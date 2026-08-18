@@ -87,6 +87,34 @@ public sealed interface ValueName {
             return name == null;
         }
 
+        /**
+         * The primitive this builds when it is applied, or null where applying it builds nothing.
+         *
+         * <p>The one place that says what a library name applied to an argument <em>constructs</em>,
+         * as against computing something. Only the namespace itself builds a value —
+         * {@code Date("2026-09-30")} — and only where the namespace is one of the temporals;
+         * {@code Date.fromParts} is an operation and answers a case, and {@code List} builds nothing
+         * by being applied.
+         *
+         * <p>Asked here rather than at each reader, because a reader that had to answer it took the
+         * only thing in reach, which was the spelling in front of the argument. Three of them did,
+         * each with a different reading of it, and a model declaring a behavior of its own called
+         * {@code Date} was compiled as this construction.
+         *
+         * <p>What is read is the alias, through {@link Type.Prim#named} — the backwards reading of
+         * the one table that writes a primitive out, not a second list of the four spellings. That
+         * a namespace constructs the primitive its alias is written as holds because the library
+         * publishes it under that alias; a library that published a temporal under some other name
+         * would be deciding this here, and this is where it would be decided.
+         */
+        public Type.Prim constructs() {
+            if (!isNamespace()) {
+                return null;
+            }
+            Type.Prim prim = Type.Prim.named(alias);
+            return prim != null && prim.temporal() ? prim : null;
+        }
+
         /** The operation this reaches, or null where it is the namespace itself. */
         public String operation() {
             return name;

@@ -138,6 +138,16 @@ public final class CallElaborator {
             return preservedCall(call, callee, kept, env, ctx, expected);
         }
         CallArgs ca = new CallArgs(call.args(), env, ctx);
+        // A temporal written out is a value, not an application: which it is was settled when the
+        // callee was resolved, and it becomes a value of its own here so that nothing downstream is
+        // left asking a call whether it is one. Three readers were asking, each off a different
+        // thing in reach — the spelling, the answered type, the shape of the argument — and each was
+        // right only about programs that name none of the four temporals themselves. Asked of what
+        // the name denotes, which is what the library says about itself.
+        if (callee != null && callee.denotes() instanceof ValueName.Stdlib library
+                && library.constructs() instanceof Type.Prim kind) {
+            return temporalLiteral(call, kind, ca);
+        }
         Type result = typeOfCall(ca, call, env, ctx, expected);
         // applying something this body binds is a different operation from calling something
         // declared elsewhere, and it is the only one that carries a binding into the emitted tree
@@ -554,78 +564,69 @@ public final class CallElaborator {
             }
             return applied.result();
         }
-        return switch (library ? callee.reaches() : "") {
-            case "Date", "Time", "DateTime", "Instant" -> {
-                arity(call, 1);
-                ca.type(0);   // the literal text, which temporalLiteral parses
-                yield temporalLiteral(call, callee);
+        // a function-typed value in scope (a helper's function parameter) applied to
+        // arguments — f(x) (spec §fn-declaration). A newtype construction 金額(500) never
+        // reaches here — NewtypeDesugar has lowered it to a NewData literal.
+        // a function value in force, or a recursive helper's signature: which of the two
+        // is the denotation's to say, and only one of them is bound here
+        if (env.of(callee.denotes(), call.written()) instanceof Type.FnOf fn) {
+            if (args.size() != fn.params().size()) {
+                throw CompileException.of(Diagnostic
+                                .at(call.appliedAt())
+                                .say(new DeclarationMessage.AppliedToAnotherNumberOfArguments(call.written(), String.valueOf(fn.params().size()), String.valueOf(args.size()))).build());
             }
-            default -> {
-                // a function-typed value in scope (a helper's function parameter) applied to
-                // arguments — f(x) (spec §fn-declaration). A newtype construction 金額(500) never
-                // reaches here — NewtypeDesugar has lowered it to a NewData literal.
-                // a function value in force, or a recursive helper's signature: which of the two
-                // is the denotation's to say, and only one of them is bound here
-                if (env.of(callee.denotes(), call.written()) instanceof Type.FnOf fn) {
-                    if (args.size() != fn.params().size()) {
-                        throw CompileException.of(Diagnostic
-                                        .at(call.appliedAt())
-                                        .say(new DeclarationMessage.AppliedToAnotherNumberOfArguments(call.written(), String.valueOf(fn.params().size()), String.valueOf(args.size()))).build());
-                    }
-                    yield applySignature(call, fn, ca, expected, env, ctx).result();
-                }
-                // A library name that matched no builtin or intrinsic above is a wrong stdlib call
-                // (spec §stdlib) — reported as that, not as a missing behavior. Asked of which kind
-                // of name this reaches and not of whether the spelling holds a dot: a field read
-                // applied (`deps.count(x)`) is quoted with a dot in it and reaches a binding, and
-                // what is wrong with it is that it is not a function, which the report below says.
-                if (callee.reachedAs() instanceof ReachName.OfLibrary) {
-                    throw CompileException.of(Diagnostic
-                                    .at(call.appliedAt()).say(new NameMessage.NotAStandardLibraryFunction(call.written())).build());
-                }
-                // A helper another module declares is expanded where it is called, or — where it
-                // recurses — bound as a signature and answered above. Reaching here it is neither,
-                // which is this compiler having failed to do one of them rather than anything the
-                // author wrote. Said outright: reported as a wrong library call, it named a library
-                // the author never wrote.
-                if (callee.denotes() instanceof ValueName.Helper helper) {
-                    throw new IllegalStateException("`" + helper + "` was neither expanded nor"
-                            + " bound before the call to it at " + call.pos() + " was typed");
-                }
-                // a required behavior called inline (spec §unmarked-output, §fn), or one that requires nothing and
-                // is called by name (spec [#calling-a-behavior]). Both are typed against the callee's
-                // declaration; where the behavior comes from at run time is the backend's to know.
-                // Asked of the declaration the call reaches. Two modules may declare a behavior
-                // of one name, and a table asked with the name this module writes answers for
-                // whichever of them the entry happens to be.
-                // A behavior named outright, or the trailing parameter an implementation takes it
-                // as — which is a binding, and which behavior it stands for was settled where the
-                // `depends on` clause was resolved.
-                ValueName.Behavior reached = switch (callee.denotes()) {
-                    case ValueName.Behavior behavior -> behavior;
-                    case ValueName.Local local -> ctx.dependencyOf(local.id());
-                    default -> null;
-                };
-                ReqSig required = reached == null ? null : ctx.reqs().get(reached);
-                if (required == null && reached != null) {
-                    required = ctx.callees().get(reached);
-                }
-                if (required == null) {
-                    Elaborator.optionCaseWritten(call.written(), call.pos());
-                    CompileException bareLibraryName = StdlibNames.writtenBare(
-                            call.written(), call.written(), call.name().region());
-                    if (bareLibraryName != null) {
-                        throw bareLibraryName;
-                    }
-                    throw noCallee(call);
-                }
-                arity(call, required.params().size());
-                for (int i = 0; i < required.params().size(); i++) {
-                    ca.require(i, required.params().get(i), "argument " + (i + 1) + " of " + call.written());
-                }
-                yield required.success();
-            }
+            return applySignature(call, fn, ca, expected, env, ctx).result();
+        }
+        // A library name that matched no builtin or intrinsic above is a wrong stdlib call
+        // (spec §stdlib) — reported as that, not as a missing behavior. Asked of which kind
+        // of name this reaches and not of whether the spelling holds a dot: a field read
+        // applied (`deps.count(x)`) is quoted with a dot in it and reaches a binding, and
+        // what is wrong with it is that it is not a function, which the report below says.
+        if (callee.reachedAs() instanceof ReachName.OfLibrary) {
+            throw CompileException.of(Diagnostic
+                            .at(call.appliedAt()).say(new NameMessage.NotAStandardLibraryFunction(call.written())).build());
+        }
+        // A helper another module declares is expanded where it is called, or — where it
+        // recurses — bound as a signature and answered above. Reaching here it is neither,
+        // which is this compiler having failed to do one of them rather than anything the
+        // author wrote. Said outright: reported as a wrong library call, it named a library
+        // the author never wrote.
+        if (callee.denotes() instanceof ValueName.Helper helper) {
+            throw new IllegalStateException("`" + helper + "` was neither expanded nor"
+                    + " bound before the call to it at " + call.pos() + " was typed");
+        }
+        // a required behavior called inline (spec §unmarked-output, §fn), or one that requires nothing and
+        // is called by name (spec [#calling-a-behavior]). Both are typed against the callee's
+        // declaration; where the behavior comes from at run time is the backend's to know.
+        // Asked of the declaration the call reaches. Two modules may declare a behavior
+        // of one name, and a table asked with the name this module writes answers for
+        // whichever of them the entry happens to be.
+        // A behavior named outright, or the trailing parameter an implementation takes it
+        // as — which is a binding, and which behavior it stands for was settled where the
+        // `depends on` clause was resolved.
+        ValueName.Behavior reached = switch (callee.denotes()) {
+            case ValueName.Behavior behavior -> behavior;
+            case ValueName.Local local -> ctx.dependencyOf(local.id());
+            default -> null;
         };
+        ReqSig required = reached == null ? null : ctx.reqs().get(reached);
+        if (required == null && reached != null) {
+            required = ctx.callees().get(reached);
+        }
+        if (required == null) {
+            Elaborator.optionCaseWritten(call.written(), call.pos());
+            CompileException bareLibraryName = StdlibNames.writtenBare(
+                    call.written(), call.written(), call.name().region());
+            if (bareLibraryName != null) {
+                throw bareLibraryName;
+            }
+            throw noCallee(call);
+        }
+        arity(call, required.params().size());
+        for (int i = 0; i < required.params().size(); i++) {
+            ca.require(i, required.params().get(i), "argument " + (i + 1) + " of " + call.written());
+        }
+        return required.success();
     }
 
     /**
@@ -736,23 +737,32 @@ public final class CallElaborator {
      * rather than a run (and an {@code example} fixture, which may only hold literals, can carry a
      * temporal at all). This form spells one out; a temporal computed from values comes from the
      * boundary, from the arithmetic, or from {@code Date.fromParts} / {@code Time.fromParts}, which
-     * answer a case where the parts name no such moment. */
-    static Type temporalLiteral(Hir.Apply call, Hir.Var.Denoting callee) {
-        Type.Prim kind = Type.Prim.named(callee.reaches());
+     * answer a case where the parts name no such moment.
+     *
+     * <p>{@code kind} is handed in rather than read off the spelling: which temporal this builds is
+     * what the callee's denotation said ({@link ValueName.Stdlib#constructs()}), and the spelling is
+     * only what a report quotes. The node this answers with is the value itself, so the text is read
+     * here once and nothing downstream reconstructs it from a call. */
+    static Core.Temporal temporalLiteral(Hir.Apply call, Type.Prim kind, CallArgs ca) {
+        arity(call, 1);
+        ca.type(0);   // the text, typed where it stands
         if (!(call.args().get(0) instanceof Hir.StringLit lit)) {
             throw CompileException.of(Diagnostic
                             .at(call.appliedAt()).say(new TypeMessage.ATemporalTakesAWrittenString(call.written())).build());
         }
-        parseTemporal(call.written(), lit.value(), lit.reportedAt());
-        return kind;
+        parseTemporal(kind, call.written(), lit.value(), lit.reportedAt());
+        return new Core.Temporal(kind, lit.value(), call.pos());
     }
 
     /** Parses a written temporal, reporting a malformed one against {@code at} — the text the
      * message quotes, which is the part of the form a reader cannot work out from the message.
      * Returns the parsed value so the backend and the example verifier share this one reading of
-     * the text. */
-    public static Object parseTemporal(String fn, String text, Region at) {
-        Type.Prim kind = Type.Prim.named(fn);
+     * the text.
+     *
+     * <p>{@code kind} decides which parse runs and {@code fn} is only what a report quotes. They
+     * were one value, and the caller that had a name for a temporal it had not resolved got the
+     * parse the name spelled. */
+    public static Object parseTemporal(Type.Prim kind, String fn, String text, Region at) {
         Object parsed;
         try {
             parsed = switch (kind) {

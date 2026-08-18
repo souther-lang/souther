@@ -51,6 +51,41 @@ public sealed interface Core {
 
     record Bool(boolean value, Type type, SourcePos pos) implements Core {}
 
+    /**
+     * A temporal written out: {@code Date("2026-07-01")}, {@code Time("09:00")},
+     * {@code DateTime("2026-07-01T09:00")}, {@code Instant("2026-07-01T09:00:00Z")}.
+     *
+     * <p>A literal, and here beside the other four for the reason the language calls it one
+     * (spec §a-temporal-value-is-written-as-a-literal): the text is written where the value goes,
+     * and the checker has already read it. It was carried this far as a {@link Call} instead, which
+     * is the shape an application has — so every reader that needed to know a written temporal from
+     * a call had to work it out, and each took a different thing to work it out from: the spelling
+     * in front of the argument, the type the call answered, the shape of the argument. A model
+     * declaring a behavior of its own named {@code Date} was compiled as this construction, its
+     * injected implementation never called. None of them is a question this node can be asked.
+     *
+     * <p>{@code kind} is the temporal, and the node's type is it: one value, so the two cannot
+     * disagree. {@code text} is the ISO text as it was written, which is what a reader of this wants
+     * — the backend parses it, a boundary reads its place — and the parse the checker already did is
+     * what says the text is good.
+     */
+    record Temporal(Type.Prim kind, String text, SourcePos pos) implements Core {
+
+        public Temporal {
+            if (kind == null || !kind.temporal()) {
+                throw new IllegalArgumentException("`" + kind + "` is no temporal");
+            }
+            if (text == null) {
+                throw new IllegalArgumentException("a written temporal is written out");
+            }
+        }
+
+        @Override
+        public Type type() {
+            return kind;
+        }
+    }
+
     /** A read of something the body binds: a parameter, a {@code let}, a lambda's parameter, a
      * {@code match} arm's binding. {@code binding} is which one; {@code name} is what to call the
      * local it is emitted as, and what a diagnostic quotes. */
@@ -446,6 +481,7 @@ public sealed interface Core {
             case Decimal x -> x;
             case Str x -> x;
             case Bool x -> x;
+            case Temporal x -> x;
             case Read x -> x;
             case UnitValue x -> x;
             case OptionNone x -> x;
@@ -565,6 +601,7 @@ public sealed interface Core {
             case Decimal x -> new Decimal(x.value(), x.type(), null);
             case Str x -> new Str(x.value(), x.type(), null);
             case Bool x -> new Bool(x.value(), x.type(), null);
+            case Temporal x -> new Temporal(x.kind(), x.text(), null);
             case Read x -> readWithoutItsPlace(x);
             case UnitValue x -> new UnitValue(x.data(), x.type(), null);
             case OptionNone x -> new OptionNone(x.type(), null);
