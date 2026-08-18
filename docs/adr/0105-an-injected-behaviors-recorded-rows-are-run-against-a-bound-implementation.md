@@ -103,6 +103,29 @@ compared.
 `observe` and not a second `evaluate`, because one adjudicates an obligation and the other relates two
 answers, and spelling them apart keeps a consumer from sliding a fake entry into the row default.
 
+**A bound implementation is applied on the thread that asked for it.** A run of this compile's own
+code goes to a worker of its own, on a clock, because what it runs is code that may not stop and
+cannot be interrupted. A supplied implementation is not that. What it answers out of is the caller's
+world, and a thread is part of a world — a transaction bound to one, a security or request context,
+an MDC, a scoped value — so moving the work to a worker takes it out of the world the caller
+arranged, with nothing in a synchronous `evaluate(row)` to say that is happening.
+
+What is given up is the clock, and knowingly. A row's counted limits are counted in the code and
+thrown from it, so they hold either way; a wall clock guards code this compile generated, and there
+is none of that on the far side of the crossing. So an implementation that does not return does not
+return — which is what calling one synchronously is. What bounds a database query, an HTTP call or a
+whole test run belongs to whoever owns the world, and each of those has its own way of saying so.
+Taking that responsibility on would bring an executor, context propagation, cancellation semantics
+and interruptibility with it, which is the direction this decision spent its other paragraphs
+avoiding.
+
+`evaluate` and `observe` both, because both observe a world the caller arranged between calls. One of
+them running elsewhere would be the binding meaning two things depending on which call was made,
+which is what `Handing` exists to stop.
+
+This is where "the world is the caller's" turns out to mean more than the database: world ownership
+includes execution context, and once that is said the rest follows.
+
 **What stands between values and a bound implementation is one thing, asked as one.** Whether
 anything applies the behavior and whether what applies it was built against this module are answered
 together, as a sealed `Handing`, so a caller that has values to hand over cannot consider one and

@@ -5,6 +5,7 @@ import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 import net.unit8.raoh.decode.Decoder;
 import souther.compiler.check.BoundaryInput;
+import souther.compiler.check.BoundaryOutput;
 import souther.compiler.check.CrossingMapKey;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.GeneratedClasses;
@@ -108,6 +109,50 @@ final class Crossing {
      */
     Object crossed(souther.compiler.types.TypeSymbol type, Object neutral) {
         return decoded(type, neutral);
+    }
+
+    /**
+     * {@code neutral} as what a behavior answers with, in this crossing's classes.
+     *
+     * <p>The same walk over what a signature admits, asked of the answer's side. A union's answer is
+     * crossed at the case it turned out to be rather than here — {@link BoundaryOutput.Cases} is the
+     * set it may be one of, and reading a value at the set would ask for what a position adds rather
+     * than for the value.
+     */
+    Object crossed(BoundaryOutput shape, Object neutral) {
+        return switch (shape) {
+            case BoundaryOutput.Scalar _ -> neutral;
+            case BoundaryOutput.Nominal nominal -> decoded(nominal.name(), neutral);
+            case BoundaryOutput.ListOf list -> outElements(list.element(), neutral);
+            case BoundaryOutput.SetOf set -> Sets.fromList(outElements(set.element(), neutral));
+            case BoundaryOutput.MapOf map -> outEntries(map, neutral);
+            case BoundaryOutput.Cases _ -> throw new IllegalStateException(
+                    "an answer is crossed at the case it is, not at the set of cases it may be");
+        };
+    }
+
+    private List<Object> outElements(BoundaryOutput element, Object neutral) {
+        if (!(neutral instanceof List<?> written)) {
+            throw new FixtureException("a collection crossing to another build's classes is written"
+                    + " as a list, and this is " + shownAs(neutral));
+        }
+        List<Object> out = new ArrayList<>(written.size());
+        for (Object e : written) {
+            out.add(crossed(element, e));
+        }
+        return out;
+    }
+
+    private Map<Object, Object> outEntries(BoundaryOutput.MapOf map, Object neutral) {
+        if (!(neutral instanceof Map<?, ?> written)) {
+            throw new FixtureException("a `Map` crossing to another build's classes is written as a"
+                    + " map of its keys, and this is " + shownAs(neutral));
+        }
+        Map<Object, Object> out = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : written.entrySet()) {
+            out.put(key(map.key(), entry.getKey()), crossed(map.value(), entry.getValue()));
+        }
+        return out;
     }
 
     private Object decoded(souther.compiler.types.TypeSymbol type, Object neutral) {

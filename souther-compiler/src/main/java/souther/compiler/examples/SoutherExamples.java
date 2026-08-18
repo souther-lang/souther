@@ -134,6 +134,10 @@ public final class SoutherExamples {
     private static SoutherExamples settled(Compilation compiled) {
         compiled.db().ask(new Output.All());
         refuseIfItDoesNotCompile(compiled);
+        // Every binding made here answers out of the caller's world, and a thread is part of a
+        // world. What a build runs its rows on is a worker of its own; what this runs them on is
+        // whoever called.
+        compiled.withDeadline(Deadline.onTheCallersThread());
         return new SoutherExamples(compiled);
     }
 
@@ -185,22 +189,6 @@ public final class SoutherExamples {
     /** The modules these sources declare. */
     public List<String> modules() {
         return List.copyOf(sigs.keySet());
-    }
-
-    /**
-     * What one row or one observation is given to finish within, from here on.
-     *
-     * <p>A caller has a reason to say where a compile does not: what a bound implementation waits
-     * for is a database, a socket or a filesystem, and how long that may take is theirs to know. The
-     * default is set so that no row a model states reaches it, which is a statement about evaluating
-     * a `let` body and not about an implementation that went to look something up.
-     *
-     * <p>Said about these sources and no others, so one caller's budget does not hold every compile
-     * in the JVM to it.
-     */
-    public SoutherExamples withBudget(java.time.Duration budget) {
-        compilation.withExampleBudget(budget);
-        return this;
     }
 
     /** What a lone file's module is called when it leaves its `module` header off. */

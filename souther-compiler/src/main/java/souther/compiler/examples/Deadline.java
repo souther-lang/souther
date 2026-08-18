@@ -84,6 +84,42 @@ public interface Deadline {
     }
 
     /**
+     * No clock and no worker: the work runs on the thread that asked for it.
+     *
+     * <p>For a run whose answers come from outside the compile. What such an implementation answers
+     * out of is the caller's world, and a thread is part of a world — a transaction bound to one, a
+     * security or request context, an MDC, a scoped value. Moving the work to a worker moves it out
+     * of the world the caller arranged, and nothing in a synchronous {@code evaluate(row)} says that
+     * is happening.
+     *
+     * <p>What is given up is the clock, and only the clock. A row's counted limits are counted in
+     * the code and thrown from it, so they arrive here as {@link Outcome.Threw} and are answered
+     * exactly as they are on a worker; what a build guards against with a wall clock is code it
+     * generated, and there is none of that on this side of the crossing. An implementation that does
+     * not return does not return, which is what calling one synchronously is: what bounds a database
+     * query, an HTTP call or a whole test run belongs to whoever owns the world, and each of those
+     * has its own way of saying so.
+     */
+    static Deadline onTheCallersThread() {
+        return new Deadline() {
+
+            @Override
+            public long budgetMs() {
+                return 0L;   // nothing here is bounded by a clock
+            }
+
+            @Override
+            public <T> Outcome<T> given(Work work, Callable<T> body) {
+                try {
+                    return new Outcome.Finished<>(body.call());
+                } catch (Throwable cause) {
+                    return new Outcome.Threw<>(cause);
+                }
+            }
+        };
+    }
+
+    /**
      * The same, on a worker given {@code stackBytes} of stack.
      *
      * <p>Said rather than inherited, so how deep a recursion gets before the stack runs out is this

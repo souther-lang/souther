@@ -17,7 +17,6 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -94,19 +93,20 @@ class AnEntryIsHandedOverOnTheTermsARowIsTest {
             }
             """;
 
-    /** An implementation that does not come back. */
-    private static final String NEVER_ANSWERS = """
+    private static final String RAN_ON = "souther.test.the.implementation.ran.on";
+
+    /** An implementation that writes down which thread applied it. */
+    private static final String RECORDS_ITS_THREAD = """
             package example.moved;
             public final class FindTodoImpl extends FindTodo {
                 public FindTodoResult apply(TodoId id) {
-                    while (true) {
-                        if (System.nanoTime() == 0L) {
-                            return new NotFound(id);
-                        }
-                    }
+                    System.setProperty("%s", Thread.currentThread().getName());
+                    return id.equals(new TodoId(1L))
+                            ? new Todo(new TodoId(1L), new Title("write the SQL"), false)
+                            : new NotFound(id);
                 }
             }
-            """;
+            """.formatted(RAN_ON);
 
     /**
      * A binding a row may not be handed to is not handed an entry either.
@@ -152,23 +152,30 @@ class AnEntryIsHandedOverOnTheTermsARowIsTest {
     }
 
     /**
-     * An implementation that does not answer ends the observation, as it ends a row's evaluation.
+     * A bound implementation runs on the thread that asked for it.
      *
-     * <p>Without this the caller's loop hangs on `observe` where `evaluate` would have given up: the
-     * budget is the run's and an observation outside it is an observation nothing bounds.
+     * <p>What it answers out of is the caller's world, and a thread is part of a world: a
+     * transaction bound to one, a security or request context, an MDC, a scoped value. A run of this
+     * compile's own code goes to a worker of its own, and moving a supplied implementation there too
+     * would take it out of the world the caller arranged — with nothing in a synchronous
+     * {@code evaluate(row)} to say so.
+     *
+     * <p>Both operations, because both observe a world the caller arranged between calls. One of
+     * them running elsewhere would be the binding meaning two things again.
      */
     @Test
-    void anObservationOfAnImplementationThatDoesNotAnswerFinishes() throws Exception {
+    void aBoundImplementationRunsWhereItWasCalledFrom() throws Exception {
         BoundExamples examples = SoutherExamples.ofSource(MODEL)
-                .withBudget(java.time.Duration.ofMillis(300))
-                .bind(builtFrom(MODEL, NEVER_ANSWERS));
+                .bind(builtFrom(MODEL, RECORDS_ITS_THREAD));
 
-        StandinObservation.Unobserved unobserved = assertInstanceOf(
-                StandinObservation.Unobserved.class,
-                examples.observe(examples.standinEntries().get(0)),
-                "the observation came back");
-        assertInstanceOf(StandinObservation.Reason.TheObservationRanOut.class, unobserved.why());
-        assertFalse(unobserved.why().said().isBlank());
+        examples.evaluate(examples.rows().get(0));
+        assertEquals(Thread.currentThread().getName(), System.getProperty(RAN_ON),
+                "the row's evaluation applied it here");
+
+        System.clearProperty(RAN_ON);
+        examples.observe(examples.standinEntries().get(0));
+        assertEquals(Thread.currentThread().getName(), System.getProperty(RAN_ON),
+                "and so did the entry's observation");
     }
 
     /**

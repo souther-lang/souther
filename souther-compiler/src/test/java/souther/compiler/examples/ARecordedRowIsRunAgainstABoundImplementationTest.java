@@ -264,6 +264,45 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
                 "which build it is of, said where the row is");
     }
 
+
+    /**
+     * A behavior answering a scalar is held to its clause too.
+     *
+     * <p>Read off the case the answer turned out to be, this was skipped: a `Long` is no declared
+     * type, so there was no case to read it at and the check answered "kept" for every
+     * implementation. Every behavior answering `Int`, `String`, `Bool` or a bare collection was
+     * unchecked, and the row said `COMPARISON` where the model is what the answer disagrees with.
+     */
+    @Test
+    void ascalarAnswerIsHeldToWhatTheBehaviorDeclares() throws Exception {
+        String model = """
+                module example.count
+
+                data TodoId = Int
+
+                behavior countFor : (id: TodoId) -> Int
+                    ensures value >= id.value
+
+                example countFor
+                    | "a todo with no children" : (TodoId(0)) -> 0
+                """;
+        String breaks = """
+                package example.count;
+                public final class CountForImpl extends CountFor {
+                    public Long apply(TodoId id) { return -1L; }
+                }
+                """;
+
+        BoundExamples examples = SoutherExamples.ofSource(model)
+                .bind(builtElsewhere(compiled(model), breaks, "example/count/CountForImpl.java",
+                        "example.count.CountForImpl"));
+
+        RowEvaluation ran = examples.evaluate(examples.rows().get(0));
+        assertEquals(FailurePhase.ENSURES, ran.outcome().failurePhase(),
+                "and not COMPARISON, which would send its author to look at the row");
+        assertEquals(List.of("E1930"), ran.diagnostics().stream().map(Diagnostic::code).toList());
+    }
+
     private static Map<String, byte[]> compiled(String model) {
         Compilation c = Compilation.ofSource(model, "Main");
         return c.db().ask(new Output.All()).value();
@@ -331,13 +370,20 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
      */
     private static Object builtElsewhere(Map<String, byte[]> generated, String source)
             throws Exception {
+        return builtElsewhere(generated, source, "example/todo/FindTodoImpl.java",
+                "example.todo.FindTodoImpl");
+    }
+
+    private static Object builtElsewhere(Map<String, byte[]> generated, String source,
+                                         String written, String named) throws Exception {
         Path classes = Files.createTempDirectory("souther-bound");
         for (Map.Entry<String, byte[]> e : generated.entrySet()) {
             Path at = classes.resolve(e.getKey().replace('.', '/') + ".class");
             Files.createDirectories(at.getParent());
             Files.write(at, e.getValue());
         }
-        Path java = classes.resolve("example/todo/FindTodoImpl.java");
+        Path java = classes.resolve(written);
+        Files.createDirectories(java.getParent());
         Files.writeString(java, source);
         int rc = ToolProvider.getSystemJavaCompiler().run(null, null, null,
                 "-encoding", "UTF-8",
@@ -349,6 +395,6 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
         // not the run's, which is the whole of what a supplied implementation is.
         URLClassLoader loader = new URLClassLoader(new URL[] {classes.toUri().toURL()},
                 ExampleVerifier.class.getClassLoader());
-        return loader.loadClass("example.todo.FindTodoImpl").getConstructor().newInstance();
+        return loader.loadClass(named).getConstructor().newInstance();
     }
 }

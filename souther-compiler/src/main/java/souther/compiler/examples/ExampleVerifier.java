@@ -1491,7 +1491,8 @@ public final class ExampleVerifier {
         // declares it, and what this module means by that class's spelling is a different question.
         state.resultArm = fixtures.typeOf(result);
         state.got(Stage.COMPARED);
-        if (!keepsWhatIsDeclaredOfWhatItAnswered(fixtures, row, target, args, result, out, state)) {
+        if (!keepsWhatIsDeclaredOfWhatItAnswered(fixtures, row, target, sig, args, result, out,
+                state)) {
             return;
         }
         TypeSymbol arm = fixtures.caseOnly(row.expected());
@@ -1632,15 +1633,20 @@ public final class ExampleVerifier {
      * exactly what {@code AtEachCrossing} says this check is for.
      */
     private boolean keepsWhatIsDeclaredOfWhatItAnswered(FixtureReader fixtures, Hir.ExampleRow row,
-                                                        ExampleTarget target, Object[] args,
+                                                        ExampleTarget target, Sig sig, Object[] args,
                                                         Object answered, List<Diagnostic> out,
                                                         RowState state) {
-        if (!target.injected() || state.resultArm == null) {
+        // Asked of what applied the row and not of how the behavior is written. The reason the
+        // check runs here is that nothing else ran it: an implementation supplied from outside is
+        // what answered, so the callee's own check is not what came back. A behavior written with a
+        // body whose answer a binding supplied instead is in exactly that position, and reading
+        // `injected` would excuse it on the strength of a body that did not run.
+        if (!(state.reached.applied() instanceof Applied.Bound)) {
             return true;
         }
         Object here;
         try {
-            here = inTheseClasses(fixtures, state.resultArm, answered);
+            here = inTheseClasses(fixtures, state.resultArm, sig, answered);
         } catch (FixtureException | ImplementationNotReached e) {
             // The answer could not be brought into the classes the check reads, so nothing was
             // checked. Undecided rather than failed: the model may be right, and this saw nothing.
@@ -1672,10 +1678,19 @@ public final class ExampleVerifier {
      * <p>A value already of these classes goes through it too. Telling the two apart would mean
      * comparing a class identity, which is the question this whole seam exists to not ask.
      */
-    private Object inTheseClasses(FixtureReader fixtures, TypeSymbol is, Object value) {
-        NeutralValue neutral = fixtures.neutralAt(value, new Type.Ref(is),
-                "what `" + is.name() + "` was answered as");
-        return new Crossing(loader).crossed(is, neutral.read());
+    private Object inTheseClasses(FixtureReader fixtures, TypeSymbol is, Sig sig, Object value) {
+        // The case it turned out to be, where it is one. An answer that is not a declared type — a
+        // scalar, a bare collection — has no case to be read at, and reading it at the output's own
+        // shape is the same walk one step out. Answering "kept" for those, which reading the arm
+        // alone does, would leave every behavior answering `Int` or `List<Todo>` unchecked.
+        if (is != null) {
+            NeutralValue neutral = fixtures.neutralAt(value, new Type.Ref(is),
+                    "what `" + is.name() + "` was answered as");
+            return new Crossing(loader).crossed(is, neutral.read());
+        }
+        NeutralValue neutral = fixtures.neutralAt(value, sig.outputType(),
+                "what `" + sig.outputType() + "` was answered as");
+        return new Crossing(loader).crossed(sig.out(), neutral.read());
     }
 
     // --- fakes for what a behavior depends on ---------------------------------------------------
