@@ -99,11 +99,11 @@ class TheLoopOverBoundRowsBelongsToWhoeverOwnsTheWorldTest {
         RecordedRow stored = examples.rows().stream().filter(key::is).findFirst().orElseThrow();
 
         System.setProperty(STORED, "yes");
-        assertEquals(Disposition.HELD, examples.evaluate(stored).disposition(),
+        assertEquals(Disposition.HELD, examples.evaluate(stored).outcome().disposition(),
                 "the row holds in the world it was written for");
 
         System.clearProperty(STORED);
-        assertEquals(Disposition.FAILED, examples.evaluate(stored).disposition(),
+        assertEquals(Disposition.FAILED, examples.evaluate(stored).outcome().disposition(),
                 "and does not in the world where nothing is stored");
     }
 
@@ -113,7 +113,7 @@ class TheLoopOverBoundRowsBelongsToWhoeverOwnsTheWorldTest {
         BoundExamples examples = bound();
         RecordedRow unnamed = examples.rows().get(1);
 
-        assertEquals(Disposition.HELD, examples.evaluate(unnamed).disposition(),
+        assertEquals(Disposition.HELD, examples.evaluate(unnamed).outcome().disposition(),
                 "nothing is stored under 99 in any world this test arranges");
     }
 

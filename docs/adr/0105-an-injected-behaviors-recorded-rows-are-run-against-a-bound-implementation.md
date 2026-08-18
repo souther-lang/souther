@@ -42,12 +42,27 @@ owns the loop. A bulk `evaluate()` would own it, and the hooks it would then gro
 around, transaction, retry, parallelism) are a test framework, which exists. The compile-time run
 keeps evaluating in bulk: there the environment is the fakes and the run owns them.
 
-**What is read is a source set and a dependency path.** A module may write its rows beside itself and
-in an `examples for` file, and may import another user module whose classes a dependency published.
-A face taking one file and no path would be narrower than the language it stands in front of, and a
+**An evaluation answers with the observation and with what was said about it.** `RowOutcome` is what
+a machine decides from and is what an adequacy measure reads, which is what it was designed for. It
+is not a test result: a row that failed a comparison carries `FAILED`, `COMPARISON` and both arms,
+and where the two values differ inside one arm that says nothing at all — a title read from the wrong
+column is the same outcome as a title read from the right one. Answering with the outcome alone had a
+consumer report that a row failed while the compiler had the sentence in hand and dropped it. So
+`RowEvaluation` is the pair, and a row not handed over says why rather than only where it stopped: a
+bulk run says that once for the behavior and every row of it is in one report, while a row handed
+over on its own is the only place its reader looks. The language a diagnostic is rendered in is
+handed in, because what answers a reader has to say which reader and that is the consumer.
+
+**What is read is a source set and a dependency path, and a lone file is read as a lone file.**
+A module may write its rows beside itself and in an `examples for` file, and may import another user
+module whose classes a dependency published. A face taking one file and no path would be narrower than the language it stands in front of, and a
 project using either would find its rows unreachable rather than failing. Which module the rows are
 of is not decided here either: `bind` asks the implementation, so a source set declaring more than
 one module is not bound by the order its files were handed over.
+
+A single source keeps its own route rather than being handed to the many-source one: a module
+written in one file may leave its `module` header off, and linking several sources needs each to say
+which module it is. It is named by its path, so a refusal says the file the reader is looking at.
 
 A model that does not compile is refused with `CompileException`, which carries the positions, the
 codes and the sentences the compiler already writes. This is the first thing a caller sees when a

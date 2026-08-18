@@ -8,6 +8,7 @@ import souther.compiler.diag.Severity;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.Front;
 import souther.compiler.query.ExampleRuns;
 import souther.compiler.query.Output;
 import souther.compiler.query.Shapes;
@@ -20,6 +21,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * A model's {@code example} rows, and the implementations they can be run against.
@@ -69,14 +71,14 @@ public final class SoutherExamples {
      * module reads one.
      */
     public static SoutherExamples of(List<Path> sources, ModulePath dependencies) {
-        List<String> written = new ArrayList<>(sources.size());
-        for (Path source : sources) {
-            written.add(read(source));
+        if (sources.size() == 1) {
+            return of(sources.get(0), dependencies);
         }
-        Compilation compiled = Compilation.ofSources(written, dependencies);
-        compiled.db().ask(new Output.All());
-        refuseIfItDoesNotCompile(compiled);
-        return new SoutherExamples(compiled);
+        Map<String, String> byId = new LinkedHashMap<>();
+        for (Path source : sources) {
+            byId.put(source.toString(), read(source));
+        }
+        return settled(Compilation.ofDocuments(byId, Set.of(), dependencies));
     }
 
     /** The same, of sources that import no other user module. */
@@ -84,22 +86,55 @@ public final class SoutherExamples {
         return of(sources, ModulePath.EMPTY);
     }
 
-    /** The same, of a module written in one file. */
+    /**
+     * The rows written in one file, resolving imports against {@code dependencies}.
+     *
+     * <p>Its own route and not one file handed to the many-source one. A module written in a single
+     * source may leave its {@code module} header off, and what it is called is then the file's own
+     * name; linking several sources needs each to say which module it is. Reading a lone file the
+     * way several are read would refuse a source the compiler compiles, which is the narrowing this
+     * face exists not to do.
+     */
+    public static SoutherExamples of(Path source, ModulePath dependencies) {
+        // Named by its path, so what a refusal says is the file the reader is looking at rather
+        // than the number this compile happened to hold it under.
+        Compilation compiled = Compilation.ofDocuments(
+                Map.of(source.toString(), read(source)), Set.of(), dependencies);
+        compiled.db().set(new Front.DefaultName(), nameOf(source));
+        return settled(compiled);
+    }
+
+    /** The same, of a module written in one file that imports no other user module. */
     public static SoutherExamples of(Path source) {
-        return of(List.of(source));
+        return of(source, ModulePath.EMPTY);
     }
 
     /** The rows written in {@code sources} as text, for a caller holding them rather than files. */
     public static SoutherExamples ofSources(List<String> sources, ModulePath dependencies) {
-        Compilation compiled = Compilation.ofSources(sources, dependencies);
+        return sources.size() == 1
+                ? ofSource(sources.get(0), dependencies)
+                : settled(Compilation.ofSources(sources, dependencies));
+    }
+
+    /** The same, of sources that import no other user module. */
+    public static SoutherExamples ofSources(List<String> sources) {
+        return ofSources(sources, ModulePath.EMPTY);
+    }
+
+    /** One module's text, which may leave its {@code module} header off as a lone file may. */
+    public static SoutherExamples ofSource(String source, ModulePath dependencies) {
+        return settled(Compilation.ofSource(source, "Main", dependencies));
+    }
+
+    /** The same, of one module's text that imports no other user module. */
+    public static SoutherExamples ofSource(String source) {
+        return ofSource(source, ModulePath.EMPTY);
+    }
+
+    private static SoutherExamples settled(Compilation compiled) {
         compiled.db().ask(new Output.All());
         refuseIfItDoesNotCompile(compiled);
         return new SoutherExamples(compiled);
-    }
-
-    /** The same, of one module's text. */
-    public static SoutherExamples ofSource(String source) {
-        return ofSources(List.of(source), ModulePath.EMPTY);
     }
 
     /**
@@ -143,7 +178,7 @@ public final class SoutherExamples {
         }
         Prepared.ExampleExecution rows = compilation.db()
                 .ask(new Shapes.Prepared(module)).value().forExamples();
-        return new BoundExamples(rows, ExampleRuns.evaluating(compilation.db(), module,
+        return new BoundExamples(module, rows, ExampleRuns.evaluating(compilation.db(), module,
                 Answering.bound(implementation, sigs.get(module))), bound);
     }
 
@@ -166,6 +201,13 @@ public final class SoutherExamples {
     public SoutherExamples withBudget(java.time.Duration budget) {
         compilation.withExampleBudget(budget);
         return this;
+    }
+
+    /** What a lone file's module is called when it leaves its `module` header off. */
+    private static String nameOf(Path source) {
+        String file = source.getFileName().toString();
+        int dot = file.lastIndexOf('.');
+        return dot <= 0 ? file : file.substring(0, dot);
     }
 
     private static String read(Path source) {

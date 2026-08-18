@@ -7,6 +7,8 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.RowIdentity;
 
+import org.junit.jupiter.api.io.TempDir;
+
 import javax.tools.ToolProvider;
 
 import java.io.File;
@@ -86,7 +88,7 @@ class TheFaceReadsWhatAModelIsWrittenAsTest {
         List<RecordedRow> rows = examples.rows();
         assertEquals(2, rows.size(), "the companion file's rows are the module's rows");
         for (RecordedRow row : rows) {
-            assertEquals(Disposition.HELD, examples.evaluate(row).disposition(), row.shown());
+            assertTrue(examples.evaluate(row).held(), row.shown());
         }
     }
 
@@ -154,7 +156,77 @@ class TheFaceReadsWhatAModelIsWrittenAsTest {
 
         RecordedRow unnamed = examples.rows().get(1);
         assertEquals(new RowIdentity.Unnamed(2), unnamed.identity());
-        assertEquals(Disposition.HELD, examples.evaluate(unnamed).disposition());
+        assertTrue(examples.evaluate(unnamed).held());
+    }
+
+
+    /**
+     * A lone file may leave its `module` header off, as it may when the compiler is handed it.
+     *
+     * <p>Reading one file the way several are read refuses it: linking several sources needs each to
+     * say which module it is, and a face that took the many-source route for a single file would be
+     * narrower than the language it stands in front of. That narrowing was introduced by the fix for
+     * the source-set finding and is what this holds.
+     */
+    @Test
+    void aLoneFileMayLeaveItsModuleHeaderOff(@TempDir Path dir) throws Exception {
+        Path source = dir.resolve("todo.sou");
+        Files.writeString(source, """
+                data TodoId = Int
+                data NotFound = { id: TodoId }
+
+                behavior findTodo : (id: TodoId) -> NotFound
+                """);
+
+        assertEquals(List.of("todo"), SoutherExamples.of(source).modules(),
+                "and is called what the file is");
+        assertEquals(List.of("Main"), SoutherExamples.ofSource(Files.readString(source)).modules(),
+                "or `Main`, where the caller held the text rather than a file");
+    }
+
+    /**
+     * What a dependency published is read from the path, which is how every other reader of a
+     * published module reads one.
+     *
+     * <p>The other half of the source-set finding, and the half a source set cannot stand in for: a
+     * project depends on modules it does not compile.
+     */
+    @Test
+    void anImportedModuleIsReadFromTheDependencyPath(@TempDir Path dir) throws Exception {
+        Path published = Files.createDirectory(dir.resolve("dependency"));
+        for (var e : souther.compiler.Compiler.compileModules(List.of(SHARED)).entrySet()) {
+            Path at = published.resolve(e.getKey().replace('.', '/') + ".class");
+            Files.createDirectories(at.getParent());
+            Files.write(at, e.getValue());
+        }
+        Path model = dir.resolve("app.sou");
+        Files.writeString(model, MODEL);
+        Path companion = dir.resolve("app.examples.sou");
+        Files.writeString(companion, COMPANION);
+
+        SoutherExamples read = SoutherExamples.of(List.of(model, companion),
+                ModulePath.ofClassPath(List.of(published)));
+
+        assertEquals(List.of("example.app"), read.modules(),
+                "`example.ids` is a dependency and not one of these sources");
+        BoundExamples examples = read.bind(implementation());
+        assertEquals("example.app", examples.moduleName());
+        for (RecordedRow row : examples.rows()) {
+            assertTrue(examples.evaluate(row).held(), row.shown());
+        }
+    }
+
+    /** A refusal names the file the reader is looking at. */
+    @Test
+    void aRefusalNamesTheFileItIsAbout(@TempDir Path dir) throws Exception {
+        Path source = dir.resolve("broken.sou");
+        Files.writeString(source, "data Todo = { id: NoSuchType }\n");
+
+        CompileException refused = assertThrows(CompileException.class,
+                () -> SoutherExamples.of(source));
+
+        assertEquals(source.toString(), refused.sourceId().value(),
+                "and not the number this compile held it under");
     }
 
     private static BoundExamples bound() throws Exception {

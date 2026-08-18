@@ -43,7 +43,6 @@ import souther.compiler.meta.Readback;
 import souther.compiler.meta.ReadbackReasons;
 
 import java.util.ArrayList;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -223,7 +222,7 @@ public final class ExampleVerifier {
      * <p>Read the same way as in a bulk run, by the same call — so a row does not mean one thing when
      * a compile runs it and another when a caller does.
      */
-    public RowOutcome one(String behavior, Hir.ExampleRow row) {
+    public RowEvaluation one(String behavior, Hir.ExampleRow row) {
         ExampleTarget target = targetOf(behavior);
         if (target == null) {
             throw new IllegalStateException("`" + behavior + "` has no target to run its rows"
@@ -234,13 +233,21 @@ public final class ExampleVerifier {
             throw new IllegalStateException("`" + behavior + "` is evaluable and has no signature");
         }
         List<Diagnostic> said = new ArrayList<>();
+        // What is wrong with the answer rather than with the row, said here because here is the
+        // whole of what this caller gets. A bulk run says it once for the behavior and every row of
+        // it is in one report; a row handed over on its own is the only place its reader looks, so
+        // one stopping at ANSWERER_ESTABLISHMENT would otherwise carry the phase and nothing that
+        // says why.
+        if (target.handing() instanceof Handing.NotEstablished(Agreement why)) {
+            said.add(cannotBeHeldTo(row.pos(), target.name(), why));
+        }
         List<RowOutcome> outcomes = new ArrayList<>();
         checkRow(target, sig, outCases(sig.outputType()), row, said, outcomes);
         if (outcomes.size() != 1) {
             throw new IllegalStateException("a row was run and " + outcomes.size()
                     + " outcomes were recorded");
         }
-        return outcomes.get(0);
+        return new RowEvaluation(outcomes.get(0), said);
     }
 
     /**
@@ -387,10 +394,40 @@ public final class ExampleVerifier {
                                         + deadline.budgetMs() + "ms"));
             }
             case Deadline.Outcome.Threw(Throwable cause) -> {
-                return new StandinObservation.Unobserved(
-                        new StandinObservation.Reason.TheObservationRanOut(String.valueOf(cause)));
+                return whatTheWorkerThrew(cause);
             }
         }
+    }
+
+    /**
+     * What an observation makes of what its worker threw.
+     *
+     * <p>The same cut a row makes, and for the reason a row makes it. {@code Threw} says the work
+     * ended with a throwable and nothing more, so taking all of them for "it ran out" would turn a
+     * defect in this machinery into an ordinary answer about a stand-in — a reader would be told the
+     * two could not be compared where in fact this code failed. What the implementation itself threw
+     * never arrives here: it is {@link InvocationFailure} and was already answered.
+     */
+    private static StandinObservation whatTheWorkerThrew(Throwable cause) {
+        FailurePhase overspent = overspending(cause);
+        if (overspent != null) {
+            return new StandinObservation.Unobserved(
+                    new StandinObservation.Reason.TheObservationRanOut(
+                            "the observation went through more than " + overspent + " allows"));
+        }
+        if (cause instanceof StackExhaustedException || cause instanceof StackOverflowError) {
+            return new StandinObservation.Unobserved(
+                    new StandinObservation.Reason.TheObservationRanOut(
+                            "the observation ran out of stack"));
+        }
+        if (cause instanceof java.util.concurrent.CancellationException) {
+            throw new java.util.concurrent.CancellationException(
+                    "interrupted while observing a stand-in's entry");
+        }
+        if (cause instanceof RuntimeException re) {
+            throw re;
+        }
+        throw new IllegalStateException(cause);
     }
 
     private StandinObservation observing(String behavior, StandinEntry entry) {
@@ -558,8 +595,17 @@ public final class ExampleVerifier {
      * behaviors, and what each of them reaches is its own — so a memo kept by the classes alone
      * would answer for the second behavior with what was worked out about the first.
      */
+    /**
+     * What holding an answer's declarations against this module said, per answer and behavior.
+     *
+     * <p>Concurrent because a caller owns the loop over the rows and may run them alongside each
+     * other — this face says parallelism is theirs, and a cache that came apart while two of them
+     * read it would be a failure that does not reproduce. Keyed by the declarations' identity, which
+     * is what {@link PublishedClasses} has: two readings of one set of classes are one answer, and
+     * two sets that happen to read alike are not.
+     */
     private final Map<PublishedClasses, Map<String, Agreement>> agreements =
-            new IdentityHashMap<>();
+            new java.util.concurrent.ConcurrentHashMap<>();
     /** The behaviors an answer could not be established for have already been reported about. A
      * behavior's rows may be written in more than one block, and what is reported is about neither
      * the block nor the row. It is per source, which is what a verifier is: a diagnostic is said
@@ -615,7 +661,7 @@ public final class ExampleVerifier {
         // behavior's rows may be written in as many blocks as they belong in.
         if (target.agreement() != null && !(target.agreement() instanceof Agreement.Agree)
                 && said.add(target.name())) {
-            out.add(cannotBeHeldTo(ex, target.name(), target.agreement()));
+            out.add(cannotBeHeldTo(ex.pos(), target.name(), target.agreement()));
         }
         Sig sig = sigs.get(target.name());
         if (sig == null) {
@@ -748,7 +794,8 @@ public final class ExampleVerifier {
                 case null -> new Agreement.NoOriginStated(module.name());
                 case TheCompilesOwn _ -> null;
                 case Origin.Published published -> agreements
-                        .computeIfAbsent(published.classes(), _ -> new LinkedHashMap<>())
+                        .computeIfAbsent(published.classes(),
+                                _ -> new java.util.concurrent.ConcurrentHashMap<>())
                         .computeIfAbsent(behavior, named -> DeclarationAgreement.of(module.name(),
                                 named, declared.get(), published.classes()));
             };
@@ -764,21 +811,21 @@ public final class ExampleVerifier {
      * module — and reporting that as a stale build would be reporting a difference on evidence
      * nobody has.
      */
-    private Diagnostic cannotBeHeldTo(Hir.Example ex, String target, Agreement said) {
+    private Diagnostic cannotBeHeldTo(SourcePos at, String target, Agreement said) {
         return switch (said) {
             case Agreement.Agree _ ->
                     throw new IllegalStateException("an agreement that holds reports nothing");
-            case Agreement.Disagree differs -> Diagnostic.at(ex.pos())
+            case Agreement.Disagree differs -> Diagnostic.at(at)
                     .say(new ExampleMessage.TheAnswerIsOfAnotherBuild(target, differs.module(),
                             differs.declaration()))
                     .hint(new ExampleMessage.BuildWhatAnswersItAgainstThisRevision(differs.module()))
                     .build();
-            case Agreement.NoOriginStated stated -> Diagnostic.at(ex.pos())
+            case Agreement.NoOriginStated stated -> Diagnostic.at(at)
                     .say(new ExampleMessage.WhetherTheAnswerIsOfThisModuleCannotBeTold(target,
                             stated.module()))
                     .hint(new ExampleMessage.ItDidNotSayWhichBuildItReadsBy(stated.module()))
                     .build();
-            case Agreement.Unreadable unreadable -> cannotBeTold(ex, target, unreadable);
+            case Agreement.Unreadable unreadable -> cannotBeTold(at, target, unreadable);
         };
     }
 
@@ -790,9 +837,9 @@ public final class ExampleVerifier {
      * things — the side, the reading's own reason, and the two together — and a reader given only
      * the first two has been told what happened and not what to do.
      */
-    private static Diagnostic cannotBeTold(Hir.Example ex, String target,
+    private static Diagnostic cannotBeTold(SourcePos at, String target,
                                            Agreement.Unreadable unreadable) {
-        Diagnostic.Builder said = Diagnostic.at(ex.pos())
+        Diagnostic.Builder said = Diagnostic.at(at)
                 .say(new ExampleMessage.WhetherTheAnswerIsOfThisModuleCannotBeTold(
                         target, unreadable.module()));
         return whatToDoAbout(
@@ -972,7 +1019,7 @@ public final class ExampleVerifier {
      * table the row resolves are read through this one, so what a row spent is one row's whatever
      * part of it was being read.
      */
-    private static final class RowEvaluation implements java.util.concurrent.Callable<List<Diagnostic>> {
+    private static final class RowWork implements java.util.concurrent.Callable<List<Diagnostic>> {
 
         private final ExampleVerifier verifier;
         /** This row's, and only this row's. */
@@ -983,7 +1030,7 @@ public final class ExampleVerifier {
         private final Hir.ExampleRow row;
         private final RowState state = new RowState();
 
-        RowEvaluation(ExampleVerifier of, ExampleTarget target, Sig sig,
+        RowWork(ExampleVerifier of, ExampleTarget target, Sig sig,
                       Set<TypeSymbol> outCases, Hir.ExampleRow row) {
             this.verifier = of;
             this.fixtures = of.newFixtureReader();
@@ -1143,7 +1190,7 @@ public final class ExampleVerifier {
      */
     private void checkRow(ExampleTarget target, Sig sig, Set<TypeSymbol> outCases, Hir.ExampleRow row,
                           List<Diagnostic> out, List<RowOutcome> rows) {
-        RowEvaluation evaluation = new RowEvaluation(this, target, sig, outCases, row);
+        RowWork evaluation = new RowWork(this, target, sig, outCases, row);
         switch (deadline.given(
                 new Deadline.Work.Row(target.name(), row.pos(), row.identity()),
                 evaluation)) {

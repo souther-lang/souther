@@ -120,7 +120,7 @@ class AnEntryIsHandedOverOnTheTermsARowIsTest {
         BoundExamples examples = SoutherExamples.ofSource(NARROWED)
                 .bind(builtFrom(MODEL, ANSWERS));
 
-        RowOutcome row = examples.evaluate(examples.rows().get(0));
+        RowOutcome row = examples.evaluate(examples.rows().get(0)).outcome();
         assertEquals(Disposition.INCOMPLETE, row.disposition());
         assertEquals(FailurePhase.ANSWERER_ESTABLISHMENT, row.failurePhase(),
                 "the row is kept away from it");
@@ -146,7 +146,7 @@ class AnEntryIsHandedOverOnTheTermsARowIsTest {
         BoundExamples examples = SoutherExamples.ofSource(MODEL)
                 .bind(builtFrom(MODEL, ANSWERS));
 
-        assertEquals(Disposition.HELD, examples.evaluate(examples.rows().get(0)).disposition());
+        assertEquals(Disposition.HELD, examples.evaluate(examples.rows().get(0)).outcome().disposition());
         assertInstanceOf(StandinObservation.AsStated.class,
                 examples.observe(examples.standinEntries().get(0)));
     }
@@ -183,7 +183,7 @@ class AnEntryIsHandedOverOnTheTermsARowIsTest {
         BoundExamples examples = SoutherExamples.ofSource(MODEL)
                 .bind(builtFrom(MODEL, OVERLOADED));
 
-        assertEquals(Disposition.HELD, examples.evaluate(examples.rows().get(0)).disposition(),
+        assertEquals(Disposition.HELD, examples.evaluate(examples.rows().get(0)).outcome().disposition(),
                 "the behavior's own `apply` answered, and neither of the decoys");
         assertInstanceOf(StandinObservation.AsStated.class,
                 examples.observe(examples.standinEntries().get(0)));

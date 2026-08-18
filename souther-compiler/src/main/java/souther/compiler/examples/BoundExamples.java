@@ -3,7 +3,6 @@ package souther.compiler.examples;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.observe.RowIdentity;
-import souther.compiler.observe.RowOutcome;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -29,13 +28,16 @@ import java.util.List;
  */
 public final class BoundExamples {
 
+    private final String module;
     private final Prepared.ExampleExecution rows;
     private final ExampleVerifier verifier;
 
     /** The behaviors the bound instance implements, worked out once from the instance. */
     private final List<String> bound;
 
-    BoundExamples(Prepared.ExampleExecution rows, ExampleVerifier verifier, List<String> bound) {
+    BoundExamples(String module, Prepared.ExampleExecution rows, ExampleVerifier verifier,
+                  List<String> bound) {
+        this.module = module;
         this.rows = rows;
         this.verifier = verifier;
         this.bound = List.copyOf(bound);
@@ -71,8 +73,12 @@ public final class BoundExamples {
      * <p>The same row may be evaluated as often as the caller likes, under as many worlds as they
      * arrange, and nothing of one evaluation is kept for the next. Two different answers under two
      * worlds are two observations and not a contradiction.
+     *
+     * <p>What comes back is the observation and what was said about it. The observation is what a
+     * machine decides from; the diagnostics are how a consumer tells a person which value differed
+     * and where, which the outcome alone does not carry.
      */
-    public RowOutcome evaluate(RecordedRow row) {
+    public RowEvaluation evaluate(RecordedRow row) {
         if (row == null || row.enumeratedBy() != this) {
             throw new IllegalArgumentException("a row belongs to the enumeration that made it");
         }
@@ -95,6 +101,11 @@ public final class BoundExamples {
             }
         }
         throw new IllegalArgumentException("no row of `" + behavior + "` is named `" + name + "`");
+    }
+
+    /** Which module's rows these are — the one declaring what the bound instance implements. */
+    public String moduleName() {
+        return module;
     }
 
     /** Which behaviors the bound instance answers for. */

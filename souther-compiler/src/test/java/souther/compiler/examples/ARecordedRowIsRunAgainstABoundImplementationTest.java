@@ -2,6 +2,7 @@ package souther.compiler.examples;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.Diagnostic;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.meta.ClassFileDeclarations;
 import souther.compiler.meta.PublishedClasses;
@@ -28,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -209,6 +211,62 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
                 "the row the defect does not reach is not evidence against it");
         assertTrue(reasons(observed).contains("E1905"),
                 "and the row is told the way a row that disagrees is told: " + reasons(observed));
+    }
+
+
+    /**
+     * A row that failed says which value differed and where, not only that it failed.
+     *
+     * <p>Both rows here expect a `Todo` and both answer with one, so the outcome carries `FAILED`,
+     * `COMPARISON` and `Todo` on either side — which is the same outcome a right implementation
+     * produces for a right row. What tells the two apart is the diagnostic, and answering with the
+     * outcome alone would have a consumer report that a row failed while the compiler had the
+     * sentence in hand and dropped it.
+     */
+    @Test
+    void aRowThatFailedCarriesWhatWasSaidAboutIt() throws Exception {
+        BoundExamples examples = SoutherExamples.ofSource(MODEL)
+                .bind(builtElsewhere(compiled(MODEL), MISMAPS));
+
+        RowEvaluation failed = examples.evaluate(examples.rows().get(0));
+        assertFalse(failed.held());
+        assertEquals(FailurePhase.COMPARISON, failed.outcome().failurePhase());
+        assertEquals(List.of("E1905"),
+                failed.diagnostics().stream().map(Diagnostic::code).toList());
+
+        String shown = failed.shown(java.util.Locale.ENGLISH);
+        assertTrue(shown.contains("read the SQL") && shown.contains("write the SQL"),
+                "both values are in what a consumer would print: " + shown);
+
+        RowEvaluation held = examples.evaluate(examples.rows().get(1));
+        assertTrue(held.held());
+        assertEquals(List.of(), held.diagnostics(), "a row that held has nothing said about it");
+    }
+
+    /**
+     * A row not handed over says why, and not only where it stopped.
+     *
+     * <p>A bulk run says this once for the behavior and every row of it is in one report; a row
+     * handed over on its own is the only place its reader looks.
+     */
+    @Test
+    void aRowKeptFromAnImplementationOfAnotherBuildSaysWhy() throws Exception {
+        // A build the rows still compile under, and whose `Title` admits fewer values than the one
+        // the implementation was compiled against.
+        String narrowed = MODEL.replace("    invariant length(value) > 0\n",
+                "    invariant length(value) > 3\n");
+        BoundExamples examples = SoutherExamples.ofSource(narrowed)
+                .bind(builtElsewhere(compiled(MODEL), ANSWERS));
+
+        RowEvaluation kept = examples.evaluate(examples.rows().get(0));
+        assertEquals(FailurePhase.ANSWERER_ESTABLISHMENT, kept.outcome().failurePhase());
+        assertEquals(List.of("E1927"), kept.diagnostics().stream().map(Diagnostic::code).toList(),
+                "which build it is of, said where the row is");
+    }
+
+    private static Map<String, byte[]> compiled(String model) {
+        Compilation c = Compilation.ofSource(model, "Main");
+        return c.db().ask(new Output.All()).value();
     }
 
     private static RowOutcome named(ExampleVerifier.Observations observed, String name) {

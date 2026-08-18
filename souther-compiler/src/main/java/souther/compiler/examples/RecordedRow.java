@@ -1,6 +1,7 @@
 package souther.compiler.examples;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.observe.RowIdentity;
 
 /**
@@ -40,6 +41,18 @@ public final class RecordedRow {
     /** What a report writes to say which row this is. */
     public String shown() {
         return identity().shown();
+    }
+
+    /**
+     * Where the row is written.
+     *
+     * <p>Needed beside the name rather than instead of it. An unnamed row is shown as which of its
+     * behavior's rows it is <em>in its own source</em>, so a behavior exampled in a module and in an
+     * attached file has a {@code #1} in each — what tells those apart is the source, and a consumer
+     * naming a generated test after {@link #shown()} alone would name two of them the same.
+     */
+    public SourcePos at() {
+        return row.pos();
     }
 
     @Override
