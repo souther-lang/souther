@@ -34,8 +34,8 @@ import java.util.Map;
  *
  * <p><b>Every range this puts on a position is inside what the order holds.</b> Not an unbounded
  * range narrowed at the end: what is below the empty string is nothing, and a reading open below
- * would take {@code value < ""} for a rule leaving room underneath. The extent is the scale's
- * ({@link OrderScale#extent}) and it is applied where a rule becomes a range, which is the one place
+ * would take {@code value < ""} for a rule leaving room underneath. The extent is the carrier's
+ * ({@link Carrier#extent}) and it is applied where a rule becomes a range, which is the one place
  * a position is spoken about.
  *
  * <p>Applied there and not once around the whole reading, because whether an <em>alternative</em>
@@ -54,25 +54,24 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject
     private final Terms terms;
     private final Denotations at;
     /** What each position's values are ordered on, for the positions that are ordered at all. */
-    private final Map<FactSubject, OrderScale> scales;
+    private final Map<FactSubject, Carrier> carriers;
 
-    private OrderedReading(Terms terms, Denotations at, Map<FactSubject, OrderScale> scales) {
+    private OrderedReading(Terms terms, Denotations at, Map<FactSubject, Carrier> carriers) {
         this.terms = terms;
         this.at = at;
-        this.scales = scales;
+        this.carriers = carriers;
     }
 
     /** The reading of one value's positions, for {@link StatedByClauses} to take the leaves of. */
-    static OrderedReading of(Terms terms, Denotations at, Map<FactSubject, Type> byName,
-                             Symbols symbols) {
-        Map<FactSubject, OrderScale> scales = new LinkedHashMap<>();
+    static OrderedReading of(Terms terms, Denotations at, Map<FactSubject, Type> byName, Symbols symbols) {
+        Map<FactSubject, Carrier> carriers = new LinkedHashMap<>();
         byName.forEach((name, type) -> {
-            OrderScale scale = OrderScale.ofValue(type, symbols);
-            if (scale != null) {
-                scales.put(name, scale);
+            Carrier carrier = Carrier.ofValue(type, symbols);
+            if (carrier != null) {
+                carriers.put(name, carrier);
             }
         });
-        return new OrderedReading(terms, at, scales);
+        return new OrderedReading(terms, at, carriers);
     }
 
     @Override
@@ -115,8 +114,8 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject
             bound = bin.left();
             op = InvariantBound.flipped(op);
         }
-        OrderScale scale = position == null ? null : scales.get(position);
-        if (scale == null) {
+        Carrier carrier = position == null ? null : carriers.get(position);
+        if (carrier == null) {
             return OrderedIntervals.top();
         }
         Hir.Expr written = Terms.asWrittenValue(bound);
@@ -125,23 +124,23 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject
         // answer the disequality gets when it is written directly.
         Hir.BinOp said = positive ? op : denied(op);
         if (said == Hir.BinOp.EQ) {
-            Place only = written == null ? null : scale.literalOf(written);
+            Place only = written == null ? null : carrier.literalOf(written);
             return only == null ? OrderedIntervals.top()
-                    : leaves(position, scale, new OrderedInterval(
+                    : leaves(position, carrier, new OrderedInterval(
                             Endpoint.inclusive(only), Endpoint.inclusive(only)));
         }
         if (!InvariantBound.ordering(said)) {
             return OrderedIntervals.top();
         }
-        return switch (InvariantBound.at(said, written, scale)) {
-            case InvariantBound.Read.AnEnd it -> leaves(position, scale, it.bound().lower()
+        return switch (InvariantBound.at(said, written, carrier)) {
+            case InvariantBound.Read.AnEnd it -> leaves(position, carrier, it.bound().lower()
                     ? new OrderedInterval(it.bound().end(), null)
                     : new OrderedInterval(null, it.bound().end()));
             // The rule names an end the order does not reach, so the position holds nothing. Said as
             // a range of this order with no value in it, which is the same kind of answer two rules
             // whose ends cross come to.
             case InvariantBound.Read.PastWhereTheOrderStops _ ->
-                    leaves(position, scale, scale.nothing());
+                    leaves(position, carrier, carrier.nothing());
             case InvariantBound.Read.NoEnd _ -> OrderedIntervals.top();
         };
     }
@@ -153,9 +152,9 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject
      * every answer rather than something applied once at the end. A reader adding a second such
      * place has to remember the extent; this one cannot forget it.
      */
-    private static OrderedIntervals<FactSubject> leaves(FactSubject position, OrderScale scale,
-                                                       OrderedInterval range) {
-        return OrderedIntervals.at(position, scale.extent().meet(range));
+    private static OrderedIntervals<FactSubject> leaves(FactSubject position, Carrier carrier,
+                                                 OrderedInterval range) {
+        return OrderedIntervals.at(position, carrier.extent().meet(range));
     }
 
     /** The comparison that holds exactly where {@code op} does not. */
@@ -176,6 +175,6 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject
     /** The position {@code e} is, or null where it is not one this is reading for. */
     private FactSubject positionIn(Core e) {
         FactSubject named = terms.subjectOf(e, at);
-        return named != null && scales.containsKey(named) ? named : null;
+        return named != null && carriers.containsKey(named) ? named : null;
     }
 }

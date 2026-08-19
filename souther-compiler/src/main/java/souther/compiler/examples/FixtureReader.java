@@ -910,15 +910,21 @@ public final class FixtureReader {
         if (v instanceof String s) {
             return "\"" + s + "\"";
         }
+        // Written by whatever writes the value everywhere else, and not by `toString`. A time of
+        // day and a date-time drop their seconds at zero that way, so what came back was shown
+        // `Time("16:00")` beside a line the same value named `Time("16:00:00")` — one value in two
+        // spellings, in the one report where a reader holds them up against each other.
         String temporal = switch (v) {
-            case java.time.LocalDate _ -> "Date";
-            case java.time.LocalTime _ -> "Time";
-            case java.time.LocalDateTime _ -> "DateTime";
-            case java.time.Instant _ -> "Instant";
+            case java.time.LocalDate at -> "Date(\"" + at + "\")";
+            case java.time.LocalTime at ->
+                    "Time(\"" + souther.compiler.numeric.Times.written(at) + "\")";
+            case java.time.LocalDateTime at ->
+                    "DateTime(\"" + souther.compiler.numeric.DateTimes.written(at) + "\")";
+            case java.time.Instant at -> "Instant(\"" + at + "\")";
             default -> null;
         };
         if (temporal != null) {
-            return temporal + "(\"" + v + "\")";
+            return temporal;
         }
         if (v instanceof Map<?, ?> m) {
             List<String> entries = new ArrayList<>();
@@ -1326,8 +1332,13 @@ public final class FixtureReader {
             case Hir.Var v -> statedByName(v);
             case Hir.Apply c when constructsANewtype(c) -> caseNamed(constructs(c));
             // `Date("…")` is a temporal, and `Set.fromList([…])` a collection: values under no name.
+            // Whether the first of those builds anything is {@link ValueName.Stdlib#constructs},
+            // which is the one place that says so — and it is what this asks, so a module's own
+            // behavior spelled like a namespace is not read as one, and a namespace that builds
+            // nothing (`List`, `Option`) is the call it is and is refused where it is read.
             case Hir.Apply c when c.answered() != null
-                    && (Type.Prim.named(c.answered().reaches()) != null
+                    && ((c.answered().denotes() instanceof ValueName.Stdlib library
+                                    && library.constructs() != null)
                             || "Set.fromList".equals(c.answered().reaches())
                             || "Map.fromList".equals(c.answered().reaches())) ->
                     STATES_NO_NAME;
@@ -1632,15 +1643,21 @@ public final class FixtureReader {
     }
 
     private Object newtypeInner(Hir.Apply c, Position at, Admission admission) {
-        Type.Prim written = c.answered() == null
-                ? null : Type.Prim.named(c.answered().reaches());
-        if (written != null && written.temporal()) {
+        // Which temporal this builds, or none — asked of what the callee denotes
+        // ({@link ValueName.Stdlib#constructs()}), as every other question about which operation a
+        // call applies is. Read off the spelling, a model's own behavior named `Date` was a written
+        // date here; a fixture expression is never elaborated, so this reader answers for itself and
+        // has to ask the same place the elaborator asks.
+        Type.Prim temporal = c.answered() != null
+                && c.answered().denotes() instanceof ValueName.Stdlib library
+                ? library.constructs() : null;
+        if (temporal != null) {
             // a written date: the decoders take the parsed temporal, not its text (a Date field's
             // neutral form is a LocalDate), so the fixture hands over the same value the checker read
             if (c.args().size() != 1 || !(c.args().get(0) instanceof Hir.StringLit lit)) {
                 throw new FixtureException("`" + c.written() + "` takes one written string");
             }
-            return CallElaborator.parseTemporal(c.written(), lit.value(), lit.reportedAt());
+            return CallElaborator.parseTemporal(temporal, c.written(), lit.value(), lit.reportedAt());
         }
         if (!constructsANewtype(c)) {
             throw new FixtureException("`" + c.written() + "` is not a newtype; a fixture cannot call it");
@@ -1961,6 +1978,18 @@ public final class FixtureReader {
      */
     NeutralValue neutral(Object built, BoundaryInput at, String what) {
         return new NeutralValue(neutral.of(built, Position.at(FixtureShape.of(at).type()), what));
+    }
+
+    /**
+     * The same, at a position named as a type rather than as a boundary shape.
+     *
+     * <p>What needs it is a value coming back the other way: an answer is read at the case it turned
+     * out to be, and that case is a type this module declares rather than a position a signature
+     * writes down. The walk is the one above — a neutral form is decided by a position — and only
+     * where the position comes from differs.
+     */
+    NeutralValue neutralAt(Object value, Type position, String what) {
+        return new NeutralValue(neutral.of(value, Position.at(position), what));
     }
 
     /** Where what a row asserted and what came back differ, or null where they are the same value. */

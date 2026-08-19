@@ -899,6 +899,12 @@ final class Terms {
             case Core.Decimal d -> new Naming.Named(interned.written(d.value()));
             case Core.Str str -> new Naming.Named(interned.written(str.value()));
             case Core.Bool b -> new Naming.Named(interned.written(b.value()));
+            // Named as the construction it is written as, which is the term two writings of one
+            // date already shared when this arrived here as a call. The text alone would be the term
+            // the string of it has, and a `Date` is not the text of one.
+            case Core.Temporal t -> new Naming.Named(interned.called(
+                    ValueName.Stdlib.namespace(t.kind().shown()),
+                    List.of(interned.written(t.text()))));
             case Core.UnitValue u -> new Naming.Named(interned.unit(u.data()));
             case Core.Neg n -> over(List.of(n.operand()), at, bound, depth, leaf,
                     ps -> interned.negated(ps.get(0)));
@@ -1312,7 +1318,13 @@ final class Terms {
      * expands to binds each argument and reads it back, which is the source's own text moved. */
     static boolean isWritten(Core e, Set<BindingId> written) {
         return switch (e) {
-            case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.UnitValue _ -> true;
+            // A temporal is one of the literals the language has (spec
+            // §a-temporal-value-is-written-as-a-literal), so it is written wherever it stands. It
+            // was carried here as a call and answered `false` in this switch's default while
+            // `asWrittenValue` was writing it back out — one value, two answers about whether the
+            // source holds it.
+            case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
+                 Core.UnitValue _ -> true;
             case Core.Neg n -> isWritten(n.operand(), written);
             case Core.Read r -> written.contains(r.binding());
             case Core.ListLit list -> list.elements().stream().allMatch(x -> isWritten(x, written));
@@ -1428,23 +1440,20 @@ final class Terms {
                                 call.pos(), null);
             }
             // A temporal is written as a literal with its text spelled out (spec
-            // §a-temporal-value-is-written-as-a-literal), and what the analysis representation keeps
-            // of one is a call to the operation that builds it. Rendered here for the same reason
-            // every other written form is: it is a value the author wrote, and a reader handed
-            // nothing for it reads the rule around it as a rule about something unknown.
+            // §a-temporal-value-is-written-as-a-literal). Rendered here for the same reason every
+            // other written form is: it is a value the author wrote, and a reader handed nothing for
+            // it reads the rule around it as a rule about something unknown. Written back as the
+            // construction it was written as, which is the form a report and `ConstEval` read.
             //
-            // Held to the calls that answer a temporal, which is what a temporal literal is. Every
-            // call to a resolved name would be a wider claim than the one this makes: the contract
-            // above is that what is computed answers with nothing, and the fold beneath it
-            // (`ConstEval`) is written against that. Which calls those are is read off the type
-            // rather than a list of names, so a temporal added to the language is one of these
-            // without anybody remembering to say so.
-            case Core.Call call when call.fn() instanceof Core.Reached reached
-                    && temporal(call.type()) -> {
-                List<Hir.Expr> args = written(call.args());
-                yield args == null ? null
-                        : new Hir.Apply(reached.denotes().name(), reached.denotes(), reached.name(),
-                                args, ConstructionOrigin.own(), call.pos(), null);
+            // This used to be held to the calls answering a temporal — which took any behavior
+            // answering a `Date` over written arguments for a date the source spells out, and let a
+            // line be drawn where the compiler knows no value. What is written is the node now, and
+            // nothing here decides it.
+            case Core.Temporal t -> {
+                ValueName.Stdlib namespace = ValueName.Stdlib.namespace(t.kind().shown());
+                yield new Hir.Apply(namespace.qualified(), namespace, reachOf(namespace),
+                        List.of(new Hir.StringLit(t.text(), t.pos(), null)),
+                        ConstructionOrigin.own(), t.pos(), null);
             }
             // A case of an enumeration is written by naming it, so the value is the name.
             case Core.UnitValue unit -> Hir.Var.respelled(unit.data().name(),
@@ -1453,12 +1462,6 @@ final class Terms {
                     new ReachName.Bare(unit.data().name()), unit.pos(), null);
             case null, default -> null;
         };
-    }
-
-    /** Whether {@code type} is one a temporal literal answers. */
-    private static boolean temporal(Type type) {
-        return type == Type.DATE || type == Type.TIME || type == Type.DATETIME
-                || type == Type.INSTANT;
     }
 
     /** Every argument as it was written, or null where any of them was computed. */

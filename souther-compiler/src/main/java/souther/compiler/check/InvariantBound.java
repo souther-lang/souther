@@ -69,10 +69,10 @@ public record InvariantBound(boolean lower, Endpoint end) {
     private static final Read PAST_THE_END = new Read.PastWhereTheOrderStops();
 
     /**
-     * What {@code clause} says about a value on {@code scale}.
+     * What {@code clause} says about a value on {@code carrier}.
      *
      * <p>The one reading of an ordered rule. Which literals a rule may be bounded by and how its
-     * values are spaced are facts about the order the value sits on, so both come from the scale; the
+     * values are spaced are facts about the order the value sits on, so both come from the carrier; the
      * shape of the clause, which side of it the value is on, and where a strict comparison leaves the
      * end are the same questions whatever the values are.
      *
@@ -81,8 +81,8 @@ public record InvariantBound(boolean lower, Endpoint end) {
      * another reader called unreadable, and every boundary of the value it sat in — its siblings'
      * included — was downgraded to one nothing promises is writable.
      */
-    public static Read of(Hir.Expr clause, OrderScale scale) {
-        if (scale == null || !(clause instanceof Hir.Binary bin)) {
+    public static Read of(Hir.Expr clause, Carrier carrier) {
+        if (carrier == null || !(clause instanceof Hir.Binary bin)) {
             return NO_END;
         }
         // `0 <= value` says what `value >= 0` says: read the value-bearing side as the left one.
@@ -98,11 +98,11 @@ public record InvariantBound(boolean lower, Endpoint end) {
         if (!isValue(left)) {
             return NO_END;
         }
-        Place bound = scale.literalOf(right);
+        Place bound = carrier.literalOf(right);
         if (bound == null) {
             return NO_END;
         }
-        return ordered(op, bound, scale);
+        return ordered(op, bound, carrier);
     }
 
     /**
@@ -175,12 +175,12 @@ public record InvariantBound(boolean lower, Endpoint end) {
      * @param op    the comparison, with the coordinate on its left
      * @param bound what the coordinate is compared against
      */
-    static Read at(Hir.BinOp op, Hir.Expr bound, OrderScale scale) {
-        if (scale == null || bound == null) {
+    static Read at(Hir.BinOp op, Hir.Expr bound, Carrier carrier) {
+        if (carrier == null || bound == null) {
             return NO_END;
         }
-        Place at = scale.literalOf(bound);
-        return at == null ? NO_END : ordered(op, at, scale);
+        Place at = carrier.literalOf(bound);
+        return at == null ? NO_END : ordered(op, at, carrier);
     }
 
     /** Which comparison an operand on the right states of one on the left. */
@@ -227,15 +227,15 @@ public record InvariantBound(boolean lower, Endpoint end) {
         };
     }
 
-    /** One end, from the comparison and how the scale's counts are spaced. */
-    private static Read ordered(Hir.BinOp op, Place bound, OrderScale scale) {
-        boolean steps = scale.spacing() == Granularity.DISCRETE;
+    /** One end, from the comparison and how the carrier's counts are spaced. */
+    private static Read ordered(Hir.BinOp op, Place bound, Carrier carrier) {
+        boolean steps = carrier.spacing() == Granularity.DISCRETE;
         return switch (op) {
             case GE -> placed(true, Endpoint.inclusive(bound));
             case LE -> placed(false, Endpoint.inclusive(bound));
-            case GT -> steps ? stepped(true, scale.onTheGrid(Count.number(bound).plus(1)))
+            case GT -> steps ? stepped(true, carrier.onTheGrid(Count.number(bound).plus(1)))
                     : placed(true, Endpoint.exclusive(bound));
-            case LT -> steps ? stepped(false, scale.onTheGrid(Count.number(bound).minus(1)))
+            case LT -> steps ? stepped(false, carrier.onTheGrid(Count.number(bound).minus(1)))
                     : placed(false, Endpoint.exclusive(bound));
             default -> NO_END;
         };
@@ -265,14 +265,14 @@ public record InvariantBound(boolean lower, Endpoint end) {
     }
 
     /**
-     * A strict bound moved onto the count beside it — where the scale has one there.
+     * A strict bound moved onto the count beside it — where the carrier has one there.
      *
-     * <p>Asked of the scale, which is the one place that knows where its counts stop. Read off the
+     * <p>Asked of the carrier, which is the one place that knows where its counts stop. Read off the
      * range of a {@code long} instead, an end one step past the last case of an enumeration was a
      * count no case is at: it reached a cut, an obligation, and the reader that writes an obligation
      * as the value it stands for, which asked the carrier for a case that is not there.
      *
-     * <p>Where the scale has no count there, the rule admits nothing. That is said as itself. It was
+     * <p>Where the carrier has no count there, the rule admits nothing. That is said as itself. It was
      * answered "no end this reading could make of it", which is what a rule of another shape gets —
      * so a position the rules leave empty read exactly like a position nothing was written about,
      * and the count deciding whether the type has any value never heard of the rule.

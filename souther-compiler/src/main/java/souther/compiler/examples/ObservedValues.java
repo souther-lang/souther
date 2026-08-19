@@ -61,8 +61,14 @@ final class ObservedValues {
             case BigDecimal d -> new ObservedValue.Decimal(d);
             case String s -> text(s);
             case java.time.LocalDate d -> new ObservedValue.Temporal(d.toString());
-            case java.time.LocalTime t -> new ObservedValue.Temporal(t.toString());
-            case java.time.LocalDateTime d -> new ObservedValue.Temporal(d.toString());
+            // Spelled to the second by whatever writes the value everywhere else. `toString` drops
+            // the seconds at zero on both of these, so an observation carried `16:00` where a line
+            // drawn at the same value is named `16:00:00` — one value in two spellings, and the
+            // report holding both is the one a reader compares them in.
+            case java.time.LocalTime t ->
+                    new ObservedValue.Temporal(souther.compiler.numeric.Times.written(t));
+            case java.time.LocalDateTime d ->
+                    new ObservedValue.Temporal(souther.compiler.numeric.DateTimes.written(d));
             case java.time.Instant i -> new ObservedValue.Temporal(i.toString());
             case Map<?, ?> m -> mapping(m, depth);
             case Iterable<?> it -> sequence(it, depth);

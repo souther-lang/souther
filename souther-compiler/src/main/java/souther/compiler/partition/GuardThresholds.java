@@ -479,53 +479,6 @@ public final class GuardThresholds {
     }
 
 
-    /**
-     * The count a comparison is against, or null where the other side is not a value on
-     * {@code carrier}.
-     *
-     * <p>Which count the literal is on comes from the position, not from the literal. A written
-     * temporal reaches here however it is spelled, and the carrier is what says whether the days or
-     * the seconds of it are the number the line is drawn at — the same question an invariant's
-     * literal is asked, asked of the same place, so an invariant and a {@code guard} at one position
-     * cannot admit different rules.
-     */
-    static Place constantOf(Core e, Carrier carrier, Symbols symbols) {
-        if (carrier == null) {
-            return null;
-        }
-        return switch (e) {
-            case Core.Int i -> carrier.onTheGrid(Count.of(i.value()));
-            case Core.Decimal d -> carrier.onTheGrid(Count.of(d.value()));
-            case Core.Neg n -> {
-                Place inner = constantOf(n.operand(), carrier, symbols);
-                yield inner == null ? null : Count.number(inner).negate();
-            }
-            // A newtype written around a constant is that constant at this location. What makes it
-            // one is the declaration: a data of one field that is not a newtype wraps its value
-            // rather than being it.
-            case Core.Construct nd when TypeOps.numericBase(Type.ref(nd.typeName()), symbols) != null ->
-                    constantOf(nd.values().get(0).value(), carrier, symbols);
-            // A temporal written the way a model writes one. Read by what the construction answers
-            // with rather than by the name in front of it, so one reaches this however it is spelled.
-            case Core.Call call when call.args().size() == 1
-                    && call.args().get(0) instanceof Core.Str iso ->
-                    (call.type() == Type.DATE && carrier instanceof Carrier.Days)
-                            || (call.type() == Type.DATETIME && carrier instanceof Carrier.Seconds)
-                            ? carrier.placeOf(new souther.compiler.observe.ObservedValue.Temporal(
-                                    iso.value()))
-                            : null;
-            // A case, which is named rather than written. Where the position counts in some other
-            // enumeration's declaration this is a value of neither, and the carrier says so.
-            case Core.UnitValue unit -> carrier instanceof Carrier.Ordinal ordinal
-                    ? ordinal.at(unit.data()) : null;
-            // A string, which stands for itself. Refused where the position is not on that order,
-            // so a string compared against something counted is not read as its place.
-            case Core.Str str -> carrier instanceof Carrier.Text
-                    ? souther.compiler.numeric.Text.of(str.value()) : null;
-            case null, default -> null;
-        };
-    }
-
     /** Whether a line can be drawn on what this type carries, asked of the one place that says so. */
     static boolean orderable(Type type, Symbols symbols) {
         return Carrier.ofValue(type, symbols) != null;

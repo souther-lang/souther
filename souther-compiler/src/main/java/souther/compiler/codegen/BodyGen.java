@@ -692,6 +692,7 @@ final class BodyGen {
                 case Core.Bool x -> {
                     if (x.value()) code.iconst_1(); else code.iconst_0();
                 }
+                case Core.Temporal t -> temporal(t);
                 case Core.Read v -> {
                     Var var = locals.get(v.binding());
                     if (var == null) {
@@ -1206,37 +1207,39 @@ final class BodyGen {
                 putIntoMap(call);
                 return;
             }
-            switch (call.name()) {
-                case "Date", "Time", "DateTime", "Instant" -> {
-                    // a written temporal: the checker has already parsed the literal, so the text is
-                    // known good and this is a plain parse of a constant string.
-                    ClassDesc cd = JvmTypes.boxedPrim(Type.Prim.named(call.name()));
-                    code.loadConstant(((Core.Str) call.args().get(0)).value());
-                    code.invokestatic(cd, "parse", MethodTypeDesc.of(cd, CD_CharSequence));
+            // an injected behavior a lambda captured arrives in a slot rather than in a field of the
+            // enclosing behavior, and is applied as the value it is. This asks where the value is,
+            // not what the name means: what it means was settled when the call was elaborated, and
+            // an injected behavior is not a binding.
+            Var behavior = captured.get(call.name());
+            if (behavior != null && behavior.type() instanceof Type.FnOf fnType) {
+                applyCaptured(call, fnType);
+            } else if (ctx.emittedHelpers.containsKey(call.name())) {
+                // The one loop the language has is emitted where it stands, not called.
+                if (!call.name().equals(FOLD) || !folded(call)) {
+                    recursiveHelperCall(call);
                 }
-                default -> {
-                    // an injected behavior a lambda captured arrives in a slot rather than in a
-                    // field of the enclosing behavior, and is applied as the value it is. This asks
-                    // where the value is, not what the name means: what it means was settled when
-                    // the call was elaborated, and an injected behavior is not a binding.
-                    Var behavior = captured.get(call.name());
-                    if (behavior != null && behavior.type() instanceof Type.FnOf fnType) {
-                        applyCaptured(call, fnType);
-                    } else if (ctx.emittedHelpers.containsKey(call.name())) {
-                        // The one loop the language has is emitted where it stands, not called.
-                        if (!call.name().equals(FOLD) || !folded(call)) {
-                            recursiveHelperCall(call);
-                        }
-                    } else if (behaviorOf(call) != null && reqNames.contains(behaviorOf(call))) {
-                        requiredCall(call);
-                    } else if (behaviorOf(call) != null
-                            && ctx.calleeSig(behaviorOf(call)) != null) {
-                        behaviorCall(call);
-                    } else {
-                        throw new IllegalStateException("unknown function `" + call.name() + "`");
-                    }
-                }
+            } else if (behaviorOf(call) != null && reqNames.contains(behaviorOf(call))) {
+                requiredCall(call);
+            } else if (behaviorOf(call) != null
+                    && ctx.calleeSig(behaviorOf(call)) != null) {
+                behaviorCall(call);
+            } else {
+                throw new IllegalStateException("unknown function `" + call.name() + "`");
             }
+        }
+
+        /** A temporal the source spelled out. The checker read the text when it typed the form, so
+         * this is a parse of a constant that is known to parse, and which parse to run is the kind
+         * on the node.
+         *
+         * <p>It used to be a call whose spelling this compared against the four temporals, so a
+         * model declaring a behavior of its own named {@code Date} had its own behavior emitted as
+         * this. A written temporal is a value here, and a call is a call. */
+        private void temporal(Core.Temporal t) {
+            ClassDesc cd = JvmTypes.boxedPrim(t.kind());
+            code.loadConstant(t.text());
+            code.invokestatic(cd, "parse", MethodTypeDesc.of(cd, CD_CharSequence));
         }
 
         /** Calls a recursive helper as a static method on {@code $Fns} (spec §fn-declaration): each argument is
@@ -2070,6 +2073,7 @@ final class BodyGen {
                 case Core.Decimal _ -> { }
                 case Core.Str _ -> { }
                 case Core.Bool _ -> { }
+                case Core.Temporal _ -> { }
                 case Core.Unreachable _ -> { }
                 // reads nothing the enclosing body binds
                 case Core.UnitValue _ -> { }

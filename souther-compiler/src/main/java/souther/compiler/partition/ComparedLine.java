@@ -45,12 +45,10 @@ record ComparedLine(NumericTerm term, Place value, boolean valueBelongsBelow,
     static ComparedLine of(Core.Binary comparison, InputReads reads, Symbols symbols) {
         Hir.BinOp op = comparison.op();
         NumericTerm term = GuardThresholds.termOf(comparison.left(), reads, symbols);
-        Place value = GuardThresholds.constantOf(comparison.right(),
-                Carrier.ofValue(comparison.left().type(), symbols), symbols);
+        Place value = Carrier.writtenOn(comparison.right(), comparison.left().type(), symbols);
         if (term == null || value == null) {
             term = GuardThresholds.termOf(comparison.right(), reads, symbols);
-            value = GuardThresholds.constantOf(comparison.left(),
-                    Carrier.ofValue(comparison.right().type(), symbols), symbols);
+            value = Carrier.writtenOn(comparison.left(), comparison.right().type(), symbols);
             op = mirrored(op);
         }
         if (term == null || value == null) {

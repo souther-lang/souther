@@ -36,7 +36,7 @@ public final class NormalReturn {
     public static boolean of(Core e) {
         return switch (e) {
             case Core.Unreachable _ -> false;
-            case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Read _,
+            case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _, Core.Read _,
                  Core.UnitValue _, Core.OptionNone _ -> true;
             case Core.Neg n -> of(n.operand());
             case Core.FieldAccess fa -> of(fa.target());
