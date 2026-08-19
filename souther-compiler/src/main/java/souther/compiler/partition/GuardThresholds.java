@@ -346,8 +346,16 @@ public final class GuardThresholds {
                 // A line on something that is not one position's own values. Not added to `made`:
                 // what the partition could not read here it still could not read, and a boundary
                 // answering does not answer for it (spec §example-partition).
+                // Null where the quantity does not reach the line, which is the line and not one of
+                // its points: three times a length is never negative, and a rule comparing one
+                // against a negative draws nothing.
                 Border drawn = Border.at(cutting.target(), origin, cutting.within());
-                if (drawn != null && between.stream().noneMatch(had -> had.equals(drawn))) {
+                if (drawn == null) {
+                    raisesNoLine(accounting, plan, site, guard, iff, each.comparison(), reads,
+                            symbols);
+                    continue;
+                }
+                if (between.stream().noneMatch(had -> had.equals(drawn))) {
                     between.add(drawn);
                 }
                 List<TermPath> named = new ArrayList<>();

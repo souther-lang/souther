@@ -44,15 +44,6 @@ record ComparedTerms(NumericTerm on, NumericTerm against, Carrier carrier,
                      boolean holdsAtTheLine, boolean valueBelongsBelow, Count stepsApart) {
 
     /**
-     * Which side of the line the pair standing on it belongs to.
-     *
-     * <p>Derived rather than written down, and derived here so that a border reads it the same way
-     * whatever it was drawn on. What a border needs is which way the rule is satisfied, and that
-     * follows from this together with whether the rule holds on the line — the pair every rule
-     * records about its own threshold. Recorded as a third fact it would be free to disagree with
-     * them, and a line whose sides were the wrong way round asks for two rows that prove nothing.
-     */
-    /**
      * What {@code comparison} draws between two positions, or null where it draws no such line.
      *
      * <p>An equality is not one of these. {@code a == b} puts the whole of one arm on the line, and

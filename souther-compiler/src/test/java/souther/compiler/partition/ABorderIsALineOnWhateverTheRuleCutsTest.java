@@ -679,6 +679,11 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
 
         assertFalse(report.contains("3 * a + 6 * b"),
                 "the form runs from nought upward, so nothing is cut at minus three:\n" + report);
+        // And the question the comparison raises is answered by what came of reading it. Answered by
+        // which reading was tried, a rule that drew nothing reported a line as read, and the
+        // positions it names went unaccounted for.
+        assertTrue(report.contains("not read: a") && report.contains("not read: b"),
+                "the positions are still named, and as positions nothing divided:\n" + report);
     }
 
     private static String report(String model) {

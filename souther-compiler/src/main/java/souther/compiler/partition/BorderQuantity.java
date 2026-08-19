@@ -242,15 +242,6 @@ public sealed interface BorderQuantity {
         public BoundaryTarget.Shape shape() {
             return BoundaryTarget.Shape.BETWEEN_POSITIONS;
         }
-
-        /** The distance a level names, as a number of the carrier's counts. */
-        static Count apartBy(Level level) {
-            if (!(level instanceof Level.ACount count)) {
-                throw new IllegalStateException(
-                        "a distance was asked about a level that is not a number: " + level);
-            }
-            return count.at();
-        }
     }
 
     /**
