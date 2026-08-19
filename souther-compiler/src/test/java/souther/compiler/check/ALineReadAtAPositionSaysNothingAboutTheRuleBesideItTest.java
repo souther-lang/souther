@@ -191,9 +191,14 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
      * order and typechecks — and the sum's places are not its own, so no line divides it. The
      * carrier, asked of the carrier, exactly as a {@code guard} comparing the same field is
      * answered.
+     *
+     * <p>The clause reaches the reading of ends all the same, which is what lets it be answered
+     * for: a coordinate is a coordinate whether or not a line can be drawn on it. So the second
+     * assertion is the one that matters — reading an end here would put a line through a position
+     * that has no order to draw one on.
      */
     @Test
-    void aPositionNoLineCanBeDrawnOnSaysThat() {
+    void aPositionNoLineCanBeDrawnOnSaysThatAndIsGivenNoEnd() {
         FieldDomains read = readingOf("""
                 module example.stages
 
@@ -207,6 +212,7 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                 """, "Holder");
 
         assertEquals(List.of(new BlockReason.UnreadComparisonDomain()), reasonsAt(read, "stage"));
+        assertEquals(List.of(), read.placedAt("stage"), "no line is drawn where no order is");
     }
 
     /** And a newtype's own clause reaches the same account, at the position a name wraps. */
