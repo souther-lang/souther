@@ -7,7 +7,8 @@ line is drawn on is a numeric *term*, not a position — the content of a locati
 one. Revised again for #622: which values a term's line can be drawn on is one table, and a rule
 written over values it does not hold is reported as unread rather than dropped. Revised again for
 #649: what decides whether a clause draws a line is which terms the clause reaches, not which
-declaration it is written on.
+declaration it is written on. Revised again for #868: a rule left unread is a rule about where the
+values stop, and is answered per rule rather than per position.
 
 ## Context
 
@@ -244,6 +245,26 @@ an invariant's bound did not, and a bound it dropped left the position looking l
 bounds — which at a position whose only rule was that bound made the report state the opposite of
 the declaration. The two producers now say it in the same words, because they answer the same
 question: this position was written about and this could not draw the line.
+
+That question is what the sentence covers, and it is narrower than every rule about the position. An
+ordering compared against something no end came out of is one of these. An equality names a value
+rather than an end, a denial takes one away, and a format, a membership or a quantifier says which
+values exist: none of them is a line, so none of them is a line that went unread. A report has
+nowhere to put one, and naming it would send an author after a boundary nobody wrote. What such a
+rule leaves open is which values stand at the position, which is another reading's question and is
+answered where that reading gives up.
+
+Which limit stopped a comparison is one answer for both producers and not a classification each of
+them makes. A relation asks for a class about two positions, a carrier nothing orders asks for that
+order, and what is left is a form this does not take apart — and whether a comparison is a relation
+is asked of what its sides *name*, however deeply. `x < y + 1` relates two positions as surely as
+`x < y` does. Read off whether a side *is* a position, the two producers gave one shape two
+different answers the moment they classified it apart.
+
+And it is asked per rule. A position carries more than one statement, so a line read at it says
+nothing about the rule beside it. Held as what a position is left with when nothing divides it, a
+bound on a field's own type answered for the record's clause about that same field, and two
+declarations differing by one bound said opposite things about the clause above them.
 
 An invariant's bound gives a boundary and not a partition: everything outside it is refused at
 construction, so there is no class on the far side to cover. A `guard`'s line has values on both

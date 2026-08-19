@@ -46,6 +46,19 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
                 constructs Ok, No
             let mix (order) =
                 if Int.add(order.straw.value, order.choco.value) <= 150 then Ok else No
+
+            data Pair = { x: Int, y: Int }
+                invariant x < y + 1
+
+            data Bare = { x: Int, y: Int }
+
+            behavior byRule : (p: Pair) -> Ok | No
+                constructs Ok
+            let byRule (p) = Ok
+
+            behavior byGuard : (b: Bare) -> Ok | No
+                constructs Ok, No
+            let byGuard (b) = if b.x < b.y + 1 then Ok else No
             """;
 
     private static String blockOf(String behavior) {
@@ -89,6 +102,22 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
     void andInTheSameWords() {
         assertEquals(saidAbout(blockOf("mix"), "order.straw"),
                 saidAbout(blockOf("quote"), "parcel.length"));
+    }
+
+    /**
+     * And in the same words for a comparison with one position on each side.
+     *
+     * <p>{@code x < y + 1}, which is the form between the two the pair above holds. The arithmetic
+     * is on the far side of a relation rather than in place of it, so the answer is that the rule
+     * relates two positions — and it has to be that answer on both sides of the language, since the
+     * work a reader is being sent to do is a class about two positions in one case and a reader for
+     * a form in the other.
+     */
+    @Test
+    void andForAComparisonWithOnePositionOnEachSide() {
+        assertEquals(saidAbout(blockOf("byGuard"), "b.x"),
+                saidAbout(blockOf("byRule"), "p.x"));
+        assertTrue(blockOf("byRule").contains("relates it to another position"), blockOf("byRule"));
     }
 
     /**

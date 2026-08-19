@@ -1056,30 +1056,43 @@ public final class InvariantChecker {
      * single position to be filed under, and both sides of it are positions this drew no line
      * through.
      *
-     * <p>Which limit stopped it is read the way a {@code guard}'s is. A comparison of two positions
-     * asks for a class that is about both, which a partition of one position is not. A position
-     * whose values carry no order to draw a line on asks for that order. What is left is a form
-     * this does not take apart — the position inside an expression the terms do not name, or a
-     * bound written as something other than a value written out.
+     * <p>Which limit stopped it is {@link UnreadComparison}'s, so a {@code guard} of this shape
+     * cannot come to a different answer. What is read here is only what each side of the comparison
+     * came to, which is this reader's own way of looking a coordinate up.
      */
     private void unreadEnds(Core.Binary comparison, RuleRef.Invariant from, Denotations at,
                             Map<FactSubject, Coordinate> byName, List<FieldDomains.Unread> out) {
         if (!InvariantBound.ordering(comparison.op())) {
             return;
         }
-        boolean between = Relates.twoPositions(comparison, e -> {
-            FactSubject named = nameOf(e, at);
-            return named != null && byName.containsKey(named) ? named : null;
-        });
+        BlockReason why = UnreadComparison.why(sideOf(comparison.left(), at, byName),
+                sideOf(comparison.right(), at, byName));
         for (Coordinate each : coordinatesIn(comparison, at, byName)) {
-            BlockReason why = between ? new BlockReason.ComparisonBetweenPositions()
-                    : each.carrier() == null ? new BlockReason.UnreadComparisonDomain()
-                            : new BlockReason.UnreadComparisonForm();
             FieldDomains.Unread said = new FieldDomains.Unread(each.path(), from, why);
             if (!out.contains(said)) {
                 out.add(said);
             }
         }
+    }
+
+    /**
+     * What one side of a comparison came to here.
+     *
+     * <p>Which coordinates it names is the recursive question and whether it <em>is</em> one is the
+     * narrower one, and the two are what tell a coordinate inside an expression from a coordinate.
+     * Asked the narrow question alone, {@code y + 1} named nothing and a clause relating two
+     * coordinates came back as a form nobody could read — which is the answer a {@code guard}
+     * writing the same comparison does not get.
+     */
+    private UnreadComparison.Side sideOf(Core e, Denotations at,
+                                         Map<FactSubject, Coordinate> byName) {
+        if (coordinatesIn(e, at, byName).isEmpty()) {
+            return new UnreadComparison.Side.NamesNothing();
+        }
+        FactSubject itself = nameOf(e, at);
+        Coordinate here = itself == null ? null : byName.get(itself);
+        return here == null ? new UnreadComparison.Side.HoldsOne()
+                : new UnreadComparison.Side.IsOne(here.carrier() != null);
     }
 
     /**

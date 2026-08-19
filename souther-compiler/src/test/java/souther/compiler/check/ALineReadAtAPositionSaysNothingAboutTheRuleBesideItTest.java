@@ -185,6 +185,29 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
     }
 
     /**
+     * And a clause naming one coordinate on each side is one of those, however the sides are
+     * written.
+     *
+     * <p>The form between the two above: {@code x} against {@code y + 1} is a rule about the pair
+     * exactly as {@code x < y} is, and the arithmetic is on the far side of the relation rather
+     * than in place of it. Read off whether a side <em>is</em> a coordinate, {@code y + 1} named
+     * nothing and this came back as a form nobody could read — which is not what a {@code guard}
+     * writing the same comparison is told.
+     */
+    @Test
+    void andSoDoesOneWhereTheSecondPositionIsInsideAnExpression() {
+        FieldDomains read = readingOf("""
+                module example.spans
+
+                data Pair = { x: Int, y: Int }
+                    invariant x < y + 1
+                """, "Pair");
+
+        assertEquals(List.of(new BlockReason.ComparisonBetweenPositions()), reasonsAt(read, "x"));
+        assertEquals(List.of(new BlockReason.ComparisonBetweenPositions()), reasonsAt(read, "y"));
+    }
+
+    /**
      * A position whose values carry no order to draw a line on says that, and says it once.
      *
      * <p>A field declared as one case of an enumeration is ordered — the comparison is on the sum's

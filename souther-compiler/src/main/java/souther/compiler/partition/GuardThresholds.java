@@ -5,6 +5,7 @@ import souther.compiler.check.Location;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleRef;
+import souther.compiler.check.UnreadComparison;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
@@ -203,36 +204,32 @@ public final class GuardThresholds {
     /**
      * What would have to change before this comparison could be a line.
      *
-     * <p>Three different things, and a reader told one sentence for all of them cannot tell which
-     * limit is theirs to wait on. A comparison between two positions asks for a class that is about
-     * both, which a partition of one position is not. One on a carrier nothing draws a line on asks
-     * for that carrier. What is left is a form this does not read — the position inside an
-     * expression the terms do not name, or a threshold written as something other than a constant —
-     * and each of the three is a different piece of work.
+     * <p>{@link UnreadComparison}'s, which is where the answer is so that an invariant's clause of
+     * the same shape gets the same one. What is this reader's own is how a position is looked up:
+     * a body's read of a parameter is what names one here, and a coordinate of a value is what
+     * names one over there.
      */
     static BlockReason why(Core.Binary comparison, InputReads reads,
                            Symbols symbols) {
-        boolean leftNames = !mentionedIn(comparison.left(), reads, symbols).isEmpty();
-        boolean rightNames = !mentionedIn(comparison.right(), reads, symbols).isEmpty();
-        // Which limit stopped this is asked of what the sides name, not of how far the derivation
-        // got. Two positions against each other is a rule about both of them and a class here is a
-        // set of values of one — and that is as true of `x < y + 1` as of `x < y`, where reading it
-        // off the derivation loses the second position entirely and answers with the carrier.
-        if (leftNames && rightNames) {
-            return new BlockReason.ComparisonBetweenPositions();
+        return UnreadComparison.why(sideOf(comparison.left(), reads, symbols),
+                sideOf(comparison.right(), reads, symbols));
+    }
+
+    /**
+     * What one side of a comparison came to here.
+     *
+     * <p>Which positions it names is {@link #mentioned}'s recursive question and which number a
+     * line could be drawn on is {@link #termOf}'s narrower one, and the two are what tell a
+     * position inside an expression from a position. Asked the narrow question alone,
+     * {@code y + 1} named nothing and a comparison of two positions came back as a form nobody
+     * could read.
+     */
+    private static UnreadComparison.Side sideOf(Core e, InputReads reads, Symbols symbols) {
+        if (mentionedIn(e, reads, symbols).isEmpty()) {
+            return new UnreadComparison.Side.NamesNothing();
         }
-        Core named = leftNames ? comparison.left() : comparison.right();
-        if (termOf(named, reads, symbols) == null) {
-            return new BlockReason.UnreadComparisonForm();   // the position is inside something
-        }
-        // The carrier, asked of the carrier. `at < DateTime(...)` stops because nothing draws a line
-        // on a date-time; `p.x < 1 + 2` stops because the other side is not a form a threshold is
-        // read out of, and `p.x` is an `Int` — a carrier lines are drawn on all through the file.
-        // Reading this off the side that did name a position calls the second one a carrier problem
-        // and sends an author after a domain that is already there.
-        return orderable(named.type(), symbols)
-                ? new BlockReason.UnreadComparisonForm()
-                : new BlockReason.UnreadComparisonDomain();
+        return termOf(e, reads, symbols) == null ? new UnreadComparison.Side.HoldsOne()
+                : new UnreadComparison.Side.IsOne(orderable(e.type(), symbols));
     }
 
     static List<TermPath> mentionedIn(Core e, InputReads reads, Symbols symbols) {
