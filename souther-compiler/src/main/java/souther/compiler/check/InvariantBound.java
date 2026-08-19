@@ -190,15 +190,7 @@ public record InvariantBound(boolean lower, Endpoint end) {
 
     /** Whether {@code op} says where values stop rather than which one a value is. */
     static boolean ordering(Hir.BinOp op) {
-        return orders(op);
-    }
-
-    /** Whether an operator says where values stop rather than which one a value is. */
-    private static boolean orders(Hir.BinOp op) {
-        return switch (op) {
-            case LT, LE, GT, GE -> true;
-            case EQ, NE, AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
-        };
+        return ComparisonClaim.orders(op);
     }
 
     /** One end, from the comparison and how the carrier's counts are spaced. */

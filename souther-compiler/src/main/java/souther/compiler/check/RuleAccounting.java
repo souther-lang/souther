@@ -139,7 +139,39 @@ public final class RuleAccounting {
          * elsewhere: a published word reaching back into what a reading is allowed to record is the
          * coupling this whole arrangement is written against.
          */
-        record Unaccounted(UnreadReason why) implements Outcome {}
+        record Unaccounted(Why why) implements Outcome {}
+    }
+
+    /**
+     * What stopped the reading that would have answered, in that reading's own words.
+     *
+     * <p>One arm per reading, because they do not share a vocabulary and neither is the other's. The
+     * reading that turns clauses into sets of values says which form it could not take apart; the
+     * reading that turns a clause into an end says what would have to change before the rule could
+     * be a line. Held as one word, a line about an end was written in the words of a set of values —
+     * which is the sentence #842 is about, one level down.
+     */
+    public sealed interface Why {
+
+        /** The reading that turns a clause into a set of values. */
+        record TheValueReadingSays(UnreadReason why) implements Why {
+
+            public TheValueReadingSays {
+                if (why == null) {
+                    throw new IllegalArgumentException("a reading that stopped says why");
+                }
+            }
+        }
+
+        /** The reading that turns a clause into an end a line can be drawn at. */
+        record TheEndReadingSays(souther.compiler.inputs.BlockReason why) implements Why {
+
+            public TheEndReadingSays {
+                if (why == null) {
+                    throw new IllegalArgumentException("a reading that stopped says why");
+                }
+            }
+        }
     }
 
     /** Which reading answered a question. */

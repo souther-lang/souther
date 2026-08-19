@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReads;
@@ -54,20 +55,15 @@ record ComparedLine(NumericTerm term, Place value, boolean valueBelongsBelow,
         if (term == null || value == null) {
             return null;
         }
-        Boolean below = switch (op) {
-            case LE, GT -> Boolean.TRUE;    // the value itself is on the low side
-            case LT, GE -> Boolean.FALSE;   // and here it is on the high side
-            default -> null;                // EQ / NE do not order the values, so they cut nothing
+        return switch (ComparisonClaim.of(op)) {
+            case ComparisonClaim.Cut cut -> new ComparedLine(term, value, cut.valueBelongsBelow(),
+                    cut.holdsAtTheValue(), false);
+            // A value singled out has no low side of its own — the values either side of it are one
+            // class — so the side is written down as one answer and read by nobody.
+            case ComparisonClaim.Singled singled ->
+                    new ComparedLine(term, value, true, singled.holdsAtTheValue(), true);
+            case ComparisonClaim.Nothing _ -> null;
         };
-        if (below == null) {
-            // An equality singles the value out instead. Recorded as that rather than as a place to
-            // cut, because the values either side of it are not a distinction the model has drawn.
-            return op == Hir.BinOp.EQ || op == Hir.BinOp.NE
-                    ? new ComparedLine(term, value, true, op == Hir.BinOp.EQ, true) : null;
-        }
-        // True at the line's own value for the operators that include it, which is not the same
-        // question as which class the value falls in: `x <= c` and `x > c` agree about the second.
-        return new ComparedLine(term, value, below, op == Hir.BinOp.LE || op == Hir.BinOp.GE, false);
     }
 
     private static Hir.BinOp mirrored(Hir.BinOp op) {

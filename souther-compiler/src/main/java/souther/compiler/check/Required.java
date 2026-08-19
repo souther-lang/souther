@@ -161,20 +161,25 @@ public sealed interface Required {
      * <p>Every arm but one starts from {@code ADMITTED_VALUES}. That is what an invariant is: a rule
      * about which values may stand somewhere, whichever shape it is written in and whether or not
      * this compiler can read it. What the shape decides is what it raises <em>besides</em> that.
+     *
+     * <p><b>Nothing here is asked of a reading.</b> A rule stating where the values stop raises the
+     * question about that line by being written that way, and whether this compiler could fold the
+     * number on the other side is what answers it. Read off the reading, {@code value <= 20} raised
+     * the question and {@code value <= 10 * 2} raised none, and the two state one line — so the
+     * accounting came back complete for a rule nothing had taken in (#851).
      */
     static Required ofInvariant(ClauseStates states) {
         return switch (states) {
-            // An end is a statement about the values and a line rows are owed at, both — and the
+            // A bound is a statement about the values and a line rows are owed at, both — and the
             // two are about different subjects, which is why they are carried apart.
             // A `LinkedHashSet` and not `Set.of`, which iterates in an order salted once per JVM
             // run — the questions reach a document in the order they are written here.
-            case ClauseStates.AnEnd end -> new Some(new LinkedHashSet<>(java.util.List.of(
-                    admittedValues(end.position()),
-                    new Owed(CoverageObligation.BOUNDARY, end.line()))));
-            // No line: there is no value to write a row at. The rule still says which values may
-            // stand there, and what it says is that none may.
-            case ClauseStates.NoValueAtAll none -> new Some(new LinkedHashSet<>(
-                    java.util.List.of(admittedValues(none.position()))));
+            case ClauseStates.ABound bound -> {
+                Set<Owed> owed = bound.named().stream().map(Required::admittedValues)
+                        .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+                owed.add(new Owed(CoverageObligation.BOUNDARY, bound.line()));
+                yield new Some(owed);
+            }
             // A clause about no position of this value raises no question about one. Not a rule
             // that went unread: what it says was read, and what it says is about nothing here.
             case ClauseStates.SomethingElse other -> other.positions().isEmpty()

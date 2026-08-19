@@ -1036,6 +1036,7 @@ public final class InvariantChecker {
      * >= 4` came back with nothing to say while the same two rules written apart were reported.
      */
     private void settle(Core part, RuleRef.Invariant rule, ClauseStates states,
+                        InvariantBound.Read placed,
                         Denotations at,
                         Map<FactSubject, Coordinate> byName, Map<RuleRef, Required> raised,
                         ReadingEvidence took, Map<String, Type> typeAt,
@@ -1047,14 +1048,26 @@ public final class InvariantChecker {
         // not what that conjunct left standing.
         raisedByPart.computeIfAbsent(rule, _ -> new java.util.IdentityHashMap<>())
                 .merge(part, Required.ofInvariant(states), Required::and);
-        if (!(states instanceof ClauseStates.SomethingElse other)) {
+        // A part the reading of ends took in is accounted for by that reading, whatever shape the
+        // clause has. Asked of the reading and not of the shape: the two were one question while a
+        // bound this could fold was the only clause that arrived here as a bound, and reading the
+        // shape for it would say that `value <= 10 * 2` went unadopted by a reading that never got
+        // to look at it.
+        //
+        // A bound past where the order stops is not named here, and the walk below is what it gets.
+        // It leaves nothing standing all the same — the numeric reading took the comparison in,
+        // whatever the order had at the far end — and that is asserted rather than arranged for
+        // (`AQuestionExistsBecauseTheModelStatesItAndNotBecauseAReadingSucceeded`), since a second
+        // arm nothing observes is one that goes on being written after it stops being true.
+        if (placed instanceof InvariantBound.Read.AnEnd) {
             return;
         }
         // The positions this part is about, by every name each answers to, since a reading files a
         // clause under whichever name it recognised.
+        Set<Owed.Subject> named = states.about();
         Set<FactSubject> about = new LinkedHashSet<>();
         for (Map.Entry<FactSubject, Coordinate> each : byName.entrySet()) {
-            if (other.positions().contains(Owed.Subject.at(each.getValue().path()))) {
+            if (named.contains(Owed.Subject.at(each.getValue().path()))) {
                 about.add(each.getKey());
             }
         }
@@ -1105,8 +1118,8 @@ public final class InvariantChecker {
                         PartsRead parts,
                         Map<RuleRef, Map<Core, Required>> raisedByPart) {
         if (!(clause instanceof Core.Binary bin)) {
-            settle(clause, from, states(clause, at, byName), at, byName, raised, took, typeAt,
-                    parts, raisedByPart);
+            settle(clause, from, states(clause, at, byName), new InvariantBound.Read.NoEnd(),
+                    at, byName, raised, took, typeAt, parts, raisedByPart);
             return;
         }
         if (bin.op() == Hir.BinOp.AND) {
@@ -1118,8 +1131,8 @@ public final class InvariantChecker {
             return;
         }
         if (!InvariantBound.ordering(bin.op()) && bin.op() != Hir.BinOp.EQ) {
-            settle(bin, from, states(bin, at, byName), at, byName, raised, took, typeAt,
-                    parts, raisedByPart);
+            settle(bin, from, states(bin, at, byName), new InvariantBound.Read.NoEnd(),
+                    at, byName, raised, took, typeAt, parts, raisedByPart);
             return;
         }
         // The coordinate-bearing side read as the left one, as `0 <= value` says what `value >= 0`
@@ -1144,18 +1157,20 @@ public final class InvariantChecker {
                 ? new InvariantBound.Read.NoEnd()
                 : InvariantBound.at(op, Terms.asWrittenValue(bound), found.carrier());
         Coordinate about = found;
-        settle(bin, from, switch (end) {
-            // Two questions about two subjects: which values may stand at the position, and a line
-            // on whichever number the rule measured it by.
-            case InvariantBound.Read.AnEnd _ -> new ClauseStates.AnEnd(
-                    Owed.Subject.at(about.path()),
-                    new Owed.Subject(about.path(), about.measured()));
-            // A rule this read perfectly, and what it says is that no value stands here. No line
-            // follows: there is no value for a row to be written at.
-            case InvariantBound.Read.PastWhereTheOrderStops _ ->
-                    new ClauseStates.NoValueAtAll(Owed.Subject.at(about.path()));
-            case InvariantBound.Read.NoEnd _ -> states(bin, at, byName);
-        }, at, byName, raised, took, typeAt, parts, raisedByPart);
+        // What the clause is about, asked of the comparison and not of what `end` came to. A
+        // coordinate compared for order against something naming no other coordinate states where
+        // the values stop, whether or not the number on the other side is one this could fold.
+        ClauseStates shape = states(bin, at, byName);
+        if (about != null && InvariantBound.ordering(op)
+                && shape instanceof ClauseStates.SomethingElse named) {
+            Set<Owed.Subject> positions = new LinkedHashSet<>(named.positions());
+            // The coordinate the bound is on, which the walk over the comparison names anyway. Added
+            // so that the arm cannot be reached with nothing to be about.
+            positions.add(Owed.Subject.at(about.path()));
+            shape = new ClauseStates.ABound(
+                    new Owed.Subject(about.path(), about.measured()), positions);
+        }
+        settle(bin, from, shape, end, at, byName, raised, took, typeAt, parts, raisedByPart);
         if (end instanceof InvariantBound.Read.NoEnd) {
             // A rule saying where the values stop that no end came out of, said as that. Here,
             // where the reading gave up, because this is the reading a report's line would have

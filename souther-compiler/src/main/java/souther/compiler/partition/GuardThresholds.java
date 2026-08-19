@@ -4,6 +4,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Location;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Carrier;
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.UnreadComparison;
 import souther.compiler.inputs.BlockReason;
@@ -248,10 +249,7 @@ public final class GuardThresholds {
 
     /** Whether an operator is one that compares two values rather than combining two conditions. */
     static boolean orders(Hir.BinOp op) {
-        return switch (op) {
-            case EQ, NE, LT, LE, GT, GE -> true;
-            case AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
-        };
+        return ComparisonClaim.places(op);
     }
 
     /**

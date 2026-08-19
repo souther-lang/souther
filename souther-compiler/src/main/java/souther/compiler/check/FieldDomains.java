@@ -474,11 +474,40 @@ public final class FieldDomains {
     private RuleAccounting.Outcome answered(RuleRef rule, Owed owed) {
         return switch (owed.obligation()) {
             case ADMITTED_VALUES -> admissionAnswered(rule, owed.subject());
-            // Raised only where an end was read off the rule, so the reading that raised it is the
-            // one that answered it.
-            case BOUNDARY ->
-                    new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_END_READING);
+            case BOUNDARY -> boundaryAnswered(rule, owed.subject());
         };
+    }
+
+    /**
+     * What answered "where does the line fall" for one rule at one position.
+     *
+     * <p>The reading that turns a clause into an end, asked for its own account. It keeps one where
+     * a rule says where the values stop and no end came of it ({@link Unread}), so the absence of
+     * one is the reading having got there: either it placed the end, or it read the rule to the end
+     * and found the order stops past where the rule points. The second is the line understood and
+     * not a reading that fell short — whether a value can be written at it is a question about
+     * composing a row, and no rule answers for that (#854).
+     *
+     * <p>Asked per rule and per position, as the admission question is. A bound on a field's own
+     * type and a clause of the record about the same field are two rules, and an end read for one
+     * says nothing about the other.
+     */
+    private RuleAccounting.Outcome boundaryAnswered(RuleRef rule, Owed.Subject where) {
+        // The end this rule placed, wherever in it the conjunct that placed it was written. A rule
+        // raises one question about its line and is read a conjunct at a time, so a half that drew
+        // nothing is not an account of the half that drew it — asked of the record of what went
+        // unread alone, `value >= 1 && Int.abs(value) >= 2` left its own line unanswered.
+        if (directs.stream().anyMatch(d -> d.from().equals(rule)
+                && d.path().equals(where.path()) && d.measured() == where.measured())) {
+            return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_END_READING);
+        }
+        for (Unread said : unread) {
+            if (said.from().equals(rule) && said.path().equals(where.path())) {
+                return new RuleAccounting.Outcome.Unaccounted(
+                        new RuleAccounting.Why.TheEndReadingSays(said.why()));
+            }
+        }
+        return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_END_READING);
     }
 
     /**
@@ -499,7 +528,8 @@ public final class FieldDomains {
         // one conjunct is not an account of the conjunct written beside it.
         if (took.anyLeftStanding(rule, named)) {
             return new RuleAccounting.Outcome.Unaccounted(
-                    unreadByField.getOrDefault(where.path(), UnreadReason.FORM_NOT_READ));
+                    new RuleAccounting.Why.TheValueReadingSays(
+                            unreadByField.getOrDefault(where.path(), UnreadReason.FORM_NOT_READ)));
         }
         // The reading that turns this clause into where the values stop, said by the end it placed.
         if (directs.stream()
@@ -512,8 +542,8 @@ public final class FieldDomains {
             return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_VALUE_READING);
         }
         UnreadReason why = unreadByField.get(where.path());
-        return new RuleAccounting.Outcome.Unaccounted(
-                why == null ? UnreadReason.FORM_NOT_READ : why);
+        return new RuleAccounting.Outcome.Unaccounted(new RuleAccounting.Why.TheValueReadingSays(
+                why == null ? UnreadReason.FORM_NOT_READ : why));
     }
 
     /** Every name the position at {@code path} answers to. */
