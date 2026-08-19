@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.RuleAccounting;
+import souther.compiler.check.ProjectionEvidence;
 import souther.compiler.check.Rules;
 import souther.compiler.check.Shape;
 import souther.compiler.check.Symbols;
@@ -56,6 +57,14 @@ record PlacedRules(TypeSymbol value, Rules rules) {
     }
 
     /**
+     * Where the position at {@code path} stops once every rule reaching this value has been taken
+     * in, which is not the same as what {@link #at} projects onto it.
+     */
+    NumericDomain.Bounds leftAt(TermPath path) {
+        return bounds().leftAt(String.join(".", path.fields()));
+    }
+
+    /**
      * Which values the position at {@code path} may hold, and how much of its rules was read.
      *
      * <p>Asked at every path, the value's own included: what a name wraps is at no path of its own
@@ -84,6 +93,17 @@ record PlacedRules(TypeSymbol value, Rules rules) {
                         .filter(each -> each.owed().subject().path().equals(where))
                         .forEach(out::add));
         return List.copyOf(out);
+    }
+
+    /**
+     * How much of what the rules say the bounds of this value are able to state.
+     *
+     * <p>Asked of the value and not of one position in it, because that is what it licenses: a row
+     * at an edge is a whole value with that edge in it, so a rule the bounds cannot express is a way
+     * that value can be refused however plainly the numbers beside it were read.
+     */
+    ProjectionEvidence projection() {
+        return rules.projection();
     }
 
     /**

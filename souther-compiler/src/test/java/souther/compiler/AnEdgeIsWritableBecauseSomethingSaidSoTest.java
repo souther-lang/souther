@@ -33,12 +33,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AnEdgeIsWritableBecauseSomethingSaidSoTest {
 
     /**
-     * Two edges of one range, one refused by a rule that reaches it and one not.
+     * A clause placing an end at a value the clause beside it takes away.
      *
-     * <p>{@code value /= 0} is a rule the projection cannot take into a bound, so neither edge is
-     * proven. It reaches the bottom of the range and nothing else: the decoder refuses a 0 and builds
-     * a 10. The pair is the whole point — an answer that turned {@code allRulesRead == false} into
-     * "writable" would settle both, and one that kept it as "not writable" would settle neither.
+     * <p>{@code within} writes the bottom of the range at 0 and {@code nonzero} refuses the 0, and
+     * the two are read by different readings: an end is placed by whichever clause states one, and a
+     * denial states none. So the end as written is at 0 and the position starts at 1, and the line
+     * this position has is the one at 1 — a line at 0 is a line at no value of {@code N}, and asking
+     * whether a row can be written there asks about a value the model excludes.
+     *
+     * <p>Which rule the line belongs to does not move with it. {@code within} placed it and holds it
+     * still; {@code nonzero} did not draw a new line at 1.
      */
     private static final String HOLED = """
             module example.holed
@@ -59,16 +63,14 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
             """;
 
     @Test
-    void aRuleTheProjectionCouldNotReadLeavesTheEdgeItRefusesUnknown() {
-        BoundaryAssessment at = assessmentAt(HOLED, "example.holed", "f", "0");
+    void anEndTakenAwayByAClauseBesideItIsALineAtTheValueTheRulesLeave() {
+        assertEquals(List.of("1", "10"), valuesAt(HOLED, "example.holed", "f"),
+                "the position starts at 1, so that is where the line is and 0 is no line of it");
 
-        assertInstanceOf(BoundaryAssessment.Writability.Unknown.class, at.writability(),
-                "nothing proved it and nothing built it");
-        BoundaryAssessment.Attempt.Unresolved unresolved = assertInstanceOf(
-                BoundaryAssessment.Attempt.Unresolved.class, at.attempt(),
-                "and refused is not impossible: nothing here says no row can be written");
-        assertEquals(Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
-                unresolved.why().reason());
+        BoundaryAssessment at = assessmentAt(HOLED, "example.holed", "f", "1");
+        assertInstanceOf(BoundaryAssessment.Writability.WitnessedByConstruction.class,
+                at.writability(),
+                "and a value at it went through the decoder, which is more than a proof of one");
     }
 
     @Test
@@ -297,6 +299,17 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
                     assertInstanceOf(BoundaryAssessment.Attempt.NotAttempted.class, at.attempt())
                             .reason(), at.label());
         }
+    }
+
+    /** Every line of {@code behavior}, as the report names them, in the order it holds them. */
+    private static List<String> valuesAt(String model, String module, String behavior) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+        Map<String, List<BoundaryAssessment>> boundaries =
+                compilation.db().ask(new Adequacy.Boundaries(module)).value();
+        assertNotNull(boundaries, "the model under test compiles");
+        return boundaries.get(behavior).stream().map(BoundaryAssessment::value).sorted().toList();
     }
 
     private static BoundaryAssessment.Writability writabilityAt(String model, String module,

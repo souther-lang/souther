@@ -382,7 +382,24 @@ final class Predicates {
      * elsewhere, and that check names the clause that failed rather than only saying one did, so it
      * is left to say it. */
     Owed obligations(Core inv, Known k, Denotations at, boolean decidesFalse) {
-        return obligations(inv, k, at, Set.of(), true, decidesFalse, Read.AN_ASSUMPTION);
+        return obligations(inv, k, at, Set.of(), true, decidesFalse, Read.AN_ASSUMPTION, null);
+    }
+
+    /**
+     * The same, telling {@code per} what each part of the clause owed as it is read.
+     *
+     * <p>A conjunction is read a conjunct at a time, and what each conjunct came to is this
+     * reading's own answer about that conjunct. Handed over here rather than asked again afterwards:
+     * a second reading of a part is a second reader, and the two agree only for as long as nobody
+     * changes one of them.
+     */
+    Owed obligations(Core inv, Known k, Denotations at, boolean decidesFalse, PerPart per) {
+        return obligations(inv, k, at, Set.of(), true, decidesFalse, Read.AN_ASSUMPTION, per);
+    }
+
+    /** Told what one part of a clause owed, keyed by the part it was read from. */
+    interface PerPart {
+        void read(Core part, Owed owed);
     }
 
     /**
@@ -415,7 +432,7 @@ final class Predicates {
      * read against. */
     Owed obligations(Core inv, Known k, Denotations at, Set<Core> unnamed,
                      boolean decidesFalse) {
-        return obligations(inv, k, at, unnamed, true, decidesFalse, Read.AN_OBLIGATION);
+        return obligations(inv, k, at, unnamed, true, decidesFalse, Read.AN_OBLIGATION, null);
     }
 
     /**
@@ -426,29 +443,35 @@ final class Predicates {
      * taken. Reading a predicate never takes a reading away.
      */
     private Owed obligations(Core rawInv, Known k, Denotations at, Set<Core> unnamed,
-                             boolean positive, boolean decidesFalse, Read way) {
+                             boolean positive, boolean decidesFalse, Read way, PerPart per) {
         Core sized = asSizeComparison(rawInv);
         Core ordered = asOrderComparison(sized, at);
-        Owed read = read(ordered, k, at, unnamed, positive, decidesFalse, way);
-        return ordered != sized && read.unreadable()
-                ? read(sized, k, at, unnamed, positive, decidesFalse, way) : read;
+        Owed read = read(ordered, k, at, unnamed, positive, decidesFalse, way, per);
+        Owed out = ordered != sized && read.unreadable()
+                ? read(sized, k, at, unnamed, positive, decidesFalse, way, per) : read;
+        if (per != null) {
+            // Keyed by the part as it was handed in, which is the node a reader of this walk holds.
+            // What it was rewritten to on the way is this reading's business.
+            per.read(rawInv, out);
+        }
+        return out;
     }
 
     /** What {@code inv} owes, read as it stands. Its parts are read through {@link #obligations},
      * which is where each of them is taken as the comparison it states. */
     private Owed read(Core inv, Known k, Denotations at, Set<Core> unnamed,
-                      boolean positive, boolean decidesFalse, Read way) {
+                      boolean positive, boolean decidesFalse, Read way, PerPart per) {
         if (inv instanceof Core.Binary b && b.op() == Hir.BinOp.AND && positive) {
             // Each conjunct on its own: an invariant is a set of things that hold, and one the check
             // cannot read leaves its own run-time check standing without costing the others theirs.
             // That it stands is carried rather than dropped — the other conjunct being discharged is
             // not the invariant proven.
-            return obligations(b.left(), k, at, unnamed, true, decidesFalse, way)
-                    .and(obligations(b.right(), k, at, unnamed, true, decidesFalse, way));
+            return obligations(b.left(), k, at, unnamed, true, decidesFalse, way, per)
+                    .and(obligations(b.right(), k, at, unnamed, true, decidesFalse, way, per));
         }
         Core under = negated(inv);
         if (under != null) {
-            return obligations(under, k, at, unnamed, !positive, decidesFalse, way);
+            return obligations(under, k, at, unnamed, !positive, decidesFalse, way, per);
         }
         Boolean folded = decidedAt(inv);
         if (folded != null) {
@@ -747,6 +770,28 @@ final class Predicates {
             }
             if (c.fact() != null) {
                 named.addAll(c.fact().keys());
+            }
+        }
+        return named;
+    }
+
+    /**
+     * The atoms a projection could narrow by, of what {@code owed} states.
+     *
+     * <p>{@link #subjectsIn} counts the key a guard settles by name as well, because what makes a
+     * clause readable against a value is that something speaks of it, however it speaks. This
+     * counts what the interval algebra was handed a form for, which is the narrower thing and the
+     * one a range's exactness is about: {@code value == 3 || value == 5} arrives as a fact keyed on
+     * the comparison and no form at all, so it names a subject there and narrows nothing here.
+     */
+    static Set<FactSubject> narrowableIn(Owed owed) {
+        Set<FactSubject> named = new LinkedHashSet<>();
+        for (Clause c : owed.clauses()) {
+            for (Constraint known : c.known()) {
+                named.addAll(known.atoms());
+            }
+            if (c.numeric() != null) {
+                named.addAll(c.numeric().atoms());
             }
         }
         return named;

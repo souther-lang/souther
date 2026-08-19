@@ -339,17 +339,19 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
     }
 
     /**
-     * A clause can be accounted for without becoming a bound.
+     * A clause can be answered without the bounds being able to state it.
      *
-     * <p>The short circuit this is here to stop. {@code allRulesRead()} answers whether every clause
-     * became one of the constraints the bounds are read from, which is a question about how far an
-     * edge can be trusted; {@code value * 2 >= 4} is read whole and becomes no bound, so the two
-     * answers differ — and reaching for the older one to say whether the model was read would report
-     * a rule as unread on the strength of a question nobody asked.
+     * <p>The short circuit this is here to stop. Whether a rule was answered is about the model —
+     * some reading took it in — and whether the bounds state it is about the projection that was
+     * made; {@code value == 3 || value == 5} is held whole by the reading of values and reaches the
+     * interval algebra as a fact keyed on the comparison, so the bounds are {@code [3, 5]} and the 4
+     * between them is a row nobody can write. Reaching for one to say the other reports a rule as
+     * unread on the strength of a question nobody asked, or promises a row at an edge on the
+     * strength of a reading that was never about edges.
      */
     @Test
-    void aClauseCanBeAccountedForWithoutBecomingABound() {
-        Compilation compilation = Compilation.ofSource(beside("value * 2 >= 4"), "Main");
+    void aClauseCanBeAnsweredWithoutTheBoundsStatingIt() {
+        Compilation compilation = Compilation.ofSource(beside("value == 3 || value == 5"), "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
@@ -357,7 +359,7 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
         FieldDomains read = FieldDomains.of(named,
                 (Hir.Data) symbols.declarations().declaration(named.key()), symbols);
 
-        assertFalse(read.allRulesRead(), "no bound came of it");
+        assertFalse(read.projection().isExact(), "the bounds hold no hole");
         assertEquals(Set.of(), rule(read.accounting(), "said").unaccounted(),
                 "and it was read all the same");
     }
