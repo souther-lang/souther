@@ -18,8 +18,7 @@ import java.util.Optional;
  * times the rule is read, and everything beside it on these records is an answer about this reading
  * of it: where the comparison's own value is recorded, which arms witness it, which side of the
  * line the cut value falls on, which declarations took an end in. None of those tell one rule from
- * another, and a question keyed on them is a question the reading raised rather than the model
- * (issue #852).
+ * another, and a question keyed on them is a question the reading raised rather than the model.
  *
  * <p>Three identities and not one, because they are three equivalences. {@link RuleRef} answers
  * whose rule it is; this answers which reading of that rule a boundary was drawn off; and

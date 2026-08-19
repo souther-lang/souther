@@ -23,7 +23,7 @@ import java.util.Set;
  * <p>Filed under {@link RuleRef} and not under the clause reference the walk had in hand. Every
  * clause reaching here is an invariant's, so the two would key the same map today — and the value
  * recorded here is carried to a report, where what names a rule is the rule. Weakened on the way
- * out, each reader downstream had to work the identity back out for itself (issue #852).
+ * out, each reader downstream had to work the identity back out for itself.
  *
  * <p>Success and not attempt. A reading that recognised part of a clause and gave up took nothing
  * in, so nothing here records it — what is written down is the point at which a reading adopted the

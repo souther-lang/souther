@@ -71,6 +71,13 @@ public sealed interface RuleRef {
             if (rule == null) {
                 throw new IllegalArgumentException("an ensures rule belongs to a behavior");
             }
+            // Absent is spelled as the empty string, which is what {@link #named} reads. A clause
+            // stating one rule over every answer is called by the behavior's name alone, and that
+            // is an answer about the clause rather than the absence of one.
+            if (clause == null) {
+                throw new IllegalArgumentException(
+                        "a clause the author named nothing is named by nothing, not by null");
+            }
         }
     }
 

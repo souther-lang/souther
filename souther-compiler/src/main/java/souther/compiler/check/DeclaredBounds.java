@@ -44,7 +44,7 @@ public final class DeclaredBounds {
      * <p>Each as the rule a report names it by. An end here is read by the measure that turns it
      * into lines to write rows at, and that measure names the rule that drew it — handed the clause
      * reference, it built the identity back for itself, which is a decision about what a rule is
-     * being taken by whoever happened to consume one (issue #852).
+     * being taken by whoever happened to consume one.
      */
     public record End(Endpoint at, List<RuleRef.Invariant> from) {
 

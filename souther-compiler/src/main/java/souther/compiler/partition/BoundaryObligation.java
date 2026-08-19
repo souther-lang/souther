@@ -49,7 +49,7 @@ public record BoundaryObligation(BoundaryTarget target, OriginRef origin, Bounda
      * <p>Asked of the origin here rather than answered by it. Which rule drew a line and which side
      * of the line a row is owed on are two questions, and only the first is the rule's — the second
      * is what this measure does with the answer, and reading it off the origin put the vocabulary
-     * of boundaries inside the identity every other measure of a rule shares (issue #852).
+     * of boundaries inside the identity every other measure of a rule shares.
      */
     public static java.util.Optional<BoundarySide> besideTheCut(OriginRef origin) {
         return switch (origin) {

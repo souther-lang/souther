@@ -109,7 +109,7 @@ public final class RuleAccounting {
      * <p>The rule as {@link RuleRef}, all the way to the report that names it. Carried as the
      * clause reference the reading had in hand, the one reader of these built the identity at the
      * last moment — right while only invariants raise a question, and a decision about what a rule
-     * is taken by whoever consumed one (issue #852).
+     * is taken by whoever consumed one.
      */
     public record Unanswered(RuleRef rule, Owed owed) {}
 
