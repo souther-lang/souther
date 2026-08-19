@@ -144,7 +144,7 @@ final class Coverages {
                         // Spelled by the term itself, which is the one thing that spells a term. A
                         // second spelling here is a second key for one subject, and a document
                         // promises `String.length(code)` beside `code`.
-                        subjectSaid(open.owed().subject(), each)));
+                        open.owed().subject(), measureSaid(open.owed().subject(), each)));
             }
         }
         return new PartitionEvidence(PartitionEvidence.Partitioned.of(axes),
@@ -306,14 +306,11 @@ final class Coverages {
     private static List<PartitionEvidence.Unanswered> unansweredAt(Axis axis) {
         return axis.unanswered().stream()
                 .map(each -> new PartitionEvidence.Unanswered(axis.path().toString(),
-                        each.cited(), each.owed().obligation(),
-                        // The subject the question carries, resolved against the axis it is at. A
-                        // question about the position is spelled as the position and one about a
-                        // number taken of it as the term, and which of the two it is was settled
-                        // where the question was raised — not here, and not by whatever a renderer
-                        // has to hand.
-                        each.owed().subject().measured()
-                                ? axis.term().toString() : axis.path().toString()))
+                        each.cited(), each.owed().obligation(), each.owed().subject(),
+                        // The number the line falls on, where it falls on one. Which of the two the
+                        // question is about was settled where it was raised — not here, and not by
+                        // whatever a renderer has to hand.
+                        each.owed().subject().measured() ? axis.term().toString() : null))
                 .toList();
     }
 
@@ -324,18 +321,14 @@ final class Coverages {
      * position it was filed at spells it. A position's own subject is relative to where it is filed,
      * and the term it was measured by spells the rest.
      */
-    private static String subjectSaid(souther.compiler.check.Owed.Subject subject,
+    private static String measureSaid(souther.compiler.check.Owed.Subject subject,
                                       souther.compiler.partition.GuardThresholds.Guards.AtAPosition
                                               filed) {
-        return switch (subject) {
-            // Named by the comparison that drew it, which a report writes as its place. The words
-            // beside it say what kind of place it is; writing the place out is what this subject
-            // exists not to do.
-            case souther.compiler.check.Owed.Subject.OfComparison it -> it.toString();
-            case souther.compiler.check.Owed.Subject.OfAPosition at ->
-                    at.measured() && filed.term() != null
-                            ? filed.term().toString() : filed.at().toString();
-        };
+        // The number the line falls on, where it falls on one. A place between two moving terms has
+        // none — writing one out is what naming it by its comparison exists not to do — and a
+        // position's own values are named by the position.
+        return subject instanceof souther.compiler.check.Owed.Subject.OfAPosition at
+                && at.measured() && filed.term() != null ? filed.term().toString() : null;
     }
 
     private static PartitionEvidence.AxisCoverage coverageOf(Axis axis, Readings readings) {

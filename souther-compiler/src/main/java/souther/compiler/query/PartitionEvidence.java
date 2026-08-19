@@ -82,14 +82,20 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
      *                 measure's section a reader meets it in follows from this and is decided where
      *                 the document is written — the question is the model's and the sections are
      *                 the report's
-     * @param subject  what the question is about, spelled the way a report names it. Carried
-     *                 rather than worked out downstream from the axis: the questions do not share a
-     *                 subject — which values may stand somewhere is about a position, and a line is
-     *                 about a number taken of one — and a renderer choosing between the two is how a
-     *                 reading of a string's values came to be printed against its length
+     * @param subject  what the question is about, as the reading that raised it named it. Carried
+     *                 as what it is rather than as words for it: the questions do not share a
+     *                 subject — which values may stand somewhere is about a position, a border is
+     *                 about a number taken of one, and a border between two moving terms is about
+     *                 the comparison that drew it — and two of those cannot be told apart once they
+     *                 are one string. Which is what happened: a place named by its comparison came
+     *                 out as the same words for every comparison there is
+     * @param measure  the number the position is measured by, where a border falls on one. Beside
+     *                 the subject because it is the reading's spelling of it and this document
+     *                 promises both
      */
     public record Unanswered(String at, souther.compiler.check.RuleCitation cited,
-                             souther.compiler.check.CoverageObligation question, String subject) {}
+                             souther.compiler.check.CoverageObligation question,
+                             souther.compiler.check.Owed.Subject subject, String measure) {}
 
     /**
      * A position something is written about that this reading did not turn into a line, and what

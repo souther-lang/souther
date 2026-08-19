@@ -352,9 +352,9 @@ public final class GuardThresholds {
      * {@code String} bounded on its length raises about the string and draws its line on the count,
      * and a document promises both spellings.
      */
-    static Owed.Subject subjectOf(NumericTerm term) {
-        // Null where neither side named a number this reads. The position is what the comparison is
-        // about then, and nothing says a count was what the line was on.
+    static Owed.Subject.OfAPosition subjectOf(NumericTerm term) {
+        // A term that is a count says the line is on the count; anything else — a term over the
+        // position's own value, or no term at all — leaves it on the position.
         return new Owed.Subject.OfAPosition("", term instanceof NumericTerm.SizeOf);
     }
 

@@ -333,6 +333,25 @@ class EverySchemaWordIsAccountedForTest {
                 "and so is the identifier a resolver keys on: " + schema().get("$id"));
     }
 
+    /**
+     * And the third: which kind of thing a question is about, written from the arms of a sealed type
+     * rather than from an enum.
+     *
+     * <p>The arms are not interchangeable words for one thing — a position is named by where it is
+     * and a comparison by where it is written — so what a document says of each is asked of the
+     * writer rather than of a name.
+     */
+    @Test
+    void theThirdFieldWithNoEnumBehindItIsWrittenFromWhatAQuestionIsAbout() {
+        assertEquals(Set.of(
+                        AdequacyReport.subjectWord(souther.compiler.check.Owed.Subject.at("x")),
+                        AdequacyReport.subjectWord(new souther.compiler.check.Owed.Subject
+                                .OfComparison(souther.compiler.diag.Citation.of(
+                                        new souther.compiler.diag.SourcePos(1, 1))))),
+                allowedAt(schema(), List.of("$defs", "partition", "properties", "unanswered",
+                        "items", "properties", "subject", "properties", "kind")));
+    }
+
     /** Every enumerated field of the schema is either held above or named as the exception. */
     @Test
     void noEnumeratedFieldIsUnaccountedFor() {
@@ -344,6 +363,7 @@ class EverySchemaWordIsAccountedForTest {
         }
         held.add("/$defs/behavior/properties/implementation");
         held.add("/$defs/partition/properties/axes/items/properties/read/properties/extent");
+        held.add("/$defs/partition/properties/unanswered/items/properties/subject/properties/kind");
 
         List<String> unaccounted = paths.stream().filter(p -> !held.contains(p)).toList();
         assertEquals(List.of(), unaccounted,

@@ -71,7 +71,7 @@ class AValueSingledOutIsNotABorderTest {
 
     /** What the questions of that condition are about, as a report names them. */
     private static Set<String> subjectsOf(String condition) {
-        return raisedWith(condition).stream().map(PartitionEvidence.Unanswered::subject)
+        return raisedWith(condition).stream().map(each -> each.subject().toString())
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
 
@@ -128,18 +128,26 @@ class AValueSingledOutIsNotABorderTest {
     }
 
     /**
-     * And the place it names is the comparison, not a spelling of where the two meet.
+     * And the place it names is the comparison that drew it, which tells two of them apart.
      *
      * <p>Writing the place out takes both sides in a vocabulary this compiler has, and it has none
-     * for {@code r.other + 1}: the best it could print was {@code r.a = r.other}, which is a place
-     * that rule never stopped, and {@code + 1} and {@code + 2} came out as one subject. What the
-     * question is about does not move when a printer learns another shape.
+     * for {@code r.other + 1}: the best it could print was {@code r.a = r.other}, a place that rule
+     * never stopped, and {@code + 1} and {@code + 2} came out as one subject. Named by the
+     * comparison, the subject is exact — which is only true while the comparison travels as itself,
+     * so this asks what it is and not what it is called.
      */
     @Test
     void theBorderOfARelationIsNamedByTheComparisonThatDrewIt() {
-        assertEquals(Set.of("where the relation changes"), subjectsOf("r.a <= r.other + 1"));
-        assertEquals(Set.of("where the relation changes"), subjectsOf("r.a <= r.a + 1"),
-                "and not `r.a = r.a`, which reads as a place every row is at");
+        java.util.List<souther.compiler.diag.Citation> drawn =
+                raisedWith("r.a <= r.other + 1 && r.a <= r.other + 2").stream()
+                        .map(PartitionEvidence.Unanswered::subject)
+                        .map(souther.compiler.check.Owed.Subject.OfComparison.class::cast)
+                        .map(souther.compiler.check.Owed.Subject.OfComparison::at)
+                        .toList();
+
+        assertEquals(2, drawn.size(), () -> "one line each: " + drawn);
+        assertEquals(2, Set.copyOf(drawn).size(),
+                () -> "and two places, not one sentence twice: " + drawn);
     }
 
     /**

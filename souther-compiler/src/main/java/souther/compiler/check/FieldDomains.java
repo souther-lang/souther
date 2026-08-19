@@ -349,13 +349,17 @@ public final class FieldDomains {
      * <p>One per position the rule names, since a rule relating two coordinates is filed under
      * neither of them alone.
      *
-     * @param path where the coordinate sits, read from the value these are of
+     * @param path     where the coordinate sits, read from the value these are of
+     * @param measured whether the end was to be on a count taken of the position rather than on the
+     *                 position's own value. One position carries both — a {@code String} bounded on
+     *                 its length has an end on the count and values of its own — and a rule stopped
+     *                 at one of them is no account of the other
      * @param from the rule that says where the values stop, which is what a reader is sent to look
      *             at
      * @param why  what would have to change before this rule could be a line, in this compiler's
      *             own terms
      */
-    public record Unread(String path, RuleRef.Invariant from,
+    public record Unread(String path, boolean measured, RuleRef.Invariant from,
                          souther.compiler.inputs.BlockReason why) {}
 
     /**
@@ -538,7 +542,8 @@ public final class FieldDomains {
     private RuleAccounting.Outcome unreadAnswerFor(RuleRef rule,
                                                    Owed.Subject.OfAPosition where) {
         for (Unread said : unread) {
-            if (said.from().equals(rule) && said.path().equals(where.path())) {
+            if (said.from().equals(rule) && said.path().equals(where.path())
+                    && said.measured() == where.measured()) {
                 return new RuleAccounting.Outcome.Unaccounted(
                         new RuleAccounting.Why.TheEndReadingSays(said.why()));
             }

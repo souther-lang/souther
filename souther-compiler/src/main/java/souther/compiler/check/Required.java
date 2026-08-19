@@ -201,13 +201,12 @@ public sealed interface Required {
      * carry. An invariant refuses everything outside its bound at construction, which is why that
      * producer raises no {@link CoverageObligation#PARTITION} and this one does (ADR-0090).
      *
-     * <p>{@code read} is a reading and never a verdict. A caller says what it made of the
-     * comparison and this says what that answers, so the questions and their answers are paired in
-     * one place — handed a verdict, a caller could answer a question the model never raised.
+     * <p>Nothing a reading managed reaches this. What a comparison asks is settled by what it
+     * places and what it places it about, both read off the comparison; what a reading made of it
+     * is an answer, and is paired with these questions by {@link RuleAccounting#ofComparison}.
      *
      * @param claim what the comparison places, from the comparison alone
-     * @param about the position the line is on, as the reading that found it names it
-     * @param read  what that reading came to
+     * @param of    what it places it about, from the comparison alone as well
      */
     public static Required ofComparison(ComparisonClaim claim, ComparisonSubject of) {
         if (of instanceof ComparisonSubject.Relation between) {

@@ -37,8 +37,11 @@ public enum CoverageObligation {
     /**
      * A line rows are owed at.
      *
-     * <p>Subject: the number the position is measured at. Raised by every rule that places an end,
-     * whether it divides the position or only stops it.
+     * <p>Subject: where the line falls. A rule bounding one position draws it on the number that
+     * position is measured at; a comparison of two things that both move with the row draws it where
+     * they hold one count, which is on neither of them and is named by that comparison. Raised by
+     * every rule that places an end, whether it divides the position, stops it, or holds two of them
+     * against each other.
      */
     BOUNDARY,
 

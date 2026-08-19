@@ -38,11 +38,11 @@ class AQuestionAboutACountIsNotOneAboutTheValueItCountsTest {
         throw new AssertionError("no behavior called " + behavior);
     }
 
-    /** The subject of the line question, which is the only one both producers raise. */
+    /** The number the line question falls on, which is the only one both producers raise. */
     private static String lineSubjectIn(PartitionEvidence partition) {
         return partition.unanswered().stream()
                 .filter(each -> each.question() == CoverageObligation.BOUNDARY)
-                .map(PartitionEvidence.Unanswered::subject)
+                .map(PartitionEvidence.Unanswered::measure)
                 .findFirst().orElseThrow(() -> new AssertionError(
                         "no line was asked about: " + partition.unanswered()));
     }

@@ -1938,8 +1938,9 @@ public final class Adequacy {
                 // which section of a document says this follows from the question.
                 out.add(new Finding(Kind.RULE_UNACCOUNTED, behavior.name(),
                         MeasurementStatus.NOT_MEASURED, Citation.of(behavior.pos()),
-                        List.of(each.subject(), each.cited(), asked(each.question()),
-                                each.question())));
+                        List.of(each.measure() != null ? each.measure() : each.at(),
+                                each.cited(), asked(each.question()), each.question(),
+                                each.subject())));
             }
             for (souther.compiler.partition.Partitions.OmittedAxis dropped : partition.omitted()) {
                 out.add(new Finding(Kind.PARTITION_OMITTED, behavior.name(),

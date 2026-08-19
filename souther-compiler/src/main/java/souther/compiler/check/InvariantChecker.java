@@ -1311,7 +1311,8 @@ public final class InvariantChecker {
         BlockReason why = UnreadComparison.why(sideOf(comparison.left(), at, byName),
                 sideOf(comparison.right(), at, byName));
         for (Coordinate each : coordinatesIn(comparison, at, byName)) {
-            FieldDomains.Unread said = new FieldDomains.Unread(each.path(), from, why);
+            FieldDomains.Unread said =
+                    new FieldDomains.Unread(each.path(), each.measured(), from, why);
             if (!out.contains(said)) {
                 out.add(said);
             }

@@ -981,10 +981,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
 
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.RULE_UNACCOUNTED)) {
             if (mine.test((souther.compiler.check.CoverageObligation) f.args().get(3))) {
+                // A place a comparison drew is pointed at rather than described: the words for it
+                // are the same for every comparison there is, and two of them at one position read
+                // as one.
+                Object about = f.args().get(4)
+                        instanceof souther.compiler.check.Owed.Subject.OfComparison it
+                        ? it.at().said(names, declaredIn) : f.args().get(0);
                 out.append(String.format("      %s not accounted for: %s — %s %s%n",
                         mark(f), cited((souther.compiler.check.RuleCitation) f.args().get(1),
                                 names, declaredIn),
-                        f.args().get(2), f.args().get(0)));
+                        f.args().get(2), about));
             }
         }
     }
@@ -1010,6 +1016,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * to the words without reading the writer. No {@code default}: an arm added and not given a
      * word stops the compile rather than arriving in a document as one that already existed.
      */
+    /**
+     * The word a document writes for which kind of thing a question is about.
+     *
+     * <p>Here rather than at the one place it is written, for the reason the others are: a reader
+     * holding the arms can be held to the words without reading the writer. No {@code default}, so
+     * an arm added and not given a word stops the compile rather than arriving in a document as one
+     * that already existed.
+     */
+    public static String subjectWord(souther.compiler.check.Owed.Subject subject) {
+        return switch (subject) {
+            case souther.compiler.check.Owed.Subject.OfAPosition _ -> "position";
+            case souther.compiler.check.Owed.Subject.OfComparison _ -> "comparison";
+        };
+    }
+
     public static String readingWord(PartitionEvidence.AxisCoverage.Reading read) {
         // Partial covers both, and what is written beside it says which. A reader keying on the
         // word is told the numbers rest on something unfinished, which is what the word is for; the
@@ -1231,7 +1252,31 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // table of sources this document carries.
                 one.put("rule", each.cited().said(sources::written, null));
                 one.put("question", word(each.question()));
-                one.put("subject", each.subject());
+                // What the question is about, as what it is. A place a comparison drew between two
+                // moving terms is named by that comparison and not written out — printing it takes
+                // both sides in a vocabulary this compiler has, and it has none for every shape a
+                // side can be — so a consumer telling two of them apart is handed the two places
+                // rather than one sentence twice.
+                ObjectNode about = one.putObject("subject");
+                switch (each.subject()) {
+                    case souther.compiler.check.Owed.Subject.OfAPosition _ -> {
+                        about.put("kind", subjectWord(each.subject()));
+                        about.put("path", each.at());
+                        if (each.measure() != null) {
+                            about.put("measure", each.measure());
+                        }
+                    }
+                    case souther.compiler.check.Owed.Subject.OfComparison it -> {
+                        about.put("kind", subjectWord(each.subject()));
+                        // Where the comparison is, for every citation this document can point at.
+                        // A comparison out of sight has no place a reader here can open, and the
+                        // rule beside it is what sends them to the declaration it is written in.
+                        if (it.at() instanceof Citation.Written
+                                || it.at() instanceof Citation.Reached) {
+                            at(about, it.at(), sources);
+                        }
+                    }
+                }
             }
         }
         ArrayNode offAxis = out.putArray("claimsOffAxis");
@@ -1438,8 +1483,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // for a rule with a name and broke for every rule found by where it is written.
             case RULE_UNACCOUNTED ->
                     ((souther.compiler.check.RuleCitation) args.get(1))
-                            .said(sources::written, null)
-                            + " — " + args.get(2) + " " + args.get(0);
+                            .said(sources::written, null) + " — " + args.get(2) + " "
+                            + (args.get(4)
+                                    instanceof souther.compiler.check.Owed.Subject.OfComparison it
+                                            ? it.at().said(sources::written, null) : args.get(0));
             case INPUT_CASE_UNSPECIFIED ->
                     String.valueOf(args.get(0)) + " (in #" + args.get(1) + ")";
             case BOUNDARY_UNMET -> args.get(0) + " = " + args.get(1);
