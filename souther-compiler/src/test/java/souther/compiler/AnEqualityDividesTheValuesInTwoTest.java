@@ -102,7 +102,7 @@ class AnEqualityDividesTheValuesInTwoTest {
     void rowsOnEitherSideCoverIt() {
         String human = reportOf(MODEL);
 
-        assertTrue(human.contains("IN points 2/2"), human);
+        assertTrue(human.contains("equivalence partitions 2/2"), human);
         assertFalse(human.contains("no row is in"), human);
     }
 

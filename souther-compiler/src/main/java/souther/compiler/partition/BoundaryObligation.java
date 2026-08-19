@@ -58,15 +58,24 @@ public record BoundaryObligation(BoundaryTarget target, OriginRef origin, Bounda
      * assumed inclusive, and the ends that reach a report are inclusive because a strict bound on a
      * continuous carrier is dropped further down and not because a bound is always closed.
      *
-     * <p>Answered for {@code BELOW} and {@code ABOVE} under a bound as well, though
-     * {@link #besideTheCut} owes no row there. What a value one step outside a bound would be is not
-     * in doubt, and a side with no answer would be a case a reader has to handle for a value that
-     * never arrives.
+     * <p>Defined at the cut and at the one value beside it, which is every side an obligation is
+     * built with ({@link #besideTheCut}) and no other. Not every value around a border has one of
+     * these two roles: under {@code <= 100} the value below the cut is 99, which is inside the
+     * partition and not against its border — an {@code IN} point, and neither of the two answers
+     * here. Answering for it would have this say {@code OFF} of a value well inside the range, so a
+     * side the rule does not place a row on is refused rather than given the nearer of two words.
+     *
+     * @throws IllegalArgumentException where {@code side} is neither the cut nor the value the rule
+     *                                  places beside it
      */
-    public static PointRole pointRole(OriginRef origin, BoundarySide side) {
-        boolean holds = holdsAtTheValue(origin);
-        boolean inside = side == BoundarySide.AT ? holds : !holds;
-        return inside ? PointRole.ON : PointRole.OFF;
+    static PointRole pointRole(OriginRef origin, BoundarySide side) {
+        if (side != BoundarySide.AT && besideTheCut(origin).orElse(null) != side) {
+            throw new IllegalArgumentException(
+                    "no row is owed " + side + " of this line: " + origin);
+        }
+        // Inside at the cut exactly where the rule holds there, and beside it exactly where it does
+        // not — the two sides of one border, so the answers are opposite by construction.
+        return (side == BoundarySide.AT) == holdsAtTheValue(origin) ? PointRole.ON : PointRole.OFF;
     }
 
     /** Whether the cut value itself satisfies the rule that drew the line. */

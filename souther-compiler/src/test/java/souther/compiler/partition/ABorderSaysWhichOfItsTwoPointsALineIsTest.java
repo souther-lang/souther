@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.RuleRef;
@@ -21,6 +22,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -174,16 +176,55 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
      */
     @Test
     void aBoundThatStopsShortOfItsValueIsTheOffPoint() {
-        RuleRef.Invariant rule = new RuleRef.Invariant(new Clause.Ref(
-                new Clause.Id(TypeSymbols.declared(new TypeKey("example.bound", "Above")), 0),
-                Optional.of(new ClauseName("above"))));
-
         assertEquals(BoundaryObligation.PointRole.ON,
-                BoundaryObligation.pointRole(new OriginRef.InvariantOrigin(rule, true),
+                BoundaryObligation.pointRole(new OriginRef.InvariantOrigin(invariant(), true),
                         BoundaryObligation.BoundarySide.AT));
         assertEquals(BoundaryObligation.PointRole.OFF,
-                BoundaryObligation.pointRole(new OriginRef.InvariantOrigin(rule, false),
+                BoundaryObligation.pointRole(new OriginRef.InvariantOrigin(invariant(), false),
                         BoundaryObligation.BoundarySide.AT));
+    }
+
+    /**
+     * The two roles are defined at the cut and at the value beside it, and refused anywhere else.
+     *
+     * <p>Under {@code <= 100} the value below the cut is 99, which is inside the partition and not
+     * against its border — an {@code IN} point, and neither of the two words here. Answered by the
+     * arithmetic alone it comes back {@code OFF}, which would say a value well inside the range is
+     * outside it. What keeps the derivation honest is the domain rather than the formula, so a side
+     * no rule places a row on is refused.
+     *
+     * <p>An invariant places a row on no side at all, so every side but the cut is refused there.
+     */
+    @Test
+    void aSideNoRowIsOwedOnIsRefusedRatherThanGivenTheNearerWord() {
+        // `<= 100`: the cut belongs to the passing side, so the row beside it is the one above.
+        OriginRef closed = new OriginRef.EnsuresOrigin(
+                new RuleRef.Ensures(new BehaviorContract.RuleId(null, 0, 0, null), "cap"),
+                true, true, false);
+
+        assertEquals(BoundaryObligation.PointRole.ON,
+                BoundaryObligation.pointRole(closed, BoundaryObligation.BoundarySide.AT));
+        assertEquals(BoundaryObligation.PointRole.OFF,
+                BoundaryObligation.pointRole(closed, BoundaryObligation.BoundarySide.ABOVE));
+        assertThrows(IllegalArgumentException.class, () -> BoundaryObligation.pointRole(
+                closed, BoundaryObligation.BoundarySide.BELOW));
+
+        OriginRef bound = new OriginRef.InvariantOrigin(invariant(), true);
+
+        assertEquals(BoundaryObligation.PointRole.ON,
+                BoundaryObligation.pointRole(bound, BoundaryObligation.BoundarySide.AT));
+        for (BoundaryObligation.BoundarySide beside : List.of(
+                BoundaryObligation.BoundarySide.BELOW, BoundaryObligation.BoundarySide.ABOVE)) {
+            assertThrows(IllegalArgumentException.class,
+                    () -> BoundaryObligation.pointRole(bound, beside));
+        }
+    }
+
+    /** The clause the bound tests name, which is only an identity here. */
+    private static RuleRef.Invariant invariant() {
+        return new RuleRef.Invariant(new Clause.Ref(
+                new Clause.Id(TypeSymbols.declared(new TypeKey("example.bound", "Above")), 0),
+                Optional.of(new ClauseName("above"))));
     }
 
     /** A newtype bounded by {@code rule}, held in a record, with one row well away from the bound. */

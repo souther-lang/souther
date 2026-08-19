@@ -181,13 +181,13 @@ class AMeasureWithNoNumberSaysWhyTest {
                     branch      not measured (no row names this behavior)
                   classify                 implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
-                    partition   axes 1   IN points 1/2
+                    partition   axes 1   equivalence partitions 1/2
                       · no row is in `No`
                     border      not measured (no line was derived at any position)
                     branch      0/0
                   sift                     implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
-                    partition   axes 2   IN points 0/0   (2 not measured: no row names this behavior)
+                    partition   axes 2   equivalence partitions 0/0   (2 not measured: no row names this behavior)
                     border      not measured (no line was derived at any position)
                     branch      not measured (no row names this behavior)
 

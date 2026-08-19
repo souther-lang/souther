@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * guard} printed both of these, four rows apart:
  *
  * <pre>
- *     partition   axes 1   IN points 2/2
+ *     partition   axes 1   equivalence partitions 2/2
  *       · read in part: length (a rule about it is one this compiler did not read)
  *     border      2/4
  *       ! no row is at the ON point price/length = 1 (invariant Length (min))

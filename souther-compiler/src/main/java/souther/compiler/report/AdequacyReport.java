@@ -624,7 +624,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             int excluded = (int) measuredAxes.stream()
                     .flatMap(each -> behavior.claimed().at(each.path()).stream())
                     .filter(ClaimAnnotations.Said::settled).count();
-            out.append(String.format("    partition   axes %d   IN points %d/%d%s%s%n",
+            out.append(String.format("    partition   axes %d   equivalence partitions %d/%d%s%s%n",
                     partition.axes().size(), covered, classes,
                     excluded == 0 ? "" : "   excluded " + excluded,
                     notes(partition.axes(), a -> !a.status().counted(),
