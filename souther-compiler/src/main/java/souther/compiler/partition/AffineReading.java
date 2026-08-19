@@ -64,7 +64,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
         // a reader that met the first without turning it round drew its border on `-3a - 6b` — the
         // same four points under a name no author wrote, and a different line from the rule written
         // the other way.
-        return read.facesTheOtherWay(subjectOf(comparison, reads, symbols))
+        return read.facesTheOtherWay(subjectOf(comparison, left, reads, symbols))
                 ? read.mirrored() : read;
     }
 
@@ -167,10 +167,10 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
         return (first != null ? first : ordered(form).getFirst().getValue()).signum() < 0;
     }
 
-    /** The position the comparison's left side names first, or null where it names none. */
-    private static NumericTerm subjectOf(Core.Binary comparison, InputReads reads,
-                                         Symbols symbols) {
-        LinearForm<NumericTerm> left = affine(comparison.left(), reads, symbols);
+    /** The position the comparison's left side names first, or null where it names none. Handed the
+     *  reading of that side rather than walking it again: one comparison is read once. */
+    private static NumericTerm subjectOf(Core.Binary comparison, LinearForm<NumericTerm> left,
+                                         InputReads reads, Symbols symbols) {
         if (left == null || left.coefs().isEmpty()) {
             return null;
         }
@@ -198,17 +198,43 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
         };
     }
 
-    /** The order this form's positions are counted on, or null where they are not all on one. */
-    Carrier carrier(Symbols symbols, java.util.function.Function<NumericTerm, Carrier> of) {
+    /**
+     * The order this form's positions are counted on, or null where they are not all on one.
+     *
+     * <p>Asked of each position and not of the operand it was written beside. A form adds its
+     * positions together, and two orders whose counts mean different things have no sum — a day
+     * count and a number are not addable, however well both sides type-checked. Read off one
+     * operand's type, every position of the form answered with that one's order and the check could
+     * not fire at all: positions were then read off rows, and written back, on an order that is not
+     * theirs.
+     */
+    Carrier carrier(InputReads reads, Symbols symbols) {
         Carrier one = null;
         for (NumericTerm term : form.coefs().keySet()) {
-            Carrier here = of.apply(term);
+            Carrier here = carrierOf(term, reads, symbols);
             if (here == null || (one != null && !one.equals(here))) {
                 return null;
             }
             one = here;
         }
         return one;
+    }
+
+    /**
+     * The order one term's own position is counted on, or null where the reading has no position
+     * for it.
+     *
+     * <p>The position's, because that is whose values are being read and written: what a term is
+     * measured at is the term's question ({@link NumericTerm#carrierAt}) and what the position holds
+     * is the declaration's, and the two are answered together where the position was read.
+     */
+    static Carrier carrierOf(NumericTerm term, InputReads reads, Symbols symbols) {
+        for (souther.compiler.inputs.Position position : reads.read().positions()) {
+            if (position.term().equals(term)) {
+                return term.carrierAt(position.type(), symbols);
+            }
+        }
+        return null;
     }
 
     /** Whether the operator orders the values around the threshold rather than singling one out. */

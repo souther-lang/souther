@@ -8,6 +8,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -518,6 +519,125 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
                 "zero is no value of `D`, so no row is offered at it:\n" + rows);
         assertFalse(report(excluded).contains("was refused"),
                 "and nothing was handed to the decoder to refuse:\n" + report(excluded));
+    }
+
+    /**
+     * A level out of reach is proved out of reach, however wide the box is.
+     *
+     * <p>What a proof takes is a walk of the whole box, and a wide one is not walked a step at a
+     * time: what the positions still to be chosen can add up to settles it without looking, and so
+     * does whether the residue is a multiple of what their coefficients can make. Without them the
+     * budget runs out first and a level the rules truly leave nothing at comes back as a search that
+     * stopped — which is the one answer a reader may not act on, standing where the one they may
+     * belongs.
+     */
+    @Test
+    void aLevelOutOfReachIsProvedOutOfReachHoweverWideTheBoxIs() {
+        String report = report("""
+                module example.wide
+
+                data Bound = Int
+                    invariant value >= 20
+                    invariant value <= 300000
+
+                data No = { why: Int }
+                data Yes = { v: Int }
+                data Result = No | Yes
+
+                behavior f : (a: Bound, b: Bound) -> Result
+                    constructs No, Yes
+                let f (a, b) = {
+                    guard Int.add(Int.multiply(300, a.value), Int.multiply(600, b.value)) <= 4800
+                        else No { why = 0 }
+                    Yes { v = 1 }
+                }
+
+                example f
+                    | "one" : (Bound(20), Bound(20)) -> No { why = 0 }
+                """);
+
+        assertTrue(report.contains("the rules leave no value at 300 * a + 600 * b = 4800"), report);
+        assertFalse(report.contains("the search stopped before reaching 300 * a + 600 * b = 4800"),
+                report);
+    }
+
+    /**
+     * A position this cannot enumerate takes a value the rest can still absorb.
+     *
+     * <p>Where the values fill there is nothing to step through, so one position takes a value and
+     * the ones after it have to make up what is left. Taken off the end of its own range without
+     * asking, the residue lands outside what they can reach and a level the box plainly holds comes
+     * back unsolved: here {@code b} runs to one, so {@code a} at zero leaves 9 for {@code 4 * b} to
+     * make and it can make at most 4.
+     */
+    @Test
+    void aPositionThatCannotBeEnumeratedTakesAValueTheRestCanAbsorb() {
+        String rows = generated("""
+                module example.lopsided
+
+                data Wide = Decimal
+                    invariant value >= 0m
+                    invariant value <= 100m
+
+                data Narrow = Decimal
+                    invariant value >= 0m
+                    invariant value <= 1m
+
+                data No = { why: Int }
+                data Yes = { v: Int }
+                data Result = No | Yes
+
+                behavior f : (a: Wide, b: Narrow) -> Result
+                    constructs No, Yes
+                let f (a, b) = {
+                    guard a.value * 2m + b.value * 4m <= 9m else No { why = 0 }
+                    Yes { v = 1 }
+                }
+
+                example f
+                    | "under" : (Wide(0m), Narrow(0m)) -> Yes { v = 1 }
+                """);
+
+        assertFalse(rows.contains("no row for `2 * a + 4 * b = 9`"),
+                "the box holds a pair where the form comes to nine:\n" + rows);
+    }
+
+    /**
+     * A library call and the operator it stands for are one rule.
+     *
+     * <p>{@code Int.multiply(w, h)} and {@code w * h} are the same arithmetic, and the reading is of
+     * the operation the call resolved to rather than of the representation it is in. Read in one and
+     * not the other, a rule the check enforced was one the measure reported as unread — and the two
+     * spellings would answer differently about the same model.
+     */
+    @Test
+    void aLibraryCallAndItsOperatorAreOneRule() {
+        String written = """
+                module example.spelled
+
+                data Bound = Int
+                    invariant value >= 0
+                    invariant value <= 10
+
+                data No = { why: Int }
+                data Yes = { v: Int }
+                data Result = No | Yes
+
+                behavior f : (a: Bound, b: Bound) -> Result
+                    constructs No, Yes
+                let f (a, b) = {
+                    guard %s else No { why = 0 }
+                    Yes { v = 1 }
+                }
+
+                example f
+                    | "one" : (Bound(1), Bound(1)) -> Yes { v = 1 }
+                """;
+
+        assertEquals(report(written.formatted(
+                        "Int.add(Int.multiply(3, a.value), Int.multiply(6, b.value)) <= 48")),
+                report(written.formatted("a.value * 3 + b.value * 6 <= 48")),
+                "one rule, whichever way the arithmetic is spelled");
     }
 
     private static String report(String model) {

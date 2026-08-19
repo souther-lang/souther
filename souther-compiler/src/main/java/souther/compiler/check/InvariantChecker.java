@@ -1351,9 +1351,14 @@ public final class InvariantChecker {
         java.util.Set<String> over = new LinkedHashSet<>();
         for (FactSubject atom : left.minus(right).coefs().keySet()) {
             Coordinate here = byName.get(atom);
-            if (here != null) {
-                over.add(here.path());
+            if (here == null) {
+                // An atom this reading has no coordinate for. Counted as absent, a quantity over two
+                // positions would come back as one and this reader would describe the rule
+                // differently from the one that reads the same shape in a body — which is the thing
+                // sharing the rule was meant to stop.
+                return null;
             }
+            over.add(here.path());
         }
         return over;
     }

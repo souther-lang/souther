@@ -58,7 +58,8 @@ record ComparedTerms(NumericTerm on, NumericTerm against, Carrier carrier,
      * <p>An equality is not one of these. {@code a == b} puts the whole of one arm on the line, and
      * that arm is already a row the branch measure asks for.
      */
-    static ComparedTerms of(Core.Binary comparison, InputReads reads, Symbols symbols) {
+    static ComparedTerms of(Core.Binary comparison, AffineReading read, InputReads reads,
+                            Symbols symbols) {
         Carrier carrier = Carrier.ofValue(comparison.left().type(), symbols);
         if (carrier == null || !carrier.equals(Carrier.ofValue(comparison.right().type(), symbols))) {
             return null;
@@ -74,7 +75,7 @@ record ComparedTerms(NumericTerm on, NumericTerm against, Carrier carrier,
                         holdsAtTheLine(comparison.op()) == !onIsAbove(comparison.op()), Count.ZERO);
             }
         }
-        return fromTheForm(comparison, carrier, reads, symbols);
+        return fromTheForm(read, carrier);
     }
 
     /**
@@ -88,9 +89,7 @@ record ComparedTerms(NumericTerm on, NumericTerm against, Carrier carrier,
      * where they meet is not where that rule cuts — read as a line at zero it would ask for a pair
      * that proves nothing about it.
      */
-    private static ComparedTerms fromTheForm(Core.Binary comparison, Carrier carrier,
-                                             InputReads reads, Symbols symbols) {
-        AffineReading read = AffineReading.of(comparison, reads, symbols);
+    private static ComparedTerms fromTheForm(AffineReading read, Carrier carrier) {
         if (read == null || !read.orders()) {
             return null;
         }

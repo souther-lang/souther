@@ -44,7 +44,8 @@ record ComparedLine(NumericTerm term, Place value, Carrier carrier,
      * the line is being drawn on — a size call is an {@code Int} there, and a position holding dates
      * is a day count.
      */
-    static ComparedLine of(Core.Binary comparison, InputReads reads, Symbols symbols) {
+    static ComparedLine of(Core.Binary comparison, AffineReading read, InputReads reads,
+                           Symbols symbols) {
         Hir.BinOp op = comparison.op();
         NumericTerm term = GuardThresholds.termOf(comparison.left(), reads, symbols);
         Place value = Carrier.writtenOn(comparison.right(), comparison.left().type(), symbols);
@@ -57,7 +58,7 @@ record ComparedLine(NumericTerm term, Place value, Carrier carrier,
             // Nothing here is a position against a value the carrier writes. It may still be a
             // statement about one position: `a + 1 <= 10` and `a <= b - b + 9` are both `a <= 9`,
             // and which quantity a rule cuts is the arithmetic's answer rather than the spelling's.
-            return fromTheForm(comparison, reads, symbols);
+            return fromTheForm(read, reads, symbols);
         }
         Carrier carrier = Carrier.ofValue(
                 op == comparison.op() ? comparison.left().type() : comparison.right().type(),
@@ -81,15 +82,17 @@ record ComparedLine(NumericTerm term, Place value, Carrier carrier,
      * nine is not one of them, and reading it as a line on {@code a} would put a row at four and a
      * half. That is a quantity of its own ({@link BorderQuantity.OverAForm}) and is read elsewhere.
      */
-    private static ComparedLine fromTheForm(Core.Binary comparison, InputReads reads,
+    private static ComparedLine fromTheForm(AffineReading read, InputReads reads,
                                             Symbols symbols) {
-        AffineReading read = AffineReading.of(comparison, reads, symbols);
         if (read == null) {
             return null;
         }
         NumericTerm term = read.oneCoordinate();
-        Carrier carrier = Carrier.ofValue(comparison.left().type(), symbols);
-        if (term == null || carrier == null || !carrier.counts()) {
+        // The position's own order, not the order of whichever operand it was written beside. The
+        // reading two methods up is careful about the same thing — it takes the type from the side
+        // that named the position — and `10 >= a + 1` names it on the right.
+        Carrier carrier = term == null ? null : AffineReading.carrierOf(term, reads, symbols);
+        if (carrier == null || !carrier.counts()) {
             return null;
         }
         Place value = Count.of(read.cut());

@@ -34,7 +34,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim) {
 
     /** The line {@code comparison} draws, or null where nothing here reads one. */
     static Cutting of(String behavior, Core.Binary comparison, InputReads reads, Symbols symbols) {
-        ComparedLine atAPosition = ComparedLine.of(comparison, reads, symbols);
+        // Read once and handed to each of the three. Each reading asks the same arithmetic a
+        // different question, and walking the comparison again per question is four to six walks of
+        // every comparison in every body and every clause.
+        AffineReading read = AffineReading.of(comparison, reads, symbols);
+        ComparedLine atAPosition = ComparedLine.of(comparison, read, reads, symbols);
         if (atAPosition != null) {
             return new Cutting(
                     new BorderQuantity.OfACoordinate(AxisId.of(behavior, atAPosition.term()),
@@ -42,14 +46,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim) {
                     new Level.OnACarrier(atAPosition.carrier(), atAPosition.value()),
                     claimOf(atAPosition));
         }
-        ComparedTerms apart = ComparedTerms.of(comparison, reads, symbols);
+        ComparedTerms apart = ComparedTerms.of(comparison, read, reads, symbols);
         if (apart != null) {
             return new Cutting(
                     new BorderQuantity.Apart(behavior, apart.on(), apart.against(), apart.carrier()),
                     new Level.ACount(apart.stepsApart()),
                     new ComparisonClaim.Cut(apart.valueBelongsBelow(), apart.holdsAtTheLine()));
         }
-        return overAForm(behavior, comparison, reads, symbols);
+        return overAForm(behavior, read, reads, symbols);
     }
 
     /**
@@ -64,14 +68,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim) {
      * number are not addable, and a rule that looked addable because both sides type-checked would
      * put a border at a number nothing stands at.
      */
-    private static Cutting overAForm(String behavior, Core.Binary comparison, InputReads reads,
+    private static Cutting overAForm(String behavior, AffineReading read, InputReads reads,
                                      Symbols symbols) {
-        AffineReading read = AffineReading.of(comparison, reads, symbols);
         if (read == null || !read.orders()) {
             return null;
         }
-        Carrier carrier = read.carrier(symbols,
-                term -> term.carrierAt(comparison.left().type(), symbols));
+        Carrier carrier = read.carrier(reads, symbols);
         if (carrier == null || !carrier.counts()) {
             return null;
         }

@@ -286,6 +286,28 @@ public interface LevelSpace {
         };
     }
 
+    /**
+     * The step a lattice made by these coefficients moves in: their greatest common divisor.
+     *
+     * <p>Bézout's, and exact rather than a guess: what {@code Σ cᵢ·xᵢ} takes over the whole numbers
+     * is exactly the multiples of {@code gcd(cᵢ)}. Taken over them as whole numbers at their common
+     * scale, so a decimal coefficient answers the way a whole one does.
+     *
+     * <p>Here rather than on the quantity, because it is what makes the space and a search prunes by
+     * it as well: a residue that is not one of these multiples is one no assignment lands on.
+     */
+    static BigDecimal stepOf(java.util.Collection<BigDecimal> coefs) {
+        int scale = 0;
+        for (BigDecimal coef : coefs) {
+            scale = Math.max(scale, Math.max(coef.scale(), 0));
+        }
+        java.math.BigInteger together = java.math.BigInteger.ZERO;
+        for (BigDecimal coef : coefs) {
+            together = together.gcd(coef.setScale(scale).unscaledValue().abs());
+        }
+        return new BigDecimal(together, scale);
+    }
+
     /** The shared half of every space whose levels are numbers: how two of them compare, and that a
      *  number always has numbers either side of it. What stops a border having a side on one of
      *  these is what the rules leave, which is asked of them and not of the order. */

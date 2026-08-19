@@ -361,6 +361,14 @@ public final class Generator {
                         new UnresolvedCombination(List.of(label), edge.reason()));
             }
             String at = each.getKey().path().toString();
+            // Two terms at one path is one location asked for two things at once — a string of a
+            // length and the string itself — and what a row writes at a location is one value. The
+            // fixing keeps them apart ({@link Realization.Found}) and this cannot, so it says so
+            // rather than writing whichever came last and offering half the point as the whole.
+            if (decided.containsKey(at)) {
+                return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
+                        UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE));
+            }
             decided.put(at, edge.values());
             if (edge.settledAt() != null) {
                 settled.put(at, edge.settledAt());

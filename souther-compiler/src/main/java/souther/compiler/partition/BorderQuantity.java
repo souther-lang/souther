@@ -298,7 +298,8 @@ public sealed interface BorderQuantity {
         @Override
         public LevelSpace levels() {
             return of.spacing() == souther.compiler.numeric.Granularity.DISCRETE
-                    ? LevelSpace.steppingBy(gcdOf(form.coefs().values())) : LevelSpace.dense();
+                    ? LevelSpace.steppingBy(LevelSpace.stepOf(form.coefs().values()))
+                    : LevelSpace.dense();
         }
 
         @Override
@@ -375,20 +376,6 @@ public sealed interface BorderQuantity {
             return BoundaryTarget.Shape.OVER_A_FORM;
         }
 
-        /** The step the form's values move in: the greatest common divisor of its coefficients,
-         *  taken over them as whole numbers at their common scale so a decimal coefficient answers
-         *  the way a whole one does. */
-        static java.math.BigDecimal gcdOf(java.util.Collection<java.math.BigDecimal> coefs) {
-            int scale = 0;
-            for (java.math.BigDecimal coef : coefs) {
-                scale = Math.max(scale, Math.max(coef.scale(), 0));
-            }
-            java.math.BigInteger together = java.math.BigInteger.ZERO;
-            for (java.math.BigDecimal coef : coefs) {
-                together = together.gcd(coef.setScale(scale).unscaledValue().abs());
-            }
-            return new java.math.BigDecimal(together, scale);
-        }
     }
 
     /** How this quantity's own values are ordered, and which of them it can take. */

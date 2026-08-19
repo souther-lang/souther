@@ -247,6 +247,15 @@ public final class LevelRealizer {
             if (++taken > STEPS_A_SEARCH_MAY_TAKE) {
                 return false;
             }
+            // What the positions from here on can add up to, and what their coefficients can make.
+            // Both are proofs: a residue outside the reach of everything still to be chosen is one
+            // no assignment of them arrives at, and a residue that is not a multiple of what their
+            // coefficients can make is one none of them lands on. Without them a wide box is walked
+            // one step at a time until the budget runs out, and a level the rules truly leave
+            // nothing at comes back as a search that stopped rather than as the proof it is.
+            if (outOfReach(i, owed) || offTheLattice(i, owed)) {
+                return false;
+            }
             java.math.BigDecimal coef = terms.get(i).getValue();
             NumericDomain.Bounds within = bounds(terms.get(i).getKey());
             java.math.BigDecimal low = endOf(within.min(), true);
@@ -291,7 +300,11 @@ public final class LevelRealizer {
                 // not consulted at all, so the row offered was one the position refuses and the
                 // report said every candidate had been rejected.
                 everyEndKnown = false;
-                Place inside = carrier.somethingInside(within.min(), within.max());
+                // Which value it takes is chosen against what the rest can reach, not off the end of
+                // its own range: the residue has to be something the positions after it arrive at,
+                // and a value picked without asking leaves a form over three or more filled
+                // positions unsolved wherever the first guess happens not to work out.
+                Place inside = somewhereThatLeavesTheRestReachable(i, owed, coef, within);
                 if (inside == null || !(inside instanceof Count taken)) {
                     return false;
                 }
@@ -323,6 +336,86 @@ public final class LevelRealizer {
          * the decoder turns the row down — which arrives as every candidate having been rejected,
          * and reads as the model refusing an edge it admits.
          */
+        /**
+         * A place this position admits that leaves the rest a residue they can reach, or null.
+         *
+         * <p>What the positions after this one can add up to is an interval; what this one has to
+         * contribute for the residue to land in it is another. The carrier is asked for a value in
+         * the two together, so a choice here is one the rest can still answer — and where the two do
+         * not meet there is nothing to choose and the walk says so.
+         */
+        private Place somewhereThatLeavesTheRestReachable(int i, java.math.BigDecimal owed,
+                                                          java.math.BigDecimal coef,
+                                                          NumericDomain.Bounds within) {
+            java.math.BigDecimal[] rest = reach(i + 1);
+            Endpoint low = within.min();
+            Endpoint high = within.max();
+            if (rest != null && coef.signum() != 0) {
+                // owed - coef * x must lie in [rest0, rest1], so coef * x lies in
+                // [owed - rest1, owed - rest0].
+                java.math.BigDecimal one = owed.subtract(rest[1]).divide(coef,
+                        java.math.MathContext.DECIMAL64);
+                java.math.BigDecimal other = owed.subtract(rest[0]).divide(coef,
+                        java.math.MathContext.DECIMAL64);
+                Endpoint needLow = Endpoint.inclusive(new Count(one.min(other)));
+                Endpoint needHigh = Endpoint.inclusive(new Count(one.max(other)));
+                low = Endpoint.lower(low, needLow);
+                high = Endpoint.upper(high, needHigh);
+            }
+            return carrier.somethingInside(low, high);
+        }
+
+        /**
+         * The least and the greatest the positions from {@code i} on can add up to, or null where
+         * one of them is unbounded and there is nothing to say.
+         */
+        private java.math.BigDecimal[] reach(int i) {
+            java.math.BigDecimal least = java.math.BigDecimal.ZERO;
+            java.math.BigDecimal most = java.math.BigDecimal.ZERO;
+            for (int j = i; j < terms.size(); j++) {
+                NumericDomain.Bounds within = bounds(terms.get(j).getKey());
+                java.math.BigDecimal coef = terms.get(j).getValue();
+                java.math.BigDecimal low = numberOf(within.min());
+                java.math.BigDecimal high = numberOf(within.max());
+                if (low == null || high == null) {
+                    return null;
+                }
+                java.math.BigDecimal one = coef.multiply(low);
+                java.math.BigDecimal other = coef.multiply(high);
+                least = least.add(one.min(other));
+                most = most.add(one.max(other));
+            }
+            return new java.math.BigDecimal[] {least, most};
+        }
+
+        /** Whether the residue is outside everything the positions from {@code i} on can add up to,
+         *  which no assignment of them arrives at. */
+        private boolean outOfReach(int i, java.math.BigDecimal owed) {
+            java.math.BigDecimal[] rest = reach(i);
+            return rest != null && (owed.compareTo(rest[0]) < 0 || owed.compareTo(rest[1]) > 0);
+        }
+
+        /**
+         * Whether the residue is off the lattice the positions from {@code i} on can land on.
+         *
+         * <p>Only where their values step: over whole numbers what {@code Σ c·x} takes is exactly
+         * the multiples of the coefficients' greatest common divisor (Bézout), so a residue that is
+         * not one is a residue none of them reaches. Where the values fill there is no lattice and
+         * this says nothing.
+         */
+        private boolean offTheLattice(int i, java.math.BigDecimal owed) {
+            if (!whole) {
+                return false;
+            }
+            java.math.BigDecimal step = LevelSpace.stepOf(
+                    terms.subList(i, terms.size()).stream().map(Map.Entry::getValue).toList());
+            return step.signum() != 0 && owed.remainder(step).signum() != 0;
+        }
+
+        private static java.math.BigDecimal numberOf(Endpoint end) {
+            return end == null || !(end.at() instanceof Count count) ? null : count.at();
+        }
+
         private java.math.BigDecimal endOf(Endpoint end, boolean low) {
             if (end == null || !(end.at() instanceof Count count)) {
                 return null;
