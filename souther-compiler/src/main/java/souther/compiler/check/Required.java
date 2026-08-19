@@ -92,10 +92,10 @@ public sealed interface Required {
         /**
          * What settled it, which is every part's reason and not one of them.
          *
-         * <p>{@code a < b && 1 >= 0} raises nothing because one part is about a pair and the other
-         * about nothing here, and both are true of the rule. Kept as one, the answer was whichever
-         * part was written first — a fact about the source order under a name that says why the
-         * rule raises nothing.
+         * <p>{@code value == other && 1 >= 0} raises nothing because one part singles a value out of
+         * two things that both move and the other is about nothing here, and both are true of the
+         * rule. Kept as one, the answer was whichever part was written first — a fact about the
+         * source order under a name that says why the rule raises nothing.
          */
         public Set<Because> because() {
             return because;

@@ -352,6 +352,34 @@ class EverySchemaWordIsAccountedForTest {
                         "items", "properties", "subject", "properties", "kind")));
     }
 
+    /**
+     * And the fourth: which kind of rule an identity is of, written from the arms of a sealed type.
+     *
+     * <p>The arms are told apart by different coordinates — a clause of an invariant by where it is
+     * written among its declaration's clauses, a comparison by the site it was numbered at — so
+     * which one a document is carrying decides which of its keys are written.
+     */
+    @Test
+    void theFourthFieldWithNoEnumBehindItIsWrittenFromWhichKindOfRuleItIs() {
+        souther.compiler.types.TypeSymbol on = souther.compiler.types.TypeSymbols.declared(
+                new souther.compiler.types.TypeKey("m", "L"));
+        assertEquals(Set.of(
+                        AdequacyReport.ruleWord(new souther.compiler.check.RuleRef.Invariant(
+                                new souther.compiler.check.Clause.Ref(
+                                        new souther.compiler.check.Clause.Id(on, 0),
+                                        java.util.Optional.empty()))),
+                        AdequacyReport.ruleWord(new souther.compiler.check.RuleRef.Ensures(
+                                new souther.compiler.check.BehaviorContract.RuleId(
+                                        new souther.compiler.types.ValueName.Behavior("m", "f"),
+                                        0, 0, on), "Found")),
+                        AdequacyReport.ruleWord(new souther.compiler.check.RuleRef.Guard(
+                                new souther.compiler.coverage.CoverageSites.ComparisonRef("f",
+                                        new souther.compiler.types.CoverageOrigin("m", 0, 0,
+                                                souther.compiler.types.CoverageConstruct.IF))))),
+                allowedAt(schema(), List.of("$defs", "partition", "properties", "unanswered",
+                        "items", "properties", "ruleId", "properties", "kind")));
+    }
+
     /** Every enumerated field of the schema is either held above or named as the exception. */
     @Test
     void noEnumeratedFieldIsUnaccountedFor() {
@@ -364,6 +392,7 @@ class EverySchemaWordIsAccountedForTest {
         held.add("/$defs/behavior/properties/implementation");
         held.add("/$defs/partition/properties/axes/items/properties/read/properties/extent");
         held.add("/$defs/partition/properties/unanswered/items/properties/subject/properties/kind");
+        held.add("/$defs/partition/properties/unanswered/items/properties/ruleId/properties/kind");
 
         List<String> unaccounted = paths.stream().filter(p -> !held.contains(p)).toList();
         assertEquals(List.of(), unaccounted,

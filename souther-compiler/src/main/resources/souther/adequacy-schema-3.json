@@ -330,11 +330,26 @@
           "minItems": 1,
           "items": {
             "type": "object",
-            "required": ["at", "rule", "question", "subject"],
+            "required": ["at", "rule", "ruleId", "question", "subject"],
             "additionalProperties": false,
             "properties": {
               "at": { "type": "string", "description": "The position the rule is written about, as a report names it." },
-              "rule": { "type": "string", "description": "How a reader finds the rule: the name the author gave it where there is one — `invariant Length (even)` — and where it is written where there is none, as `if@<source>:<line>:<column>`. A comparison in a body is written rather than named, so a document that spelled every rule as a name would send an author looking for a clause called `if`. The same handle a `boundaries` entry writes for a line the same rule drew." },
+              "rule": { "type": "string", "description": "How a reader finds the rule: the name the author gave it where there is one — `invariant Length (even)` — and where it is written where there is none, as `if@<source>:<line>:<column>`. A comparison in a body is written rather than named, so a document that spelled every rule as a name would send an author looking for a clause called `if`. The same handle a `boundaries` entry writes for a line the same rule drew. Not what tells one rule from another: two arms of one `ensures` clause may name the same case, and `ruleId` beside this is what says they are two." },
+              "ruleId": {
+                "type": "object",
+                "description": "What tells this rule from every other, which is not what a reader is shown. The coordinates differ by kind because rules are told apart by different things: a clause of an invariant by the declaration it is on and its place among that declaration's clauses, a rule of an `ensures` by the behavior and where it sits among the clauses and their arms, a comparison by the behavior and the site the coverage plan numbered it at. A key within this document rather than a name — a consumer joins entries by it and shows `rule`.",
+                "required": ["kind"],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": { "enum": ["invariant", "ensures", "guard"], "description": "Which kind of rule of the model this is, and so which coordinates below are written." },
+                  "declaredOn": { "type": "string", "description": "The declaration an invariant's clause is written on." },
+                  "clause": { "type": "integer", "description": "Where the clause sits among the ones written beside it, counted from zero." },
+                  "arm": { "type": "integer", "description": "Where the rule sits among the arms of its `ensures` clause, counted from zero. Two arms may name one case and are two rules." },
+                  "behavior": { "type": "string", "description": "The behavior an `ensures` clause or a body's comparison is written in." },
+                  "site": { "type": "integer", "description": "The comparison, as the coverage plan numbered it in the behavior." },
+                  "lowered": { "type": "integer", "description": "Which of the comparisons one written construct lowered to this is, for a construct that lowers to more than one." }
+                }
+              },
               "question": { "$ref": "#/$defs/coverageQuestion" },
               "subject": {
                 "type": "object",

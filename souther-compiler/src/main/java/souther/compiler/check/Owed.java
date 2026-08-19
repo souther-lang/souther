@@ -76,10 +76,10 @@ public record Owed(CoverageObligation obligation, Subject subject) {
          * subjects however little of either can be spelled.
          *
          * <p>Beside {@link RuleCitation} and not a copy of it. A citation is how a reader finds the
-         * rule, which for a {@code guard} is the fork it is written in and for an {@code ensures} is
-         * the clause's name; this is which comparison inside it drew the line. They coincide often
-         * and mean different things, and a clause stating two comparisons has one citation and two
-         * of these.
+         * rule — the place a comparison is written, the name an {@code ensures} clause was given —
+         * and this is the comparison that drew the line. For a rule that is one comparison the two
+         * point at one place and answer different questions; a clause stating two comparisons has
+         * one citation and two of these.
          */
         record OfComparison(souther.compiler.diag.Citation at) implements Subject {
 

@@ -1940,7 +1940,7 @@ public final class Adequacy {
                         MeasurementStatus.NOT_MEASURED, Citation.of(behavior.pos()),
                         List.of(each.measure() != null ? each.measure() : each.at(),
                                 each.cited(), asked(each.question()), each.question(),
-                                each.subject())));
+                                each.subject(), each.rule())));
             }
             for (souther.compiler.partition.Partitions.OmittedAxis dropped : partition.omitted()) {
                 out.add(new Finding(Kind.PARTITION_OMITTED, behavior.name(),

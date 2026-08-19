@@ -1010,6 +1010,60 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
+     * What tells one rule of the model from another, as this document carries it.
+     *
+     * <p>The parts that are the identity and no more. A rule is a clause of an invariant, a
+     * comparison written in a body, or a rule of an {@code ensures} clause, and each is told from
+     * its neighbours by different coordinates — so this is an object per kind rather than one
+     * spelling every kind is squeezed into. Not the internal value's own words: what a compiler
+     * calls a rule to itself is not a contract, and this is.
+     *
+     * <p>Not a name and never shown to a reader. `rule` beside it is what an author is given, and
+     * the two are different questions: a handle finds a rule and an identity distinguishes one.
+     */
+    private static void ruleId(ObjectNode into, souther.compiler.check.RuleRef rule) {
+        into.put("kind", ruleWord(rule));
+        switch (rule) {
+            // The clause, by the declaration it is written on and its place among that
+            // declaration's clauses — which is how somebody reading the declaration counts them.
+            case souther.compiler.check.RuleRef.Invariant it -> {
+                into.put("declaredOn", it.clause().id().declaredOn().name());
+                into.put("clause", it.clause().id().ordinal());
+            }
+            // The rule of the clause, by the behavior it is declared on and where it sits among the
+            // clauses and their arms. Two arms naming one case are two rules and differ here.
+            case souther.compiler.check.RuleRef.Ensures it -> {
+                into.put("behavior", it.rule().behavior().name());
+                into.put("clause", it.rule().clause());
+                into.put("arm", it.rule().arm());
+            }
+            // The comparison, by the behavior it is written in and the site the coverage plan
+            // numbered it at. A comparison is written rather than named, and two of one condition
+            // are two rules.
+            case souther.compiler.check.RuleRef.Guard it -> {
+                into.put("behavior", it.comparison().behavior());
+                into.put("site", it.comparison().origin().ordinal());
+                into.put("lowered", it.comparison().origin().lowered());
+            }
+        }
+    }
+
+    /**
+     * The word a document writes for which kind of rule an identity is of.
+     *
+     * <p>Here rather than at the one place it is written, for the reason the others are. No
+     * {@code default}, so a rule shape added and not given a word stops the compile rather than
+     * arriving in a document as one that already existed.
+     */
+    public static String ruleWord(souther.compiler.check.RuleRef rule) {
+        return switch (rule) {
+            case souther.compiler.check.RuleRef.Invariant _ -> "invariant";
+            case souther.compiler.check.RuleRef.Ensures _ -> "ensures";
+            case souther.compiler.check.RuleRef.Guard _ -> "guard";
+        };
+    }
+
+    /**
      * The word a document writes for which kind of thing a question is about.
      *
      * <p>Here rather than at the one place it is written, for the reason the others are: a reader
@@ -1251,6 +1305,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // The same handle the border prints for a line the comparison drew, through the
                 // table of sources this document carries.
                 one.put("rule", each.cited().said(sources::written, null));
+                // What tells one rule from another, beside the words for finding it. A handle is a
+                // projection of the rule and not the rule: two arms of one `ensures` clause may
+                // name the same case, so the author's words for them are the same words, and two
+                // questions came out as one object twice. Within this document and not a name to
+                // show a reader — which is what `rule` beside it is.
+                ruleId(one.putObject("ruleId"), each.rule());
                 one.put("question", word(each.question()));
                 // What the question is about, as what it is. A place a comparison drew between two
                 // moving terms is named by that comparison and not written out — printing it takes
@@ -1481,6 +1541,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // Written to join the `unanswered` entry this came out of, so the rule is named by the
             // one method that names it. Spelled a second way here, the join this exists for held
             // for a rule with a name and broke for every rule found by where it is written.
+            // The handle, and what tells this rule from another beside it: two arms of one clause
+            // may name the same case, so the words alone joined two questions into one row.
             case RULE_UNACCOUNTED ->
                     ((souther.compiler.check.RuleCitation) args.get(1))
                             .said(sources::written, null) + " — " + args.get(2) + " "
