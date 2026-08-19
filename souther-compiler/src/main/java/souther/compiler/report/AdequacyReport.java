@@ -698,7 +698,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // warning built from the same finding, where nothing knows what to call one.
             out.append(String.format("      %s no row is at %s = %s (%s)%n",
                     mark(f), f.args().get(0), f.args().get(1),
-                    ((souther.compiler.partition.OriginRef) f.args().get(2))
+                    ((souther.compiler.check.OriginRef) f.args().get(2))
                             .describe(names, declaredIn)));
         }
         // Said and not counted. Nothing has shown a row can be written at these — the projection

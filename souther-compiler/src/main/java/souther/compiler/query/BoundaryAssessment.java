@@ -210,7 +210,7 @@ public record BoundaryAssessment(BoundaryObligation obligation, Coverage coverag
     }
 
     /** The rule itself, for a reader that renders it rather than printing what this would. */
-    public souther.compiler.partition.OriginRef rule() {
+    public souther.compiler.check.OriginRef rule() {
         return obligation.origin();
     }
 

@@ -20,7 +20,7 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.partition.EnsuresThresholds;
 import souther.compiler.partition.GuardThresholds;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.partition.OriginRef;
+import souther.compiler.check.OriginRef;
 import souther.compiler.partition.PartitionClass;
 import souther.compiler.partition.Partitions;
 import souther.compiler.partition.BehaviorInputs;
@@ -296,9 +296,7 @@ final class Coverages {
                             String subject = each.owed().subject().measured()
                                     ? axis.term().toString() : axis.path().toString();
                             return new PartitionEvidence.AxisCoverage.Unanswered(
-                                    new souther.compiler.partition.OriginRef
-                                            .InvariantOrigin(each.rule()).named(),
-                                    each.owed().obligation(), subject);
+                                    each.origin().named(), each.owed().obligation(), subject);
                         })
                         .toList());
         // Nothing a body claims is in scope here. What a row is owed at is counted first and on its

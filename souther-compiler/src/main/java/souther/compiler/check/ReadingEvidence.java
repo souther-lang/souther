@@ -20,6 +20,11 @@ import java.util.Set;
  * reading of values short at a position, and {@code invariant seven = value == 7} written beside it
  * was taken in whole and came back reported as unread.
  *
+ * <p>Filed under {@link OriginRef} and not under the clause reference the walk had in hand. Every
+ * clause reaching here is an invariant's, so the two would key the same map today — and the value
+ * recorded here is carried to a report, where what names a rule is the origin. Weakened on the way
+ * out, each reader downstream had to work the identity back out for itself (issue #852).
+ *
  * <p>Success and not attempt. A reading that recognised part of a clause and gave up took nothing
  * in, so nothing here records it — what is written down is the point at which a reading adopted the
  * clause into what it holds.
@@ -40,45 +45,45 @@ import java.util.Set;
 final class ReadingEvidence {
 
     /** Where each reading took a clause in. */
-    private final Map<Clause.Ref, Set<FactSubject>> spokenFor = new LinkedHashMap<>();
+    private final Map<OriginRef, Set<FactSubject>> spokenFor = new LinkedHashMap<>();
 
     /** Where a part of a clause was taken in by nothing, which no other part makes up for. */
-    private final Map<Clause.Ref, Set<FactSubject>> left = new LinkedHashMap<>();
+    private final Map<OriginRef, Set<FactSubject>> left = new LinkedHashMap<>();
 
-    /** A reading took {@code rule} in at {@code position}. */
-    void record(Clause.Ref rule, FactSubject position) {
-        spokenFor.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).add(position);
+    /** A reading took {@code origin} in at {@code position}. */
+    void record(OriginRef origin, FactSubject position) {
+        spokenFor.computeIfAbsent(origin, _ -> new LinkedHashSet<>()).add(position);
     }
 
     /**
-     * Whether a part of {@code rule} about one of {@code positions} was taken in by nothing.
+     * Whether a part of {@code origin} about one of {@code positions} was taken in by nothing.
      *
      * <p>Outranks every other answer about the rule. A clause half of which nothing read is a clause
      * nothing read, however well the other half went — so an end placed by one conjunct does not
      * answer for the conjunct beside it.
      */
-    boolean anyLeftStanding(Clause.Ref rule, Collection<FactSubject> positions) {
-        Set<FactSubject> standing = left.get(rule);
+    boolean anyLeftStanding(OriginRef origin, Collection<FactSubject> positions) {
+        Set<FactSubject> standing = left.get(origin);
         return standing != null && positions.stream().anyMatch(standing::contains);
     }
 
-    /** A part of {@code rule} was taken in by nothing, of the positions it named. */
-    void leftStanding(Clause.Ref rule, Set<FactSubject> positions) {
-        left.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).addAll(positions);
+    /** A part of {@code origin} was taken in by nothing, of the positions it named. */
+    void leftStanding(OriginRef origin, Set<FactSubject> positions) {
+        left.computeIfAbsent(origin, _ -> new LinkedHashSet<>()).addAll(positions);
     }
 
     /**
-     * Whether anything took {@code rule} in, of a position named by any of {@code positions}.
+     * Whether anything took {@code origin} in, of a position named by any of {@code positions}.
      *
      * <p>Every name the position answers to, since a number is called one thing by the interval
      * algebra and another by everything else, and a clause reaching it is filed under whichever the
      * reading recognised.
      */
-    boolean tookIn(Clause.Ref rule, Collection<FactSubject> positions) {
-        if (anyLeftStanding(rule, positions)) {
+    boolean tookIn(OriginRef origin, Collection<FactSubject> positions) {
+        if (anyLeftStanding(origin, positions)) {
             return false;
         }
-        Set<FactSubject> here = spokenFor.get(rule);
+        Set<FactSubject> here = spokenFor.get(origin);
         return here != null && positions.stream().anyMatch(here::contains);
     }
 }

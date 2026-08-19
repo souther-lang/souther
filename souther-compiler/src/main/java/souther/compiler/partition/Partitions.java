@@ -4,6 +4,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.ClauseHelpers;
+import souther.compiler.check.OriginRef;
 import souther.compiler.check.Shape;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
@@ -629,7 +630,7 @@ public final class Partitions {
                 // nothing on one side of it, and a step off the end is a row nobody can write:
                 // `value >= 10` under `x < 10` would be owed a 9. The cut itself stays either way,
                 // because the line is still met by a row written at it.
-                origin.besideTheCut().ifPresent(beside -> {
+                BoundaryObligation.besideTheCut(origin).ifPresent(beside -> {
                     switch (beside) {
                         case ABOVE -> domain.successor(cut.at())
                                 .filter(next -> within == null || within.admits(next))

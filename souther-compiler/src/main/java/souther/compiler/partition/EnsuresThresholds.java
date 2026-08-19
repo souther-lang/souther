@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorContract;
+import souther.compiler.check.OriginRef;
 import souther.compiler.check.StatedContract;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;

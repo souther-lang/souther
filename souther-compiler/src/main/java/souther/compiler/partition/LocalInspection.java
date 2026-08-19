@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Clause;
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.OriginRef;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.Position;
 import souther.compiler.numeric.Endpoint;
@@ -123,20 +124,20 @@ final class LocalInspection {
         // at. `low < high` under one `[0, 1]` leaves `low` the same 1 and no longer holding it, and
         // that is the record's doing as much as a smaller number would have been.
         boolean moved = own != null && !own.at().equals(end.at());
-        for (Clause.Ref from : end.from()) {
+        for (OriginRef from : end.from()) {
             put(into, carrier, end.value(), from, moved ? within : List.<TypeSymbol>of());
         }
     }
 
-    private static void put(Map<String, Cut> into, Carrier carrier, Place at, Clause.Ref rule,
+    private static void put(Map<String, Cut> into, Carrier carrier, Place at, OriginRef drawnBy,
                             List<TypeSymbol> narrowedBy) {
-        OriginRef origin = new OriginRef.InvariantOrigin(rule);
-        if (!narrowedBy.isEmpty()) {
-            origin = new OriginRef.NarrowedOrigin(origin, narrowedBy);
-        }
-        OriginRef each = origin;
+        // The rule as the end already names it. Narrowing is the one thing said here, and it is
+        // said about the rule rather than in place of it: which declarations took the end in is a
+        // fact about this reading of the position, and what drew the end is not.
+        OriginRef origin = narrowedBy.isEmpty() ? drawnBy
+                : new OriginRef.NarrowedOrigin(drawnBy, narrowedBy);
         Cut cut = Cut.at(carrier, at, origin);
-        into.merge(cut.key(), cut, (had, _) -> had.and(each));
+        into.merge(cut.key(), cut, (had, _) -> had.and(origin));
     }
 
     private LocalInspection() {}

@@ -1,4 +1,4 @@
-package souther.compiler.partition;
+package souther.compiler.check;
 
 import souther.compiler.source.SourceId;
 
@@ -10,12 +10,26 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Where a partition or a boundary came from.
+ * Which rule of the model an observation is attributed to.
+ *
+ * <p>The one identity a rule wears once something has been attributed to it. A clause of an
+ * invariant, a comparison in a body and a clause of an {@code ensures} are three rules a row or a
+ * question can be owed to, and what a reader downstream asks of any of them — what to call it,
+ * where to send somebody, what construct drew it — is the same question. Held as whatever each
+ * producer happened to have in hand, every consumer had to work out which of the three it was
+ * looking at, and the ones written while only invariants arrived assumed so (issue #852).
  *
  * <p>Kept per cut rather than per axis. Several rules can put a cut at the same value — a type's
  * invariant and a {@code guard} that repeats it, or two guards written in different behaviors — and
  * they merge into one partition while staying separate obligations. Reaching the boundary through one
  * guard says nothing about the other.
+ *
+ * <p>Here rather than beside the boundaries because attribution happens before any of them. A rule
+ * is attributed where a walk over the model reaches it, and what is done with the attribution — a
+ * line to write a row at, a question nothing answered — is decided later and elsewhere. Which is
+ * also why nothing about a cut is answered here: which side of a line a row is owed on is
+ * {@link souther.compiler.partition.BoundaryObligation}'s reading of an origin, not something an
+ * origin knows about itself.
  */
 public sealed interface OriginRef {
 
@@ -27,7 +41,7 @@ public sealed interface OriginRef {
      * declaration bounding a position at one value came out as one origin, and the cut kept one
      * rule where ADR-0090 says it keeps every rule that drew it.
      */
-    record InvariantOrigin(souther.compiler.check.Clause.Ref rule) implements OriginRef {
+    record InvariantOrigin(Clause.Ref rule) implements OriginRef {
 
         public InvariantOrigin {
             if (rule == null) {
@@ -132,7 +146,7 @@ public sealed interface OriginRef {
      * @param singles           whether the comparison singles the value out rather than ordering
      *                          the values either side of it
      */
-    record EnsuresOrigin(souther.compiler.check.BehaviorContract.RuleId rule, String clause,
+    record EnsuresOrigin(BehaviorContract.RuleId rule, String clause,
                          boolean valueBelongsBelow, boolean holdsAtTheValue,
                          boolean singles) implements OriginRef {}
 
@@ -372,30 +386,4 @@ public sealed interface OriginRef {
         };
     }
 
-    /**
-     * The value beside the cut a row is owed as well, or nothing where the line has no other side.
-     *
-     * <p>The second of the two questions, and independent of the first. What decides it is whether
-     * the values either side of the line are both writable: a guard and a clause leave a range on
-     * each side, and a bound leaves nothing outside itself, so an invariant's edge is the only row
-     * there is to write. A value a rule singles out has no neighbour either — the values either side
-     * of it are one class, so a row over there is a row that class already has.
-     *
-     * <p>Which neighbour it is comes from where the cut value itself falls: {@code <= 3000} leaves
-     * 3001 over the line and {@code < 3000} leaves 2999.
-     */
-    default java.util.Optional<BoundaryObligation.BoundarySide> besideTheCut() {
-        return switch (this) {
-            case GuardOrigin g -> g.singles() ? java.util.Optional.empty()
-                    : java.util.Optional.of(g.valueBelongsBelow()
-                            ? BoundaryObligation.BoundarySide.ABOVE
-                            : BoundaryObligation.BoundarySide.BELOW);
-            case EnsuresOrigin e -> e.singles() ? java.util.Optional.empty()
-                    : java.util.Optional.of(e.valueBelongsBelow()
-                            ? BoundaryObligation.BoundarySide.ABOVE
-                            : BoundaryObligation.BoundarySide.BELOW);
-            case NarrowedOrigin n -> n.bound().besideTheCut();
-            case InvariantOrigin _ -> java.util.Optional.empty();
-        };
-    }
 }

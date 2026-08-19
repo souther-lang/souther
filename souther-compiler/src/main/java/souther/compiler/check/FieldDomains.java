@@ -69,12 +69,12 @@ public final class FieldDomains {
     /** The ends the record's own clauses place, which is a different question from the range they
      * leave — see {@link #placedAt}. */
     private final List<InvariantChecker.Direct> directs;
-    /** What each clause reaching this value raises, keyed on the clause. */
-    private final Map<Clause.Ref, Required> raised;
+    /** What each clause reaching this value raises, keyed on the rule it is. */
+    private final Map<OriginRef, Required> raised;
     /** Which readings took each clause in, as each of them said so. */
     private final ReadingEvidence took;
     /** The accounting, worked out once. Every position of a value asks the same question of it. */
-    private volatile Map<Clause.Ref, RuleAccounting> accounting;
+    private volatile Map<OriginRef, RuleAccounting> accounting;
     /** Which declarations relate each coordinate to something else, and so could have moved where it
      * stops — see {@link #narrowedBy}. */
     private final Map<String, List<TypeSymbol>> narrowers;
@@ -114,7 +114,7 @@ public final class FieldDomains {
                          Map<String, ValueSet> admittedByField,
                          Map<String, UnreadReason> unreadByField,
                          List<InvariantChecker.Direct> directs,
-                         Map<Clause.Ref, Required> raised, ReadingEvidence took,
+                         Map<OriginRef, Required> raised, ReadingEvidence took,
                          Map<String, List<TypeSymbol>> narrowers,
                          boolean seeded, Set<String> notGathered,
                          SequencedMap<FactSubject, String> positions,
@@ -312,7 +312,8 @@ public final class FieldDomains {
      * @param from     the declaration the clause is written on, which is what names the line
      * @param lower    whether this bounds the coordinate below; otherwise above
      */
-    public record Placed(String path, boolean measured, Clause.Ref from, boolean lower, Endpoint end) {}
+    public record Placed(String path, boolean measured, OriginRef from, boolean lower,
+                         Endpoint end) {}
 
     /**
      * The declaration whose clause could have moved where the coordinate at {@code path} stops, or
@@ -391,14 +392,14 @@ public final class FieldDomains {
     }
 
     /**
-     * What each clause reaching this value raises, keyed on the clause.
+     * What each clause reaching this value raises, keyed on the rule it is.
      *
      * <p>Questions and not answers. A clause is here whether or not anything took it in, which is
      * what makes it a list of what has to be settled rather than a list of what this compiler
      * managed — the second is what a completeness written per reader amounts to, and it says the
      * model was read in full for exactly as long as nobody adds a reader.
      */
-    public Map<Clause.Ref, Required> required() {
+    public Map<OriginRef, Required> required() {
         return raised;
     }
 
@@ -411,14 +412,15 @@ public final class FieldDomains {
      * first case and by the reading of values in the second — so a completeness read off either
      * reading alone reports a model that was read in full as one this compiler could not read.
      */
-    public Map<Clause.Ref, RuleAccounting> accounting() {
-        Map<Clause.Ref, RuleAccounting> had = accounting;
+    public Map<OriginRef, RuleAccounting> accounting() {
+        Map<OriginRef, RuleAccounting> had = accounting;
         if (had != null) {
             return had;
         }
-        Map<Clause.Ref, RuleAccounting> out = new LinkedHashMap<>();
-        raised.forEach((rule, required) ->
-                out.put(rule, RuleAccounting.of(rule, required, owed -> answered(rule, owed))));
+        Map<OriginRef, RuleAccounting> out = new LinkedHashMap<>();
+        raised.forEach((origin, required) ->
+                out.put(origin,
+                        RuleAccounting.of(origin, required, owed -> answered(origin, owed))));
         // Insertion order, which is the order the declaration writes its clauses. `Map.copyOf`
         // iterates in an order salted once per JVM run, and these reach a checked-in document.
         accounting = java.util.Collections.unmodifiableMap(out);
@@ -426,9 +428,9 @@ public final class FieldDomains {
     }
 
     /** What answered one question of one rule. */
-    private RuleAccounting.Outcome answered(Clause.Ref rule, Owed owed) {
+    private RuleAccounting.Outcome answered(OriginRef origin, Owed owed) {
         return switch (owed.obligation()) {
-            case ADMITTED_VALUES -> admissionAnswered(rule, owed.subject());
+            case ADMITTED_VALUES -> admissionAnswered(origin, owed.subject());
             // Raised only where an end was read off the rule, so the reading that raised it is the
             // one that answered it.
             case BOUNDARY ->
@@ -448,22 +450,22 @@ public final class FieldDomains {
      * clause beside it: {@code value >= 1} leaves the reading of values short at a position, and
      * {@code value == 7} written beside it was taken in whole.
      */
-    private RuleAccounting.Outcome admissionAnswered(Clause.Ref rule, Owed.Subject where) {
+    private RuleAccounting.Outcome admissionAnswered(OriginRef origin, Owed.Subject where) {
         List<FactSubject> named = named(where.path());
         // A part of the rule nothing took in outranks everything else about it. An end placed by
         // one conjunct is not an account of the conjunct written beside it.
-        if (took.anyLeftStanding(rule, named)) {
+        if (took.anyLeftStanding(origin, named)) {
             return new RuleAccounting.Outcome.Unaccounted(
                     unreadByField.getOrDefault(where.path(), UnreadReason.FORM_NOT_READ));
         }
         // The reading that turns this clause into where the values stop, said by the end it placed.
         if (directs.stream()
-                .anyMatch(d -> d.from().equals(rule) && d.path().equals(where.path()))) {
+                .anyMatch(d -> d.from().equals(origin) && d.path().equals(where.path()))) {
             return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_END_READING);
         }
         // And the readings that hold what a clause says about the values themselves, each said by
         // that reading at the point it adopted the clause.
-        if (took.tookIn(rule, named)) {
+        if (took.tookIn(origin, named)) {
             return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_VALUE_READING);
         }
         UnreadReason why = unreadByField.get(where.path());

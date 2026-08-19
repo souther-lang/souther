@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.check.OriginRef;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 

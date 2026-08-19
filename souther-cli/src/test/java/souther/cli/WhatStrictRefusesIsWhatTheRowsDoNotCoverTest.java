@@ -16,7 +16,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.partition.AxisId;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
-import souther.compiler.partition.OriginRef;
+import souther.compiler.check.OriginRef;
 import souther.compiler.query.BoundaryAssessment;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
