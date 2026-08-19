@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://souther-lang.org/schema/adequacy-2.json",
+  "$id": "https://souther-lang.org/schema/adequacy-3.json",
   "title": "Souther adequacy report",
   "description": "How well a model's `example`s cover it. Emitted by `souther examples --format json`. A reader keys on `schemaVersion`: a change that removes or renames anything here raises it, and something added since does not — a key added since is optional, and a word added to an enumerated field is one no earlier document carried, so a document written before either existed is still a document of this version. That is one direction: every object here is closed, so an older copy of this schema refuses a document carrying a key added since. A reader that has to accept newer documents wants the newer schema, not a higher number.",
   "type": "object",
@@ -9,7 +9,7 @@
   "properties": {
     "schemaVersion": {
       "type": "integer",
-      "const": 2
+      "const": 3
     },
     "compilerVersion": {
       "type": "string",
@@ -100,7 +100,7 @@
         "properties": {
           "kind": {
             "description": "What the measure established. `output_case_unspecified` is a case of the output no row expects and `output_case_unverified` is one some row expects and nothing was seen to produce; `input_case_unspecified` is a case of an input no row applies the behavior to and `axis_class_uncovered` is a class of a derived position no row is in — the two read alike about one class and only one of them is refused over. `boundary_unmet` is a line some rule draws that no row sits on, `arm_unreached` an arm of the body no row goes through. `partition_not_derivable`, `partition_not_read`, `partition_rule_unaccounted`, `partition_rules_not_reached` and `partition_omitted` are positions the model divides no way, positions some rule about which was not read, rules written about a position the axes did measure that nothing took in, positions the axes did measure whose rules the walk never reached, and positions past the axis limit.",
-            "enum": ["output_case_unspecified", "input_case_unspecified", "boundary_unmet", "arm_unreached", "output_case_unverified", "axis_class_uncovered", "partition_not_derivable", "partition_not_read", "partition_rule_unaccounted", "partition_rules_not_reached", "partition_omitted"]
+            "enum": ["output_case_unspecified", "input_case_unspecified", "boundary_unmet", "arm_unreached", "output_case_unverified", "axis_class_uncovered", "partition_not_derivable", "partition_not_read", "rule_unaccounted", "partition_rules_not_reached", "partition_omitted"]
           },
           "disposition": {
             "description": "What a build does about this one. `refused` is a gap `--strict` and a warned build refuse over; `reported` is a kind neither refuses over, whatever its measurement managed; `undecided` is a kind they would refuse over, from a measurement that came to no answer — telling an author to write a row they may already have written is worse than saying nothing, so it is named and not refused.",
@@ -201,31 +201,16 @@
               "path": { "type": "string", "description": "The input position, as a parameter and the fields read off it. A newtype's `value` is never a step." },
               "read": {
                 "type": "object",
-                "description": "Which of this position's rules nothing accounted for. It qualifies `classes` and nothing else says it: a rule nothing took in may yet refuse a value one of the classes holds, so `classes` is the denominator the model states and not one every member of which is known to stand. The questions the model raises and not how far one reading got — several readings take a clause in and they are short of different things, so an ordering bound is unreadable to the one that turns clauses into sets of values and is held whole by two others. Under the earlier version this field said the second, which reported a model whose every rule had been read as one this compiler could not read. The two keys below are separate axes and either, both or neither may be written.",
+                "description": "How far this measure got with the rules about this position. It qualifies `classes` and nothing else says it: a rule nothing took in may yet refuse a value one of the classes holds, so `classes` is the denominator the model states and not one every member of which is known to stand. The questions themselves are in `unanswered` beside the measures — the model raises them and every measure here is one reader of them, so a position no axis came back for still has whatever was written about it. This says only whether the questions *this* measure answers were answered: which values may stand somewhere is what classes are made of, and where a line falls is the border measure's, counted there.",
                 "required": ["extent"],
                 "additionalProperties": false,
                 "oneOf": [
-                  { "properties": { "extent": { "const": "complete" } }, "not": { "anyOf": [ { "required": ["rulesNotReached"] }, { "required": ["unanswered"] } ] } },
-                  { "properties": { "extent": { "const": "partial" } }, "anyOf": [ { "required": ["rulesNotReached"] }, { "required": ["unanswered"] } ] }
+                  { "properties": { "extent": { "const": "complete" } }, "not": { "required": ["rulesNotReached"] } },
+                  { "properties": { "extent": { "const": "partial" } } }
                 ],
                 "properties": {
-                  "extent": { "enum": ["complete", "partial"], "description": "Whether anything the rules raise about this position is left standing. `complete` exactly where neither key below is written, which the `oneOf` above says rather than leaving to a reader of this sentence." },
-                  "rulesNotReached": { "const": true, "description": "The walk never reached some of the rules written about this position, so what is written there is not known. Written only where that is so. Its own axis beside `unanswered` and not exclusive with it: a rule can have arrived and gone unaccounted for while a subtree beside it was never entered, and both are said." },
-                  "unanswered": {
-                    "type": "array",
-                    "description": "The rules nothing took in, each naming the rule because a position is not what an author edits. Written only where there is one.",
-                    "minItems": 1,
-                    "items": {
-                      "type": "object",
-                      "required": ["rule", "question", "subject"],
-                      "additionalProperties": false,
-                      "properties": {
-                        "rule": { "type": "string", "description": "The rule, as a report names it — `invariant Length (even)`." },
-                        "question": { "$ref": "#/$defs/coverageQuestion" },
-                        "subject": { "type": "string", "description": "What the question is about, as a report names it. The questions do not share a subject: which values may stand somewhere is about the position, and a line is about a number taken of it — so a `String` bounded on its length raises one about `code` and one about `String.length(code)`, and `path` beside them is the second." }
-                      }
-                    }
-                  }
+                  "extent": { "enum": ["complete", "partial"], "description": "Whether anything this measure reads about this position is left standing: a rule out of sight, or a question about which values may stand here that nothing answered. `partial` where either holds. A question about where the values stop does not make this `partial` — it is not this measure's to answer, and counting it here would put back a number `partition` and `border` were separated into." },
+                  "rulesNotReached": { "const": true, "description": "The walk never reached some of the rules written about this position, so what is written there is not known. Written only where that is so. Its own axis beside the questions and not exclusive with them: a rule can have arrived and gone unaccounted for while a subtree beside it was never entered, and both are said." }
                 }
               },
               "classes": { "type": "array", "items": { "type": "string" }, "description": "The classes a row can be written at: what the model divides this position into, less what its own rules refuse." },
@@ -337,6 +322,22 @@
             "enum": ["no_rows"]
           },
           "truncated": { "type": "boolean" }
+          }
+        },
+        "unanswered": {
+          "type": "array",
+          "description": "The questions this behavior's rules raise about its input positions that nothing answered, each naming the rule. Beside the measures rather than inside one: the model raises them and every measure in this object is one reader of them, so a position no axis could be derived at still has whatever was written about it. Written only where there is one. Under the earlier version these sat inside each axis, which meant a rule whose line this compiler could not read left a question standing and was reported as a model with nothing to answer for, because no axis survived to carry it. Which section of a human report a reader meets one in follows from `question`.",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["at", "rule", "question", "subject"],
+            "additionalProperties": false,
+            "properties": {
+              "at": { "type": "string", "description": "The position the rule is written about, as a report names it." },
+              "rule": { "type": "string", "description": "The rule, as a report names it — `invariant Length (even)`." },
+              "question": { "$ref": "#/$defs/coverageQuestion" },
+              "subject": { "type": "string", "description": "What the question is about, as a report names it. The questions do not share a subject: which values may stand somewhere is about the position, and a line is about a number taken of it — so a `String` bounded on its length raises one about `code` and one about `String.length(code)`, and `at` beside them is the first." }
+            }
           }
         },
         "claimsOffAxis": {

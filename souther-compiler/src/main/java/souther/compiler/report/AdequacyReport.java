@@ -58,7 +58,7 @@ import java.util.Set;
 public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy.Level askedLevel,
                              MeasurementStatus status, List<ModuleReport> modules) {
 
-    public static final int SCHEMA_VERSION = 2;
+    public static final int SCHEMA_VERSION = 3;
 
     /**
      * Whether the rows meet what the asked measures require of them.
@@ -705,6 +705,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             b -> whyNoBoundary(b.coverage())),
                     undecided == 0 ? "" : "   (" + undecided + " undecided: a value was not read)"));
         }
+        // A line the model drew that nothing here answered for, said whether or not a border came
+        // of it. It is exactly where none did that the question stands, so this cannot be written
+        // by walking the borders.
+        unaccounted(out, behavior,
+                question -> question == souther.compiler.check.CoverageObligation.BOUNDARY);
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.BOUNDARY_UNMET)) {
             // The rule as this report writes it. The finding carries the rule and not words about
             // it, because what to say differs between here — where a file has a name — and the
@@ -756,10 +761,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_RULES_NOT_REACHED)) {
             out.append(String.format("      %s rules not reached: %s%n", mark(f), f.args().get(0)));
         }
-        for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_RULE_UNACCOUNTED)) {
-            out.append(String.format("      %s not accounted for: %s — %s %s%n",
-                    mark(f), f.args().get(1), f.args().get(2), f.args().get(0)));
-        }
+        // The questions about which values may stand where, which is what classes are made of. A
+        // question about a line is the border measure's to print, two sections down, and printing
+        // it here put a sentence about where the values stop under the heading for how they are
+        // divided.
+        unaccounted(out, behavior, question -> question
+                != souther.compiler.check.CoverageObligation.BOUNDARY);
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_OMITTED)) {
             out.append(String.format("      %s omitted: %s (axis limit)%n",
                     mark(f), f.args().get(0)));
@@ -948,6 +955,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * to the words without reading the writer. No {@code default}: an arm added and not given a
      * word stops the compile rather than arriving in a document as one that already existed.
      */
+    /**
+     * The questions a section is the reader of, each named by the rule that raised it.
+     *
+     * <p>One finding kind, filed by what it asks. Which measure answers a question is settled where
+     * the question is raised; a report chooses where to print it, and nothing here decides what the
+     * model asked.
+     */
+    private static void unaccounted(StringBuilder out, BehaviorReport behavior,
+                                    java.util.function.Predicate<
+                                            souther.compiler.check.CoverageObligation> mine) {
+        for (Adequacy.Finding f : behavior.of(Adequacy.Kind.RULE_UNACCOUNTED)) {
+            if (mine.test((souther.compiler.check.CoverageObligation) f.args().get(3))) {
+                out.append(String.format("      %s not accounted for: %s — %s %s%n",
+                        mark(f), f.args().get(1), f.args().get(2), f.args().get(0)));
+            }
+        }
+    }
+
     public static String readingWord(PartitionEvidence.AxisCoverage.Reading read) {
         // Partial covers both, and what is written beside it says which. A reader keying on the
         // word is told the numbers rest on something unfinished, which is what the word is for; the
@@ -1139,15 +1164,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             if (axis.read().reach() == PartitionEvidence.AxisCoverage.Reach.SOME_OUT_OF_SIGHT) {
                 read.put("rulesNotReached", true);
             }
-            if (!axis.read().unanswered().isEmpty()) {
-                ArrayNode standing = read.putArray("unanswered");
-                for (PartitionEvidence.AxisCoverage.Unanswered each : axis.read().unanswered()) {
-                    ObjectNode one = standing.addObject();
-                    one.put("rule", each.rule());
-                    one.put("question", word(each.question()));
-                    one.put("subject", each.subject());
-                }
-            }
             axis.classes().forEach(a.putArray("classes")::add);
             axis.covered().stream().sorted().forEach(a.putArray("covered")::add);
             ArrayNode excluded = a.putArray("excluded");
@@ -1162,6 +1178,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             }
             a.put("unclassifiedRows", axis.unclassifiedRows());
             measured(a, axis.status(), axis.reason());
+        }
+        // The questions the model raised that nothing answered, beside the measures rather than
+        // inside one. Every measure here is a reader of them, and a position no axis came back for
+        // still has whatever was written about it.
+        if (!partition.unanswered().isEmpty()) {
+            ArrayNode standing = out.putArray("unanswered");
+            for (PartitionEvidence.Unanswered each : partition.unanswered()) {
+                ObjectNode one = standing.addObject();
+                one.put("at", each.at());
+                one.put("rule", each.rule());
+                one.put("question", word(each.question()));
+                one.put("subject", each.subject());
+            }
         }
         ArrayNode offAxis = out.putArray("claimsOffAxis");
         for (ClaimAnnotations.Said said : claimed.notAt(measuredPaths(partition))) {
@@ -1330,7 +1359,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case ARM_UNREACHED -> finding.at();
             case OUTPUT_CASE_UNSPECIFIED, OUTPUT_CASE_UNVERIFIED, INPUT_CASE_UNSPECIFIED,
                     AXIS_CLASS_UNCOVERED, BOUNDARY_UNMET, PARTITION_NOT_DERIVABLE,
-                    PARTITION_NOT_READ, PARTITION_RULE_UNACCOUNTED, PARTITION_RULES_NOT_REACHED,
+                    PARTITION_NOT_READ, RULE_UNACCOUNTED, PARTITION_RULES_NOT_REACHED,
                             PARTITION_OMITTED -> null;
         };
     }
@@ -1362,7 +1391,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // The rule and what it was left saying. Named by the position alone, two rules nothing
             // took in at one position serialised as two identical objects, and the human line named
             // them while a consumer of the document could not tell them apart.
-            case PARTITION_RULE_UNACCOUNTED ->
+            case RULE_UNACCOUNTED ->
                     args.get(1) + " — " + args.get(2) + " " + args.get(0);
             case INPUT_CASE_UNSPECIFIED ->
                     String.valueOf(args.get(0)) + " (in #" + args.get(1) + ")";

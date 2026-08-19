@@ -111,9 +111,15 @@ final class Coverages {
         List<PartitionEvidence.AxisCoverage> axes = new ArrayList<>();
 
         List<Axis> divided = new ArrayList<>();
+        List<PartitionEvidence.Unanswered> standing = new ArrayList<>();
         Readings readings = Readings.of(rows, where, partitioning.axes(),
                 observed.someRowsUnseen());
         for (Axis axis : partitioning.axes()) {
+            // What the model asked about this position and nothing answered, said before anything
+            // here decides whether the position could be measured. The questions are the model's;
+            // `undivided` below explains why no evidence came back, which is a nothing of its own
+            // and carries no word about what was written there.
+            standing.addAll(unansweredAt(axis));
             if (!axis.measurable()) {
                 continue;   // said by `undivided`, which also says which kind of nothing it is
             }
@@ -124,7 +130,8 @@ final class Coverages {
         }
         return new PartitionEvidence(PartitionEvidence.Partitioned.of(axes),
                 PartitionEvidence.Bounded.of(boundaries), pairsOf(divided, readings),
-                partitioning.undivided(), partitioning.unread(), partitioning.omitted(),
+                partitioning.undivided(), partitioning.unread(), List.copyOf(standing),
+                partitioning.omitted(),
                 whyUnclassified(readings.byRow(),
                         partitioning.axes().stream().map(Axis::id).toList()));
     }
@@ -270,6 +277,27 @@ final class Coverages {
                 (int) total - reached, false, readings.status(axes), null);
     }
 
+    /**
+     * The questions the rules about one position raise that nothing answered, as a document says
+     * them.
+     *
+     * <p>Read off the axis because that is what carries a position's accounting here, and not
+     * because an axis owns the questions: one that could not be measured has them all the same.
+     */
+    private static List<PartitionEvidence.Unanswered> unansweredAt(Axis axis) {
+        return axis.unanswered().stream()
+                .map(each -> new PartitionEvidence.Unanswered(axis.path().toString(),
+                        each.rule().named(), each.owed().obligation(),
+                        // The subject the question carries, resolved against the axis it is at. A
+                        // question about the position is spelled as the position and one about a
+                        // number taken of it as the term, and which of the two it is was settled
+                        // where the question was raised — not here, and not by whatever a renderer
+                        // has to hand.
+                        each.owed().subject().measured()
+                                ? axis.term().toString() : axis.path().toString()))
+                .toList();
+    }
+
     private static PartitionEvidence.AxisCoverage coverageOf(Axis axis, Readings readings) {
         List<String> classes = axis.classes().stream().map(PartitionClass::id).toList();
         // What the axis already says about which of this position's rules nothing accounted for,
@@ -281,24 +309,13 @@ final class Coverages {
                 axis.rulesNotReached()
                         ? PartitionEvidence.AxisCoverage.Reach.SOME_OUT_OF_SIGHT
                         : PartitionEvidence.AxisCoverage.Reach.EVERY_RULE,
-                // What the axis already says about which of this position's rules nothing accounted
-                // for, each named. Read off the axis rather than worked out here, and in the
-                // questions' own words: the vocabulary beside it says why a division could not be
-                // derived, which is a different question, and borrowing it left a reader with a
-                // sentence that named neither (issue #842).
-                axis.unanswered().stream()
-                        .map(each -> {
-                            // The subject the question carries, resolved against the axis it is at.
-                            // A question about the position is spelled as the position and one
-                            // about a number taken of it as the term, and which of the two it is
-                            // was settled where the question was raised — not here, and not by
-                            // whatever a renderer has to hand.
-                            String subject = each.owed().subject().measured()
-                                    ? axis.term().toString() : axis.path().toString();
-                            return new PartitionEvidence.AxisCoverage.Unanswered(
-                                    each.rule().named(), each.owed().obligation(), subject);
-                        })
-                        .toList());
+                // Of the questions standing at this position, the ones this measure is the reader
+                // of. What classes are made of is which values may stand somewhere; where the line
+                // falls is the border measure's question, and counting it here would put a number
+                // #869 separated back together. The questions themselves are beside the measures
+                // and are said there once.
+                axis.unanswered().stream().noneMatch(each -> each.owed().obligation()
+                        == souther.compiler.check.CoverageObligation.ADMITTED_VALUES));
         // Nothing a body claims is in scope here. What a row is owed at is counted first and on its
         // own, and what was declared about those positions is put beside it afterwards
         // ({@link ClaimReport}) — which is what keeps a claim from narrowing a denominator by being
