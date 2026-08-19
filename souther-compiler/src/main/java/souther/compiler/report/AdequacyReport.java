@@ -1023,26 +1023,33 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     private static void ruleId(ObjectNode into, souther.compiler.check.RuleRef rule) {
         into.put("kind", ruleWord(rule));
+        // Every part of the identity and not the parts that read well. A declaration is its module
+        // and its name — two modules may each declare an `Amount` and they are two types — and a
+        // construct is numbered from zero in each source, so the module is what tells one behavior's
+        // twelfth construct from another's. Written without them, two rules of two modules project
+        // onto one identity, which is the one thing this field may not do.
         switch (rule) {
             // The clause, by the declaration it is written on and its place among that
             // declaration's clauses — which is how somebody reading the declaration counts them.
             case souther.compiler.check.RuleRef.Invariant it -> {
+                into.put("declaredIn", it.clause().id().declaredOn().key().module());
                 into.put("declaredOn", it.clause().id().declaredOn().name());
                 into.put("clause", it.clause().id().ordinal());
             }
             // The rule of the clause, by the behavior it is declared on and where it sits among the
             // clauses and their arms. Two arms naming one case are two rules and differ here.
             case souther.compiler.check.RuleRef.Ensures it -> {
+                into.put("declaredIn", it.rule().behavior().module());
                 into.put("behavior", it.rule().behavior().name());
                 into.put("clause", it.rule().clause());
                 into.put("arm", it.rule().arm());
             }
-            // The comparison, by the behavior it is written in and the site the coverage plan
-            // numbered it at. A comparison is written rather than named, and two of one condition
-            // are two rules.
+            // The comparison, by the behavior it is written in and the construct it was numbered
+            // as. The numbering starts at zero in each source, so the source is part of it.
             case souther.compiler.check.RuleRef.Guard it -> {
+                into.put("declaredIn", it.comparison().origin().module());
                 into.put("behavior", it.comparison().behavior());
-                into.put("site", it.comparison().origin().ordinal());
+                into.put("ordinal", it.comparison().origin().ordinal());
                 into.put("lowered", it.comparison().origin().lowered());
             }
         }
@@ -1473,6 +1480,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             f.put("kind", word(finding.kind()));
             f.put("disposition", word(finding.disposition()));
             f.put("subject", subject(finding, sources));
+            // Which rule this is about, where the finding is about one. The words in `subject` are
+            // how a reader finds it, and two rules an author named alike have the same words — so a
+            // consumer joining findings to the questions they came from wants this.
+            if (finding.kind() == Adequacy.Kind.RULE_UNACCOUNTED) {
+                ruleId(f.putObject("ruleId"),
+                        (souther.compiler.check.RuleRef) finding.args().get(5));
+            }
             // Present where the kind has one. A finding a build is not told about under any code is
             // not one with an empty code, and a consumer joining these to the diagnostics a build
             // printed reads the difference.

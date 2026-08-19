@@ -38,6 +38,27 @@
       "description": "Why a reading is short of the rules. `unsupported_syntax` is a rule that was read and could not be used — an expression the terms do not name; `rules_not_read_at_all` is a rule the reading never arrived at, with which limit stopped the walk neither recorded nor promised; `unsupported_domain` is a comparison against values no line can be drawn on; `unsupported_partition_shape` is a comparison relating two positions rather than dividing one; `depth_limit` is the walk stopping before it reached the position; `type_unresolved` is a type at the position that could not be worked out; `unsupported_traversal` is values held inside something the walk does not reach into. Every one of them is a fact about the compiler and none is a fact about the model.",
       "enum": ["unsupported_syntax", "rules_not_read_at_all", "unsupported_domain", "unsupported_partition_shape", "depth_limit", "type_unresolved", "unsupported_traversal"]
     },
+    "ruleId": {
+      "type": "object",
+      "description": "What tells one rule of the model from every other, which is not what a reader is shown. The coordinates differ by kind because rules are told apart by different things, and every part of an identity is written: a declaration is its module and its name — two modules may each declare an `Amount`, and they are two types — and a behavior's constructs are numbered from zero in each source, so which source is part of which construct. A key within this document rather than a name; a consumer joins entries by it and shows `rule`.",
+      "required": ["kind", "declaredIn"],
+      "additionalProperties": false,
+      "oneOf": [
+        { "properties": { "kind": { "const": "invariant" } }, "required": ["declaredOn", "clause"], "not": { "anyOf": [ { "required": ["behavior"] }, { "required": ["arm"] }, { "required": ["ordinal"] }, { "required": ["lowered"] } ] } },
+        { "properties": { "kind": { "const": "ensures" } }, "required": ["behavior", "clause", "arm"], "not": { "anyOf": [ { "required": ["declaredOn"] }, { "required": ["ordinal"] }, { "required": ["lowered"] } ] } },
+        { "properties": { "kind": { "const": "guard" } }, "required": ["behavior", "ordinal", "lowered"], "not": { "anyOf": [ { "required": ["declaredOn"] }, { "required": ["clause"] }, { "required": ["arm"] } ] } }
+      ],
+      "properties": {
+        "kind": { "enum": ["invariant", "ensures", "guard"], "description": "Which kind of rule of the model this is, and so which coordinates below are written." },
+        "declaredIn": { "type": "string", "description": "The module the rule is written in. Part of every identity here: names are unique within a module and not across them, and a construct's number starts again in each source." },
+        "declaredOn": { "type": "string", "description": "The declaration an invariant's clause is written on." },
+        "behavior": { "type": "string", "description": "The behavior an `ensures` clause or a body's comparison is written in." },
+        "clause": { "type": "integer", "description": "Where the clause sits among the ones written beside it, counted from zero." },
+        "arm": { "type": "integer", "description": "Where the rule sits among the arms of its `ensures` clause, counted from zero. Two arms may name one case and are two rules." },
+        "ordinal": { "type": "integer", "description": "The construct the comparison was written in, as this compile numbered the constructs of its source." },
+        "lowered": { "type": "integer", "description": "Which of the comparisons one written construct lowered to this is, for a construct that lowers to more than one." }
+      }
+    },
     "coverageQuestion": {
       "description": "What a rule of the model raises that something has to answer. `admitted_values` is which values may stand at a position; `boundary` is a border rows are owed at, which has an order across it and a role for each side; `singleton` is a value a rule tells from every other, which has neither because the values either side of it are one class; `partition` is the classes a comparison makes, which both shapes raise where they leave values on both sides. Only the questions this compiler issues today: a question nothing raises is one every model answers by nobody having asked it, so a word arrives here in the same change that starts raising it.",
       "enum": ["admitted_values", "boundary", "singleton", "partition"]
@@ -107,6 +128,7 @@
             "enum": ["refused", "undecided", "reported"]
           },
           "subject": {
+          "ruleId": { "$ref": "#/$defs/ruleId", "description": "Which rule the finding is about, where it is about one. `subject` beside it is what a reader is shown, and two rules an author named alike are shown the same words — so a consumer joining a finding to the question it came from joins on this. Written for `rule_unaccounted` and for no other kind." },
             "type": "string",
             "description": "What the finding is about, written to name what is already in this document: a class name is one of an axis's `classes`, an arm's label one in `branch.unreached`, and `axis = value` names a `boundaries` entry. An input's case carries its position — `C (in #1)` — because two parameters of one type give two findings a class name alone cannot tell apart."
           },
@@ -335,21 +357,7 @@
             "properties": {
               "at": { "type": "string", "description": "The position the rule is written about, as a report names it." },
               "rule": { "type": "string", "description": "How a reader finds the rule: the name the author gave it where there is one — `invariant Length (even)` — and where it is written where there is none, as `if@<source>:<line>:<column>`. A comparison in a body is written rather than named, so a document that spelled every rule as a name would send an author looking for a clause called `if`. The same handle a `boundaries` entry writes for a line the same rule drew. Not what tells one rule from another: two arms of one `ensures` clause may name the same case, and `ruleId` beside this is what says they are two." },
-              "ruleId": {
-                "type": "object",
-                "description": "What tells this rule from every other, which is not what a reader is shown. The coordinates differ by kind because rules are told apart by different things: a clause of an invariant by the declaration it is on and its place among that declaration's clauses, a rule of an `ensures` by the behavior and where it sits among the clauses and their arms, a comparison by the behavior and the site the coverage plan numbered it at. A key within this document rather than a name — a consumer joins entries by it and shows `rule`.",
-                "required": ["kind"],
-                "additionalProperties": false,
-                "properties": {
-                  "kind": { "enum": ["invariant", "ensures", "guard"], "description": "Which kind of rule of the model this is, and so which coordinates below are written." },
-                  "declaredOn": { "type": "string", "description": "The declaration an invariant's clause is written on." },
-                  "clause": { "type": "integer", "description": "Where the clause sits among the ones written beside it, counted from zero." },
-                  "arm": { "type": "integer", "description": "Where the rule sits among the arms of its `ensures` clause, counted from zero. Two arms may name one case and are two rules." },
-                  "behavior": { "type": "string", "description": "The behavior an `ensures` clause or a body's comparison is written in." },
-                  "site": { "type": "integer", "description": "The comparison, as the coverage plan numbered it in the behavior." },
-                  "lowered": { "type": "integer", "description": "Which of the comparisons one written construct lowered to this is, for a construct that lowers to more than one." }
-                }
-              },
+              "ruleId": { "$ref": "#/$defs/ruleId" },
               "question": { "$ref": "#/$defs/coverageQuestion" },
               "subject": {
                 "type": "object",

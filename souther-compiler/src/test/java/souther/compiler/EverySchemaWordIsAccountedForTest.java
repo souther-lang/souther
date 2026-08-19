@@ -376,8 +376,7 @@ class EverySchemaWordIsAccountedForTest {
                                 new souther.compiler.coverage.CoverageSites.ComparisonRef("f",
                                         new souther.compiler.types.CoverageOrigin("m", 0, 0,
                                                 souther.compiler.types.CoverageConstruct.IF))))),
-                allowedAt(schema(), List.of("$defs", "partition", "properties", "unanswered",
-                        "items", "properties", "ruleId", "properties", "kind")));
+                allowedAt(schema(), List.of("$defs", "ruleId", "properties", "kind")));
     }
 
     /** Every enumerated field of the schema is either held above or named as the exception. */
@@ -392,7 +391,7 @@ class EverySchemaWordIsAccountedForTest {
         held.add("/$defs/behavior/properties/implementation");
         held.add("/$defs/partition/properties/axes/items/properties/read/properties/extent");
         held.add("/$defs/partition/properties/unanswered/items/properties/subject/properties/kind");
-        held.add("/$defs/partition/properties/unanswered/items/properties/ruleId/properties/kind");
+        held.add("/$defs/ruleId/properties/kind");
 
         List<String> unaccounted = paths.stream().filter(p -> !held.contains(p)).toList();
         assertEquals(List.of(), unaccounted,
