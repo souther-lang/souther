@@ -75,7 +75,7 @@ public final class EnsuresThresholds {
      *                and the model says otherwise in its own declaration
      */
     public record Clauses(List<Threshold> thresholds, List<GuardThresholds.Guards.Singled> singled,
-                          List<BoundaryObligation> between, List<UnreadRule> unread,
+                          List<Border> between, List<UnreadRule> unread,
                           List<GuardThresholds.Guards.AtAPosition> accounting) {
 
         public static final Clauses NONE =
@@ -128,7 +128,7 @@ public final class EnsuresThresholds {
      *  after. Together because they are filled together and are one answer. */
     private record Drawn(String behavior, List<Threshold> thresholds,
                          List<GuardThresholds.Guards.Singled> singled,
-                         List<BoundaryObligation> between, List<UnreadRule> unread,
+                         List<Border> between, List<UnreadRule> unread,
                          List<GuardThresholds.Guards.AtAPosition> accounting) {}
 
     /**
@@ -253,12 +253,12 @@ public final class EnsuresThresholds {
         if (drawn == null) {
             return;
         }
-        BoundaryObligation made = new BoundaryObligation(
+        Border made = Border.betweenTerms(
                 new BoundaryTarget.EqualTerms(out.behavior(), drawn.on(), drawn.against(),
                         drawn.carrier()),
                 new OriginRef.EnsuresOrigin(new RuleRef.Ensures(rule.id(), clause), true,
                         drawn.holdsAtTheLine(), false),
-                BoundaryObligation.BoundarySide.AT);
+                drawn.onIsAboveWhereItHolds());
         if (out.between().stream().noneMatch(had -> had.equals(made))) {
             out.between().add(made);
         }

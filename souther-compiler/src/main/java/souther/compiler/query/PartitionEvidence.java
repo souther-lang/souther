@@ -175,7 +175,7 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
     }
 
     /** The lines, likewise. */
-    public List<BoundaryAssessment> boundaries() {
+    public List<BorderAssessment> boundaries() {
         return bounded.at();
     }
 
@@ -231,7 +231,7 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
     /** The lines some rule drew that this behavior is measured at, and — where there are none — why
      * not. The same argument as {@link Partitioned}: an empty list of obligations reads exactly like
      * a measure that was made and found everything met. */
-    public record Bounded(List<BoundaryAssessment> at, MeasurementStatus status, Reason reason) {
+    public record Bounded(List<BorderAssessment> at, MeasurementStatus status, Reason reason) {
 
         /** Why no line was measured. */
         public enum Reason implements souther.compiler.observe.MeasureReason {
@@ -256,7 +256,7 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
             }
         }
 
-        public static Bounded of(List<BoundaryAssessment> at) {
+        public static Bounded of(List<BorderAssessment> at) {
             return at.isEmpty()
                     ? new Bounded(List.of(), Reason.NO_LINES_DERIVED.status(),
                             Reason.NO_LINES_DERIVED)

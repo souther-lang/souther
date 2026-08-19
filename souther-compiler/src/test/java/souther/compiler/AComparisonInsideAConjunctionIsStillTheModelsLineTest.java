@@ -4,7 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.BoundaryAssessment;
+import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
@@ -104,23 +105,24 @@ class AComparisonInsideAConjunctionIsStillTheModelsLineTest {
      */
     @Test
     void theEdgeOnTheOtherSideIsOwedTheSame() {
-        assertEquals(new BoundaryAssessment.Coverage.Missed(),
+        assertEquals(new ItemAssessment.Coverage.Missed(),
                 coverageAt("inAConjunction", "inAConjunction/r.cost", "100001"));
     }
 
     /** What the rows established about one line of one behavior. */
-    private static BoundaryAssessment.Coverage coverageAt(String behavior, String axis,
+    private static ItemAssessment.Coverage coverageAt(String behavior, String axis,
                                                           String value) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
-        Map<String, List<BoundaryAssessment>> boundaries =
+        Map<String, List<BorderAssessment>> boundaries =
                 compilation.db().ask(new Adequacy.Boundaries("example.repro")).value();
         assertNotNull(boundaries, "the model under test compiles");
-        return boundaries.get(behavior).stream()
-                .filter(line -> line.axis().equals(axis) && line.value().equals(value))
+        return BorderAssessment.pointsOf(boundaries.get(behavior)).stream()
+                .filter(p -> p.role().againstTheLine()).filter(p -> p.owed() != null)
+                .filter(p -> p.border().axis().equals(axis) && value.equals(p.against()))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("no line at " + axis + " = " + value))
-                .coverage();
+                .owed().coverage();
     }
 }

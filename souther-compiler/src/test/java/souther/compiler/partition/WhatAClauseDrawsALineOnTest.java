@@ -4,11 +4,13 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Scopes;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.Carrier;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.StatedContract;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -72,7 +74,7 @@ class WhatAClauseDrawsALineOnTest {
         Threshold line = clauses.thresholds().get(0);
         assertEquals("id", line.path().toString());
         assertInstanceOf(OriginRef.EnsuresOrigin.class, line.origin());
-        assertTrue(line.valueBelongsBelow(),
+        assertTrue(((OriginRef.EnsuresOrigin) line.origin()).valueBelongsBelow(),
                 "`> 0` puts the zero on the low side, so the row beside it is the one above");
     }
 
@@ -231,8 +233,16 @@ class WhatAClauseDrawsALineOnTest {
 
         assertEquals(List.of(), valuesOf(clauses));
         assertEquals(1, clauses.singled().size(), clauses.singled().toString());
-        assertTrue(BoundaryObligation.besideTheCut(clauses.singled().get(0).origin()).isEmpty(),
-                "a value singled out has no neighbour: the values either side of it are one class");
+        assertEquals(new Demand.NotOwed(NotOwedReason.THE_RULE_NAMES_A_VALUE_NOT_A_SIDE),
+                Border.atAPlace(new AxisId("findTodo", "id"),
+                                Cut.at(new Carrier.Whole(),
+                                        clauses.singled().get(0).value(),
+                                        clauses.singled().get(0).origin()),
+                                clauses.singled().get(0).origin(),
+                                souther.compiler.inputs.BoundaryDomain.on(new Carrier.Whole()),
+                                new NumericDomain.Bounds(null, null))
+                        .demand(PointRole.OFF),
+                "a value singled out orders nothing around it, so neither neighbour is the nearer");
     }
 
     /**
@@ -351,11 +361,19 @@ class WhatAClauseDrawsALineOnTest {
 
         assertEquals(List.of(), valuesOf(clauses), "the line is on neither position");
         assertEquals(1, clauses.between().size(), clauses.between().toString());
-        BoundaryObligation line = clauses.between().get(0);
+        Border line = clauses.between().get(0);
         assertEquals("book/from = to",
-                line.target().named() + " = " + line.target().right());
+                line.cut().named() + " = " + line.cut().right());
         assertEquals("from = to", line.label());
         assertInstanceOf(OriginRef.EnsuresOrigin.class, line.origin());
+        // The line divides neither position and still has two sides: a row where `from` is under
+        // `to` is inside it and one where `from` is over `to` is outside, which is as much a
+        // coverage item as the row on the line.
+        // `<` is open at the line, so the pair one step under it is the ON point and the side
+        // away from the border starts under that.
+        assertEquals("= to - 1", line.demand(PointRole.ON).criterion().asked(line.cut()));
+        assertEquals("< to - 1", line.demand(PointRole.IN).criterion().asked(line.cut()));
+        assertEquals("> to", line.demand(PointRole.OUT).criterion().asked(line.cut()));
         assertEquals(List.of("from", "to"),
                 clauses.unread().stream().map(each -> each.at().toString()).toList());
     }
@@ -382,7 +400,7 @@ class WhatAClauseDrawsALineOnTest {
                 """, "book");
 
         assertEquals(2, clauses.between().size(), clauses.between().toString());
-        assertEquals(2, clauses.between().stream().map(BoundaryObligation::origin).distinct().count(),
+        assertEquals(2, clauses.between().stream().map(Border::origin).distinct().count(),
                 "one line, two rules, and a row on it shows which of them was written");
     }
 

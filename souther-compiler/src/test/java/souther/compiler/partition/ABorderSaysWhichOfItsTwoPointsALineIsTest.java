@@ -6,6 +6,11 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import souther.compiler.check.BehaviorContract;
+import souther.compiler.check.Carrier;
+import souther.compiler.inputs.BoundaryDomain;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.RuleRef;
@@ -22,7 +27,6 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -108,17 +112,20 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
     }
 
     /**
-     * The JSON carries the role beside the geometry rather than in place of it.
+     * The JSON writes the four items under the border that owes them, each with what it asks for.
      *
-     * <p>Two questions. {@code side} says where the value sits around the cut, which is what says how
-     * to read {@code value}; {@code point} says what a row written there is for. Neither produces the
-     * other: {@code at} is the {@code on} point of one of these models and the {@code off} point of
-     * the other, and both documents write {@code at}.
+     * <p>The role and the relation are two questions. {@code point} says what a row written there is
+     * for; {@code relation} and {@code against} say what the row has to do, and the same {@code = 100}
+     * is the {@code on} point of one of these models and the {@code off} point of the other. Neither
+     * produces the other, and a document carrying one of them would be asking its reader to work out
+     * the closed-border rule for themselves.
      */
     @Test
-    void theJsonWritesBothTheSideAndThePoint() {
-        assertEquals(List.of("at/on", "above/off"), sidesAndPoints(CLOSED));
-        assertEquals(List.of("at/off", "below/on"), sidesAndPoints(OPENED));
+    void theJsonWritesEveryPointUnderItsBorder() {
+        assertEquals(List.of("on:= 100", "off:= 101", "in:< 100", "out:> 101"),
+                pointsAsked(CLOSED));
+        assertEquals(List.of("on:= 99", "off:= 100", "in:< 99", "out:> 100"),
+                pointsAsked(OPENED));
     }
 
     /**
@@ -157,10 +164,17 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
 
         assertTrue(closed.contains("the ON point take/h.a = 5"), closed);
         assertTrue(strict.contains("the ON point take/h.a = 6"), strict);
-        // And neither owes the value over the line. `besideTheCut` answers nothing for a bound, so
-        // an OFF point here would be a row asked for at a value the type refuses.
-        assertFalse(closed.contains("OFF point"), closed);
-        assertFalse(strict.contains("OFF point"), strict);
+        // And neither owes a row over the line. A bound leaves nothing outside itself, so the two
+        // points out there are excluded — said in those words rather than left out, because a border
+        // showing two of four items and nothing beside them reads as this compiler being short.
+        for (String report : List.of(closed, strict)) {
+            assertTrue(report.contains(
+                    "no OFF point is owed"), report);
+            assertTrue(report.contains(
+                    "no OUT point is owed"), report);
+            assertTrue(report.contains("excluded — the rules leave no value there"), report);
+            assertFalse(report.contains("no row is at the OFF point"), report);
+        }
         assertFalse(strict.contains("take/h.a = 5"), strict);
     }
 
@@ -175,13 +189,26 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
      * the derivation reaches further.
      */
     @Test
-    void aBoundThatStopsShortOfItsValueIsTheOffPoint() {
-        assertEquals(BoundaryObligation.PointRole.ON,
-                BoundaryObligation.pointRole(new OriginRef.InvariantOrigin(invariant(), true),
-                        BoundaryObligation.BoundarySide.AT));
-        assertEquals(BoundaryObligation.PointRole.OFF,
-                BoundaryObligation.pointRole(new OriginRef.InvariantOrigin(invariant(), false),
-                        BoundaryObligation.BoundarySide.AT));
+    void aBoundThatStopsShortOfItsValueDrawsNoBorderAtIt() {
+        assertEquals(Criterion.AtThePlace.class,
+                borderOf(new OriginRef.InvariantOrigin(invariant(), true))
+                        .demand(PointRole.ON).criterion().getClass(),
+                "a bound that admits its own end is at that end's ON point");
+        // And where it does not admit it, the position does not reach the line: the value is outside
+        // what the rules leave, so there is no border here and no point of one either. Read as a
+        // border, it would owe an ON point one step in that no carrier here names.
+        assertEquals(null, borderOf(new OriginRef.InvariantOrigin(invariant(), false)),
+                "a bound whose own end its position refuses draws no line at it");
+    }
+
+    /** The border a bound draws at 5 on an `Int` whose rules leave 5 and up. */
+    private static Border borderOf(OriginRef origin) {
+        Carrier carrier = new Carrier.Whole();
+        boolean admits = origin instanceof OriginRef.InvariantOrigin bound && bound.holdsAtTheValue();
+        return Border.atAPlace(new AxisId("take", "h.a"),
+                Cut.at(carrier, Count.of(5), origin),
+                origin, BoundaryDomain.on(carrier),
+                new NumericDomain.Bounds(new Endpoint(Count.of(5), admits), null));
     }
 
     /**
@@ -196,28 +223,32 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
      * <p>An invariant places a row on no side at all, so every side but the cut is refused there.
      */
     @Test
-    void aSideNoRowIsOwedOnIsRefusedRatherThanGivenTheNearerWord() {
-        // `<= 100`: the cut belongs to the passing side, so the row beside it is the one above.
+    void aSideNoRowIsOwedOnIsNamedRatherThanGivenTheNearerWord() {
+        // `<= 100`: the cut belongs to the passing side, so the row beside it is the one above, and
+        // the value below the cut is 99 — inside the partition and away from its border, which is
+        // the IN point and neither of the two words against the line.
+        Carrier carrier = new Carrier.Whole();
         OriginRef closed = new OriginRef.EnsuresOrigin(
                 new RuleRef.Ensures(new BehaviorContract.RuleId(null, 0, 0, null), "cap"),
                 true, true, false);
+        Border border = Border.atAPlace(new AxisId("cap", "n"),
+                Cut.at(carrier, Count.of(100), closed), closed, BoundaryDomain.on(carrier),
+                new NumericDomain.Bounds(null, null));
 
-        assertEquals(BoundaryObligation.PointRole.ON,
-                BoundaryObligation.pointRole(closed, BoundaryObligation.BoundarySide.AT));
-        assertEquals(BoundaryObligation.PointRole.OFF,
-                BoundaryObligation.pointRole(closed, BoundaryObligation.BoundarySide.ABOVE));
-        assertThrows(IllegalArgumentException.class, () -> BoundaryObligation.pointRole(
-                closed, BoundaryObligation.BoundarySide.BELOW));
+        assertEquals("= 100", border.demand(PointRole.ON).criterion().asked(border.cut()));
+        assertEquals("= 101", border.demand(PointRole.OFF).criterion().asked(border.cut()));
+        assertEquals("< 100", border.demand(PointRole.IN).criterion().asked(border.cut()),
+                "99 is inside the partition and away from the border, which is the IN point");
+        assertEquals("> 101", border.demand(PointRole.OUT).criterion().asked(border.cut()));
 
-        OriginRef bound = new OriginRef.InvariantOrigin(invariant(), true);
-
-        assertEquals(BoundaryObligation.PointRole.ON,
-                BoundaryObligation.pointRole(bound, BoundaryObligation.BoundarySide.AT));
-        for (BoundaryObligation.BoundarySide beside : List.of(
-                BoundaryObligation.BoundarySide.BELOW, BoundaryObligation.BoundarySide.ABOVE)) {
-            assertThrows(IllegalArgumentException.class,
-                    () -> BoundaryObligation.pointRole(bound, beside));
-        }
+        // A bound owes nothing outside itself, and says which of the three answers settled it.
+        Border bound = borderOf(new OriginRef.InvariantOrigin(invariant(), true));
+        assertEquals(new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
+                bound.demand(PointRole.OFF));
+        assertEquals(new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
+                bound.demand(PointRole.OUT));
+        assertEquals("/= 5", bound.demand(PointRole.IN).criterion().asked(bound.cut()),
+                "and everything else the position admits is inside the bound");
     }
 
     /** The clause the bound tests name, which is only an identity here. */
@@ -278,8 +309,8 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
         assertEquals(1, report.split("    partition ", -1).length - 1, report);
     }
 
-    /** Each line of the model's borders as {@code side/point}, in the order the report writes them. */
-    private static List<String> sidesAndPoints(String model) {
+    /** Each item of the model's borders as {@code point:relation against}, in document order. */
+    private static List<String> pointsAsked(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
@@ -287,7 +318,8 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
                 .readTree(AdequacyReport.of(compilation).json(SourceNameResolver.identity()));
         List<String> out = new ArrayList<>();
         root.findValues("boundaries").forEach(each -> each.forEach(
-                b -> out.add(b.get("side").asText() + "/" + b.get("point").asText())));
+                b -> b.get("items").forEach(i -> out.add(i.get("point").asText() + ":"
+                        + i.get("relation").asText() + " " + i.get("against").asText()))));
         return out;
     }
 

@@ -62,33 +62,81 @@
         "boundaries" : [ {
           "axis" : "discount/String.length(item.sku)",
           "origin" : "invariant Sku #1",
-          "side" : "at",
-          "point" : "on",
           "kind" : "at_value",
           "value" : "1",
-          "hit" : true,
-          "knownWritable" : true,
-          "status" : "complete"
+          "items" : [ {
+            "point" : "on",
+            "relation" : "=",
+            "against" : "1",
+            "hit" : true,
+            "knownWritable" : true,
+            "status" : "complete"
+          }, {
+            "point" : "off",
+            "notOwed" : "the_rules_refuse_it"
+          }, {
+            "point" : "in",
+            "relation" : "/=",
+            "against" : "1",
+            "hit" : true,
+            "knownWritable" : true,
+            "status" : "complete"
+          }, {
+            "point" : "out",
+            "notOwed" : "the_rules_refuse_it"
+          } ]
         }, {
           "axis" : "discount/item.price",
           "origin" : "invariant Price #1",
-          "side" : "at",
-          "point" : "on",
           "kind" : "at_value",
           "value" : "0",
-          "hit" : true,
-          "knownWritable" : true,
-          "status" : "complete"
+          "items" : [ {
+            "point" : "on",
+            "relation" : "=",
+            "against" : "0",
+            "hit" : true,
+            "knownWritable" : true,
+            "status" : "complete"
+          }, {
+            "point" : "off",
+            "notOwed" : "the_rules_refuse_it"
+          }, {
+            "point" : "in",
+            "relation" : "/=",
+            "against" : "0",
+            "hit" : true,
+            "knownWritable" : true,
+            "status" : "complete"
+          }, {
+            "point" : "out",
+            "notOwed" : "the_rules_refuse_it"
+          } ]
         }, {
           "axis" : "discount/item.weight",
           "origin" : "invariant Weight #1",
-          "side" : "at",
-          "point" : "on",
           "kind" : "at_value",
           "value" : "1",
-          "hit" : true,
-          "knownWritable" : true,
-          "status" : "complete"
+          "items" : [ {
+            "point" : "on",
+            "relation" : "=",
+            "against" : "1",
+            "hit" : true,
+            "knownWritable" : true,
+            "status" : "complete"
+          }, {
+            "point" : "off",
+            "notOwed" : "the_rules_refuse_it"
+          }, {
+            "point" : "in",
+            "relation" : "/=",
+            "against" : "1",
+            "hit" : true,
+            "knownWritable" : true,
+            "status" : "complete"
+          }, {
+            "point" : "out",
+            "notOwed" : "the_rules_refuse_it"
+          } ]
         } ],
         "pairs" : {
           "total" : 0,
@@ -163,23 +211,55 @@
         "boundaries" : [ {
           "axis" : "台帳へ書く/String.length(指示.番号)",
           "origin" : "invariant 送り状番号 #1",
-          "side" : "at",
-          "point" : "on",
           "kind" : "at_value",
           "value" : "1",
-          "hit" : true,
-          "knownWritable" : true,
-          "status" : "complete"
+          "items" : [ {
+            "point" : "on",
+            "relation" : "=",
+            "against" : "1",
+            "hit" : true,
+            "knownWritable" : true,
+            "status" : "complete"
+          }, {
+            "point" : "off",
+            "notOwed" : "the_rules_refuse_it"
+          }, {
+            "point" : "in",
+            "relation" : "/=",
+            "against" : "1",
+            "hit" : true,
+            "knownWritable" : true,
+            "status" : "complete"
+          }, {
+            "point" : "out",
+            "notOwed" : "the_rules_refuse_it"
+          } ]
         }, {
           "axis" : "台帳へ書く/指示.重量",
           "origin" : "invariant Weight #1",
-          "side" : "at",
-          "point" : "on",
           "kind" : "at_value",
           "value" : "1",
-          "hit" : true,
-          "knownWritable" : true,
-          "status" : "complete"
+          "items" : [ {
+            "point" : "on",
+            "relation" : "=",
+            "against" : "1",
+            "hit" : true,
+            "knownWritable" : true,
+            "status" : "complete"
+          }, {
+            "point" : "off",
+            "notOwed" : "the_rules_refuse_it"
+          }, {
+            "point" : "in",
+            "relation" : "/=",
+            "against" : "1",
+            "hit" : true,
+            "knownWritable" : true,
+            "status" : "complete"
+          }, {
+            "point" : "out",
+            "notOwed" : "the_rules_refuse_it"
+          } ]
         } ],
         "pairs" : {
           "total" : 0,
@@ -285,43 +365,89 @@
         "boundaries" : [ {
           "axis" : "出荷する/String.length(指示.番号)",
           "origin" : "invariant 送り状番号 #1",
-          "side" : "at",
-          "point" : "on",
           "kind" : "at_value",
           "value" : "1",
-          "hit" : true,
-          "knownWritable" : true,
-          "status" : "complete"
+          "items" : [ {
+            "point" : "on",
+            "relation" : "=",
+            "against" : "1",
+            "hit" : true,
+            "knownWritable" : true,
+            "status" : "complete"
+          }, {
+            "point" : "off",
+            "notOwed" : "the_rules_refuse_it"
+          }, {
+            "point" : "in",
+            "relation" : "/=",
+            "against" : "1",
+            "hit" : true,
+            "knownWritable" : true,
+            "status" : "complete"
+          }, {
+            "point" : "out",
+            "notOwed" : "the_rules_refuse_it"
+          } ]
         }, {
           "axis" : "出荷する/指示.重量",
           "origin" : "invariant Weight #1",
-          "side" : "at",
-          "point" : "on",
           "kind" : "at_value",
           "value" : "1",
-          "hit" : true,
-          "knownWritable" : true,
-          "status" : "complete"
+          "items" : [ {
+            "point" : "on",
+            "relation" : "=",
+            "against" : "1",
+            "hit" : true,
+            "knownWritable" : true,
+            "status" : "complete"
+          }, {
+            "point" : "off",
+            "notOwed" : "the_rules_refuse_it"
+          }, {
+            "point" : "in",
+            "relation" : "/=",
+            "against" : "1",
+            "hit" : true,
+            "knownWritable" : true,
+            "status" : "complete"
+          }, {
+            "point" : "out",
+            "notOwed" : "the_rules_refuse_it"
+          } ]
         }, {
           "axis" : "出荷する/指示.重量",
           "origin" : "guard@1:73:5",
-          "side" : "at",
-          "point" : "on",
           "kind" : "at_value",
           "value" : "30000",
-          "hit" : true,
-          "knownWritable" : true,
-          "status" : "complete"
-        }, {
-          "axis" : "出荷する/指示.重量",
-          "origin" : "guard@1:73:5",
-          "side" : "above",
-          "point" : "off",
-          "kind" : "at_value",
-          "value" : "30001",
-          "hit" : true,
-          "knownWritable" : true,
-          "status" : "complete"
+          "items" : [ {
+            "point" : "on",
+            "relation" : "=",
+            "against" : "30000",
+            "hit" : true,
+            "knownWritable" : true,
+            "status" : "complete"
+          }, {
+            "point" : "off",
+            "relation" : "=",
+            "against" : "30001",
+            "hit" : true,
+            "knownWritable" : true,
+            "status" : "complete"
+          }, {
+            "point" : "in",
+            "relation" : "<",
+            "against" : "30000",
+            "hit" : true,
+            "knownWritable" : true,
+            "status" : "complete"
+          }, {
+            "point" : "out",
+            "relation" : ">",
+            "against" : "30001",
+            "hit" : false,
+            "knownWritable" : true,
+            "status" : "complete"
+          } ]
         } ],
         "pairs" : {
           "total" : 6,
@@ -355,6 +481,10 @@
         "unreached" : [ ]
       },
       "findings" : [ {
+        "kind" : "domain_point_uncovered",
+        "disposition" : "reported",
+        "subject" : "出荷する/指示.重量 > 30001"
+      }, {
         "kind" : "partition_not_derivable",
         "disposition" : "reported",
         "subject" : "指示.記録時刻"

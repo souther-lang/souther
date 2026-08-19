@@ -72,7 +72,7 @@ public final class GuardThresholds {
      */
     public record Guards(List<Threshold> thresholds,
                          List<UnreadRule> unread, List<Singled> singled,
-                         List<BoundaryObligation> between,
+                         List<Border> between,
                          List<AtAPosition> accounting) {
 
         public static final Guards NONE =
@@ -122,7 +122,7 @@ public final class GuardThresholds {
         List<UnreadRule> unread = new ArrayList<>();
         List<Guards.AtAPosition> accounting = new ArrayList<>();
         List<Guards.Singled> singled = new ArrayList<>();
-        List<BoundaryObligation> between = new ArrayList<>();
+        List<Border> between = new ArrayList<>();
         walk(behavior, body, plan, InputReads.of(inputs), symbols, found, unread,
                 singled, between, accounting);
         return new Guards(found, unread, singled, between, accounting);
@@ -131,7 +131,7 @@ public final class GuardThresholds {
     private static void walk(String behavior, Core e, CoverageSites.Plan plan,
                              InputReads reads, Symbols symbols, List<Threshold> out,
                              List<UnreadRule> unread,
-                             List<Guards.Singled> singled, List<BoundaryObligation> between,
+                             List<Guards.Singled> singled, List<Border> between,
                              List<Guards.AtAPosition> accounting) {
         if (e instanceof Core.If iff) {
             List<Core> read =
@@ -287,7 +287,7 @@ public final class GuardThresholds {
     private static List<Core> read(String behavior, Core.If iff, CoverageSites.Plan plan,
                                    InputReads reads, Symbols symbols,
                                    List<Threshold> out,
-                                   List<Guards.Singled> singled, List<BoundaryObligation> between,
+                                   List<Guards.Singled> singled, List<Border> between,
                                    List<Guards.AtAPosition> accounting) {
         // The comparisons a line came of, and not the positions they were about. A position carries
         // more than one statement and reading one of them settles nothing about the others.
@@ -462,7 +462,7 @@ public final class GuardThresholds {
      */
     private static void between(String behavior, Core.If iff, Placed placed, CoverageSites.Plan plan,
                                 CoverageSites.GuardRef guard, int site, InputReads reads,
-                                Symbols symbols, List<BoundaryObligation> out) {
+                                Symbols symbols, List<Border> out) {
         ComparedTerms drawn = ComparedTerms.of(placed.comparison(), reads, symbols);
         if (drawn == null) {
             return;
@@ -470,15 +470,16 @@ public final class GuardThresholds {
         // Below and inclusive are what a threshold's arms are read off, and neither is a question this
         // line answers: the two sides of it are decided by both positions at once. `singles` is false
         // because this is a line and not a value singled out, and the row that meets it is the row on
-        // it.
+        // it. Which way round the two stand where the comparison holds is the compared terms' to say,
+        // and it is handed to the border rather than kept here.
         OriginRef.GuardOrigin origin = new OriginRef.GuardOrigin(
                 new RuleRef.Guard(plan.site(site).comparison()),
                 new OriginRef.GuardOrigin.Read(guard, site, Citation.of(iff.pos())),
                 true, placed.witness(), drawn.holdsAtTheLine(), false);
-        BoundaryObligation made = new BoundaryObligation(
+        Border made = Border.betweenTerms(
                 new BoundaryTarget.EqualTerms(behavior, drawn.on(), drawn.against(),
                         drawn.carrier()),
-                origin, BoundaryObligation.BoundarySide.AT);
+                origin, drawn.onIsAboveWhereItHolds());
         if (out.stream().noneMatch(had -> had.equals(made))) {
             out.add(made);
         }

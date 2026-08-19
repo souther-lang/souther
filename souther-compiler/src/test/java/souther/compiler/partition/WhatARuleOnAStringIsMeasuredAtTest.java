@@ -59,12 +59,12 @@ class WhatARuleOnAStringIsMeasuredAtTest {
         assertEquals(new Measured(
                         List.of("x < b", "b <= x"),
                         List.of("[]", "[b]"),
-                        List.of("AT b")),
+                        List.of("OFF b")),
                 measured("guard x < QbQ else Newer"));
         assertEquals(new Measured(
                         List.of("x < a", "a <= x"),
                         List.of("[]", "[a]"),
-                        List.of("AT a")),
+                        List.of("ON a")),
                 measured("guard x >= QaQ else Newer"));
     }
 
@@ -80,12 +80,12 @@ class WhatARuleOnAStringIsMeasuredAtTest {
         assertEquals(new Measured(
                         List.of("x <= b", "b < x"),
                         List.of("[b]", "none"),
-                        List.of("AT b")),
+                        List.of("ON b")),
                 measured("guard x <= QbQ else Newer"));
         assertEquals(new Measured(
                         List.of("x <= a", "a < x"),
                         List.of("[a]", "none"),
-                        List.of("AT a")),
+                        List.of("OFF a")),
                 measured("guard x > QaQ else Newer"));
     }
 
@@ -100,31 +100,39 @@ class WhatARuleOnAStringIsMeasuredAtTest {
         assertEquals(new Measured(
                         List.of("x <= a", "a < x <= b", "b < x"),
                         List.of("[a]", "[b]", "none"),
-                        List.of("AT a", "AT b")),
+                        List.of("OFF a", "ON b")),
                 measured("guard x > QaQ && x <= QbQ else Newer"));
         assertEquals(new Measured(
                         List.of("x < a", "a <= x < b", "b <= x"),
                         List.of("[]", "[a]", "[b]"),
-                        List.of("AT a", "AT b")),
+                        List.of("ON a", "OFF b")),
                 measured("guard x >= QaQ && x < QbQ else Newer"));
     }
 
     /**
      * A value singled out leaves everything else, and the least string stands for it.
      *
-     * <p>Both spellings of the same distinction. What is left over is not a range and does not have
-     * to be: what a class needs is a way to say whether a value is in it and a value that stands for
-     * it, and the empty string is one wherever it is not the value singled out.
+     * <p>Both spellings divide the position the same way. What is left over is not a range and does
+     * not have to be: what a class needs is a way to say whether a value is in it and a value that
+     * stands for it, and the empty string is one wherever it is not the value singled out.
+     *
+     * <p>What the two spellings do not share is which point the row at the value is. {@code == "foo"}
+     * puts the value inside the partition it names, so a row there is its {@code ON} point;
+     * {@code /= "foo"} puts it outside, so the same row is that border's {@code OFF} point. One row
+     * and two readings of it, which is what naming the point is for.
      */
     @Test
     void aValueSingledOutLeavesTheLeastStringForEverythingElse() {
-        Measured both = new Measured(
-                List.of("= foo", "/= foo"),
-                List.of("[foo]", "[]"),
-                List.of("AT foo"));
-
-        assertEquals(both, measured("guard x == QfooQ else Newer"));
-        assertEquals(both, measured("guard x /= QfooQ else Newer"));
+        assertEquals(new Measured(
+                        List.of("= foo", "/= foo"),
+                        List.of("[foo]", "[]"),
+                        List.of("ON foo")),
+                measured("guard x == QfooQ else Newer"));
+        assertEquals(new Measured(
+                        List.of("= foo", "/= foo"),
+                        List.of("[foo]", "[]"),
+                        List.of("OFF foo")),
+                measured("guard x /= QfooQ else Newer"));
     }
 
     /** And where the least string is the one singled out, nothing else stands for the rest. */
@@ -133,7 +141,7 @@ class WhatARuleOnAStringIsMeasuredAtTest {
         assertEquals(new Measured(
                         List.of("= ", "/= "),
                         List.of("[]", "none"),
-                        List.of("AT ")),
+                        List.of("ON ")),
                 measured("guard x == QQ else Newer"));
     }
 
@@ -182,8 +190,11 @@ class WhatARuleOnAStringIsMeasuredAtTest {
                         : made.stream().map(FixtureTemplate::text)
                                 .map(WhatARuleOnAStringIsMeasuredAtTest::bare).toList().toString());
             }
-            Partitions.obligationsOf(axis, symbols, p.domains().get(axis.term()))
-                    .forEach(o -> owed.add(o.side() + " " + o.target().right()));
+            Partitions.bordersOf(axis, symbols, p.domains().get(axis.term()))
+                    .forEach(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
+                            .filter(role -> border.demand(role).criterion() != null)
+                            .forEach(role -> owed.add(role + " "
+                                    + border.demand(role).criterion().against(border.cut()))));
         }
         return new Measured(classes, stands, owed);
     }

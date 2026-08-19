@@ -11,9 +11,9 @@ import souther.compiler.diag.SourceProvenance;
 import souther.compiler.diag.Placement;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
-import souther.compiler.partition.BoundaryObligation;
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.BoundaryAssessment;
+import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
@@ -203,14 +203,14 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "partition", "properties", "claimsOffAxis", "items",
                             "properties", "why"),
                     souther.compiler.query.ClaimAnnotations.Why.class),
-            new Vocabulary("partition.boundaries[].side",
+            new Vocabulary("partition.boundaries[].items[].point",
                     List.of("$defs", "partition", "properties", "boundaries", "items", "properties",
-                            "side"),
-                    BoundaryObligation.BoundarySide.class),
-            new Vocabulary("partition.boundaries[].point",
+                            "items", "items", "properties", "point"),
+                    souther.compiler.partition.PointRole.class),
+            new Vocabulary("partition.boundaries[].items[].notOwed",
                     List.of("$defs", "partition", "properties", "boundaries", "items", "properties",
-                            "point"),
-                    BoundaryObligation.PointRole.class),
+                            "items", "items", "properties", "notOwed"),
+                    souther.compiler.partition.NotOwedReason.class),
             new Vocabulary("partition.boundaries[].kind",
                     List.of("$defs", "partition", "properties", "boundaries", "items", "properties",
                             "kind"),
@@ -219,10 +219,10 @@ class EverySchemaWordIsAccountedForTest {
             // separate the rows that reached its comparison from the rows that did not. The
             // comparison is observed where it runs now, so nothing produces the word — and reports of
             // this version were written carrying it, and a version says what its documents may carry.
-            new Vocabulary("partition.boundaries[].reason",
+            new Vocabulary("partition.boundaries[].items[].reason",
                     List.of("$defs", "partition", "properties", "boundaries", "items", "properties",
-                            "reason"),
-                    BoundaryAssessment.Coverage.Reason.class, Set.of("no_arm_witnesses_it")),
+                            "items", "items", "properties", "reason"),
+                    ItemAssessment.Coverage.Reason.class, Set.of("no_arm_witnesses_it")),
             new Vocabulary("partition.pairs.reason",
                     List.of("$defs", "partition", "properties", "pairs", "properties", "reason"),
                     PartitionEvidence.PairSpace.Reason.class),
@@ -419,7 +419,7 @@ class EverySchemaWordIsAccountedForTest {
             required.add(each.asString());
         }
 
-        assertEquals(Set.of("axis", "origin", "side", "value", "hit", "knownWritable", "status"),
+        assertEquals(Set.of("axis", "origin", "value", "items"),
                 required, "a boundary object written before `kind` existed carries these and no more");
     }
 

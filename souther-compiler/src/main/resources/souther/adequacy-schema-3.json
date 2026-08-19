@@ -128,7 +128,8 @@
         "properties": {
           "kind": {
             "description": "What the measure established. `output_case_unspecified` is a case of the output no row expects and `output_case_unverified` is one some row expects and nothing was seen to produce; `input_case_unspecified` is a case of an input no row applies the behavior to and `axis_class_uncovered` is a class of a derived position no row is in — the two read alike about one class and only one of them is refused over. `boundary_unmet` is a line some rule draws that no row sits on, `arm_unreached` an arm of the body no row goes through. `partition_not_derivable`, `partition_not_read`, `partition_rules_not_reached` and `partition_omitted` are positions the model divides no way, positions some rule about which was not read, positions the axes did measure whose rules the walk never reached, and positions past the axis limit. `rule_unaccounted` is one question a rule raised that nothing answered — said whether or not an axis came back for the position it is about, since a rule this compiler could not read is exactly the one no axis is derived from, and named for the question rather than for a measure because which section a reader meets it under follows from what it asks.",
-            "enum": ["output_case_unspecified", "input_case_unspecified", "boundary_unmet", "arm_unreached", "output_case_unverified", "axis_class_uncovered", "partition_not_derivable", "partition_not_read", "rule_unaccounted", "partition_rules_not_reached", "partition_omitted"]
+            "enum": ["output_case_unspecified", "input_case_unspecified", "boundary_unmet", "arm_unreached", "output_case_unverified", "axis_class_uncovered",
+              "domain_point_uncovered", "partition_not_derivable", "partition_not_read", "rule_unaccounted", "partition_rules_not_reached", "partition_omitted"]
           },
           "disposition": {
             "description": "What a build does about this one. `refused` is a gap `--strict` and a warned build refuse over; `reported` is a kind neither refuses over, whatever its measurement managed; `undecided` is a kind they would refuse over, from a measurement that came to no answer — telling an author to write a row they may already have written is worse than saying nothing, so it is named and not refused.",
@@ -295,30 +296,58 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["axis", "origin", "side", "value", "hit", "knownWritable", "status"],
+            "required": ["axis", "origin", "value", "items"],
             "additionalProperties": false,
             "properties": {
               "axis": { "type": "string" },
               "origin": { "type": "string", "description": "The rule that drew this line — a type's invariant, a behavior's `ensures`, or the fork of a body a condition was written in, named by the construct the author wrote it as (`if`, `guard` or `comprehension`) and where. Prose rather than a word list: which rules there are is the model's question, not this document's." },
-              "side": { "enum": ["below", "at", "above"] },
-              "point": {
-                "enum": ["on", "off"],
-                "description": "Which point of the border a row here would be, in the words domain testing gives them (ISTQB CTAL-TA v4.0 §3.1.1): `on` is inside the equivalence partition the border bounds and closest to it, `off` is outside it and closest to it. Not another spelling of `side`, which says where the value sits around the cut and so says how to read `value`. Which one a side is turns on whether the border is closed or open, so the same `at` is the `on` point of `x <= 100` and the `off` point of `x < 100`, and neither key produces the other. Absent in a document written before this key existed."
-              },
               "kind": {
                 "enum": ["at_value", "between_positions"],
                 "description": "What this line is a line at. `at_value` is a place of the position `axis` names, which is what an invariant's bound and a guard against a constant draw. `between_positions` is a guard comparing one position against another: the line is where the two hold the same place, `axis` names the left of it and `value` the other position rather than a value. Reading `value` without reading this reads a position's name as a value. Absent in a document written before this key existed, where every line was at a value."
               },
-              "value": { "type": "string", "description": "The other side of the line, as an author would write it: a value where `kind` is `at_value` or absent, and the other position where it is `between_positions`. The place a row happens to satisfy such a line with belongs to that row and not to the line, so it is not written here." },
-              "hit": { "type": "boolean" },
-              "knownWritable": {
-                "type": "boolean",
-                "description": "Whether some row could carry this value. False where a rule reaching the value this position sits in was not read in full — a pattern, a disequality, a strict bound on a decimal — so the edge is where the reading stopped rather than where the model does. Such a line is reported and not counted, and no build is refused over it."
-              },
-              "status": { "$ref": "#/$defs/status" },
-              "reason": {
-                "description": "Why there is no answer, present exactly where `status` is `unavailable`. `arms_not_asked` and `arms_unreadable` belong to a guard's line only, which is met by getting the comparison to produce a value rather than by writing the value; an invariant's line is met by writing it and is never waiting on the instrumentation. `no_arm_witnesses_it` was a guard's line whose comparison sat inside a condition whose arms did not separate the rows that reached it from the rows that did not — the second operand of an `&&` on the side where it is false. No compiler writes it any more: the comparison carries a site of its own and is observed where it runs. It is here because reports of this version were written carrying it, and a version says what its documents may carry rather than what is emitted today.",
-                "enum": ["arms_not_asked", "arms_unreadable", "no_rows", "no_arm_witnesses_it"]
+              "value": { "type": "string", "description": "Where the line is, as an author would write it: a value where `kind` is `at_value` or absent, and the other position where it is `between_positions`. Not what any one of the border's points asks for — three of the four ask for something else, and each says so itself." },
+              "items": {
+                "type": "array",
+                "description": "The four coverage items this border owes, keyed on the border the way the technique keys them (ISTQB CTAL-TA v4.0 §3.1.1). All four are here and each exactly once: how many of them a border owes a row at is the rule's answer and not a constant, so a role it owes none in carries `notOwed` rather than being left out — a document short of one would read as this compiler being short of an item the technique asks for. Two of them used to be keys of this object and the other two were written nowhere, being counted by `equivalencePartitions`, whose unit is a position's class.",
+                "minItems": 4,
+                "maxItems": 4,
+                "allOf": [
+                  { "contains": { "required": ["point"], "properties": { "point": { "const": "on" } } }, "minContains": 1, "maxContains": 1 },
+                  { "contains": { "required": ["point"], "properties": { "point": { "const": "off" } } }, "minContains": 1, "maxContains": 1 },
+                  { "contains": { "required": ["point"], "properties": { "point": { "const": "in" } } }, "minContains": 1, "maxContains": 1 },
+                  { "contains": { "required": ["point"], "properties": { "point": { "const": "out" } } }, "minContains": 1, "maxContains": 1 }
+                ],
+                "items": {
+                  "type": "object",
+                  "required": ["point"],
+                  "additionalProperties": false,
+                  "oneOf": [
+                    { "required": ["notOwed"], "not": { "anyOf": [{ "required": ["relation"] }, { "required": ["against"] }, { "required": ["hit"] }, { "required": ["knownWritable"] }, { "required": ["status"] }, { "required": ["reason"] }] } },
+                    { "required": ["relation", "against", "hit", "knownWritable", "status"], "not": { "required": ["notOwed"] } }
+                  ],
+                  "properties": {
+                    "point": {
+                      "enum": ["on", "off", "in", "out"],
+                      "description": "Which of the four coverage items of this border this entry is, in the words domain testing gives them. `on` is inside the equivalence partition the border bounds and closest to it, `off` is outside it and closest to it, `in` is inside it and away from it, and `out` is outside it and away from it. Which one the line's own value serves as turns on whether the border is closed or open, so the same place is the `on` point of `x <= 100` and the `off` point of `x < 100`."
+                    },
+                    "notOwed": {
+                      "enum": ["the_rules_refuse_it", "the_carrier_names_no_neighbour", "the_rule_names_a_value_not_a_side"],
+                      "description": "Why no row is owed here, present exactly when one is not. `the_rules_refuse_it` is the model's own answer — nothing outside an invariant's bound can be constructed, so the two points out there are excluded and counted out, and a side the rules leave one value wide has no `in` point for the same reason. `the_carrier_names_no_neighbour` is this language having no name for the value one step from the line, which a `Decimal`, a `DateTime` and a `String` do not — at a place, and at the difference two terms of a line between them stand at. `the_rule_names_a_value_not_a_side` is what an equality draws, where neither neighbour is nearer to being outside than the other. The three ask different things of a reader — two are the model and the rule having settled the point and one is a limit of this language — which is why the key is a word and not a flag."
+                    },
+                    "relation": { "type": "string", "description": "How a row here has to stand to what `against` names: `=`, `<`, `>` or `/=`. Present exactly where a row is owed. Two of the four items ask for a place and two ask for a side, so a document carrying a value for all four would name a witness of a side as though it were the side." },
+                    "against": { "type": "string", "description": "What that relation is against, as an author would write it: a value where the border's `kind` is `at_value`, and the other position where it is `between_positions`." },
+                    "hit": { "type": "boolean" },
+                    "knownWritable": {
+                      "type": "boolean",
+                      "description": "Whether some row could be at this point. False where a rule reaching the value this position sits in was not read in full — a pattern, a disequality, a strict bound on a decimal — so the point is where the reading stopped rather than where the model does. Such a point is reported and not counted, and no build is refused over it."
+                    },
+                    "status": { "$ref": "#/$defs/status" },
+                    "reason": {
+                      "description": "Why there is no answer, present exactly where `status` is `unavailable`. `arms_not_asked` and `arms_unreadable` belong to a line a fork of a body drew, which is met by getting the comparison to produce a value rather than by writing the value — and that holds of all four of its points. An invariant's line is met by writing the value and is never waiting on the instrumentation. `no_arm_witnesses_it` was a guard's line whose comparison sat inside a condition whose arms did not separate the rows that reached it from the rows that did not — the second operand of an `&&` on the side where it is false. No compiler writes it any more: the comparison carries a site of its own and is observed where it runs. It is here because reports of this version were written carrying it, and a version says what its documents may carry rather than what is emitted today.",
+                      "enum": ["arms_not_asked", "arms_unreadable", "no_rows", "no_arm_witnesses_it"]
+                    }
+                  }
+                }
               }
             }
           }

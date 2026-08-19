@@ -28,12 +28,16 @@ import java.util.List;
  * and not something an origin knows about itself. Asked of it there, the folding read as the
  * origin's own identity, and the next thing to key on an origin keyed on the reading.
  *
+ * <p>The line and not one of its points. Which of the four coverage items a row is at is
+ * {@link PointRole}'s, and it used to be part of this — so the {@code ON} point and the
+ * {@code OFF} point of one border were two lines, and nothing could ask what one border owed. Two
+ * readings of one line owe the same four things, which is what makes this the key they are merged
+ * under.
+ *
  * @param target  where the line is
- * @param side    which of the values around the cut this one is
  * @param drawing whose rule drew it, and what the line it drew is
  */
-public record BoundaryLine(BoundaryTarget target, BoundaryObligation.BoundarySide side,
-                           Drawing drawing) {
+public record BoundaryLine(BoundaryTarget target, Drawing drawing) {
 
     /**
      * Whose rule drew a line, and what the line it drew is.
@@ -54,10 +58,9 @@ public record BoundaryLine(BoundaryTarget target, BoundaryObligation.BoundarySid
         }
     }
 
-    /** The line {@code obligation} asks for a row at. */
-    public static BoundaryLine of(BoundaryObligation obligation) {
-        return new BoundaryLine(obligation.target(), obligation.side(),
-                drawnBy(obligation.origin()));
+    /** The line {@code border} is the coverage items of. */
+    public static BoundaryLine of(Border border) {
+        return new BoundaryLine(border.cut(), drawnBy(border.origin()));
     }
 
     private static Drawing drawnBy(OriginRef origin) {

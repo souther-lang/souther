@@ -4,7 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.BoundaryAssessment;
+import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.ItemAssessment;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.ValueName;
@@ -258,7 +259,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      */
     @Test
     void aWrappersRuleReachesAPositionInsideARecord() {
-        Map<String, BoundaryAssessment> lines = linesOf(WRAPPERS, "wrappers");
+        Map<String, BorderAssessment> lines = linesOf(WRAPPERS, "wrappers");
 
         assertEquals("invariant Wrapped #1", lines.get("onHeld/v.w.n = 1").rule().named());
         assertEquals("invariant NonEmptyBag #1",
@@ -268,7 +269,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     /** And through as many names as are worn, since a name wrapped round a value is not a step. */
     @Test
     void aWrappersRuleReachesThroughAStackOfNames() {
-        Map<String, BoundaryAssessment> lines = linesOf(WRAPPERS, "wrappers");
+        Map<String, BorderAssessment> lines = linesOf(WRAPPERS, "wrappers");
 
         assertEquals("invariant W2 #1", lines.get("onStacked/v.w.n = 2").rule().named());
     }
@@ -287,7 +288,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      */
     @Test
     void aNameWrappedRoundARecordReachesItsPositions() {
-        Map<String, BoundaryAssessment> lines = linesOf(WRAPPERS, "wrappers");
+        Map<String, BorderAssessment> lines = linesOf(WRAPPERS, "wrappers");
 
         assertEquals("invariant Wrapped #1", lines.get("onWrapped/v.n = 1").rule().named());
         assertEquals("invariant NonEmptyBag #1",
@@ -557,7 +558,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      */
     @Test
     void aLineTheRecordPlacedIsSettledLikeOneOnANewtype() {
-        Map<String, BoundaryAssessment> lines = new LinkedHashMap<>();
+        Map<String, BorderAssessment> lines = new LinkedHashMap<>();
         Compilation compilation = Compilation.ofSource(UNMEETABLE, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
@@ -569,14 +570,20 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                         "onFlagsR/Set.size(v.s) = 2", "onNumbersR/Set.size(v.s) = 3",
                         "onTextR/String.length(v.s) = 3"),
                 lines.keySet(), "one line each, and the record's is on the count of the field");
-        assertTrue(lines.get("onFlagsN/Set.size(v) = 2").writability().known(),
+        assertTrue(onPoint(lines, "onFlagsN/Set.size(v) = 2").writability().known(),
                 "two booleans are two booleans");
-        assertTrue(lines.get("onFlagsR/Set.size(v.s) = 2").writability().known(),
+        assertTrue(onPoint(lines, "onFlagsR/Set.size(v.s) = 2").writability().known(),
                 "and writing the rule on the record does not take one away");
-        assertTrue(lines.get("onNumbersN/Set.size(v) = 3").writability().known(),
+        assertTrue(onPoint(lines, "onNumbersN/Set.size(v) = 3").writability().known(),
                 "three integers are three integers");
-        assertTrue(lines.get("onNumbersR/Set.size(v.s) = 3").writability().known(),
+        assertTrue(onPoint(lines, "onNumbersR/Set.size(v.s) = 3").writability().known(),
                 "and a record holding them is a value that can be built");
+    }
+
+    /** The point on the line of the border named {@code label}, which is what a bound owes. */
+    private static souther.compiler.query.ItemAssessment.Owed onPoint(
+            Map<String, BorderAssessment> lines, String label) {
+        return lines.get(label).owedAt(PointRole.ON);
     }
 
     /**
@@ -634,7 +641,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      */
     @Test
     void aWrappersRelationNarrowsThePositionsItPlacesNoEdgeOn() {
-        Map<String, BoundaryAssessment> lines = linesOf(WRAPPED_RELATION, "wrappedrelation");
+        Map<String, BorderAssessment> lines = linesOf(WRAPPED_RELATION, "wrappedrelation");
 
         assertTrue(lines.containsKey("onBare/v.a = 10"),
                 "`a` stops where its own type stops when nothing narrows it: " + lines.keySet());
@@ -656,7 +663,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      */
     @Test
     void aNarrowedEdgeNamesTheDeclarationThatMovedItAndNotTheValueItSitsIn() {
-        Map<String, BoundaryAssessment> lines = linesOf(WRAPPED_RELATION, "wrappedrelation");
+        Map<String, BorderAssessment> lines = linesOf(WRAPPED_RELATION, "wrappedrelation");
 
         assertEquals("invariant A #1 within Wrapped",
                 lines.get("onHeld/v.w.a = 9").rule().named(),
@@ -720,7 +727,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      */
     @Test
     void aRelationThatMovedNoEndDoesNotNameOne() {
-        Map<String, BoundaryAssessment> lines = linesOf(WHO_HELD_IT, "whoheldit");
+        Map<String, BorderAssessment> lines = linesOf(WHO_HELD_IT, "whoheldit");
 
         assertEquals("invariant A #1 within Inner", lines.get("onOuter/v.a = 7").rule().named(),
                 "`Outer`'s clause reaches nothing `a` had not already passed");
@@ -739,7 +746,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      */
     @Test
     void aCandidateThatHoldsNothingIsOutEvenWhereNoOneCandidateHoldsIt() {
-        Map<String, BoundaryAssessment> lines = linesOf(WHO_HELD_IT, "whoheldit");
+        Map<String, BorderAssessment> lines = linesOf(WHO_HELD_IT, "whoheldit");
 
         assertEquals("invariant A #1 within Again or Twice",
                 lines.get("onIdle/v.a = 7").rule().named(),
@@ -749,7 +756,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     /** And the two ends of one position are two answers. */
     @Test
     void eachEndIsHeldByWhicheverDeclarationHoldsIt() {
-        Map<String, BoundaryAssessment> lines = linesOf(WHO_HELD_IT, "whoheldit");
+        Map<String, BorderAssessment> lines = linesOf(WHO_HELD_IT, "whoheldit");
 
         assertEquals("invariant N #1 within Both", lines.get("onBoth/v.n = 3").rule().named());
         assertEquals("invariant N #2 within Upper", lines.get("onBoth/v.n = 7").rule().named());
@@ -780,8 +787,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      */
     @Test
     void aLengthOverSomethingUninhabitedIsNotProvenByTheRange() {
-        BoundaryAssessment line = linesOf(UNINHABITED, "uninhabited")
-                .get("onLoopyR/List.length(v.xs) = 1");
+        souther.compiler.query.ItemAssessment.Owed line =
+                onPoint(linesOf(UNINHABITED, "uninhabited"), "onLoopyR/List.length(v.xs) = 1");
 
         assertFalse(line.writability().known(),
                 "nothing inhabits `Loop`, so nothing holds a list of one");
@@ -802,11 +809,11 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     }
 
     /** Every line one module draws, by the behavior and label it is reported under. */
-    private static Map<String, BoundaryAssessment> linesOf(String source, String module) {
+    private static Map<String, BorderAssessment> linesOf(String source, String module) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
-        Map<String, BoundaryAssessment> lines = new LinkedHashMap<>();
+        Map<String, BorderAssessment> lines = new LinkedHashMap<>();
         compilation.db().ask(new Adequacy.Coverage(module)).value()
                 .forEach((behavior, evidence) -> evidence.boundaries()
                         .forEach(line -> lines.put(behavior + "/" + line.label(), line)));

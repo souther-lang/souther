@@ -130,7 +130,8 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
         String block = block(LIMIT, true);
         List<String> offered = names(block);
 
-        assertEquals(5, rows(block), "the model owes a row for each class pair and one at the line");
+        assertEquals(7, rows(block),
+                "the model owes a row for each class pair, one at the line and one either side");
         assertEquals(4, offered.size(), "the four composed for a cell are named: " + offered);
         Set<String> distinct = new LinkedHashSet<>(offered);
         assertEquals(offered.size(), distinct.size(),

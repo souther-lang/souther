@@ -7,7 +7,8 @@ import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.BoundaryAssessment;
+import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
@@ -216,9 +217,12 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
                     wrong.add("axis " + axis.path() + ": " + axis.uncovered());
                 }
             }
-            for (BoundaryAssessment boundary : partition.boundaries()) {
-                if (boundary.status() == MeasurementStatus.COMPLETE && !boundary.coverage().hit()) {
-                    wrong.add("boundary " + boundary.axis() + " = " + boundary.value());
+            for (BorderAssessment.Point point
+                    : BorderAssessment.pointsOf(partition.boundaries())) {
+                if (point.owed() != null
+                        && point.item().status() == MeasurementStatus.COMPLETE
+                        && !point.owed().coverage().hit()) {
+                    wrong.add("boundary " + point.border().axis() + " " + point.asked());
                 }
             }
             if (partition.pairs().status() == MeasurementStatus.COMPLETE
@@ -311,7 +315,8 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
         assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.of(compilation).status());
         assertTrue(partition.axes().stream().anyMatch(a -> !a.uncovered().isEmpty()),
                 "a class nothing is in");
-        assertTrue(partition.boundaries().stream().anyMatch(b -> !b.coverage().hit()),
+        assertTrue(BorderAssessment.pointsOf(partition.boundaries()).stream()
+                        .anyMatch(p -> p.owed() != null && !p.owed().coverage().hit()),
                 "a boundary nothing is at");
         assertTrue(partition.pairs().unknown() > 0, "a combination nothing reaches");
         assertFalse(compilation.db().ask(new Adequacy.BranchCoverage(module)).value()

@@ -91,8 +91,10 @@ class AGeneratedRowIsWrittenTheWayTheModuleReachesItTest {
                 "Amount", "Kind"));
 
         assertEquals(List.of(
-                        "Req { amount = Amount(500), kind = Domestic }",
                         "Req { amount = Amount(499), kind = Domestic }",
+                        "Req { amount = Amount(500), kind = Domestic }",
+                        "Req { amount = Amount(498), kind = Domestic }",
+                        "Req { amount = Amount(501), kind = Domestic }",
                         "Req { amount = Amount(499), kind = Overseas }",
                         "Req { amount = Amount(500), kind = Overseas }"),
                 rows);
@@ -107,8 +109,10 @@ class AGeneratedRowIsWrittenTheWayTheModuleReachesItTest {
         List<String> rows = rowsFor(app("import lib as up", "up.Amount", "up.Kind"));
 
         assertEquals(List.of(
-                        "Req { amount = up.Amount(500), kind = up.Domestic }",
                         "Req { amount = up.Amount(499), kind = up.Domestic }",
+                        "Req { amount = up.Amount(500), kind = up.Domestic }",
+                        "Req { amount = up.Amount(498), kind = up.Domestic }",
+                        "Req { amount = up.Amount(501), kind = up.Domestic }",
                         "Req { amount = up.Amount(499), kind = up.Overseas }",
                         "Req { amount = up.Amount(500), kind = up.Overseas }"),
                 rows);
@@ -125,8 +129,10 @@ class AGeneratedRowIsWrittenTheWayTheModuleReachesItTest {
                 "up.Amount", "up.Kind"));
 
         assertEquals(List.of(
-                        "Req { amount = up.Amount(500), kind = up.Domestic }",
                         "Req { amount = up.Amount(499), kind = up.Domestic }",
+                        "Req { amount = up.Amount(500), kind = up.Domestic }",
+                        "Req { amount = up.Amount(498), kind = up.Domestic }",
+                        "Req { amount = up.Amount(501), kind = up.Domestic }",
                         "Req { amount = up.Amount(499), kind = up.Overseas }",
                         "Req { amount = up.Amount(500), kind = up.Overseas }"),
                 rows);
@@ -142,12 +148,16 @@ class AGeneratedRowIsWrittenTheWayTheModuleReachesItTest {
         List<String> rows = rowsFor(source);
 
         assertEquals(List.of(
-                        "Req { amount = lib.Amount(500), kind = Domestic }",
                         "Req { amount = lib.Amount(499), kind = Domestic }",
+                        "Req { amount = lib.Amount(500), kind = Domestic }",
+                        "Req { amount = lib.Amount(498), kind = Domestic }",
+                        "Req { amount = lib.Amount(501), kind = Domestic }",
                         "Req { amount = lib.Amount(499), kind = Overseas }",
                         "Req { amount = lib.Amount(500), kind = Overseas }"),
                 rows);
-        assertEquals(List.of("E1905"), addedByPasting(source, rows.get(0)),
+        assertEquals(List.of("E1905"), addedByPasting(source,
+                        rows.stream().filter(each -> each.contains("Amount(500)"))
+                                .findFirst().orElseThrow()),
                 "and the qualified form compiles where it is offered");
     }
 
@@ -168,7 +178,12 @@ class AGeneratedRowIsWrittenTheWayTheModuleReachesItTest {
     @Test
     void aRowCompilesInTheModuleItIsOfferedToAndTheDeclarationsOwnSpellingDoesNot() {
         String source = app("import lib as up", "up.Amount", "up.Kind");
-        String offered = rowsFor(source).get(0);
+        // The row at the value the guard names, and not whichever row happens to come first. What
+        // this pastes beside it is an expectation the behavior does not answer with there, so a row
+        // at any other value would be a check that passes by agreeing.
+        String offered = rowsFor(source).stream()
+                .filter(each -> each.contains("Amount(500)"))
+                .findFirst().orElseThrow();
         String declared = offered.replace("up.", "");
 
         assertEquals(List.of("E1905"), addedByPasting(source, offered),

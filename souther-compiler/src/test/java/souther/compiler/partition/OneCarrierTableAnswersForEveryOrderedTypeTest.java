@@ -542,8 +542,14 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
             // this compiler could not do is recorded in its own words and said in the document's.
             UndividedPosition.Reason unread = evidence.unread().isEmpty() ? null
                     : ReportedReason.of(evidence.unread().get(0).why());
+            // The points a row is owed at against a line, and not the borders. Which carriers name a
+            // value one step over is what this table is about, and a border is one whether or not
+            // its second point exists — counted as borders, every carrier answers alike.
             out.put(behavior, new Measured(evidence.axes().size(),
-                    evidence.boundaries().size(), unread));
+                    (int) souther.compiler.query.BorderAssessment.pointsOf(evidence.boundaries())
+                            .stream().filter(point -> point.role().againstTheLine())
+                            .filter(point -> point.owed() != null).count(),
+                    unread));
         }
         return out;
     }

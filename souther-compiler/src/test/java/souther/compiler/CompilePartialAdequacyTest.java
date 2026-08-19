@@ -12,7 +12,8 @@ import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
-import souther.compiler.query.BoundaryAssessment;
+import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
@@ -220,11 +221,12 @@ class CompilePartialAdequacyTest {
         PartitionEvidence partition = measured(budgetSpent("")).db()
                 .ask(new Adequacy.Coverage("example.budget")).value().get("take");
 
-        List<BoundaryAssessment> at = partition.boundaries().stream()
-                .filter(b -> b.value().equals("0")).toList();
+        List<BorderAssessment.Point> at = pointsAgainstTheLine(partition).stream()
+                .filter(p -> "0".equals(p.against())).toList();
         assertEquals(1, at.size());
-        assertEquals(MeasurementStatus.PARTIAL, at.get(0).status());
-        assertFalse(at.get(0).coverage().hit(), "nothing was read, so nothing was met either");
+        assertEquals(MeasurementStatus.PARTIAL, at.get(0).item().status());
+        assertFalse(at.get(0).owed().coverage().hit(),
+                "nothing was read, so nothing was met either");
     }
 
     @Test
@@ -387,10 +389,10 @@ class CompilePartialAdequacyTest {
         PartitionEvidence partition = split().db()
                 .ask(new Adequacy.Coverage("example.split")).value().get("take");
 
-        assertEquals(2, partition.boundaries().size());
-        for (BoundaryAssessment boundary : partition.boundaries()) {
-            assertEquals(MeasurementStatus.PARTIAL, boundary.status(), boundary.value());
-            assertFalse(boundary.coverage().hit());
+        assertEquals(2, pointsAgainstTheLine(partition).size());
+        for (BorderAssessment.Point boundary : pointsAgainstTheLine(partition)) {
+            assertEquals(MeasurementStatus.PARTIAL, boundary.item().status(), boundary.against());
+            assertFalse(boundary.owed().coverage().hit());
         }
     }
 
@@ -617,15 +619,22 @@ class CompilePartialAdequacyTest {
                         DoesNotComeBack.everythingAboutTheRowNamed("over it")), Adequacy.Asked.reportOnly())
                 .db().ask(new Adequacy.Coverage("example.mix")).value().get("take");
 
-        BoundaryAssessment line = partition.boundaries().stream()
-                .filter(b -> b.value().equals("100")).findFirst().orElseThrow();
-        assertTrue(line.coverage().hit(), "a row wrote 100 and went through the comparison");
-        assertEquals(MeasurementStatus.COMPLETE, line.status());
+        BorderAssessment.Point line = pointsAgainstTheLine(partition).stream()
+                .filter(p -> "100".equals(p.against())).findFirst().orElseThrow();
+        assertTrue(line.owed().coverage().hit(),
+                "a row wrote 100 and went through the comparison");
+        assertEquals(MeasurementStatus.COMPLETE, line.item().status());
 
-        BoundaryAssessment beyond = partition.boundaries().stream()
-                .filter(b -> b.value().equals("101")).findFirst().orElseThrow();
-        assertEquals(MeasurementStatus.PARTIAL, beyond.status(),
+        BorderAssessment.Point beyond = pointsAgainstTheLine(partition).stream()
+                .filter(p -> "101".equals(p.against())).findFirst().orElseThrow();
+        assertEquals(MeasurementStatus.PARTIAL, beyond.item().status(),
                 "and the one nothing was found at is undecided, not missed");
+    }
+
+    /** The points a row is owed at against a line, which is what a value names. */
+    private static List<BorderAssessment.Point> pointsAgainstTheLine(PartitionEvidence partition) {
+        return BorderAssessment.pointsOf(partition.boundaries()).stream()
+                .filter(p -> p.role().againstTheLine()).filter(p -> p.owed() != null).toList();
     }
 
     /**

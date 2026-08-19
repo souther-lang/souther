@@ -160,7 +160,7 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
     void andTheBoundTheFieldsOwnTypeStatesIsStillALine() {
         String block = blockOf("quote");
 
-        assertTrue(block.contains("border      0/0   (2 not measured"), block);
+        assertTrue(block.contains("border      borders 2   coverage items 0/0   excluded 4   (4 not measured"), block);
     }
 
     /** One clause and one sentence: what a reader has to lift is one thing. */

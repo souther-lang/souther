@@ -168,8 +168,12 @@ class CompileExampleGenerateTest {
                         "Request { kind = Overseas, cost = Amount(0) }"),
                 inputs(filling.pairs()), "the classes, at whatever cost builds");
         assertEquals(List.of("Request { kind = Domestic, cost = Amount(0) }",
-                        "Request { kind = Domestic, cost = Amount(1000) }"),
-                inputs(filling.boundaries()), "the edges, at exactly the value the rule names");
+                        "Request { kind = Domestic, cost = Amount(1) }",
+                        "Request { kind = Domestic, cost = Amount(1000) }",
+                        "Request { kind = Domestic, cost = Amount(999) }"),
+                inputs(filling.boundaries()),
+                "the points against each line at exactly the value the rule names, and the points"
+                        + " away from them at a value the side holds");
     }
 
     /**

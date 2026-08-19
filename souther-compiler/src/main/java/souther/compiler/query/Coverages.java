@@ -14,7 +14,12 @@ import souther.compiler.observe.Counting;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
-import souther.compiler.partition.BoundaryObligation;
+import souther.compiler.partition.Border;
+import souther.compiler.partition.Criterion;
+import souther.compiler.partition.Demand;
+import souther.compiler.partition.Generator;
+import souther.compiler.partition.PointRole;
+import souther.compiler.partition.Region;
 import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.partition.EnsuresThresholds;
@@ -101,7 +106,7 @@ final class Coverages {
     static PartitionEvidence of(Hir.SpecBehavior behavior, InputDomain inputs, Sig sig,
                                 Symbols symbols, Core body,
                                 CoverageSites.Plan plan, souther.compiler.query.Adequacy.Observed observed,
-                                List<BoundaryAssessment> boundaries,
+                                List<BorderAssessment> boundaries,
                                 PathReachability.Answers arrives,
                                 souther.compiler.check.StatedContract stated) {
         List<RowOutcome> rows = observed.rows();
@@ -391,14 +396,22 @@ final class Coverages {
      */
     interface Probe {
 
-        /** What building a row at this boundary came to, or null where the attempt could not be made
-         * at all — which leaves the edge unknown rather than refused. */
-        souther.compiler.partition.Generator.BoundaryAttempt attempt(BoundaryObligation obligation);
+        /**
+         * What building a row for {@code label} came to, fixing {@code at}, or null where the
+         * attempt could not be made at all — which leaves the point unknown rather than refused.
+         *
+         * <p>Two arguments and not one. What the row is for is the coverage item, and what is fixed
+         * to build it is a value that stands for it; a side of a border is met by a row anywhere in
+         * it, so a row labelled by the place a search happened to compose would name a witness as
+         * though it were the item.
+         */
+        souther.compiler.partition.Generator.BoundaryAttempt attempt(String label,
+                                                                    BoundaryTarget.AtPlace at);
 
         /** The same for a line between two positions, which is not at a count of its own: the count
          * to write at both of them is the rules' answer about the pair and is handed in. */
         souther.compiler.partition.Generator.BoundaryAttempt attemptBetween(
-                BoundaryTarget.EqualTerms line, Place at);
+                String label, BoundaryTarget.EqualTerms line, Place onAt, Place againstAt);
     }
 
     /**
@@ -423,109 +436,327 @@ final class Coverages {
      *                  had happened.
      * @param probe     null where the module's classes or the runtime are not there to build against
      */
-    static List<BoundaryAssessment> assess(
+    static List<BorderAssessment> assess(
             Axis axis, BehaviorInputs where, souther.compiler.query.Adequacy.Observed observed,
             boolean armsAsked, boolean knownWritable, Probe probe,
             souther.compiler.numeric.NumericDomain.Bounds within) {
-        List<RowOutcome> rows = observed.rows();
         // Keyed by the line rather than by the reading of it. A guard inside a non-recursive helper
-        // is read once per call of that helper, and the rows do not owe the same edge twice for
+        // is read once per call of that helper, and the rows do not owe the same border twice for
         // having been offered it twice; what each reading saw is merged below.
-        java.util.SequencedMap<BoundaryLine, BoundaryAssessment> out =
-                new java.util.LinkedHashMap<>();
-        for (BoundaryObligation each : Partitions.obligationsOf(axis, where.symbols(), within)) {
-            BoundaryAssessment.Coverage coverage =
-                    coverageOf(each, axis, where, observed, armsAsked);
-            BoundaryAssessment.Attempt attempt = attemptAt(each, coverage, probe);
-            BoundaryAssessment made = new BoundaryAssessment(each, coverage,
-                    writabilityOf(coverage, knownWritable, attempt), attempt);
-            out.merge(BoundaryLine.of(each), made,
+        java.util.SequencedMap<BoundaryLine, BorderAssessment> out = new java.util.LinkedHashMap<>();
+        for (Border each : Partitions.bordersOf(axis, where.symbols(), within)) {
+            out.merge(BoundaryLine.of(each),
+                    assessed(each, atAPlace(each, axis, where, knownWritable, probe, within),
+                            observed, armsAsked),
                     Coverages::whicheverSawMore);
         }
         return List.copyOf(out.values());
     }
 
     /**
-     * Which of two readings of one line the report keeps.
+     * What differs between the two shapes of border when a point of one is assessed.
      *
-     * <p>Existential, the same way an arm is: a row met the edge if it met it through any reading of
-     * it. So a reading that found a row outranks one that could not tell, which outranks one that
-     * looked and found none, which outranks one that was never made. Anything else would let a
-     * second call site of a helper take back what a row at the first one established.
+     * <p>Three answers and no more. How a row is read is one — at a position's own term, or at both
+     * terms of a line between two — what a search does is another, and whether the rules alone prove
+     * a row can be written at this border is the third. Everything else about a point is the same
+     * either way, and writing it out per shape is what let one shape acquire a rule the other had:
+     * the gates before a search were asked twice and a third search went in beside them without
+     * them.
      */
-    private static BoundaryAssessment whicheverSawMore(BoundaryAssessment a, BoundaryAssessment b) {
-        return rank(b.coverage()) > rank(a.coverage()) ? b : a;
+    private interface OneShapeOfBorder {
+
+        /** Whether one of {@code rows} meets {@code criterion}, and whether that could be told. */
+        Met met(Criterion criterion, List<RowOutcome> rows);
+
+        /** What building a row at it came to, asked only where one is worth building. */
+        ItemAssessment.Attempt search(Criterion criterion, String label);
+
+        /** Whether the rules this reading took in prove a row can be written at this border. */
+        boolean provenWritable();
     }
 
-    private static int rank(BoundaryAssessment.Coverage coverage) {
-        return switch (coverage) {
-            case BoundaryAssessment.Coverage.Hit _ -> 3;
-            case BoundaryAssessment.Coverage.Undecided _ -> 2;
-            case BoundaryAssessment.Coverage.Missed _ -> 1;
-            case BoundaryAssessment.Coverage.NotMeasured _ -> 0;
+    /**
+     * What each of one border's four points came to.
+     *
+     * <p>Every role, and the ones nobody is owed a row in carry the border's own reason rather than
+     * being left out. What a row has to do is the criterion's ({@link Criterion}); what it has to do
+     * <em>beyond</em> that is the border's — a line a fork of a body drew is met by getting the
+     * comparison to answer as well as by writing the value, and that holds of all four of its points.
+     * Read off the role instead, an {@code IN} point of a guard would be met by a row that never
+     * reached the guard.
+     *
+     * <p>One place, for both shapes of border. Which of the four a build is told about, whether a
+     * point is worth building a candidate for, and what a point that owes no row carries are rules
+     * about a point and not about a shape, so a shape added later inherits them rather than being
+     * trusted to repeat them.
+     */
+    private static BorderAssessment assessed(Border border, OneShapeOfBorder shape,
+                                             souther.compiler.query.Adequacy.Observed observed,
+                                             boolean armsAsked) {
+        // Whether meeting this border takes the comparison having run, asked of the rule rather than
+        // read off which kind it is, and asked once for the border rather than once per point. A
+        // guard's line is about a place in a body and is reached or not; an invariant's and a
+        // clause's are about the values — one refuses everything outside its bound, the other states
+        // a relation — so for both of those writing the value is the whole of what there is to reach.
+        boolean guard = border.origin().comparisonSite().isPresent();
+        ItemAssessment.Coverage.Reason absent = guard
+                ? whyNoGuardLine(observed.rows(), armsAsked, observed.armsUnseen(),
+                        observed.someRowsUnseen())
+                : whyNoInvariantLine(observed.rows(), observed.someRowsUnseen());
+
+        java.util.EnumMap<PointRole, ItemAssessment> items = new java.util.EnumMap<>(PointRole.class);
+        for (PointRole role : PointRole.values()) {
+            items.put(role, switch (border.demand(role)) {
+                case Demand.NotOwed not -> new ItemAssessment.NotOwed(not.reason());
+                case Demand.Owed owed -> {
+                    ItemAssessment.Coverage coverage = absent != null
+                            ? new ItemAssessment.Coverage.NotMeasured(absent)
+                            : verdictOf(shape.met(owed.criterion(), observed.rows()), guard,
+                                    observed);
+                    ItemAssessment.Attempt attempt = whereOneIsWorthBuilding(coverage,
+                            () -> shape.search(owed.criterion(), border.label(role)));
+                    yield new ItemAssessment.Owed(owed.criterion(), coverage,
+                            writabilityOf(coverage, shape.provenWritable(), attempt), attempt);
+                }
+            });
+        }
+        return new BorderAssessment(border, items);
+    }
+
+    /** A border at one place of one position, read at that position's own term. */
+    private static OneShapeOfBorder atAPlace(Border border, Axis axis, BehaviorInputs where,
+                                             boolean knownWritable, Probe probe,
+                                             souther.compiler.numeric.NumericDomain.Bounds within) {
+        BoundaryTarget.AtPlace cut = (BoundaryTarget.AtPlace) border.cut();
+        java.util.OptionalInt site = border.origin().comparisonSite();
+        return new OneShapeOfBorder() {
+
+            @Override
+            public Met met(Criterion criterion, List<RowOutcome> rows) {
+                return metAt(axis, where, rows, holding(criterion), site);
+            }
+
+            @Override
+            public ItemAssessment.Attempt search(Criterion criterion, String label) {
+                if (probe == null) {
+                    return new ItemAssessment.Attempt.NotAttempted(
+                            ItemAssessment.Attempt.Reason.NO_CLASSES);
+                }
+                // Which place to try is asked of the criterion, and a side answers with one it
+                // holds. That value is a candidate to offer and no part of the item: another row in
+                // the same side is at the point as much as this one would be, so what the row is
+                // offered for goes in beside it rather than being read back off it.
+                Place standing = Generator.placeFor(criterion, cut.carrier(), within);
+                return standing == null ? nothingComposedOne(label)
+                        : whatCameOfIt(probe.attempt(label,
+                                new BoundaryTarget.AtPlace(cut.axis(), cut.carrier(), standing)));
+            }
+
+            @Override
+            public boolean provenWritable() {
+                return knownWritable;
+            }
         };
     }
 
     /**
-     * What building a row at this boundary came to, where one was worth building.
+     * Which of two readings of one line the report keeps.
      *
-     * <p>Nothing is built where nothing is owed: a boundary a row already sits at needs no candidate,
-     * and one whose measurement never happened is not a piece of work to hand to anybody. Where a
-     * candidate was worth building and there was nothing to build against, that is said as well —
-     * it is a fact about the run, and reading it as a fact about the value is how "the classpath is
-     * short of a jar" would become "this edge may not be writable".
+     * <p>Existential and per point, the same way an arm is: a row met a point if it met it through
+     * any reading of the line. So a reading that found a row outranks one that could not tell, which
+     * outranks one that looked and found none, which outranks one that was never made. Anything else
+     * would let a second call site of a helper take back what a row at the first one established.
+     *
+     * <p>Point by point rather than border by border. Two readings of one line are the same border
+     * and can have seen different things at different points, and keeping whichever border saw more
+     * on the whole would throw away a point the other one had.
      */
-    private static BoundaryAssessment.Attempt attemptAt(BoundaryObligation obligation,
-                                                        BoundaryAssessment.Coverage coverage,
-                                                        Probe probe) {
-        if (coverage instanceof BoundaryAssessment.Coverage.Hit) {
-            return new BoundaryAssessment.Attempt.NotAttempted(
-                    BoundaryAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE);
+    private static BorderAssessment whicheverSawMore(BorderAssessment a, BorderAssessment b) {
+        java.util.EnumMap<PointRole, ItemAssessment> kept = new java.util.EnumMap<>(PointRole.class);
+        for (PointRole role : PointRole.values()) {
+            kept.put(role, rank(b.at(role)) > rank(a.at(role)) ? b.at(role) : a.at(role));
         }
-        if (!worthBuilding(coverage)) {
-            return new BoundaryAssessment.Attempt.NotAttempted(
-                    BoundaryAssessment.Attempt.Reason.NOT_MEASURED);
+        return new BorderAssessment(a.border(), kept);
+    }
+
+    private static int rank(ItemAssessment item) {
+        if (!(item instanceof ItemAssessment.Owed owed)) {
+            // Two readings of one line owe the same points, so this is one of them against itself.
+            return 0;
         }
-        if (probe == null) {
-            return new BoundaryAssessment.Attempt.NotAttempted(
-                    BoundaryAssessment.Attempt.Reason.NO_CLASSES);
-        }
-        souther.compiler.partition.Generator.BoundaryAttempt made = probe.attempt(obligation);
-        return switch (made) {
-            case null -> new BoundaryAssessment.Attempt.NotAttempted(
-                    BoundaryAssessment.Attempt.Reason.LINKAGE_FAILED);
-            case souther.compiler.partition.Generator.BoundaryAttempt.Built built ->
-                    new BoundaryAssessment.Attempt.Built(built.row());
-            case souther.compiler.partition.Generator.BoundaryAttempt.Unresolved left ->
-                    new BoundaryAssessment.Attempt.Unresolved(left.why());
+        return switch (owed.coverage()) {
+            case ItemAssessment.Coverage.Hit _ -> 3;
+            case ItemAssessment.Coverage.Undecided _ -> 2;
+            case ItemAssessment.Coverage.Missed _ -> 1;
+            case ItemAssessment.Coverage.NotMeasured _ -> 0;
         };
     }
 
-    /** Whether a row sits at one boundary, and whether that could be told. */
-    private static BoundaryAssessment.Coverage coverageOf(
-            BoundaryObligation obligation, Axis axis, BehaviorInputs where,
-            souther.compiler.query.Adequacy.Observed observed, boolean armsAsked) {
-        List<RowOutcome> rows = observed.rows();
-        // Whether meeting this line takes the comparison having run, asked of the rule rather than
-        // read off which kind it is. A guard's line is about a place in a body and is reached or
-        // not; an invariant's and a clause's are about the values — one refuses everything outside
-        // its bound, the other states a relation — so for both of those writing the value is the
-        // whole of what there is to reach.
-        java.util.OptionalInt site = obligation.origin().comparisonSite();
-        boolean guard = site.isPresent();
-        BoundaryAssessment.Coverage.Reason absent = guard
-                ? whyNoGuardLine(rows, armsAsked, observed.armsUnseen(), observed.someRowsUnseen())
-                : whyNoInvariantLine(rows, observed.someRowsUnseen());
-        if (absent != null) {
-            return new BoundaryAssessment.Coverage.NotMeasured(absent);
+    /**
+     * What was tried at one point, where anything was worth trying at all.
+     *
+     * <p>The two gates in one place because they are one rule and there are three searches. A point
+     * a row already sits at needs no candidate, and one whose measurement never happened is not a
+     * piece of work to hand to anybody — offered anyway, both put a specific row in front of an
+     * author that may already be written. Written per search, the third one to be added skipped
+     * them and said a search had run and failed at points nothing had looked at.
+     */
+    private static ItemAssessment.Attempt whereOneIsWorthBuilding(
+            ItemAssessment.Coverage coverage,
+            java.util.function.Supplier<ItemAssessment.Attempt> search) {
+        if (coverage instanceof ItemAssessment.Coverage.Hit) {
+            return new ItemAssessment.Attempt.NotAttempted(
+                    ItemAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE);
         }
-        Met met = switch (obligation.target()) {
-            case BoundaryTarget.AtPlace place -> guard
-                    ? evaluatedAt(axis, where, rows, place.at(), site.getAsInt())
-                    : writtenAt(axis, where, rows, place.at());
-            case BoundaryTarget.EqualTerms line -> heldBetween(line, where, rows, site);
+        if (!worthBuilding(coverage)) {
+            return new ItemAssessment.Attempt.NotAttempted(
+                    ItemAssessment.Attempt.Reason.NOT_MEASURED);
+        }
+        return search.get();
+    }
+
+    /** A search that came to nothing at {@code subject}, which is what a point is written as. */
+    private static ItemAssessment.Attempt nothingComposedOne(String subject) {
+        return new ItemAssessment.Attempt.Unresolved(
+                new souther.compiler.partition.Generator.UnresolvedCombination(List.of(subject),
+                        souther.compiler.partition.Generator.UnresolvedCombination.Reason
+                                .NOTHING_COMPOSES_ONE));
+    }
+
+    /** What a search of the module's own decoders came to, in this measure's words. */
+    private static ItemAssessment.Attempt whatCameOfIt(
+            souther.compiler.partition.Generator.BoundaryAttempt made) {
+        return switch (made) {
+            case null -> new ItemAssessment.Attempt.NotAttempted(
+                    ItemAssessment.Attempt.Reason.LINKAGE_FAILED);
+            case souther.compiler.partition.Generator.BoundaryAttempt.Built built ->
+                    new ItemAssessment.Attempt.Built(built.row());
+            case souther.compiler.partition.Generator.BoundaryAttempt.Unresolved left ->
+                    new ItemAssessment.Attempt.Unresolved(left.why());
         };
-        return verdictOf(met, guard, observed);
+    }
+
+    /**
+     * What a row's place at this position has to be, for a border drawn at a place.
+     *
+     * <p>One predicate for both kinds of item, which is what keeps a side from being measured against
+     * a value. A point names a place and is met by writing it; a side names a set and is met by
+     * landing anywhere in it, and reading the second as the first would ask for whichever value a
+     * search happened to compose.
+     */
+    private static java.util.function.Predicate<Place> holding(Criterion criterion) {
+        return switch (criterion) {
+            case Criterion.AtThePlace at -> place -> place.sameAs(at.place());
+            case Criterion.InTheRegion side -> switch (side.region()) {
+                case Region.Beyond beyond -> beyond::holds;
+                case Region.AdmittedOtherThan other -> other::holds;
+            };
+            // A pair of terms falling apart is not a place of one position. Reaching here is the
+            // border and the criterion it built disagreeing about which shape the line has.
+            case Criterion.WhereTheTermsAreApartBy _,
+                    Criterion.WhereTheTermsAreFurtherApartThan _ -> throw new IllegalStateException(
+                    "a line at a place was given a criterion about two terms");
+        };
+    }
+
+    /**
+     * The same for a border between two positions, where the row writes two places.
+     *
+     * <p>Read as one border on the difference the two terms fall apart by. A point of it is where
+     * that difference is exactly so many steps, and a side of it is where it is more than that — so
+     * the four are told apart the way a border at a place tells its four apart, and none of them
+     * holds a pair that another one holds. Read as `on` against `against` with no step, the pair one
+     * step inside `a < b` fell into the side beside it and was counted as the point away from the
+     * border rather than the one against it.
+     */
+    private static java.util.function.BiPredicate<Place, Place> holdingBetween(
+            Criterion criterion, souther.compiler.check.Carrier carrier) {
+        return switch (criterion) {
+            case Criterion.WhereTheTermsAreApartBy apart -> (on, against) ->
+                    stepped(against, apart.steps(), carrier).filter(on::sameAs).isPresent();
+            case Criterion.WhereTheTermsAreFurtherApartThan apart -> (on, against) ->
+                    stepped(against, apart.steps(), carrier)
+                            .filter(from -> apart.towards() == Region.Towards.ABOVE
+                                    ? on.compareTo(from) > 0 : on.compareTo(from) < 0)
+                            .isPresent();
+            case Criterion.InTheRegion _, Criterion.AtThePlace _ -> throw new IllegalStateException(
+                    "a line between two positions was given a criterion about one place");
+        };
+    }
+
+    /**
+     * A pair standing at one point of a line between two positions, given a place its {@code
+     * against} term can hold, or nothing where this composes none.
+     *
+     * <p>Composed and then asked. Which pair stands at a point and whether a pair is at that point
+     * are two answers, and the second already exists — worked out apart, the two came apart. So what
+     * is composed is handed to the predicate the rows are read by, and a pair that predicate does
+     * not accept stands for nothing: a row offered for a side that is really at the point against
+     * the line is a row an author pastes and re-measures to find the item still uncovered.
+     *
+     * <p>Which is the step a place already had. A region is asked whether it holds the value the
+     * carrier offered before that value stands for it ({@link Region#standingIn}), and this is the
+     * same question of a pair.
+     */
+    private static java.util.Optional<Place> pairStandingAt(
+            Criterion criterion, Place against, souther.compiler.check.Carrier carrier,
+            souther.compiler.numeric.NumericDomain.Bounds on) {
+        souther.compiler.numeric.NumericDomain.Bounds within = on == null
+                ? new souther.compiler.numeric.NumericDomain.Bounds(null, null) : on;
+        return composed(criterion, against, carrier, within)
+                .filter(standing -> holdingBetween(criterion, carrier).test(standing, against));
+    }
+
+    /**
+     * Where the {@code on} term stands for one point of a line, before anything has asked whether it
+     * does.
+     *
+     * <p>Two questions and two answers, which is the whole of this. A point of the line asks for the
+     * place exactly so many steps from the other term, and only a carrier that names the value that
+     * far can give it. A side asks for any place in it — being in a side is not being anywhere in
+     * particular — so it is asked the way a side of a border at a place is asked, off the carrier's
+     * own reading of what lies between two ends.
+     *
+     * <p>Answered by stepping for both, a side over a carrier with no step had no candidate at all:
+     * {@code a < b} over decimals holds every pair where one is under the other, and the search came
+     * back saying nothing composes one because there is no value one step under anything. Stepping
+     * finds the nearest value; a witness of a side is not the nearest anything.
+     */
+    private static java.util.Optional<Place> composed(
+            Criterion criterion, Place against, souther.compiler.check.Carrier carrier,
+            souther.compiler.numeric.NumericDomain.Bounds within) {
+        return switch (criterion) {
+            case Criterion.WhereTheTermsAreApartBy apart -> stepped(against, apart.steps(), carrier);
+            case Criterion.WhereTheTermsAreFurtherApartThan apart ->
+                    stepped(against, apart.steps(), carrier)
+                            .map(from -> new Region.Beyond(from, apart.towards()))
+                            .map(side -> side.standingIn(carrier, within))
+                            .filter(java.util.Objects::nonNull);
+            case Criterion.AtThePlace _, Criterion.InTheRegion _ -> throw new IllegalStateException(
+                    "a line between two positions was given a criterion about one place");
+        };
+    }
+
+    /**
+     * The place {@code steps} from {@code at} on this carrier, or nothing where it names none.
+     *
+     * <p>Every step, and not one however many were asked for. Read off the sign alone, a place two
+     * steps out came back one step out — which at a point of a line is the point beside it.
+     *
+     * <p>Nothing rather than the place itself where a step runs off what the carrier counts. A step
+     * off the end is not a pair anything stands in, and answering with {@code at} would put every
+     * row on the line into the point one step from it.
+     */
+    private static java.util.Optional<Place> stepped(Place at, int steps,
+                                                     souther.compiler.check.Carrier carrier) {
+        souther.compiler.inputs.BoundaryDomain domain =
+                souther.compiler.inputs.BoundaryDomain.on(carrier);
+        java.util.Optional<Place> walked = java.util.Optional.of(at);
+        for (int taken = 0; taken < Math.abs(steps); taken++) {
+            walked = walked.flatMap(
+                    from -> steps > 0 ? domain.successor(from) : domain.predecessor(from));
+        }
+        return walked;
     }
 
     /**
@@ -539,96 +770,71 @@ final class Coverages {
      * positions admit, and until that is read the line is one nothing has shown to be writable — which
      * is reported and not counted, the same account any other unpromised edge gets.
      */
-    static List<BoundaryAssessment> assessBetween(
+    static List<BorderAssessment> assessBetween(
             Partitions.Partitioning partitioning, BehaviorInputs where,
             souther.compiler.query.Adequacy.Observed observed, boolean armsAsked, Probe probe) {
-        List<RowOutcome> rows = observed.rows();
         // Keyed by the line the author drew, the way a line at a place is. A guard inside a
         // non-recursive helper is read once per call of that helper, and the rows do not owe the same
         // line twice for having been offered it twice — nor may one reading of it take back what
         // another established.
-        java.util.SequencedMap<BoundaryLine, BoundaryAssessment> out = new LinkedHashMap<>();
-        for (BoundaryObligation each : partitioning.between()) {
-            BoundaryTarget.EqualTerms line = (BoundaryTarget.EqualTerms) each.target();
-            // The same two questions a line at a place is asked, and asked of the rule rather than
-            // read off the shape of the line. Both shapes are drawn by a `guard` and by a clause,
-            // and which of them drew this one is what says whether the line is about a place in a
-            // body — so a clause's line here is not one waiting on the arms either.
-            java.util.OptionalInt site = each.origin().comparisonSite();
-            boolean guard = site.isPresent();
-            BoundaryAssessment.Coverage.Reason absent = guard
-                    ? whyNoGuardLine(rows, armsAsked, observed.armsUnseen(),
-                            observed.someRowsUnseen())
-                    : whyNoInvariantLine(rows, observed.someRowsUnseen());
-            BoundaryAssessment.Coverage coverage = absent != null
-                    ? new BoundaryAssessment.Coverage.NotMeasured(absent)
-                    : verdictOf(heldBetween(line, where, rows, site), guard, observed);
+        java.util.SequencedMap<BoundaryLine, BorderAssessment> out = new LinkedHashMap<>();
+        for (Border each : partitioning.between()) {
+            BoundaryTarget.EqualTerms line = (BoundaryTarget.EqualTerms) each.cut();
             // A place both positions admit is what a row on the line writes. Read once: it is what a
             // candidate is built at, and what proves the line writable where the two are independent.
             Place at = Partitions.commonPlace(partitioning.domains(), line);
-            BoundaryAssessment.Attempt attempt = attemptBetween(line, at, coverage, probe);
             out.merge(BoundaryLine.of(each),
-                    new BoundaryAssessment(each, coverage,
-                            writabilityOf(coverage, false, attempt), attempt),
+                    assessed(each, betweenTerms(each, line, at, where, probe,
+                            partitioning.domains().get(line.on())), observed, armsAsked),
                     Coverages::whicheverSawMore);
         }
         return List.copyOf(out.values());
     }
 
     /**
-     * Why a line between two positions is never counted on the strength of the rules alone.
+     * A border where two positions hold one place, read at both of their terms.
      *
-     * <p>Two ranges overlapping is not two positions holding one value. A place in both is one each of
-     * them admits *on its own*, and what refuses the pair need not appear in either range: a rule
-     * relating two fields of one record does not — under {@code invariant a < b} the two ranges run
-     * over each other everywhere and the line {@code a = b} holds nothing — and neither does a rule
-     * the ranges could not take in, since a range says nothing is missing where a disequality left a
-     * hole and a pattern left one string.
-     *
-     * <p>Nor is "every rule was read" the question. That says the checker understood each clause, not
-     * that each clause reached the ranges: {@code String.matches} is read and bounds nothing, so a
-     * position admitting one string looks unbounded from here.
-     *
-     * <p>So the line is settled by a witness and by nothing else — a row already on it, or a value the
-     * module's own decoder took, which is the one thing here that reads every rule of a value at once.
-     * That is not a claim that a line without one cannot be written: it is reported as one nothing has
-     * promised, which is the account any other unpromised edge gets, and a witness found later counts
-     * it. A line at a place of one position keeps its own proof, where the rules that bound it are the
-     * rules that drew it.
+     * <p>Nothing here is proven writable by the rules. Two ranges overlapping is not two positions
+     * holding a pair, and what refuses the pair need not be in either range — so every point of such
+     * a line is settled by a witness or by nothing.
      */
-    /** What building a row on a line between two positions came to, where one was worth building. */
-    private static BoundaryAssessment.Attempt attemptBetween(
-            BoundaryTarget.EqualTerms line, Place at, BoundaryAssessment.Coverage coverage,
-            Probe probe) {
-        if (coverage instanceof BoundaryAssessment.Coverage.Hit) {
-            return new BoundaryAssessment.Attempt.NotAttempted(
-                    BoundaryAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE);
-        }
-        if (!worthBuilding(coverage)) {
-            return new BoundaryAssessment.Attempt.NotAttempted(
-                    BoundaryAssessment.Attempt.Reason.NOT_MEASURED);
-        }
-        if (at == null) {
-            // The rules leave the two positions no place in common. Said as the search coming to
-            // nothing rather than as a search nobody ran: this is what was asked and what came back.
-            return new BoundaryAssessment.Attempt.Unresolved(
-                    new souther.compiler.partition.Generator.UnresolvedCombination(
-                            List.of(line.left() + " = " + line.right()),
-                            souther.compiler.partition.Generator.UnresolvedCombination.Reason
-                                    .NOTHING_COMPOSES_ONE));
-        }
-        if (probe == null) {
-            return new BoundaryAssessment.Attempt.NotAttempted(
-                    BoundaryAssessment.Attempt.Reason.NO_CLASSES);
-        }
-        souther.compiler.partition.Generator.BoundaryAttempt made = probe.attemptBetween(line, at);
-        return switch (made) {
-            case null -> new BoundaryAssessment.Attempt.NotAttempted(
-                    BoundaryAssessment.Attempt.Reason.LINKAGE_FAILED);
-            case souther.compiler.partition.Generator.BoundaryAttempt.Built built ->
-                    new BoundaryAssessment.Attempt.Built(built.row());
-            case souther.compiler.partition.Generator.BoundaryAttempt.Unresolved left ->
-                    new BoundaryAssessment.Attempt.Unresolved(left.why());
+    private static OneShapeOfBorder betweenTerms(Border border, BoundaryTarget.EqualTerms line,
+                                                 Place at, BehaviorInputs where, Probe probe,
+                                                 souther.compiler.numeric.NumericDomain.Bounds on) {
+        java.util.OptionalInt site = border.origin().comparisonSite();
+        return new OneShapeOfBorder() {
+
+            @Override
+            public Met met(Criterion criterion, List<RowOutcome> rows) {
+                return metBetween(line, where, rows,
+                        holdingBetween(criterion, line.carrier()), site);
+            }
+
+            @Override
+            public ItemAssessment.Attempt search(Criterion criterion, String label) {
+                if (at == null) {
+                    // The rules leave the two positions no place in common.
+                    return nothingComposedOne(label);
+                }
+                if (probe == null) {
+                    return new ItemAssessment.Attempt.NotAttempted(
+                            ItemAssessment.Attempt.Reason.NO_CLASSES);
+                }
+                // A pair, and every one of the four is one. What is fixed is where the `on` term
+                // stands against the other: a point of the line is a place exactly so far from it,
+                // and a side is any place past that — which is a pair as much as the row on the
+                // line is, and is why all four are composed rather than only the one where they
+                // meet.
+                java.util.Optional<Place> standing =
+                        pairStandingAt(criterion, at, line.carrier(), on);
+                return standing.isEmpty() ? nothingComposedOne(label)
+                        : whatCameOfIt(probe.attemptBetween(label, line, standing.get(), at));
+            }
+
+            @Override
+            public boolean provenWritable() {
+                return false;
+            }
         };
     }
 
@@ -646,8 +852,10 @@ final class Coverages {
      *             a clause: what it states is a relation, and the input the relation changes at is a
      *             pair of counts that are equal
      */
-    private static Met heldBetween(BoundaryTarget.EqualTerms line, BehaviorInputs where,
-                                   List<RowOutcome> rows, java.util.OptionalInt site) {
+    private static Met metBetween(BoundaryTarget.EqualTerms line, BehaviorInputs where,
+                                  List<RowOutcome> rows,
+                                  java.util.function.BiPredicate<Place, Place> holds,
+                                  java.util.OptionalInt site) {
         boolean unreadable = false;
         for (RowOutcome row : rows) {
             NumericTerm.Reading on = line.on()
@@ -661,7 +869,7 @@ final class Coverages {
             }
             if (on instanceof NumericTerm.Reading.Number here
                     && against instanceof NumericTerm.Reading.Number there
-                    && here.value().sameAs(there.value())
+                    && holds.test(here.value(), there.value())
                     && site.stream().allMatch(litBy(row)::contains)) {
                 return Met.YES;
             }
@@ -670,27 +878,27 @@ final class Coverages {
     }
 
     /** What a reading of the rows comes to, once what could not be read is accounted for. */
-    private static BoundaryAssessment.Coverage verdictOf(
+    private static ItemAssessment.Coverage verdictOf(
             Met met, boolean guard, souther.compiler.query.Adequacy.Observed observed) {
         List<RowOutcome> rows = observed.rows();
         if (met == Met.YES) {
-            return new BoundaryAssessment.Coverage.Hit();
+            return new ItemAssessment.Coverage.Hit();
         }
         if (met == Met.UNREADABLE) {
-            return new BoundaryAssessment.Coverage.Undecided();
+            return new ItemAssessment.Coverage.Undecided();
         }
         // A row nothing read may be the row that is at this value. Found is still found — one row at
         // the boundary settles it whatever else went unread — but not-found is not settled.
         if (observed.someRowsUnseen()) {
-            return new BoundaryAssessment.Coverage.Undecided();
+            return new ItemAssessment.Coverage.Undecided();
         }
         // Nor is a hit that could not be looked for: a row that never finished left no hits, and a
         // guard's line is met by going through the comparison.
         if (guard && rows.stream().anyMatch(
                 row -> row.disposition() == souther.compiler.observe.Disposition.INCOMPLETE)) {
-            return new BoundaryAssessment.Coverage.Undecided();
+            return new ItemAssessment.Coverage.Undecided();
         }
-        return new BoundaryAssessment.Coverage.Missed();
+        return new ItemAssessment.Coverage.Missed();
     }
 
     /**
@@ -706,20 +914,20 @@ final class Coverages {
      * say, and it is kept whether or not it changed this answer — an edge the projection proves is one
      * a search can still fail to reach, and a reader that had only this could not tell that it had.
      */
-    private static BoundaryAssessment.Writability writabilityOf(
-            BoundaryAssessment.Coverage coverage, boolean knownWritable,
-            BoundaryAssessment.Attempt attempt) {
-        if (coverage instanceof BoundaryAssessment.Coverage.Hit) {
-            return new BoundaryAssessment.Writability.WitnessedByRow();
+    private static ItemAssessment.Writability writabilityOf(
+            ItemAssessment.Coverage coverage, boolean knownWritable,
+            ItemAssessment.Attempt attempt) {
+        if (coverage instanceof ItemAssessment.Coverage.Hit) {
+            return new ItemAssessment.Writability.WitnessedByRow();
         }
-        if (attempt instanceof BoundaryAssessment.Attempt.Built) {
-            return new BoundaryAssessment.Writability.WitnessedByConstruction();
+        if (attempt instanceof ItemAssessment.Attempt.Built) {
+            return new ItemAssessment.Writability.WitnessedByConstruction();
         }
         // A refusal and an attempt nobody made leave the same verdict, and a projection that read
         // every rule proves what neither of them found. Which is where the asymmetry lives: nothing
         // a search does can take a proof away, because nothing a search does is evidence against.
-        return knownWritable ? new BoundaryAssessment.Writability.ProvenByProjection()
-                : new BoundaryAssessment.Writability.Unknown();
+        return knownWritable ? new ItemAssessment.Writability.ProvenByProjection()
+                : new ItemAssessment.Writability.Unknown();
     }
 
     /**
@@ -730,10 +938,10 @@ final class Coverages {
      * value may be one of the rows nothing saw — building a candidate for either hands somebody a
      * specific piece of work that may already be done.
      */
-    private static boolean worthBuilding(BoundaryAssessment.Coverage coverage) {
-        return coverage instanceof BoundaryAssessment.Coverage.Missed
-                || (coverage instanceof BoundaryAssessment.Coverage.NotMeasured absent
-                        && absent.reason() == BoundaryAssessment.Coverage.Reason.NO_ROWS);
+    private static boolean worthBuilding(ItemAssessment.Coverage coverage) {
+        return coverage instanceof ItemAssessment.Coverage.Missed
+                || (coverage instanceof ItemAssessment.Coverage.NotMeasured absent
+                        && absent.reason() == ItemAssessment.Coverage.Reason.NO_ROWS);
     }
 
     /**
@@ -744,13 +952,13 @@ final class Coverages {
      * run, which puts the arms in front of the rows: nothing a row carries decides it until the
      * classes that record where the row went exist and survived.
      */
-    private static BoundaryAssessment.Coverage.Reason whyNoGuardLine(
+    private static ItemAssessment.Coverage.Reason whyNoGuardLine(
             List<RowOutcome> rows, boolean armsAsked, boolean armsUnseen, boolean someRowsUnseen) {
         if (!armsAsked) {
-            return BoundaryAssessment.Coverage.Reason.ARMS_NOT_ASKED;
+            return ItemAssessment.Coverage.Reason.ARMS_NOT_ASKED;
         }
         if (armsUnseen) {
-            return BoundaryAssessment.Coverage.Reason.ARMS_UNREADABLE;
+            return ItemAssessment.Coverage.Reason.ARMS_UNREADABLE;
         }
         return whyNoInvariantLine(rows, someRowsUnseen);
     }
@@ -763,13 +971,13 @@ final class Coverages {
      * separately — an invariant's line can never be waiting on the arms, and a measure that could say
      * so would be able to say something that is not true of it.
      */
-    private static BoundaryAssessment.Coverage.Reason whyNoInvariantLine(
+    private static ItemAssessment.Coverage.Reason whyNoInvariantLine(
             List<RowOutcome> rows, boolean someRowsUnseen) {
         // Nothing read is not the same as nothing written. A source that could not be evaluated may
         // hold the row that is at this line, so the question is undecided rather than unasked, and
         // the reading below settles it that way.
         return rows.isEmpty() && !someRowsUnseen
-                ? BoundaryAssessment.Coverage.Reason.NO_ROWS : null;
+                ? ItemAssessment.Coverage.Reason.NO_ROWS : null;
     }
 
     /**
@@ -796,33 +1004,16 @@ final class Coverages {
      * {@code B} false and the rows that never reached {@code B}. Reading the arms here credited the
      * second kind and could not credit the first.
      */
-    private static Met evaluatedAt(Axis axis, BehaviorInputs where, List<RowOutcome> rows,
-                                   Place boundary, int site) {
+    private static Met metAt(Axis axis, BehaviorInputs where, List<RowOutcome> rows,
+                             java.util.function.Predicate<Place> holds,
+                             java.util.OptionalInt site) {
         boolean unreadable = false;
         for (RowOutcome row : rows) {
             switch (readingFor(axis, where, row)) {
                 case NumericTerm.Reading.Missing _ -> unreadable = true;
                 case NumericTerm.Reading.NotNumber _ -> { }
                 case NumericTerm.Reading.Number number -> {
-                    if (number.value().sameAs(boundary)
-                            && litBy(row).contains(site)) {
-                        return Met.YES;
-                    }
-                }
-            }
-        }
-        return unreadable ? Met.UNREADABLE : Met.NO;
-    }
-
-    private static Met writtenAt(Axis axis, BehaviorInputs where, List<RowOutcome> rows,
-                                 Place boundary) {
-        boolean unreadable = false;
-        for (RowOutcome row : rows) {
-            switch (readingFor(axis, where, row)) {
-                case NumericTerm.Reading.Missing _ -> unreadable = true;
-                case NumericTerm.Reading.NotNumber _ -> { }
-                case NumericTerm.Reading.Number number -> {
-                    if (number.value().sameAs(boundary)) {
+                    if (holds.test(number.value()) && site.stream().allMatch(litBy(row)::contains)) {
                         return Met.YES;
                     }
                 }

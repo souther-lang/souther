@@ -7,7 +7,8 @@ import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.BoundaryAssessment;
+import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 
@@ -172,12 +173,20 @@ class AMeasureWithNoNumberSaysWhyTest {
                   baseRate                 injected      rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not measured (no partition axis was derived at any position)
-                    border      0/0   (2 not measured: no row names this behavior)
+                    border      borders 2   coverage items 0/0   excluded 4   (4 not measured: no row names this behavior)
+                      · no OFF point is owed at r.cost = 0 (invariant Amount #1): excluded — the rules leave no value there
+                      · no OUT point is owed at r.cost = 0 (invariant Amount #1): excluded — the rules leave no value there
+                      · no OFF point is owed at r.cost = 1000 (invariant Amount #1): excluded — the rules leave no value there
+                      · no OUT point is owed at r.cost = 1000 (invariant Amount #1): excluded — the rules leave no value there
                     branch      not applicable (this behavior has no body)
                   rated                    implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not measured (no partition axis was derived at any position)
-                    border      0/0   (2 not measured: no row names this behavior)
+                    border      borders 2   coverage items 0/0   excluded 4   (4 not measured: no row names this behavior)
+                      · no OFF point is owed at r.cost = 0 (invariant Amount #1): excluded — the rules leave no value there
+                      · no OUT point is owed at r.cost = 0 (invariant Amount #1): excluded — the rules leave no value there
+                      · no OFF point is owed at r.cost = 1000 (invariant Amount #1): excluded — the rules leave no value there
+                      · no OUT point is owed at r.cost = 1000 (invariant Amount #1): excluded — the rules leave no value there
                     branch      not measured (no row names this behavior)
                   classify                 implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
@@ -288,11 +297,13 @@ class AMeasureWithNoNumberSaysWhyTest {
      * The two origins are measured along separate paths for exactly this reason. */
     @Test
     void anInvariantsLineIsNeverWaitingOnTheArms() {
-        List<BoundaryAssessment> lines = partitions().get("rated").boundaries();
+        List<BorderAssessment.Point> lines =
+                BorderAssessment.pointsOf(partitions().get("rated").boundaries()).stream()
+                        .filter(p -> p.owed() != null).toList();
         assertFalse(lines.isEmpty(), "the invariant draws two");
-        for (BoundaryAssessment line : lines) {
-            assertEquals(BoundaryAssessment.Coverage.Reason.NO_ROWS, line.reason(),
-                    line.rule().named() + " at " + line.value());
+        for (BorderAssessment.Point line : lines) {
+            assertEquals(ItemAssessment.Coverage.Reason.NO_ROWS, line.item().whyNotMeasured(),
+                    line.border().rule().named() + " at " + line.asked());
         }
     }
 
@@ -378,11 +389,14 @@ class AMeasureWithNoNumberSaysWhyTest {
         PartitionEvidence partition = compilation.db()
                 .ask(new Adequacy.Coverage("example.unseen")).value().get("elsewhere");
         assertFalse(partition.boundaries().isEmpty(), "the invariant and the guard draw lines");
-        for (BoundaryAssessment line : partition.boundaries()) {
-            assertNotEquals(BoundaryAssessment.Coverage.Reason.NO_ROWS, line.reason(),
-                    line.rule().named() + " at " + line.value());
-            assertEquals(MeasurementStatus.PARTIAL, line.status(),
-                    line.rule().named() + " at " + line.value());
+        for (BorderAssessment.Point line : BorderAssessment.pointsOf(partition.boundaries())) {
+            if (line.owed() == null) {
+                continue;   // nothing was measured there and nothing was waiting on a row
+            }
+            assertNotEquals(ItemAssessment.Coverage.Reason.NO_ROWS, line.item().whyNotMeasured(),
+                    line.border().rule().named() + " at " + line.asked());
+            assertEquals(MeasurementStatus.PARTIAL, line.item().status(),
+                    line.border().rule().named() + " at " + line.asked());
         }
     }
 
@@ -472,8 +486,10 @@ class AMeasureWithNoNumberSaysWhyTest {
                     partition.pairs().status(), partition.pairs().reason()});
             partition.axes().forEach(a -> measures.add(
                     new Object[] {"axis " + each.getKey(), a.status(), a.reason()}));
-            partition.boundaries().forEach(b -> measures.add(
-                    new Object[] {"line " + each.getKey(), b.status(), b.reason()}));
+            BorderAssessment.pointsOf(partition.boundaries()).stream()
+                    .filter(p -> p.owed() != null)
+                    .forEach(p -> measures.add(new Object[] {"line " + each.getKey(),
+                            p.item().status(), p.item().whyNotMeasured()}));
         }
         return measures;
     }

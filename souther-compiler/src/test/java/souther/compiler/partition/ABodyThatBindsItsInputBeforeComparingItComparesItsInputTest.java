@@ -3,7 +3,8 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.BoundaryAssessment;
+import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 
@@ -109,8 +110,9 @@ class ABodyThatBindsItsInputBeforeComparingItComparesItsInputTest {
     }
 
     private static List<String> linesOf(PartitionEvidence evidence) {
-        return evidence.boundaries().stream()
-                .map(line -> line.label() + " " + line.side())
+        return BorderAssessment.pointsOf(evidence.boundaries()).stream()
+                .filter(p -> p.role().againstTheLine()).filter(p -> p.owed() != null)
+                .map(p -> p.label() + " " + p.role())
                 .sorted()
                 .toList();
     }
@@ -123,8 +125,8 @@ class ABodyThatBindsItsInputBeforeComparingItComparesItsInputTest {
 
         assertEquals(List.of("temp: [temp/x < 240, temp/240 <= x < 260, temp/260 <= x]"),
                 classesOf(read));
-        assertEquals(List.of("temp = 239 BELOW", "temp = 240 AT",
-                        "temp = 259 BELOW", "temp = 260 AT"),
+        assertEquals(List.of("temp = 239 ON", "temp = 240 OFF",
+                        "temp = 259 ON", "temp = 260 OFF"),
                 linesOf(read));
     }
 

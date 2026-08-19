@@ -17,7 +17,8 @@ import souther.compiler.observe.OutputCaseEvidence;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.partition.Partitions;
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.BoundaryAssessment;
+import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 import souther.compiler.query.PartitionEvidence;
@@ -147,8 +148,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         if (partition != null) {
             partial |= partition.axes().stream()
                     .anyMatch(a -> a.status() == MeasurementStatus.PARTIAL);
-            partial |= partition.boundaries().stream()
-                    .anyMatch(b -> b.status() == MeasurementStatus.PARTIAL);
+            partial |= BorderAssessment.pointsOf(partition.boundaries()).stream()
+                    .anyMatch(p -> p.item().status() == MeasurementStatus.PARTIAL);
             partial |= partition.pairs().status() == MeasurementStatus.PARTIAL;
             // What was dropped for being past a limit is measurement that did not happen either.
             partial |= !partition.omitted().isEmpty() || partition.pairs().truncated();
@@ -367,7 +368,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // boundary measure is made in full. Holding the verdict open for it would say a
                 // model was unmeasured on the strength of the one measure that was.
                 add(measures, behavior.partition().bounded().status());
-                behavior.partition().boundaries().forEach(b -> add(measures, b.status()));
+                // And of a border's four points, the two a build refuses over. Which of them is a
+                // gap a build is held to is decided per measure, and a measure that refuses nothing
+                // cannot leave a verdict undetermined for want of an answer — read that way, a row
+                // whose value could not be read at an IN point held a model open while every point
+                // a build asks about had been measured in full. What the report says about itself
+                // still reads all four: how much of the measurement was made and what a build is
+                // held to are two questions.
+                BorderAssessment.pointsOf(behavior.partition().boundaries()).stream()
+                        .filter(p -> p.role().againstTheLine())
+                        .forEach(p -> add(measures, p.item().status()));
                 // A dropped axis that was carrying a line some rule drew took boundaries with it, and
                 // nothing can ask about them now. One that was only classifying took a measure no
                 // build refuses over, so it costs a line in the report and not the verdict. The pair
@@ -684,14 +694,27 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // filtered separately — a line nobody measured and a line nothing promises are not the same
         // absence, and printing them under one sentence said "not known to be writable" about
         // behaviors whose only problem was that nobody had written a row yet.
-        List<BoundaryAssessment> measured = partition.boundaries().stream()
-                .filter(b -> !(b.coverage() instanceof BoundaryAssessment.Coverage.NotMeasured))
-                .filter(b -> b.writability().known()).toList();
-        List<BoundaryAssessment> unpromised = partition.boundaries().stream()
-                .filter(b -> !b.writability().known()).toList();
-        long met = measured.stream().filter(b -> b.coverage().hit()).count();
+        // Counted over the coverage items and named as such. A border owes a row at up to four
+        // points, so a count of borders would say a border with one point met and three missed was
+        // as covered as one with nothing to owe but that point — and how many items a border owes is
+        // the rule's answer rather than a constant.
+        List<BorderAssessment.Point> points =
+                BorderAssessment.pointsOf(partition.boundaries()).stream()
+                        .filter(p -> p.item() instanceof ItemAssessment.Owed).toList();
+        List<BorderAssessment.Point> measured = points.stream()
+                .filter(p -> !(owed(p).coverage() instanceof ItemAssessment.Coverage.NotMeasured))
+                .filter(p -> owed(p).writability().known()).toList();
+        List<BorderAssessment.Point> unpromised = points.stream()
+                .filter(p -> !owed(p).writability().known()).toList();
+        long met = measured.stream().filter(p -> owed(p).coverage().hit()).count();
         long undecided = measured.stream()
-                .filter(b -> b.coverage() instanceof BoundaryAssessment.Coverage.Undecided).count();
+                .filter(p -> owed(p).coverage() instanceof ItemAssessment.Coverage.Undecided)
+                .count();
+        // The points the model's own rules discharged. Said rather than left out of the numbers: a
+        // reader working to a coverage criterion counts four items per border, and a border showing
+        // two of them with nothing beside it reads as this compiler being short of the other two.
+        long excluded = partition.boundaries().stream()
+                .mapToLong(b -> b.excluded().size()).sum();
         if (!partition.bounded().status().counted()) {
             // `0/0` said the rows were at every line there was. What it meant was that nobody found
             // a line to be at, which a model whose bounds sit one type away from the position the
@@ -699,10 +722,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             out.append(String.format("    border      %s%n",
                     whyNoBoundary(partition.bounded().reason())));
         } else {
-            out.append(String.format("    border      %d/%d%s%s%n", met, measured.size(),
-                    notes(partition.boundaries(),
-                            b -> b.coverage() instanceof BoundaryAssessment.Coverage.NotMeasured,
-                            b -> whyNoBoundary(b.coverage())),
+            out.append(String.format("    border      borders %d   coverage items %d/%d%s%s%s%n",
+                    partition.boundaries().size(), met, measured.size(),
+                    excluded == 0 ? "" : "   excluded " + excluded,
+                    notes(points,
+                            p -> owed(p).coverage() instanceof ItemAssessment.Coverage.NotMeasured,
+                            p -> whyNoBoundaryItem(owed(p).coverage())),
                     undecided == 0 ? "" : "   (" + undecided + " undecided: a value was not read)"));
         }
         // A border the model drew that nothing here answered for, said whether or not one came of
@@ -710,28 +735,64 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // walking the borders.
         unaccounted(out, behavior, names, declaredIn,
                 question -> !aboutTheClasses(question));
-        for (Adequacy.Finding f : behavior.of(Adequacy.Kind.BOUNDARY_UNMET)) {
-            // The rule as this report writes it. The finding carries the rule and not words about
-            // it, because what to say differs between here — where a file has a name — and the
-            // warning built from the same finding, where nothing knows what to call one.
-            out.append(String.format("      %s no row is at the %s point %s = %s (%s)%n",
-                    mark(f), f.args().get(3), f.args().get(0), f.args().get(1),
-                    ((souther.compiler.partition.OriginRef) f.args().get(2))
-                            .describe(names, declaredIn)));
+        // The rule as this report writes it. The finding carries the rule and not words about it,
+        // because what to say differs between here — where a file has a name — and the warning built
+        // from the same finding, where nothing knows what to call one.
+        //
+        // The two kinds are printed alike and refuse differently. A row against the line is a gap a
+        // build can be told to refuse over and a row away from it is not, which is a decision about
+        // what a build is held to and not about what a reader is shown — printed apart, the second
+        // would read as a lesser finding rather than as the second half of one technique.
+        for (Adequacy.Kind kind
+                : List.of(Adequacy.Kind.BOUNDARY_UNMET, Adequacy.Kind.DOMAIN_POINT_UNCOVERED)) {
+            for (Adequacy.Finding f : behavior.of(kind)) {
+                out.append(String.format("      %s no row is at the %s point %s %s (%s)%n",
+                        mark(f), f.args().get(3), f.args().get(0),
+                        kind == Adequacy.Kind.BOUNDARY_UNMET
+                                ? "= " + f.args().get(1) : f.args().get(1),
+                        ((souther.compiler.partition.OriginRef) f.args().get(2))
+                                .describe(names, declaredIn)));
+            }
         }
         // Said and not counted. Nothing has shown a row can be written at these — the projection
         // could not read every rule of the value, and nothing built one either — so they are not
         // rows anybody is owed, and they are still the only thing there is to say about the
         // position.
-        for (BoundaryAssessment b : unpromised) {
-            // What the search came to, beside the verdict it did not decide. Whether this edge is
+        for (BorderAssessment.Point p : unpromised) {
+            // What the search came to, beside the verdict it did not decide. Whether this point is
             // counted turns on whether a concrete value was accepted at it, so a reader looking at
             // two models that differ here is looking at what the compiler could establish — and
             // without this line the difference reads as the tool being arbitrary.
-            out.append(String.format("      · not known to be writable: the %s point %s = %s (%s)%s%n",
-                    b.pointRole(), b.axis(), b.value(), b.origin(names, declaredIn),
-                    whatWasTried(b.attempt())));
+            out.append(String.format("      · not known to be writable: the %s point %s %s (%s)%s%n",
+                    p.role(), p.border().axis(), p.asked(),
+                    p.border().origin(names, declaredIn), whatWasTried(owed(p).attempt())));
         }
+        // And what the model itself answered, which is not a row anybody is behind on. Named by the
+        // reason rather than left blank: a point the rules refuse and a point this language cannot
+        // write down are counted out for opposite reasons, and a reader acts on them differently.
+        for (BorderAssessment.Point p : BorderAssessment.pointsOf(partition.boundaries())) {
+            if (p.item() instanceof ItemAssessment.NotOwed not) {
+                out.append(String.format("      · no %s point is owed at %s (%s): %s%n",
+                        p.role(), p.border().label(), p.border().origin(names, declaredIn),
+                        whyNotOwed(not.reason())));
+            }
+        }
+    }
+
+    /** The owed half of a point this report has already filtered to the owed ones. */
+    private static ItemAssessment.Owed owed(BorderAssessment.Point point) {
+        return (ItemAssessment.Owed) point.item();
+    }
+
+    /** What settled a point nobody is owed a row at, in the words the report promises its reader. */
+    private static String whyNotOwed(souther.compiler.partition.NotOwedReason reason) {
+        return switch (reason) {
+            case THE_RULES_REFUSE_IT -> "excluded — the rules leave no value there";
+            case THE_CARRIER_NAMES_NO_NEIGHBOUR ->
+                    "these values name no neighbour, so the point cannot be written";
+            case THE_RULE_NAMES_A_VALUE_NOT_A_SIDE ->
+                    "the rule names a value rather than a side, so neither neighbour is the nearer";
+        };
     }
 
     /**
@@ -888,8 +949,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /** What the search for a value at an edge came to, where it ran and found none. */
-    private static String whatWasTried(BoundaryAssessment.Attempt attempt) {
-        if (!(attempt instanceof BoundaryAssessment.Attempt.Unresolved left)) {
+    private static String whatWasTried(ItemAssessment.Attempt attempt) {
+        if (!(attempt instanceof ItemAssessment.Attempt.Unresolved left)) {
             return "";   // nothing ran, and what a run would have said is not this line's to guess
         }
         return " — nothing composed one: " + left.why().said()
@@ -909,8 +970,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         };
     }
 
-    private static String whyNoBoundary(BoundaryAssessment.Coverage coverage) {
-        if (!(coverage instanceof BoundaryAssessment.Coverage.NotMeasured absent)) {
+    private static String whyNoBoundaryItem(ItemAssessment.Coverage coverage) {
+        if (!(coverage instanceof ItemAssessment.Coverage.NotMeasured absent)) {
             return "";
         }
         return switch (absent.reason()) {
@@ -1357,7 +1418,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             }
         }
         ArrayNode boundaries = out.putArray("boundaries");
-        for (BoundaryAssessment boundary : partition.boundaries()) {
+        for (BorderAssessment boundary : partition.boundaries()) {
             ObjectNode b = boundaries.addObject();
             b.put("axis", boundary.axis());
             // The identity, and never left out. This document says what it is about with the
@@ -1370,25 +1431,35 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // and where a boundary is the only place a report points at, the `sources` table has
             // no other entry to guess from.
             b.put("origin", boundary.origin(sources::written, null));
-            b.put("side", word(boundary.side()));
-            // Beside `side` and not in place of it. `side` is where the value sits around the cut,
-            // which is what says how to read `value`; this is what a row written there is for. The
-            // same `at` is the ON point of a closed border and the OFF point of an open one, so
-            // neither of the two produces the other, and a document carrying one of them would be
-            // asking its reader to work out the closed-border rule for themselves.
-            b.put("point", word(boundary.pointRole()));
             // What the line is a line at, said rather than left to be inferred from the text beside
             // it. A line between two positions writes the other position where a line at a count
             // writes the count, and the two read alike.
             b.put("kind", word(boundary.shape()));
             b.put("value", boundary.value());
-            // The shape a published schema promises, read off the assessment rather than stored
-            // beside it. What each of these says is unchanged; where it comes from is one answer now
-            // instead of two kept in step. Naming which evidence made a line writable is worth
-            // emitting and would be a different schema, so it waits for one.
-            b.put("hit", boundary.coverage().hit());
-            b.put("knownWritable", boundary.writability().known());
-            measured(b, boundary.status(), boundary.reason());
+            // The four coverage items, under the border that owes them. Emitted flat, the two the
+            // technique keys on the border and the two it keys on the same border were an entry each
+            // and nothing said which border they belonged to — a consumer working to a coverage
+            // criterion had to group them back by three fields and guess at the rest.
+            ArrayNode items = b.putArray("items");
+            for (BorderAssessment.Point point : boundary.points()) {
+                ObjectNode i = items.addObject();
+                i.put("point", word(point.role()));
+                switch (point.item()) {
+                    // Why no row is owed, in the one word that says which of the three settled it.
+                    // Absent, the two that are not shortfalls read as the report being short.
+                    case ItemAssessment.NotOwed not -> i.put("notOwed", word(not.reason()));
+                    case ItemAssessment.Owed owed -> {
+                        // What a row here has to do, whole. Two of the four ask for a place and two
+                        // ask for a side, so a document carrying a value for all four would name a
+                        // witness of a side as though it were the side.
+                        i.put("relation", point.border().operator(point.role()));
+                        i.put("against", point.border().against(point.role()));
+                        i.put("hit", owed.coverage().hit());
+                        i.put("knownWritable", owed.writability().known());
+                        measured(i, owed.status(), owed.whyNotMeasured());
+                    }
+                }
+            }
         }
         ObjectNode pairs = out.putObject("pairs");
         pairs.put("total", partition.pairs().total());
@@ -1519,9 +1590,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return switch (finding.kind()) {
             case ARM_UNREACHED -> finding.at();
             case OUTPUT_CASE_UNSPECIFIED, OUTPUT_CASE_UNVERIFIED, INPUT_CASE_UNSPECIFIED,
-                    AXIS_CLASS_UNCOVERED, BOUNDARY_UNMET, PARTITION_NOT_DERIVABLE,
-                    PARTITION_NOT_READ, RULE_UNACCOUNTED, PARTITION_RULES_NOT_REACHED,
-                            PARTITION_OMITTED -> null;
+                    AXIS_CLASS_UNCOVERED, BOUNDARY_UNMET, DOMAIN_POINT_UNCOVERED,
+                    PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ, RULE_UNACCOUNTED,
+                    PARTITION_RULES_NOT_REACHED, PARTITION_OMITTED -> null;
         };
     }
 
@@ -1565,7 +1636,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                                             ? it.at().said(sources::written, null) : args.get(0));
             case INPUT_CASE_UNSPECIFIED ->
                     String.valueOf(args.get(0)) + " (in #" + args.get(1) + ")";
+            // What the point asks of a row, which is what joins it to one of a border's `items`. A
+            // point on the line is written the way it always was; a point away from it carries the
+            // relation in its argument, because a value alone would name the border rather than the
+            // side of it a row is owed in.
             case BOUNDARY_UNMET -> args.get(0) + " = " + args.get(1);
+            case DOMAIN_POINT_UNCOVERED -> args.get(0) + " " + args.get(1);
         };
     }
 

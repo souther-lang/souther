@@ -607,7 +607,7 @@ public final class Adequacy {
                     db.ask(new PathReached(name)).value();
             // What every line this module's rules drew came to, asked once and read here. Measuring a
             // line takes building values, which is not this measure's work and not work to do twice.
-            Map<String, List<BoundaryAssessment>> boundaries = db.ask(new Boundaries(name)).value();
+            Map<String, List<BorderAssessment>> boundaries = db.ask(new Boundaries(name)).value();
             // What each behavior states about its answer, read into the representation the analysis
             // holds it in. A comparison written there draws a line as a `guard`'s does.
             Map<String, souther.compiler.check.StatedContract> declared =
@@ -652,7 +652,7 @@ public final class Adequacy {
      * is a separate request — the first decides what the report may count, so tying it to the second
      * would make one measure's number depend on another flag.
      */
-    public record Boundaries(String name) implements Key<Map<String, List<BoundaryAssessment>>> {
+    public record Boundaries(String name) implements Key<Map<String, List<BorderAssessment>>> {
 
         @Override
         public String module() {
@@ -660,7 +660,7 @@ public final class Adequacy {
         }
 
         @Override
-        public Answer<Map<String, List<BoundaryAssessment>>> compute(Db db) {
+        public Answer<Map<String, List<BorderAssessment>>> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
@@ -689,7 +689,7 @@ public final class Adequacy {
             Map<String, souther.compiler.check.StatedContract> declared =
                     db.ask(new Bodies.StatedContracts(name)).value();
 
-            Map<String, List<BoundaryAssessment>> out = new LinkedHashMap<>();
+            Map<String, List<BorderAssessment>> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
                 if (!(behavior instanceof Hir.SpecBehavior spec)) {
                     continue;   // a composition's inputs are its first stage's, measured there
@@ -707,7 +707,7 @@ public final class Adequacy {
         }
 
         /** Every line of one behavior, with what the rows and the decoder say about each. */
-        private static List<BoundaryAssessment> assess(
+        private static List<BorderAssessment> assess(
                 Hir.SpecBehavior spec, Sig sig, Symbols symbols, souther.compiler.core.Core body,
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
                 boolean armsAsked, FixtureReader.Construction building, InputDomain domain,
@@ -725,7 +725,7 @@ public final class Adequacy {
             // axis; a line drawn between two positions comes off the comparison and has no axis to come
             // off — the body of a behavior whose inputs are plain numbers nothing bounds draws lines
             // while having no axis at all.
-            List<BoundaryAssessment> out = new ArrayList<>();
+            List<BorderAssessment> out = new ArrayList<>();
             for (Axis axis : partitioning.axes()) {
                 if (!axis.measurable()) {
                     continue;
@@ -759,16 +759,18 @@ public final class Adequacy {
             return new Coverages.Probe() {
 
                 @Override
-                public Generator.BoundaryAttempt attempt(
-                        souther.compiler.partition.BoundaryObligation obligation) {
-                    return built(() -> Generator.probe(subject, obligation, check));
+                public Generator.BoundaryAttempt attempt(String label,
+                        souther.compiler.partition.BoundaryTarget.AtPlace at) {
+                    return built(() -> Generator.probe(subject, label, at, check));
                 }
 
                 @Override
-                public Generator.BoundaryAttempt attemptBetween(
+                public Generator.BoundaryAttempt attemptBetween(String label,
                         souther.compiler.partition.BoundaryTarget.EqualTerms line,
-                        souther.compiler.numeric.Place at) {
-                    return built(() -> Generator.probeBetween(subject, line, at, check));
+                        souther.compiler.numeric.Place onAt,
+                        souther.compiler.numeric.Place againstAt) {
+                    return built(() ->
+                            Generator.probeBetween(subject, label, line, onAt, againstAt, check));
                 }
 
                 private Generator.BoundaryAttempt built(
@@ -1276,7 +1278,7 @@ public final class Adequacy {
                     db.ask(new PathReached(name)).value();
             Symbols symbols = scope.value();
 
-            Map<String, List<BoundaryAssessment>> boundaries =
+            Map<String, List<BorderAssessment>> boundaries =
                     db.ask(new Boundaries(name)).value();
             // And what each behavior states about its answer, which draws lines of its own.
             Map<String, souther.compiler.check.StatedContract> declared =
@@ -1296,7 +1298,7 @@ public final class Adequacy {
                 if (sig == null) {
                     continue;
                 }
-                List<BoundaryAssessment> edges = boundaries == null ? List.of()
+                List<BorderAssessment> edges = boundaries == null ? List.of()
                         : boundaries.getOrDefault(spec.name(), List.of());
                 Generator.GenerationResult pairs;
                 try {
@@ -1342,7 +1344,7 @@ public final class Adequacy {
          * added later does not compile until somebody has said which of the three it is.
          */
         private static List<GapDisposition> dispositions(List<Finding> findings,
-                                                      List<BoundaryAssessment> edges,
+                                                      List<BorderAssessment> edges,
                                                       PartitionEvidence partition,
                                                       Generator.GenerationResult pairs,
                                                       Hir.SpecBehavior spec) {
@@ -1361,9 +1363,9 @@ public final class Adequacy {
                     // Not gaps a build refuses, and the loop above does not reach them. Listed so
                     // that the switch stays exhaustive over the kinds rather than over the ones
                     // thought of here.
-                    case OUTPUT_CASE_UNVERIFIED, AXIS_CLASS_UNCOVERED, PARTITION_NOT_DERIVABLE,
-                            PARTITION_NOT_READ, RULE_UNACCOUNTED, PARTITION_RULES_NOT_REACHED,
-                            PARTITION_OMITTED ->
+                    case OUTPUT_CASE_UNVERIFIED, AXIS_CLASS_UNCOVERED, DOMAIN_POINT_UNCOVERED,
+                            PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ, RULE_UNACCOUNTED,
+                            PARTITION_RULES_NOT_REACHED, PARTITION_OMITTED ->
                             throw new IllegalStateException("not a gap a build refuses: " + gap);
                 }));
             }
@@ -1374,7 +1376,7 @@ public final class Adequacy {
          * The edge's own attempt, read off what the assessment already made.
          *
          * <p>Nothing is built here, and nothing is worked out from the verdict either. The attempt
-         * says what happened; this reads it. Reading it back off {@link BoundaryAssessment#writability()}
+         * says what happened; this reads it. Reading it back off {@link BorderAssessment#writability()}
          * would lose the case that matters most to an author — an edge the projection proves is
          * writable and the search could not produce a row for — which came out as a verdict of
          * "provable" with nothing said about the row that never appeared.
@@ -1387,26 +1389,35 @@ public final class Adequacy {
          * assessment is the two readings having come apart rather than a row that could not be
          * generated, and it is refused below as one.
          */
-        private static GenerationOutcome atEdge(Finding gap, List<BoundaryAssessment> edges) {
+        private static GenerationOutcome atEdge(Finding gap, List<BorderAssessment> edges) {
             String axis = String.valueOf(gap.args().get(0));
             String value = String.valueOf(gap.args().get(1));
             Object rule = gap.args().get(2);
+            souther.compiler.partition.PointRole role =
+                    (souther.compiler.partition.PointRole) gap.args().get(3);
             String subject = axis + " = " + value;
-            for (BoundaryAssessment each : edges) {
-                // The rule as well as the place. Several rules can draw a line at one value — a
-                // type's invariant and a `guard` that repeats it, a clause and a guard comparing the
-                // same number — and they are separate obligations that a row meets separately, so
-                // one of them can be a gap while the one beside it already has its row. Found by the
-                // value alone, the gap was answered by whichever assessment came first, and where
-                // that was the met one this read its own answer as a contradiction.
-                if (!each.axis().equals(axis) || !each.value().equals(value)
-                        || !each.rule().equals(rule)) {
+            for (BorderAssessment each : edges) {
+                // The rule and the point as well as the place. Several rules can draw a line at one
+                // value — a type's invariant and a `guard` that repeats it, a clause and a guard
+                // comparing the same number — and they are separate borders that a row meets
+                // separately, so one of them can be a gap while the one beside it already has its
+                // row. One border owes rows at four points, and they are met separately too. Found
+                // by the value alone, the gap was answered by whichever assessment came first, and
+                // where that was the met one this read its own answer as a contradiction.
+                if (!each.axis().equals(axis) || !each.rule().equals(rule)
+                        || !value.equals(each.against(role))) {
                     continue;
                 }
-                return switch (each.attempt()) {
-                    case BoundaryAssessment.Attempt.Built built ->
+                if (!(each.at(role) instanceof ItemAssessment.Owed owed)) {
+                    // A gap was found at a point nobody is owed a row at, which is the finding and
+                    // the assessment disagreeing about the same border rather than a row that could
+                    // not be generated.
+                    throw new IllegalStateException("a gap at a point nothing owes: " + gap);
+                }
+                return switch (owed.attempt()) {
+                    case ItemAssessment.Attempt.Built built ->
                             new GenerationOutcome.Generated(List.of(built.row()));
-                    case BoundaryAssessment.Attempt.Unresolved why ->
+                    case ItemAssessment.Attempt.Unresolved why ->
                             new GenerationOutcome.CannotGenerate(why.why());
                     // Carried apart, because the assessment kept them apart. Classes that were not
                     // there and classes that would not link are two things this saw, and choosing
@@ -1416,7 +1427,7 @@ public final class Adequacy {
                     // value, or the line was never measured against the rows, and neither is a gap.
                     // Where one arrives, the assessment and the finding disagree about the same
                     // measurement, which is not something about generating a row.
-                    case BoundaryAssessment.Attempt.NotAttempted absent -> switch (absent.reason()) {
+                    case ItemAssessment.Attempt.NotAttempted absent -> switch (absent.reason()) {
                         case NO_CLASSES -> new GenerationOutcome.CannotGenerate(
                                 new Generator.UnresolvedCombination(List.of(subject),
                                         Generator.UnresolvedCombination.Reason
@@ -1510,14 +1521,19 @@ public final class Adequacy {
          * with no rows at all — the one an author most wants rows for — with nothing.
          */
         private static Generator.GenerationResult offered(String behavior,
-                                                          List<BoundaryAssessment> boundaries) {
+                                                          List<BorderAssessment> boundaries) {
             List<Generator.GeneratedRow> rows = new ArrayList<>();
             List<Generator.UnresolvedCombination> unresolved = new ArrayList<>();
             List<souther.compiler.partition.GenerationReason> stopped = new ArrayList<>();
-            for (BoundaryAssessment each : boundaries) {
+            for (BorderAssessment border : boundaries) {
+              for (souther.compiler.partition.PointRole role
+                      : souther.compiler.partition.PointRole.values()) {
+                if (!(border.at(role) instanceof ItemAssessment.Owed each)) {
+                    continue;   // nothing is owed here, so nothing was tried and nothing is offered
+                }
                 switch (each.attempt()) {
-                    case BoundaryAssessment.Attempt.Built built -> rows.add(built.row());
-                    case BoundaryAssessment.Attempt.Unresolved why -> unresolved.add(why.why());
+                    case ItemAssessment.Attempt.Built built -> rows.add(built.row());
+                    case ItemAssessment.Attempt.Unresolved why -> unresolved.add(why.why());
                     // Nothing was tried. One of the reasons is news — the decoders could not be
                     // reached, so this block is short of rows it would otherwise have offered — and
                     // two are boundaries nobody is owed a row at, where saying so would be noise.
@@ -1529,7 +1545,7 @@ public final class Adequacy {
                     // defect in the backend rather than a state of the source. It says the same
                     // thing as the reason beside it — nothing could be built against — and that is
                     // what is said.
-                    case BoundaryAssessment.Attempt.NotAttempted absent -> {
+                    case ItemAssessment.Attempt.NotAttempted absent -> {
                         switch (absent.reason()) {
                             case NO_CLASSES -> stopped.add(
                                     new souther.compiler.partition.GenerationReason
@@ -1541,6 +1557,7 @@ public final class Adequacy {
                         }
                     }
                 }
+              }
             }
             return new Generator.GenerationResult(rows, unresolved,
                     stopped.stream().distinct().toList());
@@ -1632,6 +1649,21 @@ public final class Adequacy {
         OUTPUT_CASE_UNVERIFIED(null, false),
         /** A class of an axis no row is in. */
         AXIS_CLASS_UNCOVERED(null, false),
+        /**
+         * A point away from a border that no row is at — the {@code IN} or the {@code OUT} point.
+         *
+         * <p>Beside {@link #BOUNDARY_UNMET} rather than among its findings, and the difference is
+         * which criterion a build is held to. A row on the line and a row one step over are what
+         * simplified domain coverage asks for, and a build can be told to refuse over them. A row
+         * well inside and a row well outside are the two further items reliable domain coverage adds,
+         * and this reports them without naming either criterion as the bar — which is what a report
+         * that claims no coverage criterion has to do.
+         *
+         * <p>Not a measure of its own. It comes off the same assessment of the same border as the
+         * points against the line, so what a build refuses over is a reading of one measurement and
+         * never a second one made to different rules.
+         */
+        DOMAIN_POINT_UNCOVERED(null, false),
         /**
          * A position the model draws no line through.
          *
@@ -1877,20 +1909,38 @@ public final class Adequacy {
                             Citation.of(behavior.pos()), List.of(missing)));
                 }
             }
-            for (BoundaryAssessment boundary : partition.boundaries()) {
-                // Both halves, asked of the two answers the assessment keeps apart. A line no row was
-                // measured against is not a gap, and neither is one nothing has shown a row can be
-                // written at — that edge is where the reading stopped rather than where the model
-                // does, and a row at it may be one nobody can write.
-                if (boundary.isUnmetGap()) {
+            for (BorderAssessment boundary : partition.boundaries()) {
+                for (souther.compiler.partition.PointRole role
+                        : souther.compiler.partition.PointRole.values()) {
+                    // Both halves, asked of the two answers the assessment keeps apart. A point no
+                    // row was measured against is not a gap, and neither is one nothing has shown a
+                    // row can be written at — that point is where the reading stopped rather than
+                    // where the model does, and a row at it may be one nobody can write. A point
+                    // nobody is owed a row at is not a gap either, and it says so as its own shape.
+                    if (!boundary.at(role).isUnmetGap()) {
+                        continue;
+                    }
                     // Which point of the border this is, carried rather than worked out again by
                     // whoever prints the finding. It is the assessment's answer, and a reader that
                     // re-derived it from the rule would be the second place the closed-border rule
                     // is written.
-                    out.add(new Finding(Kind.BOUNDARY_UNMET, behavior.name(),
-                            MeasurementStatus.COMPLETE, Citation.of(behavior.pos()),
-                            List.of(boundary.axis(), boundary.value(), boundary.rule(),
-                                    boundary.pointRole())));
+                    //
+                    // Two kinds and one measurement. Which of the four points a build is told about
+                    // is a decision per measure and not per finding: a row against the line is what
+                    // simplified domain coverage asks for and is what a build can refuse over, and a
+                    // row away from it is reported and refuses nothing. Both are found here, so the
+                    // decision is written once instead of by a second walk that could disagree.
+                    out.add(role.againstTheLine()
+                            ? new Finding(Kind.BOUNDARY_UNMET, behavior.name(),
+                                    MeasurementStatus.COMPLETE, Citation.of(behavior.pos()),
+                                    List.of(boundary.axis(), boundary.against(role),
+                                            boundary.rule(), role))
+                            : new Finding(Kind.DOMAIN_POINT_UNCOVERED, behavior.name(),
+                                    MeasurementStatus.COMPLETE, Citation.of(behavior.pos()),
+                                    List.of(boundary.axis(),
+                                            boundary.operator(role) + " "
+                                                    + boundary.against(role),
+                                            boundary.rule(), role)));
                 }
             }
             // What the model divides this position no way at all, which is the classes question and
