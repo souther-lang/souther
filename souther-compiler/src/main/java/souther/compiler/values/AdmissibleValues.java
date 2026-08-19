@@ -76,7 +76,7 @@ import java.util.function.BinaryOperator;
  * {@link #guaranteedAt} is carried for, and holding "something went unread" alone would answer the
  * same clause two ways depending on where its brackets fell.
  */
-public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> unread,
+public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> standing,
                                   boolean dropped, boolean nothing,
                                   Map<A, ValueSet> guaranteed, ValueSet defaultGuaranteed,
                                   boolean guaranteedTogether) {
@@ -84,10 +84,17 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
     /**
      * @param values  what each position admits. A position at {@link ValueSet#ANY} is left out, so
      *                that what is held is what was said
-     * @param unread  the positions this reading cannot speak for, each with what stopped it. Why
-     *                and not only which: two of these are lifted by different work and reported
-     *                differently, and a reader handed the positions alone would have to go back to
-     *                the rules to find out which it was
+     * @param standing what a rule left standing at each position, and what stopped the reading
+     *                from taking it in. Why and not only which: two of these are lifted by
+     *                different work and reported differently, and a reader handed the positions
+     *                alone would have to go back to the rules to find out which it was.
+     *
+     *                <p><b>Not the positions this cannot speak for.</b> A rule left standing where
+     *                the alternatives cover the position between them is one nothing there is
+     *                answerable for, and it is held all the same, since whether they still cover it
+     *                turns on rules stated beside the choice that have not been read yet.
+     *                {@link #speaksFor} and {@link #whyUnread} are the readings; this is what they
+     *                are read from
      * @param dropped whether a rule was left unread anywhere in this reading, which is what a
      *                disjunction needs in order to know that a branch widened it. What stopped that
      *                rule is not carried: a position the other branch spoke about is spoiled by
@@ -120,7 +127,7 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
         // written out of these has to come out the same on two runs of the compiler, and the
         // iteration order of an immutable copy does not.
         values = Collections.unmodifiableMap(said);
-        unread = Collections.unmodifiableMap(new LinkedHashMap<>(unread));
+        standing = Collections.unmodifiableMap(new LinkedHashMap<>(standing));
         // A guarantee empty at one position is empty at all of them. What is held is one set per
         // position standing for the product of them, and a product with an empty side is empty —
         // so there is no value at any position that this can promise. This is also where a reading
@@ -161,9 +168,18 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
      * whether the promise is one about whole values, and a conjunction promises nothing where it is
      * not.
      *
-     * <p>Which is why {@link #unread} is not answered from these under a conjunction either. A rule
-     * stated beside others narrows rather than widens, so what an unread one costs there is
-     * answered by the positions it names, and that is the account {@code unread} has kept all along.
+     * <p>Which is why {@link #speaksFor} is not answered from these under a conjunction either. A
+     * rule stated beside others narrows rather than widens, so what an unread one costs there is
+     * answered by the positions it names, and that is the account {@link #standing} has kept all
+     * along.
+     *
+     * <p><b>What that costs is a promise, and it is paid across the whole value.</b> A conjunction
+     * with a part nothing could read promises nothing anywhere, so a position covered inside one
+     * clause is reported short of its rules once any clause of the same value goes unread —
+     * {@code invariant said = (n == 5 || n /= 5) || f(n)} beside {@code invariant apart = g(m)}
+     * leaves {@code n} partial, though nothing about {@code n} is what {@code g(m)} could narrow.
+     * Telling the two apart wants a reading that remembers why it promises nothing, which is more
+     * than a promise and less than this holds.
      */
     public ValueSet guaranteedAt(A atom) {
         return guaranteed.getOrDefault(atom, defaultGuaranteed);
@@ -183,7 +199,7 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
      */
     public AdmissibleValues<A> leavingNothing() {
         return isBottom() ? this
-                : new AdmissibleValues<>(Map.of(), unread, dropped, true, Map.of(), ValueSet.NONE, true);
+                : new AdmissibleValues<>(Map.of(), standing, dropped, true, Map.of(), ValueSet.NONE, true);
     }
 
     /** One position said to admit {@code set}, and nothing missed. */
@@ -229,12 +245,12 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
      * would answer that the model leaves {@code b} every value.
      */
     public boolean speaksFor(A atom) {
-        return !unread.containsKey(atom) || guaranteedAt(atom).equals(at(atom));
+        return !standing.containsKey(atom) || guaranteedAt(atom).equals(at(atom));
     }
 
     /** What stopped this reading from speaking for {@code atom}, or null where nothing did. */
     public UnreadReason whyUnread(A atom) {
-        return speaksFor(atom) ? null : unread.get(atom);
+        return speaksFor(atom) ? null : standing.get(atom);
     }
 
     /** Whether nothing satisfies these rules, at a position or otherwise. */
@@ -255,7 +271,7 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
         // never has to say it is not one. Two of them met is one — a value taken from each
         // position of both stands in both readings — and nothing promised is one for want of
         // anything to promise.
-        return new AdmissibleValues<>(out, union(unread, other.unread),
+        return new AdmissibleValues<>(out, union(standing, other.standing),
                 dropped || other.dropped, nothing || other.nothing,
                 apart ? Map.of() : guaranteedBy(guaranteed, defaultGuaranteed,
                         other.guaranteed, other.defaultGuaranteed, ValueSet::meet),
@@ -285,7 +301,7 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
                     both.put(atom, set);
                 }
             });
-            return new AdmissibleValues<>(both, union(unread, other.unread),
+            return new AdmissibleValues<>(both, union(standing, other.standing),
                     dropped || other.dropped, true, Map.of(), ValueSet.NONE, true);
         }
         if (isBottom()) {
@@ -306,7 +322,7 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
         Map<A, ValueSet> covered = guaranteedBy(guaranteed, defaultGuaranteed,
                 other.guaranteed, other.defaultGuaranteed, ValueSet::join);
         ValueSet coveredElsewhere = defaultGuaranteed.join(other.defaultGuaranteed);
-        Map<A, UnreadReason> spoiled = union(unread, other.unread);
+        Map<A, UnreadReason> spoiled = union(standing, other.standing);
         // Spoiled by there having been an alternative this could not read, which is what happened
         // to them: a value satisfying that branch is under no obligation from this one. Not by what
         // the unread rule was about — a rule relating two other positions relates this one to

@@ -181,6 +181,43 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
     }
 
     /**
+     * A clause nothing could read costs the whole value its cover, and not only the positions it
+     * names.
+     *
+     * <p>What a conjunction promises is what its parts promise together, and a part nothing could
+     * read promises nothing — it may be a rule nothing satisfies, and then the value has no values
+     * and no position is at anything. So a position covered inside one clause is reported short of
+     * its rules once any clause of the same value goes unread, whether or not that clause could
+     * have reached it.
+     *
+     * <p>Written down because it is a decision and not an accident. {@code n} below holds every
+     * value: {@code n == 5 || n /= 5} covers it and {@code Int.abs(m) >= 3} is about {@code m}. The
+     * reading answers that it is short of its rules all the same, and telling the two apart wants a
+     * reading that remembers why it promises nothing.
+     */
+    @Test
+    void aClauseNothingCouldReadCostsTheWholeValueItsCover() {
+        FieldDomains read = of("""
+                module demo
+
+                data R = { n: Int, m: Int }
+                    invariant said = (n == 5 || n /= 5) || Int.abs(n) >= 2
+                    invariant apart = Int.abs(m) >= 3
+                """, "R");
+
+        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, "n");
+        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, "m");
+
+        FieldDomains alone = of("""
+                module demo
+
+                data R = { n: Int, m: Int }
+                    invariant said = (n == 5 || n /= 5) || Int.abs(n) >= 2
+                """, "R");
+        wholly(ValueSet.ANY, alone, "n");
+    }
+
+    /**
      * What covered a position is an alternative, and a rule beside the choice may leave none of it.
      *
      * <p>{@code a == 5} admits every {@code b}, so the choice does and nothing about {@code b} went
