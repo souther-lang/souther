@@ -356,11 +356,15 @@ public final class FieldDomains {
      *                 at one of them is no account of the other
      * @param from the rule that says where the values stop, which is what a reader is sent to look
      *             at
+     * @param part which conjunct of it this is. A rule is read a conjunct at a time and a reason
+     *             belongs to the one it came out of: asked of the rule and the position alone,
+     *             {@code x <= y && x <= 10 * 2} said its bound went unread because a comparison
+     *             relates two positions, which is what the conjunct beside it does
      * @param why  what would have to change before this rule could be a line, in this compiler's
      *             own terms
      */
     public record Unread(String path, boolean measured, RuleRef.Invariant from,
-                         souther.compiler.inputs.BlockReason why) {}
+                         Core part, souther.compiler.inputs.BlockReason why) {}
 
     /**
      * The declaration whose clause could have moved where the coordinate at {@code path} stops, or
@@ -532,17 +536,18 @@ public final class FieldDomains {
             }
             if (directs.stream().noneMatch(d -> d.from().equals(rule) && d.part() == part.getKey()
                     && d.path().equals(where.path()) && d.measured() == where.measured())) {
-                return unreadAnswerFor(rule, where);
+                return unreadAnswerFor(rule, part.getKey(), where);
             }
         }
         return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_END_READING);
     }
 
     /** What the reading of ends said about the rule at this position, where it said anything. */
-    private RuleAccounting.Outcome unreadAnswerFor(RuleRef rule,
+    private RuleAccounting.Outcome unreadAnswerFor(RuleRef rule, Core part,
                                                    Owed.Subject.OfAPosition where) {
         for (Unread said : unread) {
-            if (said.from().equals(rule) && said.path().equals(where.path())
+            if (said.from().equals(rule) && said.part() == part
+                    && said.path().equals(where.path())
                     && said.measured() == where.measured()) {
                 return new RuleAccounting.Outcome.Unaccounted(
                         new RuleAccounting.Why.TheEndReadingSays(said.why()));

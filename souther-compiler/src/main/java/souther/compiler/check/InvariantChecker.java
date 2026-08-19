@@ -1312,7 +1312,7 @@ public final class InvariantChecker {
                 sideOf(comparison.right(), at, byName));
         for (Coordinate each : coordinatesIn(comparison, at, byName)) {
             FieldDomains.Unread said =
-                    new FieldDomains.Unread(each.path(), each.measured(), from, why);
+                    new FieldDomains.Unread(each.path(), each.measured(), from, comparison, why);
             if (!out.contains(said)) {
                 out.add(said);
             }
