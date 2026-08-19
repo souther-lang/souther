@@ -14,6 +14,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -229,6 +230,59 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
         assertFalse(report.contains("no row is at the OFF point h.a = 0"), report);
     }
 
+    /**
+     * A point a row already sits at is not a point a search came back empty from.
+     *
+     * <p>The two answers are about different things and both reach an author: what the rows showed
+     * is a verdict, and what was tried is what {@code --generate} prints. A side of a line between
+     * two positions is the one point this compiler composes nothing for, and answered as a search
+     * that ran and failed it put a reason under every such side on every run — including the sides a
+     * row is in and the sides nothing measured, which is the specific work a person is handed that
+     * they may already have done.
+     */
+    @Test
+    void aPointARowIsAlreadyAtIsNotOneASearchCameBackEmptyFrom() {
+        Map<String, BorderAssessment> borders = bordersOf(BOTH_SIDES);
+        BorderAssessment line = borders.get("p.a = p.b");
+        assertNotNull(line, borders.keySet().toString());
+
+        assertTrue(line.owedAt(PointRole.IN).coverage().hit(), "a row is under the line");
+        assertTrue(line.owedAt(PointRole.OUT).coverage().hit(), "and one is over it");
+        for (PointRole role : List.of(PointRole.IN, PointRole.OUT)) {
+            assertEquals(souther.compiler.query.ItemAssessment.Attempt.Reason
+                            .A_ROW_IS_ALREADY_THERE,
+                    assertInstanceOf(souther.compiler.query.ItemAssessment.Attempt.NotAttempted.class,
+                            line.owedAt(role).attempt(), role.toString()).reason(),
+                    role.toString());
+        }
+
+        // And the block an author reads says nothing about them, because nothing is owed there.
+        String block = souther.compiler.report.GeneratedRows.of(
+                compiled(BOTH_SIDES), "example.owed", "cmp", true, SourceNameResolver.identity());
+        assertFalse(block.contains("p.a < p.b"), block);
+        assertFalse(block.contains("p.a > p.b"), block);
+    }
+
+    /** A line between two positions with a row either side of it and none on it. */
+    private static final String BOTH_SIDES = """
+            module example.owed
+
+            data P = { a: Int, b: Int }
+
+            data Ok
+            data No
+            data Verdict = Ok | No
+
+            behavior cmp : (p: P) -> Verdict
+                constructs Ok, No
+            let cmp (p) = { guard p.a < p.b else Ok
+                No }
+
+            example cmp
+                | "under" : (P { a = 1, b = 2 }) -> No
+                | "over" : (P { a = 2, b = 1 }) -> Ok
+            """;
+
     /** What a row inside this border has to do, as the report writes it. */
     private static String inside(BorderAssessment border) {
         return border.operator(PointRole.IN) + " " + border.against(PointRole.IN);
@@ -248,9 +302,13 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
     }
 
     private static String report(String model) {
+        return AdequacyReport.of(compiled(model)).human(SourceNameResolver.identity());
+    }
+
+    private static Compilation compiled(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
+        return compilation;
     }
 }

@@ -461,6 +461,44 @@ final class Coverages {
     private static ItemAssessment.Attempt attemptAt(
             Criterion criterion, Border border, ItemAssessment.Coverage coverage, Probe probe,
             souther.compiler.numeric.NumericDomain.Bounds within) {
+        return whereOneIsWorthBuilding(coverage, () -> {
+            if (probe == null) {
+                return new ItemAssessment.Attempt.NotAttempted(
+                        ItemAssessment.Attempt.Reason.NO_CLASSES);
+            }
+            // Which place to try is asked of the criterion, and a side answers with one it holds.
+            // That value is a candidate to offer and no part of the item: another row in the same
+            // side is at the point as much as this one would be.
+            Place standing = souther.compiler.partition.Generator.placeFor(
+                    criterion, border.cut().carrier(), within);
+            if (standing == null) {
+                // Nothing composed a value here. Said as a search that came to nothing rather than
+                // as one nobody ran: this is what was asked and what came back.
+                //
+                // Named by the point and not by the line. A border's four points fail separately —
+                // the row on the line can be composed while the side beside it holds nothing this
+                // can write — and named by the line all four say the same words, which a reader
+                // that prints each reason once shows as one.
+                return nothingComposedOne(border.label(criterion));
+            }
+            return whatCameOfIt(probe.attempt(new BoundaryTarget.AtPlace(
+                    ((BoundaryTarget.AtPlace) border.cut()).axis(), border.cut().carrier(),
+                    standing)));
+        });
+    }
+
+    /**
+     * What was tried at one point, where anything was worth trying at all.
+     *
+     * <p>The two gates in one place because they are one rule and there are three searches. A point
+     * a row already sits at needs no candidate, and one whose measurement never happened is not a
+     * piece of work to hand to anybody — offered anyway, both put a specific row in front of an
+     * author that may already be written. Written per search, the third one to be added skipped
+     * them and said a search had run and failed at points nothing had looked at.
+     */
+    private static ItemAssessment.Attempt whereOneIsWorthBuilding(
+            ItemAssessment.Coverage coverage,
+            java.util.function.Supplier<ItemAssessment.Attempt> search) {
         if (coverage instanceof ItemAssessment.Coverage.Hit) {
             return new ItemAssessment.Attempt.NotAttempted(
                     ItemAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE);
@@ -469,26 +507,15 @@ final class Coverages {
             return new ItemAssessment.Attempt.NotAttempted(
                     ItemAssessment.Attempt.Reason.NOT_MEASURED);
         }
-        if (probe == null) {
-            return new ItemAssessment.Attempt.NotAttempted(
-                    ItemAssessment.Attempt.Reason.NO_CLASSES);
-        }
-        // Which place to try is asked of the criterion, and a side answers with one it holds. That
-        // value is a candidate to offer and no part of the item: another row in the same side is at
-        // the point as much as this one would be.
-        Place standing = souther.compiler.partition.Generator.placeFor(
-                criterion, border.cut().carrier(), within);
-        if (standing == null) {
-            // Nothing composed a value here. Said as a search that came to nothing rather than as one
-            // nobody ran: this is what was asked and what came back.
-            return new ItemAssessment.Attempt.Unresolved(
-                    new souther.compiler.partition.Generator.UnresolvedCombination(
-                            List.of(border.label()),
-                            souther.compiler.partition.Generator.UnresolvedCombination.Reason
-                                    .NOTHING_COMPOSES_ONE));
-        }
-        return whatCameOfIt(probe.attempt(new BoundaryTarget.AtPlace(
-                ((BoundaryTarget.AtPlace) border.cut()).axis(), border.cut().carrier(), standing)));
+        return search.get();
+    }
+
+    /** A search that came to nothing at {@code subject}, which is what a point is written as. */
+    private static ItemAssessment.Attempt nothingComposedOne(String subject) {
+        return new ItemAssessment.Attempt.Unresolved(
+                new souther.compiler.partition.Generator.UnresolvedCombination(List.of(subject),
+                        souther.compiler.partition.Generator.UnresolvedCombination.Reason
+                                .NOTHING_COMPOSES_ONE));
     }
 
     /** What a search of the module's own decoders came to, in this measure's words. */
@@ -603,14 +630,16 @@ final class Coverages {
                         // Only the row on the line is composed. A side of such a line is a set of
                         // pairs, and building a row where the two are equal would witness the point
                         // on the line as though it stood for the side beside it.
-                        ItemAssessment.Attempt attempt =
+                        //
+                        // Through the same gate as every other search, and that is the whole of why
+                        // the gate is not written here. A point a row already sits at and a point
+                        // nothing measured are not points a search comes back empty from; answered
+                        // that way, `--generate` printed a reason at every side of every such line
+                        // on every run.
+                        ItemAssessment.Attempt attempt = whereOneIsWorthBuilding(coverage, () ->
                                 owed.criterion() instanceof Criterion.WhereTheTermsMeet
-                                        ? attemptBetween(line, at, coverage, probe)
-                                        : new ItemAssessment.Attempt.Unresolved(
-                                                new Generator.UnresolvedCombination(
-                                                        List.of(each.label(role)),
-                                                        Generator.UnresolvedCombination.Reason
-                                                                .NOTHING_COMPOSES_ONE));
+                                        ? composedOnTheLine(line, at, probe)
+                                        : nothingComposedOne(each.label(role)));
                         yield new ItemAssessment.Owed(owed.criterion(), coverage,
                                 writabilityOf(coverage, false, attempt), attempt);
                     }
@@ -644,39 +673,18 @@ final class Coverages {
      * rules that drew it.
      */
     /** What building a row on a line between two positions came to, where one was worth building. */
-    private static ItemAssessment.Attempt attemptBetween(
-            BoundaryTarget.EqualTerms line, Place at, ItemAssessment.Coverage coverage,
-            Probe probe) {
-        if (coverage instanceof ItemAssessment.Coverage.Hit) {
-            return new ItemAssessment.Attempt.NotAttempted(
-                    ItemAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE);
-        }
-        if (!worthBuilding(coverage)) {
-            return new ItemAssessment.Attempt.NotAttempted(
-                    ItemAssessment.Attempt.Reason.NOT_MEASURED);
-        }
+    private static ItemAssessment.Attempt composedOnTheLine(BoundaryTarget.EqualTerms line,
+                                                            Place at, Probe probe) {
         if (at == null) {
             // The rules leave the two positions no place in common. Said as the search coming to
             // nothing rather than as a search nobody ran: this is what was asked and what came back.
-            return new ItemAssessment.Attempt.Unresolved(
-                    new souther.compiler.partition.Generator.UnresolvedCombination(
-                            List.of(line.left() + " = " + line.right()),
-                            souther.compiler.partition.Generator.UnresolvedCombination.Reason
-                                    .NOTHING_COMPOSES_ONE));
+            return nothingComposedOne(line.left() + " = " + line.right());
         }
         if (probe == null) {
             return new ItemAssessment.Attempt.NotAttempted(
                     ItemAssessment.Attempt.Reason.NO_CLASSES);
         }
-        souther.compiler.partition.Generator.BoundaryAttempt made = probe.attemptBetween(line, at);
-        return switch (made) {
-            case null -> new ItemAssessment.Attempt.NotAttempted(
-                    ItemAssessment.Attempt.Reason.LINKAGE_FAILED);
-            case souther.compiler.partition.Generator.BoundaryAttempt.Built built ->
-                    new ItemAssessment.Attempt.Built(built.row());
-            case souther.compiler.partition.Generator.BoundaryAttempt.Unresolved left ->
-                    new ItemAssessment.Attempt.Unresolved(left.why());
-        };
+        return whatCameOfIt(probe.attemptBetween(line, at));
     }
 
     /**

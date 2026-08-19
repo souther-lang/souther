@@ -67,7 +67,13 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
      */
     public String label(PointRole role) {
         Criterion criterion = demand(role).criterion();
-        return criterion == null ? null : cut.left() + " " + criterion.asked(cut);
+        return criterion == null ? null : label(criterion);
+    }
+
+    /** The same of a criterion this border owes, for a caller that is holding one rather than a
+     *  role. One spelling, so that what a search reports and what a report prints agree. */
+    public String label(Criterion criterion) {
+        return cut.left() + " " + criterion.asked(cut);
     }
 
     /**
