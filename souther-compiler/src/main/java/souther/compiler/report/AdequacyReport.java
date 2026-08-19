@@ -674,7 +674,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             said.classId(), said.at(), because(said.reasons()),
                             unproven(said.why())));
         }
-        undivided(out, behavior);
+        undivided(out, behavior, names, declaredIn);
         // On a line of its own, and this is the whole of why it has one. Counting combinations
         // across two positions is the neighbouring technique rather than this one, and printed at
         // the end of the partition line it sat beside the border counts where a reader could add
@@ -730,6 +730,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             p -> whyNoBoundaryItem(owed(p).coverage())),
                     undecided == 0 ? "" : "   (" + undecided + " undecided: a value was not read)"));
         }
+        // A border the model drew that nothing here answered for, said whether or not one came of
+        // it. It is exactly where none did that the question stands, so this cannot be written by
+        // walking the borders.
+        unaccounted(out, behavior, names, declaredIn,
+                question -> !aboutTheClasses(question));
         // The rule as this report writes it. The finding carries the rule and not words about it,
         // because what to say differs between here — where a file has a name — and the warning built
         // from the same finding, where nothing knows what to call one.
@@ -800,7 +805,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * the position went undivided sat two rows under a boundary count that was counting the line that
      * very comparison drew — one measure's silence printed as though it were the other's.
      */
-    private static void undivided(StringBuilder out, BehaviorReport behavior) {
+    private static void undivided(StringBuilder out, BehaviorReport behavior,
+                                  SourceNameResolver names, SourceId declaredIn) {
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_NOT_DERIVABLE)) {
             out.append(String.format("      %s not derivable: %s%n", mark(f), f.args().get(0)));
         }
@@ -819,10 +825,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_RULES_NOT_REACHED)) {
             out.append(String.format("      %s rules not reached: %s%n", mark(f), f.args().get(0)));
         }
-        for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_RULE_UNACCOUNTED)) {
-            out.append(String.format("      %s not accounted for: %s — %s %s%n",
-                    mark(f), f.args().get(1), f.args().get(2), f.args().get(0)));
-        }
+        // The questions this measure answers: which values may stand where, which classes hold
+        // them, and which value a rule tells from every other. A border is the section below's.
+        unaccounted(out, behavior, names, declaredIn, AdequacyReport::aboutTheClasses);
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_OMITTED)) {
             out.append(String.format("      %s omitted: %s (axis limit)%n",
                     mark(f), f.args().get(0)));
@@ -1002,6 +1007,145 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     public static String implementationWord(boolean injected) {
         return injected ? "injected" : "implemented";
+    }
+
+    /**
+     * Whether the partition measure is the one that answers this question.
+     *
+     * <p>Which values may stand somewhere, which classes hold them, and which value a rule tells
+     * from every other: a singling makes the two classes {@code {c}} and everything else, so that
+     * measure is what counts a row for it. A border is the other one's, and is the only one.
+     * Filed by what the question asks and not by which producer raised it.
+     */
+    private static boolean aboutTheClasses(souther.compiler.check.CoverageObligation question) {
+        return switch (question) {
+            // A value singled out is one class of the position and everything else is the other,
+            // which is what this measure counts. Printed under the borders it would say a border is
+            // what the rule placed, in a section whose words are about an order across one and a
+            // role for each side — the order the rule never drew, arriving in the report after
+            // being kept out of the question.
+            case ADMITTED_VALUES, PARTITION, SINGLETON -> true;
+            case BOUNDARY -> false;
+        };
+    }
+
+    /**
+     * The questions a section is the reader of, each named by the rule that raised it.
+     *
+     * <p>One finding kind, filed by what it asks. Which measure answers a question is settled where
+     * the question is raised; a report chooses where to print it, and nothing here decides what the
+     * model asked.
+     */
+    private static void unaccounted(StringBuilder out, BehaviorReport behavior,
+                                    SourceNameResolver names,
+                                    souther.compiler.source.SourceId declaredIn,
+                                    java.util.function.Predicate<
+                                            souther.compiler.check.CoverageObligation> mine) {
+
+        for (Adequacy.Finding f : behavior.of(Adequacy.Kind.RULE_UNACCOUNTED)) {
+            if (mine.test((souther.compiler.check.CoverageObligation) f.args().get(3))) {
+                // A place a comparison drew is pointed at rather than described: the words for it
+                // are the same for every comparison there is, and two of them at one position read
+                // as one.
+                Object about = f.args().get(4)
+                        instanceof souther.compiler.check.Owed.Subject.OfComparison it
+                        ? it.at().said(names, declaredIn) : f.args().get(0);
+                out.append(String.format("      %s not accounted for: %s — %s %s%n",
+                        mark(f), cited((souther.compiler.check.RuleCitation) f.args().get(1),
+                                names, declaredIn),
+                        f.args().get(2), about));
+            }
+        }
+    }
+
+    /**
+     * How a report writes the rule a question is about.
+     *
+     * <p>A name where the author gave one and a place where they did not, which is the same handle
+     * a border prints for the line a comparison drew — the two share the formatter and the words,
+     * and nothing else. What they must not share is an identity: where a rule was read is the
+     * partition's and one rule has as many of those as it has readings.
+     */
+    private static String cited(souther.compiler.check.RuleCitation cited,
+                                SourceNameResolver names,
+                                souther.compiler.source.SourceId declaredIn) {
+        return cited.said(names, declaredIn);
+    }
+
+    /**
+     * What tells one rule of the model from another, as this document carries it.
+     *
+     * <p>The parts that are the identity and no more. A rule is a clause of an invariant, a
+     * comparison written in a body, or a rule of an {@code ensures} clause, and each is told from
+     * its neighbours by different coordinates — so this is an object per kind rather than one
+     * spelling every kind is squeezed into. Not the internal value's own words: what a compiler
+     * calls a rule to itself is not a contract, and this is.
+     *
+     * <p>Not a name and never shown to a reader. `rule` beside it is what an author is given, and
+     * the two are different questions: a handle finds a rule and an identity distinguishes one.
+     */
+    private static void ruleId(ObjectNode into, souther.compiler.check.RuleRef rule) {
+        into.put("kind", ruleWord(rule));
+        // Every part of the identity and not the parts that read well. A declaration is its module
+        // and its name — two modules may each declare an `Amount` and they are two types — and a
+        // construct is numbered from zero in each source, so the module is what tells one behavior's
+        // twelfth construct from another's. Written without them, two rules of two modules project
+        // onto one identity, which is the one thing this field may not do.
+        switch (rule) {
+            // The clause, by the declaration it is written on and its place among that
+            // declaration's clauses — which is how somebody reading the declaration counts them.
+            case souther.compiler.check.RuleRef.Invariant it -> {
+                into.put("declaredIn", it.clause().id().declaredOn().key().module());
+                into.put("declaredOn", it.clause().id().declaredOn().name());
+                into.put("clause", it.clause().id().ordinal());
+            }
+            // The rule of the clause, by the behavior it is declared on and where it sits among the
+            // clauses and their arms. Two arms naming one case are two rules and differ here.
+            case souther.compiler.check.RuleRef.Ensures it -> {
+                into.put("declaredIn", it.rule().behavior().module());
+                into.put("behavior", it.rule().behavior().name());
+                into.put("clause", it.rule().clause());
+                into.put("arm", it.rule().arm());
+            }
+            // The comparison, by the behavior it is written in and the construct it was numbered
+            // as. The numbering starts at zero in each source, so the source is part of it.
+            case souther.compiler.check.RuleRef.Guard it -> {
+                into.put("declaredIn", it.comparison().origin().module());
+                into.put("behavior", it.comparison().behavior());
+                into.put("ordinal", it.comparison().origin().ordinal());
+                into.put("lowered", it.comparison().origin().lowered());
+            }
+        }
+    }
+
+    /**
+     * The word a document writes for which kind of rule an identity is of.
+     *
+     * <p>Here rather than at the one place it is written, for the reason the others are. No
+     * {@code default}, so a rule shape added and not given a word stops the compile rather than
+     * arriving in a document as one that already existed.
+     */
+    public static String ruleWord(souther.compiler.check.RuleRef rule) {
+        return switch (rule) {
+            case souther.compiler.check.RuleRef.Invariant _ -> "invariant";
+            case souther.compiler.check.RuleRef.Ensures _ -> "ensures";
+            case souther.compiler.check.RuleRef.Guard _ -> "guard";
+        };
+    }
+
+    /**
+     * The word a document writes for which kind of thing a question is about.
+     *
+     * <p>Here rather than at the one place it is written, for the reason the others are: a reader
+     * holding the arms can be held to the words without reading the writer. No {@code default}, so
+     * an arm added and not given a word stops the compile rather than arriving in a document as one
+     * that already existed.
+     */
+    public static String subjectWord(souther.compiler.check.Owed.Subject subject) {
+        return switch (subject) {
+            case souther.compiler.check.Owed.Subject.OfAPosition _ -> "position";
+            case souther.compiler.check.Owed.Subject.OfComparison _ -> "comparison";
+        };
     }
 
     /**
@@ -1202,15 +1346,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             if (axis.read().reach() == PartitionEvidence.AxisCoverage.Reach.SOME_OUT_OF_SIGHT) {
                 read.put("rulesNotReached", true);
             }
-            if (!axis.read().unanswered().isEmpty()) {
-                ArrayNode standing = read.putArray("unanswered");
-                for (PartitionEvidence.AxisCoverage.Unanswered each : axis.read().unanswered()) {
-                    ObjectNode one = standing.addObject();
-                    one.put("rule", each.rule());
-                    one.put("question", word(each.question()));
-                    one.put("subject", each.subject());
-                }
-            }
             axis.classes().forEach(a.putArray("classes")::add);
             axis.covered().stream().sorted().forEach(a.putArray("covered")::add);
             ArrayNode excluded = a.putArray("excluded");
@@ -1225,6 +1360,54 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             }
             a.put("unclassifiedRows", axis.unclassifiedRows());
             measured(a, axis.status(), axis.reason());
+        }
+        // The questions the model raised that nothing answered, beside the measures rather than
+        // inside one. Every measure here is a reader of them, and a position no axis came back for
+        // still has whatever was written about it.
+        if (!partition.unanswered().isEmpty()) {
+            ArrayNode standing = out.putArray("unanswered");
+            for (PartitionEvidence.Unanswered each : partition.unanswered()) {
+                ObjectNode one = standing.addObject();
+                one.put("at", each.at());
+                // The rendered label, which is what this key has always been. What it is rendered
+                // from is beside it: a name is a name, and a place is a place, and a consumer that
+                // needs to open a file wants the second rather than a string to take apart.
+                // The same handle the border prints for a line the comparison drew, through the
+                // table of sources this document carries.
+                one.put("rule", each.cited().said(sources::written, null));
+                // What tells one rule from another, beside the words for finding it. A handle is a
+                // projection of the rule and not the rule: two arms of one `ensures` clause may
+                // name the same case, so the author's words for them are the same words, and two
+                // questions came out as one object twice. Within this document and not a name to
+                // show a reader — which is what `rule` beside it is.
+                ruleId(one.putObject("ruleId"), each.rule());
+                one.put("question", word(each.question()));
+                // What the question is about, as what it is. A place a comparison drew between two
+                // moving terms is named by that comparison and not written out — printing it takes
+                // both sides in a vocabulary this compiler has, and it has none for every shape a
+                // side can be — so a consumer telling two of them apart is handed the two places
+                // rather than one sentence twice.
+                ObjectNode about = one.putObject("subject");
+                switch (each.subject()) {
+                    case souther.compiler.check.Owed.Subject.OfAPosition _ -> {
+                        about.put("kind", subjectWord(each.subject()));
+                        about.put("path", each.at());
+                        if (each.measure() != null) {
+                            about.put("measure", each.measure());
+                        }
+                    }
+                    case souther.compiler.check.Owed.Subject.OfComparison it -> {
+                        about.put("kind", subjectWord(each.subject()));
+                        // Where the comparison is, for every citation this document can point at.
+                        // A comparison out of sight has no place a reader here can open, and the
+                        // rule beside it is what sends them to the declaration it is written in.
+                        if (it.at() instanceof Citation.Written
+                                || it.at() instanceof Citation.Reached) {
+                            at(about, it.at(), sources);
+                        }
+                    }
+                }
+            }
         }
         ArrayNode offAxis = out.putArray("claimsOffAxis");
         for (ClaimAnnotations.Said said : claimed.notAt(measuredPaths(partition))) {
@@ -1369,7 +1552,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             ObjectNode f = out.addObject();
             f.put("kind", word(finding.kind()));
             f.put("disposition", word(finding.disposition()));
-            f.put("subject", subject(finding));
+            f.put("subject", subject(finding, sources));
+            // Which rule this is about, where the finding is about one. The words in `subject` are
+            // how a reader finds it, and two rules an author named alike have the same words — so a
+            // consumer joining findings to the questions they came from wants this.
+            if (finding.kind() == Adequacy.Kind.RULE_UNACCOUNTED) {
+                ruleId(f.putObject("ruleId"),
+                        (souther.compiler.check.RuleRef) finding.args().get(5));
+            }
             // Present where the kind has one. A finding a build is not told about under any code is
             // not one with an empty code, and a consumer joining these to the diagnostics a build
             // printed reads the difference.
@@ -1403,7 +1593,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case ARM_UNREACHED -> finding.at();
             case OUTPUT_CASE_UNSPECIFIED, OUTPUT_CASE_UNVERIFIED, INPUT_CASE_UNSPECIFIED,
                     AXIS_CLASS_UNCOVERED, BOUNDARY_UNMET, DOMAIN_POINT_UNCOVERED,
-                    PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ, PARTITION_RULE_UNACCOUNTED,
+                    PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ, RULE_UNACCOUNTED,
                     PARTITION_RULES_NOT_REACHED, PARTITION_OMITTED -> null;
         };
     }
@@ -1421,7 +1611,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * name a {@code boundaries} entry. An input's case carries its position with it, because two
      * parameters of one type give two findings a class name alone cannot tell apart.
      */
-    private static String subject(Adequacy.Finding finding) {
+    private static String subject(Adequacy.Finding finding, DocumentSources sources) {
         List<Object> args = finding.args();
         return switch (finding.kind()) {
             // The label and not the arm, and the same label `branch.unreached` writes: this field
@@ -1435,8 +1625,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // The rule and what it was left saying. Named by the position alone, two rules nothing
             // took in at one position serialised as two identical objects, and the human line named
             // them while a consumer of the document could not tell them apart.
-            case PARTITION_RULE_UNACCOUNTED ->
-                    args.get(1) + " — " + args.get(2) + " " + args.get(0);
+            // Written to join the `unanswered` entry this came out of, so the rule is named by the
+            // one method that names it. Spelled a second way here, the join this exists for held
+            // for a rule with a name and broke for every rule found by where it is written.
+            // The handle, and what tells this rule from another beside it: two arms of one clause
+            // may name the same case, so the words alone joined two questions into one row.
+            case RULE_UNACCOUNTED ->
+                    ((souther.compiler.check.RuleCitation) args.get(1))
+                            .said(sources::written, null) + " — " + args.get(2) + " "
+                            + (args.get(4)
+                                    instanceof souther.compiler.check.Owed.Subject.OfComparison it
+                                            ? it.at().said(sources::written, null) : args.get(0));
             case INPUT_CASE_UNSPECIFIED ->
                     String.valueOf(args.get(0)) + " (in #" + args.get(1) + ")";
             // What the point asks of a row, which is what joins it to one of a border's `items`. A

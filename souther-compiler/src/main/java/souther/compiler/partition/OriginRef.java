@@ -231,12 +231,13 @@ public sealed interface OriginRef {
         return switch (this) {
             case InvariantOrigin i -> i.rule().named();
             case EnsuresOrigin e -> e.rule().named();
-            case GuardOrigin g -> switch (g.read().at()) {
-                case Citation.Written _, Citation.Unplaced _ ->
-                        wordFor(g) + "@" + g.read().at().said(names, sectionSource);
-                case Citation.Elsewhere _ ->
-                        wordFor(g) + " in " + g.read().at().said(names, sectionSource);
-            };
+            // The same word and the same join a question about this rule is written with. A rule
+            // and a line it drew are found the same way, and two spellings of one place read as two
+            // places.
+            case GuardOrigin g -> souther.compiler.check.RuleCitation.wordFor(
+                    g.constructThatDrewIt())
+                    + souther.compiler.check.RuleCitation.joining(g.read().at())
+                    + g.read().at().said(names, sectionSource);
             case NarrowedOrigin n -> n.bound().describe(names, sectionSource) + " within "
                     + n.within().stream().map(TypeSymbol::name)
                             .collect(java.util.stream.Collectors.joining(" or "));

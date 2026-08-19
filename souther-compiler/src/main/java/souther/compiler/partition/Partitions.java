@@ -79,8 +79,10 @@ public final class Partitions {
                                java.util.Set<NumericTerm> uncertain,
                                List<UndividedPosition> undivided,
                                List<UnreadRule> unread,
-                               List<Border> between) {
+                               List<Border> between,
+                               List<GuardThresholds.Guards.AtAPosition> compared) {
         public Partitioning {
+            compared = List.copyOf(compared);
             axes = List.copyOf(axes);
             omitted = List.copyOf(omitted);
             domains = Map.copyOf(domains);
@@ -165,7 +167,7 @@ public final class Partitions {
             keep(new ArrayList<>(), measured, axis, null, unread);
         }
         return new Partitioning(kept, omitted, domains, uncertain, undividedIn(measured),
-                List.copyOf(unread), List.of());
+                List.copyOf(unread), List.of(), List.of());
     }
 
     /**
@@ -282,7 +284,7 @@ public final class Partitions {
                                               List<GuardThresholds.Guards.Singled> singled,
                                               List<Border> between) {
         return withThresholds(base, thresholds, symbols, unread, singled, between,
-                souther.compiler.check.PathReachability.Answers.NONE);
+                souther.compiler.check.PathReachability.Answers.NONE, List.of());
     }
 
     /**
@@ -305,7 +307,8 @@ public final class Partitions {
                                               List<GuardThresholds.Guards.Singled> singled,
                                               List<Border> between,
                                               souther.compiler.check.PathReachability.Answers
-                                                      arrives) {
+                                                      arrives,
+                                              List<GuardThresholds.Guards.AtAPosition> compared) {
         // Both producers of one kind of evidence. What a body compared and what a type's own rules
         // bound are read by different readers and answer the same question, so a position either of
         // them wrote about and neither could turn into a line is named once, whichever wrote it.
@@ -396,7 +399,7 @@ public final class Partitions {
                     reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), rules);
         }
         return new Partitioning(out, base.omitted(), domainsOf(base, out), base.uncertain(),
-                undividedIn(measured), List.copyOf(rules), between);
+                undividedIn(measured), List.copyOf(rules), between, compared);
     }
 
     /**

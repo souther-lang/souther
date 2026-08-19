@@ -12,9 +12,13 @@ import java.util.Set;
  * anybody can write — saying that a rule raises no question at all is a conclusion about the model,
  * and the only thing entitled to draw it is a reading of the rule.
  *
- * <p>Four answers and not a tally of what a reader could do with the clause. Each says what the
+ * <p>Three answers and not a tally of what a reader could do with the clause. Each says what the
  * clause is about; none of them says whether this compiler managed anything with it, which is the
- * other question and is settled by whichever reading answered.
+ * other question and is {@link InvariantBound.Read}'s. The two used to be one: {@code AnEnd} was
+ * built where {@code InvariantBound.at} came back with an end, so a bound this could not fold — the
+ * {@code 20} in {@code value <= 10 * 2} — arrived here as a clause that states no bound at all.
+ * {@code NoValueAtAll} was the same mixing from the other side, reached only by folding the bound
+ * and comparing it against the carrier's order.
  *
  * <p>Each carries what it is about, taken from the same reading. Worked out again where the
  * questions are raised, the subject a question is filed under and the subject the reading found
@@ -23,21 +27,27 @@ import java.util.Set;
 sealed interface ClauseStates {
 
     /**
-     * Where the values stop: a comparison of the number against one written out.
+     * Where the values stop: a coordinate compared for order against an expression naming no
+     * coordinate of this value.
      *
-     * @param position whose values the rule bounds
-     * @param line     the number the end is on, which is the position's own value or a count taken
-     *                 of it
+     * <p>Whether an end came of it is not asked here, and neither is whether the order has a value
+     * at the end. A rule states where the values stop by being written that way; what this compiler
+     * made of the number on the other side is what answers the question, not what raises it.
+     *
+     * @param line  the number the end is on, which is the position's own value or a count taken of
+     *              it
+     * @param named the positions the clause is about, which is what a rule can cost. Never empty:
+     *              a clause bounding a coordinate names it
      */
-    record AnEnd(Owed.Subject position, Owed.Subject line) implements ClauseStates {}
+    record ABound(Owed.Subject line, Set<Owed.Subject> named) implements ClauseStates {
 
-    /**
-     * That the position holds no value at all.
-     *
-     * <p>An end past the last value of the order, which is a rule this read perfectly. It raises no
-     * line — there is no value to write a row at — and it is not a rule left unread either.
-     */
-    record NoValueAtAll(Owed.Subject position) implements ClauseStates {}
+        public ABound {
+            if (named.isEmpty()) {
+                throw new IllegalArgumentException("a bound is written about a position");
+            }
+            named = java.util.Collections.unmodifiableSet(new java.util.LinkedHashSet<>(named));
+        }
+    }
 
     /**
      * How this position stands against another.
@@ -77,5 +87,16 @@ sealed interface ClauseStates {
         static SomethingElse naming(List<Owed.Subject> found) {
             return new SomethingElse(new java.util.LinkedHashSet<>(found));
         }
+    }
+
+    /** The positions this clause is about, by which a rule can cost one. */
+    default Set<Owed.Subject> about() {
+        return switch (this) {
+            case ABound bound -> bound.named();
+            case SomethingElse other -> other.positions();
+            // A rule about a pair costs neither of them: what it says is not a set of one
+            // position's values, so there is nothing about one for anything to have read.
+            case ARelation _ -> Set.of();
+        };
     }
 }

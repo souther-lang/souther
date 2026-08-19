@@ -4,6 +4,10 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Location;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Carrier;
+import souther.compiler.check.ComparisonClaim;
+import souther.compiler.check.Owed;
+import souther.compiler.check.Required;
+import souther.compiler.check.RuleAccounting;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.UnreadComparison;
 import souther.compiler.inputs.BlockReason;
@@ -19,6 +23,7 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.Citation;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 
@@ -67,10 +72,27 @@ public final class GuardThresholds {
      */
     public record Guards(List<Threshold> thresholds,
                          List<UnreadRule> unread, List<Singled> singled,
-                         List<Border> between) {
+                         List<Border> between,
+                         List<AtAPosition> accounting) {
 
         public static final Guards NONE =
-                new Guards(List.of(), List.of(), List.of(), List.of());
+                new Guards(List.of(), List.of(), List.of(), List.of(), List.of());
+
+        /**
+         * One comparison's accounting, and the position a reader is sent to for it.
+         *
+         * <p>The position is beside the accounting rather than inside it. What a rule raises is
+         * about a subject of its own — the number a line falls on — and where in a behavior's inputs
+         * that number is read from is what a document keys the question by, which is a question
+         * about the walk that found it.
+         */
+        public record AtAPosition(TermPath at, NumericTerm term, RuleAccounting accounting) {
+            public AtAPosition {
+                if (at == null || accounting == null) {
+                    throw new IllegalArgumentException("an accounting is filed somewhere");
+                }
+            }
+        }
 
         /**
          * A value a body singles out rather than orders.
@@ -85,6 +107,7 @@ public final class GuardThresholds {
         public Guards {
             thresholds = List.copyOf(thresholds);
             unread = List.copyOf(unread);
+            accounting = List.copyOf(accounting);
             singled = List.copyOf(singled);
             between = List.copyOf(between);
         }
@@ -97,20 +120,22 @@ public final class GuardThresholds {
                             InputDomain inputs, Symbols symbols) {
         List<Threshold> found = new ArrayList<>();
         List<UnreadRule> unread = new ArrayList<>();
+        List<Guards.AtAPosition> accounting = new ArrayList<>();
         List<Guards.Singled> singled = new ArrayList<>();
         List<Border> between = new ArrayList<>();
         walk(behavior, body, plan, InputReads.of(inputs), symbols, found, unread,
-                singled, between);
-        return new Guards(found, unread, singled, between);
+                singled, between, accounting);
+        return new Guards(found, unread, singled, between, accounting);
     }
 
     private static void walk(String behavior, Core e, CoverageSites.Plan plan,
                              InputReads reads, Symbols symbols, List<Threshold> out,
                              List<UnreadRule> unread,
-                             List<Guards.Singled> singled, List<Border> between) {
+                             List<Guards.Singled> singled, List<Border> between,
+                             List<Guards.AtAPosition> accounting) {
         if (e instanceof Core.If iff) {
             List<Core> read =
-                    read(behavior, iff, plan, reads, symbols, out, singled, between);
+                    read(behavior, iff, plan, reads, symbols, out, singled, between, accounting);
             // Every comparison this condition holds that nothing turned into a line — asked of the
             // comparisons and not of the positions. One position carries more than one statement,
             // and a line read at it says nothing about the rest: kept per position, a threshold on
@@ -131,7 +156,7 @@ public final class GuardThresholds {
         InputReads inside = e instanceof Core.LetIn let ? reads.and(let.binder(), let.value())
                 : reads;
         Core.forEachChild(e, child -> walk(behavior, child, plan, inside, symbols, out,
-                unread, singled, between));
+                unread, singled, between, accounting));
     }
 
     /**
@@ -248,10 +273,7 @@ public final class GuardThresholds {
 
     /** Whether an operator is one that compares two values rather than combining two conditions. */
     static boolean orders(Hir.BinOp op) {
-        return switch (op) {
-            case EQ, NE, LT, LE, GT, GE -> true;
-            case AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
-        };
+        return ComparisonClaim.places(op);
     }
 
     /**
@@ -265,7 +287,8 @@ public final class GuardThresholds {
     private static List<Core> read(String behavior, Core.If iff, CoverageSites.Plan plan,
                                    InputReads reads, Symbols symbols,
                                    List<Threshold> out,
-                                   List<Guards.Singled> singled, List<Border> between) {
+                                   List<Guards.Singled> singled, List<Border> between,
+                                   List<Guards.AtAPosition> accounting) {
         // The comparisons a line came of, and not the positions they were about. A position carries
         // more than one statement and reading one of them settles nothing about the others.
         List<Core> made = new ArrayList<>();
@@ -283,18 +306,140 @@ public final class GuardThresholds {
             // comparison has no site is this reader and the plan disagreeing about what a condition
             // is made of.
             int site = plan.requireComparisonSiteOf(each.comparison());
-            TermPath here = readOne(behavior, iff, each, plan, guard, site, reads, symbols,
+            ComparedLine here = readOne(behavior, iff, each, plan, guard, site, reads, symbols,
                     out, singled);
             if (here != null) {
                 made.add(each.comparison());
+                raises(accounting, plan, site, guard, iff, each.comparison(),
+                        here.term().path(), here.term(),
+                        subjectsOf(each.comparison(), reads, symbols, null),
+                        new Required.LineRead.ALineOnThePosition());
                 continue;
             }
             // A line this could not read as a count of one position may still be one between two.
             // Not added to `made`: what the partition could not read here it still could not read,
             // and a boundary answering does not answer for it (spec §example-partition).
+            int drawn = between.size();
             between(behavior, iff, each, plan, guard, site, reads, symbols, between);
+            List<TermPath> named = new ArrayList<>();
+            mentioned(each.comparison().left(), reads, symbols, named);
+            mentioned(each.comparison().right(), reads, symbols, named);
+            if (named.isEmpty()) {
+                continue;   // a comparison about no position of the input raises nothing about one
+            }
+            // Filed at the position the reading names first, which is the one a line between two
+            // would be read `on`. One comparison is one line however many positions it mentions, so
+            // this is where a reader is sent and not a question raised once apiece.
+            // The side that names the position is readable even where the other one is not, so
+            // what the line is on is known here too: a bound this could not fold is still a bound on
+            // a length where it was written about one. Read off the position alone, a question about
+            // a count came back spelled as the string it counts.
+            NumericTerm about = comparedTerm(each.comparison(), reads, symbols);
+            raises(accounting, plan, site, guard, iff, each.comparison(), named.get(0), about,
+                    subjectsOf(each.comparison(), reads, symbols, null),
+                    between.size() > drawn ? new Required.LineRead.ALineBetweenTwoPositions()
+                            : new Required.LineRead.NoLine(
+                                    why(each.comparison(), reads, symbols)));
         }
         return made;
+    }
+
+    /**
+     * What the question is about, relative to the position it is filed at.
+     *
+     * <p>An invariant's subject is relative to the value its clause is on, and this is the same
+     * thing one frame out. Which of the two it is was settled by the reading that found the term: a
+     * {@code String} bounded on its length raises about the string and draws its line on the count,
+     * and a document promises both spellings.
+     */
+    static Owed.Subject.OfAPosition subjectOf(NumericTerm term) {
+        // A term that is a count says the line is on the count; anything else — a term over the
+        // position's own value, or no term at all — leaves it on the position.
+        return new Owed.Subject.OfAPosition("", term instanceof NumericTerm.SizeOf);
+    }
+
+    /**
+     * Whether the comparison is about one of the behavior's positions or about two.
+     *
+     * <p>Off the source, by the walk that names positions however they are written. The operator
+     * says what a comparison places and this says what it places it about, and neither is the
+     * other's: {@code x == 10} singles a value out and {@code x == y} is a rule about a pair, under
+     * one operator.
+     */
+    static Required.ComparisonSubject subjectsOf(Core.Binary comparison, InputReads reads,
+                                                 Symbols symbols, BindingId answer) {
+        boolean left = movesWithTheRow(comparison.left(), reads, symbols, answer);
+        boolean right = movesWithTheRow(comparison.right(), reads, symbols, answer);
+        if (left == right) {
+            // Both, which is a rule about a pair; or neither, which says nothing about an input.
+            // The place a relation's line falls is between the two sides, spelled as they are
+            // written — a reader meets them beside each other on the row owed there.
+            return left ? new Required.ComparisonSubject.Relation(
+                    new Owed.Subject.OfComparison(Citation.of(comparison.pos())))
+                    : new Required.ComparisonSubject.NoInput();
+        }
+        Core side = left ? comparison.left() : comparison.right();
+        NumericTerm term = termOf(side, reads, symbols);
+        if (term == null) {
+            // It moves with the row and is not a number this reads — the answer, or an input read a
+            // way the terms do not name. Nothing about an input's own values follows.
+            return new Required.ComparisonSubject.NoInput();
+        }
+        return new Required.ComparisonSubject.AnInput(subjectOf(term), Owed.Subject.at(""));
+    }
+
+    /**
+     * Whether what {@code e} comes to is chosen by the row.
+     *
+     * <p>An input's position is, and so is the answer a clause of an {@code ensures} names — what a
+     * row chooses is what the behavior is applied to, and the answer follows from it. Everything
+     * else is the same for every row, which is what makes the other side of a comparison a place
+     * rather than a second moving thing.
+     */
+    private static boolean movesWithTheRow(Core e, InputReads reads, Symbols symbols,
+                                           BindingId answer) {
+        if (!mentionedIn(e, reads, symbols).isEmpty()) {
+            return true;
+        }
+        return answer != null && reads(e, answer);
+    }
+
+    /** Whether anything in {@code e} reads the binding a rule calls the answer. */
+    private static boolean reads(Core e, BindingId answer) {
+        if (e instanceof Core.Read read && answer.equals(read.binding())) {
+            return true;
+        }
+        boolean[] found = {false};
+        Core.forEachChild(e, child -> found[0] |= reads(child, answer));
+        return found[0];
+    }
+
+    /** The number a comparison is about, from whichever side names one. */
+    static NumericTerm comparedTerm(Core.Binary comparison, InputReads reads, Symbols symbols) {
+        NumericTerm left = termOf(comparison.left(), reads, symbols);
+        return left != null ? left : termOf(comparison.right(), reads, symbols);
+    }
+
+    /**
+     * What one comparison raises, and what the reading of it answered.
+     *
+     * <p>Off the comparison and not off the lines that came back. A comparison states where the
+     * values stop by being written that way, and a line this could not read is exactly the case
+     * where nothing answers it — walked from the lines, such a rule would be one the model never
+     * wrote.
+     */
+    private static void raises(List<Guards.AtAPosition> out, CoverageSites.Plan plan, int site,
+                               CoverageSites.GuardRef guard, Core.If iff, Core.Binary comparison,
+                               TermPath at, NumericTerm term,
+                               Required.ComparisonSubject of, Required.LineRead read) {
+        out.add(new Guards.AtAPosition(at, term, RuleAccounting.ofComparison(
+                new RuleRef.Guard(plan.site(site).comparison()),
+                souther.compiler.check.ComparisonClaim.of(comparison.op()), of, read,
+                // A comparison is written rather than named, so a reader is sent where the author
+                // wrote it — the comparison's own place and not the fork's. Two comparisons of one
+                // condition are two rules, and cited at the `if` they were one handle twice.
+                new souther.compiler.check.RuleCitation.WrittenAt(
+                        guard.origin().kind(), Citation.of(comparison.pos())))));
     }
 
     /**
@@ -430,7 +575,7 @@ public final class GuardThresholds {
 
 
     /** The position a line was drawn on by one comparison, or null where none was. */
-    private static TermPath readOne(String behavior, Core.If iff, Placed placed,
+    private static ComparedLine readOne(String behavior, Core.If iff, Placed placed,
                                     CoverageSites.Plan plan, CoverageSites.GuardRef guard, int site,
                                     InputReads reads,
                                     Symbols symbols, List<Threshold> out,
@@ -450,10 +595,10 @@ public final class GuardThresholds {
                 drawn.singles());
         if (drawn.singles()) {
             singled.add(new Guards.Singled(drawn.term(), drawn.value(), origin));
-            return drawn.term().path();
+            return drawn;
         }
         out.add(new Threshold(drawn.term(), drawn.value(), drawn.valueBelongsBelow(), origin));
-        return drawn.term().path();
+        return drawn;
     }
 
     private static CoverageSites.GuardRef guardOf(CoverageSites.Plan plan, Core.If iff) {

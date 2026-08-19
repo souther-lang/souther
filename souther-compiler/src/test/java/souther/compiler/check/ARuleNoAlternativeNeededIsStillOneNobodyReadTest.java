@@ -84,12 +84,21 @@ class ARuleNoAlternativeNeededIsStillOneNobodyReadTest {
                 "and either way round");
     }
 
-    /** What stopped each question of each rule of this value that nothing answered. */
+    /**
+     * What stopped each question of each rule of this value that nothing answered.
+     *
+     * <p>The reading of values, which is the one these questions are about. A reason is said in the
+     * vocabulary of whichever reading would have answered, and a line about an end is not written in
+     * the words of a set of values — so this asks for the arm it is about rather than for whatever
+     * came back.
+     */
     private static List<UnreadReason> leftStanding(FieldDomains read) {
         return read.accounting().values().stream()
                 .flatMap(each -> each.answers().values().stream())
                 .filter(RuleAccounting.Outcome.Unaccounted.class::isInstance)
                 .map(each -> ((RuleAccounting.Outcome.Unaccounted) each).why())
+                .filter(RuleAccounting.Why.TheValueReadingSays.class::isInstance)
+                .map(each -> ((RuleAccounting.Why.TheValueReadingSays) each).why())
                 .toList();
     }
 

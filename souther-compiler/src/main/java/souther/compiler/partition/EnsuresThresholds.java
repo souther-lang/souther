@@ -2,6 +2,10 @@ package souther.compiler.partition;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorContract;
+import souther.compiler.check.ComparisonClaim;
+import souther.compiler.check.Owed;
+import souther.compiler.check.Required;
+import souther.compiler.check.RuleAccounting;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.StatedContract;
 import souther.compiler.check.Symbols;
@@ -9,6 +13,7 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.UnreadRule;
 import souther.compiler.types.BindingId;
@@ -70,16 +75,18 @@ public final class EnsuresThresholds {
      *                and the model says otherwise in its own declaration
      */
     public record Clauses(List<Threshold> thresholds, List<GuardThresholds.Guards.Singled> singled,
-                          List<Border> between, List<UnreadRule> unread) {
+                          List<Border> between, List<UnreadRule> unread,
+                          List<GuardThresholds.Guards.AtAPosition> accounting) {
 
         public static final Clauses NONE =
-                new Clauses(List.of(), List.of(), List.of(), List.of());
+                new Clauses(List.of(), List.of(), List.of(), List.of(), List.of());
 
         public Clauses {
             thresholds = List.copyOf(thresholds);
             singled = List.copyOf(singled);
             between = List.copyOf(between);
             unread = List.copyOf(unread);
+            accounting = List.copyOf(accounting);
         }
     }
 
@@ -101,7 +108,7 @@ public final class EnsuresThresholds {
         }
         InputReads reads = InputReads.ofWhatIsDeclared(inputs, rootsOf(stated.params()));
         Drawn drawn = new Drawn(stated.behavior().name(), new ArrayList<>(), new ArrayList<>(),
-                new ArrayList<>(), new ArrayList<>());
+                new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
         for (StatedContract.StatedRule rule : stated.rules()) {
             String clause = labelOf(rule);
             for (StatedContract.Conjunct conjunct : rule.conjuncts()) {
@@ -113,14 +120,16 @@ public final class EnsuresThresholds {
                 }
             }
         }
-        return new Clauses(drawn.thresholds(), drawn.singled(), drawn.between(), drawn.unread());
+        return new Clauses(drawn.thresholds(), drawn.singled(), drawn.between(), drawn.unread(),
+                drawn.accounting());
     }
 
     /** What the walk has found so far, and the behavior a line between two positions is named
      *  after. Together because they are filled together and are one answer. */
     private record Drawn(String behavior, List<Threshold> thresholds,
                          List<GuardThresholds.Guards.Singled> singled,
-                         List<Border> between, List<UnreadRule> unread) {}
+                         List<Border> between, List<UnreadRule> unread,
+                         List<GuardThresholds.Guards.AtAPosition> accounting) {}
 
     /**
      * The comparisons a rule states outright: its own, and those of both sides of every {@code &&}
@@ -166,10 +175,27 @@ public final class EnsuresThresholds {
             // Asked in that order and about the same comparison, the way a body's conditions are
             // read — and the positions are named as unread either way, because what the partition
             // could not read here it still could not read.
+            int had = out.between().size();
             between(comparison, rule, clause, reads, symbols, out);
             reportUnread(comparison, rule.value(), reads, symbols, out.unread());
+            // Every position the comparison names, by the walk a body's conditions use. Asked of
+            // `ComparedTerms` instead, a comparison this could not read as a line between two
+            // positions had no position to be filed at — which is exactly the comparison whose
+            // questions stand, so the clause that most needs saying said nothing.
+            List<TermPath> named = GuardThresholds.mentionedIn(comparison, reads, symbols);
+            NumericTerm about = GuardThresholds.comparedTerm(comparison, reads, symbols);
+            raises(out, rule, clause, comparison, rule.value(),
+                    named.isEmpty() ? null : named.get(0), about,
+                    GuardThresholds.subjectsOf(comparison, reads, symbols, rule.value()),
+                    out.between().size() > had
+                            ? new Required.LineRead.ALineBetweenTwoPositions()
+                            : new Required.LineRead.NoLine(
+                                    GuardThresholds.why(comparison, reads, symbols)));
             return;
         }
+        raises(out, rule, clause, comparison, rule.value(), drawn.term().path(), drawn.term(),
+                GuardThresholds.subjectsOf(comparison, reads, symbols, rule.value()),
+                new Required.LineRead.ALineOnThePosition());
         OriginRef.EnsuresOrigin origin = new OriginRef.EnsuresOrigin(
                 new RuleRef.Ensures(rule.id(), clause),
                 drawn.valueBelongsBelow(), drawn.holdsAtTheValue(), drawn.singles());
@@ -180,6 +206,27 @@ public final class EnsuresThresholds {
             out.thresholds().add(
                     new Threshold(drawn.term(), drawn.value(), drawn.valueBelongsBelow(), origin));
         }
+    }
+
+    /**
+     * What one clause's comparison raises, and what the reading of it answered.
+     *
+     * <p>Off the comparison and not off the lines that came back, for the reason a body's is: a
+     * comparison states where the values stop by being written that way, and one this could not
+     * read is exactly where nothing answers it.
+     */
+    private static void raises(Drawn out, StatedContract.StatedRule rule, String clause,
+                               Core.Binary comparison, BindingId answer, TermPath at,
+                               NumericTerm term,
+                               Required.ComparisonSubject of, Required.LineRead read) {
+        if (at == null) {
+            return;   // about no position of the input, so it raises nothing about one
+        }
+        RuleRef.Ensures named = new RuleRef.Ensures(rule.id(), clause);
+        out.accounting().add(new GuardThresholds.Guards.AtAPosition(at, term,
+                RuleAccounting.ofComparison(named, ComparisonClaim.of(comparison.op()), of, read,
+                        // A clause belongs to a behavior, so there is always something to call it.
+                        new souther.compiler.check.RuleCitation.Named(named.named()))));
     }
 
     /**

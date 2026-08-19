@@ -21,11 +21,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * What a reading leaves standing is a state the schema says, not one its prose describes.
  *
- * <p>`read` carries two facts that are not the same and are not exclusive: which of a position's
- * rules nothing took in, and whether the walk reached all of them. `extent` is the word over both.
- * A description saying "present exactly where" and "never beside" is a promise a consumer written
- * against it will find broken by the first document that breaks it, since nothing refuses one; the
- * schema says it in `oneOf` instead, and this holds the emitter to the same states.
+ * <p>`read` says how far one measure got with a position: whether the walk reached every rule, and
+ * whether the questions that measure answers were answered. `extent` is the word over both. A
+ * description saying "present exactly where" is a promise a consumer written against it will find
+ * broken by the first document that breaks it, since nothing refuses one; the schema says what it
+ * can in `oneOf`, and this holds the emitter to the rest.
+ *
+ * <p>The questions themselves are not in `read`. They are the model's and every measure is one
+ * reader of them, so they are written once beside the measures — which is also what keeps a
+ * question alive at a position no axis came back for.
  */
 class WhatAReadingLeavesStandingIsAStateTheSchemaSaysTest {
 
@@ -57,6 +61,31 @@ class WhatAReadingLeavesStandingIsAStateTheSchemaSaysTest {
                 if length.value >= 50 then 1 else 2
             """;
 
+    /** A line the model draws that this could not fold, beside a bound it could. */
+    private static final String A_LINE_UNACCOUNTED = """
+            module example.rooms
+
+            data Length = Int
+                invariant min = value >= 1
+                invariant max = value <= 10 * 2
+
+            behavior price : (length: Length) -> Int
+            let price (length) =
+                if length.value >= 5 then 1 else 2
+            """;
+
+    /** The same line with nothing beside it, so no axis comes back at all. */
+    private static final String A_LINE_AND_NO_AXIS = """
+            module example.rooms
+
+            data Length = Int
+                invariant top = value <= 10 * 2
+
+            behavior price : (length: Length) -> Int
+            let price (length) =
+                if length.value >= 50 then 1 else 2
+            """;
+
     /** Rules the walk never reached, behind an option. */
     private static final String RULES_OUT_OF_SIGHT = """
             module o
@@ -78,7 +107,7 @@ class WhatAReadingLeavesStandingIsAStateTheSchemaSaysTest {
         }
     }
 
-    private static JsonNode readOf(String source, String behavior) {
+    private static JsonNode partitionOf(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
@@ -86,19 +115,23 @@ class WhatAReadingLeavesStandingIsAStateTheSchemaSaysTest {
                 AdequacyReport.of(compilation).json(SourceNameResolver.identity()));
         for (JsonNode each : document.get("modules").get(0).get("behaviors")) {
             if (each.get("name").asString().equals(behavior)) {
-                return each.get("partition").get("axes").get(0).get("read");
+                return each.get("partition");
             }
         }
         throw new AssertionError("no behavior called " + behavior);
     }
 
+    private static JsonNode readOf(String source, String behavior) {
+        return partitionOf(source, behavior).get("axes").get(0).get("read");
+    }
+
     /**
-     * The states are in the schema, and `complete` is the one where neither key is written.
+     * The states are in the schema, and `complete` is the one where the key is not written.
      *
-     * <p>Read off the schema so that a description rewritten without the constraint fails here. The
-     * two keys are separate axes: nothing says a position cannot have both a rule nothing took in
-     * and a subtree nothing entered, so the `partial` branch asks for at least one rather than for
-     * exactly one.
+     * <p>Read off the schema so that a description rewritten without the constraint fails here.
+     * What the schema can say is the reach; that a question about this position's values is
+     * standing is written elsewhere in the document, which no cross-reference here can require, so
+     * it is held by the emitter tests below instead.
      */
     @Test
     void theSchemaSaysWhichKeysEachExtentIsWrittenWith() throws Exception {
@@ -107,21 +140,30 @@ class WhatAReadingLeavesStandingIsAStateTheSchemaSaysTest {
         JsonNode states = read.get("oneOf");
         assertNotNull(states, "the states are in the schema and not only in its description");
         assertEquals(2, states.size());
-
         assertEquals("complete",
                 states.get(0).get("properties").get("extent").get("const").asString());
-        assertEquals(2, states.get(0).get("not").get("anyOf").size(),
-                "complete is written with neither key");
-
+        assertEquals("rulesNotReached",
+                states.get(0).get("not").get("required").get(0).asString(),
+                "complete is never written beside a reach that fell short");
         assertEquals("partial",
                 states.get(1).get("properties").get("extent").get("const").asString());
-        assertEquals(2, states.get(1).get("anyOf").size(),
-                "and partial with at least one of them, either or both");
 
         assertTrue(read.get("properties").get("rulesNotReached").get("const").asBoolean(),
                 "written only where it is so, so `false` is not a document this accepts");
-        assertEquals(1, read.get("properties").get("unanswered").get("minItems").asInt(),
-                "and an empty list is a position with nothing standing, which is the other state");
+        assertFalse(read.get("properties").has("unanswered"),
+                "the questions are the model's and are written beside the measures, not in one");
+    }
+
+    /** And where they are written, keyed by the position so that a reader can find them. */
+    @Test
+    void theQuestionsAreWrittenBesideTheMeasures() throws Exception {
+        JsonNode standing = schema().get("$defs").get("partition").get("properties")
+                .get("unanswered");
+        assertNotNull(standing, "beside `axes` and `boundaries`, not inside either");
+        assertEquals(1, standing.get("minItems").asInt(),
+                "an empty list is a behavior with nothing standing, which is written by leaving it out");
+        assertEquals("at", standing.get("items").get("required").get(0).asString(),
+                "each says which position it is about, since no axis is carrying it");
     }
 
     /** Two positions of one value, one with a rule nothing took in and one with rules out of
@@ -154,52 +196,87 @@ class WhatAReadingLeavesStandingIsAStateTheSchemaSaysTest {
      */
     @Test
     void aRuleNothingTookInAndRulesOutOfSightAreIndependent() {
-        Compilation compilation = Compilation.ofSource(BOTH_FACTS, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
-        compilation.answerEverything();
-        JsonNode axes = JSON.readTree(
-                        AdequacyReport.of(compilation).json(SourceNameResolver.identity()))
-                .get("modules").get(0).get("behaviors").get(0).get("partition").get("axes");
+        JsonNode partition = partitionOf(BOTH_FACTS, "f");
+        JsonNode axes = partition.get("axes");
 
         JsonNode number = axes.get(0).get("read");
-        assertEquals(1, number.get("unanswered").size(), number.toString());
+        assertEquals("partial", number.get("extent").asString(), number.toString());
         assertFalse(number.has("rulesNotReached"), number.toString());
+        assertEquals(1, partition.get("unanswered").size(), partition.toString());
+        assertEquals("admitted_values",
+                partition.get("unanswered").get(0).get("question").asString());
 
         JsonNode held = axes.get(1).get("read");
         assertTrue(held.get("rulesNotReached").asBoolean(), held.toString());
-        assertFalse(held.has("unanswered"), held.toString());
     }
 
-    /** Nothing standing: `complete`, and neither key. */
+    /** Nothing standing: `complete`, and nothing written either way. */
     @Test
     void aPositionWithNothingStandingIsCompleteAndCarriesNeitherKey() {
-        JsonNode read = readOf(NOTHING_STANDING, "price");
+        JsonNode partition = partitionOf(NOTHING_STANDING, "price");
 
-        assertEquals("complete", read.get("extent").asString());
-        assertFalse(read.has("rulesNotReached"), read.toString());
-        assertFalse(read.has("unanswered"), read.toString());
+        assertEquals("complete", partition.get("axes").get(0).get("read").get("extent").asString());
+        assertFalse(partition.get("axes").get(0).get("read").has("rulesNotReached"));
+        assertFalse(partition.has("unanswered"), partition.toString());
     }
 
-    /** A rule nothing took in: `partial`, and the rules, and nothing about reach. */
+    /** A rule nothing took in: `partial`, and the rule named beside the measures. */
     @Test
     void aRuleNothingTookInIsPartialAndNamesIt() {
-        JsonNode read = readOf(A_RULE_UNACCOUNTED, "price");
+        JsonNode partition = partitionOf(A_RULE_UNACCOUNTED, "price");
 
-        assertEquals("partial", read.get("extent").asString());
-        assertFalse(read.has("rulesNotReached"), read.toString());
-        assertEquals(1, read.get("unanswered").size(), read.toString());
+        assertEquals("partial", partition.get("axes").get(0).get("read").get("extent").asString());
+        assertFalse(partition.get("axes").get(0).get("read").has("rulesNotReached"));
+        assertEquals(1, partition.get("unanswered").size());
         assertEquals("invariant Length (square)",
-                read.get("unanswered").get(0).get("rule").asString());
+                partition.get("unanswered").get(0).get("rule").asString());
     }
 
-    /** Rules out of sight: `partial`, and the reach, and no rule to name. */
+    /**
+     * A line nothing answered leaves the position's own extent alone.
+     *
+     * <p>The two measures #869 told apart. Which values may stand at the position is what classes
+     * are made of and is the partition measure's to be short of; where the line falls is the border
+     * measure's. Counted in `extent`, the number they were separated into would be one again — and
+     * an author reading `partial` would go looking for a class.
+     */
+    @Test
+    void aLineNothingAnsweredIsNotWhatMakesTheDivisionPartial() {
+        JsonNode partition = partitionOf(A_LINE_UNACCOUNTED, "price");
+
+        assertEquals(1, partition.get("unanswered").size(), partition.toString());
+        assertEquals("boundary", partition.get("unanswered").get(0).get("question").asString());
+        assertEquals("invariant Length (max)",
+                partition.get("unanswered").get(0).get("rule").asString());
+        assertEquals("complete", partition.get("axes").get(0).get("read").get("extent").asString(),
+                "every rule about which values may stand there was answered");
+    }
+
+    /**
+     * And it is written where no axis came back at all.
+     *
+     * <p>The reason the questions are not inside an axis. This position is divided no way this
+     * could read, so nothing here has an axis to carry a question — and what the model asked is
+     * still what the model asked.
+     */
+    @Test
+    void aLineNothingAnsweredSurvivesAPositionWithNoAxis() {
+        JsonNode partition = partitionOf(A_LINE_AND_NO_AXIS, "price");
+
+        assertEquals(0, partition.get("axes").size(), "nothing divided the position");
+        assertEquals(1, partition.get("unanswered").size(), partition.toString());
+        assertEquals("length", partition.get("unanswered").get(0).get("at").asString());
+        assertEquals("boundary", partition.get("unanswered").get(0).get("question").asString());
+    }
+
+    /** Rules out of sight: `partial`, the reach, and no rule to name. */
     @Test
     void rulesOutOfSightArePartialAndNameNoRule() {
-        JsonNode read = readOf(RULES_OUT_OF_SIGHT, "classify");
+        JsonNode partition = partitionOf(RULES_OUT_OF_SIGHT, "classify");
+        JsonNode read = partition.get("axes").get(0).get("read");
 
-        assertEquals("partial", read.get("extent").asString());
+        assertEquals("partial", read.get("extent").asString(), read.toString());
         assertTrue(read.get("rulesNotReached").asBoolean(), read.toString());
-        assertFalse(read.has("unanswered"),
-                "nothing was seen, so there is no rule to name: " + read);
+        assertFalse(partition.has("unanswered"), partition.toString());
     }
 }

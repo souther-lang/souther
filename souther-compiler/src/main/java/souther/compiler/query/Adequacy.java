@@ -1362,7 +1362,7 @@ public final class Adequacy {
                     // that the switch stays exhaustive over the kinds rather than over the ones
                     // thought of here.
                     case OUTPUT_CASE_UNVERIFIED, AXIS_CLASS_UNCOVERED, DOMAIN_POINT_UNCOVERED,
-                            PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ, PARTITION_RULE_UNACCOUNTED,
+                            PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ, RULE_UNACCOUNTED,
                             PARTITION_RULES_NOT_REACHED, PARTITION_OMITTED ->
                             throw new IllegalStateException("not a gap a build refuses: " + gap);
                 }));
@@ -1674,24 +1674,32 @@ public final class Adequacy {
         /** A position something is written about that this did not read, with what stopped it. */
         PARTITION_NOT_READ(null, false),
         /**
-         * A rule written about a position the axes measure that nothing took in.
+         * A rule written about a position that nothing took in, and which of its questions stands.
+         *
+         * <p>One kind and not one per measure. What happened is that a rule raised a question and
+         * nothing answered it; which section of a document a reader meets it in follows from the
+         * question, and is decided where the document is written. Named for the partition, this said
+         * that the fact belonged to that measure — and a rule about where the values stop would have
+         * been printed under the classes, two headings away from the border it is about, which is
+         * the shape of issue #842.
+         *
+         * <p>Not read off the borders either. A line this could not fold has no border to iterate,
+         * and that is exactly when its question stands.
          *
          * <p>Told apart from {@link #PARTITION_NOT_READ} because they are different things to act
-         * on. Nothing was established about a position this could not read; here the classes are
-         * what the model was read to say, and this rule may yet refuse a value one of them holds —
-         * so a reader is told that the numbers beside it rest on rules one of which nothing
-         * accounted for, rather than that there are none.
+         * on. Nothing was established about a position this could not read; here the model said
+         * something and no reading of it answered.
          *
          * <p>Named by the rule. A position was all a reader used to be given, which sent them
          * looking for a rule the sentence never named — and the sentence was written off one
          * reading's account of itself, so it was said of models every rule of which had been read
          * (issue #842).
          */
-        PARTITION_RULE_UNACCOUNTED(null, false),
+        RULE_UNACCOUNTED(null, false),
         /**
          * A position the axes measure whose rules the walk never reached.
          *
-         * <p>Its own finding beside {@link #PARTITION_RULE_UNACCOUNTED}. There is no rule to name,
+         * <p>Its own finding beside {@link #RULE_UNACCOUNTED}. There is no rule to name,
          * and a reader told that every rule was accounted for is told the opposite of the one thing
          * worth knowing about the position.
          */
@@ -1966,18 +1974,21 @@ public final class Adequacy {
                             MeasurementStatus.NOT_MEASURED, Citation.of(behavior.pos()),
                             List.of(axis.path())));
                 }
-                // One per rule, and said whether or not something is out of sight beside them: a
-                // rule that arrived and went unaccounted for is a fact about the rule, and a
-                // subtree nothing entered is a fact about the walk. A position was all a reader
-                // used to be given, and the rules a position carries are not one thing to act on.
-                for (PartitionEvidence.AxisCoverage.Unanswered each : axis.read().unanswered()) {
-                    // The subject the question carries, and not the axis's own number. A length
-                    // bound says which strings may stand at the position and draws its line on the
-                    // count, and the axis is named after the second.
-                    out.add(new Finding(Kind.PARTITION_RULE_UNACCOUNTED, behavior.name(),
-                            MeasurementStatus.NOT_MEASURED, Citation.of(behavior.pos()),
-                            List.of(each.subject(), each.rule(), asked(each.question()))));
-                }
+            }
+            // One per question a rule raised and nothing answered, whether or not the position it
+            // is at came back with an axis. A rule that arrived and went unaccounted for is a fact
+            // about the rule; that no axis could be derived is a fact about a measure, and the
+            // second used to decide whether the first was said at all.
+            for (PartitionEvidence.Unanswered each : partition.unanswered()) {
+                // The subject the question carries, and not the axis's own number. A length bound
+                // says which strings may stand at the position and draws its line on the count, and
+                // the axis is named after the second. The question itself travels with it, because
+                // which section of a document says this follows from the question.
+                out.add(new Finding(Kind.RULE_UNACCOUNTED, behavior.name(),
+                        MeasurementStatus.NOT_MEASURED, Citation.of(behavior.pos()),
+                        List.of(each.measure() != null ? each.measure() : each.at(),
+                                each.cited(), asked(each.question()), each.question(),
+                                each.subject(), each.rule())));
             }
             for (souther.compiler.partition.Partitions.OmittedAxis dropped : partition.omitted()) {
                 out.add(new Finding(Kind.PARTITION_OMITTED, behavior.name(),
@@ -1991,6 +2002,8 @@ public final class Adequacy {
             return switch (question) {
                 case ADMITTED_VALUES -> "which values may stand at";
                 case BOUNDARY -> "where the values stop on";
+                case PARTITION -> "which classes a row is owed in at";
+                case SINGLETON -> "which value is singled out at";
             };
         }
 
