@@ -335,16 +335,42 @@ public final class NumericDomain<A> {
 
     /** Whether the domain proves {@code f rel 0} (the construction's invariant is discharged). */
     public boolean entails(LinearForm<A> f, Rel rel) {
+        return entails(f, rel, true);
+    }
+
+    /**
+     * Whether what is <em>projected</em> out of this proves {@code f rel 0}.
+     *
+     * <p>The bounds a reader downstream is handed, and not the relations kept beside them. A form
+     * neither an interval nor a difference holds is kept as written and marked
+     * {@link Loss#KEPT_UNPROJECTABLE} for exactly that reason — {@link #boundsOf} does not read it —
+     * so asking {@link #entails} whether the projection still holds such a form is asking the form
+     * to stand on itself, and everything the projection dropped comes back proven.
+     *
+     * <p>A caller deciding how much of the rules the bounds state wants this. A caller deciding
+     * whether a construction discharges its invariant wants the other one: what is known there is
+     * everything this holds, however it holds it.
+     */
+    public boolean projectionEntails(LinearForm<A> f, Rel rel) {
+        return entails(f, rel, false);
+    }
+
+    private boolean entails(LinearForm<A> f, Rel rel, boolean withKept) {
         if (bottom) {
             return true;   // an infeasible path discharges anything
         }
         if (rel == Rel.EQ) {
-            return proveLe(f, false) && proveLe(f.negate(), false);
+            return prove(f, false, withKept) && prove(f.negate(), false, withKept);
         }
         if (rel == Rel.NE) {
-            return proveLe(f, true) || proveLe(f.negate(), true);   // f < 0, or f > 0
+            // `f < 0`, or `f > 0`
+            return prove(f, true, withKept) || prove(f.negate(), true, withKept);
         }
-        return proveLe(negOf(rel) ? f.negate() : f, strictOf(rel));
+        return prove(negOf(rel) ? f.negate() : f, strictOf(rel), withKept);
+    }
+
+    private boolean prove(LinearForm<A> g, boolean strict, boolean withKept) {
+        return withKept ? proveLe(g, strict) : proveBaseLe(g, strict);
     }
 
     /** Whether the domain proves {@code ¬(f rel 0)} — the invariant is <em>definitely</em> violated
