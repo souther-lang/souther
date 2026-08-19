@@ -705,11 +705,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             b -> whyNoBoundary(b.coverage())),
                     undecided == 0 ? "" : "   (" + undecided + " undecided: a value was not read)"));
         }
-        // A line the model drew that nothing here answered for, said whether or not a border came
-        // of it. It is exactly where none did that the question stands, so this cannot be written
-        // by walking the borders.
+        // A place the model named that nothing here answered for, said whether or not a row was
+        // asked at it. It is exactly where none was that the question stands, so this cannot be
+        // written by walking what came back.
         unaccounted(out, behavior, names, declaredIn,
-                question -> question == souther.compiler.check.CoverageObligation.BOUNDARY);
+                question -> !aboutTheClasses(question));
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.BOUNDARY_UNMET)) {
             // The rule as this report writes it. The finding carries the rule and not words about
             // it, because what to say differs between here — where a file has a name — and the
@@ -762,12 +762,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_RULES_NOT_REACHED)) {
             out.append(String.format("      %s rules not reached: %s%n", mark(f), f.args().get(0)));
         }
-        // The questions about which values may stand where, which is what classes are made of. A
-        // question about a line is the border measure's to print, two sections down, and printing
-        // it here put a sentence about where the values stop under the heading for how they are
-        // divided.
-        unaccounted(out, behavior, names, declaredIn, question -> question
-                != souther.compiler.check.CoverageObligation.BOUNDARY);
+        // The questions about which values may stand where and which classes hold them, which is
+        // what this section counts. The two that name a place — a border, and a value singled out —
+        // are printed where the rows for them are, which is the section below.
+        unaccounted(out, behavior, names, declaredIn, AdequacyReport::aboutTheClasses);
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_OMITTED)) {
             out.append(String.format("      %s omitted: %s (axis limit)%n",
                     mark(f), f.args().get(0)));
@@ -963,6 +961,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * the question is raised; a report chooses where to print it, and nothing here decides what the
      * model asked.
      */
+    /**
+     * Whether this section is where the rows for a question are counted.
+     *
+     * <p>Which values may stand somewhere and which classes hold them are counted under the
+     * partition; a border and a value singled out are places rows are written at, and are counted
+     * under the borders. Filed by what the question asks and not by which producer raised it.
+     */
+    private static boolean aboutTheClasses(souther.compiler.check.CoverageObligation question) {
+        return switch (question) {
+            case ADMITTED_VALUES, PARTITION -> true;
+            case BOUNDARY, SINGLETON -> false;
+        };
+    }
+
     private static void unaccounted(StringBuilder out, BehaviorReport behavior,
                                     SourceNameResolver names,
                                     souther.compiler.source.SourceId declaredIn,

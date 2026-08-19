@@ -1954,6 +1954,7 @@ public final class Adequacy {
                 case ADMITTED_VALUES -> "which values may stand at";
                 case BOUNDARY -> "where the values stop on";
                 case PARTITION -> "which classes a row is owed in at";
+                case SINGLETON -> "which value is singled out at";
             };
         }
 

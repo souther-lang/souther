@@ -39,8 +39,8 @@
       "enum": ["unsupported_syntax", "rules_not_read_at_all", "unsupported_domain", "unsupported_partition_shape", "depth_limit", "type_unresolved", "unsupported_traversal"]
     },
     "coverageQuestion": {
-      "description": "What a rule of the model raises that something has to answer. `admitted_values` is which values may stand at a position; `boundary` is a line rows are owed at; `partition` is the classes either side of such a line, which a rule raises where it leaves values on both sides. Only the questions this compiler issues today: a question nothing raises is one every model answers by nobody having asked it, so a word arrives here in the same change that starts raising it.",
-      "enum": ["admitted_values", "boundary", "partition"]
+      "description": "What a rule of the model raises that something has to answer. `admitted_values` is which values may stand at a position; `boundary` is a border rows are owed at, which has an order across it and a role for each side; `singleton` is a value a rule tells from every other, which has neither because the values either side of it are one class; `partition` is the classes a comparison makes, which both shapes raise where they leave values on both sides. Only the questions this compiler issues today: a question nothing raises is one every model answers by nobody having asked it, so a word arrives here in the same change that starts raising it.",
+      "enum": ["admitted_values", "boundary", "singleton", "partition"]
     },
     "status": {
       "description": "Whether a measure has a number. `unavailable` says only that it has none; the `reason` beside it says why, and the two are not read off one another.",

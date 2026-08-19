@@ -212,19 +212,22 @@ public sealed interface Required {
     public static Required ofComparison(ComparisonClaim claim, Owed.Subject about, LineRead read) {
         Set<Owed> owed = new LinkedHashSet<>();
         switch (claim) {
-            case ComparisonClaim.Cut _, ComparisonClaim.Singled _ -> {
-                owed.add(new Owed(CoverageObligation.BOUNDARY, about));
-                // A line between two positions divides neither: where one stands against another is
-                // not a set of one position's values, so there is no class of one for a row to be
-                // owed in. The line itself is still a line and rows are still owed at it.
-                if (!(read instanceof LineRead.ALineBetweenTwoPositions)) {
-                    owed.add(new Owed(CoverageObligation.PARTITION, about));
-                }
-            }
+            // An order across the place it names, so rows are owed either side of it and the two
+            // sides have roles. A singling names the same place and has neither: the values on both
+            // sides of it are one class.
+            case ComparisonClaim.Cut _ -> owed.add(new Owed(CoverageObligation.BOUNDARY, about));
+            case ComparisonClaim.Singled _ ->
+                    owed.add(new Owed(CoverageObligation.SINGLETON, about));
             // Reached only by asking what an operator that compares nothing places. Every caller
             // walks comparisons; one arriving here has read something else as one.
             case ComparisonClaim.Nothing _ -> throw new IllegalArgumentException(
                     "a comparison that places nothing is not one this raises questions about");
+        }
+        // A line between two positions divides neither: where one stands against another is not a
+        // set of one position's values, so there is no class of one for a row to be owed in. The
+        // line itself is still a line and rows are still owed at it.
+        if (!(read instanceof LineRead.ALineBetweenTwoPositions)) {
+            owed.add(new Owed(CoverageObligation.PARTITION, about));
         }
         return new Some(owed);
     }
