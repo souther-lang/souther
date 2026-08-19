@@ -64,7 +64,22 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
         // a reader that met the first without turning it round drew its border on `-3a - 6b` — the
         // same four points under a name no author wrote, and a different line from the rule written
         // the other way.
-        return read.facesTheOtherWay() ? read.mirrored() : read;
+        return read.facesTheOtherWay(subjectOf(comparison, reads, symbols))
+                ? read.mirrored() : read;
+    }
+
+    /**
+     * The order a form's positions are named in, which settles what "the first coefficient" means.
+     *
+     * <p>By the position's own name, because that is the one thing about a form that does not depend
+     * on how it was written. A form is a map; the order its coefficients were recorded in is the
+     * order the author happened to add them in, and a report is a document compared against the one
+     * written last time.
+     */
+    static java.util.List<Map.Entry<NumericTerm, BigDecimal>> ordered(
+            LinearForm<NumericTerm> form) {
+        return form.coefs().entrySet().stream()
+                .sorted(java.util.Comparator.comparing(each -> each.getKey().toString())).toList();
     }
 
     /** {@code e} as an affine form over the behavior's positions, or null where it is not one. */
@@ -134,10 +149,40 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
         return new AffineReading(form.negate(), cut.negate(), turned(claim));
     }
 
-    /** Whether the quantity is written with every coefficient negative, which is the same statement
-     *  turned round. */
-    private boolean facesTheOtherWay() {
-        return form.coefs().values().stream().allMatch(c -> c.signum() < 0);
+    /**
+     * Whether this is the same statement written the other way round.
+     *
+     * <p>Which way a statement faces is the sign of one coefficient, and which coefficient is the
+     * question. Where the comparison's left side names a position, that one: {@code charge > ceiling}
+     * and {@code 3a - 6b <= 48} are lines about what the author put on the left, and deriving the
+     * subject where the source states it would rename half the borders in a report. Where it names
+     * none — {@code 48 >= 3a - 6b} — nothing is being kept, and the form's own order settles it.
+     *
+     * <p>Total either way, which is what makes it canonical. Settled by every coefficient being
+     * negative, {@code 48 >= 3a - 6b} faced neither way and kept the quantity {@code -3a + 6b} —
+     * the same line as {@code 3a - 6b <= 48} under a name no author wrote.
+     */
+    private boolean facesTheOtherWay(NumericTerm subject) {
+        BigDecimal first = subject == null ? null : form.coefs().get(subject);
+        return (first != null ? first : ordered(form).getFirst().getValue()).signum() < 0;
+    }
+
+    /** The position the comparison's left side names first, or null where it names none. */
+    private static NumericTerm subjectOf(Core.Binary comparison, InputReads reads,
+                                         Symbols symbols) {
+        LinearForm<NumericTerm> left = affine(comparison.left(), reads, symbols);
+        if (left == null || left.coefs().isEmpty()) {
+            return null;
+        }
+        for (souther.compiler.inputs.TermPath named
+                : GuardThresholds.mentionedIn(comparison.left(), reads, symbols)) {
+            for (NumericTerm atom : left.coefs().keySet()) {
+                if (atom.path().equals(named)) {
+                    return atom;
+                }
+            }
+        }
+        return null;
     }
 
     /** What the operator states once both sides are turned round. */

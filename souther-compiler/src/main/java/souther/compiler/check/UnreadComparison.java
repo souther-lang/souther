@@ -99,15 +99,38 @@ public final class UnreadComparison {
      * for a class to be about — what a reader would have to be given is a reading of the form, and
      * being sent after a relation sends them looking for a position the model never wrote.
      *
-     * <p>Which side each of them is written on is no part of it. {@code 3 * a + 6 * b <= 48} names
-     * two positions on one side and relates them exactly as {@code a < b} does — neither is divided
-     * by it, and which values of one are on which side depends on the other. Counted per side, such
-     * a rule came back as a form nobody could read, two tokens from a border drawn on it.
+     * <p><b>Asked of what the rule cuts, and of the sides only where that is unreadable.</b> Which
+     * side a position is written on is no part of whether a rule relates two of them: {@code 3 * a +
+     * 6 * b <= 48} puts both on one side and divides neither. What says so is the quantity the
+     * canonical form cuts, which each reader works out with its own atoms and its own environment —
+     * the same division of labour {@link Side} already has. Where the arithmetic reads nothing there
+     * is no quantity to count, and the sides answer: {@code a > b} over strings relates two
+     * positions on an order with no numbers, and {@code a * b > 5} names two and is stopped by
+     * neither of them.
+     *
+     * @param quantityIsOver the positions the canonical form's quantity is over, or null where the
+     *                       arithmetic read no form at all
      */
-    public static <K> BlockReason why(Side<K> left, Side<K> right) {
+    public static <K> BlockReason why(Side<K> left, Side<K> right,
+                                      Set<K> quantityIsOver) {
+        // What the rule cuts, where the arithmetic could be read at all. A quantity over
+        // more than one position divides none of them — which values of one are on which
+        // side depends on the others — and that is as true of `3a + 6b <= 48`, whose two
+        // sit on one side, as of `a < b`. Counted off the sides instead, the first came
+        // back as a form nobody could read; counted off how many positions the comparison
+        // names, `a * b > 5` came back as a relation when what stops it is the product.
+        if (quantityIsOver != null && quantityIsOver.size() > 1) {
+            return new BlockReason.ComparisonBetweenPositions();
+        }
+        return whatTheSidesSay(left, right);
+    }
+
+    /** The same, where the arithmetic named no quantity — which is every carrier whose
+     *  values do not count, and every form outside the affine fragment. */
+    private static <K> BlockReason whatTheSidesSay(Side<K> left, Side<K> right) {
         Set<K> named = new LinkedHashSet<>(left.positions());
         named.addAll(right.positions());
-        if (named.size() > 1) {
+        if (!left.positions().isEmpty() && !right.positions().isEmpty() && named.size() > 1) {
             return new BlockReason.ComparisonBetweenPositions();
         }
         // The side that names one, and the left where both do — which is the side a threshold would

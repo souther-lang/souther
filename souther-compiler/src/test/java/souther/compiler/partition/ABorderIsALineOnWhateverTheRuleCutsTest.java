@@ -424,6 +424,102 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
         assertTrue(report.contains("no row is at the OFF point f/3 * a + 6 * b = 51"), report);
     }
 
+    /**
+     * A form written the other way round is the same form, whichever way its coefficients sign.
+     *
+     * <p>Turned round only where every coefficient was negative, {@code 48 >= 3a - 6b} faced neither
+     * way and kept the quantity {@code -3a + 6b} at {@code -48} — the same line as
+     * {@code 3a - 6b <= 48}, under a name no author wrote and with an identity of its own.
+     */
+    @Test
+    void aFormWithMixedSignsIsTurnedRoundToo() {
+        String written = report(guarded(
+                "Int.subtract(Int.multiply(3, a.value), Int.multiply(6, b.value)) <= 48"));
+        String turned = report(guarded(
+                "48 >= Int.subtract(Int.multiply(3, a.value), Int.multiply(6, b.value))"));
+
+        assertTrue(written.contains("point f/3 * a - 6 * b = 48"), written);
+        assertTrue(turned.contains("point f/3 * a - 6 * b = 48"), turned);
+        assertFalse(turned.contains("-3 * a"), turned);
+    }
+
+    /**
+     * And the subject stays the one the author wrote where the source states it.
+     *
+     * <p>Canonical is not the same as derived. {@code charge > ceiling} is a line about the charge,
+     * and orienting every form by its positions' names would rename half the borders in a report to
+     * say the same thing backwards.
+     */
+    @Test
+    void theSubjectIsTheOneTheSourceNames() {
+        String report = report(guarded("b.value > a.value"));
+
+        assertTrue(report.contains("point f/b = a"), report);
+        assertFalse(report.contains("point f/a = b"), report);
+    }
+
+    /**
+     * A side of a border over an order that fills is looked at.
+     *
+     * <p>A side is met anywhere past its end, and any level that way witnesses it. Asked for the
+     * <em>neighbour</em> instead — which only an order that steps has — no level was looked at, and
+     * every side of every form over decimals was offered no row.
+     */
+    @Test
+    void aSideOfAFormOverAnOrderThatFillsIsOfferedARow() {
+        String rows = generated(dense("a.value * 2m + b.value * 4m <= 9m"));
+
+        assertTrue(rows.contains("D(0m), D(2.25m)"),
+                "the point where the form comes to nine:\n" + rows);
+        assertTrue(rows.contains("D(0m), D(2m)"),
+                "and a pair past it, which is what stands for the side the rows leave open:\n"
+                        + rows);
+    }
+
+    /**
+     * A search offers a value the rules admit, or it offers none and says so.
+     *
+     * <p>An end the rules exclude is not one they leave. Worked out from the numbers rather than
+     * asked of the carrier, {@code value > 0m} gave a lower end of zero, the row offered was the one
+     * the record refuses, and the report said every candidate had been rejected — which reads as the
+     * decoder having decided something about the edge.
+     *
+     * <p>What is not promised is that it finds one. This box holds a pair at every level of the
+     * form and the walk takes one value for a position it cannot enumerate and solves the last
+     * against it, so a value that leaves nothing for the last position to be ends the walk. The
+     * report says the search stopped, which is what happened.
+     */
+    @Test
+    void aSearchOffersAValueTheRulesAdmitOrOffersNone() {
+        String excluded = """
+                module example.excluded
+
+                data D = Decimal
+                    invariant value > 0m
+                    invariant value <= 100m
+
+                data No = { why: Int }
+                data Yes = { v: Int }
+                data Result = No | Yes
+
+                behavior f : (a: D, b: D) -> Result
+                    constructs No, Yes
+                let f (a, b) = {
+                    guard a.value * 2m + b.value * 4m <= 9m else No { why = 0 }
+                    Yes { v = 1 }
+                }
+
+                example f
+                    | "under" : (D(1m), D(1m)) -> Yes { v = 1 }
+                """;
+        String rows = generated(excluded);
+
+        assertFalse(rows.contains("D(0m)"),
+                "zero is no value of `D`, so no row is offered at it:\n" + rows);
+        assertFalse(report(excluded).contains("was refused"),
+                "and nothing was handed to the decoder to refuse:\n" + report(excluded));
+    }
+
     private static String report(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());

@@ -67,6 +67,9 @@ record ComparedTerms(NumericTerm on, NumericTerm against, Carrier carrier,
             NumericTerm on = GuardThresholds.termOf(comparison.left(), reads, symbols);
             NumericTerm against = GuardThresholds.termOf(comparison.right(), reads, symbols);
             if (on != null && against != null) {
+                // The subject is the one the author wrote on the left, which the canonical form
+                // keeps too. Which of the two a line is named by is not something to derive where
+                // the source settles it: `charge > ceiling` is a line about the charge.
                 return new ComparedTerms(on, against, carrier, holdsAtTheLine(comparison.op()),
                         holdsAtTheLine(comparison.op()) == !onIsAbove(comparison.op()), Count.ZERO);
             }

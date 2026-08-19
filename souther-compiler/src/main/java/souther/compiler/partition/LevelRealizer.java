@@ -138,7 +138,7 @@ public final class LevelRealizer {
         boolean whole = levels.neighbour(new Level.ACount(Count.ZERO), Towards.ABOVE).isPresent();
         boolean bounded = true;
         for (Level level : levelsToTry(levels, over.where())) {
-            Search search = new Search(terms, whole);
+            Search search = new Search(terms, over.of(), whole);
             Map<NumericTerm, Place> found = search.solve(level.asACount());
             if (found != null) {
                 return new Realization.Found(found);
@@ -179,7 +179,10 @@ public final class LevelRealizer {
         List<Level> out = new java.util.ArrayList<>();
         Level at = from;
         for (int step = 0; step < LEVELS_OF_A_SIDE; step++) {
-            Optional<Level> past = levels.neighbour(at, towards);
+            // Some level past this one, which an order whose values fill answers as readily as one
+            // that steps. Asked for the neighbour, a side of a border over decimals had no level to
+            // look at and came back saying the search had stopped without one having run.
+            Optional<Level> past = levels.somethingBeyond(at, towards);
             if (past.isEmpty()) {
                 break;
             }
@@ -208,13 +211,16 @@ public final class LevelRealizer {
     private final class Search {
 
         private final List<Map.Entry<NumericTerm, java.math.BigDecimal>> terms;
+        private final Carrier carrier;
         private final boolean whole;
         private final Place[] at;
         private int taken;
         private boolean everyEndKnown = true;
 
-        Search(List<Map.Entry<NumericTerm, java.math.BigDecimal>> terms, boolean whole) {
+        Search(List<Map.Entry<NumericTerm, java.math.BigDecimal>> terms, Carrier carrier,
+               boolean whole) {
             this.terms = terms;
+            this.carrier = carrier;
             this.whole = whole;
             this.at = new Place[terms.size()];
         }
@@ -276,11 +282,21 @@ public final class LevelRealizer {
             if (low == null || high == null || !whole) {
                 // Not a position this can walk. One nothing bounds has no ends to run between; one
                 // whose values fill has no next value to step to, so there is no enumeration of it
-                // at all. Either way this takes one value and goes on, and says that what it walked
-                // was not the whole of the box — a proof may only come out of a walk that was.
+                // at all. Either way this takes one value the rules admit and goes on, and says that
+                // what it walked was not the whole of the box — a proof may only come out of a walk
+                // that was.
+                //
+                // Which value is the carrier's answer and not this one's. Worked out from the
+                // numbers, an end the rules exclude was taken as one they leave and an end above was
+                // not consulted at all, so the row offered was one the position refuses and the
+                // report said every candidate had been rejected.
                 everyEndKnown = false;
-                at[i] = low != null ? new Count(low) : Count.ZERO;
-                return walk(i + 1, owed.subtract(coef.multiply(Count.number(at[i]).at())));
+                Place inside = carrier.somethingInside(within.min(), within.max());
+                if (inside == null || !(inside instanceof Count taken)) {
+                    return false;
+                }
+                at[i] = taken;
+                return walk(i + 1, owed.subtract(coef.multiply(taken.at())));
             }
             for (java.math.BigDecimal x = low; x.compareTo(high) <= 0;
                     x = x.add(java.math.BigDecimal.ONE)) {
@@ -296,7 +312,10 @@ public final class LevelRealizer {
         }
 
         /**
-         * One end of what the rules leave a position, as a number this can start or stop at.
+         * One end of what the rules leave a position, as a whole number this can start or stop at.
+         *
+         * <p>Asked only where the position's values step, which is the only case an enumeration
+         * exists in. Where they fill, what a value inside the ends is is the carrier's answer.
          *
          * <p>Rounded inwards and never outwards, and the excluded end excluded. A bound of
          * {@code > 0} leaves one, not zero; a bound of {@code >= 2.4} over whole numbers leaves
@@ -309,9 +328,6 @@ public final class LevelRealizer {
                 return null;
             }
             java.math.BigDecimal number = count.at();
-            if (!whole) {
-                return number;
-            }
             java.math.BigDecimal onTheGrid = number.setScale(0,
                     low ? java.math.RoundingMode.CEILING : java.math.RoundingMode.FLOOR);
             // An end the rules exclude, already on the grid, is one value further in.
@@ -446,10 +462,5 @@ public final class LevelRealizer {
             case Level.OnACarrier on -> on.at();
             case Level.ACount count -> count.at();
         };
-    }
-
-    /** A count as a level, for a caller holding one. */
-    public static Level at(Count count) {
-        return new Level.ACount(count);
     }
 }

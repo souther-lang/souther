@@ -833,59 +833,6 @@ final class Coverages {
      */
     private enum Met { YES, NO, UNREADABLE, UNDECIDED }
 
-    /**
-     * Whether a row wrote the boundary value <em>and</em> got the comparison that cares about it to
-     * produce a value.
-     *
-     * <p>Both, because either alone is a different claim. A row can hand a behavior exactly 100000 and
-     * take an earlier branch that never reaches {@code cost <= 100000}, and counting that as having
-     * tried the boundary would report a rule as exercised that nothing has run.
-     *
-     * <p>Asked of the comparison's own site and of no arm. A condition stops as soon as its answer is
-     * settled, so which arm a row landed in is not an answer about which of the condition's
-     * comparisons ran: under {@code A && B} the arm the condition failed on holds the rows that made
-     * {@code B} false and the rows that never reached {@code B}. Reading the arms here credited the
-     * second kind and could not credit the first.
-     */
-    private static Met metAt(Axis axis, BehaviorInputs where, List<RowOutcome> rows,
-                             java.util.function.Predicate<Place> holds,
-                             java.util.OptionalInt site) {
-        boolean unreadable = false;
-        for (RowOutcome row : rows) {
-            switch (readingFor(axis, where, row)) {
-                case NumericTerm.Reading.Missing _ -> unreadable = true;
-                case NumericTerm.Reading.NotNumber _ -> { }
-                case NumericTerm.Reading.Number number -> {
-                    if (holds.test(number.value()) && site.stream().allMatch(litBy(row)::contains)) {
-                        return Met.YES;
-                    }
-                }
-            }
-        }
-        return unreadable ? Met.UNREADABLE : Met.NO;
-    }
-
-    /**
-     * What this row put on the line's own term, kept as the three answers it is.
-     *
-     * <p>Asked of the term and not of the shape of what sits at the position. A boundary is on a
-     * number, and which number a value carries is the term's to say: the content of a location where
-     * the line is on that, and how long the string is where it is on that. Read as "is this
-     * observation a number", a string was unreadable at every position and every length boundary was
-     * undecided for every row.
-     *
-     * <p>The three are kept apart here rather than folded into a number-or-null. An observation the
-     * run could not read leaves this line undecided, because the row that was cut short may be the
-     * row at the value. A value that was read and is not a number of this term does not: it is a row
-     * that is not at this boundary, and calling it undecided would report a term that does not fit
-     * its position as a row nobody could read — which is the answer {@code Intervals} already gives
-     * a class asked the same question, and it has to be the same answer.
-     */
-    private static NumericTerm.Reading readingFor(Axis axis, BehaviorInputs where, RowOutcome row) {
-        return axis.term().read(where.valueAt(row, axis.path()),
-                axis.term().carrierAt(axis.type(), where.symbols()));
-    }
-
     private Coverages() {}
 
     /**

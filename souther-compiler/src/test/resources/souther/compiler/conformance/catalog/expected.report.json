@@ -461,10 +461,10 @@
         "notDerivable" : [ "指示.記録時刻" ],
         "notRead" : [ {
           "position" : "指示.受付日",
-          "reason" : "unsupported_partition_shape"
+          "reason" : "unsupported_syntax"
         }, {
           "position" : "指示.締切",
-          "reason" : "unsupported_partition_shape"
+          "reason" : "unsupported_syntax"
         }, {
           "position" : "指示.集荷時刻",
           "reason" : "unsupported_syntax"

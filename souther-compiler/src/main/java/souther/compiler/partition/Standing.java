@@ -60,5 +60,5 @@ public sealed interface Standing {
      * is.
      */
     record OfAForm(souther.compiler.numeric.NumericDomain.LinearForm<NumericTerm> form,
-                   LevelSpace levels, Criterion where) implements Standing {}
+                   Carrier of, LevelSpace levels, Criterion where) implements Standing {}
 }

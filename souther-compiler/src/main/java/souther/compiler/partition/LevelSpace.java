@@ -68,6 +68,18 @@ public interface LevelSpace {
     Optional<Level> neighbour(Level from, Towards towards);
 
     /**
+     * Some level this quantity takes strictly past {@code from}, the way {@code towards} says, or
+     * empty where it takes none.
+     *
+     * <p>A witness of the side and not the side itself: a row at any level past the end is at the
+     * point, and the one offered here is a candidate. Which is why it is apart from
+     * {@link #neighbour} — a side wants any level that way and a point wants the one next to it, and
+     * an order whose values fill has the first and not the second. Asked for the neighbour, every
+     * side of every border over decimals came back with nothing tried.
+     */
+    Optional<Level> somethingBeyond(Level from, Towards towards);
+
+    /**
      * Whether this quantity takes any value at all strictly past {@code from}, the way
      * {@code towards} says.
      *
@@ -128,6 +140,19 @@ public interface LevelSpace {
                 Optional<Place> next = towards == Towards.ABOVE
                         ? steps.successor(placeOf(from)) : steps.predecessor(placeOf(from));
                 return next.map(at -> new Level.OnACarrier(carrier, at));
+            }
+
+            @Override
+            public Optional<Level> somethingBeyond(Level from, Towards towards) {
+                Optional<Level> next = neighbour(from, towards);
+                if (next.isPresent() || !anythingBeyond(from, towards)) {
+                    return next;
+                }
+                Endpoint past = Endpoint.exclusive(placeOf(from));
+                Place inside = towards == Towards.ABOVE
+                        ? carrier.somethingInside(past, extent.high())
+                        : carrier.somethingInside(extent.low(), past);
+                return Optional.ofNullable(inside).map(at -> new Level.OnACarrier(carrier, at));
             }
 
             @Override
@@ -250,6 +275,14 @@ public interface LevelSpace {
                 countOf(from);
                 return Optional.empty();
             }
+
+            /** Only where they meet is a level here, so there is none past it — and both sides of
+             *  it are still inhabited, which {@link #anythingBeyond} is what says. */
+            @Override
+            public Optional<Level> somethingBeyond(Level from, Towards towards) {
+                countOf(from);
+                return Optional.empty();
+            }
         };
     }
 
@@ -267,6 +300,24 @@ public interface LevelSpace {
         public boolean anythingBeyond(Level from, Towards towards) {
             countOf(from);
             return true;
+        }
+
+        /**
+         * The next level where the order steps, and one step of the numbers themselves where it does
+         * not.
+         *
+         * <p>Any level past the end witnesses the side, so where the order names no next one this
+         * offers a number that is past it and says no more than that. Offered as the item it would
+         * be wrong; offered as a candidate for a side, one number past is as good as any other.
+         */
+        @Override
+        public Optional<Level> somethingBeyond(Level from, Towards towards) {
+            Optional<Level> next = neighbour(from, towards);
+            if (next.isPresent()) {
+                return next;
+            }
+            return Optional.of(new Level.ACount(countOf(from)
+                    .plus(towards == Towards.ABOVE ? 1 : -1)));
         }
 
         static Count countOf(Level level) {

@@ -9,7 +9,6 @@ import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * What a border is a border <em>of</em>: the quantity a rule cuts.
@@ -327,7 +326,7 @@ public sealed interface BorderQuantity {
 
         @Override
         public Standing standingAt(Criterion where) {
-            return new Standing.OfAForm(form, levels(), where);
+            return new Standing.OfAForm(form, of, levels(), where);
         }
 
         @Override
@@ -345,7 +344,8 @@ public sealed interface BorderQuantity {
         @Override
         public String left() {
             StringBuilder out = new StringBuilder();
-            for (Map.Entry<NumericTerm, java.math.BigDecimal> each : ordered()) {
+            for (Map.Entry<NumericTerm, java.math.BigDecimal> each
+                    : AffineReading.ordered(form)) {
                 java.math.BigDecimal coef = each.getValue();
                 if (out.isEmpty()) {
                     out.append(coef.signum() < 0 ? "-" : "");
@@ -373,11 +373,6 @@ public sealed interface BorderQuantity {
         @Override
         public BoundaryTarget.Shape shape() {
             return BoundaryTarget.Shape.OVER_A_FORM;
-        }
-
-        private java.util.List<Map.Entry<NumericTerm, java.math.BigDecimal>> ordered() {
-            return form.coefs().entrySet().stream()
-                    .sorted(java.util.Comparator.comparing(e -> e.getKey().toString())).toList();
         }
 
         /** The step the form's values move in: the greatest common divisor of its coefficients,
@@ -443,10 +438,5 @@ public sealed interface BorderQuantity {
      *  one belong to the measure, and a quantity only asks what stands at a path. */
     interface Observation {
         ObservedValue at(TermPath path);
-    }
-
-    /** A number as a level of this quantity, for a caller holding one rather than a level. */
-    static Level at(Count count) {
-        return new Level.ACount(count);
     }
 }

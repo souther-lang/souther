@@ -237,7 +237,29 @@ public final class GuardThresholds {
     static BlockReason why(Core.Binary comparison, InputReads reads,
                            Symbols symbols) {
         return UnreadComparison.why(sideOf(comparison.left(), reads, symbols),
-                sideOf(comparison.right(), reads, symbols));
+                sideOf(comparison.right(), reads, symbols),
+                quantityOf(comparison, reads, symbols));
+    }
+
+    /**
+     * The positions the quantity this comparison cuts is over, or null where the arithmetic read no
+     * form at all.
+     *
+     * <p>This reader's own, because the atoms are: a body names a position by what it reads of a
+     * parameter. What is done with the answer is {@link UnreadComparison}'s, so a clause of the same
+     * shape two declarations away is described in the same words.
+     */
+    private static java.util.Set<TermPath> quantityOf(Core.Binary comparison, InputReads reads,
+                                                      Symbols symbols) {
+        AffineReading read = AffineReading.of(comparison, reads, symbols);
+        if (read == null) {
+            return null;
+        }
+        java.util.Set<TermPath> over = new java.util.LinkedHashSet<>();
+        for (NumericTerm atom : read.form().coefs().keySet()) {
+            over.add(atom.path());
+        }
+        return over;
     }
 
     /**
