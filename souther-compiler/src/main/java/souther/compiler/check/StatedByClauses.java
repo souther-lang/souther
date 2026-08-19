@@ -90,18 +90,6 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
                 OrderedReading.of(terms, at, byName, symbols), terms, at, byName);
     }
 
-    /**
-     * Where the readings took {@code clause} in, said by them.
-     *
-     * <p>A reading of its own, so what comes back is what this clause was adopted at and not what
-     * everything before it was. The two languages are two accounts and either will do: a comparison
-     * one of them has no word for is read whole by the other, and asking for one to hold all of a
-     * clause would call a clause that was read unread.
-     */
-    static Set<FactSubject> adoptedIn(Core clause, Terms terms, Denotations at,
-                                      Map<FactSubject, Type> byName, Symbols symbols) {
-        return readingOf(terms, at, byName, symbols).read(clause, true).adopted();
-    }
 
 
 

@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.ProjectionEvidence;
 import souther.compiler.check.RuleAccounting;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
@@ -53,6 +54,17 @@ public sealed interface Position permits ReadPosition {
     /** What the value the position sits in projects onto it, or null where it projects nothing. */
     NumericDomain.Bounds narrowedEnds();
 
+    /**
+     * Where this position stops once every rule reaching the value it sits in has been taken in.
+     *
+     * <p>Beside {@link #narrowedEnds} and not the same question. That one is what the value this
+     * sits in projects onto it, which a newtype's own value has nobody to be projected onto it by;
+     * this is where the position starts and stops, whatever placed the ends and whatever moved them
+     * afterwards. A caller deciding where a line actually falls wants this, because a clause placing
+     * an end is not a clause that read the ones written beside it.
+     */
+    NumericDomain.Bounds rangeLeft();
+
     /** Which declarations' clauses are holding the end on the side asked for. */
     List<TypeSymbol> narrowedBy(boolean lower);
 
@@ -61,20 +73,20 @@ public sealed interface Position permits ReadPosition {
     boolean nothingExists();
 
     /**
-     * Whether every rule of the value this position sits in was read into a bound.
+     * How much of what the rules say the bounds of the value this position sits in are able to
+     * state.
      *
-     * <p>Asked of the whole value and not of this position, because that is what it is about: a
-     * rule this compiler could not read is a way the value can be refused wherever in it the rule
-     * is written, so an edge at one of its positions is only as certain as the reading of all of
+     * <p>Asked of the whole value and not of this position, because that is what it is about: a rule
+     * the bounds cannot express is a way the value can be refused wherever in it the rule is
+     * written, so an edge at one of its positions is only as certain as the projection of all of
      * them.
      *
-     * <p>Read and not answered. Whether a rule was taken in by something is the wider question and
-     * is not this one: {@code invariant nonzero = value /= 0} is read whole by the reading that
-     * turns clauses into sets of values, and the edge at 0 is a row nobody can write all the same.
-     * An edge is promised where the range is exact, which is where every rule became a bound
+     * <p>Not whether a rule was answered, which is the wider question and is not this one:
+     * {@code invariant nonzero = value /= 0} is read whole by the reading that turns clauses into
+     * sets of values, and the edge at 0 is a row nobody can write all the same
      * ({@link souther.compiler.check.RuleAccounting} answers the other one).
      */
-    boolean everyRuleOfTheValueWasRead();
+    ProjectionEvidence projection();
 
     /** What crossing the position's distinctions with the rules came to, as the reading found it. */
     ReadingResult reading();

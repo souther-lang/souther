@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.core.Core;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.TypeSymbol;
@@ -28,11 +29,11 @@ import java.util.Set;
  * {@code endsAt} the day has no room for. Reading the field's type alone names values the record
  * refuses.
  *
- * <p>The bounds are as wide as what the rules could be read as, and only that. {@link #allRulesRead}
- * says whether that was all of them: a clause outside the fragment — a call, a pattern, a sum of
- * three terms — narrows nothing here, so where one is present these bounds admit values nothing can
- * build. Wide is the safe direction for deciding a value is impossible and the wrong direction for
- * deciding that an edge can be written, which is why the two answers are handed over together.
+ * <p>The bounds are as wide as what the rules could be read as, and only that. {@link #projection}
+ * says how much of them that was: a clause outside the fragment — a call, a pattern, a sum of three
+ * terms — narrows nothing here, so where one is present these bounds admit values nothing can build.
+ * Wide is the safe direction for deciding a value is impossible and the wrong direction for deciding
+ * that an edge can be written, which is why the two answers are handed over together.
  */
 public final class FieldDomains {
 
@@ -62,8 +63,9 @@ public final class FieldDomains {
      */
     public static final FieldDomains NONE =
             new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), List.of(), List.of(), Map.of(),
-                    new ReadingEvidence(), Map.of(), true, Set.of(THE_VALUE), NO_POSITIONS,
-                    ConstraintState.top(), null, null, null, Map.of(), () -> true);
+                    Map.of(), new ReadingEvidence(), Map.of(), Set.of(THE_VALUE), NO_POSITIONS,
+                    ConstraintState.top(), null, null, null, Map.of(), Set.of(THE_VALUE), Map.of(),
+                    Map.of(), Map.of());
 
     private final Map<String, NumericDomain.Bounds> byField;
     /** The ends the record's own clauses place, which is a different question from the range they
@@ -74,6 +76,9 @@ public final class FieldDomains {
     private final List<Unread> unread;
     /** What each clause reaching this value raises, keyed on the rule it is. */
     private final Map<RuleRef, Required> raised;
+    /** The same per part of each clause. A reader that found one conjunct wanting names what that
+     *  conjunct is about, and not what the conjunct written beside it raised. */
+    private final Map<RuleRef, Map<Core, Required>> raisedByPart;
     /** Which readings took each clause in, as each of them said so. */
     private final ReadingEvidence took;
     /** The accounting, worked out once. Every position of a value asks the same question of it. */
@@ -90,13 +95,13 @@ public final class FieldDomains {
      * A position not here is one the reading took every rule about into the set — see
      * {@link #admits}. */
     private final Map<String, UnreadReason> unreadByField;
-    /** Whether the reading that produced these bounds ran to the end. Kept because it is what that
-     * reading knows about itself: a walk that fell over produces the same empty domain as a value
-     * with no rules, and a second reading asked afterwards does not take the same path. */
-    private final boolean seeded;
     /** Where a clause of this value did not reach the readings at all, as the paths the stops
      * happened at — see {@link #admits}. */
     private final Set<String> notGathered;
+    /** And of those, the positions a construction has to make a value at. What a position admits is
+     *  short wherever a rule about it went unread; whether an edge of it may be promised is about
+     *  what every value of this has to satisfy, and a rule inside an optional is not that. */
+    private final Set<String> unreadOfEveryValue;
     /** Where each position of this value sits, in the order the value declares them. What a domain
      * holds is what a reading called a position; which place in the value that is, is known here. */
     private final SequencedMap<FactSubject, String> positions;
@@ -109,21 +114,29 @@ public final class FieldDomains {
     private final Hir.Data data;
     private final Symbols symbols;
     private final Map<String, Count> settled;
-    private final java.util.function.BooleanSupplier reading;
-    private volatile Boolean everyRuleRead;
+    /** The atom a range is taken of at each position: the position's own value, and the count of
+     *  one where a count is taken. A position with neither has no range to be exact about. */
+    private final Map<String, FactSubject> atomAt;
+    private final Map<String, FactSubject> countAt;
+    /** What the reading that builds the bounds made of each part of each rule. Per part, because a
+     *  rule is represented where every part of it is. */
+    private final Map<RuleRef, Map<Core, InvariantChecker.PartRead>> readBy;
 
     private FieldDomains(Map<String, NumericDomain.Bounds> byField,
                          Map<String, NumericDomain.Bounds> heldByField,
                          Map<String, ValueSet> admittedByField,
                          Map<String, UnreadReason> unreadByField,
                          List<InvariantChecker.Direct> directs, List<Unread> unread,
-                         Map<RuleRef, Required> raised, ReadingEvidence took,
+                         Map<RuleRef, Required> raised,
+                         Map<RuleRef, Map<Core, Required>> raisedByPart, ReadingEvidence took,
                          Map<String, List<TypeSymbol>> narrowers,
-                         boolean seeded, Set<String> notGathered,
+                         Set<String> notGathered,
                          SequencedMap<FactSubject, String> positions,
                          ConstraintState constraints, TypeSymbol named,
                          Hir.Data data, Symbols symbols, Map<String, Count> settled,
-                         java.util.function.BooleanSupplier reading) {
+                         Set<String> unreadOfEveryValue,
+                         Map<String, FactSubject> atomAt, Map<String, FactSubject> countAt,
+                         Map<RuleRef, Map<Core, InvariantChecker.PartRead>> readBy) {
         this.byField = byField;
         this.heldByField = heldByField;
         this.admittedByField = admittedByField;
@@ -131,9 +144,9 @@ public final class FieldDomains {
         this.directs = directs;
         this.unread = unread;
         this.raised = raised;
+        this.raisedByPart = raisedByPart;
         this.took = took;
         this.narrowers = narrowers;
-        this.seeded = seeded;
         this.notGathered = notGathered;
         this.positions = positions;
         this.constraints = constraints;
@@ -141,7 +154,10 @@ public final class FieldDomains {
         this.data = data;
         this.symbols = symbols;
         this.settled = settled;
-        this.reading = reading;
+        this.unreadOfEveryValue = unreadOfEveryValue;
+        this.atomAt = atomAt;
+        this.countAt = countAt;
+        this.readBy = readBy;
     }
 
     /**
@@ -292,13 +308,12 @@ public final class FieldDomains {
                 named(seeded, field).forEach(term -> placeOf.putIfAbsent(term, field)));
         return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), Map.copyOf(admitted),
                 Map.copyOf(unread), seeded.reading().directs(), seeded.reading().unread(),
-                seeded.reading().raised(), seeded.took(), seeded.reading().narrowers(),
-                seeded.everyClauseRead(), seeded.notGathered(), placeOf,
+                seeded.reading().raised(), seeded.reading().raisedByPart(), seeded.took(),
+                seeded.reading().narrowers(),
+                seeded.notGathered(), placeOf,
                 seeded.constraints(), named, data, symbols, settled,
-                // Classifying the rules is a second reading of every one of them. Asked when the
-                // answer is, and not before: a caller filling a row wants the bounds and nothing
-                // else.
-                () -> InvariantChecker.everyRuleRead(named, data, symbols));
+                seeded.unreadOfEveryValue(), seeded.atoms(), seeded.held(),
+                seeded.readBy());
     }
 
     /**
@@ -618,10 +633,9 @@ public final class FieldDomains {
         // value with no rules — so what the gathering knows about itself is asked, rather than
         // guessed from the maps being empty.
         //
-        // Not `allRulesRead`, and not the flag under it. That one is one reading's account of the
-        // clauses it was handed, and a clause it could not turn into an obligation is one this
-        // reading may have taken in whole; borrowing it would settle this reading's completeness by
-        // a fragment that is not this reading's.
+        // Not `projection`, which is what the bounds state of the rules. A clause the interval
+        // algebra holds nothing of may be one this reading took in whole, so borrowing that answer
+        // would settle this reading's completeness by a reading that is not this one.
         return everyRuleReachedAt(path) ? AdmissibleSet.complete(values)
                 : AdmissibleSet.partial(values, UnreadReason.NOT_REACHED);
     }
@@ -682,33 +696,145 @@ public final class FieldDomains {
     }
 
     /**
-     * Whether every rule of this value was taken into these bounds.
+     * What every rule reaching this value leaves the position at {@code path}, the value's own
+     * position included.
      *
-     * <p>Asked of the value and not of one position in it, because what it licenses is existential: a
-     * row at an edge is a whole value with that edge in it, and a rule about some other position can
-     * refuse to be part of any such value. Two labels on one record that cannot both be written leave
-     * every number beside them with edges nothing can reach, however plainly the numbers themselves
-     * were read.
-     *
-     * <p>The narrower question — whether the bound at one position was derived losslessly — is a
-     * different one and has no caller. It would say that a bound is approximate; this says whether
-     * anything can be written at it, and only the second decides whether a row is owed.
-     *
-     * <p>Where this is false the bounds still hold: every value they exclude is truly excluded, and a
-     * value they admit may be one nothing can build. What settles such an edge is a witness.
+     * <p>A different question from {@link #at}, which is what the value a position sits in projects
+     * onto it — a sibling's business, and a newtype's value has no siblings, which is why that one
+     * has nothing to say about it. This is where the position stops once everything written about it
+     * has been taken in, and a caller that has to know where a line actually falls wants this: a
+     * clause placing an end at 0 beside one that takes the 0 away leaves a position whose first
+     * value is 1, and the end as written is not where the position starts.
      */
-    public boolean allRulesRead() {
-        // What the reading that made these bounds knows about itself comes first. A second reading
-        // asked afterwards walks the declarations and not the same path, so it can come back clean
-        // about a projection that was never computed.
-        if (!seeded || !constraints.numbers().projectionIsLossless()) {
-            return false;
-        }
-        Boolean read = everyRuleRead;
-        if (read == null) {
-            read = reading.getAsBoolean();
-            everyRuleRead = read;
-        }
-        return read;
+    /** What a cause is filed under, so that two runs print them the same way round. */
+    private static String orderOf(ProjectionEvidence.Cause cause) {
+        return switch (cause) {
+            case ProjectionEvidence.Cause.Unavailable it -> "1 " + it.path();
+            case ProjectionEvidence.Cause.Unrepresented it ->
+                    "2 " + it.rule().named() + " " + it.path();
+            case ProjectionEvidence.Cause.Lossy it ->
+                    "3 " + it.rule().named() + " " + it.atom() + " " + it.losses();
+        };
     }
+
+    public NumericDomain.Bounds leftAt(String path, boolean measured) {
+        // The axis the caller is on, and not whichever of the two this position happens to have. A
+        // `String` is measured two ways — its own order, and the length of it — and answering with
+        // the wrong one clamps a line drawn on one axis by the range of the other.
+        FactSubject atom = measured ? countAt.get(path) : atomAt.get(path);
+        return atom == null ? null : constraints.numbers().boundsOf(atom);
+    }
+
+    /**
+     * How much of what the rules say these bounds are able to state.
+     *
+     * <p>Asked of the value and not of one position in it, because what it licenses is existential:
+     * a row at an edge is a whole value with that edge in it, and a rule about some other position
+     * can refuse to be part of any such value. Two labels on one record that cannot both be written
+     * leave every number beside them with edges nothing can reach, however plainly the numbers
+     * themselves were read.
+     *
+     * <p>Read off the reading that made the bounds and not off a second walk of the declarations.
+     * A walk classifying each rule by its shape asks what could have become a bound, which is an
+     * answer about this compiler's interval algebra wearing the model's words — and it went on
+     * saying a rule was unread where the algebra had taken it in whole.
+     *
+     * <p>Where this is not exact the bounds still hold: every value they exclude is truly excluded,
+     * and a value they admit may be one nothing can build. What settles such an edge is a witness.
+     */
+    public ProjectionEvidence projection() {
+        List<ProjectionEvidence.Cause> causes = new ArrayList<>();
+        // A rule that never arrived first. Which rule it was is not known here and there is nothing
+        // to say: what a stop leaves is a position and everything under it.
+        for (String stopped : unreadOfEveryValue) {
+            causes.add(new ProjectionEvidence.Cause.Unavailable(stopped));
+        }
+        // Every position of this value, by the atom a range of it is taken under. A rule that
+        // narrowed one of these is in the bounds; a rule that narrowed only an atom standing for an
+        // arithmetic this cannot carry narrowed nothing anybody reads off them.
+        Set<FactSubject> ranged = new LinkedHashSet<>(atomAt.values());
+        ranged.addAll(countAt.values());
+        // Asked of every rule the reading was handed, and not of the questions the rules raise. A
+        // pattern raises none — which values may stand somewhere and where a line falls are not what
+        // it is about — and it is still a way the value can be refused at an edge of the number
+        // beside it.
+        readBy.forEach((rule, byPart) -> {
+            // A part at a time, and any one of them is enough. A conjunct the bounds hold nothing of
+            // leaves the range wider than the rule however well the conjunct written beside it went,
+            // and a set unioned over the whole clause answers for the failing half with the other
+            // one — which is the same shape as reading a clause's evidence for one of its parts.
+            Set<String> said = new LinkedHashSet<>();
+            byPart.forEach((part, read) -> {
+                // A conjunction says what its conjuncts say, and they are here beside it. Asked of
+                // the conjunction as well, a rule whose halves are each held in a language of their
+                // own — a date bounded at both ends, read by the comparison rather than by the
+                // interval algebra — answers for neither half and fails on the node above them.
+                if (part instanceof Core.Binary b && b.op() == Hir.BinOp.AND
+                        && byPart.containsKey(b.left()) && byPart.containsKey(b.right())) {
+                    return;
+                }
+                if (read.narrowable().stream().anyMatch(ranged::contains)) {
+                    return;
+                }
+                // Or the end this part placed, which is the same part in the bounds said by the
+                // other reading of it: an ordered value that is not a number takes its range from
+                // the comparison rather than from the interval algebra, and counting only the
+                // algebra calls a bounded `Date` a rule the bounds do not hold — and takes every
+                // boundary beside it down with it.
+                if (directs.stream().anyMatch(d -> d.part() == part)) {
+                    return;
+                }
+                // What this part is about, and not what the rule is. A conjunction is one rule the
+                // author wrote and what it raises is what its conjuncts raise together, so a reader
+                // reaching for the rule's questions here would name the positions of the conjunct
+                // written beside this one — the half the bounds do hold — among the ones they do
+                // not.
+                Map<Core, Required> byPartRaised = raisedByPart.get(rule);
+                Required required = byPartRaised == null ? null : byPartRaised.get(part);
+                if (required != null) {
+                    required.obligations().forEach(owed -> said.add(owed.subject().path()));
+                }
+                // A part that raised no question is about the value it is written on, which is what
+                // the empty path is.
+                if (required == null || required.obligations().isEmpty()) {
+                    said.add(THE_VALUE);
+                }
+            });
+            said.forEach(path ->
+                    causes.add(new ProjectionEvidence.Cause.Unrepresented(rule, path)));
+        });
+        // And what the algebra was given and what it projects does not hold.
+        //
+        // Asked of the projection and of nothing else. A form neither an interval nor a difference
+        // holds is kept as written and marked lost for exactly that reason, and asking the whole
+        // state whether it still holds such a form is asking the form to stand on itself — every
+        // rule the projection dropped comes back proven. Asked of every form the algebra was handed
+        // rather than of the losses it recorded at the time: a loss is a fact about the step it
+        // happened at, the domain holds which kinds an atom has and not how many times each
+        // happened, and a second hole at an atom that already has one is a loss nothing can see.
+        Set<ProjectionEvidence.Cause.Lossy> lossy = new LinkedHashSet<>();
+        readBy.forEach((rule, byPart) -> byPart.values().forEach(read -> {
+            for (Predicates.Constraint each : read.stated()) {
+                if (constraints.numbers().projectionEntails(each.form(), each.rel())) {
+                    continue;
+                }
+                for (FactSubject atom : each.atoms()) {
+                    Set<NumericDomain.Loss> losses = constraints.numbers().lossesAt(atom);
+                    if (!losses.isEmpty()) {
+                        lossy.add(new ProjectionEvidence.Cause.Lossy(rule, atom, losses));
+                    }
+                }
+            }
+        }));
+        causes.addAll(lossy);
+        // In an order that does not move between runs. Parts are keyed by the node the tree holds,
+        // which is an identity, and a map keyed on one iterates by where the addresses landed — so
+        // a value with two conjuncts short of the bounds printed its two causes in whichever order
+        // this run happened to give them. Sorted rather than kept in insertion order, because the
+        // causes come from three producers and there is no one order they arrive in.
+        causes.sort(java.util.Comparator.comparing(FieldDomains::orderOf));
+        return causes.isEmpty() ? new ProjectionEvidence.Exact()
+                : new ProjectionEvidence.Approximate(causes);
+    }
+
 }

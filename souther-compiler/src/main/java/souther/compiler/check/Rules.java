@@ -74,6 +74,22 @@ public sealed interface Rules {
     }
 
     /**
+     * How much of what the rules say the bounds these leave are able to state.
+     *
+     * <p>The same two answers this type exists to keep apart, asked of a projection. A value of a
+     * kind that carries no clause has no rule for a projection to have been short of, so its bounds
+     * state everything there was — read off {@link FieldDomains#NONE} instead, which answers as a
+     * caller that stopped, every plain {@code String} in every model would be a position no edge
+     * could be promised at.
+     */
+    default ProjectionEvidence projection() {
+        return switch (this) {
+            case Read read -> read.domains().projection();
+            case NoneWritten _ -> new ProjectionEvidence.Exact();
+        };
+    }
+
+    /**
      * The numbers, ends and narrowings these rules leave.
      *
      * <p>{@link FieldDomains#NONE} where nothing was written, which is what it says of those: no

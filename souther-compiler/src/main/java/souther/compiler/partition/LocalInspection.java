@@ -40,7 +40,7 @@ final class LocalInspection {
         List<PartitionClass> classes =
                 PartitionClasses.of(position.obligationCases(), position.view(), symbols);
         DeclaredBounds.Bounds axis = position.nothingExists() ? null
-                : axisBounds(position.ownEnds(), position.narrowedEnds());
+                : axisBounds(position.ownEnds(), position.rangeLeft());
         List<Cut> cuts = position.nothingExists() ? List.of()
                 : cutsOf(axis, position.ownEnds(),
                         position.narrowedBy(true), position.narrowedBy(false));
@@ -56,7 +56,7 @@ final class LocalInspection {
         // sits in, so it is answered once for the parameter. A rule this could not read is a way
         // that value can be refused, wherever in it the rule is written.
         CutEvidence drawn = cuts.isEmpty() ? new CutEvidence.None()
-                : new CutEvidence.Present(cuts, !position.everyRuleOfTheValueWasRead());
+                : new CutEvidence.Present(cuts, position.projection());
         return new LocalPartition.Divided(classes, drawn, position.unansweredQuestions(),
                 position.rulesNotReached());
     }
@@ -74,18 +74,18 @@ final class LocalInspection {
      * the record alone became invisible: see {@code TypeBounds#admissible}.
      */
     private static DeclaredBounds.Bounds axisBounds(DeclaredBounds.Bounds own,
-                                                    NumericDomain.Bounds projected) {
-        if (own == null || projected == null) {
+                                                    NumericDomain.Bounds left) {
+        if (own == null || left == null) {
             return own;
         }
         // The value moves and the names do not: a record narrowing an edge does not take it away
         // from the rule that put one there, and which record did the narrowing is said beside it.
         return new DeclaredBounds.Bounds(
                 own.min() == null ? null
-                        : new DeclaredBounds.End(Endpoint.lower(own.min().at(), projected.min()),
+                        : new DeclaredBounds.End(Endpoint.lower(own.min().at(), left.min()),
                                 own.min().from()),
                 own.max() == null ? null
-                        : new DeclaredBounds.End(Endpoint.upper(own.max().at(), projected.max()),
+                        : new DeclaredBounds.End(Endpoint.upper(own.max().at(), left.max()),
                                 own.max().from()),
                 own.carrier());
     }

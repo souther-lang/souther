@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorContract.Guard;
 import souther.compiler.core.Core;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.Refinement;
@@ -160,26 +161,20 @@ final class PathEngine {
      * expression it was given.
      *
      * <p>Nothing is recorded of the name itself. A name is read as the expression it was given —
-     * {@link Terms#affine} reads through it, and reads through a field taken off it the same way —
+     * {@link Terms#affineOf} reads through it, and reads through a field taken off it the same way —
      * so there is no second reading for a fact about the name to be needed by. Recording one meant
      * giving the name's own atom the bounds of the form it was given, which is what a guard read one
      * way and a construction read the other had between them, and a bound is not a relation: it left
      * the guard settling nothing about the construction (#676).
+     *
+     * <p>What the binder means is {@link Terms#inside}'s answer and not this walk's. A reader that
+     * decides for itself what a binder denotes is a second account of it, and the second account is
+     * weaker than the first wherever it was written for a narrower purpose — which is what a
+     * reduction's step read by (#867). Nothing else here is owed: the knowledge is what stood before
+     * the binding, because the initializer was read before this.
      */
     Entered bindLet(Core.LetIn li, Known k, Denotations at) {
-        // Entering a binding a walk is already inside is not a second binding of it. A branch is
-        // read from where its conditional stood, which is inside these, over a tree that still holds
-        // them.
-        if (at.valueOf(li.binder().id()) == li.value()) {
-            return new Entered(k, at);
-        }
-        // What the name is about is what it was given is about. Where even the identity reading has
-        // nothing to name — an expression answering nothing at all — the name is what there is, and
-        // it is one value however many times it is read.
-        FactSubject about = terms.subjectOf(li.value(), at);
-        return new Entered(k, at.binding(li.binder().id(), li.value(),
-                about != null ? about : terms.placeSubject(li.binder().id()),
-                terms.locationOf(li.value(), at), terms.bodyKey(li.value(), at)));
+        return new Entered(k, terms.inside(li, at));
     }
 
     /**
@@ -562,12 +557,42 @@ final class PathEngine {
         // next field of the same type would be passed over as one already read. Supposed to hold
         // values, so nothing written under it is read: what is under it is what would say it holds
         // none, and reading it here is the supposing undone one step in.
-        if (depth > limit || !(root.type() instanceof Type.Ref ref)
-                || reach.stopAt().test(ref.name())) {
-            return declining(root.type(), path, gathering, k);
+        // Asked one at a time, because a stop says two things and only one of them is the same for
+        // all of these: whether the rules under it were read, and whether a construction could have
+        // got out of making the value they are about.
+        if (depth > limit) {
+            // A limit on how far a measurement is worth carrying, which is not a limit on the model:
+            // a rule four records down refuses the outermost construction exactly as one on its own
+            // fields does.
+            return declining(root.type(), path, gathering, k,
+                    InvariantChecker.Borne.BY_EVERY_VALUE);
         }
-        if (!(symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data) || !onPath.add(ref.name())) {
-            return declining(root.type(), path, gathering, k);
+        if (!(root.type() instanceof Type.Ref ref)) {
+            // Not a declaration of its own: a container or an optional, whose element is a value
+            // that need not be there, or a type nothing is written under at all.
+            return declining(root.type(), path, gathering, k,
+                    InvariantChecker.Borne.BY_SOME_VALUES);
+        }
+        if (reach.stopAt().test(ref.name())) {
+            // Left out because this reading was asked to leave it out, which is still a rule of a
+            // value every construction has to make.
+            return declining(root.type(), path, gathering, k,
+                    InvariantChecker.Borne.BY_EVERY_VALUE);
+        }
+        if (!(symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data)) {
+            // A choice between declarations, which is the only kind that reaches here holding a rule
+            // at all: a unit holds none and a name standing for nothing declares none. A
+            // construction picks one of the cases, so a rule written on one of them refuses values
+            // of that case and not every value of this.
+            return declining(root.type(), path, gathering, k,
+                    InvariantChecker.Borne.BY_SOME_VALUES);
+        }
+        if (!onPath.add(ref.name())) {
+            // Already met on the way down, so entering it again reads the rules that were read where
+            // it was met. A record holding one of its own kind stops here and nothing is short of
+            // anything for it.
+            return declining(root.type(), path, gathering, k,
+                    InvariantChecker.Borne.BY_SOME_VALUES);
         }
         Map<String, Type> fields = clauses.fieldsOf(data);
         Map<String, BindingId> bindings = clauses.bindingsOf(ref.name(), data);
@@ -587,7 +612,7 @@ final class PathEngine {
         // reader collecting the clauses would otherwise take the ones it was handed for every
         // clause there is, and answer for a rule it never saw.
         if (gathering != null && !stated.everyClauseStated()) {
-            gathering.missed(path);
+            gathering.missed(path, InvariantChecker.Borne.BY_EVERY_VALUE);
         }
         for (Clauses.Stated one : stated.clauses()) {
             // Where this clause becomes a rule of the model something can be attributed to. What is
@@ -596,7 +621,11 @@ final class PathEngine {
             RuleRef.Invariant origin = new RuleRef.Invariant(one.clause().ref());
             // Read before it is handed over, so that what is recorded is this reading's own answer
             // about this clause rather than a guess made from its shape somewhere else.
-            Predicates.Owed owed = predicates.obligations(one.expr(), out, at, false);
+            Predicates.Owed owed = gathering == null
+                    ? predicates.obligations(one.expr(), out, at, false)
+                    : predicates.obligations(one.expr(), out, at, false,
+                            (part, said) -> gathering.constrained(origin, part,
+                                    InvariantChecker.partRead(said)));
             if (gathering != null) {
                 gathering.gathered(origin, one.expr(), Predicates.subjectsIn(owed));
             }
@@ -610,7 +639,9 @@ final class PathEngine {
             // A newtype's `.value` is at no path of its own, which is the rule `name` walks by:
             // wearing a name is not being somewhere else.
             Core value = given.get(bindings.get("value"));
-            out = value == null ? declining(fields.get("value"), path, gathering, out)
+            out = value == null
+                    ? declining(fields.get("value"), path, gathering, out,
+                            InvariantChecker.Borne.BY_EVERY_VALUE)
                     : seedAt(value, path, out, at, depth + 1, limit, onPath, gathering, reach);
         } else {
             for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
@@ -635,9 +666,10 @@ final class PathEngine {
      * and only then is anything said. A walk that reported every stop would have a record with one
      * plain string field speaking for none of its positions.
      */
-    private Known declining(Type type, String path, InvariantChecker.Gathering gathering, Known k) {
+    private Known declining(Type type, String path, InvariantChecker.Gathering gathering, Known k,
+                            InvariantChecker.Borne borne) {
         if (gathering != null && type != null && anyRuleUnder(type, new HashSet<>())) {
-            gathering.missed(path);
+            gathering.missed(path, borne);
         }
         return k;
     }

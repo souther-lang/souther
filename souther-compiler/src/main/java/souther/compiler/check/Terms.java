@@ -193,19 +193,25 @@ final class Terms {
     }
 
     /**
-     * The affine walk: literals and {@code +}/{@code -} compose; every other node is handed to
-     * {@code leaf} (which decides whether it is an atom, a location, or opaque). It takes the leaf
-     * rule rather than fixing one because a binding it reads through answers with what that binding
-     * was given.
+     * The affine walk: literals and {@code +}/{@code -} compose; every other node is read as a leaf
+     * ({@link #leafOf}, which decides whether it is an atom, a location, or opaque).
      *
-     * <p>A node this has a rule for and cannot compose is handed to {@code leaf} as well. Reading the
+     * <p>A node this has a rule for and cannot compose is read as a leaf as well. Reading the
      * structure of a value and naming the value are two questions: a variable product is outside the
      * fragment, and it is still one value, so what a guard states of it is still about the thing the
      * clause reads. Answering the first question with {@code null} and never asking the second is
      * what made {@code a * b} name nothing where it is written and something where it is bound —
      * which is a name changing what can be said of an expression.
+     *
+     * <p>The environment is what carries a binding, and this walk takes no leaf rule of its own. It
+     * took one so that a binding could be read through by answering the binder's reads with the form
+     * its value had — a second account of what a name means, beside the one {@link Denotations}
+     * keeps, and weaker than it by exactly the values the arithmetic cannot read. Inside a
+     * reduction's step, where nothing else enters a binding, that weaker account was the only one
+     * there was and a helper taking a record ended the read (#867). A leaf rule handed in is where
+     * such an account can be written, so there is none.
      */
-    LinearForm<FactSubject> affine(Core raw, Denotations at, java.util.function.Function<Core, LinearForm<FactSubject>> leaf) {
+    LinearForm<FactSubject> affineOf(Core raw, Denotations at) {
         Core e = asOperator(raw);
         if (e instanceof Core.PreservedCall) {
             // A call that folds is the number it folds to. `String.length("1A")` is 2, and a clause
@@ -217,27 +223,26 @@ final class Terms {
                 return LinearForm.constant(folded);
             }
         }
-        LinearForm<FactSubject> composed = composed(e, at, leaf);
-        return composed != null ? composed : leaf.apply(e);
+        LinearForm<FactSubject> composed = composed(e, at);
+        return composed != null ? composed : leafOf(e, at);
     }
 
-    /** {@code e} read as arithmetic over what {@code leaf} answers, or {@code null} where this has no
+    /** {@code e} read as arithmetic over what its parts answer, or {@code null} where this has no
      * rule for it or the rule it has does not compose. */
-    private LinearForm<FactSubject> composed(Core e, Denotations at,
-                                java.util.function.Function<Core, LinearForm<FactSubject>> leaf) {
+    private LinearForm<FactSubject> composed(Core e, Denotations at) {
         return switch (e) {
             case Core.Int i -> LinearForm.constant(BigDecimal.valueOf(i.value()));
             case Core.Decimal d -> LinearForm.constant(d.value());
-            case Core.Neg n -> negate(affine(n.operand(), at, leaf));
+            case Core.Neg n -> negate(affineOf(n.operand(), at));
             case Core.Binary b when b.op() == Hir.BinOp.ADD ->
-                    add(affine(b.left(), at, leaf), affine(b.right(), at, leaf), false);
+                    add(affineOf(b.left(), at), affineOf(b.right(), at), false);
             case Core.Binary b when b.op() == Hir.BinOp.SUB ->
-                    add(affine(b.left(), at, leaf), affine(b.right(), at, leaf), true);
+                    add(affineOf(b.left(), at), affineOf(b.right(), at), true);
             // scalar multiply by a constant (Amount * 2) is linear; `/` and a variable product are not
             // (a divide truncates for Int, and a variable factor is non-linear), so those come back
             // here as one value rather than as arithmetic over two.
             case Core.Binary b when b.op() == Hir.BinOp.MUL ->
-                    scale(affine(b.left(), at, leaf), affine(b.right(), at, leaf));
+                    scale(affineOf(b.left(), at), affineOf(b.right(), at));
             // A newtype's `.value` read off something that is not a place: what it wraps is what it
             // is, which is the rule a location is keyed by ({@link #pathKey}) read of a computed
             // value too. Without it `f(x).value` is one value where the same call given a name is
@@ -250,18 +255,56 @@ final class Terms {
             // a construction over the other (#676).
             case Core.FieldAccess fa when !isAPlace(fa.target(), at)
                     && !Location.isStep(fa.target().type(), fa.field(), symbols) ->
-                    affine(fa.target(), at, leaf);
-            // A binding an expansion introduced (`let $0_n = n.value in $0_n * 2`) is what an
-            // arithmetic helper becomes, so reading through it is reading the arithmetic the author
-            // wrote.
-            case Core.LetIn li -> {
-                LinearForm<FactSubject> bound = affine(li.value(), at, leaf);
-                yield bound == null ? null : affine(li.body(), at,
-                        n -> n instanceof Core.Read r && r.binding().equals(li.binder().id())
-                                ? bound : leaf.apply(n));
-            }
+                    affineOf(fa.target(), at);
+            // A binding an expansion introduced (`let $0_n = n.value in $0_n * 2`) is what a helper
+            // becomes, so reading through it is reading what the author wrote at the call. The body
+            // is read with the binder entered, which is the one account of what a name means
+            // ({@link #inside}); what the binder was given is read where a read of it asks, which
+            // {@link #givenForm} and {@link #writtenValue} answer from the environment.
+            //
+            // Whether what it holds is a number is not asked. A binding denotes what it was given
+            // whatever kind of value that is, so a helper taking a record binds a record and the
+            // places under the binder are the places under the record — which is what makes the
+            // facts a walk recorded about them reach the step that reads them (#867).
+            case Core.LetIn li -> affineOf(li.body(), inside(li, at));
             default -> null;
         };
+    }
+
+    /**
+     * The environment {@code li}'s body is read in: {@code li}'s binder entered as what its
+     * initializer denotes.
+     *
+     * <p>The one place a {@code let} is entered. Every reader that goes inside one comes through
+     * here — the region walk on its way into a body ({@link PathEngine#bindLet}), and this class
+     * reading the arithmetic a helper's expansion became — so what a name means is settled once and
+     * no reader interprets a binder for itself. Two accounts of it is what #867 was: the arithmetic
+     * reader's own account could not carry a binding holding a record, and inside a reduction's step
+     * it was the only account there was.
+     *
+     * <p>The initializer is read in the environment outside the binding, and the binder is entered
+     * as what that reading found. What is recorded about the name is recorded under that denotation
+     * and not under the binding; recording it under the binding is what made a named subexpression a
+     * term of its own, answering differently from the very expression it was given (#676).
+     *
+     * <p>Nothing here branches on what kind of value the initializer is. A number, a record, a sum,
+     * a value written into the source: the binder denotes it, and which of those it is decides what
+     * can be said about it later and not whether the binding may be entered at all.
+     */
+    Denotations inside(Core.LetIn li, Denotations at) {
+        // Entering a binding a walk is already inside is not a second binding of it. A branch is
+        // read from where its conditional stood, which is inside these, over a tree that still holds
+        // them.
+        if (at.valueOf(li.binder().id()) == li.value()) {
+            return at;
+        }
+        // What the name is about is what it was given is about. Where even the identity reading has
+        // nothing to name — an expression answering nothing at all — the name is what there is, and
+        // it is one value however many times it is read.
+        FactSubject about = subjectOf(li.value(), at);
+        return at.binding(li.binder().id(), li.value(),
+                about != null ? about : placeSubject(li.binder().id()),
+                locationOf(li.value(), at), bodyKey(li.value(), at));
     }
 
     /** What {@code e} folds to where every part of it is written out, or {@code null} where any part
@@ -292,45 +335,43 @@ final class Terms {
         return b.coefs().isEmpty() ? a.times(b.constant()) : null;
     }
 
-    /** The affine form of an expression: a numeric atom, a newtype construct's wrapped value, or
-     * {@code null}. */
-    LinearForm<FactSubject> affineOf(Core e, Denotations at) {
-        return affine(e, at, n -> {
-            // A newtype built around a number is that number here. What makes it one is the
-            // declaration, which `affineScalarBase` asks; a construction of it has the one field the
-            // declaration gives it.
-            if (n instanceof Core.Construct nd
-                    && affineScalarBase(Type.ref(nd.typeName())) != null) {
-                return affineOf(nd.values().get(0).value(), at);
-            }
-            Core written = writtenValue(n, at);
-            if (written != null && written != n) {
-                return affineOf(written, at);
-            }
-            // An operation answering a number it was given is that number here, whatever type it
-            // answers it in: `Decimal.fromInt(n)` is `n`, so a guard about `n` is about the call as
-            // well. Read through rather than made an atom of its own, which would leave the two
-            // unrelated and the guard saying nothing about the construction.
-            Core answered = DischargeRules.answersItsArgument(n);
-            if (answered != null) {
-                return affineOf(answered, at);
-            }
-            // A list written out has as many elements as it is written with, whatever they are.
-            BigDecimal counted = writtenSize(n, at);
-            if (counted != null) {
-                return LinearForm.constant(counted);
-            }
-            // A name given arithmetic over terms the check names is related to that arithmetic (spec
-            // §invariant-discharge-terms). Read through it, as the `let` node above is read through:
-            // the name and the expression it was given are one value, and reading one as an atom of
-            // its own leaves a guard on the name saying nothing about the value it was built from.
-            LinearForm<FactSubject> given = givenForm(n, at);
-            if (given != null) {
-                return given;
-            }
-            FactSubject atom = atomOf(n, at);
-            return atom == null ? null : LinearForm.atom(atom);
-        });
+    /** A node the affine walk composes nothing out of, as a form: a numeric atom, a newtype
+     * construct's wrapped value, what a name was given, or {@code null}. */
+    private LinearForm<FactSubject> leafOf(Core n, Denotations at) {
+        // A newtype built around a number is that number here. What makes it one is the
+        // declaration, which `affineScalarBase` asks; a construction of it has the one field the
+        // declaration gives it.
+        if (n instanceof Core.Construct nd
+                && affineScalarBase(Type.ref(nd.typeName())) != null) {
+            return affineOf(nd.values().get(0).value(), at);
+        }
+        Core written = writtenValue(n, at);
+        if (written != null && written != n) {
+            return affineOf(written, at);
+        }
+        // An operation answering a number it was given is that number here, whatever type it
+        // answers it in: `Decimal.fromInt(n)` is `n`, so a guard about `n` is about the call as
+        // well. Read through rather than made an atom of its own, which would leave the two
+        // unrelated and the guard saying nothing about the construction.
+        Core answered = DischargeRules.answersItsArgument(n);
+        if (answered != null) {
+            return affineOf(answered, at);
+        }
+        // A list written out has as many elements as it is written with, whatever they are.
+        BigDecimal counted = writtenSize(n, at);
+        if (counted != null) {
+            return LinearForm.constant(counted);
+        }
+        // A name given arithmetic over terms the check names is related to that arithmetic (spec
+        // §invariant-discharge-terms). Read through it, as the `let` node above is read through:
+        // the name and the expression it was given are one value, and reading one as an atom of
+        // its own leaves a guard on the name saying nothing about the value it was built from.
+        LinearForm<FactSubject> given = givenForm(n, at);
+        if (given != null) {
+            return given;
+        }
+        FactSubject atom = atomOf(n, at);
+        return atom == null ? null : LinearForm.atom(atom);
     }
 
     /**
