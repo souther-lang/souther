@@ -355,6 +355,45 @@ class WhatMakesARangeExactIsNotWhatAnswersACoverageQuestionTest {
         assertEquals("Lossy", named(domains.projection()).split(", ")[0]);
     }
 
+    /**
+     * The conjunct the bounds do not hold names its own position, and not the one beside it.
+     *
+     * <p>A conjunction is one rule the author wrote, and what it raises is what its conjuncts raise
+     * together — so a reader that found one conjunct wanting and reached for the rule's questions
+     * would name the position of the conjunct the bounds do hold among the ones they do not. That
+     * the range is approximate would still be true; what it was approximate about would not be.
+     *
+     * <p>The same two rules written apart name the same position, which is the point: where the
+     * author put the {@code &&} is not a fact about which position is short of its rules.
+     */
+    @Test
+    void theConjunctTheBoundsDoNotHoldNamesItsOwnPosition() {
+        FieldDomains together = read("""
+                module example.rooms
+
+                data Length = { a: Int, b: Int }
+                    invariant both = a >= 1 && b * b >= 4
+                """, "Length");
+        assertEquals(List.of("b"), paths(together),
+                "`a >= 1` is in the bounds, so `a` is not what is missing from them");
+
+        FieldDomains apart = read("""
+                module example.rooms
+
+                data Length = { a: Int, b: Int }
+                    invariant one = a >= 1
+                    invariant two = b * b >= 4
+                """, "Length");
+        assertEquals(paths(together), paths(apart));
+    }
+
+    /** The positions the causes name, in the order they are held. */
+    private static List<String> paths(FieldDomains domains) {
+        return domains.projection().causes().stream()
+                .map(cause -> ((ProjectionEvidence.Cause.Unrepresented) cause).path())
+                .distinct().toList();
+    }
+
     /** The clause of the read declaration the author called {@code name}. */
     private static Clause.Ref only(FieldDomains domains, String name) {
         return domains.accounting().keySet().stream()

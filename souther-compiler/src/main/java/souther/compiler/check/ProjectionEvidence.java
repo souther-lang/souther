@@ -98,12 +98,16 @@ public sealed interface ProjectionEvidence {
         }
 
         /**
-         * A rule was given to the interval algebra, which could not hold all of it.
+         * A rule was given to the interval algebra, and what the algebra projects does not hold it.
          *
-         * <p>The domain's own account of what it dropped, at the atom it dropped it about. A
-         * disequality is the one an author meets: it is a disjunction, and a range is what this
+         * <p>A disequality is the one an author meets: it is a disjunction, and a range is what this
          * holds — except where one side is already out, which is why {@code value >= 1} written
-         * beside {@code value /= 0} leaves nothing lost at all.
+         * beside {@code value /= 0} leaves the bounds stating both.
+         *
+         * <p>{@code rule} is this rule and {@code losses} is the atom's. The domain records which
+         * kinds of loss an atom has and not which rule left it with each, so where two rules leave
+         * one atom short in different ways both are named with both kinds. The rule is exact, the
+         * atom is exact, and what was lost is the atom's account of itself.
          */
         record Lossy(RuleRef rule, FactSubject atom, Set<NumericDomain.Loss> losses)
                 implements Cause {

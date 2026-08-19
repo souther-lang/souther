@@ -431,7 +431,8 @@ public final class InvariantChecker {
          *  every position, since nothing here knows which of them the rules were about. */
         static Seeded nothingRead() {
             return new Seeded(ConstraintState.top(), Map.of(), Map.of(), Map.of(),
-                    new Reading(List.of(), List.of(), Map.of(), Map.of()), new ReadingEvidence(),
+                    new Reading(List.of(), List.of(), Map.of(), Map.of(), Map.of()),
+                    new ReadingEvidence(),
                     false, Set.of(FieldDomains.THE_VALUE), Set.of(FieldDomains.THE_VALUE),
                     Map.of());
         }
@@ -955,10 +956,15 @@ public final class InvariantChecker {
      *                  Beside the ends rather than derived from them: a clause that placed no end
      *                  may have raised a question all the same, and a clause that placed one raised
      *                  more than the line. Nothing here says whether anything answered
+     * @param raisedByPart the same, kept per part of each rule. A conjunction is one rule the author
+     *                  wrote, and what it raises is what its conjuncts raise together — so a reader
+     *                  that found one conjunct wanting and reached for the rule's questions would
+     *                  name the positions of the conjunct written beside it as well
      */
     record Reading(List<Direct> directs, List<FieldDomains.Unread> unread,
                    Map<String, List<TypeSymbol>> narrowers,
-                   Map<RuleRef, Required> raised) {}
+                   Map<RuleRef, Required> raised,
+                   Map<RuleRef, Map<Core, Required>> raisedByPart) {}
 
     private Reading directsIn(List<Written> stated, Denotations at,
                                    Map<String, FactSubject> atoms, Map<String, FactSubject> keys,
@@ -980,13 +986,15 @@ public final class InvariantChecker {
         List<FieldDomains.Unread> unread = new ArrayList<>();
         Map<String, List<TypeSymbol>> narrowers = new LinkedHashMap<>();
         Map<RuleRef, Required> raised = new LinkedHashMap<>();
+        Map<RuleRef, Map<Core, Required>> raisedByPart = new LinkedHashMap<>();
         stated.forEach(each ->
                 direct(each.clause(), each.from(), at, byName, out, unread, narrowers, raised,
-                        took, typeAt, parts));
+                        took, typeAt, parts, raisedByPart));
         // Insertion order, kept: `Map.copyOf` iterates in an order salted once per JVM run, and
         // what a report prints for a position is these in the order the declaration writes them.
         return new Reading(List.copyOf(out), List.copyOf(unread), Map.copyOf(narrowers),
-                java.util.Collections.unmodifiableMap(new LinkedHashMap<>(raised)));
+                java.util.Collections.unmodifiableMap(new LinkedHashMap<>(raised)),
+                java.util.Collections.unmodifiableMap(new LinkedHashMap<>(raisedByPart)));
     }
 
     /** What {@code clause} raises, taken together with whatever its other conjuncts raised. */
@@ -1008,8 +1016,14 @@ public final class InvariantChecker {
                         Denotations at,
                         Map<FactSubject, Coordinate> byName, Map<RuleRef, Required> raised,
                         ReadingEvidence took, Map<String, Type> typeAt,
-                        PartsRead parts) {
+                        PartsRead parts,
+                        Map<RuleRef, Map<Core, Required>> raisedByPart) {
         raises(raised, rule, states);
+        // And what this part of it raises, kept apart from what the rule raises. A reader that found
+        // one conjunct wanting reaches for this: the questions of the conjunct written beside it are
+        // not what that conjunct left standing.
+        raisedByPart.computeIfAbsent(rule, _ -> new java.util.IdentityHashMap<>())
+                .merge(part, Required.ofInvariant(states), Required::and);
         if (!(states instanceof ClauseStates.SomethingElse other)) {
             return;
         }
@@ -1066,23 +1080,24 @@ public final class InvariantChecker {
                         Map<String, List<TypeSymbol>> narrowers,
                         Map<RuleRef, Required> raised, ReadingEvidence took,
                         Map<String, Type> typeAt,
-                        PartsRead parts) {
+                        PartsRead parts,
+                        Map<RuleRef, Map<Core, Required>> raisedByPart) {
         if (!(clause instanceof Core.Binary bin)) {
             settle(clause, from, states(clause, at, byName), at, byName, raised, took, typeAt,
-                    parts);
+                    parts, raisedByPart);
             return;
         }
         if (bin.op() == Hir.BinOp.AND) {
             // One rule the author wrote, so what it raises is what its conjuncts raise together.
             direct(bin.left(), from, at, byName, out, unread, narrowers, raised, took, typeAt,
-                    parts);
+                    parts, raisedByPart);
             direct(bin.right(), from, at, byName, out, unread, narrowers, raised, took, typeAt,
-                    parts);
+                    parts, raisedByPart);
             return;
         }
         if (!InvariantBound.ordering(bin.op()) && bin.op() != Hir.BinOp.EQ) {
             settle(bin, from, states(bin, at, byName), at, byName, raised, took, typeAt,
-                    parts);
+                    parts, raisedByPart);
             return;
         }
         // The coordinate-bearing side read as the left one, as `0 <= value` says what `value >= 0`
@@ -1118,7 +1133,7 @@ public final class InvariantChecker {
             case InvariantBound.Read.PastWhereTheOrderStops _ ->
                     new ClauseStates.NoValueAtAll(Owed.Subject.at(about.path()));
             case InvariantBound.Read.NoEnd _ -> states(bin, at, byName);
-        }, at, byName, raised, took, typeAt, parts);
+        }, at, byName, raised, took, typeAt, parts, raisedByPart);
         if (end instanceof InvariantBound.Read.NoEnd) {
             // A rule saying where the values stop that no end came out of, said as that. Here,
             // where the reading gave up, because this is the reading a report's line would have

@@ -63,7 +63,7 @@ public final class FieldDomains {
      */
     public static final FieldDomains NONE =
             new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), List.of(), List.of(), Map.of(),
-                    new ReadingEvidence(), Map.of(), Set.of(THE_VALUE), NO_POSITIONS,
+                    Map.of(), new ReadingEvidence(), Map.of(), Set.of(THE_VALUE), NO_POSITIONS,
                     ConstraintState.top(), null, null, null, Map.of(), Set.of(THE_VALUE), Map.of(),
                     Map.of(), Map.of());
 
@@ -76,6 +76,9 @@ public final class FieldDomains {
     private final List<Unread> unread;
     /** What each clause reaching this value raises, keyed on the rule it is. */
     private final Map<RuleRef, Required> raised;
+    /** The same per part of each clause. A reader that found one conjunct wanting names what that
+     *  conjunct is about, and not what the conjunct written beside it raised. */
+    private final Map<RuleRef, Map<Core, Required>> raisedByPart;
     /** Which readings took each clause in, as each of them said so. */
     private final ReadingEvidence took;
     /** The accounting, worked out once. Every position of a value asks the same question of it. */
@@ -124,7 +127,8 @@ public final class FieldDomains {
                          Map<String, ValueSet> admittedByField,
                          Map<String, UnreadReason> unreadByField,
                          List<InvariantChecker.Direct> directs, List<Unread> unread,
-                         Map<RuleRef, Required> raised, ReadingEvidence took,
+                         Map<RuleRef, Required> raised,
+                         Map<RuleRef, Map<Core, Required>> raisedByPart, ReadingEvidence took,
                          Map<String, List<TypeSymbol>> narrowers,
                          Set<String> notGathered,
                          SequencedMap<FactSubject, String> positions,
@@ -140,6 +144,7 @@ public final class FieldDomains {
         this.directs = directs;
         this.unread = unread;
         this.raised = raised;
+        this.raisedByPart = raisedByPart;
         this.took = took;
         this.narrowers = narrowers;
         this.notGathered = notGathered;
@@ -303,7 +308,8 @@ public final class FieldDomains {
                 named(seeded, field).forEach(term -> placeOf.putIfAbsent(term, field)));
         return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), Map.copyOf(admitted),
                 Map.copyOf(unread), seeded.reading().directs(), seeded.reading().unread(),
-                seeded.reading().raised(), seeded.took(), seeded.reading().narrowers(),
+                seeded.reading().raised(), seeded.reading().raisedByPart(), seeded.took(),
+                seeded.reading().narrowers(),
                 seeded.notGathered(), placeOf,
                 seeded.constraints(), named, data, symbols, settled,
                 seeded.unreadOfEveryValue(), seeded.atoms(), seeded.held(),
@@ -767,13 +773,19 @@ public final class FieldDomains {
                 if (directs.stream().anyMatch(d -> d.part() == part)) {
                     return;
                 }
-                // What the rule is about, where it raised a question naming a position. A rule that
-                // raises none is about the value it is written on, which is the empty path.
-                Required required = raised.get(rule);
+                // What this part is about, and not what the rule is. A conjunction is one rule the
+                // author wrote and what it raises is what its conjuncts raise together, so a reader
+                // reaching for the rule's questions here would name the positions of the conjunct
+                // written beside this one — the half the bounds do hold — among the ones they do
+                // not.
+                Map<Core, Required> byPartRaised = raisedByPart.get(rule);
+                Required required = byPartRaised == null ? null : byPartRaised.get(part);
                 if (required != null) {
                     required.obligations().forEach(owed -> said.add(owed.subject().path()));
                 }
-                if (said.isEmpty()) {
+                // A part that raised no question is about the value it is written on, which is what
+                // the empty path is.
+                if (required == null || required.obligations().isEmpty()) {
                     said.add(THE_VALUE);
                 }
             });
