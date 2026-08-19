@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.types.CoverageOrigin;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.LinearForm;
@@ -457,22 +458,33 @@ final class Terms {
         }
         LinearForm<FactSubject> numerator = affineOf(b.left(), at);
         LinearForm<FactSubject> divisor = affineOf(b.right(), at);
-        if (numerator == null || divisor == null) {
+        NumericDomain.Bounds extent = extentOf(b.right().type());
+        if (numerator == null || divisor == null || extent == null) {
             return null;
         }
-        return new Derivation.Quotient(numerator, divisor, extentOf(b.right().type()));
+        return new Derivation.Quotient(numerator, divisor, extent);
     }
 
     /**
-     * Every value a position of {@code type} can take.
+     * Every value a position of {@code type} can take, or null where nothing orders its values.
      *
      * <p>What the operator divides by is a value of its own type, and the arithmetic a form is
      * composed of runs over numbers of any size — so a form can name a number the operand never is.
      * Read off the carrier, which is where what a type's values run between is written down and the
      * one place it is ({@link Carrier#extent}).
+     *
+     * <p>A type with no carrier is asked about rather than assumed away. Which operands {@code /}
+     * has is settled where it is typed and not here, so a divisor of a type nothing orders is a
+     * rule this declines — which is what it does with everything else it cannot read — rather than a
+     * dereference of a null. Swallowed by the fail-open catch, that would take the whole behavior's
+     * analysis with it and say nothing.
      */
     private NumericDomain.Bounds extentOf(Type type) {
-        OrderedInterval extent = Carrier.ofValue(type, symbols).extent();
+        Carrier carrier = Carrier.ofValue(type, symbols);
+        if (carrier == null) {
+            return null;
+        }
+        OrderedInterval extent = carrier.extent();
         return new NumericDomain.Bounds(extent.low(), extent.high());
     }
 
@@ -491,8 +503,22 @@ final class Terms {
             case Derivation.Quotient one -> b instanceof Derivation.Quotient other
                     && sameForm(one.numerator(), other.numerator())
                     && sameForm(one.divisor(), other.divisor())
-                    && one.divisorExtent().equals(other.divisorExtent());
+                    && sameExtent(one.divisorExtent(), other.divisorExtent());
         };
+    }
+
+    /** Whether two extents run between the same places. Asked on the order and not of the record's
+     * own equality, for the reason the numbers are: {@code 0.00} and {@code 0} are one place, and
+     * two readings differing in nothing but a scale are not this check disagreeing with itself. */
+    private static boolean sameExtent(NumericDomain.Bounds a, NumericDomain.Bounds b) {
+        return sameEnd(a.min(), b.min()) && sameEnd(a.max(), b.max());
+    }
+
+    private static boolean sameEnd(Endpoint a, Endpoint b) {
+        if (a == null || b == null) {
+            return a == b;
+        }
+        return a.inclusive() == b.inclusive() && a.at().sameAs(b.at());
     }
 
     private static boolean sameForm(LinearForm<FactSubject> a, LinearForm<FactSubject> b) {

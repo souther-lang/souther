@@ -5,7 +5,7 @@ package souther.compiler.numeric;
  *
  * <p>A pair of ends, either of which may be absent for no end there. Apart from
  * {@link NumericDomain.Bounds}, which holds the same two things and answers a different question:
- * that one is what a projection of the interval algebra left, and its {@code isEmpty} says that
+ * that one is what a projection of the interval algebra left, and its {@code saysNothing} says that
  * nothing bounds the position at all. Here an empty interval is the opposite — a position the rules
  * leave no value at — and one type answering both would be a word that means "everything" to one
  * reader and "nothing" to the next.
