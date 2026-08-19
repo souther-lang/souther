@@ -2,10 +2,12 @@ package souther.compiler.partition;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.numeric.Count;
 
 /**
  * The line a comparison between two positions draws: the place where the two hold one count.
@@ -28,15 +30,18 @@ import souther.compiler.inputs.NumericTerm;
  *
  * @param holdsAtTheLine whether the line's own values satisfy the comparison, which is what tells
  *                       {@code <} from {@code <=} and is the whole of what the row on the line shows
- * @param onIsAboveWhereItHolds which way round the two stand where the comparison is satisfied.
- *                       Not derivable from {@link #holdsAtTheLine}, which says what happens on the
- *                       line and nothing about either side of it: {@code a < b} and {@code a > b}
- *                       agree there and are opposite everywhere else. What it decides is which side
- *                       of the border a row is in and which it is out of, and a line that carried
- *                       only its own place had no {@code IN} point and no {@code OUT} point at all
+ * @param valueBelongsBelow which side of the line the pair standing on it belongs to. Not derivable
+ *                       from {@link #holdsAtTheLine}, which says what happens on the line and
+ *                       nothing about either side of it: {@code a < b} and {@code a > b} agree there
+ *                       and are opposite everywhere else. Together the two say which way the rule is
+ *                       satisfied, which is what a border is read off
+ * @param stepsApart     how far apart the rule holds them, as a number on the carrier's counts.
+ *                       Zero where the rule cuts where they meet, which is every comparison written
+ *                       as one position against another. A number and not a count of steps: an order
+ *                       with no smallest step still holds its values a distance apart
  */
 record ComparedTerms(NumericTerm on, NumericTerm against, Carrier carrier,
-                     boolean holdsAtTheLine, boolean onIsAboveWhereItHolds) {
+                     boolean holdsAtTheLine, boolean valueBelongsBelow, Count stepsApart) {
 
     /**
      * What {@code comparison} draws between two positions, or null where it draws no such line.
@@ -44,22 +49,51 @@ record ComparedTerms(NumericTerm on, NumericTerm against, Carrier carrier,
      * <p>An equality is not one of these. {@code a == b} puts the whole of one arm on the line, and
      * that arm is already a row the branch measure asks for.
      */
-    static ComparedTerms of(Core.Binary comparison, InputReads reads, Symbols symbols) {
-        if (!ordersStrictly(comparison.op())) {
-            return null;
-        }
-        NumericTerm on = GuardThresholds.termOf(comparison.left(), reads, symbols);
-        NumericTerm against = GuardThresholds.termOf(comparison.right(), reads, symbols);
-        if (on == null || against == null) {
-            return null;   // a position inside an expression is not a place a row can be written at
-        }
+    static ComparedTerms of(Core.Binary comparison, AffineReading read, InputReads reads,
+                            Symbols symbols) {
         Carrier carrier = Carrier.ofValue(comparison.left().type(), symbols);
-        if (carrier == null
-                || !carrier.equals(Carrier.ofValue(comparison.right().type(), symbols))) {
+        if (carrier == null || !carrier.equals(Carrier.ofValue(comparison.right().type(), symbols))) {
             return null;
         }
-        return new ComparedTerms(on, against, carrier, holdsAtTheLine(comparison.op()),
-                onIsAbove(comparison.op()));
+        if (ordersStrictly(comparison.op())) {
+            NumericTerm on = GuardThresholds.termOf(comparison.left(), reads, symbols);
+            NumericTerm against = GuardThresholds.termOf(comparison.right(), reads, symbols);
+            if (on != null && against != null) {
+                // The subject is the one the author wrote on the left, which the canonical form
+                // keeps too. Which of the two a line is named by is not something to derive where
+                // the source settles it: `charge > ceiling` is a line about the charge.
+                return new ComparedTerms(on, against, carrier, holdsAtTheLine(comparison.op()),
+                        holdsAtTheLine(comparison.op()) == !onIsAbove(comparison.op()), Count.ZERO);
+            }
+        }
+        return fromTheForm(read, carrier);
+    }
+
+    /**
+     * The distance the canonical form holds two positions apart, where it holds two apart.
+     *
+     * <p>Coefficients of one and minus one and nothing else, because that is what makes the quantity
+     * a distance: {@code 2a - b} is not how far two positions stand apart, it is an arithmetic form
+     * over both of them, and its border is a border of that form.
+     *
+     * <p>The threshold need not be zero. {@code a < b - 1} holds the two at least two apart, and
+     * where they meet is not where that rule cuts — read as a line at zero it would ask for a pair
+     * that proves nothing about it.
+     */
+    private static ComparedTerms fromTheForm(AffineReading read, Carrier carrier) {
+        if (read == null || !read.orders()) {
+            return null;
+        }
+        NumericTerm[] two = read.twoCoordinates();
+        if (two == null || !carrier.counts()) {
+            return null;
+        }
+        ComparisonClaim.Cut cut = (ComparisonClaim.Cut) read.claim();
+        // The distance as the number it is. Held as a count of the carrier's steps, a threshold
+        // that is not a whole number of them — which two decimals a rule holds half apart give —
+        // was an exception thrown out of the measure.
+        return new ComparedTerms(two[0], two[1], carrier, cut.holdsAtTheValue(),
+                cut.valueBelongsBelow(), new Count(read.cut()));
     }
 
     /** Which side the left of the comparison is on where the comparison is satisfied. Read off the

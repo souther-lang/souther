@@ -168,23 +168,27 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     @Test
     void aPositionIsNamedOnceRatherThanPerComparison() {
         assertEquals(1, read("at: Int",
-                "at < 1 + 1 || at > 2 + 2").unread().size());
+                "Int.multiply(at, at) < 4 || Int.multiply(at, at) > 9").unread().size());
     }
 
     /**
      * A position named inside an expression the reader does not model is still named.
      *
      * <p>Discovery and derivation are different questions and must not share a reader. What decides
-     * whether a line can be drawn is whether the number compared is one the terms name; what decides
-     * whether the model says anything here is whether a comparison mentions the position at all.
-     * Asked of the first, `+p.x + 1 < 10+` reports a position the model divides no way, two tokens
-     * from a comparison about it.
+     * whether a line can be drawn is whether the number compared is one the arithmetic reads; what
+     * decides whether the model says anything here is whether a comparison mentions the position at
+     * all. Asked of the first, a position inside an expression this cannot read reports a position
+     * the model divides no way, two tokens from a comparison about it.
+     *
+     * <p>A variable product, because that is what is left outside the fragment: {@code p.x + 1 < 10}
+     * is {@code p.x <= 9} and is read, and a factor that moves with the row is not a form this has a
+     * rule for.
      */
     @Test
     void aPositionNamedInsideAnExpressionIsStillNoticed() {
         assertEquals(List.of(new UnreadRule(TermPath.of("p").then("x"),
                         new BlockReason.UnreadComparisonForm())),
-                read("p: Pair", "p.x + 1 < 10").unread());
+                read("p: Pair", "Int.multiply(p.x, p.x) < 10").unread());
     }
 
     /**
@@ -214,7 +218,8 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
      */
     @Test
     void aLineReadAtAPositionDoesNotSwallowWhatWasNotReadThere() {
-        GuardThresholds.Guards guards = read("p: Pair", "p.x <= 5 && p.x + 1 < 10");
+        GuardThresholds.Guards guards =
+                read("p: Pair", "p.x <= 5 && Int.multiply(p.x, p.x) < 10");
 
         assertEquals(1, guards.thresholds().size(), guards.thresholds().toString());
         assertEquals(List.of(new UnreadRule(TermPath.of("p").then("x"),
@@ -225,9 +230,14 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     /**
      * A relation stays a relation when one side is written with something added to it.
      *
-     * <p>What `+p.x < p.y + 1+` needs is a class about two positions, exactly as `+p.x < p.y+` does.
-     * Read off how far the derivation got, the second side stops being a position at all and the
-     * answer becomes the carrier — which is a different piece of work and not the one that is owed.
+     * <p>What `+p.x < p.y * p.y+` needs is a class about two positions, exactly as
+     * `+p.x < p.y+` does. Read off how far the derivation got, the second side stops being a
+     * position at all and the answer becomes the carrier — which is a different piece of work and
+     * not the one that is owed.
+     *
+     * <p>`+p.x < p.y + 1+` is not this case any more. It is `+p.x - p.y < 1+`, a line where the two
+     * stand one apart, and it is drawn — so what is left here is a relation the arithmetic reads
+     * nothing out of at all.
      */
     @Test
     void aRelationWithArithmeticOnOneSideIsStillARelation() {
@@ -236,21 +246,21 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
                                 new BlockReason.ComparisonBetweenPositions()),
                         new UnreadRule(TermPath.of("p").then("y"),
                                 new BlockReason.ComparisonBetweenPositions())),
-                read("p: Pair", "p.x < p.y + 1").unread());
+                read("p: Pair", "p.x < Int.multiply(p.y, p.y)").unread());
     }
 
     /**
      * A position whose carrier is fine, against a right-hand side this does not read.
      *
-     * <p>`+1 + 2+` is not a form a threshold is read out of, and that is the whole of what stopped
-     * the line. Nothing is wrong with `+p.x+`: it is an `+Int+`, a carrier lines are drawn on all
-     * through this file. Read off the side that did name a position, the answer becomes the carrier
-     * and sends a reader after a domain that is already there.
+     * <p>`+Int.min(1, 2)+` is not a form a threshold is read out of, and that is the whole of what
+     * stopped the line. Nothing is wrong with `+p.x+`: it is an `+Int+`, a carrier lines are drawn
+     * on all through this file. Read off the side that did name a position, the answer becomes the
+     * carrier and sends a reader after a domain that is already there.
      */
     @Test
     void aReadableCarrierAgainstAnUnreadableSideIsNotACarrierProblem() {
         assertEquals(List.of(new UnreadRule(TermPath.of("p").then("x"),
                         new BlockReason.UnreadComparisonForm())),
-                read("p: Pair", "p.x < 1 + 2").unread());
+                read("p: Pair", "p.x < Int.min(1, 2)").unread());
     }
 }

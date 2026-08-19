@@ -1309,7 +1309,7 @@ public final class InvariantChecker {
             return;
         }
         BlockReason why = UnreadComparison.why(sideOf(comparison.left(), at, byName),
-                sideOf(comparison.right(), at, byName));
+                sideOf(comparison.right(), at, byName), quantityOf(comparison, at, byName));
         for (Coordinate each : coordinatesIn(comparison, at, byName)) {
             FieldDomains.Unread said =
                     new FieldDomains.Unread(each.path(), each.measured(), from, comparison, why);
@@ -1332,6 +1332,37 @@ public final class InvariantChecker {
      * called one thing by the interval algebra and another by everything else — so two sides
      * naming one place through two of its names would be a comparison against another position.
      */
+    /**
+     * The coordinates the quantity this clause cuts is over, or null where the arithmetic read no
+     * form at all.
+     *
+     * <p>This reader's own, because the atoms are: a clause names a coordinate of the value it is
+     * written about. What is done with the answer is {@link UnreadComparison}'s, so a {@code guard}
+     * of the same shape in a body two declarations away is described in the same words — which is
+     * what {@code invariant Int.add(length.value, width.value) <= 150} and the guard beside it are.
+     */
+    private java.util.Set<String> quantityOf(Core.Binary comparison, Denotations at,
+                                             Map<FactSubject, Coordinate> byName) {
+        NumericDomain.LinearForm<FactSubject> left = terms.affineOf(comparison.left(), at);
+        NumericDomain.LinearForm<FactSubject> right = terms.affineOf(comparison.right(), at);
+        if (left == null || right == null) {
+            return null;
+        }
+        java.util.Set<String> over = new LinkedHashSet<>();
+        for (FactSubject atom : left.minus(right).coefs().keySet()) {
+            Coordinate here = byName.get(atom);
+            if (here == null) {
+                // An atom this reading has no coordinate for. Counted as absent, a quantity over two
+                // positions would come back as one and this reader would describe the rule
+                // differently from the one that reads the same shape in a body — which is the thing
+                // sharing the rule was meant to stop.
+                return null;
+            }
+            over.add(here.path());
+        }
+        return over;
+    }
+
     private UnreadComparison.Side<String> sideOf(Core e, Denotations at,
                                                  Map<FactSubject, Coordinate> byName) {
         List<Coordinate> named = coordinatesIn(e, at, byName);

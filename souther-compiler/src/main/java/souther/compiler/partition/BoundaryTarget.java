@@ -1,125 +1,77 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.Carrier;
-import souther.compiler.inputs.NumericTerm;
-import souther.compiler.numeric.Place;
-
 /**
- * What a line is drawn at.
+ * What a line is drawn at: a quantity, and where on it the rule cuts.
  *
- * <p>A rule draws a line somewhere, and where that is has more than one shape. A rule that compares a
- * position against a constant puts it at one count of one position. A rule that compares one position
- * against another puts it where the two hold the same place, which is one no single position has a
- * value at — so the two cannot be one record without one of them carrying a field the other has no
- * answer for.
+ * <p><b>A product and no longer a sum.</b> What differs between a line at a position's own value, a
+ * line where two positions stand apart and a line over an arithmetic form is <em>what is being
+ * cut</em> — and that is {@link BorderQuantity}'s one answer rather than a shape every reader of a
+ * line has to tell apart. Written as a sum here, a shape added was a shape a report, a row check, a
+ * generator, a probe, an assessment and a criterion vocabulary each grew an arm for; the second one
+ * cost nine such arms, and the third would have cost nine more.
  *
- * <p><b>Sealed, so a shape added is one every reader has to answer for.</b> What a report prints, what
- * a row is checked against and what the generator builds are three readings of a line, and a reader
- * that assumed a count where there is none would print a witness as though it were the line itself.
- *
- * <p>The sentence a line is named by is {@code left = right} whatever its shape, so both are asked
+ * <p>The sentence a line is named by is {@code left = right} whatever it is on, so both are asked
  * here rather than assembled by each reader out of whichever fields it knows about.
  */
-public sealed interface BoundaryTarget {
+public record BoundaryTarget(BorderQuantity of, QuantityCut cut) {
+
+    public BoundaryTarget {
+        if (of == null || cut == null) {
+            throw new IllegalArgumentException("a line is a quantity cut somewhere");
+        }
+    }
+
+    /** A line on {@code of} at the level {@code at}. */
+    public static BoundaryTarget at(BorderQuantity of, Level at) {
+        return new BoundaryTarget(of, new QuantityCut(at));
+    }
 
     /**
-     * A line at one place of one position.
+     * Which shape this line has, for a reader outside this compiler that has to tell them apart.
      *
-     * <p>The place is where the value sits on its carrier's order, and the carrier it is on. Everything that compares a row against this
-     * compares counts, and everything that writes or prints it asks the carrier — so a report, a
-     * generated row and the rule that drew the line cannot disagree about which value the line is at.
+     * <p>A published word ({@code partition.boundaries[].kind}) and not a question anything here
+     * asks. A report writes a line as {@code left = right} whichever it is, and what stands on the
+     * right is a value in one case and a position in another — a consumer reading the right as a
+     * value would read a position's name as one, so the shape is said rather than inferred.
      */
-    /**
-     * Which shape a line has, for a reader that has to tell them apart without holding either.
-     *
-     * <p>A report writes a line as {@code left = right} whichever it is, and what stands on the right
-     * is a value in one case and a position in the other. A consumer reading the right as a value
-     * would read a position's name as one, so the shape is said rather than inferred.
-     */
-    enum Shape {
+    public Shape shape() {
+        return of.shape();
+    }
+
+    /** The order this line's levels are on. */
+    public LevelSpace levels() {
+        return of.levels();
+    }
+
+    /** Where the rule cut. */
+    public Level at() {
+        return cut.at();
+    }
+
+    /** The left of the line as a report names it, which is qualified by the behavior it is an input
+     *  of. Apart from {@link #left()}, which is the bare term a generated row is labelled with. */
+    public String named() {
+        return of.named();
+    }
+
+    /** The left of the {@code left = right} a report names this by. */
+    public String left() {
+        return of.left();
+    }
+
+    /** The right of it, which is where the rule cut, written the way the quantity writes its own
+     *  levels. */
+    public String right() {
+        return of.writtenAt(at());
+    }
+
+    /** Which shape a line has, for a reader that has to tell them apart without holding either. */
+    public enum Shape {
         /** A count of one position. */
         AT_VALUE,
         /** Two positions holding the same place. */
-        BETWEEN_POSITIONS
+        BETWEEN_POSITIONS,
+        /** An arithmetic form over several positions, at a value of the form. */
+        OVER_A_FORM
     }
-
-    record AtPlace(AxisId axis, Carrier carrier, Place at) implements BoundaryTarget {
-
-        @Override
-        public Shape shape() {
-            return Shape.AT_VALUE;
-        }
-
-        @Override
-        public String named() {
-            return axis.toString();
-        }
-
-        @Override
-        public String left() {
-            return axis.term();
-        }
-
-        @Override
-        public String right() {
-            return carrier.written(at);
-        }
-    }
-
-    /**
-     * A line where two terms hold the same place on one order.
-     *
-     * <p>Drawn by a {@code guard} comparing one position against another. It divides neither of them —
-     * which values of one are on which side depends on the other, and a class is a set of values of one
-     * position — so this is a line without a partition, and the two answers are kept apart rather than
-     * the second refusing the first.
-     *
-     * <p>No place of its own. Where the line is is a relation the row satisfies, and the value a search
-     * happens to find that satisfies it is the witness rather than the line: written here, one row at
-     * the line would name every other row at it as a different boundary.
-     *
-     * <p>One carrier, because both sides are ordered by it. Two operands may be comparable and share
-     * no carrier — an enumeration's case is comparable on its sum's order without ranging over it — so
-     * what makes this line measurable is the carrier and not the type the comparison type-checked
-     * under.
-     */
-    record EqualTerms(String behavior, NumericTerm on, NumericTerm against, Carrier carrier)
-            implements BoundaryTarget {
-
-        @Override
-        public Shape shape() {
-            return Shape.BETWEEN_POSITIONS;
-        }
-
-        @Override
-        public String named() {
-            return new AxisId(behavior, on.toString()).toString();
-        }
-
-        @Override
-        public String left() {
-            return on.toString();
-        }
-
-        @Override
-        public String right() {
-            return against.toString();
-        }
-    }
-
-    /** Which of the shapes this is. */
-    Shape shape();
-
-    /** What the line is on, which is the same carrier for every side of it. */
-    Carrier carrier();
-
-    /** The left of the line as a report names it, which is qualified by the behavior it is an input
-     * of. Apart from {@link #left()}, which is the bare term a generated row is labelled with. */
-    String named();
-
-    /** The left of the {@code left = right} a report names this by. */
-    String left();
-
-    /** The right of it. */
-    String right();
 }

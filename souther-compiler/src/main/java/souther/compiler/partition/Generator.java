@@ -140,6 +140,16 @@ public final class Generator {
             ALL_CANDIDATES_REJECTED,
             /** The search stopped before it got here. */
             SEARCH_LIMIT,
+            /**
+             * The rules leave no value here, and the whole of what they leave was walked.
+             *
+             * <p>Apart from every other word here, and the difference is the whole point of having
+             * it. The rest say what this compiler did not manage; this one says what the model
+             * settles — every position of the point is bounded, every combination of those bounds
+             * was tried, and none of them reaches it. A reader may act on this and may not act on
+             * the others (ADR-0091).
+             */
+            THE_RULES_LEAVE_NOTHING_THERE,
             /** The module's classes were not there to build a candidate against. */
             NOTHING_TO_BUILD_AGAINST,
             /** The generated classes would not link, so the decoders could not be reached. Told
@@ -315,7 +325,18 @@ public final class Generator {
     }
 
     /**
-     * A row at one boundary, built through the module's own decoders.
+     * A row at one coverage item of a border, built through the module's own decoders.
+     *
+     * <p>One entry, whatever the border was drawn on. What a search is handed is where each position
+     * has to stand — one of them for a line at a position's own value, two for a line where two
+     * positions stand apart, and as many as the rule named for a line over a form — and writing a row
+     * with some positions fixed is one procedure. Written as a method per shape of line, the two that
+     * existed offered different candidates for the same position and a third would have been a third
+     * offer.
+     *
+     * <p><b>Every position of the item is fixed at once</b>, which is what makes the row one at the
+     * item. A search that settled one and left the others to their own ranges would produce a row
+     * beside the line as readily as one at it.
      *
      * <p>One row per boundary rather than one row covering several, because a row is a question put to
      * a person and a row sitting on three edges at once is three answers they have to separate.
@@ -324,153 +345,113 @@ public final class Generator {
      * candidates that were tried, and another value of the same edge may build; what comes back says
      * which of the two happened and leaves the reading to the caller.
      */
-    public static BoundaryAttempt probe(Subject subject, String label,
-                                        BoundaryTarget.AtPlace place, CandidateCheck check) {
-        return probeAt(subject, label, place, check);
-    }
-
-    /**
-     * The place to try for one coverage item of a border, or null where this composes none.
-     *
-     * <p>Where the item names a place, that place; where it names a side of the border, one the side
-     * holds. Which value stands for a side is asked of the side and is no part of what the side is —
-     * a row anywhere in it is at the point, and the one built here is a candidate to offer rather
-     * than the item itself.
-     */
-    public static Place placeFor(Criterion criterion, Carrier carrier,
-                                 souther.compiler.numeric.NumericDomain.Bounds within) {
-        return switch (criterion) {
-            case Criterion.AtThePlace at -> at.place();
-            case Criterion.InTheRegion side -> side.region().standingIn(carrier,
-                    within == null
-                            ? new souther.compiler.numeric.NumericDomain.Bounds(null, null)
-                            : within);
-            // A pair is not a place at one term. Which pair stands for a point of a line between
-            // two positions is worked out where the pair is; asked here it would be a value one of
-            // them happens to hold.
-            case Criterion.WhereTheTermsAreApartBy _,
-                    Criterion.WhereTheTermsAreFurtherApartThan _ -> null;
-        };
-    }
-
-    /**
-     * A row on a line between two positions, written at a count both of them admit.
-     *
-     * <p>The count comes in rather than off the line. Where the line is is that the two are equal, and
-     * which count satisfies that is the rules' answer about the pair — written into the line it would
-     * make one row at it a different boundary from another.
-     *
-     * <p>Both positions are fixed at once, which is the whole of what makes this a row on the line. A
-     * search that settled one and left the other to its own range would produce a row beside the line
-     * as readily as one on it.
-     */
-    public static BoundaryAttempt probeBetween(Subject subject, String label,
-                                               BoundaryTarget.EqualTerms line, Place onAt,
-                                               Place againstAt, CandidateCheck check) {
-        FixtureTemplate on = written(subject, line.on(), line.carrier(), onAt);
-        FixtureTemplate against = written(subject, line.against(), line.carrier(), againstAt);
-        if (on == null || against == null) {
-            // What this has no way to write, and not a position with no values. The line may be the
-            // easiest row in the file to write by hand — two strings of one length are — and
-            // Nothing here says the edge cannot be written at: what ran is this compiler's search.
-            return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
-                    UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE));
-        }
+    public static BoundaryAttempt probeFixing(Subject subject, String label, Carrier carrier,
+                                              Map<NumericTerm, Place> fixing, CandidateCheck check) {
         Map<String, List<FixtureTemplate>> decided = new LinkedHashMap<>();
-        decided.put(line.on().path().toString(), List.of(on));
-        decided.put(line.against().path().toString(), List.of(against));
+        // What the rest of the row has to sit beside. A field of a record is not chosen from its own
+        // type once another field of that record is fixed: the rule relating them says what is left,
+        // and taking the bottom of the type's range instead is how a boundary that can be written
+        // came back as one every value tried was refused at.
         Map<String, Place> settled = new LinkedHashMap<>();
-        settled.put(line.on().path().toString(), onAt);
-        settled.put(line.against().path().toString(), againstAt);
+        Map<String, UnresolvedCombination.Reason> heldBack = new LinkedHashMap<>();
+        for (Map.Entry<NumericTerm, Place> each : fixing.entrySet()) {
+            Edge edge = edgeAt(subject, carrier, each.getKey(), each.getValue(), fixing.size() > 1);
+            if (edge.values().isEmpty()) {
+                return new BoundaryAttempt.Unresolved(
+                        new UnresolvedCombination(List.of(label), edge.reason()));
+            }
+            String at = each.getKey().path().toString();
+            // Two terms at one path is one location asked for two things at once — a string of a
+            // length and the string itself — and what a row writes at a location is one value. The
+            // fixing keeps them apart ({@link Realization.Found}) and this cannot, so it says so
+            // rather than writing whichever came last and offering half the point as the whole.
+            if (decided.containsKey(at)) {
+                return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
+                        UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE));
+            }
+            decided.put(at, edge.values());
+            if (edge.settledAt() != null) {
+                settled.put(at, edge.settledAt());
+            }
+            heldBack.put(at, edge.refused());
+        }
         List<FixtureTemplate> inputs = new ArrayList<>();
         for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
             String head = subject.parameters().get(p);
             Map<String, List<FixtureTemplate>> here = new LinkedHashMap<>();
-            if (line.on().path().head().equals(head)) {
-                here.put(line.on().path().toString(), decided.get(line.on().path().toString()));
-            }
-            if (line.against().path().head().equals(head)) {
-                here.put(line.against().path().toString(),
-                        decided.get(line.against().path().toString()));
+            for (NumericTerm term : fixing.keySet()) {
+                if (term.path().head().equals(head)) {
+                    here.put(term.path().toString(), decided.get(term.path().toString()));
+                }
             }
             Outcome tried = valueAt(subject, p, here, settled, Map.of(), check);
             if (tried.value() == null) {
-                return new BoundaryAttempt.Unresolved(
-                        new UnresolvedCombination(List.of(label), tried.reason(), tried.detail()));
-            }
-            inputs.add(tried.value());
-        }
-        return new BoundaryAttempt.Built(new GeneratedRow(List.of(label), inputs));
-    }
-
-    /**
-     * One count written as the value the position it stands at is declared as.
-     *
-     * <p>Null where nothing here can say what that is — a position whose type this cannot reach, and a
-     * term that is a measure of a value rather than the value: a length of four is not a count to write
-     * at the position, it is four characters somebody has to choose.
-     */
-    private static FixtureTemplate written(Subject subject, NumericTerm term, Carrier carrier,
-                                           Place at) {
-        if (term instanceof NumericTerm.SizeOf) {
-            return null;
-        }
-        Type declared = null;
-        for (Axis axis : subject.axes()) {
-            if (axis.term().equals(term)) {
-                declared = axis.type();
-                break;
-            }
-        }
-        if (declared == null && term.path().fields().isEmpty()) {
-            int at1 = subject.parameters().indexOf(term.path().head());
-            declared = at1 < 0 || at1 >= subject.types().size() ? null : subject.types().get(at1);
-        }
-        return declared == null ? null
-                : Witnesses.wrapped(declared, FixtureTemplate.on(carrier, at, subject.symbols().scope()::reach),
-                        subject.symbols());
-    }
-
-    /** A row at a line drawn at one count of one position. */
-    private static BoundaryAttempt probeAt(Subject subject, String label,
-                                           BoundaryTarget.AtPlace place, CandidateCheck check) {
-        // The obligation was read off this subject's axes, so one it names is one this has. A
-        // subject without it is two structures that disagree, which is not a search result and has
-        // no reading in a report.
-        Axis axis = subject.axes().stream().filter(a -> a.id().equals(place.axis())).findFirst()
-                .orElseThrow(() -> new IllegalStateException(
-                        "boundary names axis " + place.axis() + ", which "
-                                + "this subject has no axis at"));
-        Edge edge = edgeOf(axis, place.carrier(), place.at(), subject.symbols());
-        if (edge.values().isEmpty()) {
-            return new BoundaryAttempt.Unresolved(
-                    new UnresolvedCombination(List.of(label), edge.reason()));
-        }
-        List<FixtureTemplate> inputs = new ArrayList<>();
-        // What the rest of the row has to sit beside. A field of a record is not chosen from its
-        // own type once another field of that record is fixed: the rule relating them says what
-        // is left, and taking the bottom of the type's range instead is how a boundary that can
-        // be written came back as one every value tried was refused at.
-        Map<String, Place> settled = edge.settledAt() == null ? Map.of()
-                : Map.of(axis.path().toString(), edge.settledAt());
-        for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
-            Map<String, List<FixtureTemplate>> here =
-                    TermPath.of(subject.parameters().get(p)).head().equals(axis.path().head())
-                            ? Map.of(axis.path().toString(), edge.values()) : Map.of();
-            Outcome tried = valueAt(subject, p, here, settled, Map.of(), check);
-            if (tried.value() == null) {
-                // Where the refusal is of the values this edge offered, what the edge held back
-                // outranks it: values that were never built were not among the ones refused.
-                UnresolvedCombination.Reason why =
-                        !here.isEmpty() && tried.reason()
-                                == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED
-                                ? edge.refused() : tried.reason();
+                // Where the refusal is of the values one edge offered, what that edge held back
+                // outranks it: values that were never built were not among the ones refused. Only
+                // where one edge offered them, though — a point of a form fixes several positions
+                // under one parameter, and which of their edges the refusal was about is not
+                // something this knows. Taken from whichever came first, the reason named the wrong
+                // position's search.
+                UnresolvedCombination.Reason why = tried.reason();
+                if (here.size() == 1
+                        && why == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED) {
+                    why = heldBack.getOrDefault(here.keySet().iterator().next(), why);
+                }
                 return new BoundaryAttempt.Unresolved(
                         new UnresolvedCombination(List.of(label), why, tried.detail()));
             }
             inputs.add(tried.value());
         }
         return new BoundaryAttempt.Built(new GeneratedRow(List.of(label), inputs));
+    }
+
+    /**
+     * The values that stand at one position's place of the item.
+     *
+     * <p>The axis's own edge where the subject has an axis at this position, which is where a count
+     * taken of a location is met by whatever carries that count. Where it has none — a behavior whose
+     * inputs nothing bounds has no axis and its body still draws lines between them — the value is
+     * written from the declared type.
+     *
+     * @param besideAnother whether another position of the same item is fixed too. A count taken of a
+     *                      location is met by several values and only one of them can be offered
+     *                      beside a second position that is being fixed as well, which is a limit of
+     *                      the reading this replaced rather than a rule: it is preserved here so that
+     *                      collapsing the two searches into one changed nothing, and removing it is
+     *                      its own answer to give
+     */
+    private static Edge edgeAt(Subject subject, Carrier carrier, NumericTerm term, Place at,
+                               boolean besideAnother) {
+        if (besideAnother && term instanceof NumericTerm.SizeOf) {
+            return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        for (Axis axis : subject.axes()) {
+            if (axis.term().equals(term)) {
+                return edgeOf(axis, carrier, at, subject.symbols());
+            }
+        }
+        // No axis at this position, which a behavior whose inputs nothing bounds has none of while
+        // its body still draws lines between them. A count taken of a location is not writable this
+        // way: four is not what goes at the position, it is four characters somebody has to choose.
+        Type declared = term instanceof NumericTerm.SizeOf ? null : declaredAt(subject, term.path());
+        if (declared == null) {
+            return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        FixtureTemplate standing = Witnesses.wrapped(declared,
+                FixtureTemplate.on(carrier, at, subject.symbols().scope()::reach),
+                subject.symbols());
+        return standing == null ? Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
+                : new Edge(List.of(standing), null, at, null);
+    }
+
+    /** The type declared at a position this subject has no axis for, which is a bare parameter and
+     *  nothing else: a field of one is reached through a type this cannot name here. */
+    private static Type declaredAt(Subject subject, TermPath path) {
+        if (!path.fields().isEmpty()) {
+            return null;
+        }
+        int at = subject.parameters().indexOf(path.head());
+        return at < 0 || at >= subject.types().size() ? null : subject.types().get(at);
     }
 
     // --- the pair space -------------------------------------------------------------------------

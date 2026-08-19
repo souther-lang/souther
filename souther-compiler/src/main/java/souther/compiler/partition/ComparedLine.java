@@ -7,6 +7,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 
 /**
@@ -31,8 +32,8 @@ import souther.compiler.numeric.Place;
  *                          values either side of it. An equality says nothing about ranges: what it
  *                          distinguishes is the value from every other value
  */
-record ComparedLine(NumericTerm term, Place value, boolean valueBelongsBelow,
-                    boolean holdsAtTheValue, boolean singles) {
+record ComparedLine(NumericTerm term, Place value, Carrier carrier,
+                    boolean valueBelongsBelow, boolean holdsAtTheValue, boolean singles) {
 
     /**
      * What {@code comparison} draws, or null where it draws nothing.
@@ -43,7 +44,8 @@ record ComparedLine(NumericTerm term, Place value, boolean valueBelongsBelow,
      * the line is being drawn on — a size call is an {@code Int} there, and a position holding dates
      * is a day count.
      */
-    static ComparedLine of(Core.Binary comparison, InputReads reads, Symbols symbols) {
+    static ComparedLine of(Core.Binary comparison, AffineReading read, InputReads reads,
+                           Symbols symbols) {
         Hir.BinOp op = comparison.op();
         NumericTerm term = GuardThresholds.termOf(comparison.left(), reads, symbols);
         Place value = Carrier.writtenOn(comparison.right(), comparison.left().type(), symbols);
@@ -53,15 +55,52 @@ record ComparedLine(NumericTerm term, Place value, boolean valueBelongsBelow,
             op = mirrored(op);
         }
         if (term == null || value == null) {
-            return null;
+            // Nothing here is a position against a value the carrier writes. It may still be a
+            // statement about one position: `a + 1 <= 10` and `a <= b - b + 9` are both `a <= 9`,
+            // and which quantity a rule cuts is the arithmetic's answer rather than the spelling's.
+            return fromTheForm(read, reads, symbols);
         }
+        Carrier carrier = Carrier.ofValue(
+                op == comparison.op() ? comparison.left().type() : comparison.right().type(),
+                symbols);
         return switch (ComparisonClaim.of(op)) {
-            case ComparisonClaim.Cut cut -> new ComparedLine(term, value, cut.valueBelongsBelow(),
-                    cut.holdsAtTheValue(), false);
+            case ComparisonClaim.Cut cut -> new ComparedLine(term, value, carrier,
+                    cut.valueBelongsBelow(), cut.holdsAtTheValue(), false);
             // A value singled out has no low side of its own — the values either side of it are one
             // class — so the side is written down as one answer and read by nobody.
             case ComparisonClaim.Singled singled ->
-                    new ComparedLine(term, value, true, singled.holdsAtTheValue(), true);
+                    new ComparedLine(term, value, carrier, true, singled.holdsAtTheValue(), true);
+            case ComparisonClaim.Nothing _ -> null;
+        };
+    }
+
+    /**
+     * The line the canonical form draws where it cuts one position with a coefficient of one.
+     *
+     * <p>A coefficient of one and no other, because that is what makes the quantity the position's
+     * own values. {@code 2 * a <= 9} cuts something that is not {@code a}: it takes the even numbers,
+     * nine is not one of them, and reading it as a line on {@code a} would put a row at four and a
+     * half. That is a quantity of its own ({@link BorderQuantity.OverAForm}) and is read elsewhere.
+     */
+    private static ComparedLine fromTheForm(AffineReading read, InputReads reads,
+                                            Symbols symbols) {
+        if (read == null) {
+            return null;
+        }
+        NumericTerm term = read.oneCoordinate();
+        // The position's own order, not the order of whichever operand it was written beside. The
+        // reading two methods up is careful about the same thing — it takes the type from the side
+        // that named the position — and `10 >= a + 1` names it on the right.
+        Carrier carrier = term == null ? null : AffineReading.carrierOf(term, reads, symbols);
+        if (carrier == null || !carrier.counts()) {
+            return null;
+        }
+        Place value = Count.of(read.cut());
+        return switch (read.claim()) {
+            case ComparisonClaim.Cut cut -> new ComparedLine(term, value, carrier,
+                    cut.valueBelongsBelow(), cut.holdsAtTheValue(), false);
+            case ComparisonClaim.Singled singled ->
+                    new ComparedLine(term, value, carrier, true, singled.holdsAtTheValue(), true);
             case ComparisonClaim.Nothing _ -> null;
         };
     }

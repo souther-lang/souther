@@ -193,7 +193,7 @@ class WhatARuleOnAStringIsMeasuredAtTest {
                     .forEach(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
                             .filter(role -> border.demand(role).criterion() != null)
                             .forEach(role -> owed.add(role + " "
-                                    + border.demand(role).criterion().against(border.cut()))));
+                                    + border.demand(role).criterion().asked(border.cut().of()).substring(2))));
         }
         return new Measured(classes, stands, owed);
     }

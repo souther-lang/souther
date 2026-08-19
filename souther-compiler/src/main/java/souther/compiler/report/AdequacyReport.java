@@ -806,7 +806,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return switch (reason) {
             case THE_RULES_REFUSE_IT -> "excluded — the rules leave no value there";
             case THE_CARRIER_NAMES_NO_NEIGHBOUR ->
-                    "these values name no neighbour, so the point cannot be written";
+                    "this order names no value there, so the point cannot be written";
             case THE_RULE_NAMES_A_VALUE_NOT_A_SIDE ->
                     "the rule names a value rather than a side, so neither neighbour is the nearer";
         };
@@ -1031,8 +1031,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         if (!(attempt instanceof ItemAssessment.Attempt.Unresolved left)) {
             return "";   // nothing ran, and what a run would have said is not this line's to guess
         }
-        return " — nothing composed one: " + left.why().said()
-                .orElseGet(() -> whyUnresolved(left.why()));
+        // A proof is not a failure, and the sentence in front of the reason may not say it is.
+        // Every other word here is this compiler saying what it did not manage; one of them is the
+        // model settling the point, and reading them under one opening sends an author looking for
+        // a row nothing can write.
+        String opening = left.why().reason()
+                == souther.compiler.partition.Generator.UnresolvedCombination.Reason
+                        .THE_RULES_LEAVE_NOTHING_THERE
+                ? " — " : " — nothing composed one: ";
+        return opening + left.why().said().orElseGet(() -> whyUnresolved(left.why()));
     }
 
     /** The category a search came back with, where the class it was about said nothing itself. */
@@ -1042,6 +1049,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case NOTHING_COMPOSES_ONE -> "nothing here could build a representative for " + at;
             case ALL_CANDIDATES_REJECTED -> "every value tried at " + at + " was refused";
             case SEARCH_LIMIT -> "the search stopped before reaching " + at;
+            case THE_RULES_LEAVE_NOTHING_THERE ->
+                    "the rules leave no value at " + at;
             case NOTHING_TO_BUILD_AGAINST -> "there was nothing to build a candidate against";
             case LINKAGE_FAILED -> "the generated classes would not link";
             case NO_REASON_RECORDED -> "nothing was recorded about why";

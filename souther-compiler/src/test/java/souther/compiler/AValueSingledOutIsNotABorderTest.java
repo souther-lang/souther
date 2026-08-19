@@ -31,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class AValueSingledOutIsNotABorderTest {
 
-    /** The condition, with a bound this compiler cannot fold, so the questions survive. */
+    /** The condition, with a bound the measure reads no line out of, so the questions survive. */
     private static final String SOURCE = """
                 module m
 
@@ -46,7 +46,7 @@ class AValueSingledOutIsNotABorderTest {
                     | "one" : (R { cost = 1, a = 1, other = 2 }) -> B
                 """;
 
-    /** The condition, with a bound this compiler cannot fold, so the questions survive. */
+    /** The condition, with a bound the measure reads no line out of, so the questions survive. */
     private static Set<CoverageObligation> raisedBy(String condition) {
         Compilation compilation = Compilation.ofSource(
                 SOURCE.formatted(condition), "Main");
@@ -78,14 +78,14 @@ class AValueSingledOutIsNotABorderTest {
     @Test
     void anOrderingComparisonAsksAboutABorder() {
         assertEquals(Set.of(CoverageObligation.BOUNDARY, CoverageObligation.PARTITION),
-                raisedBy("r.cost <= 10 * 2"));
+                raisedBy("r.cost <= Int.min(20, 30)"));
     }
 
     /** And an equality asks about the value it singles out, beside the same classes. */
     @Test
     void anEqualityAsksAboutTheValueItSinglesOut() {
         assertEquals(Set.of(CoverageObligation.SINGLETON, CoverageObligation.PARTITION),
-                raisedBy("r.cost == 10 * 2"));
+                raisedBy("r.cost == Int.min(20, 30)"));
     }
 
     /**
@@ -115,13 +115,13 @@ class AValueSingledOutIsNotABorderTest {
      *
      * <p>The line is where the two sides hold one count, so it is on neither of them and divides
      * neither: a border, and no classes. Raised whether or not this compiler can find that place —
-     * {@code a <= b} and {@code a <= b + 1} relate two positions alike (ADR-0090), and only one of
-     * them is a place this can name today. Which is the whole of the difference between a question
+     * {@code a <= b} and {@code a <= b * b} relate two positions alike (ADR-0090), and only
+     * one of them is a place this can name. Which is the whole of the difference between a question
      * and an answer.
      */
     @Test
     void anOrderBetweenTwoThingsThatMoveIsABorderAndNoClasses() {
-        assertEquals(Set.of(CoverageObligation.BOUNDARY), raisedBy("r.a <= r.other + 1"));
+        assertEquals(Set.of(CoverageObligation.BOUNDARY), raisedBy("r.a <= Int.multiply(r.other, r.other)"));
         assertEquals(Set.of(CoverageObligation.BOUNDARY), raisedBy("r.a <= r.a + 1"),
                 "one name twice is still both sides moving");
     }
@@ -130,15 +130,15 @@ class AValueSingledOutIsNotABorderTest {
      * And the place it names is the comparison that drew it, which tells two of them apart.
      *
      * <p>Writing the place out takes both sides in a vocabulary this compiler has, and it has none
-     * for {@code r.other + 1}: the best it could print was {@code r.a = r.other}, a place that rule
-     * never stopped, and {@code + 1} and {@code + 2} came out as one subject. Named by the
-     * comparison, the subject is exact — which is only true while the comparison travels as itself,
-     * so this asks what it is and not what it is called.
+     * for {@code r.other * r.other}: the best it could print was {@code r.a = r.other}, a place
+     * that rule never stopped, and the two bounds came out as one subject. Named by the comparison,
+     * the subject is exact — which is only true while the comparison travels as itself, so this asks
+     * what it is and not what it is called.
      */
     @Test
     void theBorderOfARelationIsNamedByTheComparisonThatDrewIt() {
         java.util.List<souther.compiler.diag.Citation> drawn =
-                raisedWith("r.a <= r.other + 1 && r.a <= r.other + 2").stream()
+                raisedWith("r.a <= Int.multiply(r.other, r.other)\n                        && r.a <= Int.multiply(r.other, r.cost)").stream()
                         .map(PartitionEvidence.Unanswered::subject)
                         .map(souther.compiler.check.Owed.Subject.OfComparison.class::cast)
                         .map(souther.compiler.check.Owed.Subject.OfComparison::at)
@@ -159,6 +159,6 @@ class AValueSingledOutIsNotABorderTest {
     @Test
     void andSoDoesADisequality() {
         assertEquals(Set.of(CoverageObligation.SINGLETON, CoverageObligation.PARTITION),
-                raisedBy("r.cost /= 10 * 2"));
+                raisedBy("r.cost /= Int.min(20, 30)"));
     }
 }

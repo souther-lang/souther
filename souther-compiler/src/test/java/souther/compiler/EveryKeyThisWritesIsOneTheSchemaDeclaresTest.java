@@ -47,8 +47,8 @@ class EveryKeyThisWritesIsOneTheSchemaDeclaresTest {
             data Missing
 
             behavior f : (r: R) -> Found | Missing
-                ensures Found -> r.a <= 10 * 2
-                ensures Found -> r.a >= 20 * 2
+                ensures Found -> r.a <= Int.min(20, 30)
+                ensures Found -> r.a >= Int.min(40, 50)
             let f (r) = if r.a >= 30 * 2 then Found else Missing
 
             example f

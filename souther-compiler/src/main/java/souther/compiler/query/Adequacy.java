@@ -776,17 +776,11 @@ public final class Adequacy {
 
                 @Override
                 public Generator.BoundaryAttempt attempt(String label,
-                        souther.compiler.partition.BoundaryTarget.AtPlace at) {
-                    return built(() -> Generator.probe(subject, label, at, check));
-                }
-
-                @Override
-                public Generator.BoundaryAttempt attemptBetween(String label,
-                        souther.compiler.partition.BoundaryTarget.EqualTerms line,
-                        souther.compiler.numeric.Place onAt,
-                        souther.compiler.numeric.Place againstAt) {
+                        souther.compiler.check.Carrier carrier,
+                        java.util.Map<souther.compiler.inputs.NumericTerm,
+                                souther.compiler.numeric.Place> fixing) {
                     return built(() ->
-                            Generator.probeBetween(subject, label, line, onAt, againstAt, check));
+                            Generator.probeFixing(subject, label, carrier, fixing, check));
                 }
 
                 private Generator.BoundaryAttempt built(

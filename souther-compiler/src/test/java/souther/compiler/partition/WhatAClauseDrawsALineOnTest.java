@@ -234,14 +234,16 @@ class WhatAClauseDrawsALineOnTest {
         assertEquals(List.of(), valuesOf(clauses));
         assertEquals(1, clauses.singled().size(), clauses.singled().toString());
         assertEquals(new Demand.NotOwed(NotOwedReason.THE_RULE_NAMES_A_VALUE_NOT_A_SIDE),
-                Border.atAPlace(new AxisId("findTodo", "id"),
-                                Cut.at(new Carrier.Whole(),
-                                        clauses.singled().get(0).value(),
-                                        clauses.singled().get(0).origin()),
+                Border.at(BoundaryTarget.at(
+                                        new BorderQuantity.OfACoordinate(
+                                                new AxisId("findTodo", "id"),
+                                                new souther.compiler.inputs.NumericTerm.ValueOf(
+                                                        souther.compiler.inputs.TermPath.of("id")),
+                                                new Carrier.Whole()),
+                                        new Level.OnACarrier(new Carrier.Whole(),
+                                                clauses.singled().get(0).value())),
                                 clauses.singled().get(0).origin(),
-                                souther.compiler.inputs.BoundaryDomain.on(new Carrier.Whole()),
-                                new NumericDomain.Bounds(null, null))
-                        .demand(PointRole.OFF),
+                                null).demand(PointRole.OFF),
                 "a value singled out orders nothing around it, so neither neighbour is the nearer");
     }
 
@@ -371,9 +373,9 @@ class WhatAClauseDrawsALineOnTest {
         // coverage item as the row on the line.
         // `<` is open at the line, so the pair one step under it is the ON point and the side
         // away from the border starts under that.
-        assertEquals("= to - 1", line.demand(PointRole.ON).criterion().asked(line.cut()));
-        assertEquals("< to - 1", line.demand(PointRole.IN).criterion().asked(line.cut()));
-        assertEquals("> to", line.demand(PointRole.OUT).criterion().asked(line.cut()));
+        assertEquals("= to - 1", line.demand(PointRole.ON).criterion().asked(line.cut().of()));
+        assertEquals("< to - 1", line.demand(PointRole.IN).criterion().asked(line.cut().of()));
+        assertEquals("> to", line.demand(PointRole.OUT).criterion().asked(line.cut().of()));
         assertEquals(List.of("from", "to"),
                 clauses.unread().stream().map(each -> each.at().toString()).toList());
     }
@@ -446,7 +448,7 @@ class WhatAClauseDrawsALineOnTest {
                 data NotFound = { asked: TodoId }
 
                 behavior findTodo : (id: TodoId) -> Todo | NotFound
-                    ensures asked = NotFound -> id.value + 1 > 10
+                    ensures asked = NotFound -> Int.multiply(id.value, id.value) > 10
                 """, "findTodo");
 
         assertEquals(List.of(), valuesOf(clauses), "nothing here reads a line out of that form");

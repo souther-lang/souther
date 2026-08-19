@@ -168,43 +168,67 @@ public final class EnsuresThresholds {
             reportUnread(e, rule.value(), reads, symbols, out.unread());
             return;
         }
-        // What the comparison draws is read the same way wherever a comparison is written.
-        ComparedLine drawn = ComparedLine.of(comparison, reads, symbols);
-        if (drawn == null) {
-            // A line this could not read as a count of one position may still be one between two.
-            // Asked in that order and about the same comparison, the way a body's conditions are
-            // read — and the positions are named as unread either way, because what the partition
-            // could not read here it still could not read.
-            int had = out.between().size();
-            between(comparison, rule, clause, reads, symbols, out);
+        // What the comparison cuts is read the same way wherever a comparison is written, which is
+        // what {@link Cutting} is for: a clause and a guard over one arithmetic form draw one line,
+        // and a reader that called two of the three readings read no form at all.
+        Cutting cutting = Cutting.of(out.behavior(), comparison, reads, symbols);
+        if (cutting == null) {
+            // The positions are named as unread, because what the partition could not read here it
+            // still could not read.
             reportUnread(comparison, rule.value(), reads, symbols, out.unread());
-            // Every position the comparison names, by the walk a body's conditions use. Asked of
-            // `ComparedTerms` instead, a comparison this could not read as a line between two
-            // positions had no position to be filed at — which is exactly the comparison whose
-            // questions stand, so the clause that most needs saying said nothing.
+            // Every position the comparison names, by the walk a body's conditions use. Asked of the
+            // narrower reading instead, a comparison this could not read had no position to be filed
+            // at — which is exactly the comparison whose questions stand, so the clause that most
+            // needs saying said nothing.
             List<TermPath> named = GuardThresholds.mentionedIn(comparison, reads, symbols);
-            NumericTerm about = GuardThresholds.comparedTerm(comparison, reads, symbols);
             raises(out, rule, clause, comparison, rule.value(),
-                    named.isEmpty() ? null : named.get(0), about,
+                    named.isEmpty() ? null : named.get(0),
+                    GuardThresholds.comparedTerm(comparison, reads, symbols),
                     GuardThresholds.subjectsOf(comparison, reads, symbols, rule.value()),
-                    out.between().size() > had
-                            ? new Required.LineRead.ALineBetweenTwoPositions()
+                    new Required.LineRead.NoLine(
+                            GuardThresholds.why(comparison, reads, symbols)));
+            return;
+        }
+        OriginRef.EnsuresOrigin origin = new OriginRef.EnsuresOrigin(
+                new RuleRef.Ensures(rule.id(), clause), cutting.valueBelongsBelow(),
+                cutting.holdsAtTheValue(), cutting.singles());
+        NumericTerm divided = cutting.dividedPosition();
+        if (divided == null) {
+            // A line on something that is not one position's own values: it divides no position, so
+            // it travels beside the partition rather than on an axis. Met by writing the values,
+            // which is this reader's own answer and not the one the same shape of line gets from a
+            // guard — a guard's is met by getting the comparison to answer, because what it is about
+            // is a place in a body.
+            // The positions are named as ones nothing divides, which is what a rule over a quantity
+            // that is not one position's own values leaves them — the same note the same shape gets
+            // from a body's conditions, said by the same reader.
+            reportUnread(comparison, rule.value(), reads, symbols, out.unread());
+            // Null where the quantity does not reach the line, which is the line and not one of its
+            // points. What a clause raises is answered by what came of reading it and never by which
+            // reading was tried: read off the branch, a rule that drew nothing reported a line.
+            Border made = Border.at(cutting.target(), origin, cutting.within());
+            if (made != null && out.between().stream().noneMatch(had -> had.equals(made))) {
+                out.between().add(made);
+            }
+            List<TermPath> named = GuardThresholds.mentionedIn(comparison, reads, symbols);
+            raises(out, rule, clause, comparison, rule.value(),
+                    named.isEmpty() ? null : named.get(0),
+                    GuardThresholds.comparedTerm(comparison, reads, symbols),
+                    GuardThresholds.subjectsOf(comparison, reads, symbols, rule.value()),
+                    made != null ? new Required.LineRead.ALineBetweenTwoPositions()
                             : new Required.LineRead.NoLine(
                                     GuardThresholds.why(comparison, reads, symbols)));
             return;
         }
-        raises(out, rule, clause, comparison, rule.value(), drawn.term().path(), drawn.term(),
+        raises(out, rule, clause, comparison, rule.value(), divided.path(), divided,
                 GuardThresholds.subjectsOf(comparison, reads, symbols, rule.value()),
                 new Required.LineRead.ALineOnThePosition());
-        OriginRef.EnsuresOrigin origin = new OriginRef.EnsuresOrigin(
-                new RuleRef.Ensures(rule.id(), clause),
-                drawn.valueBelongsBelow(), drawn.holdsAtTheValue(), drawn.singles());
-        if (drawn.singles()) {
-            out.singled().add(
-                    new GuardThresholds.Guards.Singled(drawn.term(), drawn.value(), origin));
+        souther.compiler.numeric.Place value = ((Level.OnACarrier) cutting.at()).at();
+        if (cutting.singles()) {
+            out.singled().add(new GuardThresholds.Guards.Singled(divided, value, origin));
         } else {
             out.thresholds().add(
-                    new Threshold(drawn.term(), drawn.value(), drawn.valueBelongsBelow(), origin));
+                    new Threshold(divided, value, cutting.valueBelongsBelow(), origin));
         }
     }
 
@@ -227,41 +251,6 @@ public final class EnsuresThresholds {
                 RuleAccounting.ofComparison(named, ComparisonClaim.of(comparison.op()), of, read,
                         // A clause belongs to a behavior, so there is always something to call it.
                         new souther.compiler.check.RuleCitation.Named(named.named()))));
-    }
-
-    /**
-     * The line a rule draws between two of its positions.
-     *
-     * <p>{@code ensures Ok -> from.value < to.value} says the behavior may not answer {@code Ok}
-     * where the two hold one count and may above it, which is a line as much as one at a number is.
-     * It is on neither position, so it divides neither and travels beside the partition rather than
-     * on an axis.
-     *
-     * <p>Met by writing the two values, which is this reader's own answer and not the one the same
-     * shape of line gets from a {@code guard}. A guard's is met by getting the comparison to answer,
-     * because what it is about is a place in a body; a clause states a relation, and the input the
-     * relation changes at is a pair of counts that are equal — so a row putting one count in both
-     * positions has met it.
-     *
-     * <p>{@code valueBelongsBelow} is not a question this line answers — the two sides of it are
-     * decided by both positions at once — and {@code singles} is false, because this is a line and
-     * not a value singled out.
-     */
-    private static void between(Core.Binary comparison, StatedContract.StatedRule rule,
-                                String clause, InputReads reads, Symbols symbols, Drawn out) {
-        ComparedTerms drawn = ComparedTerms.of(comparison, reads, symbols);
-        if (drawn == null) {
-            return;
-        }
-        Border made = Border.betweenTerms(
-                new BoundaryTarget.EqualTerms(out.behavior(), drawn.on(), drawn.against(),
-                        drawn.carrier()),
-                new OriginRef.EnsuresOrigin(new RuleRef.Ensures(rule.id(), clause), true,
-                        drawn.holdsAtTheLine(), false),
-                drawn.onIsAboveWhereItHolds());
-        if (out.between().stream().noneMatch(had -> had.equals(made))) {
-            out.between().add(made);
-        }
     }
 
     /**

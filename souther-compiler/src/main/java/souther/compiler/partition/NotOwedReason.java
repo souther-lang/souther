@@ -31,13 +31,17 @@ public enum NotOwedReason {
     THE_RULES_REFUSE_IT,
 
     /**
-     * The border is drawn and the carrier names no value one step from it.
+     * The border is drawn and the order the quantity is on names no value the point could be at.
      *
-     * <p>A {@code Decimal} and a {@code String} have no next value, at a place or at the difference
-     * two terms of a line between them stand at — the two carriers this language names no step for,
-     * a date-time and a time of day each stepping at the unit they are held to. The point the
-     * technique asks for cannot be written down, which is a limit of the language and not a gap in
-     * the rows: an item that cannot exist is not one anybody is short of.
+     * <p>Two ways that happens and one answer. A {@code Decimal} and a {@code String} have no next
+     * value, at a place or at the difference two terms of a line between them stand at — the two
+     * carriers this language names no step for, a date-time and a time of day each stepping at the
+     * unit they are held to. And a form over positions whose values fill takes some of the numbers
+     * and not all of them: {@code 3 * a} comes arbitrarily close to one and never arrives, because
+     * no decimal a model writes is a third.
+     *
+     * <p>The point the technique asks for cannot be written down either way, which is a limit of the
+     * language and not a gap in the rows: an item that cannot exist is not one anybody is short of.
      */
     THE_CARRIER_NAMES_NO_NEIGHBOUR,
 
