@@ -947,25 +947,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
-     * The word a document writes for how far a position's rules were read.
+     * Whether the partition measure is the one that answers this question.
      *
-     * <p>Here rather than at the one place it is written, so a reader holding the arms can be held
-     * to the words without reading the writer. No {@code default}: an arm added and not given a
-     * word stops the compile rather than arriving in a document as one that already existed.
-     */
-    /**
-     * The questions a section is the reader of, each named by the rule that raised it.
-     *
-     * <p>One finding kind, filed by what it asks. Which measure answers a question is settled where
-     * the question is raised; a report chooses where to print it, and nothing here decides what the
-     * model asked.
-     */
-    /**
-     * Whether this section is where the rows for a question are counted.
-     *
-     * <p>Which values may stand somewhere and which classes hold them are counted under the
-     * partition; a border and a value singled out are places rows are written at, and are counted
-     * under the borders. Filed by what the question asks and not by which producer raised it.
+     * <p>Which values may stand somewhere, which classes hold them, and which value a rule tells
+     * from every other: a singling makes the two classes {@code {c}} and everything else, so that
+     * measure is what counts a row for it. A border is the other one's, and is the only one.
+     * Filed by what the question asks and not by which producer raised it.
      */
     private static boolean aboutTheClasses(souther.compiler.check.CoverageObligation question) {
         return switch (question) {
@@ -979,6 +966,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         };
     }
 
+    /**
+     * The questions a section is the reader of, each named by the rule that raised it.
+     *
+     * <p>One finding kind, filed by what it asks. Which measure answers a question is settled where
+     * the question is raised; a report chooses where to print it, and nothing here decides what the
+     * model asked.
+     */
     private static void unaccounted(StringBuilder out, BehaviorReport behavior,
                                     SourceNameResolver names,
                                     souther.compiler.source.SourceId declaredIn,
@@ -1009,6 +1003,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return cited.said(names, declaredIn);
     }
 
+    /**
+     * The word a document writes for how far a position's rules were read.
+     *
+     * <p>Here rather than at the one place it is written, so a reader holding the arms can be held
+     * to the words without reading the writer. No {@code default}: an arm added and not given a
+     * word stops the compile rather than arriving in a document as one that already existed.
+     */
     public static String readingWord(PartitionEvidence.AxisCoverage.Reading read) {
         // Partial covers both, and what is written beside it says which. A reader keying on the
         // word is told the numbers rest on something unfinished, which is what the word is for; the

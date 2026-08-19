@@ -88,6 +88,22 @@ class AValueSingledOutIsNotABorderTest {
     }
 
     /**
+     * Both sides moving with the row is a relation, whatever names appear on them.
+     *
+     * <p>What decides it is not how many positions are named. {@code a <= a + 1} names one, twice,
+     * and is a rule about how a position stands against itself; {@code a <= b + 1} names two and is
+     * not a line between them that anything here draws. Counted by distinct names, the first came
+     * back as a bound on {@code a} — a question about where {@code a} stops that no rule wrote.
+     */
+    @Test
+    void bothSidesMovingWithTheRowIsARelation() {
+        assertEquals(Set.of(), raisedBy("r.a <= r.other + 1"),
+                "two positions, and no bound on either");
+        assertEquals(Set.of(), raisedBy("r.a <= r.a + 1"),
+                "one name twice is still both sides moving");
+    }
+
+    /**
      * So does a disequality, which places the same thing and selects the other class.
      *
      * <p>The two are one partition — {@code {c}} and everything else — and differ in which of the

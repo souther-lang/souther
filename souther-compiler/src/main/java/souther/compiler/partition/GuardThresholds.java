@@ -23,6 +23,7 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.Citation;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 
@@ -310,8 +311,8 @@ public final class GuardThresholds {
             if (here != null) {
                 made.add(each.comparison());
                 raises(accounting, plan, site, guard, iff, each.comparison(),
-                        here.term().path(), here.term(), subjectOf(here.term()),
-                        subjectsOf(each.comparison(), reads, symbols),
+                        here.term().path(), here.term(),
+                        subjectsOf(each.comparison(), reads, symbols, null),
                         new Required.LineRead.ALineOnThePosition());
                 continue;
             }
@@ -334,8 +335,8 @@ public final class GuardThresholds {
             // a length where it was written about one. Read off the position alone, a question about
             // a count came back spelled as the string it counts.
             NumericTerm about = comparedTerm(each.comparison(), reads, symbols);
-            raises(accounting, plan, site, guard, iff, each.comparison(), named.get(0),
-                    about, subjectOf(about), subjectsOf(each.comparison(), reads, symbols),
+            raises(accounting, plan, site, guard, iff, each.comparison(), named.get(0), about,
+                    subjectsOf(each.comparison(), reads, symbols, null),
                     between.size() > drawn ? new Required.LineRead.ALineBetweenTwoPositions()
                             : new Required.LineRead.NoLine(
                                     why(each.comparison(), reads, symbols)));
@@ -366,23 +367,54 @@ public final class GuardThresholds {
      * one operator.
      */
     static Required.ComparisonSubject subjectsOf(Core.Binary comparison, InputReads reads,
-                                                 Symbols symbols) {
-        return namedIn(comparison, reads, symbols).size() > 1
-                ? new Required.ComparisonSubject.BetweenPositions()
-                : new Required.ComparisonSubject.OnePosition();
+                                                 Symbols symbols, BindingId answer) {
+        boolean left = movesWithTheRow(comparison.left(), reads, symbols, answer);
+        boolean right = movesWithTheRow(comparison.right(), reads, symbols, answer);
+        if (left == right) {
+            // Both, which is a rule about a pair; or neither, which says nothing about an input.
+            return left ? new Required.ComparisonSubject.Relation()
+                    : new Required.ComparisonSubject.NoInput();
+        }
+        Core side = left ? comparison.left() : comparison.right();
+        NumericTerm term = termOf(side, reads, symbols);
+        if (term == null) {
+            // It moves with the row and is not a number this reads — the answer, or an input read a
+            // way the terms do not name. Nothing about an input's own values follows.
+            return new Required.ComparisonSubject.NoInput();
+        }
+        return new Required.ComparisonSubject.AnInput(subjectOf(term), Owed.Subject.at(""));
+    }
+
+    /**
+     * Whether what {@code e} comes to is chosen by the row.
+     *
+     * <p>An input's position is, and so is the answer a clause of an {@code ensures} names — what a
+     * row chooses is what the behavior is applied to, and the answer follows from it. Everything
+     * else is the same for every row, which is what makes the other side of a comparison a place
+     * rather than a second moving thing.
+     */
+    private static boolean movesWithTheRow(Core e, InputReads reads, Symbols symbols,
+                                           BindingId answer) {
+        if (!mentionedIn(e, reads, symbols).isEmpty()) {
+            return true;
+        }
+        return answer != null && reads(e, answer);
+    }
+
+    /** Whether anything in {@code e} reads the binding a rule calls the answer. */
+    private static boolean reads(Core e, BindingId answer) {
+        if (e instanceof Core.Read read && answer.equals(read.binding())) {
+            return true;
+        }
+        boolean[] found = {false};
+        Core.forEachChild(e, child -> found[0] |= reads(child, answer));
+        return found[0];
     }
 
     /** The number a comparison is about, from whichever side names one. */
     static NumericTerm comparedTerm(Core.Binary comparison, InputReads reads, Symbols symbols) {
         NumericTerm left = termOf(comparison.left(), reads, symbols);
         return left != null ? left : termOf(comparison.right(), reads, symbols);
-    }
-
-    /** Every position an expression names, for a reader outside this walk. */
-    static List<TermPath> namedIn(Core e, InputReads reads, Symbols symbols) {
-        List<TermPath> out = new ArrayList<>();
-        mentioned(e, reads, symbols, out);
-        return out;
     }
 
     /**
@@ -395,12 +427,11 @@ public final class GuardThresholds {
      */
     private static void raises(List<Guards.AtAPosition> out, CoverageSites.Plan plan, int site,
                                CoverageSites.GuardRef guard, Core.If iff, Core.Binary comparison,
-                               TermPath at, NumericTerm term, Owed.Subject about,
+                               TermPath at, NumericTerm term,
                                Required.ComparisonSubject of, Required.LineRead read) {
         out.add(new Guards.AtAPosition(at, term, RuleAccounting.ofComparison(
                 new RuleRef.Guard(plan.site(site).comparison()),
-                souther.compiler.check.ComparisonClaim.of(comparison.op()), of,
-                about, read,
+                souther.compiler.check.ComparisonClaim.of(comparison.op()), of, read,
                 // A comparison is written rather than named, so a reader is sent where the author
                 // wrote it. The construct's own place and not the reading's: one comparison inside a
                 // helper is one rule however many calls read it.

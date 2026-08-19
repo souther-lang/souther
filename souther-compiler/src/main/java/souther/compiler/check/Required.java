@@ -209,54 +209,77 @@ public sealed interface Required {
      * @param about the position the line is on, as the reading that found it names it
      * @param read  what that reading came to
      */
-    public static Required ofComparison(ComparisonClaim claim, ComparisonSubject of,
-                                        Owed.Subject about) {
-        if (of instanceof ComparisonSubject.BetweenPositions) {
-            // Where one position stands against another. An order between them is a line rows are
+    public static Required ofComparison(ComparisonClaim claim, ComparisonSubject of) {
+        if (!(of instanceof ComparisonSubject.AnInput input)) {
+            // Where both sides move with the row. An order between two of them is a line rows are
             // owed at and divides neither, so there is no class of one for a row to be owed in; an
-            // equality between them is not even that — it puts the whole of one arm on the line, and
-            // that arm is a row the branch measure already asks for (`ComparedTerms`).
-            return claim instanceof ComparisonClaim.Cut
-                    ? new Some(new LinkedHashSet<>(java.util.List.of(
-                            new Owed(CoverageObligation.BOUNDARY, about))))
-                    : new Irrelevant(Set.of(Because.IT_RELATES_TWO_POSITIONS));
+            // equality between them is not even that — it puts the whole of one arm on the place,
+            // and that arm is a row the branch measure already asks for (`ComparedTerms`).
+            return new Irrelevant(Set.of(Because.IT_RELATES_TWO_POSITIONS));
         }
         Set<Owed> owed = new LinkedHashSet<>();
         switch (claim) {
             // An order across the place it names, so rows are owed either side of it and the two
             // sides have roles. A singling names the same place and has neither: the values on both
-            // sides of it are one class.
-            case ComparisonClaim.Cut _ -> owed.add(new Owed(CoverageObligation.BOUNDARY, about));
+            // sides of it are one class. Both are about the number the comparison measures the
+            // position by.
+            case ComparisonClaim.Cut _ ->
+                    owed.add(new Owed(CoverageObligation.BOUNDARY, input.place()));
             case ComparisonClaim.Singled _ ->
-                    owed.add(new Owed(CoverageObligation.SINGLETON, about));
+                    owed.add(new Owed(CoverageObligation.SINGLETON, input.place()));
             // Reached only by asking what an operator that compares nothing places. Every caller
             // walks comparisons; one arriving here has read something else as one.
             case ComparisonClaim.Nothing _ -> throw new IllegalArgumentException(
                     "a comparison that places nothing is not one this raises questions about");
         }
-        owed.add(new Owed(CoverageObligation.PARTITION, about));
+        // And the classes are the position's. A `String` bounded on its length draws its line on the
+        // count and divides the strings, which is what {@link Owed} carries two subjects for.
+        owed.add(new Owed(CoverageObligation.PARTITION, input.position()));
         return new Some(owed);
     }
 
     /**
-     * How many of the behavior's positions a comparison is written about.
+     * What a comparison is written about, which the operator does not say.
      *
-     * <p>The other half of what a comparison claims, and read off the source as the operator is.
-     * {@code x == 10} singles a value out and {@code x == y} says where one position stands against
-     * another; the operator is the same and the claims are not. Taken from the operator alone,
-     * {@code a == b} raised a question about a value singled out at {@code a}, which no rule wrote.
+     * <p>The other half of what a comparison claims. {@code x == 10} singles a value out and
+     * {@code x == y} says where one position stands against another, under one operator — so taken
+     * from the operator alone, {@code a == b} raised a question about a value singled out at
+     * {@code a} that no rule wrote.
      *
-     * <p>Not read off what a reading managed. Whether this compiler could turn the comparison into a
-     * line between two positions is an answer, and a question may not be decided by one (#851) — so
-     * {@code a == 10 * 2} is one position's however unreadable the bound is.
+     * <p><b>Which of the two is decided by what moves with a row.</b> A comparison is about one
+     * position exactly where one side is a number taken of an input and the other side is the same
+     * for every row. Counted as positions named instead, {@code a <= a + 1} came back as one
+     * position's — one name, twice — and a clause comparing an answer to an input needed a rule of
+     * its own to be kept out. What a row chooses is the input; the answer moves with it, so a
+     * comparison against the answer is a relation like any other.
+     *
+     * <p>Not read off what a reading managed. Whether this compiler could fold the other side is an
+     * answer, and a question may not be decided by one (#851) — so {@code a == 10 * 2} is one
+     * position's however unreadable the bound is.
      */
     public sealed interface ComparisonSubject {
 
-        /** One position, and something on the other side that names none. */
-        record OnePosition() implements ComparisonSubject {}
+        /**
+         * One input, measured by the number on this side of the comparison.
+         *
+         * @param place    the number the comparison names, which is where a border or a singled
+         *                 value falls
+         * @param position the position it is a number of, which is what the classes are of
+         */
+        record AnInput(Owed.Subject place, Owed.Subject position) implements ComparisonSubject {
 
-        /** Two of them, which is a rule about a pair. */
-        record BetweenPositions() implements ComparisonSubject {}
+            public AnInput {
+                if (place == null || position == null) {
+                    throw new IllegalArgumentException("a comparison about an input names it");
+                }
+            }
+        }
+
+        /** Both sides move with the row, so it is a rule about a pair. */
+        record Relation() implements ComparisonSubject {}
+
+        /** Neither side is an input's, so it says nothing about one. */
+        record NoInput() implements ComparisonSubject {}
     }
 
     /**

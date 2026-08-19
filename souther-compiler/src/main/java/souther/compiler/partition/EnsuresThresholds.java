@@ -182,12 +182,11 @@ public final class EnsuresThresholds {
             // `ComparedTerms` instead, a comparison this could not read as a line between two
             // positions had no position to be filed at — which is exactly the comparison whose
             // questions stand, so the clause that most needs saying said nothing.
-            List<TermPath> named = GuardThresholds.namedIn(comparison, reads, symbols);
+            List<TermPath> named = GuardThresholds.mentionedIn(comparison, reads, symbols);
             NumericTerm about = GuardThresholds.comparedTerm(comparison, reads, symbols);
             raises(out, rule, clause, comparison, rule.value(),
                     named.isEmpty() ? null : named.get(0), about,
-                    GuardThresholds.subjectOf(about),
-                    GuardThresholds.subjectsOf(comparison, reads, symbols),
+                    GuardThresholds.subjectsOf(comparison, reads, symbols, rule.value()),
                     out.between().size() > had
                             ? new Required.LineRead.ALineBetweenTwoPositions()
                             : new Required.LineRead.NoLine(
@@ -195,8 +194,7 @@ public final class EnsuresThresholds {
             return;
         }
         raises(out, rule, clause, comparison, rule.value(), drawn.term().path(), drawn.term(),
-                GuardThresholds.subjectOf(drawn.term()),
-                GuardThresholds.subjectsOf(comparison, reads, symbols),
+                GuardThresholds.subjectsOf(comparison, reads, symbols, rule.value()),
                 new Required.LineRead.ALineOnThePosition());
         OriginRef.EnsuresOrigin origin = new OriginRef.EnsuresOrigin(
                 new RuleRef.Ensures(rule.id(), clause),
@@ -219,24 +217,15 @@ public final class EnsuresThresholds {
      */
     private static void raises(Drawn out, StatedContract.StatedRule rule, String clause,
                                Core.Binary comparison, BindingId answer, TermPath at,
-                               NumericTerm term, Owed.Subject about,
+                               NumericTerm term,
                                Required.ComparisonSubject of, Required.LineRead read) {
         if (at == null) {
             return;   // about no position of the input, so it raises nothing about one
         }
-        // A comparison against the answer draws no line a row can be written at, and that is not a
-        // reading falling short: what a row chooses is what the behavior is applied to, so there is
-        // nothing for a row to be at. `value.sku == item.sku` was read and understood, and raising a
-        // question about where `item.sku` stops would report a model this compiler read perfectly as
-        // one it could not.
-        if (readsTheAnswer(comparison, answer)) {
-            return;
-        }
         RuleRef.Ensures named = new RuleRef.Ensures(rule.id(), clause);
         out.accounting().add(new GuardThresholds.Guards.AtAPosition(at, term,
-                RuleAccounting.ofComparison(named, ComparisonClaim.of(comparison.op()), of,
+                RuleAccounting.ofComparison(named, ComparisonClaim.of(comparison.op()), of, read,
                         // A clause belongs to a behavior, so there is always something to call it.
-                        about, read,
                         new souther.compiler.check.RuleCitation.Named(named.named()))));
     }
 
