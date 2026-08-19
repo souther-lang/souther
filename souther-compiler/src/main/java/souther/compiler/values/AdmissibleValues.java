@@ -237,12 +237,16 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
         // at once, and met they would promise a combination neither reading has — so the
         // conjunction promises nothing. See {@link #guaranteedAt}.
         boolean apart = !guaranteedTogether || !other.guaranteedTogether;
+        // Either way what comes out is a promise about whole values, which is why a conjunction
+        // never has to say it is not one. Two of them met is one — a value taken from each
+        // position of both stands in both readings — and nothing promised is one for want of
+        // anything to promise.
         return new AdmissibleValues<>(out, union(unread, other.unread),
                 dropped || other.dropped, nothing || other.nothing,
                 apart ? Map.of() : guaranteedBy(guaranteed, defaultGuaranteed,
                         other.guaranteed, other.defaultGuaranteed, ValueSet::meet),
                 apart ? ValueSet.NONE : defaultGuaranteed.meet(other.defaultGuaranteed),
-                !apart);
+                true);
     }
 
     /**

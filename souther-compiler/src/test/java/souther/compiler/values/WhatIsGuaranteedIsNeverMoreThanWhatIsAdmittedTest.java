@@ -11,6 +11,7 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The two ends of a reading, whichever way one was built.
@@ -64,6 +65,13 @@ class WhatIsGuaranteedIsNeverMoreThanWhatIsAdmittedTest {
                                 .join(says(OTHER, A).meet(says(OTHER, B)))),
                 made("join of a meet and an unread",
                         says(VALUE, A).meet(unreadable(Set.of())).join(says(VALUE, B))),
+                made("choice over two positions",
+                        says(VALUE, A).meet(says(OTHER, A))
+                                .join(says(VALUE, B).meet(says(OTHER, B)))),
+                made("choice over two positions, met",
+                        says(VALUE, A).meet(says(OTHER, A))
+                                .join(says(VALUE, B).meet(says(OTHER, B)))
+                                .meet(says(VALUE, A))),
                 made("join nested under a join",
                         says(VALUE, A).join(says(VALUE, B).join(unreadable(Set.of(VALUE))))));
     }
@@ -126,6 +134,26 @@ class WhatIsGuaranteedIsNeverMoreThanWhatIsAdmittedTest {
                 "read one position at a time, both choices leave value open to either");
         assertEquals(ValueSet.NONE, both.guaranteedAt(VALUE),
                 "but only value = A stands, so neither value is one this reading can promise");
+    }
+
+    /**
+     * A conjunction always leaves a promise about whole values.
+     *
+     * <p>Two of them met is one: a value taken from each position of both stands in both readings.
+     * And where a side of it promised nothing about whole values, what comes out promises nothing
+     * at all, which is a promise about whole values for want of anything to promise. Neither case
+     * has a conjunction saying its promise is not one — a reading that said so would have a later
+     * conjunction refuse to compose promises that were there to compose.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("states")
+    void aConjunctionAlwaysLeavesAPromiseAboutWholeValues(AdmissibleValues<String> state) {
+        assertTrue(state.meet(says(OTHER, B)).guaranteedTogether(),
+                "met with a rule about one position");
+        assertTrue(state.meet(state).guaranteedTogether(), "and met with itself");
+        assertTrue(state.meet(AdmissibleValues.<String>unreadable(Set.of(VALUE),
+                UnreadReason.FORM_NOT_READ)).guaranteedTogether(),
+                "and met with a rule nothing could read");
     }
 
     /** Every value guaranteed at a position is a value admitted there. */
