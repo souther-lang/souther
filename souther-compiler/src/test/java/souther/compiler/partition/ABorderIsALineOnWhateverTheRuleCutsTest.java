@@ -686,6 +686,50 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
                 "the positions are still named, and as positions nothing divided:\n" + report);
     }
 
+    /**
+     * A bound a proof is drawn from is rounded outward, never inward.
+     *
+     * <p>What the walk is bounded by is a proof: a value outside it is one no assignment of the rest
+     * completes, and a walk that covers what is left of the box may end in {@code Impossible}. So a
+     * bound rounded the wrong way takes a value the box holds out of the walk and the level it
+     * reaches is proved not to exist. Written to sixteen digits at the nearest,
+     * {@code a = 10000000000000001} rounded to {@code 10000000000000000} and the one pair that meets
+     * this line was refused.
+     */
+    @Test
+    void aBoundAProofIsDrawnFromIsRoundedOutward() {
+        String report = report("""
+                module example.exact
+
+                data Big = Int
+                    invariant value >= 0
+                    invariant value <= 10000000000000001
+
+                data Nought = Int
+                    invariant value >= 0
+                    invariant value <= 0
+
+                data No = { why: Int }
+                data Yes = { v: Int }
+                data Result = No | Yes
+
+                behavior f : (a: Big, b: Nought) -> Result
+                    constructs No, Yes
+                let f (a, b) = {
+                    guard Int.add(a.value, b.value) <= 10000000000000001 else No { why = 0 }
+                    Yes { v = 1 }
+                }
+
+                example f
+                    | "one" : (Big(1), Nought(0)) -> Yes { v = 1 }
+                """);
+
+        assertTrue(report.contains("no row is at the ON point f/a + b = 10000000000000001"), report);
+        assertFalse(report.contains("the rules leave no value at a + b = 10000000000000001"),
+                "the box holds exactly one pair at this line, so nothing proves it holds none:\n"
+                        + report);
+    }
+
     private static String report(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());

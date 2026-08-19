@@ -238,16 +238,19 @@ public interface LevelSpace {
     static LevelSpace overFiniteDecimals(BigDecimal generator) {
         return new Counting() {
 
+            /**
+             * Whether the generator divides this level over the finite decimals.
+             *
+             * <p>The generator has no factor of two or five left in it, and ten is what a decimal's
+             * scale is made of — so a level {@code n / 10^k} is a multiple of it exactly where the
+             * generator divides {@code n}. Said as that rather than by dividing and seeing whether
+             * the quotient ends: a quotient with no end is the answer here and not a mishap, and a
+             * reader of this should not have to know that an exception is how it arrives.
+             */
             @Override
             public boolean attainable(Level level) {
-                try {
-                    countOf(level).at().divide(generator);
-                    return true;
-                } catch (ArithmeticException noEnd) {
-                    // A quotient with no end is a value no model writes, so the quantity never
-                    // arrives at this level.
-                    return false;
-                }
+                return countOf(level).at().stripTrailingZeros().unscaledValue()
+                        .mod(generator.toBigIntegerExact()).signum() == 0;
             }
 
             /** No nearest one. The values this takes are dense, so past a level it does not take

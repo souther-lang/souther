@@ -205,6 +205,11 @@ public final class LevelRealizer {
     /** How many assignments the search will try before it stops and says it did not settle it. */
     private static final int STEPS_A_SEARCH_MAY_TAKE = 200_000;
 
+    /** How far a derived end is written out where the division that makes it does not end. Any
+     *  number of them is sound while the rounding goes outward; this many keeps the bound close
+     *  enough that the walk it bounds is still short. */
+    private static final int DIGITS_A_DERIVED_END_KEEPS = 32;
+
     /**
      * The search itself: an assignment of every position of a form, or nothing.
      *
@@ -367,13 +372,35 @@ public final class LevelRealizer {
             }
             // owed - coef * x must lie in [reach0, reach1], so coef * x lies in
             // [owed - reach1, owed - reach0].
-            java.math.BigDecimal one = owed.subtract(reach[1])
-                    .divide(coef, java.math.MathContext.DECIMAL64);
-            java.math.BigDecimal other = owed.subtract(reach[0])
-                    .divide(coef, java.math.MathContext.DECIMAL64);
+            java.math.BigDecimal one = owed.subtract(reach[1]);
+            java.math.BigDecimal other = owed.subtract(reach[0]);
+            java.math.BigDecimal low = quotient(one, coef, java.math.RoundingMode.FLOOR)
+                    .min(quotient(other, coef, java.math.RoundingMode.FLOOR));
+            java.math.BigDecimal high = quotient(one, coef, java.math.RoundingMode.CEILING)
+                    .max(quotient(other, coef, java.math.RoundingMode.CEILING));
             return new NumericDomain.Bounds(
-                    Endpoint.lower(within.min(), Endpoint.inclusive(new Count(one.min(other)))),
-                    Endpoint.upper(within.max(), Endpoint.inclusive(new Count(one.max(other)))));
+                    Endpoint.lower(within.min(), Endpoint.inclusive(new Count(low))),
+                    Endpoint.upper(within.max(), Endpoint.inclusive(new Count(high))));
+        }
+
+        /**
+         * A quotient that is exact where the division ends, and rounded the way {@code towards} says
+         * where it does not.
+         *
+         * <p><b>Outward and never inward.</b> What this bounds is a proof — a value outside it is one
+         * no assignment of the rest completes — so a bound rounded the wrong way takes a value the
+         * box holds out of the walk, and a walk that then finds nothing calls the level unreachable.
+         * Rounded to sixteen digits at the nearest, {@code a = 10000000000000001} was rounded to
+         * {@code 10000000000000000} and the one pair that meets the line was proved not to exist.
+         */
+        private static java.math.BigDecimal quotient(java.math.BigDecimal owed,
+                                                     java.math.BigDecimal coef,
+                                                     java.math.RoundingMode towards) {
+            try {
+                return owed.divide(coef);
+            } catch (ArithmeticException noEnd) {
+                return owed.divide(coef, DIGITS_A_DERIVED_END_KEEPS, towards);
+            }
         }
 
         /**
