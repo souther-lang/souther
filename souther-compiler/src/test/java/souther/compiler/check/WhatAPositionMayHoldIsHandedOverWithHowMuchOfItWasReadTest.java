@@ -159,6 +159,12 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
      * <p>{@code left /= right} relates two positions and {@code code} is neither of them, so the
      * reason the branch stopped is not a reason about {@code code}. Lent across, a report would
      * tell an author that a rule compares {@code code} with another position, and no rule does.
+     *
+     * <p>The two positions that rule does name are left whole. {@code code == "A"} says nothing
+     * about either of them, so a {@code Triple} with any {@code left} at all satisfies the choice
+     * by its second alternative — and what a position may hold is every value, which is the whole
+     * of what the rules leave it. That the relating rule went unread is a fact about the rules and
+     * is answered by the accounting, not by what a position may hold.
      */
     @Test
     void aPositionAnAlternativeTookBackIsNotToldWhatTheOtherBranchWasAbout() {
@@ -170,8 +176,8 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 """, "Triple");
 
         asFarAsRead(ValueSet.ANY, UnreadReason.ALTERNATIVE_NOT_READ, read, "code");
-        asFarAsRead(ValueSet.ANY, UnreadReason.RELATES_TWO_POSITIONS, read, "left");
-        asFarAsRead(ValueSet.ANY, UnreadReason.RELATES_TWO_POSITIONS, read, "right");
+        wholly(ValueSet.ANY, read, "left");
+        wholly(ValueSet.ANY, read, "right");
     }
 
     /**

@@ -1,0 +1,96 @@
+package souther.compiler.values;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * An alternative that already admits every value at a position settles it, whatever went unread
+ * beside it.
+ *
+ * <p>ANY is the top of this lattice. A choice one of whose alternatives admits every value there is
+ * admits every value there is, so there is nothing wider for an unread rule to widen it to — and a
+ * reading that answered otherwise would report a position the model leaves open as one it could not
+ * follow.
+ *
+ * <p><b>Whichever way the alternatives are bracketed.</b> {@code ||} is one connective and not a
+ * tree, so a reading that says one thing about {@code (a || b) || c} and another about
+ * {@code a || (b || c)} is reading the brackets. That is what the guarantee is carried for: the
+ * alternatives that can be read cover the position between them, and the reading has to still know
+ * it after one of them has been joined with something it could not read.
+ */
+class AChoiceThatAlreadyAdmitsEverythingIsNotWidenedTest {
+
+    private static final String VALUE = "value";
+    private static final Value FIVE = Value.text("5");
+
+    /** {@code value == 5}. */
+    private static AdmissibleValues<String> is5() {
+        return AdmissibleValues.at(VALUE, ValueSet.just(FIVE));
+    }
+
+    /** {@code value /= 5}. */
+    private static AdmissibleValues<String> not5() {
+        return AdmissibleValues.at(VALUE, ValueSet.allBut(FIVE));
+    }
+
+    /** A rule about the position that this reading has no word for. */
+    private static AdmissibleValues<String> unread() {
+        return AdmissibleValues.unreadable(Set.of(VALUE), UnreadReason.FORM_NOT_READ);
+    }
+
+    /** Two alternatives that cover the position between them leave nothing to widen. */
+    @Test
+    void twoAlternativesCoveringThePositionLeaveNothingForAnUnreadOneToWiden() {
+        AdmissibleValues<String> either = is5().join(not5()).join(unread());
+
+        assertEquals(ValueSet.ANY, either.at(VALUE));
+        assertTrue(either.speaksFor(VALUE),
+                "the two readable alternatives admit every value, so the choice does");
+    }
+
+    /** And the same however the alternatives are bracketed. */
+    @Test
+    void theSameHoweverTheAlternativesAreBracketed() {
+        AdmissibleValues<String> either = is5().join(not5().join(unread()));
+
+        assertEquals(ValueSet.ANY, either.at(VALUE));
+        assertTrue(either.speaksFor(VALUE),
+                "what the readable alternatives cover is not lost by joining one of them first");
+    }
+
+    /**
+     * A conjunction is not read this way, and that is the boundary of the rule.
+     *
+     * <p>{@link AdmissibleValues#guaranteedAt} falls to nothing under a meet with a rule this could
+     * not read, because such a rule may exclude as much as it likes. Discharging unreadness by
+     * comparing the two ends there would report every position of every value with one unreadable
+     * clause as one this reading is short of — and what an unread rule stated beside others costs
+     * is answered by the positions it names, which is the account a conjunction has always kept.
+     */
+    @Test
+    void aConjunctionKeepsItsOwnAccountOfWhatWentUnread() {
+        AdmissibleValues<String> both =
+                is5().meet(AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ));
+
+        assertEquals(ValueSet.NONE, both.guaranteedAt(VALUE),
+                "an unread conjunct may exclude anything, so nothing is guaranteed under it");
+        assertEquals(ValueSet.just(FIVE), both.at(VALUE));
+        assertTrue(both.speaksFor(VALUE),
+                "and the position is still spoken for: the unread rule names none");
+    }
+
+    /** The alternative that could not be read covers nothing, so a position only it reaches is one
+     *  the choice is still short of. */
+    @Test
+    void anAlternativeNothingCouldReadCoversNothing() {
+        AdmissibleValues<String> either = is5().join(unread());
+
+        assertEquals(ValueSet.ANY, either.at(VALUE));
+        assertEquals(UnreadReason.FORM_NOT_READ, either.whyUnread(VALUE),
+                "one alternative admits one value and the other is unknown, so nothing covers it");
+    }
+}

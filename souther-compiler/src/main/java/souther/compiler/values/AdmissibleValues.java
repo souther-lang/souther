@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BinaryOperator;
 
 /**
  * Which values each position may hold, over all the rules a reading took in.
@@ -42,6 +43,18 @@ import java.util.Set;
  * questions and are kept apart: {@link #at} says which values, {@link #speaksFor} says whether that
  * is the whole of what the rules leave.
  *
+ * <p>What a position holds is answered from two sides. {@link #at} is an upper approximation and
+ * {@link #guaranteedAt} a lower one, and between them sits what the rules truly leave:
+ *
+ * <pre>
+ *     guaranteedAt(p)   &#8838;   what is truly admitted at p   &#8838;   at(p)
+ * </pre>
+ *
+ * <p>The lower one is what a choice needs. An alternative that admits every value at a position
+ * settles it however little was read beside it, and a reading holding only "something went unread"
+ * has thrown away what it would take to know that — which is why the two ends are carried and not
+ * a flag standing for their difference.
+ *
  * <p>Two things spoil it, and the second is the one that is easy to miss.
  *
  * <p>A rule this could not read spoils the positions it names, and what stopped it travels with
@@ -55,9 +68,17 @@ import java.util.Set;
  * arrived at that way is not the ANY of a position nothing was written about. Without this a
  * position would be reported as one the model draws no distinction at, when what happened is that
  * this reading could not follow the distinction the model draws.
+ *
+ * <p>Unless the alternatives already cover the position, which is the one thing that stops it.
+ * {@code (value == "A" || value /= "A") || opaque()} leaves nothing for the unread branch to take
+ * back: the two that were read admit every value between them, and a choice one of whose
+ * alternatives admits every value at a position admits every value at it. That is what
+ * {@link #guaranteedAt} is carried for, and holding "something went unread" alone would answer the
+ * same clause two ways depending on where its brackets fell.
  */
 public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> unread,
-                                  boolean dropped, boolean nothing) {
+                                  boolean dropped, boolean nothing,
+                                  Map<A, ValueSet> guaranteed, ValueSet defaultGuaranteed) {
 
     /**
      * @param values  what each position admits. A position at {@link ValueSet#ANY} is left out, so
@@ -71,6 +92,14 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
      *                rule is not carried: a position the other branch spoke about is spoiled by
      *                there having been an alternative it could not read, and not by whatever the
      *                rule in that alternative was about
+     * @param guaranteed which values each position is guaranteed to admit — read through
+     *                {@link #guaranteedAt} rather than off this map, since a position guaranteed
+     *                {@code defaultGuaranteed} is left out and what is held is what differs from it
+     * @param defaultGuaranteed what a position this holds no guarantee for is guaranteed to admit.
+     *                Not {@link #dropped} said another way: {@code value == 5} joined with a rule
+     *                nothing could read has this at {@link ValueSet#ANY} and {@code dropped} set,
+     *                because the alternative that was read guarantees every value at every position
+     *                it says nothing about, while a rule of the choice did go unread
      */
     public AdmissibleValues {
         Map<A, ValueSet> said = new LinkedHashMap<>();
@@ -84,11 +113,50 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
         // iteration order of an immutable copy does not.
         values = Collections.unmodifiableMap(said);
         unread = Collections.unmodifiableMap(new LinkedHashMap<>(unread));
+        // A reading that admits nothing guarantees nothing, and at every position rather than at
+        // the one that emptied: no value of it exists, so there is none to be counted on anywhere.
+        // Settled here because every way of building one of these arrives at nothing differently —
+        // a leaf left no value, two rules that cannot both hold, a caller that showed it from
+        // outside — and a guarantee surviving any of them is a lower bound on the empty set.
+        if (nothing || said.values().stream().anyMatch(ValueSet::isEmpty)) {
+            guaranteed = Map.of();
+            defaultGuaranteed = ValueSet.NONE;
+        }
+        Map<A, ValueSet> beyond = new LinkedHashMap<>();
+        ValueSet otherwise = defaultGuaranteed;
+        guaranteed.forEach((atom, set) -> {
+            if (!set.equals(otherwise)) {
+                beyond.put(atom, set);
+            }
+        });
+        guaranteed = Collections.unmodifiableMap(beyond);
+    }
+
+    /**
+     * Which values this reading can guarantee are admitted at {@code atom}, however much the rules
+     * it could not read turn out to exclude.
+     *
+     * <p>A lower approximation where {@link #at} is an upper one, and equal to it at a position
+     * this says that nothing left unread is why the answer is as wide as it is. It does not say the
+     * answer is what the model leaves: a rule reaching across two positions is read here one
+     * position at a time, so what is reported can be wider than the rules are with every rule read.
+     *
+     * <p><b>Carried through both connectives and read by one.</b> {@link #join} discharges an
+     * unread rule at a position the alternatives already cover, because a choice one of whose
+     * alternatives admits every value there admits every value there. {@link #meet} does not, and
+     * this is not an omission: a rule stated beside others narrows rather than widens, so what an
+     * unread one costs there is answered by the positions it names — which is what {@link #unread}
+     * has held all along. The two connectives are dual in what they do to the values and are not
+     * dual in this, and folding them together would report a conjunction short of its rules at
+     * every position wherever a single clause of it went unread.
+     */
+    public ValueSet guaranteedAt(A atom) {
+        return guaranteed.getOrDefault(atom, defaultGuaranteed);
     }
 
     /** Nothing read and nothing missed, which is what a reading starts from. */
     public static <A> AdmissibleValues<A> top() {
-        return new AdmissibleValues<>(Map.of(), Map.of(), false, false);
+        return new AdmissibleValues<>(Map.of(), Map.of(), false, false, Map.of(), ValueSet.ANY);
     }
 
     /**
@@ -100,12 +168,13 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
      */
     public AdmissibleValues<A> leavingNothing() {
         return isBottom() ? this
-                : new AdmissibleValues<>(Map.of(), unread, dropped, true);
+                : new AdmissibleValues<>(Map.of(), unread, dropped, true, Map.of(), ValueSet.NONE);
     }
 
     /** One position said to admit {@code set}, and nothing missed. */
     public static <A> AdmissibleValues<A> at(A atom, ValueSet set) {
-        return new AdmissibleValues<>(Map.of(atom, set), Map.of(), false, false);
+        return new AdmissibleValues<>(Map.of(atom, set), Map.of(), false, false,
+                Map.of(atom, set), ValueSet.ANY);
     }
 
     /**
@@ -118,7 +187,10 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
     public static <A> AdmissibleValues<A> unreadable(Set<A> named, UnreadReason why) {
         Map<A, UnreadReason> spoiled = new LinkedHashMap<>();
         named.forEach(each -> spoiled.put(each, why));
-        return new AdmissibleValues<>(Map.of(), spoiled, true, false);
+        // Nothing is guaranteed anywhere, and at the positions it does not name as much as at the
+        // ones it does: what a rule this has no word for admits is not known, so a choice offering
+        // it as an alternative is offering nothing that can be counted on.
+        return new AdmissibleValues<>(Map.of(), spoiled, true, false, Map.of(), ValueSet.NONE);
     }
 
     /** What {@code atom} may hold, everything being admitted where nothing was said. */
@@ -149,7 +221,10 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
         Map<A, ValueSet> out = new LinkedHashMap<>(values);
         other.values.forEach((atom, set) -> out.merge(atom, set, ValueSet::meet));
         return new AdmissibleValues<>(out, union(unread, other.unread),
-                dropped || other.dropped, nothing || other.nothing);
+                dropped || other.dropped, nothing || other.nothing,
+                guaranteedBy(guaranteed, defaultGuaranteed,
+                        other.guaranteed, other.defaultGuaranteed, ValueSet::meet),
+                defaultGuaranteed.meet(other.defaultGuaranteed));
     }
 
     /**
@@ -175,7 +250,7 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
                 }
             });
             return new AdmissibleValues<>(both, union(unread, other.unread),
-                    dropped || other.dropped, true);
+                    dropped || other.dropped, true, Map.of(), ValueSet.NONE);
         }
         if (isBottom()) {
             return other;
@@ -190,6 +265,11 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
                 out.put(atom, set.join(there));
             }
         });
+        // What the alternatives guarantee between them, which is what settles whether anything is
+        // left for an unread rule to have widened.
+        Map<A, ValueSet> covered = guaranteedBy(guaranteed, defaultGuaranteed,
+                other.guaranteed, other.defaultGuaranteed, ValueSet::join);
+        ValueSet coveredElsewhere = defaultGuaranteed.join(other.defaultGuaranteed);
         Map<A, UnreadReason> spoiled = union(unread, other.unread);
         // Spoiled by there having been an alternative this could not read, which is what happened
         // to them: a value satisfying that branch is under no obligation from this one. Not by what
@@ -201,7 +281,32 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
         if (dropped) {
             spoiled = spoiling(spoiled, other.values.keySet());
         }
-        return new AdmissibleValues<>(out, spoiled, dropped || other.dropped, false);
+        // And struck where the alternatives already cover what is reported. ANY is the top of this
+        // lattice, so a choice that reached it on the alternatives it could read cannot be widened
+        // by one it could not — and a position whose reported set is met exactly by what is
+        // guaranteed is one no unread rule is answerable for, wherever it came by its reason.
+        Map<A, UnreadReason> standing = new LinkedHashMap<>();
+        spoiled.forEach((atom, why) -> {
+            if (!covered.getOrDefault(atom, coveredElsewhere)
+                    .equals(out.getOrDefault(atom, ValueSet.ANY))) {
+                standing.put(atom, why);
+            }
+        });
+        return new AdmissibleValues<>(out, standing, dropped || other.dropped, false,
+                covered, coveredElsewhere);
+    }
+
+    /** What both sides guarantee, at every position either of them holds a guarantee for, each
+     *  side missing one standing at its own default. */
+    private static <A> Map<A, ValueSet> guaranteedBy(Map<A, ValueSet> these, ValueSet theseElse,
+                                                     Map<A, ValueSet> those, ValueSet thoseElse,
+                                                     BinaryOperator<ValueSet> both) {
+        Set<A> named = new LinkedHashSet<>(these.keySet());
+        named.addAll(those.keySet());
+        Map<A, ValueSet> out = new LinkedHashMap<>();
+        named.forEach(each -> out.put(each, both.apply(these.getOrDefault(each, theseElse),
+                those.getOrDefault(each, thoseElse))));
+        return out;
     }
 
     /** The same, with {@code these} left open by an alternative — where nothing has spoiled them
