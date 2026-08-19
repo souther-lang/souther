@@ -208,6 +208,26 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
     }
 
     /**
+     * But one position on both sides of a comparison is not two positions.
+     *
+     * <p>{@code x < x + 1} names {@code x} either side of it and there is no other position for a
+     * class to be about. Told that the rule relates it to another position, a reader goes looking
+     * for one the model never wrote; what would let this be read is a reading of the form, which
+     * is what the position on the right is inside of.
+     */
+    @Test
+    void butOnePositionOnBothSidesIsNotTwoPositions() {
+        FieldDomains read = readingOf("""
+                module example.spans
+
+                data Sole = { x: Int }
+                    invariant x < x + 1
+                """, "Sole");
+
+        assertEquals(List.of(new BlockReason.UnreadComparisonForm()), reasonsAt(read, "x"));
+    }
+
+    /**
      * A position whose values carry no order to draw a line on says that, and says it once.
      *
      * <p>A field declared as one case of an enumeration is ordered — the comparison is on the sum's

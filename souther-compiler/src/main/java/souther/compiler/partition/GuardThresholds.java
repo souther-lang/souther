@@ -223,13 +223,21 @@ public final class GuardThresholds {
      * position inside an expression from a position. Asked the narrow question alone,
      * {@code y + 1} named nothing and a comparison of two positions came back as a form nobody
      * could read.
+     *
+     * <p>The positions come from the one walk either way. Read again off the term where there is
+     * one, a side would be carrying two answers to "which position is this about" and the
+     * comparison between them would be settled by whichever the caller looked at.
      */
-    private static UnreadComparison.Side sideOf(Core e, InputReads reads, Symbols symbols) {
-        if (mentionedIn(e, reads, symbols).isEmpty()) {
-            return new UnreadComparison.Side.NamesNothing();
+    private static UnreadComparison.Side<TermPath> sideOf(Core e, InputReads reads,
+                                                          Symbols symbols) {
+        List<TermPath> named = mentionedIn(e, reads, symbols);
+        if (named.isEmpty()) {
+            return new UnreadComparison.Side.NamesNothing<>();
         }
-        return termOf(e, reads, symbols) == null ? new UnreadComparison.Side.HoldsOne()
-                : new UnreadComparison.Side.IsOne(orderable(e.type(), symbols));
+        return termOf(e, reads, symbols) == null
+                ? new UnreadComparison.Side.NamesInside<>(new java.util.LinkedHashSet<>(named))
+                : new UnreadComparison.Side.IsOne<>(named.getFirst(),
+                        orderable(e.type(), symbols));
     }
 
     static List<TermPath> mentionedIn(Core e, InputReads reads, Symbols symbols) {

@@ -2,6 +2,9 @@ package souther.compiler.check;
 
 import souther.compiler.inputs.BlockReason;
 
+import java.util.LinkedHashSet;
+import java.util.Set;
+
 /**
  * Why a comparison naming a position did not become a line.
  *
@@ -16,6 +19,10 @@ import souther.compiler.inputs.BlockReason;
  * asks what a body's read of a parameter names, the other asks what a clause's coordinate is
  * called; neither is the other's business. What is here is what the answers come to, which is the
  * part that has to agree.
+ *
+ * <p>What a position is called travels with the answers and is never read here, only compared with
+ * another of its own. So the readers may hold a position under whatever name each of them uses and
+ * still be held to one rule.
  */
 public final class UnreadComparison {
 
@@ -25,20 +32,39 @@ public final class UnreadComparison {
      * <p>Three cases and not a pair of flags. Whether the position this side names carries an order
      * is a question only about a side that is a position, and a reader handing over an answer for a
      * side that names none would be filling in a field that stands for nothing.
+     *
+     * <p>Each carries which positions it named and not only that it named some. Which two positions
+     * a comparison is between is the question the rule below asks, and a side that answered only
+     * "one of them is in here" made {@code x < x + 1} a rule about {@code x} and something else.
      */
-    public sealed interface Side {
+    public sealed interface Side<K> {
+
+        /** The positions this side names, in the order the reader met them. */
+        Set<K> positions();
 
         /** Nothing here is one of the positions being read for. */
-        record NamesNothing() implements Side {}
+        record NamesNothing<K>() implements Side<K> {
+
+            @Override
+            public Set<K> positions() {
+                return Set.of();
+            }
+        }
 
         /**
-         * A position is named from inside an expression this reader does not take apart:
+         * Positions are named from inside an expression this reader does not take apart:
          * {@code Int.add(length, width)}, {@code p.x + 1}.
          *
-         * <p>What is missing is a reading of the form. Nothing is known about the order under the
-         * position from here — the expression is what was not read — so nothing about it is said.
+         * <p>However many of them. What is missing is a reading of the form, and nothing is known
+         * about the order under any position from here — the expression is what was not read — so
+         * nothing about that is said.
          */
-        record HoldsOne() implements Side {}
+        record NamesInside<K>(Set<K> positions) implements Side<K> {
+
+            public NamesInside {
+                positions = java.util.Collections.unmodifiableSet(new LinkedHashSet<>(positions));
+            }
+        }
 
         /**
          * This side is the position itself, or a number taken of it.
@@ -46,7 +72,13 @@ public final class UnreadComparison {
          * @param ordered whether a line can be drawn on what that position carries, asked of the
          *                carrier
          */
-        record IsOne(boolean ordered) implements Side {}
+        record IsOne<K>(K position, boolean ordered) implements Side<K> {
+
+            @Override
+            public Set<K> positions() {
+                return Set.of(position);
+            }
+        }
     }
 
     /**
@@ -61,23 +93,32 @@ public final class UnreadComparison {
      * <p>Two positions is asked of what the sides <em>name</em>, however deeply, and not of what
      * they are. That is as true of {@code x < y + 1} as of {@code x < y}: reading it off whether a
      * side is a position loses the second position entirely and answers with the form.
+     *
+     * <p>And of <em>another</em> position, not of a position on each side ({@link Relates}).
+     * {@code x < x + 1} has a position on both sides and one position, so there is no second one
+     * for a class to be about — what a reader would have to be given is a reading of the form, and
+     * being sent after a relation sends them looking for a position the model never wrote.
      */
-    public static BlockReason why(Side left, Side right) {
-        if (!(left instanceof Side.NamesNothing) && !(right instanceof Side.NamesNothing)) {
+    public static <K> BlockReason why(Side<K> left, Side<K> right) {
+        Set<K> named = new LinkedHashSet<>(left.positions());
+        named.addAll(right.positions());
+        if (!left.positions().isEmpty() && !right.positions().isEmpty() && named.size() > 1) {
             return new BlockReason.ComparisonBetweenPositions();
         }
-        return switch (left instanceof Side.NamesNothing ? right : left) {
+        // The side that names one, and the left where both do — which is the side a threshold would
+        // be read off. What is left over there is then what the coordinate was compared against.
+        return switch (left.positions().isEmpty() ? right : left) {
             // The position itself against something no end came out of. The carrier, asked of the
             // carrier: `at < DateTime(...)` stops because nothing draws a line on a date-time,
             // while `p.x < 1 + 2` stops because the other side is not a form a threshold is read
             // out of and `p.x` is an `Int` — a carrier lines are drawn on all through the file.
-            case Side.IsOne one -> one.ordered() ? new BlockReason.UnreadComparisonForm()
+            case Side.IsOne<K> one -> one.ordered() ? new BlockReason.UnreadComparisonForm()
                     : new BlockReason.UnreadComparisonDomain();
-            case Side.HoldsOne _ -> new BlockReason.UnreadComparisonForm();
+            case Side.NamesInside<K> _ -> new BlockReason.UnreadComparisonForm();
             // Neither side names a position. Nothing is filed under this — a reason is said at the
             // positions the comparison names, and it names none — so what is answered is only that
             // no capability is owed on its account.
-            case Side.NamesNothing _ -> new BlockReason.UnreadComparisonForm();
+            case Side.NamesNothing<K> _ -> new BlockReason.UnreadComparisonForm();
         };
     }
 

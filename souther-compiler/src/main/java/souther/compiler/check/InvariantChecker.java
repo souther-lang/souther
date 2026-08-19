@@ -1083,16 +1083,23 @@ public final class InvariantChecker {
      * Asked the narrow question alone, {@code y + 1} named nothing and a clause relating two
      * coordinates came back as a form nobody could read — which is the answer a {@code guard}
      * writing the same comparison does not get.
+     *
+     * <p>By the place and not by the name. A place answers to more than one name — a number is
+     * called one thing by the interval algebra and another by everything else — so two sides
+     * naming one place through two of its names would be a comparison against another position.
      */
-    private UnreadComparison.Side sideOf(Core e, Denotations at,
-                                         Map<FactSubject, Coordinate> byName) {
-        if (coordinatesIn(e, at, byName).isEmpty()) {
-            return new UnreadComparison.Side.NamesNothing();
+    private UnreadComparison.Side<String> sideOf(Core e, Denotations at,
+                                                 Map<FactSubject, Coordinate> byName) {
+        List<Coordinate> named = coordinatesIn(e, at, byName);
+        if (named.isEmpty()) {
+            return new UnreadComparison.Side.NamesNothing<>();
         }
         FactSubject itself = nameOf(e, at);
         Coordinate here = itself == null ? null : byName.get(itself);
-        return here == null ? new UnreadComparison.Side.HoldsOne()
-                : new UnreadComparison.Side.IsOne(here.carrier() != null);
+        return here == null
+                ? new UnreadComparison.Side.NamesInside<>(new LinkedHashSet<>(
+                        named.stream().map(Coordinate::path).toList()))
+                : new UnreadComparison.Side.IsOne<>(here.path(), here.carrier() != null);
     }
 
     /**

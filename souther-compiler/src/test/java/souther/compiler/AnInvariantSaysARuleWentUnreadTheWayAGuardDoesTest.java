@@ -8,6 +8,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -59,6 +60,17 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
             behavior byGuard : (b: Bare) -> Ok | No
                 constructs Ok, No
             let byGuard (b) = if b.x < b.y + 1 then Ok else No
+
+            data Sole = { x: Int }
+                invariant x < x + 1
+
+            behavior byRuleAboutOne : (s: Sole) -> Ok | No
+                constructs Ok
+            let byRuleAboutOne (s) = Ok
+
+            behavior byGuardAboutOne : (b: Bare) -> Ok | No
+                constructs Ok, No
+            let byGuardAboutOne (b) = if b.x < b.x + 1 then Ok else No
             """;
 
     private static String blockOf(String behavior) {
@@ -118,6 +130,24 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
         assertEquals(saidAbout(blockOf("byGuard"), "b.x"),
                 saidAbout(blockOf("byRule"), "p.x"));
         assertTrue(blockOf("byRule").contains("relates it to another position"), blockOf("byRule"));
+    }
+
+    /**
+     * And neither of them says "another position" where there is only one.
+     *
+     * <p>{@code x < x + 1} puts a position either side of the comparison and names one position.
+     * Both readers had been answering it off whether each side names any position at all, so both
+     * sent a reader looking for a second one the model never wrote — the {@code guard} for as long
+     * as it has been reading comparisons.
+     */
+    @Test
+    void andNeitherNamesASecondPositionWhereThereIsOnlyOne() {
+        String rule = blockOf("byRuleAboutOne");
+        String guard = blockOf("byGuardAboutOne");
+
+        assertFalse(rule.contains("another position"), rule);
+        assertFalse(guard.contains("another position"), guard);
+        assertEquals(saidAbout(guard, "b.x"), saidAbout(rule, "s.x"));
     }
 
     /**

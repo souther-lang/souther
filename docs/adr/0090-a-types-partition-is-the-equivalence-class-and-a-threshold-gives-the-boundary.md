@@ -261,6 +261,13 @@ is asked of what its sides *name*, however deeply. `x < y + 1` relates two posit
 `x < y` does. Read off whether a side *is* a position, the two producers gave one shape two
 different answers the moment they classified it apart.
 
+Two positions and not a position on each side. `x < x + 1` puts one on either side of the
+comparison and names one position, so there is no second one for a class to be about: what a reader
+would have to be given is a reading of the form. Asked as "does each side name something", both
+producers sent an author looking for a position the model never wrote — which is the distinction
+`Relates` already draws for the readings that turn a clause into values, held here too because it
+is the same question about the same shape.
+
 And it is asked per rule. A position carries more than one statement, so a line read at it says
 nothing about the rule beside it. Held as what a position is left with when nothing divides it, a
 bound on a field's own type answered for the record's clause about that same field, and two
