@@ -163,11 +163,20 @@ public final class InvariantChecker {
      * twelve is one thousand seven hundred and twenty-eight — the same bound naming a cost two orders
      * of magnitude apart, which is a bound that stopped saying what it was for.
      *
-     * <p>Eight, so that {@code if}s open exactly as far as they did. A split is opened while the
-     * path has not already multiplied past this, which lets a wide {@code match} be opened once
-     * however wide it is — the first one costs nothing so far — and stops the nesting of them.
+     * <p>What is asked of a split is what opening it would bring the path to, and not what the path
+     * has come to already ({@link #opens}). Read the second way a path fifteen readings long admits
+     * a split of any width at all, and the bound bounds the path before the widest split on it
+     * rather than the path.
+     *
+     * <p>Sixteen, which is what a sum of eight cases costs with one conditional inside an arm.
+     * Below that, opening a {@code match} spends enough of the bound that a conditional written in a
+     * value position inside one of its arms is refused — and that conditional was opened before this
+     * check read {@code match}es at all, by lifting it out of the arm. A bound that turns a
+     * construction which discharged into one that is owed is the reading getting worse at a shape it
+     * was not asked about. It also lets a fourth conditional be opened where three were opened
+     * before, which is the same bound spent on the shape it was written for.
      */
-    private static final int READINGS_A_PATH_MAY_COST = 8;
+    private static final int READINGS_A_PATH_MAY_COST = 16;
 
 
     /** The rules this check reads a program by: entering a binding, taking a condition as holding,
@@ -1315,7 +1324,8 @@ public final class InvariantChecker {
             return;
         }
         SplitSite site = splitValueIn(e);
-        if (site != null && cost < READINGS_A_PATH_MAY_COST) {
+        Split split = site == null ? null : splitOf(site.split());
+        if (split != null && opens(cost, split.arms().size())) {
             // A case split in a value position is one of its arms, and which one is decided by what
             // it asks — an `if` by its condition, a `match` by which case the scrutinee is. So this
             // is read once with each arm standing there, under what choosing that arm settles, and
@@ -1332,11 +1342,10 @@ public final class InvariantChecker {
             Denotations there = inside.at();
             // What the split asks is read here only where the reading stopped short of it. Reached
             // from where the region was entered, it stands in `within` already.
-            Core asked = asked(value);
             if (site.read()) {
-                walk(asked, within, there, cost);
+                walk(split.asked(), within, there, cost);
             } else {
-                entering(asked, within, there, cost);
+                entering(split.asked(), within, there, cost);
             }
             Set<Core> alike = sameSplit(e, value, there);
             // The readings start from where the split stood, not from outside it. The tree each is
@@ -1347,12 +1356,12 @@ public final class InvariantChecker {
             // rather than in what stands outside it. Where the reading stopped short of the split,
             // nothing here is: the arm stands where the region that owns it reads it, and this walk
             // reaches that region on its way down.
-            List<Arm> arms = armsOf(value, within, there);
             List<Map<Occurrence, Reported>> readings = new ArrayList<>();
-            for (Arm arm : arms) {
+            for (Arm arm : split.arms()) {
+                Entered under = arm.under().entering(within, there);
                 readings.add(reading(without(e, alike, arm.body()),
                         site.read() ? arm.body() : null,
-                        arm.under().known(), arm.under().at(), cost * arms.size()));
+                        under.known(), under.at(), cost * split.arms().size()));
             }
             say(readings);
             return;
@@ -2097,56 +2106,76 @@ public final class InvariantChecker {
         }
     }
 
-    /** One arm of a case split, with the reading choosing it stands in. */
-    private record Arm(Core body, Entered under) {}
+    /** One arm of a case split: what stands there, and what choosing it settles. */
+    private record Arm(Core body, Choosing under) {}
+
+    /** What choosing an arm settles, as somewhere to enter rather than as facts already derived.
+     * Deferred because how many arms there are is what decides whether any of them is entered, and
+     * entering one of a {@code match}'s is not free. */
+    @FunctionalInterface
+    private interface Choosing {
+
+        Entered entering(Known within, Denotations there);
+    }
+
+    /**
+     * A case split taken apart: what it asks to decide which arm it answers, and the arms it answers
+     * one of.
+     *
+     * <p>One enumeration of the forms, so that nothing reading a split asks which of them it was
+     * handed and no two readers can come to disagree about what a form's arms are. Its width is the
+     * number of arms, which is what a reading of the body costs to open it.
+     */
+    private record Split(Core asked, List<Arm> arms) {}
+
+    /** Whether a split of {@code width} arms is opened where the path has already cost {@code cost}
+     * readings of the body.
+     *
+     * <p>Asked before the arms are entered, and about what opening it <em>would</em> cost: a bound
+     * read after the fact bounds the path before the widest split on it and not the path.
+     *
+     * <p>The first split on a path is opened however wide it is. What it costs is its width and
+     * nothing multiplies it, and refusing it would leave a {@code match} over a sum of more cases
+     * than the bound read nowhere at all — which is the reading this bound is bounding rather than
+     * something it is protecting against. So the bound is on the multiplying, and a path costs at
+     * most the widest split on it or this bound, whichever is the larger. */
+    private static boolean opens(int cost, int width) {
+        return cost == 1 || (long) cost * width <= READINGS_A_PATH_MAY_COST;
+    }
+
+    /**
+     * What {@code split} asks and what its arms are.
+     *
+     * <p>An {@code if} has two arms decided by its condition; a {@code match} has one per case,
+     * decided by which case the scrutinee is — and an arm is entered <em>with</em> that scrutinee,
+     * which is what says the value the arm binds is the one already there ({@link
+     * PathEngine#enteringArm}) rather than a value of its own.
+     *
+     * <p>What a split asks is read where it stands, and read whatever it is: a construction written
+     * in a condition or in a scrutinee is a construction like any other.
+     */
+    private Split splitOf(Core split) {
+        return switch (split) {
+            case Core.If iff -> new Split(iff.cond(), List.of(
+                    new Arm(iff.then(), (within, there) -> new Entered(
+                            predicates.assumeCond(iff.cond(), within, there, true).known(), there)),
+                    new Arm(iff.els(), (within, there) -> new Entered(
+                            predicates.assumeCond(iff.cond(), within, there, false).known(), there))));
+            case Core.Match m -> new Split(m.scrutinee(), m.cases().stream()
+                    .map(arm -> new Arm(arm.body(),
+                            (within, there) -> engine.enteringArm(arm, m.scrutinee(), within, there)))
+                    .toList());
+            default -> throw new IllegalStateException(
+                    "a site was opened at " + split.getClass().getSimpleName()
+                            + ", which is not a case split — {@link #splitValueIn} and this answer for"
+                            + " the same forms and one of them was given a form the other has not");
+        };
+    }
 
     /** Whether {@code e} is a case split — a node answering one of several arms, where which one is
      * decided by something a reading can assume. */
     private static boolean isASplit(Core e) {
         return e instanceof Core.If || e instanceof Core.Match;
-    }
-
-    /**
-     * What {@code split} asks to decide which arm it answers.
-     *
-     * <p>Read where the split stands, and read whatever the answer is: a construction written in a
-     * condition or in a scrutinee is a construction like any other.
-     */
-    private static Core asked(Core split) {
-        return switch (split) {
-            case Core.If iff -> iff.cond();
-            case Core.Match m -> m.scrutinee();
-            default -> throw new IllegalStateException(
-                    "a site was opened at " + split.getClass().getSimpleName()
-                            + ", which is not a case split — `asked` and `armsOf` answer for the same"
-                            + " forms and one of them was given a form the other does not have");
-        };
-    }
-
-    /**
-     * The arms {@code split} answers one of, each with what choosing it settles.
-     *
-     * <p>Where the enumeration is, so that the reading above never asks which form of split it was
-     * handed. An {@code if} has two arms decided by its condition; a {@code match} has one per case,
-     * decided by which case the scrutinee is — and the arm is entered <em>with</em> that scrutinee,
-     * which is what says the value the arm binds is the one already there ({@link
-     * PathEngine#enteringArm}) rather than a value of its own.
-     */
-    private List<Arm> armsOf(Core split, Known within, Denotations there) {
-        return switch (split) {
-            case Core.If iff -> List.of(
-                    new Arm(iff.then(), new Entered(
-                            predicates.assumeCond(iff.cond(), within, there, true).known(), there)),
-                    new Arm(iff.els(), new Entered(
-                            predicates.assumeCond(iff.cond(), within, there, false).known(), there)));
-            case Core.Match m -> m.cases().stream()
-                    .map(arm -> new Arm(arm.body(),
-                            engine.enteringArm(arm, m.scrutinee(), within, there)))
-                    .toList();
-            default -> throw new IllegalStateException(
-                    "a site was opened at " + split.getClass().getSimpleName()
-                            + ", which is not a case split");
-        };
     }
 
     /**

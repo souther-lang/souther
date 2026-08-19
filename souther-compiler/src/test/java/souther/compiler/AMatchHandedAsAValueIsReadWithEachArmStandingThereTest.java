@@ -4,6 +4,7 @@ import souther.compiler.diag.Severity;
 
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -38,6 +39,15 @@ class AMatchHandedAsAValueIsReadWithEachArmStandingThereTest {
             data Slow
             data Plan = Fast | Slow
 
+            data Ranged = Int
+                invariant lo = value >= 10
+                invariant hi = value <= 100
+
+            data Cheap
+            data Dear
+            data Fair
+            data Grade = Cheap | Dear | Fair
+
             data Metered = { rate: Yen, slack: Loose }
             data Flat
             data Tariff = Metered | Flat
@@ -47,9 +57,22 @@ class AMatchHandedAsAValueIsReadWithEachArmStandingThereTest {
             let twiceOf (l: Loose): Yen = Yen(l.value * 2)
             """;
 
-    private static boolean owed(String body) {
+    private static java.util.List<souther.compiler.diag.Diagnostic> unproven(String body) {
         return Compiler.compileWithWarnings(TYPES + "\n" + body).warnings().stream()
-                .anyMatch(d -> d.severity() == Severity.WARNING && "E2011".equals(d.code()));
+                .filter(d -> d.severity() == Severity.WARNING && "E2011".equals(d.code())).toList();
+    }
+
+    private static boolean owed(String body) {
+        return !unproven(body).isEmpty();
+    }
+
+    /** A match of three arms answering a number each, which is the shape the readings are folded
+     * over — two of them were all a fold taken two at a time would have reached. */
+    private static String grade(String cheap, String dear, String fair) {
+        return "let grade (g: Grade): Int =\n    match g with\n"
+                + "        | Cheap -> " + cheap + "\n"
+                + "        | Dear -> " + dear + "\n"
+                + "        | Fair -> " + fair + "\n";
     }
 
     /** Both arms are numbers written out, and both are above the clause's own end. */
@@ -172,5 +195,43 @@ class AMatchHandedAsAValueIsReadWithEachArmStandingThereTest {
                 let use (a) =
                     twice(match tariffOf(Yen(4500)) with | Metered as m -> m.rate | Flat -> a)
                 """), "four thousand five hundred is at or above nought");
+    }
+
+    /** Every arm is read, not the first two. What the readings find is folded, and a fold is what
+     * lets a split of any width be said once. */
+    @Test
+    void everyArmOfAMatchOfMoreThanTwoIsRead() {
+        assertFalse(owed(grade("50", "60", "70") + """
+                behavior use : (g: Grade) -> Ranged
+                    constructs Ranged
+                let use (g) = Ranged(grade(g))
+                """), "three arms, and every one of them is between ten and a hundred");
+    }
+
+    /** The one below the clause is the last arm, which is the one a fold that stopped at two would
+     * have dropped. */
+    @Test
+    void anArmBelowTheClauseIsSaidWhereverItStands() {
+        assertTrue(owed(grade("50", "60", "5") + """
+                behavior use : (g: Grade) -> Ranged
+                    constructs Ranged
+                let use (g) = Ranged(grade(g))
+                """), "the last arm answers five, and five is not at or above ten");
+    }
+
+    /** Two arms leaving two different clauses unsettled leave both of them unsettled: a clause one
+     * reading did not establish is one the construction is owed, whichever reading that was. */
+    @Test
+    void whatDifferentArmsLeaveUnsettledIsSaidTogether() {
+        var found = unproven(grade("5", "500", "50") + """
+                behavior use : (g: Grade) -> Ranged
+                    constructs Ranged
+                let use (g) = Ranged(grade(g))
+                """);
+        assertEquals(1, found.size(), "one construction, said once");
+        String unsettled = String.valueOf(found.get(0).values().get("unsettled"));
+        assertTrue(unsettled.contains("lo") && unsettled.contains("hi"),
+                "the low arm and the high arm each leave a clause standing, and it was `"
+                        + unsettled + "`");
     }
 }
