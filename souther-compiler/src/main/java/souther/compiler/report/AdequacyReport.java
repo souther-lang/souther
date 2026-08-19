@@ -1010,13 +1010,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
-     * The word a document writes for how far a position's rules were read.
-     *
-     * <p>Here rather than at the one place it is written, so a reader holding the arms can be held
-     * to the words without reading the writer. No {@code default}: an arm added and not given a
-     * word stops the compile rather than arriving in a document as one that already existed.
-     */
-    /**
      * The word a document writes for which kind of thing a question is about.
      *
      * <p>Here rather than at the one place it is written, for the reason the others are: a reader
@@ -1031,6 +1024,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         };
     }
 
+    /**
+     * The word a document writes for how far a position's rules were read.
+     *
+     * <p>Here rather than at the one place it is written, so a reader holding the arms can be held
+     * to the words without reading the writer. No {@code default}: an arm added and not given a
+     * word stops the compile rather than arriving in a document as one that already existed.
+     */
     public static String readingWord(PartitionEvidence.AxisCoverage.Reading read) {
         // Partial covers both, and what is written beside it says which. A reader keying on the
         // word is told the numbers rest on something unfinished, which is what the word is for; the

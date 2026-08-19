@@ -72,10 +72,14 @@ public sealed interface Required {
     /**
      * The rule was read, and it raises no question a measure of coverage answers.
      *
-     * <p>Not "nothing was found". A rule relating two positions says where one stands against
-     * another, which is a rule about a pair; a partition is of one position and a line is on one
-     * number, so neither is a question this rule left open. Read as a rule nothing accounted for, a
-     * model whose every rule is fine would be reported as one this compiler could not read.
+     * <p>Not "nothing was found". A clause about no position of the value says nothing about one,
+     * and a rule singling a value out of two things that both move with the row singles it out of
+     * neither. Read as rules nothing accounted for, a model whose every rule is fine would be
+     * reported as one this compiler could not read.
+     *
+     * <p>Narrower than it was. A rule relating two positions used to be here whatever it stated,
+     * and an order across such a pair draws a line where they hold one count — a question this
+     * raises now, about the comparison that drew it.
      */
     final class Irrelevant implements Required {
 
@@ -127,8 +131,14 @@ public sealed interface Required {
      */
     enum Because {
 
-        /** The rule is about how one position stands against another, which no partition of one and
-         * no line on one number is. */
+        /**
+         * The rule singles a value out of two things that both move with the row, which singles one
+         * out of neither.
+         *
+         * <p>{@code a == b} puts the whole of one arm on the place the two meet, and that arm is a
+         * row the branch measure already asks for. Not every rule about a pair: an order across one
+         * draws a line, and that is a question raised rather than one nobody has.
+         */
         IT_RELATES_TWO_POSITIONS,
 
         /**

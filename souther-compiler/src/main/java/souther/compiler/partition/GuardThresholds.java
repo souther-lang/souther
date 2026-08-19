@@ -436,10 +436,10 @@ public final class GuardThresholds {
                 new RuleRef.Guard(plan.site(site).comparison()),
                 souther.compiler.check.ComparisonClaim.of(comparison.op()), of, read,
                 // A comparison is written rather than named, so a reader is sent where the author
-                // wrote it. The construct's own place and not the reading's: one comparison inside a
-                // helper is one rule however many calls read it.
+                // wrote it — the comparison's own place and not the fork's. Two comparisons of one
+                // condition are two rules, and cited at the `if` they were one handle twice.
                 new souther.compiler.check.RuleCitation.WrittenAt(
-                        guard.origin().kind(), Citation.of(iff.pos())))));
+                        guard.origin().kind(), Citation.of(comparison.pos())))));
     }
 
     /**

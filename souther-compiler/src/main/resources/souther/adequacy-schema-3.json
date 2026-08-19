@@ -343,7 +343,7 @@
                 "additionalProperties": false,
                 "oneOf": [
                   { "properties": { "kind": { "const": "position" } }, "not": { "required": ["at"] }, "required": ["path"] },
-                  { "properties": { "kind": { "const": "comparison" } }, "not": { "required": ["path"] } }
+                  { "properties": { "kind": { "const": "comparison" } }, "not": { "anyOf": [ { "required": ["path"] }, { "required": ["measure"] } ] } }
                 ],
                 "properties": {
                   "kind": { "enum": ["position", "comparison"], "description": "`position` is a position of an input or a number taken of one; `comparison` is the place a comparison of two moving things draws, which is neither of them." },
