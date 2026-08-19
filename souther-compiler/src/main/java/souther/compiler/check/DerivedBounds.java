@@ -1,13 +1,10 @@
 package souther.compiler.check;
 
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.Endpoint;
-import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.Intervals;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.Bounds;
 import souther.compiler.numeric.NumericDomain.LinearForm;
-import souther.compiler.numeric.NumericDomain.Rel;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -16,12 +13,17 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * What follows about the values arithmetic outside the affine fragment answers.
+ * What follows about the values the domain holds as atoms: arithmetic outside the affine fragment,
+ * and what a walk over a container answers.
  *
  * <p>A product of two values and a truncating quotient are not linear, so the domain holds them as
  * atoms and knows nothing of them. What their factors lie between it does know, and that is enough
  * to bound them — so this reads the factors out of a domain, puts the arithmetic through
- * {@link Intervals}, and hands back the domain with what came out taken as holding.
+ * {@link Intervals}, and hands back the domain with what came out taken as holding. A reduction's
+ * answer is an atom for a different reason — it is what a library operation computed by applying a
+ * closure over and over — and it is bounded by {@link InductiveBounds} rather than by a projection.
+ * The two are one walk here because a fold's seed may be a product and a product's factor may be a
+ * fold, and one graph with one memo is what keeps either from being derived twice.
  *
  * <p>A projection and not an inference. Every bound is derived from the domain it was given, once,
  * and the results are taken in together at the end; nothing derived here is read back to derive
@@ -76,10 +78,9 @@ final class DerivedBounds {
      * interval reasoning that tightens under its own answers that this declines to be.
      */
     static NumericDomain<FactSubject> refine(NumericDomain<FactSubject> base, Terms terms, Set<FactSubject> asked) {
-        Map<FactSubject, Derivation> recipes = terms.derivations();
         Map<FactSubject, Bounds> derived = new LinkedHashMap<>();
-        if (!recipes.isEmpty() && !base.isBottom()) {
-            for (FactSubject atom : roots(recipes, base, asked)) {
+        if ((!terms.derivations().isEmpty() || !terms.reductions().isEmpty()) && !base.isBottom()) {
+            for (FactSubject atom : roots(terms, base, asked)) {
                 derive(atom, base, terms, derived, new LinkedHashSet<>());
             }
         }
@@ -91,19 +92,26 @@ final class DerivedBounds {
         return out;
     }
 
-    /** The atoms this reading is to derive from: the ones it can reach that were recorded as
-     * arithmetic. Walked from the reaching side rather than from {@code recipes}, so what it costs
-     * is what the question is about and not how much arithmetic the behavior contains. */
-    private static Set<FactSubject> roots(Map<FactSubject, Derivation> recipes, NumericDomain<FactSubject> base,
+    /** Whether {@code atom} was recorded as anything this can derive from — arithmetic outside the
+     * fragment, or the answer of a walk. Two tables and one question: what a reading walks is the
+     * atoms it can reach that anything was recorded about. */
+    private static boolean recorded(Terms terms, FactSubject atom) {
+        return terms.derivations().containsKey(atom) || terms.reductions().containsKey(atom);
+    }
+
+    /** The atoms this reading is to derive from: the ones it can reach that anything was recorded
+     * about. Walked from the reaching side rather than from the tables, so what it costs is what the
+     * question is about and not how much arithmetic the behavior contains. */
+    private static Set<FactSubject> roots(Terms terms, NumericDomain<FactSubject> base,
                                    Set<FactSubject> asked) {
         Set<FactSubject> out = new LinkedHashSet<>();
         for (FactSubject atom : asked) {
-            if (recipes.containsKey(atom)) {
+            if (recorded(terms, atom)) {
                 out.add(atom);
             }
         }
         for (FactSubject atom : base.atomsSpokenOf()) {
-            if (recipes.containsKey(atom)) {
+            if (recorded(terms, atom)) {
                 out.add(atom);
             }
         }
@@ -137,16 +145,39 @@ final class DerivedBounds {
         if (!deriving.add(atom)) {
             throw new AnAtomComputedFromItself(atom);
         }
-        Derivation recipe = terms.derivations().get(atom);
-        Bounds bounds = switch (recipe) {
+        Bounds bounds = boundsFor(atom, base, terms, done, deriving);
+        deriving.remove(atom);
+        done.put(atom, bounds);
+        return bounds;
+    }
+
+    /**
+     * What {@code atom} lies between, by whichever of the two things recorded about it says so.
+     *
+     * <p>Arithmetic outside the fragment is put through {@link Intervals}, which is a projection of
+     * what its operands lie between. A walk's answer is put through {@link InductiveBounds}, which
+     * proves a range holds it by checking one step. Both read the same {@code base} and neither reads
+     * what the other answered about the same atom, so the two compose the way the recipe graph does:
+     * a fold whose seed is a product reaches the product through the form its walk was recorded with,
+     * and a product of two folds reaches them through its factors.
+     */
+    private static Bounds boundsFor(FactSubject atom, NumericDomain<FactSubject> base, Terms terms,
+                                    Map<FactSubject, Bounds> done, Set<FactSubject> deriving) {
+        InductiveBounds.Walk walk = terms.reductions().get(atom);
+        if (walk != null) {
+            // Each reading of the walk's own forms gets a memo of its own, since each is against a
+            // different domain — the caller's, and the caller's with a candidate assumed. What is
+            // shared is `deriving`, which is what says an atom was built out of itself, and that is
+            // true of a recipe whatever domain it is read in.
+            return InductiveBounds.provenOf(walk, base, terms,
+                    (form, domain) -> boundsOf(form, domain, terms, new LinkedHashMap<>(), deriving));
+        }
+        return switch (terms.derivations().get(atom)) {
             case Derivation.Product product -> Intervals.product(
                     boundsOf(product.left(), base, terms, done, deriving),
                     boundsOf(product.right(), base, terms, done, deriving));
             case Derivation.Quotient quotient -> quotient(quotient, base, terms, done, deriving);
         };
-        deriving.remove(atom);
-        done.put(atom, bounds);
-        return bounds;
     }
 
     /**
@@ -201,7 +232,7 @@ final class DerivedBounds {
                                    Map<FactSubject, Bounds> done, Set<FactSubject> deriving) {
         NumericDomain<FactSubject> with = base;
         for (FactSubject atom : form.coefs().keySet()) {
-            if (terms.derivations().containsKey(atom)) {
+            if (recorded(terms, atom)) {
                 with = taking(with, atom, derive(atom, base, terms, done, deriving), terms);
             }
         }
@@ -213,22 +244,7 @@ final class DerivedBounds {
      * ends as. */
     private static NumericDomain<FactSubject> taking(NumericDomain<FactSubject> d, FactSubject atom, Bounds bounds,
                                               Terms terms) {
-        LinearForm<FactSubject> form = LinearForm.atom(atom);
-        Map<FactSubject, Granularity> kinds = terms.kindsOf(form);
-        NumericDomain<FactSubject> out = d;
-        if (bounds.min() != null) {
-            out = out.assume(form.minus(LinearForm.constant(count(bounds.min()))),
-                    bounds.min().inclusive() ? Rel.GE : Rel.GT, kinds);
-        }
-        if (bounds.max() != null) {
-            out = out.assume(form.minus(LinearForm.constant(count(bounds.max()))),
-                    bounds.max().inclusive() ? Rel.LE : Rel.LT, kinds);
-        }
-        return out;
-    }
-
-    private static java.math.BigDecimal count(Endpoint end) {
-        return Count.number(end.at()).at();
+        return d.assuming(atom, bounds, terms.kindsOf(LinearForm.atom(atom)));
     }
 
     /**

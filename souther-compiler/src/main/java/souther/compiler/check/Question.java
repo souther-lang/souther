@@ -54,6 +54,54 @@ enum Question {
         }
     },
 
+    /**
+     * Whether it walks a container from a seed through its closure, and where the seed arrives
+     * ({@link Reductions}). Asked of an operation given a container, taking a closure that answers
+     * what the operation answers and takes a value of that type, beside a plain argument of it —
+     * which is the shape a walk from a seed has and is not what makes an operation one. A closure
+     * applied once, or applied to something the operation built rather than to the accumulator it
+     * carries, is declared the same way.
+     *
+     * <p>The container is part of the range and not only of the answer. This asks whether an
+     * operation walks <em>a container</em>, so one given none is outside it rather than in it with
+     * nothing to say — an operation declared {@code ((A) -> A, A) -> A} repeats a step over no
+     * elements and is a different question, which nobody has had to ask yet.
+     *
+     * <p>Beside {@link #COMBINATOR} and not folded into it. What an operation hands its closure is
+     * read off the declaration; that it hands it the same closure again with what came back is not,
+     * and a range that took the first as an answer for the second would let the second go missing in
+     * silence.
+     */
+    REDUCTION("whether it reduces a container from a seed through its closure") {
+        @Override
+        boolean asksOf(Prelude.Signature signature) {
+            Type result = signature.result();
+            if (result == null || signature.params().stream().noneMatch(Question::holdsElements)) {
+                return false;
+            }
+            boolean carriesItBack = signature.params().stream().anyMatch(
+                    t -> t instanceof Type.FnOf fn && result.equals(fn.result())
+                            && fn.params().contains(result));
+            return carriesItBack && signature.params().stream().anyMatch(
+                    t -> !(t instanceof Type.FnOf) && result.equals(t));
+        }
+
+        @Override
+        boolean answeredFor(ValueName operation) {
+            return Reductions.answered().contains(operation);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return Reductions.answered();
+        }
+
+        @Override
+        Set<ValueName> nothingSaidOf() {
+            return Reductions.REDUCES_NOTHING;
+        }
+    },
+
     /** What it keeps of the container it was built from ({@link DischargeRules#builtFrom}). Asked of
      * an operation that answers a container and is given one. A string is not in range: a shape says
      * what became of a container's elements, and of a string this names only its length. */

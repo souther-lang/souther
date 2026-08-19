@@ -164,6 +164,29 @@ public final class NumericDomain<A> {
     }
 
     /**
+     * The domain refined by taking {@code atom} to lie between {@code bounds}.
+     *
+     * <p>Here rather than at each caller because what a range's ends are as assertions is this
+     * domain's reading of them: an end the range does not reach is the strict comparison, and a
+     * caller spelling that out is a second reader of an {@link Endpoint} that can spell it
+     * differently. Two of them had.
+     */
+    public NumericDomain<A> assuming(A atom, Bounds bounds, Map<A, Granularity> atomKinds) {
+        LinearForm<A> form = LinearForm.atom(atom);
+        NumericDomain<A> out = this;
+        if (bounds.min() != null) {
+            out = out.assume(form.minus(LinearForm.constant(Count.number(bounds.min().at()).at())),
+                    bounds.min().inclusive() ? Rel.GE : Rel.GT, atomKinds);
+        }
+        if (bounds.max() != null) {
+            out = out.assume(form.minus(LinearForm.constant(Count.number(bounds.max().at()).at())),
+                    bounds.max().inclusive() ? Rel.LE : Rel.LT, atomKinds);
+        }
+        return out;
+    }
+
+
+    /**
      * The domain with the spacing of each of {@code atoms} recorded.
      *
      * <p>One atom is one kind of number for as long as the domain lives. The same key arriving as
@@ -591,6 +614,48 @@ public final class NumericDomain<A> {
         public boolean admits(Place at) {
             return (min == null || Endpoint.someValueLiesBetween(min, Endpoint.inclusive(at)))
                     && (max == null || Endpoint.someValueLiesBetween(Endpoint.inclusive(at), max));
+        }
+
+        /**
+         * The range holding everything either of these holds: the looser end on each side. An end
+         * absent is every value that way, so it is what this answers with wherever either side has
+         * none.
+         *
+         * <p>Not called a join, and {@link #meet} beside it is not called that either. A meet of two
+         * ranges can hold nothing and this record says so with crossed ends rather than with a
+         * bottom of its own, so a caller taking one asks {@link #holdsAValue} where it matters. This
+         * one cannot: two ranges that each hold a value span a range that holds both.
+         */
+        public static Bounds spanning(Bounds a, Bounds b) {
+            if (a.min() == null || b.min() == null) {
+                return new Bounds(null, looserUpper(a, b));
+            }
+            Endpoint low = Endpoint.lower(a.min(), b.min()).equals(a.min()) ? b.min() : a.min();
+            return new Bounds(low, looserUpper(a, b));
+        }
+
+        private static Endpoint looserUpper(Bounds a, Bounds b) {
+            if (a.max() == null || b.max() == null) {
+                return null;
+            }
+            return Endpoint.upper(a.max(), b.max()).equals(a.max()) ? b.max() : a.max();
+        }
+
+        /** Whether every value this holds is one {@code wider} holds. An end {@code wider} does not
+         * have holds everything on that side, and an end this does not have is held only where
+         * {@code wider} has none either. */
+        public boolean liesWithin(Bounds wider) {
+            return endHolds(min, wider.min(), true) && endHolds(max, wider.max(), false);
+        }
+
+        private static boolean endHolds(Endpoint mine, Endpoint wider, boolean low) {
+            if (wider == null) {
+                return true;
+            }
+            if (mine == null) {
+                return false;
+            }
+            return (low ? Endpoint.lower(mine, wider) : Endpoint.upper(mine, wider)).equals(mine);
         }
     }
 
