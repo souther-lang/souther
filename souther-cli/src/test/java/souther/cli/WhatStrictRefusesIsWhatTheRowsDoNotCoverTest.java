@@ -272,7 +272,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
                         new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
                                 new Clause.Id(TypeSymbols.declared(
                                         new TypeKey("example.rate", "Amount")), 0),
-                                java.util.Optional.of(new ClauseName("cap"))))),
+                                java.util.Optional.of(new ClauseName("cap")))), true),
                         BoundaryObligation.BoundarySide.AT),
                 new BoundaryAssessment.Coverage.Hit(),
                 new BoundaryAssessment.Writability.WitnessedByRow(),
