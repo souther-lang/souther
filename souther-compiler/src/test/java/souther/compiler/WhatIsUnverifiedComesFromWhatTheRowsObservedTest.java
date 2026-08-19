@@ -181,8 +181,18 @@ class WhatIsUnverifiedComesFromWhatTheRowsObservedTest {
         return all == null ? List.of()
                 : all.getOrDefault(behavior, List.of()).stream()
                         .filter(f -> f.kind() == kind)
-                        .map(f -> String.valueOf(f.args().get(0)))
+                        .map(WhatIsUnverifiedComesFromWhatTheRowsObservedTest::caseOf)
                         .toList();
+    }
+
+    /** The case a signature finding names. */
+    private static String caseOf(Adequacy.Finding f) {
+        return switch (f.about()) {
+            case souther.compiler.query.About.ACaseNoRowExpects(var missing) -> missing.name();
+            case souther.compiler.query.About.ACaseNothingWasSeenToProduce(var missing) ->
+                    missing.name();
+            default -> throw new AssertionError("not a case of the output: " + f);
+        };
     }
 
     private static List<String> codes(String source) {

@@ -436,9 +436,32 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
             Unavailable.check(status, reason);
         }
 
-        public List<String> uncovered() {
-            return classes.stream().filter(c -> !covered.contains(c)).toList();
+        /**
+         * The classes of this position no row is in, each knowing which position it is a class of.
+         *
+         * <p>A bare name used to be enough because one axis was read at a time. It is not enough to
+         * be told apart by: two positions of one behavior divide into classes named after the same
+         * cases, and a class name alone is the same words about two of them. A reader given the
+         * name and nothing else cannot say which position to write the row at, and neither can a
+         * document trying to join the two back together.
+         *
+         * <p>Which of {@link #axis} and {@link #path} names the position to a reader is not settled
+         * here. The two are for different readers and a value that chose one of them would be this
+         * measure writing a report's sentence.
+         */
+        public List<AxisClass> uncovered() {
+            return classes.stream().filter(c -> !covered.contains(c))
+                    .map(c -> new AxisClass(this, c)).toList();
         }
     }
+
+    /**
+     * One class of one position.
+     *
+     * <p>A class is a class <em>of</em> something, and the two halves travel together for the same
+     * reason {@link BorderAssessment.Point} exists: a count, a document and a finding are three
+     * readings of one item, and each of them flattening it its own way is where a part goes missing.
+     */
+    public record AxisClass(AxisCoverage axis, String name) {}
 
 }

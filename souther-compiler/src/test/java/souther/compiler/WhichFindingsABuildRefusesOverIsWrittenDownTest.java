@@ -6,7 +6,9 @@ import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.observe.MeasurementStatus;
+import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.source.SourceId;
@@ -278,8 +280,38 @@ class WhichFindingsABuildRefusesOverIsWrittenDownTest {
     }
 
     private static Adequacy.Finding finding(Adequacy.Kind kind, MeasurementStatus status) {
-        return new Adequacy.Finding(kind, "b", status,
-                Citation.of(new SourcePos(1, 1, new SourceId("s"))), List.of("x"));
+        return new Adequacy.Finding("b", status,
+                Citation.of(new SourcePos(1, 1, new SourceId("s"))), about(kind));
+    }
+
+    /**
+     * Something a finding of the wanted kind is about.
+     *
+     * <p>What each one carries is left out, because {@link Adequacy.Finding#kind()} reads it for
+     * exactly one of them: which of the two border kinds a point is, is the role's answer, and every
+     * other kind follows from the shape alone. A fixture filling in values nothing reads would be
+     * inventing what a measure found in order to ask a question about the kind.
+     *
+     * <p>Total over the kinds, and a switch so that a kind added later does not compile until it has
+     * been said what a finding of it is about.
+     */
+    private static About about(Adequacy.Kind kind) {
+        return switch (kind) {
+            case OUTPUT_CASE_UNSPECIFIED -> new About.ACaseNoRowExpects(null);
+            case OUTPUT_CASE_UNVERIFIED -> new About.ACaseNothingWasSeenToProduce(null);
+            case INPUT_CASE_UNSPECIFIED -> new About.ACaseNoRowAppliesItTo(null, null);
+            case AXIS_CLASS_UNCOVERED -> new About.AClassNoRowIsIn(null);
+            case BOUNDARY_UNMET -> new About.APointOfABorder(new BorderAssessment.Point(
+                    null, souther.compiler.partition.PointRole.ON, null));
+            case DOMAIN_POINT_UNCOVERED -> new About.APointOfABorder(new BorderAssessment.Point(
+                    null, souther.compiler.partition.PointRole.IN, null));
+            case PARTITION_NOT_DERIVABLE -> new About.APositionNoLineDivides(null);
+            case PARTITION_NOT_READ -> new About.APositionThisCouldNotRead(null);
+            case PARTITION_RULES_NOT_REACHED -> new About.APositionWhoseRulesWereNotReached(null);
+            case RULE_UNACCOUNTED -> new About.AQuestionNothingAnswered(null);
+            case PARTITION_OMITTED -> new About.APositionPastTheAxisLimit(null);
+            case ARM_UNREACHED -> new About.AnArmNoRowGoesThrough(null);
+        };
     }
 
     private static AdequacyReport report() {

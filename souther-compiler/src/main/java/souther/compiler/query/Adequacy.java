@@ -1353,19 +1353,22 @@ public final class Adequacy {
                 if (!gap.isAdequacyGap()) {
                     continue;
                 }
-                out.add(new GapDisposition(gap, switch (gap.kind()) {
-                    case BOUNDARY_UNMET -> atEdge(gap, edges);
-                    case INPUT_CASE_UNSPECIFIED -> atCase(gap, partition, pairs, spec);
-                    case ARM_UNREACHED -> new GenerationOutcome.NotSupported(
+                out.add(new GapDisposition(gap, switch (gap.about()) {
+                    case About.APointOfABorder(var point) -> atEdge(gap, point);
+                    case About.ACaseNoRowAppliesItTo(var input, var missing) ->
+                            atCase(input, missing, partition, pairs, spec);
+                    case About.AnArmNoRowGoesThrough _ -> new GenerationOutcome.NotSupported(
                             GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_ARM);
-                    case OUTPUT_CASE_UNSPECIFIED -> new GenerationOutcome.NotSupported(
+                    case About.ACaseNoRowExpects _ -> new GenerationOutcome.NotSupported(
                             GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE);
                     // Not gaps a build refuses, and the loop above does not reach them. Listed so
-                    // that the switch stays exhaustive over the kinds rather than over the ones
-                    // thought of here.
-                    case OUTPUT_CASE_UNVERIFIED, AXIS_CLASS_UNCOVERED, DOMAIN_POINT_UNCOVERED,
-                            PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ, RULE_UNACCOUNTED,
-                            PARTITION_RULES_NOT_REACHED, PARTITION_OMITTED ->
+                    // that the switch stays exhaustive over what a finding can be about rather than
+                    // over the ones thought of here.
+                    case About.ACaseNothingWasSeenToProduce _, About.AClassNoRowIsIn _,
+                            About.APositionNoLineDivides _, About.APositionThisCouldNotRead _,
+                            About.APositionWhoseRulesWereNotReached _,
+                            About.AQuestionNothingAnswered _,
+                            About.APositionPastTheAxisLimit _ ->
                             throw new IllegalStateException("not a gap a build refuses: " + gap);
                 }));
             }
@@ -1381,73 +1384,53 @@ public final class Adequacy {
          * writable and the search could not produce a row for — which came out as a verdict of
          * "provable" with nothing said about the row that never appeared.
          *
-         * <p>Both lists are the same reading of the same lines. {@code edges} is what
-         * {@link Boundaries} answered, and every finding here was made from one of its assessments
-         * ({@code Findings} walks {@code PartitionEvidence#boundaries}, which is that answer put
-         * beside the counts) — which is why a gap can be looked up rather than measured again. The
-         * three things matched on are what a boundary is told apart by, so a finding with no
-         * assessment is the two readings having come apart rather than a row that could not be
-         * generated, and it is refused below as one.
+         * <p>The assessment is the finding's own, not one looked up beside it. A gap used to carry a
+         * copy of the axis, the value, the rule and the role, and this matched that copy back
+         * against what {@link Boundaries} answered to find the item it had been made from — three
+         * fields deep, because several rules can draw a line at one value and one border owes rows
+         * at four points, so anything less answered a gap with whichever assessment came first.
+         * There is nothing to match and nothing for the two readings to disagree about.
          */
-        private static GenerationOutcome atEdge(Finding gap, List<BorderAssessment> edges) {
-            String axis = String.valueOf(gap.args().get(0));
-            String value = String.valueOf(gap.args().get(1));
-            Object rule = gap.args().get(2);
-            souther.compiler.partition.PointRole role =
-                    (souther.compiler.partition.PointRole) gap.args().get(3);
-            String subject = axis + " = " + value;
-            for (BorderAssessment each : edges) {
-                // The rule and the point as well as the place. Several rules can draw a line at one
-                // value — a type's invariant and a `guard` that repeats it, a clause and a guard
-                // comparing the same number — and they are separate borders that a row meets
-                // separately, so one of them can be a gap while the one beside it already has its
-                // row. One border owes rows at four points, and they are met separately too. Found
-                // by the value alone, the gap was answered by whichever assessment came first, and
-                // where that was the met one this read its own answer as a contradiction.
-                if (!each.axis().equals(axis) || !each.rule().equals(rule)
-                        || !value.equals(each.against(role))) {
-                    continue;
-                }
-                if (!(each.at(role) instanceof ItemAssessment.Owed owed)) {
-                    // A gap was found at a point nobody is owed a row at, which is the finding and
-                    // the assessment disagreeing about the same border rather than a row that could
-                    // not be generated.
-                    throw new IllegalStateException("a gap at a point nothing owes: " + gap);
-                }
-                return switch (owed.attempt()) {
-                    case ItemAssessment.Attempt.Built built ->
-                            new GenerationOutcome.Generated(List.of(built.row()));
-                    case ItemAssessment.Attempt.Unresolved why ->
-                            new GenerationOutcome.CannotGenerate(why.why());
-                    // Carried apart, because the assessment kept them apart. Classes that were not
-                    // there and classes that would not link are two things this saw, and choosing
-                    // one of them to print is this compiler deciding what it observed.
-                    //
-                    // The other two reasons do not reach an unmet edge: a row is already at the
-                    // value, or the line was never measured against the rows, and neither is a gap.
-                    // Where one arrives, the assessment and the finding disagree about the same
-                    // measurement, which is not something about generating a row.
-                    case ItemAssessment.Attempt.NotAttempted absent -> switch (absent.reason()) {
-                        case NO_CLASSES -> new GenerationOutcome.CannotGenerate(
-                                new Generator.UnresolvedCombination(List.of(subject),
-                                        Generator.UnresolvedCombination.Reason
-                                                .NOTHING_TO_BUILD_AGAINST));
-                        case LINKAGE_FAILED -> new GenerationOutcome.CannotGenerate(
-                                new Generator.UnresolvedCombination(List.of(subject),
-                                        Generator.UnresolvedCombination.Reason.LINKAGE_FAILED));
-                        case A_ROW_IS_ALREADY_THERE, NOT_MEASURED ->
-                                throw new IllegalStateException("the assessment at " + subject
-                                        + " says " + absent.reason() + ", which is not a gap: "
-                                        + gap);
-                    };
-                };
+        private static GenerationOutcome atEdge(Finding gap, BorderAssessment.Point point) {
+            if (!point.role().againstTheLine()) {
+                // A point away from the line is reported under no code and is not a gap. Reaching
+                // this is the disposition of a finding and the role disagreeing about one point.
+                throw new IllegalStateException("not a gap a build refuses: " + gap);
             }
-            // The gap was established from an assessment, so one names it. Where the two lists have
-            // come apart, what happened is that these two readings of one measurement disagree, and
-            // that is not a fact about generating a row: answering it as one would turn a pipeline
-            // that contradicts itself into a strategy that tried and failed.
-            throw new IllegalStateException(
-                    "no boundary assessment for the gap at " + subject + ": " + gap);
+            String subject = point.border().axis() + " = " + point.against();
+            if (!(point.item() instanceof ItemAssessment.Owed owed)) {
+                // A gap was found at a point nobody is owed a row at, which is the finding and
+                // the assessment disagreeing about the same border rather than a row that could
+                // not be generated.
+                throw new IllegalStateException("a gap at a point nothing owes: " + gap);
+            }
+            return switch (owed.attempt()) {
+                case ItemAssessment.Attempt.Built built ->
+                        new GenerationOutcome.Generated(List.of(built.row()));
+                case ItemAssessment.Attempt.Unresolved why ->
+                        new GenerationOutcome.CannotGenerate(why.why());
+                // Carried apart, because the assessment kept them apart. Classes that were not
+                // there and classes that would not link are two things this saw, and choosing
+                // one of them to print is this compiler deciding what it observed.
+                //
+                // The other two reasons do not reach an unmet edge: a row is already at the
+                // value, or the line was never measured against the rows, and neither is a gap.
+                // Where one arrives, the assessment and the finding disagree about the same
+                // measurement, which is not something about generating a row.
+                case ItemAssessment.Attempt.NotAttempted absent -> switch (absent.reason()) {
+                    case NO_CLASSES -> new GenerationOutcome.CannotGenerate(
+                            new Generator.UnresolvedCombination(List.of(subject),
+                                    Generator.UnresolvedCombination.Reason
+                                            .NOTHING_TO_BUILD_AGAINST));
+                    case LINKAGE_FAILED -> new GenerationOutcome.CannotGenerate(
+                            new Generator.UnresolvedCombination(List.of(subject),
+                                    Generator.UnresolvedCombination.Reason.LINKAGE_FAILED));
+                    case A_ROW_IS_ALREADY_THERE, NOT_MEASURED ->
+                            throw new IllegalStateException("the assessment at " + subject
+                                    + " says " + absent.reason() + ", which is not a gap: "
+                                    + gap);
+                };
+            };
         }
 
         /**
@@ -1459,11 +1442,12 @@ public final class Adequacy {
          * rather than off an empty row list, which would be the same as calling a search that found
          * nothing a fact about the model.
          */
-        private static GenerationOutcome atCase(Finding gap, PartitionEvidence partition,
+        private static GenerationOutcome atCase(InputCaseEvidence input, TypeSymbol case_,
+                                                PartitionEvidence partition,
                                                 Generator.GenerationResult pairs,
                                                 Hir.SpecBehavior spec) {
-            String missing = String.valueOf(gap.args().get(0));
-            int at = ((Number) gap.args().get(1)).intValue() - 1;
+            String missing = case_.name();
+            int at = input.at();
             String parameter = at >= 0 && at < spec.params().size()
                     ? spec.params().get(at).name() : null;
             boolean divided = partition != null && parameter != null
@@ -1731,9 +1715,14 @@ public final class Adequacy {
     /**
      * One thing a measure established, on the behavior it is about.
      *
-     * <p>{@code args} are the message's arguments in the order its key takes them, which is also what
-     * a report needs to write the line. Two spellings of the same finding would be two places to fix a
-     * subject that changed name.
+     * <p>{@code about} is what the measure established, as itself. Every reader projects it into its
+     * own words; nothing here does that for them. It used to be the arguments of a message in the
+     * order its key took them, which made the shape of eleven kinds' payloads follow from what four
+     * of them needed for one of three readers, and left the rest carrying whatever a report happened
+     * to print.
+     *
+     * <p>{@code kind} is derived from {@code about} rather than held beside it, so a kind and what
+     * it is about cannot come apart. It is not a second thing to get right when a kind is added.
      *
      * <p>{@code status} is the measurement this came out of. A finding from a measurement that could
      * not be completed is worth printing — it says a row may be missing — and is not worth failing a
@@ -1745,8 +1734,7 @@ public final class Adequacy {
      * one of a body that may have been spliced in from a file nobody holds. A report reading a
      * coordinate cannot tell the two apart, and printed the second as though it were the first.
      */
-    public record Finding(Kind kind, String behavior, MeasurementStatus status,
-                          Citation at, List<Object> args) {
+    public record Finding(String behavior, MeasurementStatus status, Citation at, About about) {
 
         /**
          * What a build does about a finding, which is what neither surface used to say.
@@ -1772,7 +1760,34 @@ public final class Adequacy {
             // caret, which nothing produced and nothing wanted; now the reading of the citation
             // rests on there being one, so the type says so rather than the reader finding out.
             java.util.Objects.requireNonNull(at, "a finding is about a place");
-            args = List.copyOf(args);
+            java.util.Objects.requireNonNull(about, "a finding is about something");
+        }
+
+        /**
+         * Which kind of thing this is, read off what it is about.
+         *
+         * <p>The one place the two are related. A kind handed in beside the subject was a pair that
+         * could disagree, and nothing checked it; here there is no pair. The two border kinds come
+         * off one assessment of one point, and which of them a point is, is the role's answer —
+         * written here rather than at the measure that found it and at every reader that sorts
+         * findings, which is where the closed-border rule would otherwise be spelled three times.
+         */
+        public Kind kind() {
+            return switch (about) {
+                case About.ACaseNoRowExpects _ -> Kind.OUTPUT_CASE_UNSPECIFIED;
+                case About.ACaseNothingWasSeenToProduce _ -> Kind.OUTPUT_CASE_UNVERIFIED;
+                case About.ACaseNoRowAppliesItTo _ -> Kind.INPUT_CASE_UNSPECIFIED;
+                case About.AClassNoRowIsIn _ -> Kind.AXIS_CLASS_UNCOVERED;
+                case About.APointOfABorder(var point) -> point.role().againstTheLine()
+                        ? Kind.BOUNDARY_UNMET : Kind.DOMAIN_POINT_UNCOVERED;
+                case About.APositionNoLineDivides _ -> Kind.PARTITION_NOT_DERIVABLE;
+                case About.APositionThisCouldNotRead _ -> Kind.PARTITION_NOT_READ;
+                case About.APositionWhoseRulesWereNotReached _ ->
+                        Kind.PARTITION_RULES_NOT_REACHED;
+                case About.AQuestionNothingAnswered _ -> Kind.RULE_UNACCOUNTED;
+                case About.APositionPastTheAxisLimit _ -> Kind.PARTITION_OMITTED;
+                case About.AnArmNoRowGoesThrough _ -> Kind.ARM_UNREACHED;
+            };
         }
 
         /**
@@ -1783,7 +1798,7 @@ public final class Adequacy {
          * apart.
          */
         public Disposition disposition() {
-            if (!kind.isAdequacyGap()) {
+            if (!kind().isAdequacyGap()) {
                 return Disposition.REPORTED;
             }
             return status == MeasurementStatus.COMPLETE
@@ -1796,7 +1811,7 @@ public final class Adequacy {
         }
 
         public Optional<DiagnosticCode> code() {
-            return kind.code();
+            return kind().code();
         }
     }
 
@@ -1858,8 +1873,8 @@ public final class Adequacy {
             MeasurementStatus status = signature.status();
             OutputCaseEvidence output = signature.output();
             for (TypeSymbol missing : output.unspecified()) {
-                out.add(new Finding(Kind.OUTPUT_CASE_UNSPECIFIED, behavior.name(), status,
-                        Citation.of(behavior.pos()), List.of(missing.name(), behavior.name())));
+                out.add(new Finding(behavior.name(), status, Citation.of(behavior.pos()),
+                        new About.ACaseNoRowExpects(missing)));
             }
             // Where the behavior answered for no row, every case is unverified and naming each of
             // them adds nothing to that. Asked of the rows rather than of the declaration: the two
@@ -1876,15 +1891,17 @@ public final class Adequacy {
             if (output.answeredRows() > 0) {
                 for (TypeSymbol missing : output.unverified()) {
                     if (!output.unspecified().contains(missing)) {
-                        out.add(new Finding(Kind.OUTPUT_CASE_UNVERIFIED, behavior.name(), status,
-                                Citation.of(behavior.pos()), List.of(missing.name(), behavior.name())));
+                        out.add(new Finding(behavior.name(), status, Citation.of(behavior.pos()),
+                                new About.ACaseNothingWasSeenToProduce(missing)));
                     }
                 }
             }
-            for (int i = 0; i < signature.inputs().size(); i++) {
-                for (TypeSymbol missing : signature.inputs().get(i).unspecified()) {
-                    out.add(new Finding(Kind.INPUT_CASE_UNSPECIFIED, behavior.name(), status,
-                            Citation.of(behavior.pos()), List.of(missing.name(), i + 1, behavior.name())));
+            // Walked as the evidence rather than by index: which input this is, is the evidence's
+            // own answer now, so a finding is not handed a number worked out beside the list.
+            for (InputCaseEvidence input : signature.inputs()) {
+                for (TypeSymbol missing : input.unspecified()) {
+                    out.add(new Finding(behavior.name(), status, Citation.of(behavior.pos()),
+                            new About.ACaseNoRowAppliesItTo(input, missing)));
                 }
             }
         }
@@ -1904,52 +1921,39 @@ public final class Adequacy {
                 if (!axis.status().counted()) {
                     continue;
                 }
-                for (String missing : axis.uncovered()) {
-                    out.add(new Finding(Kind.AXIS_CLASS_UNCOVERED, behavior.name(), axis.status(),
-                            Citation.of(behavior.pos()), List.of(missing)));
+                for (PartitionEvidence.AxisClass missing : axis.uncovered()) {
+                    out.add(new Finding(behavior.name(), axis.status(),
+                            Citation.of(behavior.pos()), new About.AClassNoRowIsIn(missing)));
                 }
             }
-            for (BorderAssessment boundary : partition.boundaries()) {
-                for (souther.compiler.partition.PointRole role
-                        : souther.compiler.partition.PointRole.values()) {
-                    // Both halves, asked of the two answers the assessment keeps apart. A point no
-                    // row was measured against is not a gap, and neither is one nothing has shown a
-                    // row can be written at — that point is where the reading stopped rather than
-                    // where the model does, and a row at it may be one nobody can write. A point
-                    // nobody is owed a row at is not a gap either, and it says so as its own shape.
-                    if (!boundary.at(role).isUnmetGap()) {
-                        continue;
-                    }
-                    // Which point of the border this is, carried rather than worked out again by
-                    // whoever prints the finding. It is the assessment's answer, and a reader that
-                    // re-derived it from the rule would be the second place the closed-border rule
-                    // is written.
-                    //
-                    // Two kinds and one measurement. Which of the four points a build is told about
-                    // is a decision per measure and not per finding: a row against the line is what
-                    // simplified domain coverage asks for and is what a build can refuse over, and a
-                    // row away from it is reported and refuses nothing. Both are found here, so the
-                    // decision is written once instead of by a second walk that could disagree.
-                    out.add(role.againstTheLine()
-                            ? new Finding(Kind.BOUNDARY_UNMET, behavior.name(),
-                                    MeasurementStatus.COMPLETE, Citation.of(behavior.pos()),
-                                    List.of(boundary.axis(), boundary.against(role),
-                                            boundary.rule(), role))
-                            : new Finding(Kind.DOMAIN_POINT_UNCOVERED, behavior.name(),
-                                    MeasurementStatus.COMPLETE, Citation.of(behavior.pos()),
-                                    List.of(boundary.axis(),
-                                            boundary.operator(role) + " "
-                                                    + boundary.against(role),
-                                            boundary.rule(), role)));
+            // The assessment's own items, walked as items. Flattened here a second way, a reader
+            // that forgot a role would be short by it — which is the shape the whole measure was in
+            // before a border owed its four.
+            for (BorderAssessment.Point point
+                    : BorderAssessment.pointsOf(partition.boundaries())) {
+                // Both halves, asked of the two answers the assessment keeps apart. A point no
+                // row was measured against is not a gap, and neither is one nothing has shown a
+                // row can be written at — that point is where the reading stopped rather than
+                // where the model does, and a row at it may be one nobody can write. A point
+                // nobody is owed a row at is not a gap either, and it says so as its own shape.
+                if (!point.item().isUnmetGap()) {
+                    continue;
                 }
+                // The point itself, and one finding for either kind. Which of the two a build is
+                // told about is the role's answer and is read off this where the kind is asked
+                // for; the axis, the value, the rule and the role used to be copied out here, and
+                // a reader then matched the copy back against the assessments to find the one it
+                // came from.
+                out.add(new Finding(behavior.name(), MeasurementStatus.COMPLETE,
+                        Citation.of(behavior.pos()), new About.APointOfABorder(point)));
             }
             // What the model divides this position no way at all, which is the classes question and
             // is answered only for a position that has none.
             for (souther.compiler.partition.UndividedPosition position : partition.notDerivable()) {
                 if (position.isAbsent()) {
-                    out.add(new Finding(Kind.PARTITION_NOT_DERIVABLE, behavior.name(),
-                            MeasurementStatus.COMPLETE, Citation.of(behavior.pos()),
-                            List.of(position.at().toString())));
+                    out.add(new Finding(behavior.name(), MeasurementStatus.COMPLETE,
+                            Citation.of(behavior.pos()),
+                            new About.APositionNoLineDivides(position)));
                 }
             }
             // And what this could not read, asked of the one reading that answers it. A position
@@ -1957,9 +1961,9 @@ public final class Adequacy {
             // list above.
             for (PartitionEvidence.UnreadPosition each : partition.notRead()) {
                 // Not measured, because nothing here established anything either way about it.
-                out.add(new Finding(Kind.PARTITION_NOT_READ, behavior.name(),
-                        MeasurementStatus.NOT_MEASURED, Citation.of(behavior.pos()),
-                        List.of(each.at(), said(each.reason()))));
+                out.add(new Finding(behavior.name(), MeasurementStatus.NOT_MEASURED,
+                        Citation.of(behavior.pos()),
+                        new About.APositionThisCouldNotRead(each)));
             }
             // A position the axes did measure, whose rules this reading is short of. A different
             // thing to act on from one nothing divided: the classes beside it are what the model
@@ -1972,9 +1976,9 @@ public final class Adequacy {
                 // nothing was seen rather than because everything was accounted for.
                 if (axis.read().reach()
                         == PartitionEvidence.AxisCoverage.Reach.SOME_OUT_OF_SIGHT) {
-                    out.add(new Finding(Kind.PARTITION_RULES_NOT_REACHED, behavior.name(),
-                            MeasurementStatus.NOT_MEASURED, Citation.of(behavior.pos()),
-                            List.of(axis.path())));
+                    out.add(new Finding(behavior.name(), MeasurementStatus.NOT_MEASURED,
+                            Citation.of(behavior.pos()),
+                            new About.APositionWhoseRulesWereNotReached(axis)));
                 }
             }
             // One per question a rule raised and nothing answered, whether or not the position it
@@ -1982,48 +1986,19 @@ public final class Adequacy {
             // about the rule; that no axis could be derived is a fact about a measure, and the
             // second used to decide whether the first was said at all.
             for (PartitionEvidence.Unanswered each : partition.unanswered()) {
-                // The subject the question carries, and not the axis's own number. A length bound
-                // says which strings may stand at the position and draws its line on the count, and
-                // the axis is named after the second. The question itself travels with it, because
-                // which section of a document says this follows from the question.
-                out.add(new Finding(Kind.RULE_UNACCOUNTED, behavior.name(),
-                        MeasurementStatus.NOT_MEASURED, Citation.of(behavior.pos()),
-                        List.of(each.measure() != null ? each.measure() : each.at(),
-                                each.cited(), asked(each.question()), each.question(),
-                                each.subject(), each.rule())));
+                // The question as the accounting holds it, whose own contract is that it is handed
+                // on whole. Which of the names it carries a reader is shown, and what words the
+                // question is put in, are the reader's — and both used to be settled here, one of
+                // them only to be overruled by every surface that printed it.
+                out.add(new Finding(behavior.name(), MeasurementStatus.NOT_MEASURED,
+                        Citation.of(behavior.pos()),
+                        new About.AQuestionNothingAnswered(each)));
             }
             for (souther.compiler.partition.Partitions.OmittedAxis dropped : partition.omitted()) {
-                out.add(new Finding(Kind.PARTITION_OMITTED, behavior.name(),
-                        MeasurementStatus.COMPLETE, Citation.of(behavior.pos()),
-                        List.of(dropped.axis().toString())));
+                out.add(new Finding(behavior.name(), MeasurementStatus.COMPLETE,
+                        Citation.of(behavior.pos()),
+                        new About.APositionPastTheAxisLimit(dropped)));
             }
-        }
-
-        /** What a rule raised, in the words a report writes it in. */
-        private static String asked(souther.compiler.check.CoverageObligation question) {
-            return switch (question) {
-                case ADMITTED_VALUES -> "which values may stand at";
-                case BOUNDARY -> "where the values stop on";
-                case PARTITION -> "which classes a row is owed in at";
-                case SINGLETON -> "which value is singled out at";
-            };
-        }
-
-        /** What stopped a derivation, in the words a report writes it in. */
-        private static String said(souther.compiler.partition.UndividedPosition.Reason reason) {
-            return switch (reason) {
-                case UNSUPPORTED_SYNTAX -> "a rule about it is one this compiler did not read";
-                case RULES_NOT_READ_AT_ALL ->
-                        "the rules written about it were not reached at all";
-                case UNSUPPORTED_DOMAIN ->
-                        "it is compared against values no line can be drawn on here";
-                case UNSUPPORTED_PARTITION_SHAPE ->
-                        "the comparison relates it to another position rather than dividing it";
-                case DEPTH_LIMIT -> "the walk stopped before reaching what is under it";
-                case TYPE_UNRESOLVED -> "its type could not be worked out here";
-                case UNSUPPORTED_TRAVERSAL ->
-                        "its values are held inside something this does not reach into";
-            };
         }
 
         /** An arm no row goes through, at the arm and not at the declaration: what to do about it is
@@ -2040,8 +2015,8 @@ public final class Adequacy {
                 // which is written in one language, and a diagnostic, which is written in the
                 // reader's — and the two readings ask the same arm rather than one of them being
                 // handed the other's answer.
-                out.add(new Finding(Kind.ARM_UNREACHED, behavior.name(), branch.status(),
-                        arm.at(), List.of(arm, arm.behavior())));
+                out.add(new Finding(behavior.name(), branch.status(), arm.at(),
+                        new About.AnArmNoRowGoesThrough(arm)));
             }
         }
     }
@@ -2097,32 +2072,47 @@ public final class Adequacy {
          * this method's.
          */
         private static Report warning(Finding finding) {
-            List<Object> said = finding.args();
+            About said = finding.about();
             souther.compiler.diag.Diagnostic.Builder built = pointedAt(finding.at())
-                    .say(switch (finding.kind()) {
-                        case OUTPUT_CASE_UNSPECIFIED -> new ExampleMessage.NoRowExpectsThatCase(
-                                text(said, 0), text(said, 1));
-                        case INPUT_CASE_UNSPECIFIED -> new ExampleMessage.NoRowAppliesItToThatCase(
-                                text(said, 0), text(said, 1), text(said, 2));
+                    .say(switch (said) {
+                        case About.ACaseNoRowExpects(var missing) ->
+                                new ExampleMessage.NoRowExpectsThatCase(
+                                        missing.name(), finding.behavior());
+                        case About.ACaseNoRowAppliesItTo(var input, var missing) ->
+                                new ExampleMessage.NoRowAppliesItToThatCase(missing.name(),
+                                        // How a person is told which input, which is one-based and
+                                        // is this sentence's to spell.
+                                        String.valueOf(input.at() + 1), finding.behavior());
                         // The rule named without a place. Nothing here knows what to call a
                         // source, so a line and a column written into the sentence would be read
                         // against whichever file the reader has in mind. Where a fork of a body
                         // drew the line, the place is pointed at rather than said, and which
                         // construct it was is a phrase the catalog holds in every language.
-                        case BOUNDARY_UNMET -> rule(said).wasDrawnInABodyFork()
+                        case About.APointOfABorder(var point) -> againstTheLine(point).rule()
+                                .wasDrawnInABodyFork()
                                 ? new ExampleMessage.NoRowIsAtTheLineAConstructDrew(
-                                        text(said, 0), text(said, 1), constructOf(said))
+                                        point.border().axis(), point.against(), constructOf(point))
                                 : new ExampleMessage.NoRowIsAtThatBoundary(
-                                        text(said, 0), text(said, 1), rule(said).named());
-                        case ARM_UNREACHED -> new ExampleMessage.NoRowGoesThroughThatArm(
-                                phraseFor(arm(said)), text(said, 1));
-                        default -> throw new IllegalArgumentException(
-                                "no message for " + finding.kind());
+                                        point.border().axis(), point.against(),
+                                        point.border().rule().named());
+                        case About.AnArmNoRowGoesThrough(var arm) ->
+                                new ExampleMessage.NoRowGoesThroughThatArm(
+                                        phraseFor(arm), arm.behavior());
+                        // Kinds no build is told about under any code. Listed rather than
+                        // defaulted, so that one added later has to be answered here rather than
+                        // arriving as a warning with no sentence.
+                        case About.ACaseNothingWasSeenToProduce _, About.AClassNoRowIsIn _,
+                                About.APositionNoLineDivides _, About.APositionThisCouldNotRead _,
+                                About.APositionWhoseRulesWereNotReached _,
+                                About.AQuestionNothingAnswered _,
+                                About.APositionPastTheAxisLimit _ ->
+                                throw new IllegalArgumentException(
+                                        "no message for " + finding.kind());
                     });
-            switch (finding.kind()) {
-                case OUTPUT_CASE_UNSPECIFIED ->
-                        built.hint(new ExampleMessage.WriteARowExpectingThatCase(text(said, 0)));
-                case BOUNDARY_UNMET -> {
+            switch (said) {
+                case About.ACaseNoRowExpects(var missing) ->
+                        built.hint(new ExampleMessage.WriteARowExpectingThatCase(missing.name()));
+                case About.APointOfABorder(var point) -> {
                     built.hint(new ExampleMessage.ARowOnTheLineTellsTwoRulesApart());
                     // Where the rule has a place rather than a name, the place is a second region
                     // and not words in the sentence: a renderer resolves what to call its file,
@@ -2133,16 +2123,16 @@ public final class Adequacy {
                     // dropped, on the grounds that a label naming no source would be read against
                     // the file the diagnostic is in; a label no longer takes its file from where it
                     // is shown, so what was left unsaid can be said.
-                    rule(said).citation().ifPresent(cited -> {
+                    point.border().rule().citation().ifPresent(cited -> {
                         switch (cited) {
                             case souther.compiler.diag.Citation.Written w ->
                                     built.secondary(souther.compiler.diag.Region.point(w.at()),
                                             new ExampleMessage.TheConstructThatDrawsTheLine(
-                                                    constructOf(said)));
+                                                    constructOf(point)));
                             case souther.compiler.diag.Citation.Reached r ->
                                     built.secondary(souther.compiler.diag.Region.point(r.at()),
                                             new ExampleMessage.TheConstructThatDrawsTheLine(
-                                                    constructOf(said)));
+                                                    constructOf(point)));
                             // Nowhere this compilation can put a marker. Where the guard is written
                             // out of sight the label says so instead; where it is in a text the
                             // caller handed over there is no declaration to name and nothing to say,
@@ -2151,14 +2141,21 @@ public final class Adequacy {
                             case souther.compiler.diag.Citation.Elsewhere e ->
                                     built.secondaryOutOfSight(e.provenance(),
                                             new ExampleMessage.TheConstructThatDrawsTheLine(
-                                                    constructOf(said)));
+                                                    constructOf(point)));
                             case souther.compiler.diag.Citation.Unplaced _ -> { }
                         }
                     });
                 }
-                case ARM_UNREACHED ->
+                case About.AnArmNoRowGoesThrough _ ->
                         built.hint(new ExampleMessage.EitherARowIsMissingOrNothingReachesIt());
-                default -> { }   // the message says all there is to say
+                // The message says all there is to say. Written out rather than defaulted, for the
+                // reason the switch above gives.
+                case About.ACaseNoRowAppliesItTo _, About.ACaseNothingWasSeenToProduce _,
+                        About.AClassNoRowIsIn _, About.APositionNoLineDivides _,
+                        About.APositionThisCouldNotRead _,
+                        About.APositionWhoseRulesWereNotReached _,
+                        About.AQuestionNothingAnswered _,
+                        About.APositionPastTheAxisLimit _ -> { }
             }
             return Report.of(built.build());
         }
@@ -2187,23 +2184,27 @@ public final class Adequacy {
             };
         }
 
-        /** The rule a boundary finding is about, which it carries as itself rather than as words:
-         *  what to say about it differs between a report, which can name a file, and a diagnostic,
-         *  which cannot. */
-        private static souther.compiler.partition.OriginRef rule(List<Object> said) {
-            return (souther.compiler.partition.OriginRef) said.get(2);
-        }
-
-        /** The arm an arm finding is about, which it carries as itself for the same reason a
-         *  boundary finding carries its rule: what to call it is the reader's question. */
-        private static souther.compiler.coverage.CoverageSites.Site arm(List<Object> said) {
-            return (souther.compiler.coverage.CoverageSites.Site) said.get(0);
+        /**
+         * The border a build is warned about, which is the one a row is owed against the line.
+         *
+         * <p>A build is told about a point away from the line under no code at all, so one reaching
+         * a warning is {@link Finding#isAdequacyGap()} and the role disagreeing about the same
+         * point. Asked rather than assumed, since what decides it lives on the role and this is the
+         * one place that would go on printing a boundary sentence about the other two points.
+         */
+        private static BorderAssessment againstTheLine(BorderAssessment.Point point) {
+            if (!point.role().againstTheLine()) {
+                throw new IllegalArgumentException(
+                        "no build is warned about the " + point.role() + " point: " + point);
+            }
+            return point.border();
         }
 
         /** Which construct of the language drew a boundary's line, as a phrase the reader's
          *  language supplies. Asked of the rule, which is where the source's own answer is. */
-        private static souther.compiler.diag.Localizable constructOf(List<Object> said) {
-            return rule(said).constructThatDrewIt().said();
+        private static souther.compiler.diag.Localizable constructOf(
+                BorderAssessment.Point point) {
+            return point.border().rule().constructThatDrewIt().said();
         }
 
         /**
@@ -2251,10 +2252,6 @@ public final class Adequacy {
                     ? clause : java.util.Optional.empty();
         }
 
-        /** What a finding put at {@code at}, as the text a message carries. */
-        private static String text(List<Object> said, int at) {
-            return at < said.size() ? String.valueOf(said.get(at)) : "";
-        }
     }
 
     /**
@@ -2418,9 +2415,10 @@ public final class Adequacy {
         List<InputCaseEvidence> inputs = new ArrayList<>(ins.size());
         boolean partial = output.status() == MeasurementStatus.PARTIAL;
         for (int i = 0; i < ins.size(); i++) {
-            InputCaseEvidence evidence = declaredIn.get(i).isEmpty() ? InputCaseEvidence.none()
-                    : new InputCaseEvidence(declaredIn.get(i), inSpecified.get(i), inExecuted.get(i),
-                            inVerified.get(i), inExcluded.get(i), unreadableIn[i]);
+            InputCaseEvidence evidence = declaredIn.get(i).isEmpty() ? InputCaseEvidence.none(i)
+                    : new InputCaseEvidence(i, declaredIn.get(i), inSpecified.get(i),
+                            inExecuted.get(i), inVerified.get(i), inExcluded.get(i),
+                            unreadableIn[i]);
             inputs.add(evidence);
             partial |= evidence.status() == MeasurementStatus.PARTIAL;
         }

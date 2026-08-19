@@ -21,6 +21,13 @@ import java.util.Set;
  * <p>Covering every case of an input is the mechanised half of asking whether a behavior is total:
  * every case the input can be, tried, and a result defined for it.
  *
+ * @param at               which of the behavior's inputs this is, counted from zero. Held rather
+ *                         than left to the index of the list these arrive in: a type that says it
+ *                         is the evidence of <em>one</em> input and cannot answer which one is a
+ *                         value that only means something beside the list it came from, and every
+ *                         reader wanting the position had to be handed it a second time. How it is
+ *                         written to a person — {@code #1} for the first — is the reader's, and a
+ *                         one-based number here would be this measure spelling a report's word
  * @param excluded         cases the position's own rules refuse. Declared and not coverable: the
  *                         type has them and no value of one can be constructed (E1903), so they stay
  *                         in {@link #declared} because what the type can be is part of what the model
@@ -29,7 +36,7 @@ import java.util.Set;
  *                         is what the rules refuse
  * @param unclassifiedRows rows whose input case could not be read
  */
-public record InputCaseEvidence(Set<TypeSymbol> declared, Set<TypeSymbol> specified,
+public record InputCaseEvidence(int at, Set<TypeSymbol> declared, Set<TypeSymbol> specified,
                                 Set<TypeSymbol> executed, Set<TypeSymbol> verified,
                                 Set<TypeSymbol> excluded, int unclassifiedRows) {
 
@@ -41,8 +48,9 @@ public record InputCaseEvidence(Set<TypeSymbol> declared, Set<TypeSymbol> specif
         excluded = Evidence.ordered(excluded);
     }
 
-    public static InputCaseEvidence none() {
-        return new InputCaseEvidence(Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), 0);
+    /** No cases at the given input, which is what a position that is not a sum has. */
+    public static InputCaseEvidence none(int at) {
+        return new InputCaseEvidence(at, Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), 0);
     }
 
     /** The cases a row can be written at: what the type declares, less what its rules refuse. */

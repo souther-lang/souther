@@ -1,0 +1,80 @@
+package souther.compiler.query;
+
+import souther.compiler.observe.InputCaseEvidence;
+import souther.compiler.types.TypeSymbol;
+
+/**
+ * What one {@link Adequacy.Finding} is about.
+ *
+ * <p>The value a measure established, handed on as itself. Not the arguments of a sentence: a
+ * finding used to carry {@code List<Object>} in the order a message key took them, so what each
+ * element was followed from the kind and from nothing written down, and every reader indexed into it
+ * and cast. Two defects came out of that in one change — a record's {@code toString} published as a
+ * document's subject, and a cast that would have survived compiling with an element inserted ahead
+ * of it — and nothing but a reader caught either.
+ *
+ * <p>Nothing here is a projection made for a reader. Where a measure already holds the item — a
+ * point of a border, a question nothing answered, an arm — that value arrives whole, because a value
+ * taken apart at a seam loses a part at every one it crosses and a value that is not taken apart
+ * cannot lose one. Words about these belong to whoever writes a sentence: a report can name a file
+ * and a diagnostic cannot, and the two are readings of one item rather than one of them being handed
+ * the other's answer.
+ *
+ * <p>Which {@link Adequacy.Kind} a finding has is derived from this and is not held beside it, so a
+ * kind and what it is about cannot disagree. This does not know its own kind: the classification and
+ * the word a document publishes for it are downstream of what the finding is about, and a subject
+ * that answered which public category it lands in would be the leak this type exists to close.
+ */
+public sealed interface About {
+
+    /** A case of the output no row expects. */
+    record ACaseNoRowExpects(TypeSymbol missing) implements About {}
+
+    /** A case some row expects and nothing was seen to produce. */
+    record ACaseNothingWasSeenToProduce(TypeSymbol missing) implements About {}
+
+    /** A case of an input no row applies the behavior to. The evidence names which input, so that a
+     *  case and the position it is a case of arrive together. */
+    record ACaseNoRowAppliesItTo(InputCaseEvidence input, TypeSymbol missing) implements About {}
+
+    /** A class of a derived position no row is in, which knows the position it is a class of. */
+    record AClassNoRowIsIn(PartitionEvidence.AxisClass axisClass) implements About {}
+
+    /**
+     * A point of a border no row is at.
+     *
+     * <p>The assessment's own item, which is what the count, the document, the rows a tool offers
+     * and this are four readings of. Held as the point rather than as the axis, the value, the rule
+     * and the role, which is what those four fields were: a copy of it, made where the finding was
+     * built, that a reader then matched back against the assessments to find the one it came from.
+     */
+    record APointOfABorder(BorderAssessment.Point point) implements About {}
+
+    /** A position the model draws no line through. */
+    record APositionNoLineDivides(
+            souther.compiler.partition.UndividedPosition position) implements About {}
+
+    /** A position something is written about that this did not read, with what stopped it. */
+    record APositionThisCouldNotRead(PartitionEvidence.UnreadPosition position) implements About {}
+
+    /** A position the axes measure whose rules the walk never reached. */
+    record APositionWhoseRulesWereNotReached(
+            PartitionEvidence.AxisCoverage axis) implements About {}
+
+    /**
+     * A question a rule raised that nothing answered.
+     *
+     * <p>The accounting's own value, whose own contract is that it is handed on whole rather than
+     * taken apart. It was taken apart into six elements one seam later, which is the thing that
+     * contract was written against.
+     */
+    record AQuestionNothingAnswered(PartitionEvidence.Unanswered asked) implements About {}
+
+    /** A position left out because the axis limit was reached. */
+    record APositionPastTheAxisLimit(
+            souther.compiler.partition.Partitions.OmittedAxis omitted) implements About {}
+
+    /** An arm of the body no row goes through. */
+    record AnArmNoRowGoesThrough(
+            souther.compiler.coverage.CoverageSites.Site arm) implements About {}
+}
