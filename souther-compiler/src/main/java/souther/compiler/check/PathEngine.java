@@ -225,10 +225,8 @@ final class PathEngine {
      * same, because a place is what a clause may be read against and what the seeding writes about,
      * and which value it is and what may be done with it are two answers.
      *
-     * <p>Introduced afresh where the two are really different values, and where there is nothing to
-     * be the same as. An optional's present carrier binds what stands under it, which is not the
-     * optional. A conditional lifted out of a body is read with no scrutinee to hand, so there is no
-     * value here to be about.
+     * <p>Introduced afresh where the two are really different values. An optional's present carrier
+     * binds what stands under it, which is not the optional.
      *
      * <p>Held one way and not two: an arm that made a second subject for the value it opened had
      * every fact about the answer filed under one and every fact the arm added under the other, and
@@ -261,9 +259,6 @@ final class PathEngine {
      * has three answers and each one settles this.
      */
     private Opens opens(Core.Case arm, Core scrutinee, Denotations at) {
-        if (scrutinee == null) {
-            return null;
-        }
         FactSubject of = terms.subjectOf(scrutinee, at);
         if (of == null) {
             return null;
@@ -273,23 +268,6 @@ final class PathEngine {
             case Refinement.OptionPresent ignored -> new Opens(null, terms.heldBy(of));
             case Refinement.OptionAbsent ignored -> null;
         };
-    }
-
-    /**
-     * An arm entered without the value it opens.
-     *
-     * <p>Not the same question with an argument left out. A conditional found past a {@code match} is
-     * read where it stood, which means replaying the binders it is inside without reading what those
-     * binders stood in front of — so there is no scrutinee here, and there is not meant to be one.
-     * What the arm binds is introduced as a value of its own, and every rule the answer carries goes
-     * unread, because nothing here says which value the arm opened.
-     *
-     * <p>That is this reading's limit and not the model's: an arm entered with its scrutinee says the
-     * value it opens is the one already there ({@link #opening}). Named apart so the difference is in
-     * the code rather than in whether a caller remembered to pass something.
-     */
-    Entered enteringLiftedArm(Core.Case arm, Known k, Denotations at) {
-        return enteringArm(arm, null, k, at);
     }
 
     // --- what a call's answer was declared to be ------------------------------------------------
