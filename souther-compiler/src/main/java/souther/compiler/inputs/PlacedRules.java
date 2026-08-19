@@ -60,8 +60,8 @@ record PlacedRules(TypeSymbol value, Rules rules) {
      * Where the position at {@code path} stops once every rule reaching this value has been taken
      * in, which is not the same as what {@link #at} projects onto it.
      */
-    NumericDomain.Bounds leftAt(TermPath path) {
-        return bounds().leftAt(String.join(".", path.fields()));
+    NumericDomain.Bounds leftAt(TermPath path, boolean measured) {
+        return bounds().leftAt(String.join(".", path.fields()), measured);
     }
 
     /**

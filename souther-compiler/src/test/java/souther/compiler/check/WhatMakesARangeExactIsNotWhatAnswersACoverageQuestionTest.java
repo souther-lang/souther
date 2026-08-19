@@ -3,6 +3,8 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.types.TypeKey;
@@ -204,6 +206,105 @@ class WhatMakesARangeExactIsNotWhatAnswersACoverageQuestionTest {
         assertEquals(UNANSWERED_AND_UNREPRESENTED,
                 Answers.of("invariant odd = value * value >= 4"),
                 "and the same on a newtype");
+    }
+
+    /**
+     * A conjunct the bounds hold nothing of, beside one they hold.
+     *
+     * <p>Asked of the rule rather than of each part of it, the half that was taken in answers for
+     * the half that was not, and the same two rules come out one way written with {@code &&} and
+     * another written on two lines. What the author reached for is not what the bounds state.
+     */
+    @Test
+    void aConjunctTheBoundsDoNotHoldIsNotAnsweredForByTheOneBesideIt() {
+        Answers apart = Answers.of("""
+                invariant a = value >= 1
+                    invariant b = value * value >= 4""");
+        assertEquals(UNANSWERED_AND_UNREPRESENTED, apart);
+        assertEquals(apart, Answers.of("invariant c = value >= 1 && value * value >= 4"),
+                "and one rule written with `&&` says what the two written apart say");
+    }
+
+    /**
+     * A rule about a count, held as a fact and not as a form.
+     *
+     * <p>What a size is never — negative — holds of every value and is taken into the bounds
+     * whatever the rule beside it says, so a reading that counted it would call any rule mentioning
+     * a size a rule that narrowed the size. The sizes 3 and 5 are named and the range between them
+     * is `[3, 5]`, and a set of four is a row nobody can write.
+     */
+    @Test
+    void aCountNamedApartIsNotNarrowedByWhatHoldsOfEveryCount() {
+        FieldDomains domains = read("""
+                module example.rooms
+
+                data Codes = Set<String>
+                    invariant said = Set.size(value) == 3 || Set.size(value) == 5
+                """, "Codes");
+        assertEquals("Unrepresented", named(domains.projection()));
+    }
+
+    /**
+     * A conjunct the bounds hold, beside one they hold only part of.
+     *
+     * <p>The half that was taken in does not answer for the half that names two values and leaves
+     * the one between them, and it is the same rule either way it is written.
+     */
+    @Test
+    void aMixedConjunctIsNotAnsweredForByTheHalfTheBoundsHold() {
+        assertEquals(ANSWERED_AND_UNREPRESENTED,
+                Answers.of("invariant mixed = value >= 1 && (value == 3 || value == 5)"));
+    }
+
+    /**
+     * A hole a clause written beside it excludes, in either order.
+     *
+     * <p>A loss is a fact about the step it happened at: written first, {@code value /= 0} drops a
+     * hole that {@code value >= 1} puts outside the range a clause later, and the projection has no
+     * hole in it. Asked of the step, the same two rules answer one way in one order and another in
+     * the other; asked of the state the reading ended in, they answer once.
+     */
+    @Test
+    void aHoleAClauseBesideItExcludesIsExactInEitherOrder() {
+        assertEquals(EXACT_AND_ANSWERED,
+                Answers.of("""
+                        invariant nonzero = value /= 0
+                            invariant floor = value >= 1"""),
+                "the hole is dropped first and the bound puts it outside the range after");
+        assertEquals(EXACT_AND_ANSWERED,
+                Answers.of("""
+                        invariant floor = value >= 1
+                            invariant nonzero = value /= 0"""));
+        assertEquals(ANSWERED_AND_LOSSY, Answers.of("invariant nonzero = value /= 0"),
+                "and a hole nothing excludes is still a hole");
+    }
+
+    /**
+     * A count is measured on its own axis, and so is where its lines fall.
+     *
+     * <p>A `List` is bounded at its length and has no order of its own, so the range a line on it is
+     * clamped to is the one taken of the count. Read off the position's own values instead, there is
+     * no range to clamp with and the end as written stands — which is the newtype's own value all
+     * over again, on the axis beside it.
+     */
+    @Test
+    void aLineOnACountIsClampedByTheRangeTakenOfTheCount() {
+        FieldDomains domains = read("""
+                module example.rooms
+
+                data Length = List<Int>
+                    invariant floor = List.length(value) >= 0
+                    invariant nonempty = List.length(value) /= 0
+                """, "Length");
+
+        assertEquals(Endpoint.inclusive(Count.of(0)),
+                domains.placedAt(FieldDomains.THE_VALUE).stream().filter(FieldDomains.Placed::lower)
+                        .findFirst().orElseThrow().end(),
+                "`floor` writes the end at none");
+        assertEquals(Endpoint.inclusive(Count.of(1)), domains.leftAt(FieldDomains.THE_VALUE, true).min(),
+                "and the rules leave the count at one");
+        assertEquals(null, domains.leftAt(FieldDomains.THE_VALUE, false),
+                "while the position's own values have no range for a line to be clamped by");
     }
 
     /** The clause of the read declaration the author called {@code name}. */

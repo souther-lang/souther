@@ -653,7 +653,7 @@ final class PathEngine {
                     ? predicates.obligations(one.expr(), out, at, false)
                     : predicates.obligations(one.expr(), out, at, false,
                             (part, said) -> gathering.constrained(origin, part,
-                                    Predicates.subjectsIn(said)));
+                                    Predicates.subjectsIn(said), Predicates.narrowableIn(said)));
             if (gathering != null) {
                 gathering.gathered(origin, one.expr(), Predicates.subjectsIn(owed));
             }
@@ -661,7 +661,7 @@ final class PathEngine {
             NumericDomain<FactSubject> before = out.numbers();
             out = predicates.assume(owed, out, Known.Held.OF_THE_VALUE);
             if (gathering != null) {
-                gathering.projected(origin, Predicates.narrowableIn(owed), before, out.numbers());
+                gathering.projected(origin, owed, before, out.numbers());
             }
         }
         out = out.and(quantified);

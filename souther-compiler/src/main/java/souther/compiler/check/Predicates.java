@@ -787,9 +787,11 @@ final class Predicates {
     static Set<FactSubject> narrowableIn(Owed owed) {
         Set<FactSubject> named = new LinkedHashSet<>();
         for (Clause c : owed.clauses()) {
-            for (Constraint known : c.known()) {
-                named.addAll(known.atoms());
-            }
+            // What the clause states, and not what holds of the operations it names.
+            // {@link Clause#known} is filled by {@link #sizeFacts} and {@link #resultFacts} with
+            // relations that are true of every value — a size is never negative — so counting them
+            // would call any rule mentioning a size a rule that narrowed the size, whatever it says
+            // about it.
             if (c.numeric() != null) {
                 named.addAll(c.numeric().atoms());
             }

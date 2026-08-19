@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.core.Core;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.TypeSymbol;
@@ -111,10 +112,13 @@ public final class FieldDomains {
      *  one where a count is taken. A position with neither has no range to be exact about. */
     private final Map<String, FactSubject> atomAt;
     private final Map<String, FactSubject> countAt;
-    /** The atoms the reading that builds the bounds was handed a form for, per rule. */
-    private final Map<RuleRef, Set<FactSubject>> narrowedBy;
-    /** What the interval algebra dropped, where it dropped it, and out of which rule. */
-    private final List<ProjectionEvidence.Cause.Lossy> lost;
+    /** The atoms the reading that builds the bounds was handed a form for, per part of each rule.
+     *  Per part, because a rule is represented where every part of it is. */
+    private final Map<RuleRef, Map<Core, Set<FactSubject>>> narrowedBy;
+    /** What the interval algebra dropped at the step it dropped it, and what it was handed there.
+     *  Whether the projection ends up holding the rule all the same is asked of the state it ends
+     *  in — see {@link #projection}. */
+    private final List<InvariantChecker.Dropped> lost;
 
     private FieldDomains(Map<String, NumericDomain.Bounds> byField,
                          Map<String, NumericDomain.Bounds> heldByField,
@@ -129,8 +133,8 @@ public final class FieldDomains {
                          Hir.Data data, Symbols symbols, Map<String, Count> settled,
                          Set<String> unreadOfEveryValue,
                          Map<String, FactSubject> atomAt, Map<String, FactSubject> countAt,
-                         Map<RuleRef, Set<FactSubject>> narrowedBy,
-                         List<ProjectionEvidence.Cause.Lossy> lost) {
+                         Map<RuleRef, Map<Core, Set<FactSubject>>> narrowedBy,
+                         List<InvariantChecker.Dropped> lost) {
         this.byField = byField;
         this.heldByField = heldByField;
         this.admittedByField = admittedByField;
@@ -663,8 +667,11 @@ public final class FieldDomains {
      * clause placing an end at 0 beside one that takes the 0 away leaves a position whose first
      * value is 1, and the end as written is not where the position starts.
      */
-    public NumericDomain.Bounds leftAt(String path) {
-        FactSubject atom = atomAt.get(path);
+    public NumericDomain.Bounds leftAt(String path, boolean measured) {
+        // The axis the caller is on, and not whichever of the two this position happens to have. A
+        // `String` is measured two ways — its own order, and the length of it — and answering with
+        // the wrong one clamps a line drawn on one axis by the range of the other.
+        FactSubject atom = measured ? countAt.get(path) : atomAt.get(path);
         return atom == null ? null : constraints.numbers().boundsOf(atom);
     }
 
@@ -701,33 +708,58 @@ public final class FieldDomains {
         // pattern raises none — which values may stand somewhere and where a line falls are not what
         // it is about — and it is still a way the value can be refused at an edge of the number
         // beside it.
-        narrowedBy.forEach((rule, narrowable) -> {
-            if (narrowable.stream().anyMatch(ranged::contains)) {
-                return;
-            }
-            // Or the end the rule placed, which is the same rule in the bounds said by the other
-            // reading of it: an ordered value that is not a number takes its range from the
-            // comparison rather than from the interval algebra, and counting only the algebra calls
-            // a bounded `Date` a rule the bounds do not hold — and takes every boundary beside it
-            // down with it.
-            if (directs.stream().anyMatch(d -> d.from().equals(rule))) {
-                return;
-            }
-            // What the rule is about, where it raised a question naming a position. A rule that
-            // raises none is about the value it is written on, which is what the empty path is.
+        narrowedBy.forEach((rule, byPart) -> {
+            // A part at a time, and any one of them is enough. A conjunct the bounds hold nothing of
+            // leaves the range wider than the rule however well the conjunct written beside it went,
+            // and a set unioned over the whole clause answers for the failing half with the other
+            // one — which is the same shape as reading a clause's evidence for one of its parts.
             Set<String> said = new LinkedHashSet<>();
-            Required required = raised.get(rule);
-            if (required != null) {
-                required.obligations().forEach(owed -> said.add(owed.subject().path()));
-            }
-            if (said.isEmpty()) {
-                said.add(THE_VALUE);
-            }
+            byPart.forEach((part, narrowable) -> {
+                // A conjunction says what its conjuncts say, and they are here beside it. Asked of
+                // the conjunction as well, a rule whose halves are each held in a language of their
+                // own — a date bounded at both ends, read by the comparison rather than by the
+                // interval algebra — answers for neither half and fails on the node above them.
+                if (part instanceof Core.Binary b && b.op() == Hir.BinOp.AND
+                        && byPart.containsKey(b.left()) && byPart.containsKey(b.right())) {
+                    return;
+                }
+                if (narrowable.stream().anyMatch(ranged::contains)) {
+                    return;
+                }
+                // Or the end this part placed, which is the same part in the bounds said by the
+                // other reading of it: an ordered value that is not a number takes its range from
+                // the comparison rather than from the interval algebra, and counting only the
+                // algebra calls a bounded `Date` a rule the bounds do not hold — and takes every
+                // boundary beside it down with it.
+                if (directs.stream().anyMatch(d -> d.part() == part)) {
+                    return;
+                }
+                // What the rule is about, where it raised a question naming a position. A rule that
+                // raises none is about the value it is written on, which is the empty path.
+                Required required = raised.get(rule);
+                if (required != null) {
+                    required.obligations().forEach(owed -> said.add(owed.subject().path()));
+                }
+                if (said.isEmpty()) {
+                    said.add(THE_VALUE);
+                }
+            });
             said.forEach(path ->
                     causes.add(new ProjectionEvidence.Cause.Unrepresented(rule, path)));
         });
-        // And what the algebra was given and could not hold whole, as the algebra said it.
-        causes.addAll(lost);
+        // And what the algebra was given and the state it ended in does not hold. A loss is a fact
+        // about the step it happened at: `value /= 0` written before `value >= 1` drops a hole that
+        // the bound put outside the range a clause later, and the projection has no hole in it.
+        // Read off the step, the same two rules answer one way in one order and another in the
+        // other.
+        for (InvariantChecker.Dropped dropped : lost) {
+            boolean held = !dropped.stated().isEmpty() && dropped.stated().stream().allMatch(
+                    each -> constraints.numbers().entails(each.form(), each.rel()));
+            if (!held) {
+                causes.add(new ProjectionEvidence.Cause.Lossy(
+                        dropped.rule(), dropped.atom(), dropped.losses()));
+            }
+        }
         return causes.isEmpty() ? new ProjectionEvidence.Exact()
                 : new ProjectionEvidence.Approximate(causes);
     }

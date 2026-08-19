@@ -253,7 +253,7 @@ public final class InputDomain {
                 // Where the position actually stops, which the ends as written do not say: a clause
                 // placing one at 0 beside a clause that takes the 0 away leaves a position whose
                 // first value is 1, and a line drawn at the 0 is drawn at no value of it.
-                placed.leftAt(path),
+                placed.leftAt(path, bySize),
                 placed.narrowedBy(path, true), placed.narrowedBy(path, false), nothingExists,
                 placed.projection(), declared, reading,
                 ObligationDomain.of(reading, declared), admitted.completeness(),
