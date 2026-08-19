@@ -23,7 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * lose it is to answer from something that only one bracketing has in hand. What is compared is
  * what a caller reads: which values a position holds, and whether this can speak for it. The reason
  * a position is left standing is not compared — a rule that named the position outranks a branch
- * that widened it, so which of two rules is nearer does turn on which is written first.
+ * that widened it, so which of two rules is nearer does turn on which is written first. Beside
+ * those, whether the reading admits anything and whether its promise is one about whole values,
+ * since a conjunction written after the choice reads both and would answer differently past it.
  */
 class AChoiceIsOneConnectiveAndNotATreeTest {
 
@@ -48,6 +50,10 @@ class AChoiceIsOneConnectiveAndNotATreeTest {
                 AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ));
         out.put("unread about both", AdmissibleValues.unreadable(Set.of("value", "other"),
                 UnreadReason.RELATES_TWO_POSITIONS));
+        out.put("two rules leaving nothing", AdmissibleValues.at("value", ValueSet.just(A))
+                .meet(AdmissibleValues.at("value", ValueSet.just(B))));
+        out.put("shown impossible from outside",
+                AdmissibleValues.at("value", ValueSet.just(A)).leavingNothing());
         return out;
     }
 
@@ -65,6 +71,11 @@ class AChoiceIsOneConnectiveAndNotATreeTest {
             out.add(state.speaksFor(atom));
             out.add(state.guaranteedAt(atom));
         });
+        // Neither of these is read by a caller and a conjunction reads both, so a bracketing that
+        // told a conjunction something different about its sides would answer differently past it
+        // and nowhere before.
+        out.add(state.guaranteedTogether());
+        out.add(state.isBottom());
         return out;
     }
 

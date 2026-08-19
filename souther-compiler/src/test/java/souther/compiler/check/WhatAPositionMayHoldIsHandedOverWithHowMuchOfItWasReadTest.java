@@ -181,6 +181,30 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
     }
 
     /**
+     * What covered a position is an alternative, and a rule beside the choice may leave none of it.
+     *
+     * <p>{@code a == 5} admits every {@code b}, so the choice does and nothing about {@code b} went
+     * unread — while that alternative stands. {@code a == 7} refuses every value it admits, and what
+     * is left is {@code a /= b} with {@code a} at 7, which is a rule this cannot read about a
+     * {@code b} that is now not every value. A reading that had struck the rule off where the
+     * choice was read would answer that the model leaves {@code b} every value and that this was
+     * read in full.
+     */
+    @Test
+    void whatCoveredAPositionCanBeRefusedByARuleBesideTheChoice() {
+        FieldDomains read = of("""
+                module demo
+
+                data R = { a: Int, b: Int }
+                    invariant one = a == 5 || a /= b
+                    invariant two = a == 7
+                """, "R");
+
+        asFarAsRead(ValueSet.just(Value.number(7)), UnreadReason.RELATES_TWO_POSITIONS, read, "a");
+        asFarAsRead(ValueSet.ANY, UnreadReason.RELATES_TWO_POSITIONS, read, "b");
+    }
+
+    /**
      * A choice over two positions leaves nothing for an alternative beside it to rest on.
      *
      * <p>Read one position at a time, each of the two choices leaves {@code a} open, and so does

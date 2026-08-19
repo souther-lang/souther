@@ -139,7 +139,8 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
      * it could not read turn out to exclude.
      *
      * <p>A lower approximation where {@link #at} is an upper one, and equal to it at a position
-     * this says that nothing left unread is why the answer is as wide as it is. It does not say the
+     * this says that nothing left unread is why the answer is as wide as it is — which is what
+     * {@link #speaksFor} is read from. It does not say the
      * answer is what the model leaves: a rule reaching across two positions is read here one
      * position at a time, so what is reported can be wider than the rules are with every rule read.
      *
@@ -213,14 +214,25 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
     /**
      * Whether {@link #at} is the whole of what the rules leave {@code atom}, rather than a wider
      * answer this reading could not narrow.
+     *
+     * <p>Either nothing was left standing at the position, or what was left standing cannot be
+     * answerable for the answer's width: the two ends meet there, so every value reported is one
+     * this reading can promise and there is nothing between them for an unread rule to have been.
+     *
+     * <p><b>Asked of the reading in hand and not settled where a rule was left standing.</b> What an
+     * alternative covers is what that alternative admits, and a rule stated beside the choice may
+     * leave nothing of the alternative that did the covering. In {@code (a == 5 || a /= b) && a == 7}
+     * the first alternative admits every {@code b}, and the second rule refuses every value it
+     * admits — so what covered {@code b} is gone, and a reading that had already struck the rule off
+     * would answer that the model leaves {@code b} every value.
      */
     public boolean speaksFor(A atom) {
-        return !unread.containsKey(atom);
+        return !unread.containsKey(atom) || guaranteedAt(atom).equals(at(atom));
     }
 
     /** What stopped this reading from speaking for {@code atom}, or null where nothing did. */
     public UnreadReason whyUnread(A atom) {
-        return unread.get(atom);
+        return speaksFor(atom) ? null : unread.get(atom);
     }
 
     /** Whether nothing satisfies these rules, at a position or otherwise. */
@@ -298,22 +310,15 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
         // the unread rule was about — a rule relating two other positions relates this one to
         // nothing, and lending its reason here would say that it did.
         if (other.dropped) {
-            spoiled = spoiling(spoiled, values.keySet());
+            spoiled = spoiling(spoiled, guaranteed.keySet());
         }
         if (dropped) {
-            spoiled = spoiling(spoiled, other.values.keySet());
+            spoiled = spoiling(spoiled, other.guaranteed.keySet());
         }
-        // And struck where the alternatives already cover what is reported. ANY is the top of this
-        // lattice, so a choice that reached it on the alternatives it could read cannot be widened
-        // by one it could not — and a position whose reported set is met exactly by what is
-        // guaranteed is one no unread rule is answerable for, wherever it came by its reason.
-        Map<A, UnreadReason> standing = new LinkedHashMap<>();
-        spoiled.forEach((atom, why) -> {
-            if (!covered.getOrDefault(atom, coveredElsewhere)
-                    .equals(out.getOrDefault(atom, ValueSet.ANY))) {
-                standing.put(atom, why);
-            }
-        });
+        // What each rule left standing is kept whole. Whether a position is answerable for it is
+        // read off the two ends where the question is asked ({@link #speaksFor}) rather than
+        // settled here: what covers a position is an alternative, and a rule stated beside the
+        // choice may leave nothing of that alternative.
         // The promise survives as one about whole values only where the alternatives are shaped by
         // no more than one position between them. A union of two products alike everywhere but at
         // one place is the product with that place widened; anywhere else it holds a value from one
@@ -321,7 +326,7 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
         // combination neither of them stands for.
         Set<A> shapedBy = new LinkedHashSet<>(guaranteed.keySet());
         shapedBy.addAll(other.guaranteed.keySet());
-        return new AdmissibleValues<>(out, standing, dropped || other.dropped, false,
+        return new AdmissibleValues<>(out, spoiled, dropped || other.dropped, false,
                 covered, coveredElsewhere,
                 guaranteedTogether && other.guaranteedTogether && shapedBy.size() <= 1);
     }
