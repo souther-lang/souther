@@ -1,12 +1,10 @@
 package souther.compiler.check;
 
-import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.Bounds;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -49,6 +47,22 @@ final class InductiveBounds {
     record Walk(LinearForm<FactSubject> seed, FactSubject accumulator,
                 LinearForm<FactSubject> step, StepInputFacts inputs) {}
 
+    /**
+     * What a form lies between in a domain, with the arithmetic its atoms stand for read against
+     * that same domain.
+     *
+     * <p>Taken rather than done here, because which recipes an atom has is
+     * {@link DerivedBounds}' table and reading it a second way would be a second answer. What this
+     * asks of it is the part that matters to a proof: the domain is the one the question is asked
+     * in, so a product inside a step is read under the induction hypothesis and not under what was
+     * known before it.
+     */
+    @FunctionalInterface
+    interface Reading {
+
+        Bounds of(LinearForm<FactSubject> form, NumericDomain<FactSubject> domain);
+    }
+
     /** The range with no ends, which every walk's answer is in and which proves nothing. */
     static final Bounds ANYTHING = new Bounds(null, null);
 
@@ -60,18 +74,23 @@ final class InductiveBounds {
      * domain. So this can be asked twice with two readings and answer twice, and neither answer can
      * reach the other.
      */
-    static Bounds provenOf(Walk walk, NumericDomain<FactSubject> base, Terms terms) {
+    static Bounds provenOf(Walk walk, NumericDomain<FactSubject> base, Terms terms, Reading read) {
         NumericDomain<FactSubject> given = walk.inputs().taking(base);
         if (given.isBottom()) {
             return ANYTHING;   // a reading that holds nothing settles nothing about a walk under it
         }
-        Bounds seed = given.boundsOf(walk.seed());
+        Bounds seed = read.of(walk.seed(), given);
+        // Every candidate proposed is one the seed lies in and every candidate proved was confirmed
+        // to be, so each of these holds every value the seed does and so does the meet of them —
+        // which is what lets the narrower of two be taken without asking whether it holds anything.
+        // Taking it is what keeps the answer from depending on the order they were proposed in: a
+        // generator lengthened later makes the answer sharper or leaves it alone.
         Bounds proved = null;
-        for (Bounds candidate : InvariantCandidates.from(seed, given.boundsOf(walk.step()))) {
-            if (!inductive(walk, candidate, seed, given, terms)) {
+        for (Bounds candidate : InvariantCandidates.from(seed, read.of(walk.step(), given))) {
+            if (!inductive(walk, candidate, seed, given, terms, read)) {
                 continue;
             }
-            proved = proved == null ? candidate : narrower(proved, candidate);
+            proved = proved == null ? candidate : proved.meet(candidate);
         }
         return proved == null ? ANYTHING : proved;
     }
@@ -84,9 +103,17 @@ final class InductiveBounds {
      * dropped here. Nothing derived under an assumed accumulator is true where the accumulator is
      * not assumed, so letting it back would be this deriving from its own answers — which is what
      * {@link DerivedBounds} declines to be and for the same reason.
+     *
+     * <p>The step is read in that forked domain and not before it. A step whose answer is arithmetic
+     * the fragment cannot carry — {@code acc * x.value} — is one value the domain holds nothing
+     * about until what it was computed from is read, and what it was computed from is the
+     * accumulator this is assuming a range for. Read against the caller's domain instead, both
+     * factors are unknown and the product is unbounded whatever the candidate says, so a walk that
+     * multiplies could never be proved. This is one reading of the step for one candidate, not a
+     * round that feeds its own answer back.
      */
     private static boolean inductive(Walk walk, Bounds candidate, Bounds seed,
-                                     NumericDomain<FactSubject> given, Terms terms) {
+                                     NumericDomain<FactSubject> given, Terms terms, Reading read) {
         if (!seed.liesWithin(candidate)) {
             return false;
         }
@@ -98,33 +125,6 @@ final class InductiveBounds {
             throw new IllegalStateException("assuming a range for the accumulator left a reading that"
                     + " holds nothing, so the accumulator was not a value of its own");
         }
-        return assuming.boundsOf(walk.step()).liesWithin(candidate);
-    }
-
-    /**
-     * The narrower of two ranges a walk's answer was proved to be in.
-     *
-     * <p>Both are true of the answer, so their intersection is too, and taking it is what keeps the
-     * result from depending on the order the candidates were proposed in — a generator lengthened
-     * later then makes the answer sharper or leaves it alone, and never changes it.
-     *
-     * <p>It holds something, and that is argued rather than checked. Every candidate proposed is one
-     * the seed lies in, and a candidate is only proved after that has been confirmed, so both of
-     * these hold every value the seed does and so does what is between them.
-     */
-    private static Bounds narrower(Bounds a, Bounds b) {
-        return new Bounds(Endpoint.lower(a.min(), b.min()), Endpoint.upper(a.max(), b.max()));
-    }
-
-    /** Whether a walk's answer was settled at all, which is what a caller takes as holding — a range
-     * with no ends is what this answers when nothing was proved, and asserting it into a domain would
-     * be asserting nothing under the name of a derivation. */
-    static boolean settles(Bounds proven) {
-        return !proven.isEmpty();
-    }
-
-    /** For the tests that read which ranges a walk was proposed, without going through a program. */
-    static List<Bounds> candidatesFor(Bounds seed, Bounds stepWithNothingAssumed) {
-        return InvariantCandidates.from(seed, stepWithNothingAssumed);
+        return read.of(walk.step(), assuming).liesWithin(candidate);
     }
 }

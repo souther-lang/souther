@@ -1667,7 +1667,18 @@ let total (xs) = Money(List.fold((sum, x) -> sum + x.amount.value, 0, xs))
 
 The ranges tried are made from the seed and there are four of them: the seed's own range, the range open above it, the range open below it, and the seed's range together with what the step answers where nothing is assumed about the accumulator — which is the whole answer for a step that does not read the accumulator at all. Where more than one is established the answer is what they all say. Which ranges are tried is not a rule an author has to predict: one that cannot be established costs nothing and settles nothing, and a range established is established whichever others were tried beside it.
 
-The seed and what the step answers must both be arithmetic the procedure derives in. A step that chooses between two answers is not read, and neither is one over a value that is what a behavior answered.
+The seed and what the step answers must both be arithmetic the procedure derives in. A step that chooses between two answers is not read, and neither is one over a value that is what a behavior answered. A step whose answer is arithmetic the fragment cannot carry — a product of the accumulator and the element — is read, and it is read *under* the range being checked: the product is one value nothing is known of until its factors are, and one of its factors is the accumulator the range is about.
+
+[,souther]
+----
+data Positive = Int
+    invariant value >= 1
+
+behavior product : (xs: List<Positive>) -> AtLeastOne
+let product (xs) = AtLeastOne(List.fold((acc, x) -> acc * x.value, 1, xs))
+// discharged: one is at or above one, and something at or above one times
+// something at or above one is at or above one
+----
 
 [,souther]
 ----
@@ -1678,7 +1689,9 @@ let total (xs) =
     Money(List.fold((sum, x) -> if x.amount.value > 0 then sum else 0 - 1, 0, xs))
 ----
 
-What the container guarantees of what it hands the step is what a value of that type guarantees, and what a container written out holds. An element of a `+List<Line>+` carries `+Line+`'s invariant wherever the walk is; a `+[1, 2]+` written on the line holds those two numbers and nothing else, so every element of it is between them. A relation a guard states about *some* element is not this: it says nothing about the element the walk is at, and a walk is not established by it.
+What the container guarantees of what it hands the step is what a value of that type guarantees, and what a container written out holds. It is the same reading that seeds a parameter (<<invariant-discharge>>), so a rule written on a record bounds the field a step reads exactly as a rule written on a newtype the field wears does, and it is read of every parameter the step is handed but the accumulator — a `+Map.fold+` is read over its key as well as its value. A `+[1, 2]+` written on the line holds those two numbers and nothing else, so every element of it is between them.
+
+A relation a guard states about *some* element is not this: it says nothing about the element the walk is at, and a walk is not established by it. Nor is a relation between two places under one parameter — `+end >= start+` written on the element's type is not carried, and a step that needs it gets no range rather than a wrong one. Nor is a container written out with nothing in it: what that would establish is that the step never runs, which is a fact about how many elements there are and not about what any of them is.
 
 [,souther]
 ----

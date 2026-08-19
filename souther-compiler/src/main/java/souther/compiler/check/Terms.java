@@ -101,6 +101,43 @@ final class Terms {
         return reductions;
     }
 
+    /**
+     * Every atom {@code form} reaches: the ones it names, and the ones the arithmetic those stand
+     * for names, however deep.
+     *
+     * <p>Naming one is not the same as being about one. {@code acc * x.value} is a product the
+     * fragment cannot carry, so the form is a single atom and the two it was computed from are under
+     * the recipe filed against that atom — and a reader that took the form's own atoms for what the
+     * expression is about would miss both of them. Answered here because both tables are here.
+     */
+    Set<FactSubject> reached(LinearForm<FactSubject> form) {
+        Set<FactSubject> out = new java.util.LinkedHashSet<>();
+        java.util.Deque<FactSubject> todo = new java.util.ArrayDeque<>(form.coefs().keySet());
+        while (!todo.isEmpty()) {
+            FactSubject atom = todo.poll();
+            if (!out.add(atom)) {
+                continue;
+            }
+            switch (derivations.get(atom)) {
+                case Derivation.Product p -> {
+                    todo.addAll(p.left().coefs().keySet());
+                    todo.addAll(p.right().coefs().keySet());
+                }
+                case Derivation.Quotient q -> {
+                    todo.addAll(q.numerator().coefs().keySet());
+                    todo.addAll(q.divisor().coefs().keySet());
+                }
+                case null -> { }
+            }
+            InductiveBounds.Walk under = reductions.get(atom);
+            if (under != null) {
+                todo.addAll(under.seed().coefs().keySet());
+                todo.addAll(under.step().coefs().keySet());
+            }
+        }
+        return out;
+    }
+
     Terms(Symbols symbols) {
         this(symbols, Of.THE_DISCHARGE_TREE);
     }
@@ -502,7 +539,7 @@ final class Terms {
         // a step that ignores it names it nowhere, and a range is still asserted about it here.
         named(accumulator, granularityOf(e.type()));
         InductiveBounds.Walk made = new InductiveBounds.Walk(seed, accumulator, step,
-                StepInputFacts.of(walk, inside, this, symbols));
+                StepInputFacts.of(walk, inside, this, symbols, reached(step)));
         InductiveBounds.Walk had = reductions.putIfAbsent(atom, made);
         if (had != null && !had.equals(made)) {
             throw new OneTermTwoDerivations("atom `" + atom.rendered() + "` is the answer of two"
@@ -809,6 +846,18 @@ final class Terms {
      * the same reason every other term is. */
     Term placeTerm(BindingId binding) {
         return interned.at(Location.of(binding));
+    }
+
+    /**
+     * The place {@code path} names under {@code root} — the value itself where the path is empty.
+     *
+     * <p>Here because the fields of a chain are read onto a term here and nowhere else. What answers
+     * by path is {@link InvariantChecker#seedFields}, and what a walk names is a term; putting the
+     * one back on the other is this, so a reader of both does not spell the join itself.
+     */
+    FactSubject under(FactSubject root, String path) {
+        return root == null ? null
+                : FactSubject.of(interned.on(root.identity(), StepInputFacts.stepsOf(path)));
     }
 
     /**

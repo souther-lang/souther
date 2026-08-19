@@ -56,11 +56,16 @@ enum Question {
 
     /**
      * Whether it walks a container from a seed through its closure, and where the seed arrives
-     * ({@link Reductions}). Asked of an operation that takes a closure answering what the operation
-     * answers, one of whose parameters is of that type, beside a plain argument of it — which is the
-     * shape a walk from a seed has and is not what makes an operation one. A closure applied once, or
-     * applied to something the operation built rather than to the accumulator it carries, is
-     * declared the same way.
+     * ({@link Reductions}). Asked of an operation given a container, taking a closure that answers
+     * what the operation answers and takes a value of that type, beside a plain argument of it —
+     * which is the shape a walk from a seed has and is not what makes an operation one. A closure
+     * applied once, or applied to something the operation built rather than to the accumulator it
+     * carries, is declared the same way.
+     *
+     * <p>The container is part of the range and not only of the answer. This asks whether an
+     * operation walks <em>a container</em>, so one given none is outside it rather than in it with
+     * nothing to say — an operation declared {@code ((A) -> A, A) -> A} repeats a step over no
+     * elements and is a different question, which nobody has had to ask yet.
      *
      * <p>Beside {@link #COMBINATOR} and not folded into it. What an operation hands its closure is
      * read off the declaration; that it hands it the same closure again with what came back is not,
@@ -71,7 +76,7 @@ enum Question {
         @Override
         boolean asksOf(Prelude.Signature signature) {
             Type result = signature.result();
-            if (result == null) {
+            if (result == null || signature.params().stream().noneMatch(Question::holdsElements)) {
                 return false;
             }
             boolean carriesItBack = signature.params().stream().anyMatch(

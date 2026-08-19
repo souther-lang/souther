@@ -132,28 +132,6 @@ public final class NumericDomain<A> {
      *                  wrongly sharpened on or silently left blunt, and neither shows up as a
      *                  failure anywhere near where the guess was made.
      */
-    /**
-     * The domain refined by taking {@code atom} to lie between {@code bounds}.
-     *
-     * <p>Here rather than at each caller because what a range's ends are as assertions is this
-     * domain's reading of them: an end the range does not reach is the strict comparison, and a
-     * caller spelling that out is a second reader of an {@link Endpoint} that can spell it
-     * differently. Two of them had.
-     */
-    public NumericDomain<A> assuming(A atom, Bounds bounds, Map<A, Granularity> atomKinds) {
-        LinearForm<A> form = LinearForm.atom(atom);
-        NumericDomain<A> out = this;
-        if (bounds.min() != null) {
-            out = out.assume(form.minus(LinearForm.constant(Count.number(bounds.min().at()).at())),
-                    bounds.min().inclusive() ? Rel.GE : Rel.GT, atomKinds);
-        }
-        if (bounds.max() != null) {
-            out = out.assume(form.minus(LinearForm.constant(Count.number(bounds.max().at()).at())),
-                    bounds.max().inclusive() ? Rel.LE : Rel.LT, atomKinds);
-        }
-        return out;
-    }
-
     public NumericDomain<A> assume(LinearForm<A> f, Rel rel, Map<A, Granularity> atomKinds) {
         NumericDomain<A> d = knowing(f.coefs().keySet(), atomKinds);
         if (d.bottom) {
@@ -184,6 +162,29 @@ public final class NumericDomain<A> {
         // Reduce `f rel 0` to `g <= 0` (or `g < 0`): negate the form for >=/>, keep it for <=/<.
         return d.addLe(negOf(rel) ? f.negate() : f, strictOf(rel));
     }
+
+    /**
+     * The domain refined by taking {@code atom} to lie between {@code bounds}.
+     *
+     * <p>Here rather than at each caller because what a range's ends are as assertions is this
+     * domain's reading of them: an end the range does not reach is the strict comparison, and a
+     * caller spelling that out is a second reader of an {@link Endpoint} that can spell it
+     * differently. Two of them had.
+     */
+    public NumericDomain<A> assuming(A atom, Bounds bounds, Map<A, Granularity> atomKinds) {
+        LinearForm<A> form = LinearForm.atom(atom);
+        NumericDomain<A> out = this;
+        if (bounds.min() != null) {
+            out = out.assume(form.minus(LinearForm.constant(Count.number(bounds.min().at()).at())),
+                    bounds.min().inclusive() ? Rel.GE : Rel.GT, atomKinds);
+        }
+        if (bounds.max() != null) {
+            out = out.assume(form.minus(LinearForm.constant(Count.number(bounds.max().at()).at())),
+                    bounds.max().inclusive() ? Rel.LE : Rel.LT, atomKinds);
+        }
+        return out;
+    }
+
 
     /**
      * The domain with the spacing of each of {@code atoms} recorded.
@@ -620,12 +621,10 @@ public final class NumericDomain<A> {
          * absent is every value that way, so it is what this answers with wherever either side has
          * none.
          *
-         * <p>Not called a join, and there is no meet beside it. A meet of two ranges can hold
-         * nothing, and this record has no way to say so — {@link #isEmpty} says a range has no ends
-         * rather than no values, and a domain that holds nothing answers with the same two nulls. So
-         * these are two ranges and the wider one, and nothing here claims a lattice. A caller that
-         * wants the narrower of two has to say why the answer holds anything, which is a thing to
-         * argue where it is argued and not a method here.
+         * <p>Not called a join, and {@link #meet} beside it is not called that either. A meet of two
+         * ranges can hold nothing and this record says so with crossed ends rather than with a
+         * bottom of its own, so a caller taking one asks {@link #holdsAValue} where it matters. This
+         * one cannot: two ranges that each hold a value span a range that holds both.
          */
         public static Bounds spanning(Bounds a, Bounds b) {
             if (a.min() == null || b.min() == null) {

@@ -60,7 +60,7 @@ final class InvariantCandidates {
      * end is inductive for every step and proves nothing, so putting it through the proof is work
      * with a known answer. */
     private static void add(List<Bounds> out, Bounds one) {
-        if (!one.isEmpty() && !out.contains(one)) {
+        if (!one.saysNothing() && !out.contains(one)) {
             out.add(one);
         }
     }

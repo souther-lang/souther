@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Intervals;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.Bounds;
@@ -78,7 +79,7 @@ final class DerivedBounds {
      */
     static NumericDomain<FactSubject> refine(NumericDomain<FactSubject> base, Terms terms, Set<FactSubject> asked) {
         Map<FactSubject, Bounds> derived = new LinkedHashMap<>();
-        if (!base.isBottom()) {
+        if ((!terms.derivations().isEmpty() || !terms.reductions().isEmpty()) && !base.isBottom()) {
             for (FactSubject atom : roots(terms, base, asked)) {
                 derive(atom, base, terms, derived, new LinkedHashSet<>());
             }
@@ -164,8 +165,12 @@ final class DerivedBounds {
                                     Map<FactSubject, Bounds> done, Set<FactSubject> deriving) {
         InductiveBounds.Walk walk = terms.reductions().get(atom);
         if (walk != null) {
-            return InductiveBounds.provenOf(walk, withOperands(walk, base, terms, done, deriving),
-                    terms);
+            // Each reading of the walk's own forms gets a memo of its own, since each is against a
+            // different domain — the caller's, and the caller's with a candidate assumed. What is
+            // shared is `deriving`, which is what says an atom was built out of itself, and that is
+            // true of a recipe whatever domain it is read in.
+            return InductiveBounds.provenOf(walk, base, terms,
+                    (form, domain) -> boundsOf(form, domain, terms, new LinkedHashMap<>(), deriving));
         }
         return switch (terms.derivations().get(atom)) {
             case Derivation.Product product -> Intervals.product(
@@ -173,23 +178,6 @@ final class DerivedBounds {
                     boundsOf(product.right(), base, terms, done, deriving));
             case Derivation.Quotient quotient -> quotient(quotient, base, terms, done, deriving);
         };
-    }
-
-    /** {@code base} with what the walk's own forms name derived into it, so a seed or a step written
-     * over arithmetic the domain cannot carry is read against what that arithmetic lies between. */
-    private static NumericDomain<FactSubject> withOperands(InductiveBounds.Walk walk,
-                                                           NumericDomain<FactSubject> base,
-                                                           Terms terms, Map<FactSubject, Bounds> done,
-                                                           Set<FactSubject> deriving) {
-        NumericDomain<FactSubject> out = base;
-        for (LinearForm<FactSubject> form : List.of(walk.seed(), walk.step())) {
-            for (FactSubject atom : form.coefs().keySet()) {
-                if (recorded(terms, atom)) {
-                    out = taking(out, atom, derive(atom, base, terms, done, deriving), terms);
-                }
-            }
-        }
-        return out;
     }
 
     /**

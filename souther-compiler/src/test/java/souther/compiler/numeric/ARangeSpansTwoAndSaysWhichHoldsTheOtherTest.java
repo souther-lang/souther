@@ -16,9 +16,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Written apart from the domain because both are read where a walk from a seed is proved
  * (§invariant-discharge-reduction) and the answers turn on inclusivity, which a comparison of the
- * two numbers alone does not say. There is no meet beside them: a meet of two ranges can hold
- * nothing, and this record has no way to say so — an absent end here is every value that way, and
- * a range with neither end is one nothing was said about rather than one holding nothing.
+ * two numbers alone does not say. Beside them is {@code meet}, whose answer can hold nothing and
+ * whose callers ask {@code holdsAValue} where that matters; a span cannot, since two ranges that
+ * each hold a value span a range holding both.
  */
 class ARangeSpansTwoAndSaysWhichHoldsTheOtherTest {
 

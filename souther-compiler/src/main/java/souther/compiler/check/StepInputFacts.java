@@ -7,12 +7,12 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.Bounds;
-import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 
 import java.math.BigDecimal;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -23,14 +23,23 @@ import java.util.Set;
  * <p>Plural, and rooted. A step is handed the accumulator and everything else the operation applies
  * it to, and that is not one value: {@code Map.fold} hands its step a key and a value, and the two
  * are bounded by different declarations. So this is facts about places, each rooted at the parameter
- * it arrives on, rather than a range for "the element". Today only the parameter
- * {@link Combinators} names the element on is populated — a key is a place nothing here reads yet —
- * and widening that changes what is put in this, not the shape of it or of anything downstream.
+ * it arrives on, rather than a range for "the element" — and every parameter but the accumulator is
+ * read, so a key is read the day a step is written over one.
  *
- * <p>Bounds and not relations, for now. Two places under one parameter may stand in a relation the
- * declaration states — {@code end >= start} — and nothing here carries it. That is a narrowing of
- * what can be proved and is written down as one: a reduction whose step needs such a relation gets
- * no bound rather than a wrong one.
+ * <p>What a value of a type guarantees is not decided here. {@link InvariantChecker#seedFields} is
+ * what decides it, and this projects that answer onto the places the walk names — the same
+ * projection {@link FieldDomains} makes of the same reading. Read here instead, only a numeric
+ * newtype's own rules would have been found: a record's own invariant bounds its fields, and
+ * {@code data Line = { amount: Int } invariant amount >= 0} says nothing about any type
+ * {@code DeclaredBounds} would have been asked about. That fact is one the walk into a combinator's
+ * closure already has ({@link InvariantChecker#walkCall} enters the element and seeds it), so
+ * deciding it a second way here would have been two answers to one question, differing by which of
+ * them a reader happened to ask.
+ *
+ * <p>Bounds and not relations. Two places under one parameter may stand in a relation the
+ * declaration states — {@code end >= start} — and the projection drops it, as {@link FieldDomains}'
+ * does. That is a narrowing of what can be proved and is written down as one: a reduction whose step
+ * needs such a relation gets no bound rather than a wrong one.
  *
  * <p>What is here holds of <em>every</em> value the step is handed, so it may be assumed of the one
  * value the step is read against. Nothing that holds of some elements belongs here: a guard about
@@ -49,54 +58,74 @@ record StepInputFacts(Map<FactSubject, Bounds> at, Map<FactSubject, Granularity>
     }
 
     /**
-     * What holds of everything {@code r}'s step is handed besides its accumulator.
+     * What holds of everything {@code r}'s step is handed besides its accumulator, where each of
+     * those parameters is entered in {@code inside} as the place it is.
      *
-     * <p>Two sources, and they are two different kinds of fact. What a value's type declares holds of
-     * every value of that type, so it holds of whichever one the walk is at. What a container written
-     * out holds is read off the line it is written on: three elements written there are the only
-     * three there are, and every one of them lies between the least and the greatest.
-     *
-     * <p>Read at every step of a chain rather than at the end of it. A newtype's {@code .value} is
-     * the same value as the newtype, so {@code x.amount.value} is the place {@code x.amount} is —
-     * and the rules that bound it are written on {@code x.amount}'s type, not on the {@code Int} the
-     * read answers. Asking at each level is what puts the rule and the place together without this
-     * having a second opinion about which reads are steps.
+     * <p>Two sources, and they are two different kinds of fact. What a value's type guarantees holds
+     * of every value of that type, so it holds of whichever one the walk is at. What a container
+     * written out holds is read off the line it is written on: three elements written there are the
+     * only three there are, and every one of them lies between the least and the greatest.
      */
     static StepInputFacts of(Reductions.Reducing r, Denotations inside, Terms terms,
-                             Symbols symbols) {
-        Set<BindingId> handed = new HashSet<>();
-        for (Hir.Binder param : r.step().params()) {
-            if (param != r.accumulator()) {
-                handed.add(param.id());
+                             Symbols symbols, Set<FactSubject> namedByTheStep) {
+        Gathering gathering = new Gathering(terms, namedByTheStep);
+        List<Hir.Binder> params = r.step().params();
+        for (int i = 0; i < params.size(); i++) {
+            if (params.get(i) == r.accumulator()) {
+                continue;
             }
+            guaranteed(params.get(i), handedAt(r, i), inside, terms, symbols, gathering);
         }
-        Gathering gathering = new Gathering();
-        declaring(r.step().body(), handed, inside, terms, symbols, gathering);
         writtenOut(r, inside, terms, gathering);
         return gathering.gathered();
     }
 
-    /** Every place the step reads off something it was handed, bounded by what its type declares. */
-    private static void declaring(Core e, Set<BindingId> handed, Denotations inside, Terms terms,
-                                  Symbols symbols, Gathering gathering) {
-        BindingId root = Terms.rootBinding(e);
-        if (root != null && handed.contains(root)) {
-            FactSubject atom = terms.positionOf(e, inside).atom();
-            if (atom != null) {
-                gathering.holds(atom, declared(e.type(), symbols), terms.granularityOf(e.type()));
-            }
+    /**
+     * What the step's parameter at {@code i} is handed, as a type.
+     *
+     * <p>The same two answers {@link InvariantChecker#walkCall} enters a closure's parameters at:
+     * the element arrives at whatever the container holds, and every other parameter at what the
+     * closure was typed with. Read the same way here so that a reduction proves against the types
+     * the walk into that closure already reads it against.
+     */
+    private static Type handedAt(Reductions.Reducing r, int i) {
+        if (r.step().params().get(i) == r.element()) {
+            return Terms.elementType(r.container().type());
         }
-        Core.forEachChild(e, child -> declaring(child, handed, inside, terms, symbols, gathering));
+        return r.step().type() instanceof Type.FnOf fn && i < fn.params().size()
+                ? fn.params().get(i) : null;
     }
 
-    /** What {@code type}'s own rules leave a value of it between, as the domain reads a range. */
-    private static Bounds declared(Type type, Symbols symbols) {
-        DeclaredBounds.Bounds own = DeclaredBounds.of(type, symbols);
-        if (own == null || own.isEmpty()) {
-            return null;
+    /**
+     * What a value of {@code param}'s type guarantees, projected onto the places under the parameter.
+     *
+     * <p>{@link InvariantChecker#seedFields} answers by path — {@code ""} for the value itself,
+     * {@code "amount"} for a field, {@code "a.b"} for a field of one — and the walk names those same
+     * places under whatever subject the parameter was entered as. So the projection is the path read
+     * off one and put back on the other, and nothing here reads a declaration.
+     */
+    private static void guaranteed(Hir.Binder param, Type handed, Denotations inside, Terms terms,
+                                   Symbols symbols, Gathering gathering) {
+        FactSubject root = inside.subject(param.id());
+        if (root == null || !(handed instanceof Type.Ref ref)
+                || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data)) {
+            return;
         }
-        return new Bounds(own.min() == null ? null : own.min().at(),
-                own.max() == null ? null : own.max().at());
+        InvariantChecker.Seeded seeded = seededOf(ref.name(), data, symbols);
+        if (seeded == null) {
+            return;
+        }
+        seeded.atoms().forEach((path, atom) ->
+                gathering.holds(terms.under(root, path), seeded.numbers().boundsOf(atom)));
+    }
+
+    /** The reading of {@code named}, or null where it fell over. A reading that fell over is one
+     * this says nothing from, which leaves the walk unbounded rather than bounded by half of what a
+     * declaration says. */
+    private static InvariantChecker.Seeded seededOf(TypeSymbol named, Hir.Data data,
+                                                    Symbols symbols) {
+        InvariantChecker.Seeded seeded = InvariantChecker.seedFields(named, data, symbols);
+        return seeded.everyClauseRead() && !seeded.constraints().isBottom() ? seeded : null;
     }
 
     /**
@@ -106,6 +135,10 @@ record StepInputFacts(Map<FactSubject, Bounds> at, Map<FactSubject, Granularity>
      * element says nothing here — the least of what is written is not the least of what is held once
      * one of them is decided at run time — and saying nothing is what leaves the walk unbounded
      * rather than wrongly bounded.
+     *
+     * <p>A container written out with nothing in it says nothing either, and that is a narrowing
+     * this does not reach past: what it would establish is that the step never runs, which is a fact
+     * about how many elements there are and not about what any of them is.
      */
     private static void writtenOut(Reductions.Reducing r, Denotations inside, Terms terms,
                                    Gathering gathering) {
@@ -124,14 +157,9 @@ record StepInputFacts(Map<FactSubject, Bounds> at, Map<FactSubject, Granularity>
             low = low == null || written.compareTo(low) < 0 ? written : low;
             high = high == null || written.compareTo(high) > 0 ? written : high;
         }
-        FactSubject atom = terms.positionOf(
-                Terms.read(r.element(), element, r.step().pos()), inside).atom();
-        if (atom == null) {
-            return;
-        }
-        gathering.holds(atom,
-                new Bounds(Endpoint.inclusive(Count.of(low)), Endpoint.inclusive(Count.of(high))),
-                terms.granularityOf(element));
+        gathering.holds(
+                terms.positionOf(Terms.read(r.element(), element, r.step().pos()), inside).atom(),
+                new Bounds(Endpoint.inclusive(Count.of(low)), Endpoint.inclusive(Count.of(high))));
     }
 
     /** {@code domain} with all of this taken as holding. Handed a domain rather than answering with
@@ -146,33 +174,51 @@ record StepInputFacts(Map<FactSubject, Bounds> at, Map<FactSubject, Granularity>
         return out;
     }
 
-    /** A builder that keeps the two tables in step, since a bound recorded without how its atom's
-     * values are spaced is one the domain refuses to take. */
+    /**
+     * A builder that keeps the two tables in step, and that keeps only the places the step names.
+     *
+     * <p>Both for one reason. A bound recorded without how its atom's values are spaced is one the
+     * domain refuses to take, and how they are spaced is what the naming recorded when the step was
+     * read — so a place the step does not name has no answer there, and is also a place no bound
+     * could be read at. The two questions have one answer and it is asked once.
+     */
     static final class Gathering {
 
         private final Map<FactSubject, Bounds> at = new LinkedHashMap<>();
         private final Map<FactSubject, Granularity> kinds = new LinkedHashMap<>();
+        private final Terms terms;
+        private final Set<FactSubject> namedByTheStep;
+
+        Gathering(Terms terms, Set<FactSubject> namedByTheStep) {
+            this.terms = terms;
+            this.namedByTheStep = namedByTheStep;
+        }
 
         /**
-         * Records that {@code atom} lies between {@code bounds}, where that says anything.
+         * Records that {@code atom} lies between {@code bounds}, where that says anything and the
+         * step names it.
          *
          * <p>Two rules reaching one atom both hold of it, so the tighter end of each side is kept.
-         * One place can be read at more than one level of a chain and be bounded at more than one:
-         * a newtype's rule and the rule on what it wraps are two rules about one value.
+         * One place can be reached by more than one source — a type that guarantees a range and a
+         * container written out holding narrower values — and both are true of it.
          */
-        void holds(FactSubject atom, Bounds bounds, Granularity spacing) {
-            if (bounds == null || bounds.isEmpty()) {
+        void holds(FactSubject atom, Bounds bounds) {
+            if (atom == null || bounds == null || bounds.saysNothing()
+                    || !namedByTheStep.contains(atom)) {
                 return;
             }
             Bounds had = at.get(atom);
-            at.put(atom, had == null ? bounds
-                    : new Bounds(Endpoint.lower(had.min(), bounds.min()),
-                            Endpoint.upper(had.max(), bounds.max())));
-            kinds.put(atom, spacing);
+            at.put(atom, had == null ? bounds : had.meet(bounds));
+            kinds.putAll(terms.kindsOf(NumericDomain.LinearForm.atom(atom)));
         }
 
         StepInputFacts gathered() {
             return at.isEmpty() ? none() : new StepInputFacts(at, kinds);
         }
+    }
+
+    /** The fields a path names, from the head down. */
+    static List<String> stepsOf(String path) {
+        return path.isEmpty() ? List.of() : List.of(path.split("\\."));
     }
 }
