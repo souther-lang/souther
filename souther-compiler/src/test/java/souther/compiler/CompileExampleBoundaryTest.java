@@ -13,6 +13,8 @@ import souther.compiler.query.PartitionEvidence;
 import java.util.List;
 import java.util.Map;
 
+import static souther.compiler.AxisClasses.names;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -78,7 +80,7 @@ class CompileExampleBoundaryTest {
                     | (Draft { cost = Amount(50) }) -> Submitted
                 """);
 
-        assertEquals(List.of("request.cost/100 < x"), cost(one).uncovered());
+        assertEquals(List.of("request.cost/100 < x"), names(cost(one).uncovered()));
         assertEquals(MeasurementStatus.COMPLETE, cost(one).status());
 
         PartitionEvidence both = evidence(MODEL + """
@@ -87,7 +89,7 @@ class CompileExampleBoundaryTest {
                     | (Draft { cost = Amount(50) })  -> Submitted
                     | (Draft { cost = Amount(500) }) -> Waiting
                 """);
-        assertEquals(List.of(), cost(both).uncovered());
+        assertEquals(List.of(), names(cost(both).uncovered()));
     }
 
     /** Nothing below the bound can be constructed, so writing the value is the whole of what there

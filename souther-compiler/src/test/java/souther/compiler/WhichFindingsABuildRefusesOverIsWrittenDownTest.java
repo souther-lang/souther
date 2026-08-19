@@ -6,7 +6,9 @@ import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.observe.MeasurementStatus;
+import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.source.SourceId;
@@ -94,7 +96,7 @@ class WhichFindingsABuildRefusesOverIsWrittenDownTest {
         String human = report().human(SourceNameResolver.identity());
 
         assertTrue(human.contains("      ! no row uses `C`"), human);
-        assertTrue(human.contains("      · no row is in `C`"), human);
+        assertTrue(human.contains("      · no row is in `C` at grade"), human);
     }
 
     /**
@@ -165,7 +167,7 @@ class WhichFindingsABuildRefusesOverIsWrittenDownTest {
         // because two parameters of one type produce two findings a class name alone cannot tell
         // apart.
         assertEquals(List.of("C (in #1)"), subjects(findings, "input_case_unspecified"));
-        assertEquals(List.of("C"), subjects(findings, "axis_class_uncovered"));
+        assertEquals(List.of("C (at grade)"), subjects(findings, "axis_class_uncovered"));
         assertEquals("refused", disposition(findings, "input_case_unspecified"));
         assertEquals("reported", disposition(findings, "axis_class_uncovered"));
     }
@@ -253,33 +255,38 @@ class WhichFindingsABuildRefusesOverIsWrittenDownTest {
      */
     @Test
     void aDispositionIsTheKindAndTheMeasurementTogether() {
+        List<Adequacy.Finding> findings = report().findings();
+
         assertEquals(Adequacy.Finding.Disposition.REFUSED,
-                finding(Adequacy.Kind.BOUNDARY_UNMET, MeasurementStatus.COMPLETE).disposition());
-        assertEquals(Adequacy.Finding.Disposition.UNDECIDED,
-                finding(Adequacy.Kind.BOUNDARY_UNMET, MeasurementStatus.PARTIAL).disposition());
+                of(findings, Adequacy.Kind.INPUT_CASE_UNSPECIFIED).disposition());
         assertEquals(Adequacy.Finding.Disposition.REPORTED,
-                finding(Adequacy.Kind.AXIS_CLASS_UNCOVERED, MeasurementStatus.COMPLETE)
-                        .disposition());
-        assertEquals(Adequacy.Finding.Disposition.REPORTED,
-                finding(Adequacy.Kind.AXIS_CLASS_UNCOVERED, MeasurementStatus.PARTIAL)
-                        .disposition());
+                of(findings, Adequacy.Kind.AXIS_CLASS_UNCOVERED).disposition());
+        // The middle answer needs a measure that came to none, which this model does not have. It
+        // is held where the unfinished rows are, beside the warning that is not printed for it
+        // (`CompilePartialAdequacyTest#aGapFromAMeasureThatCameToNoAnswerIsUndecided`).
     }
 
-    /** The one statement of what a build refuses over, with the older reading of it held to it. */
+    /**
+     * The one statement of what a build refuses over, with the older reading of it held to it.
+     *
+     * <p>Over findings a compile made rather than findings assembled here. A fixture would have to
+     * put something in each shape for the kind to come out, and what a measure found is not
+     * something a test about dispositions knows — the last version of this filled every subject
+     * with nothing, which the type now refuses.
+     */
     @Test
     void theGapAnswerIsTheDispositionAndNotASecondReading() {
-        for (Adequacy.Kind kind : Adequacy.Kind.values()) {
-            for (MeasurementStatus status : MeasurementStatus.values()) {
-                Adequacy.Finding f = finding(kind, status);
-                assertEquals(f.disposition() == Adequacy.Finding.Disposition.REFUSED,
-                        f.isAdequacyGap(), kind + " at " + status);
-            }
+        for (Adequacy.Finding f : report().findings()) {
+            assertEquals(f.disposition() == Adequacy.Finding.Disposition.REFUSED,
+                    f.isAdequacyGap(), f.kind() + " at " + f.status());
         }
     }
 
-    private static Adequacy.Finding finding(Adequacy.Kind kind, MeasurementStatus status) {
-        return new Adequacy.Finding(kind, "b", status,
-                Citation.of(new SourcePos(1, 1, new SourceId("s"))), List.of("x"));
+    /** The one finding of a kind, which this model has at most one of. */
+    private static Adequacy.Finding of(List<Adequacy.Finding> findings, Adequacy.Kind kind) {
+        List<Adequacy.Finding> mine = findings.stream().filter(f -> f.kind() == kind).toList();
+        assertEquals(1, mine.size(), () -> "one " + kind + " in " + findings);
+        return mine.get(0);
     }
 
     private static AdequacyReport report() {

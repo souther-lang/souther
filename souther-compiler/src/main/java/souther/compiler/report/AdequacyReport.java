@@ -16,6 +16,7 @@ import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.observe.OutputCaseEvidence;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.partition.Partitions;
+import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.ItemAssessment;
@@ -515,32 +516,37 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     output.observed().size(), output.declared().size(),
                     output.verified().size(), output.declared().size(),
                     decided ? "" : "   (partial)"));
-            for (Adequacy.Finding f : behavior.of(Adequacy.Kind.OUTPUT_CASE_UNSPECIFIED)) {
-                out.append(String.format("      %s %sexpects `%s`%n",
-                        mark(f), noRow(f), f.args().get(0)));
+            for (Adequacy.Finding f : behavior.findings()) {
+                if (f.about() instanceof About.ACaseNoRowExpects(var missing)) {
+                    out.append(String.format("      %s %sexpects `%s`%n",
+                            mark(f), noRow(f), missing.name()));
+                }
             }
-            for (Adequacy.Finding f : behavior.of(Adequacy.Kind.OUTPUT_CASE_UNVERIFIED)) {
-                out.append(String.format("      %s %sconfirms `%s`%n",
-                        mark(f), noRow(f), f.args().get(0)));
+            for (Adequacy.Finding f : behavior.findings()) {
+                if (f.about() instanceof About.ACaseNothingWasSeenToProduce(var missing)) {
+                    out.append(String.format("      %s %sconfirms `%s`%n",
+                            mark(f), noRow(f), missing.name()));
+                }
             }
         }
-        for (int i = 0; i < signature.inputs().size(); i++) {
-            InputCaseEvidence input = signature.inputs().get(i);
+        for (InputCaseEvidence input : signature.inputs()) {
             if (input.declared().isEmpty()) {
                 continue;
             }
             // Counted against the cases a row can be written at. A case the body answers `unreachable`
             // for is one the compiler refuses a row for, so leaving it in the denominator would ask
             // for work that cannot be done and hold the model one case short for ever.
-            out.append(String.format("                in #%d specified %d/%d%s%n", i + 1,
+            out.append(String.format("                in #%d specified %d/%d%s%n", input.at() + 1,
                     input.specified().size(), input.coverable().size(),
                     input.excluded().isEmpty() ? ""
                             : "   excluded " + input.excluded().size()));
-            int position = i + 1;
-            for (Adequacy.Finding f : behavior.of(Adequacy.Kind.INPUT_CASE_UNSPECIFIED)) {
-                if (f.args().get(1).equals(position)) {
+            for (Adequacy.Finding f : behavior.findings()) {
+                // Told apart by the input the finding is about rather than by a number written
+                // beside it: which one it is, is the evidence's own answer on both sides.
+                if (f.about() instanceof About.ACaseNoRowAppliesItTo(var at, var missing)
+                        && at.at() == input.at()) {
                     out.append(String.format("      %s %suses `%s`%n",
-                            mark(f), noRow(f), f.args().get(0)));
+                            mark(f), noRow(f), missing.name()));
                 }
             }
             for (TypeSymbol ruled : input.excluded()) {
@@ -639,10 +645,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     excluded == 0 ? "" : "   excluded " + excluded,
                     notes(partition.axes(), a -> !a.status().counted(),
                             a -> whyNoAxis(a.reason()))));
-            for (Adequacy.Finding f : behavior.of(Adequacy.Kind.AXIS_CLASS_UNCOVERED)) {
-                out.append(String.format("      %s %s `%s`%n", mark(f),
-                        f.status() == MeasurementStatus.PARTIAL
-                                ? "undecided whether a row is in" : "no row is in", f.args().get(0)));
+            // The position as well as the class. A class name alone is the same words about two
+            // positions of one behavior whose types divide into classes named after the same cases,
+            // and a reader told one of them cannot say which position to write the row at. Which
+            // name a position goes by is settled here and not by the class: the two the axis holds
+            // are for different readers, and this one writes the term a row is written against.
+            for (Adequacy.Finding f : behavior.findings()) {
+                if (f.about() instanceof About.AClassNoRowIsIn(var missing)) {
+                    out.append(String.format("      %s %s `%s` at %s%n", mark(f),
+                            f.status() == MeasurementStatus.PARTIAL
+                                    ? "undecided whether a row is in" : "no row is in",
+                            missing.name(), missing.axis().path()));
+                }
             }
             // Not a finding: nothing is owed here, and what the line says is what the model already
             // decided rather than something the rows left undone.
@@ -743,15 +757,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // build can be told to refuse over and a row away from it is not, which is a decision about
         // what a build is held to and not about what a reader is shown — printed apart, the second
         // would read as a lesser finding rather than as the second half of one technique.
-        for (Adequacy.Kind kind
-                : List.of(Adequacy.Kind.BOUNDARY_UNMET, Adequacy.Kind.DOMAIN_POINT_UNCOVERED)) {
-            for (Adequacy.Finding f : behavior.of(kind)) {
-                out.append(String.format("      %s no row is at the %s point %s %s (%s)%n",
-                        mark(f), f.args().get(3), f.args().get(0),
-                        kind == Adequacy.Kind.BOUNDARY_UNMET
-                                ? "= " + f.args().get(1) : f.args().get(1),
-                        ((souther.compiler.partition.OriginRef) f.args().get(2))
-                                .describe(names, declaredIn)));
+        // The points against the line first and the ones away from it after, which is why this is
+        // two passes over one list rather than one: the measure finds a border's four items
+        // together, and printed in that order the two halves would be interleaved.
+        for (boolean againstTheLine : List.of(true, false)) {
+            for (Adequacy.Finding f : behavior.findings()) {
+                if (f.about() instanceof About.APointOfABorder(var point)
+                        && point.role().againstTheLine() == againstTheLine) {
+                    out.append(String.format("      %s no row is at the %s point %s %s (%s)%n",
+                            mark(f), point.role(), point.border().axis(),
+                            againstTheLine ? "= " + point.against() : point.asked(),
+                            point.border().origin(names, declaredIn)));
+                }
             }
         }
         // Said and not counted. Nothing has shown a row can be written at these — the projection
@@ -805,31 +822,90 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     private static void undivided(StringBuilder out, BehaviorReport behavior,
                                   SourceNameResolver names, SourceId declaredIn) {
-        for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_NOT_DERIVABLE)) {
-            out.append(String.format("      %s not derivable: %s%n", mark(f), f.args().get(0)));
+        for (Adequacy.Finding f : behavior.findings()) {
+            if (f.about() instanceof About.APositionNoLineDivides(var position)) {
+                out.append(String.format("      %s not derivable: %s%n", mark(f), position.at()));
+            }
         }
         // Said apart from the line above it, which is the whole of what this pair is for: one names
         // a position the model divides no way, and this one a position nobody has established
         // anything about.
-        for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_NOT_READ)) {
-            out.append(String.format("      %s not read: %s (%s)%n",
-                    mark(f), f.args().get(0), f.args().get(1)));
+        for (Adequacy.Finding f : behavior.findings()) {
+            if (f.about() instanceof About.APositionThisCouldNotRead(var position)) {
+                out.append(String.format("      %s not read: %s (%s)%n",
+                        mark(f), position.at(), whyUnread(position.reason())));
+            }
         }
         // And a third thing, said apart from both: a rule written about a position the axes did
         // measure that nothing took in. The classes beside it are what the model was read to say,
         // and this rule may yet refuse one of them — which is a different thing to act on from a
         // position nothing established anything about. Named by the rule, since a position is not
         // what an author edits.
-        for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_RULES_NOT_REACHED)) {
-            out.append(String.format("      %s rules not reached: %s%n", mark(f), f.args().get(0)));
+        for (Adequacy.Finding f : behavior.findings()) {
+            if (f.about() instanceof About.APositionWhoseRulesWereNotReached(var axis)) {
+                out.append(String.format("      %s rules not reached: %s%n",
+                        mark(f), axis.path()));
+            }
         }
         // The questions this measure answers: which values may stand where, which classes hold
         // them, and which value a rule tells from every other. A border is the section below's.
         unaccounted(out, behavior, names, declaredIn, AdequacyReport::aboutTheClasses);
-        for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_OMITTED)) {
-            out.append(String.format("      %s omitted: %s (axis limit)%n",
-                    mark(f), f.args().get(0)));
+        for (Adequacy.Finding f : behavior.findings()) {
+            if (f.about() instanceof About.APositionPastTheAxisLimit(var dropped)) {
+                out.append(String.format("      %s omitted: %s (axis limit)%n",
+                        mark(f), dropped.axis()));
+            }
         }
+    }
+
+    /**
+     * What stopped a derivation, in the words this document promises its reader.
+     *
+     * <p>Here and not where the position was found. The measure carries which kind of thing stopped
+     * it, and the sentence for one is a report's — written where the finding was made, an English
+     * phrase travelled inside the finding, which is how a value that was never words came to be
+     * printed by whoever called {@code String.valueOf} on it.
+     */
+    private static String whyUnread(souther.compiler.partition.UndividedPosition.Reason reason) {
+        return switch (reason) {
+            case UNSUPPORTED_SYNTAX -> "a rule about it is one this compiler did not read";
+            case RULES_NOT_READ_AT_ALL -> "the rules written about it were not reached at all";
+            case UNSUPPORTED_DOMAIN ->
+                    "it is compared against values no line can be drawn on here";
+            case UNSUPPORTED_PARTITION_SHAPE ->
+                    "the comparison relates it to another position rather than dividing it";
+            case DEPTH_LIMIT -> "the walk stopped before reaching what is under it";
+            case TYPE_UNRESOLVED -> "its type could not be worked out here";
+            case UNSUPPORTED_TRAVERSAL ->
+                    "its values are held inside something this does not reach into";
+        };
+    }
+
+    /** What a rule raised, in the words this document promises its reader. Here for the reason
+     *  {@link #whyUnread} gives. */
+    private static String asked(souther.compiler.check.CoverageObligation question) {
+        return switch (question) {
+            case ADMITTED_VALUES -> "which values may stand at";
+            case BOUNDARY -> "where the values stop on";
+            case PARTITION -> "which classes a row is owed in at";
+            case SINGLETON -> "which value is singled out at";
+        };
+    }
+
+    /**
+     * Which of the names a question carries a reader is shown.
+     *
+     * <p>The reader's choice and not the measure's. Both surfaces of this report make it, and both
+     * of them used to overrule the one the finding arrived with: a subject that is a comparison is
+     * shown as where it is written, because the words for one are the same for every comparison
+     * there is and two of them at one position read as one.
+     */
+    private static String subjectOf(souther.compiler.query.PartitionEvidence.Unanswered asked,
+                                    SourceNameResolver names, SourceId declaredIn) {
+        if (asked.subject() instanceof souther.compiler.check.Owed.Subject.OfComparison it) {
+            return it.at().said(names, declaredIn);
+        }
+        return asked.measure() != null ? asked.measure() : asked.at();
     }
 
     /**
@@ -876,9 +952,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         if (!decided) {
             return;
         }
-        for (Adequacy.Finding f : behavior.of(Adequacy.Kind.ARM_UNREACHED)) {
-            out.append(String.format("      %s no row goes through `%s` (%s)%n",
-                    mark(f), ArmVocabulary.label(armOf(f)), f.at().said(names, declaredIn)));
+        for (Adequacy.Finding f : behavior.findings()) {
+            if (f.about() instanceof About.AnArmNoRowGoesThrough(var arm)) {
+                out.append(String.format("      %s no row goes through `%s` (%s)%n",
+                        mark(f), ArmVocabulary.label(arm), f.at().said(names, declaredIn)));
+            }
         }
     }
 
@@ -1040,18 +1118,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                                     java.util.function.Predicate<
                                             souther.compiler.check.CoverageObligation> mine) {
 
-        for (Adequacy.Finding f : behavior.of(Adequacy.Kind.RULE_UNACCOUNTED)) {
-            if (mine.test((souther.compiler.check.CoverageObligation) f.args().get(3))) {
-                // A place a comparison drew is pointed at rather than described: the words for it
-                // are the same for every comparison there is, and two of them at one position read
-                // as one.
-                Object about = f.args().get(4)
-                        instanceof souther.compiler.check.Owed.Subject.OfComparison it
-                        ? it.at().said(names, declaredIn) : f.args().get(0);
+        for (Adequacy.Finding f : behavior.findings()) {
+            if (f.about() instanceof About.AQuestionNothingAnswered(var asked)
+                    && mine.test(asked.question())) {
                 out.append(String.format("      %s not accounted for: %s — %s %s%n",
-                        mark(f), cited((souther.compiler.check.RuleCitation) f.args().get(1),
-                                names, declaredIn),
-                        f.args().get(2), about));
+                        mark(f), cited(asked.cited(), names, declaredIn),
+                        asked(asked.question()), subjectOf(asked, names, declaredIn)));
             }
         }
     }
@@ -1554,9 +1626,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // Which rule this is about, where the finding is about one. The words in `subject` are
             // how a reader finds it, and two rules an author named alike have the same words — so a
             // consumer joining findings to the questions they came from wants this.
-            if (finding.kind() == Adequacy.Kind.RULE_UNACCOUNTED) {
-                ruleId(f.putObject("ruleId"),
-                        (souther.compiler.check.RuleRef) finding.args().get(5));
+            if (finding.about() instanceof About.AQuestionNothingAnswered(var asked)) {
+                ruleId(f.putObject("ruleId"), asked.rule());
             }
             // Present where the kind has one. A finding a build is not told about under any code is
             // not one with an empty code, and a consumer joining these to the diagnostics a build
@@ -1583,43 +1654,50 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * input — neither of which is there.
      *
      * <p>A switch and not a look at the citation. Whether a finding's place is its own is a fact
-     * about the kind, and reading it back off a coordinate would be this report working out something
-     * the measure already knew.
+     * about what it is about, and reading it back off a coordinate would be this report working out
+     * something the measure already knew.
      */
     private static Citation placeOfItsOwn(Adequacy.Finding finding) {
-        return switch (finding.kind()) {
-            case ARM_UNREACHED -> finding.at();
-            case OUTPUT_CASE_UNSPECIFIED, OUTPUT_CASE_UNVERIFIED, INPUT_CASE_UNSPECIFIED,
-                    AXIS_CLASS_UNCOVERED, BOUNDARY_UNMET, DOMAIN_POINT_UNCOVERED,
-                    PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ, RULE_UNACCOUNTED,
-                    PARTITION_RULES_NOT_REACHED, PARTITION_OMITTED -> null;
+        return switch (finding.about()) {
+            case About.AnArmNoRowGoesThrough _ -> finding.at();
+            case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
+                    About.ACaseNoRowAppliesItTo _, About.AClassNoRowIsIn _,
+                    About.APointOfABorder _, About.APositionNoLineDivides _,
+                    About.APositionThisCouldNotRead _, About.AQuestionNothingAnswered _,
+                    About.APositionWhoseRulesWereNotReached _,
+                    About.APositionPastTheAxisLimit _ -> null;
         };
     }
 
     /**
      * What one finding is about, in the one field every kind writes it in.
      *
-     * <p>Spelled here per kind rather than taken from the arguments in order. The arguments are the
-     * message's, and a document handing a consumer a positional list of them would publish the shape
-     * of a sentence — which changes when the sentence is reworded, and says nothing about which of
-     * the entries is the subject.
+     * <p>Spelled here per shape rather than taken from a payload in order. What a finding is about
+     * is a value the measure established, and a document handing a consumer that value's fields in
+     * the order some sentence took them would publish the shape of the sentence — which changes when
+     * the sentence is reworded, and says nothing about which of the fields is the subject.
      *
-     * <p>Written to join what is already in the document: a class name is one of an axis's
-     * {@code classes}, an arm's label is one in {@code branch.unreached}, and an axis and a value
-     * name a {@code boundaries} entry. An input's case carries its position with it, because two
-     * parameters of one type give two findings a class name alone cannot tell apart.
+     * <p>Written to join what is already in the document: a class name and its position are one of
+     * an axis's {@code classes} under that axis, an arm's label is one in {@code branch.unreached},
+     * and an axis and a value name a {@code boundaries} entry. An input's case carries its position
+     * with it, because two parameters of one type give two findings a class name alone cannot tell
+     * apart — and a class of a position carries its position for exactly that reason, which this
+     * used to say of the inputs and not of the axes.
      */
     private static String subject(Adequacy.Finding finding, DocumentSources sources) {
-        List<Object> args = finding.args();
-        return switch (finding.kind()) {
+        return switch (finding.about()) {
             // The label and not the arm, and the same label `branch.unreached` writes: this field
             // exists to join to that entry, and a value spelled a second way here would join to
             // nothing.
-            case ARM_UNREACHED -> ArmVocabulary.label(armOf(finding));
-            case OUTPUT_CASE_UNSPECIFIED, OUTPUT_CASE_UNVERIFIED, AXIS_CLASS_UNCOVERED,
-                    PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ,
-                    PARTITION_RULES_NOT_REACHED, PARTITION_OMITTED ->
-                    String.valueOf(args.get(0));
+            case About.AnArmNoRowGoesThrough(var arm) -> ArmVocabulary.label(arm);
+            case About.ACaseNoRowExpects(var missing) -> missing.name();
+            case About.ACaseNothingWasSeenToProduce(var missing) -> missing.name();
+            case About.AClassNoRowIsIn(var missing) ->
+                    missing.name() + " (at " + missing.axis().path() + ")";
+            case About.APositionNoLineDivides(var position) -> position.at().toString();
+            case About.APositionThisCouldNotRead(var position) -> position.at();
+            case About.APositionWhoseRulesWereNotReached(var axis) -> axis.path();
+            case About.APositionPastTheAxisLimit(var dropped) -> dropped.axis().toString();
             // The rule and what it was left saying. Named by the position alone, two rules nothing
             // took in at one position serialised as two identical objects, and the human line named
             // them while a consumer of the document could not tell them apart.
@@ -1628,27 +1706,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // for a rule with a name and broke for every rule found by where it is written.
             // The handle, and what tells this rule from another beside it: two arms of one clause
             // may name the same case, so the words alone joined two questions into one row.
-            case RULE_UNACCOUNTED ->
-                    ((souther.compiler.check.RuleCitation) args.get(1))
-                            .said(sources::written, null) + " — " + args.get(2) + " "
-                            + (args.get(4)
-                                    instanceof souther.compiler.check.Owed.Subject.OfComparison it
-                                            ? it.at().said(sources::written, null) : args.get(0));
-            case INPUT_CASE_UNSPECIFIED ->
-                    String.valueOf(args.get(0)) + " (in #" + args.get(1) + ")";
+            case About.AQuestionNothingAnswered(var asked) ->
+                    asked.cited().said(sources::written, null) + " — " + asked(asked.question())
+                            + " " + subjectOf(asked, sources::written, null);
+            case About.ACaseNoRowAppliesItTo(var input, var missing) ->
+                    missing.name() + " (in #" + (input.at() + 1) + ")";
             // What the point asks of a row, which is what joins it to one of a border's `items`. A
             // point on the line is written the way it always was; a point away from it carries the
-            // relation in its argument, because a value alone would name the border rather than the
-            // side of it a row is owed in.
-            case BOUNDARY_UNMET -> args.get(0) + " = " + args.get(1);
-            case DOMAIN_POINT_UNCOVERED -> args.get(0) + " " + args.get(1);
+            // relation, because a value alone would name the border rather than the side of it a
+            // row is owed in.
+            case About.APointOfABorder(var point) -> point.role().againstTheLine()
+                    ? point.border().axis() + " = " + point.against()
+                    : point.border().axis() + " " + point.asked();
         };
-    }
-
-    /** The arm an arm finding carries, which it holds as itself so that each reader names it its
-     *  own way. */
-    private static souther.compiler.coverage.CoverageSites.Site armOf(Adequacy.Finding finding) {
-        return (souther.compiler.coverage.CoverageSites.Site) finding.args().get(0);
     }
 
     /**

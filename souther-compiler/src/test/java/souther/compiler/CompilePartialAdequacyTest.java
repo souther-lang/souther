@@ -279,6 +279,35 @@ class CompilePartialAdequacyTest {
     }
 
     /**
+     * The third disposition, which is the one a two-valued field would lose.
+     *
+     * <p>Said here rather than beside the other two, because this is where a measure that came to no
+     * answer is. A kind a build refuses over, from a measurement that did not finish, is neither a
+     * gap nor a kind nobody gates on — and the line above is the same fact from the warning's side:
+     * no code is printed for it. What a report calls it and what a build does about it come from
+     * this one word, so a finding that is undecided and a finding nobody gates on may not read
+     * alike.
+     */
+    @Test
+    void aGapFromAMeasureThatCameToNoAnswerIsUndecided() {
+        List<Adequacy.Finding> findings = AdequacyReport.of(
+                        measured("loop", TIMES_OUT,
+                                DoesNotComeBack.overrunningOn(
+                                        DoesNotComeBack.everythingAboutRowsOf("go"))))
+                .findings();
+
+        List<Adequacy.Finding> undecided = findings.stream()
+                .filter(f -> f.kind().isAdequacyGap()).toList();
+
+        assertFalse(undecided.isEmpty(), () -> "the model has a kind a build gates on: " + findings);
+        for (Adequacy.Finding f : undecided) {
+            assertEquals(MeasurementStatus.PARTIAL, f.status(), f::toString);
+            assertEquals(Adequacy.Finding.Disposition.UNDECIDED, f.disposition(), f::toString);
+            assertFalse(f.isAdequacyGap(), f::toString);
+        }
+    }
+
+    /**
      * A report about one behavior says nothing about another.
      *
      * <p>`--behavior submit` is a promise about what the output is about. A status of `partial` whose
