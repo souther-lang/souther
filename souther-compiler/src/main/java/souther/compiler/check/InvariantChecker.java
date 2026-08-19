@@ -419,16 +419,12 @@ public final class InvariantChecker {
                   Map<String, FactSubject> held, Reading reading, ReadingEvidence took,
                   boolean everyClauseRead, Set<String> notGathered,
                   Set<String> unreadOfEveryValue,
-                  Map<RuleRef, Map<Core, Set<FactSubject>>> constrainedBy,
-                  Map<RuleRef, Map<Core, Set<FactSubject>>> narrowedBy,
-                  List<Dropped> lost) {
+                  Map<RuleRef, Map<Core, PartRead>> readBy) {
 
         public Seeded {
             notGathered = Set.copyOf(notGathered);
             unreadOfEveryValue = Set.copyOf(unreadOfEveryValue);
-            constrainedBy = Map.copyOf(constrainedBy);
-            narrowedBy = Map.copyOf(narrowedBy);
-            lost = List.copyOf(lost);
+            readBy = Map.copyOf(readBy);
         }
 
         /** What a walk that fell over comes to: no position named, no rule read, and saying so of
@@ -437,7 +433,7 @@ public final class InvariantChecker {
             return new Seeded(ConstraintState.top(), Map.of(), Map.of(), Map.of(),
                     new Reading(List.of(), List.of(), Map.of(), Map.of()), new ReadingEvidence(),
                     false, Set.of(FieldDomains.THE_VALUE), Set.of(FieldDomains.THE_VALUE),
-                    Map.of(), Map.of(), List.of());
+                    Map.of());
         }
 
         /** The numbers alone, for the readers that are about intervals. Whether a value exists is
@@ -534,11 +530,8 @@ public final class InvariantChecker {
         // Per part, because a rule is represented where every part of it is: a conjunct the bounds
         // hold nothing of leaves the range wider than the rule however well the conjunct beside it
         // went, and a set unioned over the whole clause says the opposite.
-        Map<RuleRef, Map<Core, Set<FactSubject>>> narrowedBy = new LinkedHashMap<>();
-        List<Dropped> lost = new ArrayList<>();
-        // Keyed by the part as the walk holds it, so a reader of the walk finds what this reading
-        // made of the very node it is looking at.
-        Map<RuleRef, Map<Core, Set<FactSubject>>> constrainedBy = new LinkedHashMap<>();
+        Map<RuleRef, Map<Core, PartRead>> readBy = new LinkedHashMap<>();
+
         Gathering gathering = new Gathering() {
 
             @Override
@@ -557,36 +550,9 @@ public final class InvariantChecker {
             }
 
             @Override
-            public void constrained(RuleRef.Invariant rule, Core part, Set<FactSubject> subjects,
-                                    Set<FactSubject> narrowable) {
-                constrainedBy.computeIfAbsent(rule, _ -> new java.util.IdentityHashMap<>())
-                        .put(part, subjects);
-                narrowedBy.computeIfAbsent(rule, _ -> new java.util.IdentityHashMap<>())
-                        .put(part, narrowable);
-            }
-
-            @Override
-            public void projected(RuleRef.Invariant rule, Predicates.Owed owed,
-                                  NumericDomain<FactSubject> before,
-                                  NumericDomain<FactSubject> after) {
-                for (FactSubject atom : after.lossyAtoms()) {
-                    Set<NumericDomain.Loss> now = new LinkedHashSet<>(after.lossesAt(atom));
-                    now.removeAll(before.lossesAt(atom));
-                    if (now.isEmpty()) {
-                        continue;
-                    }
-                    // What the algebra was handed about this atom, kept beside what it dropped. A
-                    // loss taken here is what this step could not hold; whether the projection ends
-                    // up holding the rule all the same is a question about the state it ends in,
-                    // and asking it now would answer by the order the author wrote the clauses in.
-                    List<Predicates.Constraint> about = new ArrayList<>();
-                    for (Predicates.Clause c : owed.clauses()) {
-                        if (c.numeric() != null && c.numeric().atoms().contains(atom)) {
-                            about.add(c.numeric());
-                        }
-                    }
-                    lost.add(new Dropped(rule, atom, now, List.copyOf(about)));
-                }
+            public void constrained(RuleRef.Invariant rule, Core part, PartRead read) {
+                readBy.computeIfAbsent(rule, _ -> new java.util.IdentityHashMap<>())
+                        .put(part, read);
             }
         };
         try {
@@ -612,17 +578,14 @@ public final class InvariantChecker {
                 RuleRef.Invariant origin = new RuleRef.Invariant(Clause.Ref.of(declared));
                 written.add(new Written(origin, stated));
                 Predicates.Owed owed = c.predicates.obligations(stated, k, at, false,
-                        (part, said) -> gathering.constrained(origin, part,
-                                Predicates.subjectsIn(said), Predicates.narrowableIn(said)));
+                        (part, said) -> gathering.constrained(origin, part, partRead(said)));
                 // And the reading that builds the numeric constraints, said by what it produced.
                 // `value * 2 >= 4` is beyond the two readings below and is taken in here about the
                 // position itself; `value * value >= 4` comes back about an atom standing for the
                 // product, which is not the position and is not a reading of it.
                 Predicates.subjectsIn(owed).forEach(spoken -> took.record(origin, spoken));
                 read &= !owed.unreadable();
-                NumericDomain<FactSubject> before = k.numbers();
                 k = c.predicates.assume(owed, k, Known.Held.OF_THE_VALUE);
-                gathering.projected(origin, owed, before, k.numbers());
             }
             // And what each field's own type says of it, at the field's own location. A depth of one
             // is already spent on the record, so this reaches the field's newtype and stops where the
@@ -682,7 +645,7 @@ public final class InvariantChecker {
             // And which of the clauses place an edge, asked once the positions have names to be
             // recognised by.
             Reading reading = c.directsIn(written, at, atoms, keys, held, typeAt, took,
-                    new PartsRead(constrainedBy, adoptedBy));
+                    new PartsRead(readBy, adoptedBy));
             ConstraintState constraints = k.constraints()
                     .taking(stated.values())
                     .taking(stated.ordered());
@@ -699,7 +662,7 @@ public final class InvariantChecker {
                         Map.of(atom, c.terms.granularityOf(type)));
             }
             return new Seeded(constraints, atoms, keys, held, reading, took, read,
-                    Set.copyOf(notGathered), unreadOfEveryValue, constrainedBy, narrowedBy, lost);
+                    Set.copyOf(notGathered), unreadOfEveryValue, readBy);
         } catch (RuntimeException why) {
             gaveUp("seedFields " + named.name(), why);
             return Seeded.nothingRead();
@@ -889,31 +852,14 @@ public final class InvariantChecker {
         void missed(String path, Borne borne);
 
         /**
-         * What the reading that builds the bounds made of {@code rule}, said by that reading.
-         *
-         * <p>{@code narrowable} is what it was handed a form for, and the two domains are what it
-         * held before and after taking them in. Both, because a rule can leave a range wider than
-         * itself two ways and the two are lifted by different work: a form the algebra never got
-         * for a position, and a form it got and could not hold whole.
-         *
-         * <p>Handed over as it happens rather than worked out afterwards from the clause. A walk
-         * asking which rules could have become a bound answers with what this compiler's algebra
-         * happens to hold, and would go on saying a rule was unread after a domain that holds it
-         * was written.
-         */
-        void projected(RuleRef.Invariant rule, Predicates.Owed owed,
-                       NumericDomain<FactSubject> before, NumericDomain<FactSubject> after);
-
-        /**
-         * What one part of {@code rule} was read as constraining, said by the reading as it read it.
+         * What the reading that builds the bounds made of one part of {@code rule}, as it read it.
          *
          * <p>Per part, because a conjunction is one rule read a conjunct at a time and evidence
          * gathered for the whole answers a clause half of which nothing read on the strength of the
          * half that was. Recorded here so that nothing downstream reads the part a second time: two
          * readings of one conjunct agree only for as long as nobody changes one of them.
          */
-        void constrained(RuleRef.Invariant rule, Core part, Set<FactSubject> subjects,
-                         Set<FactSubject> narrowable);
+        void constrained(RuleRef.Invariant rule, Core part, PartRead read);
     }
 
     /**
@@ -929,38 +875,59 @@ public final class InvariantChecker {
      *                    about
      * @param adopted     what the reading that turns clauses into sets of values took it in about
      */
-    record PartsRead(Map<RuleRef, Map<Core, Set<FactSubject>>> constrained,
+    record PartsRead(Map<RuleRef, Map<Core, PartRead>> read,
                      Map<RuleRef, Map<Core, Set<FactSubject>>> adopted) {
 
-        /** What {@code reading} made of {@code part} of {@code rule}, or null where it read no such
-         *  part — which is not the same as having read it and made nothing of it. */
-        private static Set<FactSubject> at(Map<RuleRef, Map<Core, Set<FactSubject>>> reading,
-                                           RuleRef rule, Core part) {
-            Map<Core, Set<FactSubject>> said = reading.get(rule);
+        /** What the reading that builds the bounds made of {@code part} of {@code rule}, or null
+         *  where it read no such part — which is not the same as having read it and made nothing of
+         *  it. */
+        PartRead readIn(RuleRef rule, Core part) {
+            Map<Core, PartRead> said = read.get(rule);
             return said == null ? null : said.get(part);
         }
 
-        Set<FactSubject> constrainedIn(RuleRef rule, Core part) {
-            return at(constrained, rule, part);
-        }
-
         Set<FactSubject> adoptedIn(RuleRef rule, Core part) {
-            return at(adopted, rule, part);
+            Map<Core, Set<FactSubject>> said = adopted.get(rule);
+            return said == null ? null : said.get(part);
         }
     }
 
+    /** What one reading of one part came to, as the reading itself says it. */
+    static PartRead partRead(Predicates.Owed said) {
+        List<Predicates.Constraint> stated = new ArrayList<>();
+        for (Predicates.Clause c : said.clauses()) {
+            if (c.numeric() != null) {
+                stated.add(c.numeric());
+            }
+        }
+        return new PartRead(Predicates.subjectsIn(said), Predicates.narrowableIn(said), stated);
+    }
+
     /**
-     * What the interval algebra could not hold of one rule at one step, and what it was handed.
+     * What the reading that builds the bounds made of one part of one rule.
      *
-     * <p>The constraints are kept because a loss is a fact about the step it happened at and not
-     * about the projection that came of it: a hole dropped before a later clause puts the value on
-     * one side of it is a hole the bounds no longer have. Which of the two a reader wants is the
-     * second, and it is answered by asking the state the reading ended in whether it holds what the
-     * algebra was given — the reading's own result checked against its own final state, and not the
-     * clause read a second time.
+     * <p>What it was handed and not what the state looked like afterwards. A loss read off the
+     * difference between two states is a loss the second occurrence of cannot be seen — the domain
+     * holds which kinds of loss an atom has and not how many times each happened, so a second hole
+     * dropped at an atom that already has one adds nothing to look for. And a loss is in any case a
+     * fact about the step it happened at, while what a reader wants is whether the projection ends
+     * up holding the rule. Both are answered by keeping what was given and asking the projection
+     * this reading ended with, which is neither a second reading of the clause nor a summary of the
+     * states in between.
+     *
+     * @param constrained the positions this part was read as speaking of, by any channel
+     * @param narrowable  the atoms it was handed a form for
+     * @param stated      the forms themselves, to be asked of the projection at the end
      */
-    record Dropped(RuleRef.Invariant rule, FactSubject atom, Set<NumericDomain.Loss> losses,
-                   List<Predicates.Constraint> stated) {}
+    record PartRead(Set<FactSubject> constrained, Set<FactSubject> narrowable,
+                    List<Predicates.Constraint> stated) {
+
+        PartRead {
+            constrained = Set.copyOf(constrained);
+            narrowable = Set.copyOf(narrowable);
+            stated = List.copyOf(stated);
+        }
+    }
 
     /**
      * A coordinate a clause reaching this value could be about.
@@ -1067,7 +1034,8 @@ public final class InvariantChecker {
         // the position it names. The seeding hands the whole clause to the same reader this walks,
         // so there is no such part — and if the two ever come apart, this value reads as one whose
         // rules were not gathered rather than as one whose rules were read and said nothing.
-        Set<FactSubject> constrained = parts.constrainedIn(rule, part);
+        PartRead read = parts.readIn(rule, part);
+        Set<FactSubject> constrained = read == null ? null : read.constrained();
         if (here == null || constrained == null) {
             throw new IllegalStateException(
                     "a part of a rule the readings that seeded it never read: " + part);

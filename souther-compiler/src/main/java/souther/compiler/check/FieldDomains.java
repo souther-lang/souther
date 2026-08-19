@@ -65,7 +65,7 @@ public final class FieldDomains {
             new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), List.of(), List.of(), Map.of(),
                     new ReadingEvidence(), Map.of(), Set.of(THE_VALUE), NO_POSITIONS,
                     ConstraintState.top(), null, null, null, Map.of(), Set.of(THE_VALUE), Map.of(),
-                    Map.of(), Map.of(), List.of());
+                    Map.of(), Map.of());
 
     private final Map<String, NumericDomain.Bounds> byField;
     /** The ends the record's own clauses place, which is a different question from the range they
@@ -115,13 +115,9 @@ public final class FieldDomains {
      *  one where a count is taken. A position with neither has no range to be exact about. */
     private final Map<String, FactSubject> atomAt;
     private final Map<String, FactSubject> countAt;
-    /** The atoms the reading that builds the bounds was handed a form for, per part of each rule.
-     *  Per part, because a rule is represented where every part of it is. */
-    private final Map<RuleRef, Map<Core, Set<FactSubject>>> narrowedBy;
-    /** What the interval algebra dropped at the step it dropped it, and what it was handed there.
-     *  Whether the projection ends up holding the rule all the same is asked of the state it ends
-     *  in — see {@link #projection}. */
-    private final List<InvariantChecker.Dropped> lost;
+    /** What the reading that builds the bounds made of each part of each rule. Per part, because a
+     *  rule is represented where every part of it is. */
+    private final Map<RuleRef, Map<Core, InvariantChecker.PartRead>> readBy;
 
     private FieldDomains(Map<String, NumericDomain.Bounds> byField,
                          Map<String, NumericDomain.Bounds> heldByField,
@@ -136,8 +132,7 @@ public final class FieldDomains {
                          Hir.Data data, Symbols symbols, Map<String, Count> settled,
                          Set<String> unreadOfEveryValue,
                          Map<String, FactSubject> atomAt, Map<String, FactSubject> countAt,
-                         Map<RuleRef, Map<Core, Set<FactSubject>>> narrowedBy,
-                         List<InvariantChecker.Dropped> lost) {
+                         Map<RuleRef, Map<Core, InvariantChecker.PartRead>> readBy) {
         this.byField = byField;
         this.heldByField = heldByField;
         this.admittedByField = admittedByField;
@@ -157,8 +152,7 @@ public final class FieldDomains {
         this.unreadOfEveryValue = unreadOfEveryValue;
         this.atomAt = atomAt;
         this.countAt = countAt;
-        this.narrowedBy = narrowedBy;
-        this.lost = lost;
+        this.readBy = readBy;
     }
 
     /**
@@ -313,7 +307,7 @@ public final class FieldDomains {
                 seeded.notGathered(), placeOf,
                 seeded.constraints(), named, data, symbols, settled,
                 seeded.unreadOfEveryValue(), seeded.atoms(), seeded.held(),
-                seeded.narrowedBy(), seeded.lost());
+                seeded.readBy());
     }
 
     /**
@@ -747,13 +741,13 @@ public final class FieldDomains {
         // pattern raises none — which values may stand somewhere and where a line falls are not what
         // it is about — and it is still a way the value can be refused at an edge of the number
         // beside it.
-        narrowedBy.forEach((rule, byPart) -> {
+        readBy.forEach((rule, byPart) -> {
             // A part at a time, and any one of them is enough. A conjunct the bounds hold nothing of
             // leaves the range wider than the rule however well the conjunct written beside it went,
             // and a set unioned over the whole clause answers for the failing half with the other
             // one — which is the same shape as reading a clause's evidence for one of its parts.
             Set<String> said = new LinkedHashSet<>();
-            byPart.forEach((part, narrowable) -> {
+            byPart.forEach((part, read) -> {
                 // A conjunction says what its conjuncts say, and they are here beside it. Asked of
                 // the conjunction as well, a rule whose halves are each held in a language of their
                 // own — a date bounded at both ends, read by the comparison rather than by the
@@ -762,7 +756,7 @@ public final class FieldDomains {
                         && byPart.containsKey(b.left()) && byPart.containsKey(b.right())) {
                     return;
                 }
-                if (narrowable.stream().anyMatch(ranged::contains)) {
+                if (read.narrowable().stream().anyMatch(ranged::contains)) {
                     return;
                 }
                 // Or the end this part placed, which is the same part in the bounds said by the
@@ -786,19 +780,30 @@ public final class FieldDomains {
             said.forEach(path ->
                     causes.add(new ProjectionEvidence.Cause.Unrepresented(rule, path)));
         });
-        // And what the algebra was given and the state it ended in does not hold. A loss is a fact
-        // about the step it happened at: `value /= 0` written before `value >= 1` drops a hole that
-        // the bound put outside the range a clause later, and the projection has no hole in it.
-        // Read off the step, the same two rules answer one way in one order and another in the
-        // other.
-        for (InvariantChecker.Dropped dropped : lost) {
-            boolean held = !dropped.stated().isEmpty() && dropped.stated().stream().allMatch(
-                    each -> constraints.numbers().entails(each.form(), each.rel()));
-            if (!held) {
-                causes.add(new ProjectionEvidence.Cause.Lossy(
-                        dropped.rule(), dropped.atom(), dropped.losses()));
+        // And what the algebra was given and what it projects does not hold.
+        //
+        // Asked of the projection and of nothing else. A form neither an interval nor a difference
+        // holds is kept as written and marked lost for exactly that reason, and asking the whole
+        // state whether it still holds such a form is asking the form to stand on itself — every
+        // rule the projection dropped comes back proven. Asked of every form the algebra was handed
+        // rather than of the losses it recorded at the time: a loss is a fact about the step it
+        // happened at, the domain holds which kinds an atom has and not how many times each
+        // happened, and a second hole at an atom that already has one is a loss nothing can see.
+        Set<ProjectionEvidence.Cause.Lossy> lossy = new LinkedHashSet<>();
+        readBy.forEach((rule, byPart) -> byPart.values().forEach(read -> {
+            for (Predicates.Constraint each : read.stated()) {
+                if (constraints.numbers().projectionEntails(each.form(), each.rel())) {
+                    continue;
+                }
+                for (FactSubject atom : each.atoms()) {
+                    Set<NumericDomain.Loss> losses = constraints.numbers().lossesAt(atom);
+                    if (!losses.isEmpty()) {
+                        lossy.add(new ProjectionEvidence.Cause.Lossy(rule, atom, losses));
+                    }
+                }
             }
-        }
+        }));
+        causes.addAll(lossy);
         return causes.isEmpty() ? new ProjectionEvidence.Exact()
                 : new ProjectionEvidence.Approximate(causes);
     }

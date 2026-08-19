@@ -307,6 +307,54 @@ class WhatMakesARangeExactIsNotWhatAnswersACoverageQuestionTest {
                 "while the position's own values have no range for a line to be clamped by");
     }
 
+    /**
+     * Two holes, one of them shut by a bound written beside them, in every order they can be
+     * written in.
+     *
+     * <p>`value >= 1` puts the 0 outside the range and leaves the 5 where it was, so one rule is
+     * answered by the bounds and the other is not — and which is which is a fact about the rules
+     * rather than about the order the author wrote them in. Read off what the algebra dropped at the
+     * step it dropped it, the second hole is invisible: the domain holds which kinds of loss an atom
+     * has and not how many times each happened, so a hole at an atom that already has one adds
+     * nothing to look for and the whole value comes back exact.
+     */
+    @Test
+    void aHoleShutByABoundIsAnsweredAndTheOneBesideItIsNot() {
+        List<String> holes = List.of("invariant nonzero = value /= 0",
+                "invariant nonfive = value /= 5", "invariant floor = value >= 1");
+        for (List<Integer> order : List.of(List.of(0, 1, 2), List.of(0, 2, 1), List.of(1, 0, 2),
+                List.of(1, 2, 0), List.of(2, 0, 1), List.of(2, 1, 0))) {
+            String written = order.stream().map(holes::get)
+                    .collect(java.util.stream.Collectors.joining("\n    "));
+            FieldDomains domains = read(only(written));
+            assertEquals(List.of("invariant Length (nonfive)"),
+                    domains.projection().causes().stream()
+                            .map(cause -> ((ProjectionEvidence.Cause.Lossy) cause).rule().named())
+                            .distinct().toList(),
+                    "written as `" + written.replace('\n', ';') + "`");
+        }
+    }
+
+    /**
+     * A rule the algebra keeps as written does not answer for itself.
+     *
+     * <p>A form that is neither an interval nor a difference is kept whole and marked lost for
+     * exactly that reason: what a reader is handed does not read it. Asked of everything the state
+     * holds, the kept form is a premise for its own proof and every rule the projection dropped
+     * comes back proven — so the question is put to what the projection states and to nothing
+     * beside it.
+     */
+    @Test
+    void aFormKeptAsWrittenIsNotProvenByItsOwnBeingKept() {
+        FieldDomains domains = read("""
+                module example.rooms
+
+                data Length = { a: Int, b: Int }
+                    invariant sum = a + b >= 10
+                """, "Length");
+        assertEquals("Lossy", named(domains.projection()).split(", ")[0]);
+    }
+
     /** The clause of the read declaration the author called {@code name}. */
     private static Clause.Ref only(FieldDomains domains, String name) {
         return domains.accounting().keySet().stream()
