@@ -125,6 +125,17 @@ record PlacedRules(TypeSymbol value, Rules rules) {
                 : bounds().placedAt(String.join(".", path.fields()));
     }
 
+    /**
+     * The rules saying where the coordinate at {@code path} stops that no end came out of.
+     *
+     * <p>At every path the value has, its own included — unlike {@link #placedAt}, whose empty
+     * answer at the root is what the type's own reading already gives. A rule nothing could read is
+     * not given twice by anybody, and a newtype's own clause is where the question started.
+     */
+    List<FieldDomains.Unread> unreadAt(TermPath path) {
+        return bounds().unreadAt(String.join(".", path.fields()));
+    }
+
     /** Which declarations' clauses are holding the end at {@code path}, on the side asked for. */
     List<TypeSymbol> narrowedBy(TermPath path, boolean lower) {
         return path.fields().isEmpty() ? List.of()

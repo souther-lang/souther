@@ -154,19 +154,6 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
                 in.at().subject(x.id()));
     }
 
-    /** With nothing to hand, there is no value here to be about, and the arm introduces one. A
-     * conditional lifted out of a body is read this way. */
-    @Test
-    void anArmOpeningNothingKnownIntroducesAValue() {
-        Hir.Binder x = binders.binder("x", POS);
-
-        PathEngine.Entered in = engine.enteringLiftedArm(
-                arm(new Core.ResolvedPattern.Single(CaseSelector.direct(FOUND)), x),
-                Known.top(), Denotations.none());
-
-        assertEquals(engine.terms().placeSubject(x.id()), in.at().subject(x.id()));
-    }
-
     /** The arm's name stands for the value it opened, and not for nothing. A reader following what a
      * name was given has to reach whatever produced it. */
     @Test

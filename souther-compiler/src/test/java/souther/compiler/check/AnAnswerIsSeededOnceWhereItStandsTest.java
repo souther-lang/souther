@@ -77,25 +77,26 @@ class AnAnswerIsSeededOnceWhereItStandsTest {
 
             """;
 
-    /** Somewhere an answer can stand, and how many readings of the region it stands in there are.
-     * {@code $A} is where the answers go. */
-    private record Place(String what, int readings, String body) {}
+    /** Somewhere an answer can stand. {@code $A} is where the answers go. */
+    private record Place(String what, String body) {}
 
     private static Place read(String what, String body) {
-        return new Place(what, 1, body);
-    }
-
-    private static Place readTwice(String what, String body) {
-        return new Place(what, 2, body);
+        return new Place(what, body);
     }
 
     /**
      * Every place an answer can stand relative to what makes the walk rebuild an expression.
      *
-     * <p>A binding an expansion introduced and a conditional a value is handed are the two, and an
+     * <p>A binding an expansion introduced and a case split a value is handed are the two, and an
      * answer can stand on its own, beside one, in what decides one, in what one puts in, or in a
-     * region standing under one. Only the last is read twice, and it is read twice because there are
-     * two readings of it and not because anything read it again.
+     * region standing under one. Every one of them is seeded once.
+     *
+     * <p>Two of these used to be seeded twice, and what made them two was a {@code match} being
+     * walked into rather than opened: the arm was entered again under each branch of a conditional
+     * standing over it. A {@code match} handed as a value is opened where it stands now, so the arm
+     * is a reading of its own and a split beside it is opened inside that reading — the answer is
+     * seeded where it is put in, and the readings below start from where that seeding stands rather
+     * than doing it again.
      */
     private static final List<Place> PLACES = List.of(
             read("standing on its own",
@@ -141,7 +142,11 @@ class AnAnswerIsSeededOnceWhereItStandsTest {
                         , q = a
                         }
                     """),
-            readTwice("in an arm standing under a conditional", """
+            // A `match` handed as a value is opened where it stands, so the arm is a reading of its
+            // own and the conditional beside it is opened inside that reading rather than around it.
+            // The answer is seeded once, where the arm was put in, and both readings of the
+            // conditional start from where that seeding already stands.
+            read("in an arm, beside a conditional the arm does not stand under", """
                     let run (a, t) = Box
                         { p = match t with
                                 | Lo -> Pair { l = $A, r = a }
@@ -149,7 +154,7 @@ class AnAnswerIsSeededOnceWhereItStandsTest {
                         , q = if a.value > 3 then Amount(1) else Amount(2)
                         }
                     """),
-            readTwice("in an arm standing under a conditional written in that arm", """
+            read("in an arm, with a conditional written beside it in that arm", """
                     let run (a, t) = Box
                         { p = match t with
                                 | Lo -> Pair { l = if a.value > 3 then Amount(1) else Amount(2)
@@ -171,31 +176,29 @@ class AnAnswerIsSeededOnceWhereItStandsTest {
         return List.copyOf(seeded);
     }
 
-    /** {@code answers} distinct answers were seeded over {@code source}, each of them
-     * {@code readings} times. */
-    private static void seeded(int answers, int readings, String source, String what) {
+    /** {@code answers} distinct answers were seeded over {@code source}, each of them once. */
+    private static void seeded(int answers, String source, String what) {
         List<Core> seeded = seededIn(source);
         Map<Core, Boolean> distinct = new IdentityHashMap<>();
         seeded.forEach(answer -> distinct.put(answer, true));
         assertEquals(answers, distinct.size(), "answers seeded over " + what);
-        assertEquals(answers * readings, seeded.size(),
+        assertEquals(answers, seeded.size(),
                 "seedings of " + answers + " answers over " + what);
     }
 
     /**
-     * Where an answer stands does not decide how often it is read, and how many readings of its
-     * region there are does.
+     * Where an answer stands does not decide how often it is seeded: it is seeded once, wherever it
+     * stands.
      *
      * <p>Read against a growing number of answers, so what is held is that the seedings follow the
-     * answers one for one: a body of one answer read twice and a body of two read once are the same
-     * two seedings, and only the slope tells them apart.
+     * answers one for one and not the shape of what stands over them — which is what came out
+     * wrong when a node standing over an answer read it again (#826).
      */
     @Test
-    void anAnswerIsReadOncePerReadingOfTheRegionItStandsIn() {
+    void anAnswerIsSeededOnceWhereverItStands() {
         for (Place place : PLACES) {
             for (int answers : List.of(1, 2, 4)) {
-                seeded(answers, place.readings(),
-                        DECLARATIONS + place.body().replace("$A", answers(answers)),
+                seeded(answers, DECLARATIONS + place.body().replace("$A", answers(answers)),
                         answers + " answers " + place.what());
             }
         }
@@ -228,7 +231,7 @@ class AnAnswerIsSeededOnceWhereItStandsTest {
 
                     let run (a) = Amount(%s.value + 1)
                     """.formatted(answers(depth));
-            seeded(depth, 1, source, "a body of " + depth + " nested calls");
+            seeded(depth, source, "a body of " + depth + " nested calls");
         }
     }
 }

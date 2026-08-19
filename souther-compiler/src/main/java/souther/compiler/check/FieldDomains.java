@@ -62,7 +62,7 @@ public final class FieldDomains {
      * those is a reading that found no rules.
      */
     public static final FieldDomains NONE =
-            new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(),
+            new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), List.of(), List.of(), Map.of(),
                     new ReadingEvidence(), Map.of(), Set.of(THE_VALUE), NO_POSITIONS,
                     ConstraintState.top(), null, null, null, Map.of(), Set.of(THE_VALUE), Map.of(),
                     Map.of(), Map.of(), List.of());
@@ -71,6 +71,9 @@ public final class FieldDomains {
     /** The ends the record's own clauses place, which is a different question from the range they
      * leave — see {@link #placedAt}. */
     private final List<InvariantChecker.Direct> directs;
+    /** The rules saying where a coordinate's values stop that no end came out of — see
+     * {@link #unreadAt}. */
+    private final List<Unread> unread;
     /** What each clause reaching this value raises, keyed on the rule it is. */
     private final Map<RuleRef, Required> raised;
     /** Which readings took each clause in, as each of them said so. */
@@ -124,7 +127,7 @@ public final class FieldDomains {
                          Map<String, NumericDomain.Bounds> heldByField,
                          Map<String, ValueSet> admittedByField,
                          Map<String, UnreadReason> unreadByField,
-                         List<InvariantChecker.Direct> directs,
+                         List<InvariantChecker.Direct> directs, List<Unread> unread,
                          Map<RuleRef, Required> raised, ReadingEvidence took,
                          Map<String, List<TypeSymbol>> narrowers,
                          Set<String> notGathered,
@@ -140,6 +143,7 @@ public final class FieldDomains {
         this.admittedByField = admittedByField;
         this.unreadByField = unreadByField;
         this.directs = directs;
+        this.unread = unread;
         this.raised = raised;
         this.took = took;
         this.narrowers = narrowers;
@@ -304,7 +308,7 @@ public final class FieldDomains {
         positions.forEach(field ->
                 named(seeded, field).forEach(term -> placeOf.putIfAbsent(term, field)));
         return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), Map.copyOf(admitted),
-                Map.copyOf(unread), seeded.reading().directs(),
+                Map.copyOf(unread), seeded.reading().directs(), seeded.reading().unread(),
                 seeded.reading().raised(), seeded.took(), seeded.reading().narrowers(),
                 seeded.notGathered(), placeOf,
                 seeded.constraints(), named, data, symbols, settled,
@@ -331,6 +335,28 @@ public final class FieldDomains {
      */
     public record Placed(String path, boolean measured, RuleRef.Invariant from,
                          boolean lower, Endpoint end) {}
+
+    /**
+     * A rule about where one coordinate's values stop that this reading placed no end from, and
+     * what stopped it.
+     *
+     * <p>The other half of {@link Placed} and produced by the same reading of the same clause, which
+     * is what keeps the two from disagreeing about what a rule is. Read by a walk of its own, a
+     * second reader answered for the clauses on a position's own type and knew nothing of the ones
+     * written on the value it sits in — so a clause of a record was dropped without a word while a
+     * {@code guard} of the same shape named both the positions it compared (ADR-0090).
+     *
+     * <p>One per position the rule names, since a rule relating two coordinates is filed under
+     * neither of them alone.
+     *
+     * @param path where the coordinate sits, read from the value these are of
+     * @param from the rule that says where the values stop, which is what a reader is sent to look
+     *             at
+     * @param why  what would have to change before this rule could be a line, in this compiler's
+     *             own terms
+     */
+    public record Unread(String path, RuleRef.Invariant from,
+                         souther.compiler.inputs.BlockReason why) {}
 
     /**
      * The declaration whose clause could have moved where the coordinate at {@code path} stops, or
@@ -507,6 +533,19 @@ public final class FieldDomains {
     /** The ends the rules place on the coordinates at {@code path}, in the order they were read. */
     public List<Placed> placedAt(String path) {
         return placed().stream().filter(each -> each.path().equals(path)).toList();
+    }
+
+    /**
+     * The rules about where the coordinates at {@code path} stop that no end came out of, in the
+     * order they were read.
+     *
+     * <p>Beside {@link #placedAt} and not instead of it. A position carries more than one
+     * statement, so a rule here says nothing about whether an end was placed at the same position
+     * and an end there says nothing about this — read as one answer, a bound on a field's own type
+     * silenced the record's clause about the same field.
+     */
+    public List<Unread> unreadAt(String path) {
+        return unread.stream().filter(each -> each.path().equals(path)).toList();
     }
 
     /**

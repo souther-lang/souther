@@ -4,12 +4,9 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.FieldDomains;
-import souther.compiler.check.ClauseHelpers;
-import souther.compiler.check.InvariantBound;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.BindingId;
@@ -244,7 +241,7 @@ public final class InputDomain {
         // own type draws a line, because a clause relating two fields is not a partition of one.
         NumericDomain.Bounds admissible = nothingExists ? null
                 : TypeBounds.admissible(own, projected, term);
-        List<UnreadRule> unread = unreadBoundsAt(path, type, symbols, carried, taken);
+        List<UnreadRule> unread = unreadRulesAt(placed, path);
 
         List<Case> declared = Distinctions.ofType(view, symbols);
         ReadingResult reading = crossed(declared, view, admissible, admitted, symbols, unread,
@@ -357,77 +354,30 @@ public final class InputDomain {
     }
 
     /**
-     * The rules on this position's own type that say where its value stops and that nothing here
-     * turned into an end.
+     * The rules saying where this position's values stop that nothing turned into an end.
      *
      * <p>The invariant's half of what a {@code guard}'s comparison is asked. Both draw lines
      * (ADR-0090) and both can be written in a form this does not read, and only one of them was
      * saying so — a bound it dropped left the position looking like one no rule bounds, which is
      * what the declaration above it denies.
      *
-     * @param carried what the value is read on, or null where nothing here draws a line on it
-     * @param measure the operation a number is taken by, or null where none is
+     * <p>Read off the one reading that draws lines from clauses ({@link FieldDomains#unreadAt}) and
+     * not walked again here. A second walk over the position's own type answered for the clauses
+     * written on it and knew nothing of the clauses written on the value it sits in, so a record's
+     * rule about one of its fields was dropped in silence; and where both had something to say
+     * about one clause, the report printed two causes for it.
+     *
+     * <p>One line per reason, as a {@code guard}'s comparison is. Two clauses stopped by the same
+     * limit are one thing for a reader to lift; two stopped by different limits are two.
      */
-    private static List<UnreadRule> unreadBoundsAt(TermPath path, Type type, Symbols symbols,
-                                                   Carrier carried, ValueName measure) {
+    private static List<UnreadRule> unreadRulesAt(PlacedRules placed, TermPath path) {
         List<UnreadRule> out = new ArrayList<>();
-        for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
-            for (Hir.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
-                for (Hir.Expr each : ClauseHelpers.conjunctsOf(clause.expr())) {
-                    BlockReason why = whyUnread(each, carried, measure);
-                    // Once per position, as a comparison is: what a reader has to lift is the first
-                    // limit in the way, and a second clause behind it says nothing further.
-                    if (why != null && out.isEmpty()) {
-                        out.add(new UnreadRule(path, why));
-                    }
-                }
+        for (FieldDomains.Unread each : placed.unreadAt(path)) {
+            UnreadRule said = new UnreadRule(path, each.why());
+            if (!out.contains(said)) {
+                out.add(said);
             }
         }
         return List.copyOf(out);
-    }
-
-    /** What stopped one clause from being an end, or null where nothing did — either because it was
-     * read, or because it is not a rule about where the value stops. */
-    private static BlockReason whyUnread(Hir.Expr clause, Carrier carried, ValueName measure) {
-        if (InvariantBound.statesAnEnd(clause, null)) {
-            if (carried == null) {
-                // The value is ordered — it is compared in the clause — and this reads no line on
-                // what carries it. The carrier, asked of the carrier, as a guard's is.
-                return new BlockReason.UnreadComparisonDomain();
-            }
-            return unreadFormOf(InvariantBound.of(clause, carried), true);
-        }
-        if (measure != null && InvariantBound.statesAnEnd(clause, measure)) {
-            // A size is a whole number whatever it is a size of, so nothing here is about a carrier.
-            // And nothing takes a size's ends into the reading that refuses a declaration for
-            // holding no value: that reading is over the positions a value has, and a size is a
-            // number taken of one. So a size bound past the end of the whole numbers is a rule this
-            // report is the only reader of, and going quiet about it would leave it unsaid
-            // everywhere.
-            return unreadFormOf(InvariantBound.ofSize(clause, measure), false);
-        }
-        return null;
-    }
-
-    /**
-     * What a reading of an ordered rule leaves for the report to say about it.
-     *
-     * <p>Nothing where an end was read. A rule stating an end past the last value of the order is
-     * the case the two callers differ on, and what settles it is whether anything else says
-     * something about such a rule: where the declaration is refused for holding no value, this
-     * report is never produced and naming the rule as one nothing could read would send an author
-     * after a bound the compiler understood perfectly; where nothing refuses it, this is its only
-     * reader and silence is the rule going unsaid.
-     *
-     * @param refusedElsewhere whether a rule stating an end past the end of the order is taken into
-     *                         the reading that refuses a declaration for holding no value
-     */
-    private static BlockReason unreadFormOf(InvariantBound.Read read, boolean refusedElsewhere) {
-        return switch (read) {
-            case InvariantBound.Read.AnEnd _ -> null;
-            case InvariantBound.Read.PastWhereTheOrderStops _ ->
-                    refusedElsewhere ? null : new BlockReason.UnreadComparisonForm();
-            case InvariantBound.Read.NoEnd _ -> new BlockReason.UnreadComparisonForm();
-        };
     }
 }
