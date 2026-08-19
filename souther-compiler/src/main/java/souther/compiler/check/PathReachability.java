@@ -397,7 +397,7 @@ public final class PathReachability {
     /** What the rules leave {@code position}, where they leave it numbers at all. */
     private NumericDomain.Bounds boundsAt(TermPath position) {
         Position at = read.at(position);
-        return at == null || at.numericDomain() == null || at.numericDomain().isEmpty()
+        return at == null || at.numericDomain() == null || at.numericDomain().saysNothing()
                 ? null : at.numericDomain();
     }
 

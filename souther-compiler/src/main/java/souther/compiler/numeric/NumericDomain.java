@@ -557,8 +557,33 @@ public final class NumericDomain<A> {
     /** What an atom's values are known to lie between. A {@code null} end is unbounded there. */
     public record Bounds(Endpoint min, Endpoint max) {
 
-        public boolean isEmpty() {
+        /**
+         * Whether neither end was written down, which is a range of every value there is.
+         *
+         * <p>Called {@code isEmpty} until {@link #holdsAValue} stood beside it, where the two names
+         * said opposite things about the same range: a range with neither end holds every value, and
+         * one that holds none of them has both. What is empty here is the pair of ends and never the
+         * range.
+         */
+        public boolean saysNothing() {
             return min == null && max == null;
+        }
+
+        /**
+         * Whether this holds any value at all.
+         *
+         * <p>Not {@link #saysNothing}, which asks whether either end was written down. A range with
+         * neither end says nothing and holds everything; a range whose ends have crossed says two
+         * things and holds nothing.
+         */
+        public boolean holdsAValue() {
+            return Endpoint.someValueLiesBetween(min, max);
+        }
+
+        /** The values this and {@code other} both hold. Each end is the tighter of the two, which
+         * for a lower bound is the higher and for an upper bound the lower. */
+        public Bounds meet(Bounds other) {
+            return new Bounds(Endpoint.lower(min, other.min), Endpoint.upper(max, other.max));
         }
 
         /** Whether {@code at} is inside both ends — asked of the ends, because whether an end is one

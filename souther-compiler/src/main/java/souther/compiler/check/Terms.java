@@ -3,7 +3,9 @@ package souther.compiler.check;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.LinearForm;
+import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
@@ -436,18 +438,18 @@ final class Terms {
     /**
      * The quotient {@code b} is, or null where there is no rule about it.
      *
-     * <p>Only over whole numbers, and only by a divisor that is a whole number other than zero.
-     * {@code /} on {@code Int} truncates toward zero, which is a step nothing about the divisor
-     * changes; on {@code Decimal} it rounds to a precision the run time sets (spec §stdlib-decimal),
-     * and what that rounding does to an end is not something this reads. A divisor the path only
-     * bounds away from zero is not read either — it is the sign and the magnitude of a written
-     * number that the rule is about.
+     * <p>Only over whole numbers. {@code /} on {@code Int} truncates toward zero, which is a step
+     * nothing about the operands changes; on {@code Decimal} it rounds to a precision the run time
+     * sets (spec §stdlib-decimal), and what that rounding does to an end is not something this
+     * reads. That choice is the operator's and not the path's, which is why it is made here
+     * ({@link Derivation}).
      *
-     * <p>And only by a divisor an {@code Int} can hold. The arithmetic composed here is over
-     * numbers of any size, so a written form can reach one no {@code Int} is; the rule is about the
-     * operator, whose divisor is an {@code Int}. Asked for one as the other this threw, and a throw
-     * here is read as a limit of the analysis and swallowed — which left the construction reported
-     * as nothing at all rather than as a clause nothing here establishes.
+     * <p>The divisor is a form, as the factors of a product are. Whether the path holds it away from
+     * zero, and whether it is the kind of value the operator's divisor could be at all, are asked
+     * where the recipe is read ({@link DerivedBounds}): the first because the answer is the path's
+     * and one expression is read under more than one, and the second because it is a question about
+     * a range and no range is known here. Held as a written number, this had to refuse every divisor
+     * with a coefficient in it, and a day count guarded above zero went unread.
      */
     private Derivation quotient(Core.Binary b, Denotations at) {
         if (granularityOf(b.type()) != Granularity.DISCRETE) {
@@ -455,22 +457,23 @@ final class Terms {
         }
         LinearForm<FactSubject> numerator = affineOf(b.left(), at);
         LinearForm<FactSubject> divisor = affineOf(b.right(), at);
-        if (numerator == null || divisor == null || !divisor.coefs().isEmpty()) {
+        if (numerator == null || divisor == null) {
             return null;
         }
-        BigDecimal written = divisor.constant();
-        if (written.signum() == 0 || written.stripTrailingZeros().scale() > 0
-                || !isWholeNumberAnIntHolds(written)) {
-            return null;
-        }
-        return new Derivation.Quotient(numerator, written.longValue());
+        return new Derivation.Quotient(numerator, divisor, extentOf(b.right().type()));
     }
 
-    /** Whether {@code written} is a number an {@code Int} is (spec §primitives), which is what the
-     * operator's divisor is. */
-    private static boolean isWholeNumberAnIntHolds(BigDecimal written) {
-        return written.compareTo(BigDecimal.valueOf(Long.MIN_VALUE)) >= 0
-                && written.compareTo(BigDecimal.valueOf(Long.MAX_VALUE)) <= 0;
+    /**
+     * Every value a position of {@code type} can take.
+     *
+     * <p>What the operator divides by is a value of its own type, and the arithmetic a form is
+     * composed of runs over numbers of any size — so a form can name a number the operand never is.
+     * Read off the carrier, which is where what a type's values run between is written down and the
+     * one place it is ({@link Carrier#extent}).
+     */
+    private NumericDomain.Bounds extentOf(Type type) {
+        OrderedInterval extent = Carrier.ofValue(type, symbols).extent();
+        return new NumericDomain.Bounds(extent.low(), extent.high());
     }
 
     /**
@@ -486,8 +489,9 @@ final class Terms {
                     && sameForm(one.left(), other.left())
                     && sameForm(one.right(), other.right());
             case Derivation.Quotient one -> b instanceof Derivation.Quotient other
-                    && one.divisor() == other.divisor()
-                    && sameForm(one.numerator(), other.numerator());
+                    && sameForm(one.numerator(), other.numerator())
+                    && sameForm(one.divisor(), other.divisor())
+                    && one.divisorExtent().equals(other.divisorExtent());
         };
     }
 

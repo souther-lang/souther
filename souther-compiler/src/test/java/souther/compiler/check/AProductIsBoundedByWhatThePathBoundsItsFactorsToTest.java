@@ -2,12 +2,16 @@ package souther.compiler.check;
 
 import souther.compiler.diag.CompileException;
 import souther.compiler.Compiler;
+import souther.compiler.check.InvariantChecker.GaveUp;
+import souther.compiler.check.InvariantChecker.Said;
+import souther.compiler.check.InvariantChecker.Verdict;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.InvariantMessage;
 import souther.compiler.diag.Severity;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -15,8 +19,8 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * A product of two values, and a quotient by a written constant, are read against what the path
- * knows of what they were computed from.
+ * A product of two values, and a truncating quotient, are read against what the path knows of what
+ * they were computed from.
  *
  * <p>Neither is a linear form, so neither is something the domain can carry: the check names the
  * whole expression an atom, and nothing relates that atom to the factors. What the guards state of
@@ -190,12 +194,17 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
     }
 
     /**
-     * A divisor the path only bounds away from zero is not a written constant, and the rule is about
-     * the sign and the magnitude of a number that is written.
+     * A divisor the path holds away from zero has the sign and the magnitude the rule needs, so the
+     * quotient is read off the two ranges as a product is read off its factors.
+     *
+     * <p>A guard above zero over the whole numbers arrives as an end at one, which is what a strict
+     * bound on a discrete atom is sharpened to. What the divisor is <em>written</em> as is not what
+     * the rule is about: held as a number it had to be, and a divisor with a coefficient in it went
+     * unread however plainly the guards bounded it.
      */
     @Test
-    void aQuotientByAValueTheGuardsOnlyBoundIsStillOwed() {
-        assertEquals(List.of("E2011"), warningsOf(TYPES + """
+    void aQuotientByAValueTheGuardsHoldAwayFromZeroIsBounded() {
+        assertEquals(List.of(), warningsOf(TYPES + """
                 behavior part : (x: Int, k: Int) -> NonNeg | Bad constructs NonNeg, Bad
                 let part (x, k) = {
                     guard x >= 0
@@ -208,26 +217,147 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
     }
 
     /**
-     * A divisor written as a number no {@code Int} holds is not one the rule reads, and the clause
-     * is owed as it is owed over any other value nothing is known of.
+     * A divisor a type holds away from zero is read the same way: what bounds it is not what the
+     * reading asks for.
      *
-     * <p>The walk composes the arithmetic of a written divisor over numbers of any size, and the
-     * rule is about a divisor an {@code Int} can be. Asking for the one as the other threw, and a
-     * throw here is taken as a limit of the analysis and swallowed — so the construction was
-     * reported as nothing at all, where the same construction over a divisor of 100 is an error.
-     * Declining the rule is what leaves the clause owed, which is what a value nothing is known of
-     * owes.
+     * <p>Apportioning a sum by a day count is where this is written, and the invariant that puts the
+     * count between one and thirty-one is what keeps the divide off zero. Left unread, the author's
+     * way out was to name the quotient and guard it — a refusal in the answer type for a condition
+     * that cannot happen, which every caller then has to handle.
+     */
+    @Test
+    void aQuotientByAValueATypeHoldsAwayFromZeroIsBounded() {
+        assertEquals(List.of(), warningsOf(TYPES + """
+                data Days = Int
+                    invariant value >= 1 && value <= 31
+                behavior perDay : (total: NonNeg, days: Days) -> NonNeg constructs NonNeg
+                let perDay (total, days) = NonNeg(total.value / days.value)
+                """));
+    }
+
+    /**
+     * The end above comes off the divisor's near end, which is a corner a written divisor never
+     * had.
+     *
+     * <p>The witness has an end that nothing but the divide gives: the dividend reaches 100 and the
+     * clause stops at 10, so the bound holds only because the divisor is at least 10. A construction
+     * whose clause the dividend already satisfies would discharge whatever the divisor was read to.
+     */
+    @Test
+    void theEndAboveAQuotientIsReadOffTheDivisorsNearEnd() {
+        assertEquals(List.of(), warningsOf(TYPES + """
+                data Party = Int
+                    invariant value >= 10 && value <= 31
+                data AtMost10 = Int
+                    invariant value >= 0 && value <= 10
+                behavior each : (bill: Pct, party: Party) -> AtMost10 constructs AtMost10
+                let each (bill, party) = AtMost10(bill.value / party.value)
+                """));
+    }
+
+    /** A product under a quotient by a value, which is the issue's own row: both operands are
+     * arithmetic the fragment does not carry, and each is read where it stands. */
+    @Test
+    void aQuotientOfAProductByAValueReadsBoth() {
+        assertEquals(List.of(), warningsOf(TYPES + """
+                behavior part : (a: Int, b: Int, c: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                let part (a, b, c) = {
+                    guard a >= 0
+                        else Bad
+                    guard b >= 0
+                        else Bad
+                    guard c > 0
+                        else Bad
+                    NonNeg(a * b / c)
+                }
+                """));
+    }
+
+    /**
+     * A divisor nothing holds away from zero is a quotient nothing is known of, and the clause
+     * stands.
+     *
+     * <p>Where the divisor's range admits zero there is no bound to give: a divisor as near zero as
+     * the range allows sends the quotient past every value on both sides, and at zero the divide
+     * produces nothing at all.
+     */
+    @Test
+    void aQuotientByAValueNothingHoldsAwayFromZeroIsStillOwed() {
+        assertEquals(List.of("E2011"), warningsOf(TYPES + """
+                behavior part : (x: Int, k: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                let part (x, k) = {
+                    guard x >= 0
+                        else Bad
+                    guard k >= 0
+                        else Bad
+                    NonNeg(x / k)
+                }
+                """));
+    }
+
+    /**
+     * A divisor the path holds below zero puts the quotient on the other side, and a construction
+     * the value fails is refused.
+     *
+     * <p>The end that decides it is the one the divisor's <em>near</em> end gives: the greatest the
+     * quotient gets is the dividend's least over the divisor's furthest, which is {@code -10} here
+     * and not the {@code -100} the two written ends taken in order would pair.
+     */
+    @Test
+    void aQuotientByAValueHeldBelowZeroIsRefused() {
+        assertEquals("E2010", errorOf(TYPES + """
+                data SmallNeg = Int
+                    invariant value >= 0 - 10 && value <= 0 - 1
+                behavior part : (x: Int, k: SmallNeg) -> NonNeg | Bad constructs NonNeg, Bad
+                let part (x, k) = {
+                    guard x >= 100
+                        else Bad
+                    NonNeg(x / k.value)
+                }
+                """).code());
+    }
+
+    /**
+     * A divisor that is a number no {@code Int} holds is not one the rule reads, and the clause is
+     * owed as it is owed over any other value nothing is known of.
+     *
+     * <p>The arithmetic a form is composed of runs over numbers of any size, and the operator's
+     * divisor is a value of its own type — so what the reading proves of this one is a range with no
+     * {@code Int} anywhere in it. That is not a divisor this operator has, and a rule with no operand
+     * to fire on contributes nothing. It is <em>not</em> read as a range holding no value: taken into
+     * the domain that would be a contradiction, and a contradictory domain proves every clause there
+     * is, so the construction would come out discharged rather than owed.
+     *
+     * <p>Asked of what the analysis did and not only of what it did not say. This check is fail-open
+     * — a walk that falls over reports exactly what a walk that finished and found nothing reports
+     * ({@link InvariantChecker#GAVE_UP}) — so a warning count alone would pass just as well on an
+     * analysis that stopped at this divisor, which is how the number no {@code Int} holds was
+     * declined before there was a rule about it.
      */
     @Test
     void aDivisorNoIntCanHoldIsNotOneTheRuleReads() {
-        assertEquals(List.of("E2011"), warningsOf(TYPES + """
-                behavior part : (x: Int) -> NonNeg | Bad constructs NonNeg, Bad
-                let part (x) = {
-                    guard x >= 0
-                        else Bad
-                    NonNeg(x / (9223372036854775807 + 1))
-                }
-                """));
+        List<Said> said = new ArrayList<>();
+        List<GaveUp> gaveUp = new ArrayList<>();
+        InvariantChecker.WATCHING = said;
+        InvariantChecker.GAVE_UP = gaveUp;
+        try {
+            assertEquals(List.of("E2011"), warningsOf(TYPES + """
+                    behavior part : (x: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                    let part (x) = {
+                        guard x >= 0
+                            else Bad
+                        NonNeg(x / (9223372036854775807 + 1))
+                    }
+                    """));
+        } finally {
+            InvariantChecker.WATCHING = null;
+            InvariantChecker.GAVE_UP = null;
+        }
+
+        assertEquals(List.of(), gaveUp, "the analysis ran to the end");
+        assertEquals(List.of(Verdict.UNKNOWN),
+                said.stream().map(Said::verdict).toList(),
+                "the construction was reached and the clause came out unproven");
     }
 
     /**

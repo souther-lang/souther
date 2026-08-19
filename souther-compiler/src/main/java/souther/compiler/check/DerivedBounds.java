@@ -142,13 +142,43 @@ final class DerivedBounds {
             case Derivation.Product product -> Intervals.product(
                     boundsOf(product.left(), base, terms, done, deriving),
                     boundsOf(product.right(), base, terms, done, deriving));
-            case Derivation.Quotient quotient -> Intervals.truncatingQuotient(
-                    boundsOf(quotient.numerator(), base, terms, done, deriving),
-                    quotient.divisor());
+            case Derivation.Quotient quotient -> quotient(quotient, base, terms, done, deriving);
         };
         deriving.remove(atom);
         done.put(atom, bounds);
         return bounds;
+    }
+
+    /**
+     * What a truncating divide lies between, under what this reading holds of the two it was
+     * computed from.
+     *
+     * <p>The divisor is read twice over: what the path proves of it, and what the operator's divisor
+     * can be at all ({@link Derivation.Quotient#divisorExtent}). The second is not a sharpening of
+     * the first. A form is composed over numbers of any size, so what a reading proves of one can be
+     * a range of numbers the operand never is, and where the two share nothing this operator has no
+     * divisor here — which is a different thing from a divisor it has and cannot bound.
+     *
+     * <p>Nothing is derived where they share nothing, and a range holding no value is not what says
+     * so. That a rule has no operands to fire on is not a proof that the path has no execution: read
+     * as an empty range it would be taken into the domain as a contradiction, and a contradictory
+     * domain proves every clause there is — so a construction nothing here can read would come out
+     * discharged. What a rule that does not apply contributes is nothing.
+     *
+     * <p>The dividend is not held to its own extent. It could be, and it would be sound; it would
+     * also be a sharpening of a bound that is already sound, which is a different reason from the
+     * one above and not one this rule needs.
+     */
+    private static Bounds quotient(Derivation.Quotient quotient, NumericDomain<FactSubject> base,
+                                   Terms terms, Map<FactSubject, Bounds> done,
+                                   Set<FactSubject> deriving) {
+        Bounds divisor = boundsOf(quotient.divisor(), base, terms, done, deriving)
+                .meet(quotient.divisorExtent());
+        if (!divisor.holdsAValue()) {
+            return new Bounds(null, null);
+        }
+        return Intervals.truncatingQuotient(
+                boundsOf(quotient.numerator(), base, terms, done, deriving), divisor);
     }
 
     /**

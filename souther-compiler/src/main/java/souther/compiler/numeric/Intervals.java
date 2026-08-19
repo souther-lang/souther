@@ -1,6 +1,6 @@
 package souther.compiler.numeric;
 
-import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 
 /**
@@ -57,52 +57,104 @@ public final class Intervals {
     /** Whether {@code one} holds zero and {@code other} holds anything, which is what makes zero a
      * value the product takes. */
     private static boolean holdsZero(NumericDomain.Bounds one, NumericDomain.Bounds other) {
-        return one.admits(Count.ZERO) && holdsAValue(other);
-    }
-
-    /** Whether a range holds any value at all. A range that holds none is not something a feasible
-     * domain proves, and a product of one is not a value to say anything about. */
-    private static boolean holdsAValue(NumericDomain.Bounds bounds) {
-        return Endpoint.someValueLiesBetween(bounds.min(), bounds.max());
+        return one.admits(Count.ZERO) && other.holdsAValue();
     }
 
     /**
-     * What {@code x / k} lies between, given what {@code x} does and a written {@code k}.
+     * What {@code x / y} lies between, given what each of them does.
      *
-     * <p>Truncation toward zero is monotone — it never sends a larger dividend to a smaller
-     * quotient — so the quotient's ends are the dividend's ends put through it, exchanged where the
-     * divisor is negative and the order reverses with them. That is the whole rule: what it says is
-     * about a sign and a magnitude and not an equation, which is why nothing linear could carry it.
+     * <p><b>What this bounds is the values the operation produces.</b> {@code /} over whole numbers
+     * does not answer everywhere: a zero divisor aborts, and so does the one pair whose quotient no
+     * {@code Int} holds (spec §stdlib-int). Those pairs contribute no value, so a range that takes
+     * them in is a range of what the successful divides came to and nothing else. What follows from
+     * that is what a caller must not read into an answer here: a range coming back — top included —
+     * does not say the operation is defined for every pair the two ranges admit. Whether it is is a
+     * different question with a different answer, and answering it here would be an interval that
+     * means two things.
      *
-     * <p>An end the dividend does not reach is widened rather than sharpened. Truncation sends a
-     * range of dividends onto one quotient, so an open end says nothing about whether the quotient
-     * reaches what it lands on; a bound looser than the true one proves less and never rejects a
-     * program the rules admit.
+     * <p><b>The corners, and the corners are the whole of it.</b> A divisor range held away from
+     * zero is of one sign throughout, and over such a range the divide is monotone along each
+     * operand with the other held — in a direction that may turn with the other's sign, which is why
+     * the corners and not a direction are what this is written about. Taking the ends of one operand
+     * first and then of the other leaves the extremes at the four corners, and truncation toward zero
+     * is non-decreasing, so putting the corners through it after keeps them the extremes.
      *
-     * @param divisor a whole number other than zero. What {@code /} does with a zero divisor is
-     *                abort (spec §stdlib-int), and a bound on a value nothing computes is not a
-     *                fact to derive.
+     * <p><b>A corner extended arithmetic gives no value is not a candidate.</b> An end past every
+     * value divided by another such end is no number, and the hull is taken over the corners that
+     * are numbers. Nothing is lost by it: a divisor away from zero has at most one end past every
+     * value — both would be a range through zero — so the dividend end that met it also meets the
+     * divisor's other, finite end, and reaches the same side there.
+     *
+     * <p>An end an operand does not reach is widened rather than sharpened. Truncation sends a range
+     * of dividends onto one quotient, so an open end says nothing about whether the quotient reaches
+     * what it lands on; a bound looser than the true one proves less and never rejects a program the
+     * rules admit.
+     *
+     * @param divisor a range holding at least one value. Whether the rule this belongs to has any
+     *                divisor to read is the caller's question and is asked before this
+     *                ({@code DerivedBounds}): a range with nothing in it is not a divisor whose sign
+     *                and magnitude could be read, and answering for it here would put "no such
+     *                operand" and "no bound to give" in one value.
      */
     public static NumericDomain.Bounds truncatingQuotient(NumericDomain.Bounds dividend,
-                                                          long divisor) {
-        if (divisor == 0) {
-            throw new IllegalArgumentException("a quotient by zero is not a value to bound");
+                                                          NumericDomain.Bounds divisor) {
+        if (!divisor.holdsAValue()) {
+            throw new IllegalArgumentException("a range holding no value is not a divisor to read");
         }
-        Endpoint low = truncated(dividend.min(), divisor);
-        Endpoint high = truncated(dividend.max(), divisor);
-        return divisor > 0 ? new NumericDomain.Bounds(low, high)
-                : new NumericDomain.Bounds(high, low);
+        if (divisor.admits(Count.ZERO)) {
+            // Every value on both sides: a divisor as near zero as you like sends the quotient past
+            // any number, and the pair at zero produces nothing at all.
+            return new NumericDomain.Bounds(null, null);
+        }
+        End belowX = End.below(dividend.min());
+        End aboveX = End.above(dividend.max());
+        End belowY = End.below(divisor.min());
+        End aboveY = End.above(divisor.max());
+        int sign = signOf(divisor);
+        Ratio[] corners = {
+            belowX.over(belowY, sign), belowX.over(aboveY, sign),
+            aboveX.over(belowY, sign), aboveX.over(aboveY, sign),
+        };
+        return new NumericDomain.Bounds(hull(corners, -1), hull(corners, 1));
     }
 
-    /** {@code end} divided by {@code divisor} and truncated toward zero, or null where the dividend
-     * has no such end. */
-    private static Endpoint truncated(Endpoint end, long divisor) {
-        if (end == null) {
-            return null;
+    /**
+     * Which side of zero a range held away from it lies on.
+     *
+     * <p>Read off the lower end, which says it or is absent — a range with none runs below every
+     * value and holds zero unless it stops before it. Zero itself decides nothing by being there:
+     * a lower end <em>at</em> zero belongs to a range held away from zero only by not being one of
+     * its own values, and then everything above it is.
+     */
+    private static int signOf(NumericDomain.Bounds divisor) {
+        Endpoint low = divisor.min();
+        if (low == null) {
+            return -1;
         }
-        BigDecimal quotient = Count.number(end.at()).at()
-                .divide(BigDecimal.valueOf(divisor), 0, java.math.RoundingMode.DOWN);
-        return Endpoint.inclusive(new Count(quotient));
+        int side = Count.number(low.at()).signum();
+        return side > 0 || (side == 0 && !low.inclusive()) ? 1 : -1;
+    }
+
+    /** The end of the quotient furthest along {@code direction}, or null where it runs past every
+     * value that way. Taken over the corners that are numbers, and inclusive because an end this
+     * lands on is widened rather than sharpened. */
+    private static Endpoint hull(Ratio[] corners, int direction) {
+        Count best = null;
+        for (Ratio corner : corners) {
+            if (corner == null) {
+                continue;   // extended arithmetic gives this pair of ends no value
+            }
+            if (corner.beyond() == direction) {
+                return null;
+            }
+            if (corner.at() == null) {
+                continue;   // past every value the other way, which bounds nothing on this side
+            }
+            if (best == null || corner.at().compareTo(best) * direction > 0) {
+                best = corner.at();
+            }
+        }
+        return best == null ? null : Endpoint.inclusive(best);
     }
 
     /**
@@ -150,7 +202,51 @@ public final class Intervals {
             }
             return new Corner(at.times(other.at.at()), reached && other.reached, 0);
         }
+
+        /**
+         * The corner this end makes with {@code divisor}, or null where extended arithmetic gives
+         * the pair no value.
+         *
+         * <p>{@code sign} is which side of zero the whole divisor range lies on, which its ends do
+         * not each say: an end at zero belongs to a range held away from it only by not being one of
+         * its own values, and what a divisor just past that end divides to is decided by the side
+         * the range is on.
+         *
+         * <p>Two ends past every value are the pair with no value — how fast each of them runs out
+         * is not something a range says, so their ratio is no number. Every other pair has one: a
+         * divisor past every value sends any dividend to zero; a divisor as near zero as its range
+         * allows sends any dividend but zero past every value; and zero divided by anything is zero.
+         */
+        Ratio over(End divisor, int sign) {
+            if (beyond != 0 && divisor.beyond != 0) {
+                return null;
+            }
+            if (divisor.beyond != 0) {
+                return new Ratio(Count.ZERO, 0);
+            }
+            if (at != null && at.signum() == 0) {
+                return new Ratio(Count.ZERO, 0);
+            }
+            if (divisor.at.signum() == 0) {
+                return new Ratio(null, (beyond != 0 ? beyond : at.signum()) * sign);
+            }
+            if (beyond != 0) {
+                return new Ratio(null, beyond * divisor.at.signum());
+            }
+            return new Ratio(Count.of(at.at().divide(divisor.at.at(), 0, RoundingMode.DOWN)), 0);
+        }
     }
+
+    /**
+     * One corner of the box a dividend range and a divisor range make: what the two ends divide to,
+     * or which side it is past every value on.
+     *
+     * <p>Without whether the quotient reaches it. Truncation sends a range of dividends onto one
+     * quotient, so an end an operand does not reach says nothing about whether the quotient reaches
+     * where it lands — and a bound that says it does is the looser of the two, which is the one to
+     * state.
+     */
+    private record Ratio(Count at, int beyond) {}
 
     /**
      * One corner of the box two ranges make: what the two ends multiply to, whether the product has
