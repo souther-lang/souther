@@ -88,7 +88,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         NumericDomain<FactSubject> guarded = atOrAboveZero(terms,
                 FactSubject.of(terms.bodyKey(read("a", a), at)),
                 FactSubject.of(terms.bodyKey(read("b", b), at)));
-        assertTrue(guarded.boundsOf(atom).isEmpty(),
+        assertTrue(guarded.boundsOf(atom).saysNothing(),
                 "nothing was said about the product itself");
 
         NumericDomain<FactSubject> derived = DerivedBounds.refine(guarded, terms, Set.of(atom));
@@ -118,7 +118,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
 
         NumericDomain<FactSubject> derived = DerivedBounds.refine(NumericDomain.top(), terms, Set.of(atom));
 
-        assertTrue(derived.boundsOf(atom).isEmpty());
+        assertTrue(derived.boundsOf(atom).saysNothing());
     }
 
     /**

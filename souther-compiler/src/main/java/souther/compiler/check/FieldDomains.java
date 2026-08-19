@@ -223,7 +223,7 @@ public final class FieldDomains {
                 return;
             }
             NumericDomain.Bounds bounds = seeded.numbers().boundsOf(atom);
-            if (!bounds.isEmpty()) {
+            if (!bounds.saysNothing()) {
                 out.put(field, bounds);
             }
         });
@@ -269,7 +269,7 @@ public final class FieldDomains {
                 return;
             }
             NumericDomain.Bounds bounds = seeded.numbers().boundsOf(atom);
-            if (!bounds.isEmpty()) {
+            if (!bounds.saysNothing()) {
                 holds.put(field, bounds);
             }
         });
