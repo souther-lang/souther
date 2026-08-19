@@ -5,7 +5,8 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.BoundaryAssessment;
+import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.ItemAssessment;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.query.PartitionEvidence;
 
@@ -62,9 +63,11 @@ class CompileExampleBoundaryTest {
                 .findFirst().orElseThrow();
     }
 
-    private static List<BoundaryAssessment> at(PartitionEvidence evidence,
-                                                               String value) {
-        return evidence.boundaries().stream().filter(b -> b.value().equals(value)).toList();
+    /** The points against a line at {@code value}, which is what a row there is owed for. */
+    private static List<BorderAssessment.Point> at(PartitionEvidence evidence, String value) {
+        return BorderAssessment.pointsOf(evidence.boundaries()).stream()
+                .filter(p -> p.role().againstTheLine()).filter(p -> p.owed() != null)
+                .filter(p -> value.equals(p.against())).toList();
     }
 
     @Test
@@ -96,17 +99,19 @@ class CompileExampleBoundaryTest {
                 example submit
                     | (Draft { cost = Amount(50) }) -> Submitted
                 """);
-        BoundaryAssessment zero = at(away, "0").get(0);
-        assertFalse(zero.coverage().hit());
-        assertEquals(MeasurementStatus.COMPLETE, zero.status());
-        assertTrue(zero.rule().named().startsWith("invariant"), zero.rule().named());
+        BorderAssessment.Point zero = at(away, "0").get(0);
+        assertFalse(zero.owed().coverage().hit());
+        assertEquals(MeasurementStatus.COMPLETE, zero.item().status());
+        assertTrue(zero.border().rule().named().startsWith("invariant"),
+                zero.border().rule().named());
 
         PartitionEvidence edge = evidence(MODEL + """
 
                 example submit
                     | (Draft { cost = Amount(0) }) -> Submitted
                 """);
-        assertTrue(at(edge, "0").get(0).coverage().hit(), "a row is written at the edge");
+        assertTrue(at(edge, "0").get(0).owed().coverage().hit(),
+                "a row is written at the edge");
     }
 
     /** A row that writes the value and reaches the comparison meets the line the guard drew. */
@@ -118,10 +123,12 @@ class CompileExampleBoundaryTest {
                     | (Draft { cost = Amount(100) }) -> Submitted
                 """);
 
-        BoundaryAssessment hundred = at(evidence, "100").get(0);
-        assertEquals(MeasurementStatus.COMPLETE, hundred.status());
-        assertTrue(hundred.coverage().hit(), "the row wrote 100 and the guard compared it");
-        assertTrue(hundred.rule().wasDrawnInABodyFork(), hundred.rule().named());
+        BorderAssessment.Point hundred = at(evidence, "100").get(0);
+        assertEquals(MeasurementStatus.COMPLETE, hundred.item().status());
+        assertTrue(hundred.owed().coverage().hit(),
+                "the row wrote 100 and the guard compared it");
+        assertTrue(hundred.border().rule().wasDrawnInABodyFork(),
+                hundred.border().rule().named());
     }
 
     /**
@@ -157,13 +164,14 @@ class CompileExampleBoundaryTest {
                     | (Draft { cost = Amount(-1) }) -> Waiting { cost = Amount(-1) }
                 """);
 
-        BoundaryAssessment first = at(evidence, "0").stream()
-                .filter(b -> b.rule().wasDrawnInABodyFork()).findFirst().orElseThrow();
-        BoundaryAssessment second = at(evidence, "100").get(0);
+        BorderAssessment.Point first = at(evidence, "0").stream()
+                .filter(p -> p.border().rule().wasDrawnInABodyFork()).findFirst().orElseThrow();
+        BorderAssessment.Point second = at(evidence, "100").get(0);
 
-        assertEquals(MeasurementStatus.COMPLETE, second.status(), "the arms were measured");
-        assertFalse(second.coverage().hit(), "no row was ever compared against 100");
-        assertFalse(first.coverage().hit(), "and the row wrote -1, not 0");
+        assertEquals(MeasurementStatus.COMPLETE, second.item().status(),
+                "the arms were measured");
+        assertFalse(second.owed().coverage().hit(), "no row was ever compared against 100");
+        assertFalse(first.owed().coverage().hit(), "and the row wrote -1, not 0");
     }
 
     @Test

@@ -93,9 +93,9 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
      * two empty lists. */
     @Test
     void theDatesOwnEdgesAreObligationsWrittenAsDates() {
-        assertEquals(List.of("AT 2020-01-01 writable", "AT 2020-01-02 writable"),
+        assertEquals(List.of("ON 2020-01-01 writable", "ON 2020-01-02 writable"),
                 measured(BESIDE, "s.d"));
-        assertEquals(List.of("AT 0 writable", "AT 10 writable"), measured(BESIDE, "s.a"));
+        assertEquals(List.of("ON 0 writable", "ON 10 writable"), measured(BESIDE, "s.a"));
     }
 
     /** Every obligation of one position: where it is, and whether anything promises a row can be
@@ -106,9 +106,13 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
                 .filter(a -> a.path().toString().equals(path)).findFirst().orElseThrow();
         String standing = read.partitioning().edgeIsKnownWritable(axis.term())
                 ? " writable" : " not known to be writable";
-        return Partitions.obligationsOf(axis, read.symbols(),
+        return Partitions.bordersOf(axis, read.symbols(),
                         read.partitioning().domains().get(axis.term())).stream()
-                .map(o -> o.side() + " " + o.target().right() + standing).sorted().toList();
+                .flatMap(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
+                        .filter(role -> border.demand(role).criterion() != null)
+                        .map(role -> role + " "
+                                + border.demand(role).criterion().against(border.cut()) + standing))
+                .sorted().toList();
     }
 
     private record Read(Partitions.Partitioning partitioning, Symbols symbols) {}

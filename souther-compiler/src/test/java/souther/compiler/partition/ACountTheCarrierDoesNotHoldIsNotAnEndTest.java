@@ -102,7 +102,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
      * nothing anywhere. */
     @Test
     void aBoundInsideTheCasesIsAnEnd() {
-        assertEquals(List.of("AT Qualified"), obligations("module example.inside\n" + STAGE + """
+        assertEquals(List.of("ON Qualified"), obligations("module example.inside\n" + STAGE + """
                 data FromQualified = Stage
                     invariant value >= Qualified
 
@@ -217,9 +217,12 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
         Partitions.Partitioning p =
                 Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(spec.name()), symbols), symbols);
         return p.axes().stream()
-                .flatMap(axis -> Partitions.obligationsOf(axis, symbols,
+                .flatMap(axis -> Partitions.bordersOf(axis, symbols,
                         p.domains().get(axis.term())).stream())
-                .map(o -> o.side() + " " + o.target().right())
+                .flatMap(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
+                        .filter(role -> border.demand(role).criterion() != null)
+                        .map(role -> role + " "
+                                + border.demand(role).criterion().against(border.cut())))
                 .toList();
     }
 }

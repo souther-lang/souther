@@ -38,8 +38,8 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
 
     @Test
     void aTemporalBoundaryUnderTwoNamesWearsBoth() {
-        assertEquals(List.of("AT -> ShippingDay(Day(Date(\"2026-08-01\")))",
-                        "BELOW -> ShippingDay(Day(Date(\"2026-07-31\")))"),
+        assertEquals(List.of("ON -> ShippingDay(Day(Date(\"2026-07-31\")))",
+                        "OFF -> ShippingDay(Day(Date(\"2026-08-01\")))"),
                 rowsAtBoundaries("""
                         module example.nesteddate
 
@@ -60,8 +60,8 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
     /** The same of a number, which was one layer deep before any of this and is not any more. */
     @Test
     void aNumericBoundaryUnderTwoNamesWearsBoth() {
-        assertEquals(List.of("AT -> ShippingAmount(Amount(500))",
-                        "BELOW -> ShippingAmount(Amount(499))"),
+        assertEquals(List.of("ON -> ShippingAmount(Amount(499))",
+                        "OFF -> ShippingAmount(Amount(500))"),
                 rowsAtBoundaries("""
                         module example.nestedint
 
@@ -106,14 +106,24 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
 
         List<String> out = new ArrayList<>();
         for (Axis axis : p.axes()) {
-            for (BoundaryObligation each
-                    : Partitions.obligationsOf(axis, symbols, p.domains().get(axis.term()))) {
-                out.add(each.side() + " -> "
-                        + (Generator.probe(subject, each, Generator.CandidateCheck.ANY)
+            for (Border border
+                    : Partitions.bordersOf(axis, symbols, p.domains().get(axis.term()))) {
+              for (PointRole role : List.of(PointRole.ON, PointRole.OFF)) {
+                if (!(border.demand(role).criterion()
+                        instanceof Criterion.AtThePlace each)) {
+                    continue;   // no row is owed there, so there is none to write
+                }
+                out.add(role + " -> "
+                        + (Generator.probe(subject,
+                                new BoundaryTarget.AtPlace(
+                                        ((BoundaryTarget.AtPlace) border.cut()).axis(),
+                                        border.cut().carrier(), each.place()),
+                                Generator.CandidateCheck.ANY)
                                 instanceof Generator.BoundaryAttempt.Built built
                                         ? String.join(", ", built.row().inputs().stream()
                                                 .map(FixtureTemplate::text).toList())
                                         : "no row"));
+              }
             }
         }
         return out;

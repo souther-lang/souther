@@ -564,13 +564,19 @@ public final class Analyzer {
         souther.compiler.query.PartitionEvidence partition =
                 adequacy.partitions() == null ? null : adequacy.partitions().get(behavior);
         if (partition != null) {
-            long measured = partition.boundaries().stream()
-                    .filter(b -> settled(b.coverage())).count();
-            long met = partition.boundaries().stream()
-                    .filter(b -> settled(b.coverage()))
-                    .filter(b -> b.coverage().hit()).count();
-            if (measured > 0) {
-                parts.add("boundary " + met + "/" + measured);
+            // Over the coverage items and not over the borders. A border owes a row at up to four
+            // points, and counting borders would call one with a single point met as covered as one
+            // that owes only that point.
+            List<souther.compiler.query.ItemAssessment> settled =
+                    souther.compiler.query.BorderAssessment.pointsOf(partition.boundaries()).stream()
+                            .map(souther.compiler.query.BorderAssessment.Point::item)
+                            .filter(Analyzer::settled).toList();
+            long met = settled.stream()
+                    .filter(item -> item instanceof souther.compiler.query.ItemAssessment.Owed owed
+                            && owed.coverage().hit())
+                    .count();
+            if (!settled.isEmpty()) {
+                parts.add("boundary " + met + "/" + settled.size());
             }
         }
         Adequacy.BranchEvidence branch =
@@ -585,15 +591,20 @@ public final class Analyzer {
     /**
      * Whether a line came to an answer against the rows.
      *
-     * <p>Hit or missed, and nothing else. A line waiting on the arms has no answer to show beside a
+     * <p>Hit or missed, and nothing else. A point waiting on the arms has no answer to show beside a
      * declaration, and one whose value could not be read has no answer either — a lens counting it
      * would put a number in front of an author that says a row is missing at a value nothing was able
-     * to look at. The report can afford to include such a line because it writes "undecided" beside
+     * to look at. The report can afford to include such a point because it writes "undecided" beside
      * the count; one number on one line has nowhere to put that word.
+     *
+     * <p>Nor a point nobody is owed a row at. Nothing was measured there and nothing is missing, and
+     * a lens that counted it would put the model's own answer into a ratio of what the rows reach.
      */
-    private static boolean settled(souther.compiler.query.BoundaryAssessment.Coverage coverage) {
-        return coverage instanceof souther.compiler.query.BoundaryAssessment.Coverage.Hit
-                || coverage instanceof souther.compiler.query.BoundaryAssessment.Coverage.Missed;
+    private static boolean settled(souther.compiler.query.ItemAssessment item) {
+        return item instanceof souther.compiler.query.ItemAssessment.Owed owed
+                && (owed.coverage() instanceof souther.compiler.query.ItemAssessment.Coverage.Hit
+                        || owed.coverage()
+                                instanceof souther.compiler.query.ItemAssessment.Coverage.Missed);
     }
 
     /** The caret at one position, as a range of no width. */

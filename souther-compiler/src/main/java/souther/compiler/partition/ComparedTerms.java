@@ -28,9 +28,15 @@ import souther.compiler.inputs.NumericTerm;
  *
  * @param holdsAtTheLine whether the line's own values satisfy the comparison, which is what tells
  *                       {@code <} from {@code <=} and is the whole of what the row on the line shows
+ * @param onIsAboveWhereItHolds which way round the two stand where the comparison is satisfied.
+ *                       Not derivable from {@link #holdsAtTheLine}, which says what happens on the
+ *                       line and nothing about either side of it: {@code a < b} and {@code a > b}
+ *                       agree there and are opposite everywhere else. What it decides is which side
+ *                       of the border a row is in and which it is out of, and a line that carried
+ *                       only its own place had no {@code IN} point and no {@code OUT} point at all
  */
 record ComparedTerms(NumericTerm on, NumericTerm against, Carrier carrier,
-                     boolean holdsAtTheLine) {
+                     boolean holdsAtTheLine, boolean onIsAboveWhereItHolds) {
 
     /**
      * What {@code comparison} draws between two positions, or null where it draws no such line.
@@ -52,7 +58,14 @@ record ComparedTerms(NumericTerm on, NumericTerm against, Carrier carrier,
                 || !carrier.equals(Carrier.ofValue(comparison.right().type(), symbols))) {
             return null;
         }
-        return new ComparedTerms(on, against, carrier, holdsAtTheLine(comparison.op()));
+        return new ComparedTerms(on, against, carrier, holdsAtTheLine(comparison.op()),
+                onIsAbove(comparison.op()));
+    }
+
+    /** Which side the left of the comparison is on where the comparison is satisfied. Read off the
+     *  operator as written, since neither side is turned round here. */
+    private static boolean onIsAbove(Hir.BinOp op) {
+        return op == Hir.BinOp.GT || op == Hir.BinOp.GE;
     }
 
     /** Whether an operator orders its two sides, which {@code ==} and {@code /=} do not. */

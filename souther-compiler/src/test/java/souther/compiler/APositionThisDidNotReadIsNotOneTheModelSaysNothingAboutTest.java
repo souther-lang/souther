@@ -4,7 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.BoundaryAssessment;
+import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
@@ -131,11 +132,11 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     }
 
     /** Every line one behavior's rules drew, which is what says the position was read at all. */
-    private static List<BoundaryAssessment> linesOf(String behavior) {
+    private static List<BorderAssessment> linesOf(String behavior) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
-        Map<String, List<BoundaryAssessment>> boundaries =
+        Map<String, List<BorderAssessment>> boundaries =
                 compilation.db().ask(new Adequacy.Boundaries("example.repro")).value();
         assertNotNull(boundaries, "the model under test compiles");
         return boundaries.get(behavior);
@@ -228,7 +229,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
 
         assertFalse(block.contains("not derivable: c"), block);
         assertFalse(block.contains("not read: c"), block);
-        assertTrue(block.contains("border      0/0   (1 not measured"), block);
+        assertTrue(block.contains("border      borders 1   coverage items 0/0   excluded 2   (2 not measured"), block);
     }
 
     /**

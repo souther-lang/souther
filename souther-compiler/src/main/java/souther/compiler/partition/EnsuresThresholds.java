@@ -70,7 +70,7 @@ public final class EnsuresThresholds {
      *                and the model says otherwise in its own declaration
      */
     public record Clauses(List<Threshold> thresholds, List<GuardThresholds.Guards.Singled> singled,
-                          List<BoundaryObligation> between, List<UnreadRule> unread) {
+                          List<Border> between, List<UnreadRule> unread) {
 
         public static final Clauses NONE =
                 new Clauses(List.of(), List.of(), List.of(), List.of());
@@ -120,7 +120,7 @@ public final class EnsuresThresholds {
      *  after. Together because they are filled together and are one answer. */
     private record Drawn(String behavior, List<Threshold> thresholds,
                          List<GuardThresholds.Guards.Singled> singled,
-                         List<BoundaryObligation> between, List<UnreadRule> unread) {}
+                         List<Border> between, List<UnreadRule> unread) {}
 
     /**
      * The comparisons a rule states outright: its own, and those of both sides of every {@code &&}
@@ -206,12 +206,12 @@ public final class EnsuresThresholds {
         if (drawn == null) {
             return;
         }
-        BoundaryObligation made = new BoundaryObligation(
+        Border made = Border.betweenTerms(
                 new BoundaryTarget.EqualTerms(out.behavior(), drawn.on(), drawn.against(),
                         drawn.carrier()),
                 new OriginRef.EnsuresOrigin(new RuleRef.Ensures(rule.id(), clause), true,
                         drawn.holdsAtTheLine(), false),
-                BoundaryObligation.BoundarySide.AT);
+                drawn.onIsAboveWhereItHolds());
         if (out.between().stream().noneMatch(had -> had.equals(made))) {
             out.between().add(made);
         }

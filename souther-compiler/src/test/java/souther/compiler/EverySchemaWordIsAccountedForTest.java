@@ -11,9 +11,9 @@ import souther.compiler.diag.SourceProvenance;
 import souther.compiler.diag.Placement;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
-import souther.compiler.partition.BoundaryObligation;
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.BoundaryAssessment;
+import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Every word the shipped schema allows is one somebody accounted for.
  *
- * <p>Every enumerated field of {@code adequacy-schema-2.json} is a second spelling of a Java enum.
+ * <p>Every enumerated field of {@code adequacy-schema-3.json} is a second spelling of a Java enum.
  * The two are edited in different files by different hands, and until this test nothing noticed when
  * one moved: `ROW_TIMED_OUT` became `ROW_UNDECIDED` when a row stopped being held to a clock, the
  * rename was right, and the schema went on promising a word that had not been emitted since.
@@ -59,7 +59,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class EverySchemaWordIsAccountedForTest {
 
-    private static final String SCHEMA = "/souther/adequacy-schema-2.json";
+    private static final String SCHEMA = "/souther/adequacy-schema-3.json";
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     /**
@@ -203,14 +203,14 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "partition", "properties", "claimsOffAxis", "items",
                             "properties", "why"),
                     souther.compiler.query.ClaimAnnotations.Why.class),
-            new Vocabulary("partition.boundaries[].side",
+            new Vocabulary("partition.boundaries[].items[].point",
                     List.of("$defs", "partition", "properties", "boundaries", "items", "properties",
-                            "side"),
-                    BoundaryObligation.BoundarySide.class),
-            new Vocabulary("partition.boundaries[].point",
+                            "items", "items", "properties", "point"),
+                    souther.compiler.partition.PointRole.class),
+            new Vocabulary("partition.boundaries[].items[].notOwed",
                     List.of("$defs", "partition", "properties", "boundaries", "items", "properties",
-                            "point"),
-                    BoundaryObligation.PointRole.class),
+                            "items", "items", "properties", "notOwed"),
+                    souther.compiler.partition.NotOwedReason.class),
             new Vocabulary("partition.boundaries[].kind",
                     List.of("$defs", "partition", "properties", "boundaries", "items", "properties",
                             "kind"),
@@ -219,10 +219,10 @@ class EverySchemaWordIsAccountedForTest {
             // separate the rows that reached its comparison from the rows that did not. The
             // comparison is observed where it runs now, so nothing produces the word — and reports of
             // this version were written carrying it, and a version says what its documents may carry.
-            new Vocabulary("partition.boundaries[].reason",
+            new Vocabulary("partition.boundaries[].items[].reason",
                     List.of("$defs", "partition", "properties", "boundaries", "items", "properties",
-                            "reason"),
-                    BoundaryAssessment.Coverage.Reason.class, Set.of("no_arm_witnesses_it")),
+                            "items", "items", "properties", "reason"),
+                    ItemAssessment.Coverage.Reason.class, Set.of("no_arm_witnesses_it")),
             new Vocabulary("partition.pairs.reason",
                     List.of("$defs", "partition", "properties", "pairs", "properties", "reason"),
                     PartitionEvidence.PairSpace.Reason.class),
@@ -376,7 +376,7 @@ class EverySchemaWordIsAccountedForTest {
             required.add(each.asString());
         }
 
-        assertEquals(Set.of("axis", "origin", "side", "value", "hit", "knownWritable", "status"),
+        assertEquals(Set.of("axis", "origin", "value", "items"),
                 required, "a boundary object written before `kind` existed carries these and no more");
     }
 
@@ -489,7 +489,7 @@ class EverySchemaWordIsAccountedForTest {
 
     private static JsonNode schema() {
         try (InputStream in = AdequacyReport.class.getResourceAsStream(SCHEMA)) {
-            assertNotNull(in, "adequacy-schema-2.json ships beside the compiler");
+            assertNotNull(in, "adequacy-schema-3.json ships beside the compiler");
             return JSON.readTree(new String(in.readAllBytes(), StandardCharsets.UTF_8));
         } catch (java.io.IOException e) {
             throw new AssertionError(e);

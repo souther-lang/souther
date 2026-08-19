@@ -324,18 +324,30 @@ public final class Generator {
      * candidates that were tried, and another value of the same edge may build; what comes back says
      * which of the two happened and leaves the reading to the caller.
      */
-    public static BoundaryAttempt probe(Subject subject, BoundaryObligation obligation,
+    public static BoundaryAttempt probe(Subject subject, BoundaryTarget.AtPlace place,
                                         CandidateCheck check) {
-        return switch (obligation.target()) {
-            case BoundaryTarget.AtPlace place -> probeAt(subject, place, check);
-            // A line between two positions is not at a count of its own, so the one to write is
-            // handed in, and `probeBetween` is where the caller has it. Asked here, the count is
-            // missing rather than absent — which is this compiler calling itself wrongly, and not
-            // something established about the model. Reported as a reason it would read as the
-            // second, and an author would be told a line they can write is one nothing reaches.
-            case BoundaryTarget.EqualTerms line -> throw new IllegalStateException(
-                    "line between " + line.left() + " and " + line.right()
-                            + " was requested without a count: ask `probeBetween`");
+        return probeAt(subject, place, check);
+    }
+
+    /**
+     * The place to try for one coverage item of a border, or null where this composes none.
+     *
+     * <p>Where the item names a place, that place; where it names a side of the border, one the side
+     * holds. Which value stands for a side is asked of the side and is no part of what the side is —
+     * a row anywhere in it is at the point, and the one built here is a candidate to offer rather
+     * than the item itself.
+     */
+    public static Place placeFor(Criterion criterion, Carrier carrier,
+                                 souther.compiler.numeric.NumericDomain.Bounds within) {
+        return switch (criterion) {
+            case Criterion.AtThePlace at -> at.place();
+            case Criterion.InTheRegion side -> side.region().standingIn(carrier,
+                    within == null
+                            ? new souther.compiler.numeric.NumericDomain.Bounds(null, null)
+                            : within);
+            // The place a row writes at both positions is the pair's answer and is worked out where
+            // the pair is; asked here it would be a value one term happens to hold.
+            case Criterion.WhereTheTermsMeet _ -> null;
         };
     }
 

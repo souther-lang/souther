@@ -403,7 +403,7 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 () -> "there is a row at it:\n" + report);
         // The row settles its own edge without anything being built for it, and the other edge is
         // settled by building one. Two kinds of witness, and the projection proves neither.
-        assertTrue(report.contains("border      1/2"),
+        assertTrue(report.contains("border      borders 2   coverage items 2/4   excluded 4"),
                 () -> "the row at 0 is met, and 10 was built and is owed:\n" + report);
         assertTrue(report.contains("no row is at the ON point f/r.a = 10"), () -> report);
     }

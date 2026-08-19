@@ -79,7 +79,7 @@ public final class Partitions {
                                java.util.Set<NumericTerm> uncertain,
                                List<UndividedPosition> undivided,
                                List<UnreadRule> unread,
-                               List<BoundaryObligation> between) {
+                               List<Border> between) {
         public Partitioning {
             axes = List.copyOf(axes);
             omitted = List.copyOf(omitted);
@@ -280,7 +280,7 @@ public final class Partitions {
                                               Symbols symbols,
                                               List<UnreadRule> unread,
                                               List<GuardThresholds.Guards.Singled> singled,
-                                              List<BoundaryObligation> between) {
+                                              List<Border> between) {
         return withThresholds(base, thresholds, symbols, unread, singled, between,
                 souther.compiler.check.PathReachability.Answers.NONE);
     }
@@ -303,7 +303,7 @@ public final class Partitions {
                                               Symbols symbols,
                                               List<UnreadRule> unread,
                                               List<GuardThresholds.Guards.Singled> singled,
-                                              List<BoundaryObligation> between,
+                                              List<Border> between,
                                               souther.compiler.check.PathReachability.Answers
                                                       arrives) {
         // Both producers of one kind of evidence. What a body compared and what a type's own rules
@@ -591,60 +591,31 @@ public final class Partitions {
     }
 
     /**
-     * The values a row has to be written at, one per rule that drew a cut.
+     * The borders a position's rules drew, one per rule that drew a cut.
      *
-     * <p>An invariant's bound is met by writing the value: outside it nothing can be constructed, so
-     * the edge is the only row there is to write. A guard's line and a clause's have values on both
-     * sides, so each wants the value and its neighbour — and the neighbour only where the type has
-     * one to give.
+     * <p>One entry per line and not per point. What each of them owes a row at, in each of the four
+     * roles the technique names, is the border's own answer — including the roles it owes nothing in
+     * and why. Built as a list of points instead, a role nobody was owed a row in and a role this
+     * reader forgot to build were the same thing.
+     *
+     * <p>Keeping a rule per cut means the same value can be owed three times. That is the point: an
+     * invariant and two guards that name one value are three rules, and a row that meets one of them
+     * has met one.
      */
-    public static List<BoundaryObligation> obligationsOf(Axis axis, Symbols symbols,
-                                                         NumericDomain.Bounds within) {
+    public static List<Border> bordersOf(Axis axis, Symbols symbols,
+                                         NumericDomain.Bounds within) {
         BoundaryDomain domain = axis.term().intervals(axis.type(), symbols);
-        List<BoundaryObligation> out = new ArrayList<>();
+        List<Border> out = new ArrayList<>();
         for (Cut cut : axis.cuts()) {
-            // A line the position does not reach. The rule that drew it did so about the type, and
-            // what is left of the type here may stop short of it or leave the value out — `low < high`
-            // under one `[0, 1]` leaves `low` every value up to 1 and not 1 itself. Writing the value
-            // is how an edge is met, so where the value is refused there is nothing to write.
-            //
-            // Asked of the count, so every carrier is asked the same question. Asked of the value, a
-            // date came back as a value the range could say nothing about — which read as reachable,
-            // and put a row at an edge the record refuses.
-            boolean reachable = within == null || within.admits(cut.at());
             for (OriginRef origin : cut.origins()) {
-                if (reachable) {
-                    out.add(new BoundaryObligation(
-                            new BoundaryTarget.AtPlace(axis.id(), cut.carrier(), cut.at()),
-                            origin, BoundaryObligation.BoundarySide.AT));
+                // Null where the position does not reach the line at all, which is the line and not
+                // one of its points: the rule drew it about the type, and what is left of the type
+                // here may stop short of it — `low < high` under one `[0, 1]` leaves `low` every
+                // value up to 1 and not 1 itself.
+                Border border = Border.atAPlace(axis.id(), cut, origin, domain, within);
+                if (border != null) {
+                    out.add(border);
                 }
-                // Whether the line has another side is the rule's own answer, asked rather than read
-                // off which kind of rule it is. A guard and a clause both leave values either side;
-                // an invariant leaves none outside its bound, and a rule that singles a value out
-                // leaves the values either side of it in one class, so a row over there is a row
-                // that class already has.
-                //
-                // The other class's edge is the neighbour on the side the cut value is not on —
-                // where that class has values. A line at the end of what the position can hold has
-                // nothing on one side of it, and a step off the end is a row nobody can write:
-                // `value >= 10` under `x < 10` would be owed a 9. The cut itself stays either way,
-                // because the line is still met by a row written at it.
-                BoundaryObligation.besideTheCut(origin).ifPresent(beside -> {
-                    switch (beside) {
-                        case ABOVE -> domain.successor(cut.at())
-                                .filter(next -> within == null || within.admits(next))
-                                .ifPresent(next -> out.add(new BoundaryObligation(
-                                        new BoundaryTarget.AtPlace(axis.id(), cut.carrier(), next),
-                                        origin, BoundaryObligation.BoundarySide.ABOVE)));
-                        case BELOW -> domain.predecessor(cut.at())
-                                .filter(before -> within == null || within.admits(before))
-                                .ifPresent(before -> out.add(new BoundaryObligation(
-                                        new BoundaryTarget.AtPlace(axis.id(), cut.carrier(), before),
-                                        origin, BoundaryObligation.BoundarySide.BELOW)));
-                        // The cut itself is not a value beside the cut, so nothing answers with it.
-                        case AT -> { }
-                    }
-                });
             }
         }
         return List.copyOf(out);

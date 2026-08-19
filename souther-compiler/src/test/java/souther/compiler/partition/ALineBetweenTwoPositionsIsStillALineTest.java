@@ -280,7 +280,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         String report = report(TWO_NEWTYPES);
 
         assertTrue(report.contains("no row is at the OFF point benefitOf/charge = ceiling"), report);
-        assertTrue(report.contains("border      2/3"), report);
+        assertTrue(report.contains("border      borders 3   coverage items 6/7   excluded 4"), report);
     }
 
     /** The row on the line meets it, and the line is met by a row that reached the comparison — the
@@ -289,7 +289,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aRowOnTheLineMeetsIt() {
         String report = report(ON_THE_LINE);
 
-        assertTrue(report.contains("border      3/3"), report);
+        assertTrue(report.contains("border      borders 3   coverage items 7/7   excluded 4"), report);
         assertFalse(report.contains("point benefitOf/charge = ceiling"), report);
     }
 
@@ -305,7 +305,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         String report = report(NO_AXIS);
 
         assertTrue(report.contains("no row is at the OFF point benefitOf/charge = ceiling"), report);
-        assertTrue(report.contains("border      0/1"), report);
+        assertTrue(report.contains("border      borders 1   coverage items 2/3"), report);
     }
 
     /** An enumeration counts on the place its cases are declared at, so it reaches this by the same
@@ -486,7 +486,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         String report = report(ALLOWED_BY_THE_RECORD);
 
         assertTrue(report.contains("no row is at the OFF point cmp/p.a = p.b"), report);
-        assertTrue(report.contains("border      0/1"), report);
+        assertTrue(report.contains("border      borders 1   coverage items 1/2"), report);
     }
 
     private static String report(String model) {

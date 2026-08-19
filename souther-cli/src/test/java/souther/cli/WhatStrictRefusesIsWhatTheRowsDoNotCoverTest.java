@@ -7,7 +7,10 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.observe.MeasurementStatus;
-import souther.compiler.partition.BoundaryObligation;
+import souther.compiler.partition.Border;
+import souther.compiler.partition.Cut;
+import souther.compiler.partition.Demand;
+import souther.compiler.partition.PointRole;
 import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.partition.Partitions;
 import souther.compiler.query.Adequacy;
@@ -18,7 +21,8 @@ import souther.compiler.partition.AxisId;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
 import souther.compiler.partition.OriginRef;
-import souther.compiler.query.BoundaryAssessment;
+import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.ItemAssessment;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeSymbol;
@@ -265,19 +269,28 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
      */
     @Test
     void anAxisDroppedPastTheLimitHoldsTheVerdictOpenOnlyWhereItCarriedAnObligation() {
-        BoundaryAssessment met = new BoundaryAssessment(
-                new BoundaryObligation(
-                        new BoundaryTarget.AtPlace(new AxisId("weigh", "w.a"), Carrier.WHOLE,
-                                Count.of(100)),
-                        new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
-                                new Clause.Id(TypeSymbols.declared(
-                                        new TypeKey("example.rate", "Amount")), 0),
-                                java.util.Optional.of(new ClauseName("cap")))), true),
-                        BoundaryObligation.BoundarySide.AT),
-                new BoundaryAssessment.Coverage.Hit(),
-                new BoundaryAssessment.Writability.WitnessedByRow(),
-                new BoundaryAssessment.Attempt.NotAttempted(
-                        BoundaryAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE));
+        OriginRef origin = new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
+                new Clause.Id(TypeSymbols.declared(new TypeKey("example.rate", "Amount")), 0),
+                java.util.Optional.of(new ClauseName("cap")))), true);
+        // A bound at 100 over a position the rules leave at 100 and up: the ON point is the whole of
+        // what it owes, and a row is at it.
+        Border border = Border.atAPlace(new AxisId("weigh", "w.a"),
+                Cut.at(Carrier.WHOLE, Count.of(100), origin), origin,
+                souther.compiler.inputs.BoundaryDomain.on(Carrier.WHOLE),
+                new souther.compiler.numeric.NumericDomain.Bounds(
+                        souther.compiler.numeric.Endpoint.inclusive(Count.of(100)), null));
+        java.util.EnumMap<PointRole, ItemAssessment> items =
+                new java.util.EnumMap<>(PointRole.class);
+        for (PointRole role : PointRole.values()) {
+            items.put(role, border.demand(role) instanceof Demand.NotOwed not
+                    ? new ItemAssessment.NotOwed(not.reason())
+                    : new ItemAssessment.Owed(border.demand(role).criterion(),
+                            new ItemAssessment.Coverage.Hit(),
+                            new ItemAssessment.Writability.WitnessedByRow(),
+                            new ItemAssessment.Attempt.NotAttempted(
+                                    ItemAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE)));
+        }
+        BorderAssessment met = new BorderAssessment(border, items);
 
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, verdictOf(partition(met)),
                 "nothing dropped");
@@ -294,7 +307,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
         return new Partitions.OmittedAxis(new AxisId(behavior, path), carriedAnObligation);
     }
 
-    private static PartitionEvidence partition(BoundaryAssessment boundary,
+    private static PartitionEvidence partition(BorderAssessment boundary,
                                                Partitions.OmittedAxis... omitted) {
         return new PartitionEvidence(PartitionEvidence.Partitioned.of(List.of()),
                 PartitionEvidence.Bounded.of(List.of(boundary)), PartitionEvidence.PairSpace.NONE,
