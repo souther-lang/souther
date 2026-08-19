@@ -322,7 +322,7 @@ public final class GuardThresholds {
         // because this is a line and not a value singled out, and the row that meets it is the row on
         // it.
         OriginRef.GuardOrigin origin = new OriginRef.GuardOrigin(
-                new RuleRef.Guard(plan.site(site).obligation()),
+                new RuleRef.Guard(plan.site(site).comparison()),
                 new OriginRef.GuardOrigin.Read(guard, site, Citation.of(iff.pos())),
                 true, placed.witness(), drawn.holdsAtTheLine(), false);
         BoundaryObligation made = new BoundaryObligation(
@@ -438,7 +438,7 @@ public final class GuardThresholds {
             return null;
         }
         OriginRef.GuardOrigin origin = new OriginRef.GuardOrigin(
-                new RuleRef.Guard(plan.site(site).obligation()),
+                new RuleRef.Guard(plan.site(site).comparison()),
                 new OriginRef.GuardOrigin.Read(guard, site, Citation.of(iff.pos())),
                 drawn.valueBelongsBelow(), placed.witness(), drawn.holdsAtTheValue(),
                 drawn.singles());

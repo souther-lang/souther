@@ -371,23 +371,19 @@ final class Coverages {
         // Keyed by the line rather than by the reading of it. A guard inside a non-recursive helper
         // is read once per call of that helper, and the rows do not owe the same edge twice for
         // having been offered it twice; what each reading saw is merged below.
-        java.util.SequencedMap<Line, BoundaryAssessment> out = new java.util.LinkedHashMap<>();
+        java.util.SequencedMap<BoundaryLine, BoundaryAssessment> out =
+                new java.util.LinkedHashMap<>();
         for (BoundaryObligation each : Partitions.obligationsOf(axis, where.symbols(), within)) {
             BoundaryAssessment.Coverage coverage =
                     coverageOf(each, axis, where, observed, armsAsked);
             BoundaryAssessment.Attempt attempt = attemptAt(each, coverage, probe);
             BoundaryAssessment made = new BoundaryAssessment(each, coverage,
                     writabilityOf(coverage, knownWritable, attempt), attempt);
-            out.merge(new Line(each.side(), each.target(), BoundaryLine.of(each.origin())), made,
+            out.merge(BoundaryLine.of(each), made,
                     Coverages::whicheverSawMore);
         }
         return List.copyOf(out.values());
     }
-
-    /** One line, told from another by where it is, what drew it and where that was — and not by which
-     * copy of the body the reading came off. */
-    private record Line(BoundaryObligation.BoundarySide side, BoundaryTarget at,
-                        BoundaryLine drawn) {}
 
     /**
      * Which of two readings of one line the report keeps.
@@ -491,7 +487,7 @@ final class Coverages {
         // non-recursive helper is read once per call of that helper, and the rows do not owe the same
         // line twice for having been offered it twice — nor may one reading of it take back what
         // another established.
-        java.util.SequencedMap<Line, BoundaryAssessment> out = new LinkedHashMap<>();
+        java.util.SequencedMap<BoundaryLine, BoundaryAssessment> out = new LinkedHashMap<>();
         for (BoundaryObligation each : partitioning.between()) {
             BoundaryTarget.EqualTerms line = (BoundaryTarget.EqualTerms) each.target();
             // The same two questions a line at a place is asked, and asked of the rule rather than
@@ -511,7 +507,7 @@ final class Coverages {
             // candidate is built at, and what proves the line writable where the two are independent.
             Place at = Partitions.commonPlace(partitioning.domains(), line);
             BoundaryAssessment.Attempt attempt = attemptBetween(line, at, coverage, probe);
-            out.merge(new Line(each.side(), each.target(), BoundaryLine.of(each.origin())),
+            out.merge(BoundaryLine.of(each),
                     new BoundaryAssessment(each, coverage,
                             writabilityOf(coverage, false, attempt), attempt),
                     Coverages::whicheverSawMore);

@@ -41,13 +41,14 @@ public sealed interface RuleRef {
     /**
      * A comparison written in a behavior's body.
      *
-     * <p>The comparison and not the fork testing it. A condition can be an application of a function
-     * parameter, so one predicate handed to two calls is one rule and two predicates written apart
-     * are two — neither of which the fork can say
+     * <p>The comparison and not the fork testing it. A condition can be an application of a
+     * function parameter, so one predicate handed to two calls is one rule and two predicates
+     * written apart are two — neither of which the fork can say
      * ({@link souther.compiler.coverage.CoverageSites.Plan#comparisonSiteOf}). Which fork this
      * comparison was read under is where it was met, and belongs beside this.
      */
-    record Guard(souther.compiler.coverage.CoverageSites.Obligation comparison) implements RuleRef {
+    record Guard(souther.compiler.coverage.CoverageSites.ComparisonRef comparison)
+            implements RuleRef {
 
         public Guard {
             if (comparison == null) {
