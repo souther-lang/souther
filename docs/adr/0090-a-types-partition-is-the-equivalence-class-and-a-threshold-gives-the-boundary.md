@@ -8,7 +8,9 @@ one. Revised again for #622: which values a term's line can be drawn on is one t
 written over values it does not hold is reported as unread rather than dropped. Revised again for
 #649: what decides whether a clause draws a line is which terms the clause reaches, not which
 declaration it is written on. Revised again for #868: a rule left unread is a rule about where the
-values stop, and is answered per rule rather than per position.
+values stop, and is answered per rule rather than per position. Revised again for #870: a border is
+what owes the four coverage items of domain testing, and a point it owes none of says which of three
+things settled that.
 
 ## Context
 
@@ -278,6 +280,29 @@ construction, so there is no class on the far side to cover. A `guard`'s line ha
 sides, so it gives a partition *and* boundaries — the value, and its neighbour where the type has
 one. That is a question about the rule and not about the term: a length bound is owed one row at its
 edge, and a guard on a length is owed the value and its neighbour, for the same reasons a number is.
+
+What owes a row is the border, and it owes one at four points. Domain testing keys an `ON`, an
+`OFF`, an `IN` and an `OUT` point on each border, and the same value can be one role for one border
+and another for the next — so none of the four is a property of a value or of a class, and two of
+them were answered by the measure that counts how many of a position's classes some row is in, which
+is a different unit and has no word for a row on the far side of a line. The border answers for all
+four, including the roles it owes nothing in.
+
+A point nobody is owed a row at says which of three things settled it, because they ask opposite
+things of a reader. The rules leaving no value there is the model's own answer and the point is
+*excluded* — the word this specification already uses for a case the rules refuse, one arity up —
+so an invariant's `OFF` and `OUT` points are counted out rather than left blank, and so is the `IN`
+point of a side the rules leave one value wide. A carrier naming no neighbouring value is this
+language having no way to write the point down, which is an item that cannot exist rather than one
+nobody has got to. A rule that names a value rather than ordering the values around it has no side
+for a nearest-outside point to be nearest on: under `x == 5` the 4 and the 6 stand alike, and
+choosing one would invent the answer.
+
+Which of the four a build is told about is decided per measure, the way it is for every other
+finding. A row against the line is what simplified domain coverage asks for and is a gap a build can
+refuse over; a row away from the line is one of the two items reliable domain coverage adds, and it
+is reported and refuses nothing. Both come off one assessment of one border, so a build is held to a
+reading of one measurement rather than to a second one made to different rules.
 
 Only a comparison that is the whole of a `guard`'s condition is read. A condition built with `&&`,
 `||` or `!` contributes no threshold.
