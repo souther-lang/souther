@@ -2122,8 +2122,8 @@ public final class Adequacy {
         /** The rule a boundary finding is about, which it carries as itself rather than as words:
          *  what to say about it differs between a report, which can name a file, and a diagnostic,
          *  which cannot. */
-        private static souther.compiler.check.OriginRef rule(List<Object> said) {
-            return (souther.compiler.check.OriginRef) said.get(2);
+        private static souther.compiler.partition.OriginRef rule(List<Object> said) {
+            return (souther.compiler.partition.OriginRef) said.get(2);
         }
 
         /** The arm an arm finding is about, which it carries as itself for the same reason a

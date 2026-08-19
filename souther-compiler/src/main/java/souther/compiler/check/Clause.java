@@ -72,7 +72,7 @@ public record Clause(Id id, Optional<ClauseName> name, DiagnosticPlace at) {
      * <p>Inside the reading of a declaration's clauses, and no further. This says which clause of
      * which declaration, which is what a walk over a declaration's invariants has to hand; a clause
      * is one of the things a rule of the model can be, and once something has been attributed to a
-     * rule what carries it is {@link OriginRef}. Handed on as this, every reader downstream had to
+     * rule what carries it is {@link RuleRef}. Handed on as this, every reader downstream had to
      * work the rule back out for itself, and the ones written while only invariants arrived assumed
      * the answer (issue #852).
      */

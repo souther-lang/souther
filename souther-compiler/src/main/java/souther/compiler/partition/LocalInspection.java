@@ -3,7 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Clause;
 import souther.compiler.check.DeclaredBounds;
-import souther.compiler.check.OriginRef;
+import souther.compiler.check.RuleRef;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.Position;
 import souther.compiler.numeric.Endpoint;
@@ -124,8 +124,13 @@ final class LocalInspection {
         // at. `low < high` under one `[0, 1]` leaves `low` the same 1 and no longer holding it, and
         // that is the record's doing as much as a smaller number would have been.
         boolean moved = own != null && !own.at().equals(end.at());
-        for (OriginRef from : end.from()) {
-            put(into, carrier, end.value(), from, moved ? within : List.<TypeSymbol>of());
+        // Wrapped here, and this is not a consumer settling what a rule is: which rule drew the end
+        // was settled where the clause was read and arrives as it was. What is added is a
+        // boundary's own answer about that rule — that a reading of it drew this cut, taken in by
+        // these declarations — which is nothing the rule says about itself.
+        for (RuleRef.Invariant from : end.from()) {
+            put(into, carrier, end.value(), new OriginRef.InvariantOrigin(from),
+                    moved ? within : List.<TypeSymbol>of());
         }
     }
 

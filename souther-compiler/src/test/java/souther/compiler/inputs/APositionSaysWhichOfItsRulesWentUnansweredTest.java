@@ -107,7 +107,7 @@ class APositionSaysWhichOfItsRulesWentUnansweredTest {
                 .unansweredQuestions();
 
         assertEquals(1, open.size(), () -> "one clause, one question: " + open);
-        assertEquals("invariant Length (even)", open.get(0).origin().named(),
+        assertEquals("invariant Length (even)", open.get(0).rule().named(),
                 "the clause the author wrote, as a report names it — and not the position it "
                         + "is about");
         assertEquals(CoverageObligation.ADMITTED_VALUES, open.get(0).owed().obligation());

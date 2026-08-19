@@ -615,7 +615,7 @@ final class PathEngine {
             // Where this clause becomes a rule of the model something can be attributed to. What is
             // read off it below belongs to this rule, and the identity is settled here so that no
             // reader of the reading has to decide which of the rules of the model it is holding.
-            OriginRef origin = new OriginRef.InvariantOrigin(one.clause().ref());
+            RuleRef.Invariant origin = new RuleRef.Invariant(one.clause().ref());
             // Read before it is handed over, so that what is recorded is this reading's own answer
             // about this clause rather than a guess made from its shape somewhere else.
             Predicates.Owed owed = predicates.obligations(one.expr(), out, at, false);

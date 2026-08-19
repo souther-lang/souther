@@ -26,18 +26,18 @@ import java.util.function.Function;
  */
 public final class RuleAccounting {
 
-    private final OriginRef origin;
+    private final RuleRef rule;
     private final Required required;
     private final Map<Owed, Outcome> answers;
 
-    private RuleAccounting(OriginRef origin, Required required, Map<Owed, Outcome> answers) {
-        this.origin = origin;
+    private RuleAccounting(RuleRef rule, Required required, Map<Owed, Outcome> answers) {
+        this.rule = rule;
         this.required = required;
         this.answers = Collections.unmodifiableMap(answers);
     }
 
     /**
-     * The accounting of {@code origin}, with {@code answered} asked once for each question it
+     * The accounting of {@code rule}, with {@code answered} asked once for each question it
      * raises.
      *
      * <p>The only way to one of these, and not one anything outside this package can take. What is
@@ -46,23 +46,23 @@ public final class RuleAccounting {
      * caller hold a genuine {@link Required} beside answers it wrote itself. A reader outside wants
      * a finished accounting, never a way to make one.
      */
-    static RuleAccounting of(OriginRef origin, Required required,
+    static RuleAccounting of(RuleRef rule, Required required,
                              Function<Owed, Outcome> answered) {
         Map<Owed, Outcome> answers = new LinkedHashMap<>();
         for (Owed each : required.obligations()) {
             Outcome outcome = answered.apply(each);
             if (outcome == null) {
                 throw new IllegalStateException(
-                        "no reading answered for " + each + " of " + origin);
+                        "no reading answered for " + each + " of " + rule);
             }
             answers.put(each, outcome);
         }
-        return new RuleAccounting(origin, required, answers);
+        return new RuleAccounting(rule, required, answers);
     }
 
     /** Which rule of the model, as everything that names a rule names it. */
-    public OriginRef origin() {
-        return origin;
+    public RuleRef rule() {
+        return rule;
     }
 
     /** What it raises. */
@@ -93,7 +93,7 @@ public final class RuleAccounting {
     public List<Unanswered> unansweredQuestions() {
         return answers.entrySet().stream()
                 .filter(e -> e.getValue() instanceof Outcome.Unaccounted)
-                .map(e -> new Unanswered(origin, e.getKey()))
+                .map(e -> new Unanswered(rule, e.getKey()))
                 .toList();
     }
 
@@ -106,16 +106,16 @@ public final class RuleAccounting {
      * against. A reason belongs here once the readings say why per part of a clause, and until then
      * an absent one is the honest answer.
      *
-     * <p>The rule as {@link OriginRef}, all the way to the report that names it. Carried as the
-     * clause reference the reading had in hand, the one reader of these built an
-     * {@code InvariantOrigin} at the last moment — right while only invariants raise a question,
-     * and a decision about what a rule is taken by whoever consumed one (issue #852).
+     * <p>The rule as {@link RuleRef}, all the way to the report that names it. Carried as the
+     * clause reference the reading had in hand, the one reader of these built the identity at the
+     * last moment — right while only invariants raise a question, and a decision about what a rule
+     * is taken by whoever consumed one (issue #852).
      */
-    public record Unanswered(OriginRef origin, Owed owed) {}
+    public record Unanswered(RuleRef rule, Owed owed) {}
 
     @Override
     public String toString() {
-        return origin + " " + answers;
+        return rule + " " + answers;
     }
 
     /** What became of one question. */

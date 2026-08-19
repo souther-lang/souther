@@ -20,7 +20,7 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.partition.EnsuresThresholds;
 import souther.compiler.partition.GuardThresholds;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.check.OriginRef;
+import souther.compiler.partition.BoundaryLine;
 import souther.compiler.partition.PartitionClass;
 import souther.compiler.partition.Partitions;
 import souther.compiler.partition.BehaviorInputs;
@@ -296,7 +296,7 @@ final class Coverages {
                             String subject = each.owed().subject().measured()
                                     ? axis.term().toString() : axis.path().toString();
                             return new PartitionEvidence.AxisCoverage.Unanswered(
-                                    each.origin().named(), each.owed().obligation(), subject);
+                                    each.rule().named(), each.owed().obligation(), subject);
                         })
                         .toList());
         // Nothing a body claims is in scope here. What a row is owed at is counted first and on its
@@ -378,7 +378,7 @@ final class Coverages {
             BoundaryAssessment.Attempt attempt = attemptAt(each, coverage, probe);
             BoundaryAssessment made = new BoundaryAssessment(each, coverage,
                     writabilityOf(coverage, knownWritable, attempt), attempt);
-            out.merge(new Line(each.side(), each.target(), each.origin().line()), made,
+            out.merge(new Line(each.side(), each.target(), BoundaryLine.of(each.origin())), made,
                     Coverages::whicheverSawMore);
         }
         return List.copyOf(out.values());
@@ -387,7 +387,7 @@ final class Coverages {
     /** One line, told from another by where it is, what drew it and where that was — and not by which
      * copy of the body the reading came off. */
     private record Line(BoundaryObligation.BoundarySide side, BoundaryTarget at,
-                        OriginRef.Line drawn) {}
+                        BoundaryLine drawn) {}
 
     /**
      * Which of two readings of one line the report keeps.
@@ -511,7 +511,7 @@ final class Coverages {
             // candidate is built at, and what proves the line writable where the two are independent.
             Place at = Partitions.commonPlace(partitioning.domains(), line);
             BoundaryAssessment.Attempt attempt = attemptBetween(line, at, coverage, probe);
-            out.merge(new Line(each.side(), each.target(), each.origin().line()),
+            out.merge(new Line(each.side(), each.target(), BoundaryLine.of(each.origin())),
                     new BoundaryAssessment(each, coverage,
                             writabilityOf(coverage, false, attempt), attempt),
                     Coverages::whicheverSawMore);

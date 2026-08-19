@@ -1,7 +1,9 @@
-package souther.compiler.check;
+package souther.compiler.partition;
 
 import souther.compiler.source.SourceId;
 
+import souther.compiler.check.RuleRef;
+import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.types.TypeSymbol;
@@ -10,26 +12,24 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Which rule of the model an observation is attributed to.
+ * A rule of the model, as a boundary reader met it.
  *
- * <p>The one identity a rule wears once something has been attributed to it. A clause of an
- * invariant, a comparison in a body and a clause of an {@code ensures} are three rules a row or a
- * question can be owed to, and what a reader downstream asks of any of them — what to call it,
- * where to send somebody, what construct drew it — is the same question. Held as whatever each
- * producer happened to have in hand, every consumer had to work out which of the three it was
- * looking at, and the ones written while only invariants arrived assumed so (issue #852).
+ * <p>{@link RuleRef} and what is true of it here. Which rule it is is the same value however many
+ * times the rule is read, and everything beside it on these records is an answer about this reading
+ * of it: where the comparison's own value is recorded, which arms witness it, which side of the
+ * line the cut value falls on, which declarations took an end in. None of those tell one rule from
+ * another, and a question keyed on them is a question the reading raised rather than the model
+ * (issue #852).
+ *
+ * <p>Three identities and not one, because they are three equivalences. {@link RuleRef} answers
+ * whose rule it is; this answers which reading of that rule a boundary was drawn off; and
+ * {@link BoundaryLine} answers which of them a partition folds into one line. A guard inside a
+ * helper is read once per call: those are several of these, one {@code RuleRef}, and one line.
  *
  * <p>Kept per cut rather than per axis. Several rules can put a cut at the same value — a type's
  * invariant and a {@code guard} that repeats it, or two guards written in different behaviors — and
  * they merge into one partition while staying separate obligations. Reaching the boundary through one
  * guard says nothing about the other.
- *
- * <p>Here rather than beside the boundaries because attribution happens before any of them. A rule
- * is attributed where a walk over the model reaches it, and what is done with the attribution — a
- * line to write a row at, a question nothing answered — is decided later and elsewhere. Which is
- * also why nothing about a cut is answered here: which side of a line a row is owed on is
- * {@link souther.compiler.partition.BoundaryObligation}'s reading of an origin, not something an
- * origin knows about itself.
  */
 public sealed interface OriginRef {
 
@@ -41,7 +41,7 @@ public sealed interface OriginRef {
      * declaration bounding a position at one value came out as one origin, and the cut kept one
      * rule where ADR-0090 says it keeps every rule that drew it.
      */
-    record InvariantOrigin(Clause.Ref rule) implements OriginRef {
+    record InvariantOrigin(RuleRef.Invariant rule) implements OriginRef {
 
         public InvariantOrigin {
             if (rule == null) {
@@ -57,38 +57,46 @@ public sealed interface OriginRef {
      * writing the value: the comparison has to have been evaluated. A row can hand the behavior the
      * exact threshold and never reach the guard that cares about it.
      *
-     * @param guard             which {@code if} — by the arms it owns, which is what says which
-     *                          class of the partition a row landed in
-     * @param site              where the comparison's own value is recorded. Required, and this is
-     *                          what meeting the line is measured against: a row met it by getting the
-     *                          comparison to answer, which is not what any arm records. A condition
-     *                          stops as soon as it is settled, so under {@code A && B} the arm where
-     *                          the condition failed holds rows that made {@code B} false and rows
-     *                          that never reached {@code B}
+     * @param rule              which comparison, which is the rule and the whole of it
+     * @param read              which reading of that rule this is, and where it was met
      * @param valueBelongsBelow which side of the line the cut value itself is on. It decides which
      *                          neighbour is the other class's edge: {@code <= 3000} leaves 3001 over
      *                          there, {@code < 3000} leaves 2999.
      * @param witness           which arms of the {@code if} a row reaching this comparison can land
-     *                          in. Not what says the comparison ran — {@code site} is — but what says
-     *                          which arm's edge is this comparison's to draw, which is a question
-     *                          about the classes either side of the line
+     *                          in. Not what says the comparison ran — {@link Read#site} is — but
+     *                          what says which arm's edge is this comparison's to draw, which is a
+     *                          question about the classes either side of the line
      * @param holdsAtTheValue   whether the comparison is true at the line's own value. Not derivable
      *                          from {@code valueBelongsBelow}: {@code x <= c} and {@code x > c} agree
      *                          about the class the value is in and disagree here
      */
-    record GuardOrigin(souther.compiler.coverage.CoverageSites.GuardRef guard, int site,
-                       souther.compiler.coverage.CoverageSites.Obligation comparison,
-                       Citation at, boolean valueBelongsBelow,
-                       Witness witness,
-                       boolean holdsAtTheValue, boolean singles) implements OriginRef {
+    record GuardOrigin(RuleRef.Guard rule, Read read, boolean valueBelongsBelow,
+                       Witness witness, boolean holdsAtTheValue, boolean singles)
+            implements OriginRef {
 
-        public GuardOrigin(souther.compiler.coverage.CoverageSites.GuardRef guard, int site,
-                           souther.compiler.coverage.CoverageSites.Obligation comparison,
-                           Citation at, boolean valueBelongsBelow,
-                           Witness witness,
-                           boolean holdsAtTheValue) {
-            this(guard, site, comparison, at, valueBelongsBelow, witness, holdsAtTheValue, false);
+        public GuardOrigin(RuleRef.Guard rule, Read read, boolean valueBelongsBelow,
+                           Witness witness, boolean holdsAtTheValue) {
+            this(rule, read, valueBelongsBelow, witness, holdsAtTheValue, false);
         }
+
+        /**
+         * Which reading of the comparison this is, and where that reading was.
+         *
+         * <p>None of it tells one rule from another. A guard inside a non-recursive helper is read
+         * once per call of that helper, so one comparison the author wrote arrives as several of
+         * these — each a real occurrence, each measured on its own, and all of them the same rule.
+         *
+         * @param guard which {@code if} — by the arms it owns, which is what says which class of
+         *              the partition a row landed in
+         * @param site  where the comparison's own value is recorded. Required, and this is what
+         *              meeting the line is measured against: a row met it by getting the comparison
+         *              to answer, which is not what any arm records. A condition stops as soon as
+         *              it is settled, so under {@code A && B} the arm where the condition failed
+         *              holds rows that made {@code B} false and rows that never reached {@code B}
+         * @param at    where the fork is written, which is where a reader is sent. A rule with no
+         *              name is pointed at instead of being called something
+         */
+        public record Read(CoverageSites.GuardRef guard, int site, Citation at) {}
 
         /** Which arms a row that reached this comparison can be in. */
         public enum Witness {
@@ -128,12 +136,7 @@ public sealed interface OriginRef {
      * and not the origin — and a reader asking which rule is owed this row does not have to know
      * which shape the line has.
      *
-     * @param rule              which rule of which clause, which is what tells one line from
-     *                          another. Two arms of one clause may name the same case, so the
-     *                          author's words for it are not enough
-     * @param clause            what a report calls it: the name the author gave the clause, or the
-     *                          case the arm names where they gave none, or empty where the clause
-     *                          states one rule over every answer
+     * @param rule              which clause of which behavior — the rule and the whole of it
      * @param valueBelongsBelow which side of the line the cut value itself is on, which decides
      *                          which neighbour is the other class's edge
      * @param holdsAtTheValue   whether the comparison is true at the line's own value. Not derivable
@@ -146,9 +149,8 @@ public sealed interface OriginRef {
      * @param singles           whether the comparison singles the value out rather than ordering
      *                          the values either side of it
      */
-    record EnsuresOrigin(BehaviorContract.RuleId rule, String clause,
-                         boolean valueBelongsBelow, boolean holdsAtTheValue,
-                         boolean singles) implements OriginRef {}
+    record EnsuresOrigin(RuleRef.Ensures rule, boolean valueBelongsBelow,
+                         boolean holdsAtTheValue, boolean singles) implements OriginRef {}
 
     /**
      * A bound one rule put there and another took in.
@@ -179,37 +181,19 @@ public sealed interface OriginRef {
     }
 
     /**
-     * What tells one line from another, with nothing in it that says which copy of a body the line
-     * was read off.
+     * Which rule of the model this is a reading of, through however many narrowings.
      *
-     * <p>A guard inside a non-recursive helper is read once per call of that helper, so one line the
-     * author drew arrives here as several. They carry different arms and a different comparison site
-     * — each is a real occurrence and each is measured on its own — and they are one line to write a
-     * row at. This is what says which of them are the same one.
-     *
-     * <p>A rule that is not a guard is its own line: nothing about an invariant or a type is read off
-     * a body, so there is nothing here that expansion could have duplicated.
-     *
-     * @param rule            the origin itself, for the rules that are their own line
-     * @param comparison      which comparison of which fork, for a guard's line
-     * @param narrowedWithin  the declarations a bound was taken in by, kept so that a narrowed line
-     *                        stays apart from the bare one it narrows
+     * <p>The same value for every reading of one rule, which is what makes it a key. What a
+     * narrowing adds is about the end and not about the rule: {@code MinuteOfDay}'s maximum is the
+     * rule whether or not {@code WorkInterval} moved where it lands, so it comes back the same here
+     * and is kept beside it by whoever is measuring the line.
      */
-    record Line(OriginRef rule, souther.compiler.coverage.CoverageSites.Obligation comparison,
-                boolean valueBelongsBelow, GuardOrigin.Witness witness, boolean holdsAtTheValue,
-                boolean singles, List<TypeSymbol> narrowedWithin) {}
-
-    /** The line this origin drew, said the way {@link Line} says it. */
-    default Line line() {
+    default RuleRef rule() {
         return switch (this) {
-            case GuardOrigin g -> new Line(null, g.comparison(), g.valueBelongsBelow(), g.witness(),
-                    g.holdsAtTheValue(), g.singles(), List.of());
-            case NarrowedOrigin n -> {
-                Line inner = n.bound().line();
-                yield new Line(inner.rule(), inner.comparison(), inner.valueBelongsBelow(),
-                        inner.witness(), inner.holdsAtTheValue(), inner.singles(), n.within());
-            }
-            default -> new Line(this, null, false, null, false, false, List.of());
+            case InvariantOrigin i -> i.rule();
+            case GuardOrigin g -> g.rule();
+            case EnsuresOrigin e -> e.rule();
+            case NarrowedOrigin n -> n.bound().rule();
         };
     }
 
@@ -233,12 +217,13 @@ public sealed interface OriginRef {
      */
     default String describe(SourceNameResolver names, SourceId sectionSource) {
         return switch (this) {
-            case InvariantOrigin i -> nameOf(i);
-            case EnsuresOrigin e -> nameOf(e);
-            case GuardOrigin g -> switch (g.at()) {
+            case InvariantOrigin i -> i.rule().named();
+            case EnsuresOrigin e -> e.rule().named();
+            case GuardOrigin g -> switch (g.read().at()) {
                 case Citation.Written _, Citation.Unplaced _ ->
-                        wordFor(g) + "@" + g.at().said(names, sectionSource);
-                case Citation.Elsewhere _ -> wordFor(g) + " in " + g.at().said(names, sectionSource);
+                        wordFor(g) + "@" + g.read().at().said(names, sectionSource);
+                case Citation.Elsewhere _ ->
+                        wordFor(g) + " in " + g.read().at().said(names, sectionSource);
             };
             case NarrowedOrigin n -> n.bound().describe(names, sectionSource) + " within "
                     + n.within().stream().map(TypeSymbol::name)
@@ -261,7 +246,7 @@ public sealed interface OriginRef {
             // reader and the walk that numbered the fork disagreeing about what drew the line.
             case MATCH, BINARY, NOT_WRITTEN -> throw new IllegalStateException(
                     "a line was drawn in something that is not a fork: "
-                            + g.guard().origin().kind());
+                            + g.read().guard().origin().kind());
         };
     }
 
@@ -275,43 +260,18 @@ public sealed interface OriginRef {
      */
     default String named() {
         return switch (this) {
-            case InvariantOrigin i -> nameOf(i);
-            case EnsuresOrigin e -> nameOf(e);
-            // Never rendered to a reader: a rule with no name gets a sentence of its own, so the
-            // catalog holds those words in every language rather than this building them in one.
-            // What reaches this is a caller that wanted something to call the rule anyway, and what
-            // it gets is the construct the source wrote rather than one of the three standing for
-            // all of them.
+            case InvariantOrigin i -> i.rule().named();
+            case EnsuresOrigin e -> e.rule().named();
+            // The construct the source wrote, which the rule cannot say: a comparison is written
+            // rather than named, and which fork tests it is a fact about this reading of it. Never
+            // rendered to a reader either way — a rule with no name gets a sentence of its own, and
+            // the catalog holds those words in every language rather than this building one.
             case GuardOrigin g -> "the " + wordFor(g);
+            // A narrowing is not part of the rule, so it is said here and not by the rule.
             case NarrowedOrigin n -> n.bound().named() + " within "
                     + n.within().stream().map(TypeSymbol::name)
                             .collect(java.util.stream.Collectors.joining(" or "));
         };
-    }
-
-    /**
-     * What a report calls a clause: the behavior, and the words that tell one of its rules from
-     * another.
-     *
-     * <p>A name and not a place, which is what puts it beside an invariant rather than beside a
-     * guard. A clause belongs to a behavior, so there is always something to call it — where the
-     * author named the clause it is that name, and where they did not it is the case the arm is
-     * about. Only a clause stating one rule over every answer has neither, and the behavior's own
-     * name is then the whole of it.
-     */
-    private static String nameOf(InvariantOrigin i) {
-        // What the author called it, and where they called it nothing, which of the declaration's
-        // clauses it is — counted from one, as somebody reading the declaration counts them. Two
-        // unnamed clauses of one declaration are two rules, and rendered by the declaration alone
-        // they are one word twice, which is the thing this origin was changed to stop.
-        return "invariant " + i.rule().id().declaredOn().name()
-                + i.rule().name().map(n -> " (" + n + ")")
-                        .orElse(" #" + (i.rule().id().ordinal() + 1));
-    }
-
-    private static String nameOf(EnsuresOrigin e) {
-        return "ensures " + e.rule().behavior().name()
-                + (e.clause().isEmpty() ? "" : " (" + e.clause() + ")");
     }
 
     /**
@@ -348,7 +308,7 @@ public sealed interface OriginRef {
      */
     default souther.compiler.types.CoverageConstruct constructThatDrewIt() {
         return switch (this) {
-            case GuardOrigin g -> g.guard().origin().kind();
+            case GuardOrigin g -> g.read().guard().origin().kind();
             case NarrowedOrigin n -> n.bound().constructThatDrewIt();
             case InvariantOrigin _, EnsuresOrigin _ -> throw new IllegalStateException(
                     "no fork of a body drew this line: " + named());
@@ -358,7 +318,7 @@ public sealed interface OriginRef {
     /** Where the rule is written, where it is a rule that has a place rather than a name. */
     default java.util.Optional<Citation> citation() {
         return switch (this) {
-            case GuardOrigin g -> java.util.Optional.of(g.at());
+            case GuardOrigin g -> java.util.Optional.of(g.read().at());
             case NarrowedOrigin n -> n.bound().citation();
             case InvariantOrigin _, EnsuresOrigin _ -> java.util.Optional.empty();
         };
@@ -380,7 +340,7 @@ public sealed interface OriginRef {
      */
     default java.util.OptionalInt comparisonSite() {
         return switch (this) {
-            case GuardOrigin g -> java.util.OptionalInt.of(g.site());
+            case GuardOrigin g -> java.util.OptionalInt.of(g.read().site());
             case NarrowedOrigin n -> n.bound().comparisonSite();
             case InvariantOrigin _, EnsuresOrigin _ -> java.util.OptionalInt.empty();
         };

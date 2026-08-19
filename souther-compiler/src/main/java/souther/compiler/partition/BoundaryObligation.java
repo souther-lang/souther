@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.OriginRef;
 
 /**
  * One place a row has to be written at: a boundary, and the rule that drew it.

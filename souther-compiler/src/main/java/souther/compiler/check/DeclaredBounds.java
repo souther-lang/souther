@@ -46,7 +46,7 @@ public final class DeclaredBounds {
      * reference, it built the identity back for itself, which is a decision about what a rule is
      * being taken by whoever happened to consume one (issue #852).
      */
-    public record End(Endpoint at, List<OriginRef> from) {
+    public record End(Endpoint at, List<RuleRef.Invariant> from) {
 
         public Place value() {
             return at.at();
@@ -71,7 +71,7 @@ public final class DeclaredBounds {
             if (had.value().compareTo(one.value()) != 0) {
                 return at == had.at() ? had : one;
             }
-            List<OriginRef> both = new ArrayList<>(had.from());
+            List<RuleRef.Invariant> both = new ArrayList<>(had.from());
             one.from().stream().filter(n -> !both.contains(n)).forEach(both::add);
             return new End(at, List.copyOf(both));
         }
@@ -119,7 +119,7 @@ public final class DeclaredBounds {
             // spread it, and two clauses of one declaration were one rule.
             for (TypeOps.Declared declared
                     : TypeOps.declaredInvariants(layer.named(), layer.data(), symbols, _ -> null)) {
-                OriginRef origin = new OriginRef.InvariantOrigin(Clause.Ref.of(declared));
+                RuleRef.Invariant rule = new RuleRef.Invariant(Clause.Ref.of(declared));
                 for (Hir.Expr each : ClauseHelpers.conjunctsOf(declared.clause().expr())) {
                     // An end and nothing else. A rule this reads no end from narrows nothing here,
                     // and a rule stepping past the last value of the order states an end no value is
@@ -131,7 +131,7 @@ public final class DeclaredBounds {
                         continue;
                     }
                     InvariantBound read = placed.bound();
-                    End end = new End(read.end(), List.of(origin));
+                    End end = new End(read.end(), List.of(rule));
                     if (read.lower()) {
                         min = End.tighter(min, end, false);
                     } else {

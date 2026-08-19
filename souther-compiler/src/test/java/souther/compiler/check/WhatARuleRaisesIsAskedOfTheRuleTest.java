@@ -32,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  */
 class WhatARuleRaisesIsAskedOfTheRuleTest {
 
-    private static Map<OriginRef, Required> raisedBy(String source, String type) {
+    private static Map<RuleRef, Required> raisedBy(String source, String type) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
@@ -53,12 +53,12 @@ class WhatARuleRaisesIsAskedOfTheRuleTest {
     }
 
     /** What the author called the clause, of a rule that is a declaration's invariant. */
-    private static java.util.Optional<String> nameOf(OriginRef origin) {
-        return origin instanceof OriginRef.InvariantOrigin invariant
-                ? invariant.rule().name().map(ClauseName::value) : java.util.Optional.empty();
+    private static java.util.Optional<String> nameOf(RuleRef rule) {
+        return rule instanceof RuleRef.Invariant invariant
+                ? invariant.clause().name().map(ClauseName::value) : java.util.Optional.empty();
     }
 
-    private static Required only(Map<OriginRef, Required> raised, String clause) {
+    private static Required only(Map<RuleRef, Required> raised, String clause) {
         return raised.entrySet().stream()
                 .filter(e -> nameOf(e.getKey()).filter(clause::equals).isPresent())
                 .map(Map.Entry::getValue).findFirst()
@@ -75,7 +75,7 @@ class WhatARuleRaisesIsAskedOfTheRuleTest {
      */
     @Test
     void anOrderingBoundRaisesTheValuesAndTheLine() {
-        Map<OriginRef, Required> raised = raisedBy("""
+        Map<RuleRef, Required> raised = raisedBy("""
                 module example.rooms
 
                 data Length = Int
@@ -154,7 +154,7 @@ class WhatARuleRaisesIsAskedOfTheRuleTest {
      */
     @Test
     void aRelationBetweenTwoPositionsRaisesNothing() {
-        Map<OriginRef, Required> raised = raisedBy("""
+        Map<RuleRef, Required> raised = raisedBy("""
                 module example.booking
 
                 data Span = { startsAt: Int, endsAt: Int }
@@ -180,7 +180,7 @@ class WhatARuleRaisesIsAskedOfTheRuleTest {
      */
     @Test
     void aConjunctionRaisesWhatItsPartsRaiseTogether() {
-        Map<OriginRef, Required> raised = raisedBy("""
+        Map<RuleRef, Required> raised = raisedBy("""
                 module example.booking
 
                 data Span = { startsAt: Int, endsAt: Int }

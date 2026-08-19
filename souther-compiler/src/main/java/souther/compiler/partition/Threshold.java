@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.OriginRef;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Place;
