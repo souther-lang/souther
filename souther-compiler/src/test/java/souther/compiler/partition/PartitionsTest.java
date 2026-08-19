@@ -234,7 +234,7 @@ class PartitionsTest {
         OriginRef.InvariantOrigin invariant =
                 org.junit.jupiter.api.Assertions.assertInstanceOf(OriginRef.InvariantOrigin.class,
                         origin);
-        assertEquals("Amount", invariant.rule().id().declaredOn().name());
+        assertEquals("Amount", invariant.rule().clause().id().declaredOn().name());
     }
 
     /** A record is taken apart, and only so far: two levels reach a field of a record a parameter

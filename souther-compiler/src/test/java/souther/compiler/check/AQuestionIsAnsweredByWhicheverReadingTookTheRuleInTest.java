@@ -45,7 +45,7 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
                 """.formatted(clause);
     }
 
-    private static Map<Clause.Ref, RuleAccounting> accountingOf(String source, String type) {
+    private static Map<RuleRef, RuleAccounting> accountingOf(String source, String type) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
@@ -57,10 +57,15 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
         return FieldDomains.of(named, data, symbols).accounting();
     }
 
-    private static RuleAccounting rule(Map<Clause.Ref, RuleAccounting> accounting, String clause) {
+    /** What the author called the clause, of a rule that is a declaration's invariant. */
+    private static java.util.Optional<String> nameOf(RuleRef rule) {
+        return rule instanceof RuleRef.Invariant invariant
+                ? invariant.clause().name().map(ClauseName::value) : java.util.Optional.empty();
+    }
+
+    private static RuleAccounting rule(Map<RuleRef, RuleAccounting> accounting, String clause) {
         return accounting.entrySet().stream()
-                .filter(e -> e.getKey().name().map(ClauseName::value)
-                        .filter(clause::equals).isPresent())
+                .filter(e -> nameOf(e.getKey()).filter(clause::equals).isPresent())
                 .map(Map.Entry::getValue).findFirst()
                 .orElseThrow(() -> new AssertionError("no clause called `" + clause + "`; had "
                         + accounting.keySet()));
@@ -144,7 +149,7 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
      */
     @Test
     void aFailureAtAPositionIsNotTheAccountOfTheClausesBesideIt() {
-        Map<Clause.Ref, RuleAccounting> accounting = accountingOf("""
+        Map<RuleRef, RuleAccounting> accounting = accountingOf("""
                 module example.rooms
 
                 data Length = Int

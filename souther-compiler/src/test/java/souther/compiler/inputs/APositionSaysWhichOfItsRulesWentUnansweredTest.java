@@ -3,7 +3,6 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.check.ClauseName;
 import souther.compiler.check.CoverageObligation;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.RuleAccounting;
@@ -108,8 +107,9 @@ class APositionSaysWhichOfItsRulesWentUnansweredTest {
                 .unansweredQuestions();
 
         assertEquals(1, open.size(), () -> "one clause, one question: " + open);
-        assertEquals("even", open.get(0).rule().name().map(ClauseName::value).orElseThrow(),
-                "the clause the author wrote, not the position it is about");
+        assertEquals("invariant Length (even)", open.get(0).rule().named(),
+                "the clause the author wrote, as a report names it — and not the position it "
+                        + "is about");
         assertEquals(CoverageObligation.ADMITTED_VALUES, open.get(0).owed().obligation());
         assertTrue(open.get(0).owed().subject().path().isEmpty(),
                 () -> "about the value the newtype wraps: " + open.get(0).owed().subject());

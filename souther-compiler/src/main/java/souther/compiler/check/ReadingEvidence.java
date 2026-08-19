@@ -20,6 +20,11 @@ import java.util.Set;
  * reading of values short at a position, and {@code invariant seven = value == 7} written beside it
  * was taken in whole and came back reported as unread.
  *
+ * <p>Filed under {@link RuleRef} and not under the clause reference the walk had in hand. Every
+ * clause reaching here is an invariant's, so the two would key the same map today — and the value
+ * recorded here is carried to a report, where what names a rule is the rule. Weakened on the way
+ * out, each reader downstream had to work the identity back out for itself.
+ *
  * <p>Success and not attempt. A reading that recognised part of a clause and gave up took nothing
  * in, so nothing here records it — what is written down is the point at which a reading adopted the
  * clause into what it holds.
@@ -40,13 +45,13 @@ import java.util.Set;
 final class ReadingEvidence {
 
     /** Where each reading took a clause in. */
-    private final Map<Clause.Ref, Set<FactSubject>> spokenFor = new LinkedHashMap<>();
+    private final Map<RuleRef, Set<FactSubject>> spokenFor = new LinkedHashMap<>();
 
     /** Where a part of a clause was taken in by nothing, which no other part makes up for. */
-    private final Map<Clause.Ref, Set<FactSubject>> left = new LinkedHashMap<>();
+    private final Map<RuleRef, Set<FactSubject>> left = new LinkedHashMap<>();
 
     /** A reading took {@code rule} in at {@code position}. */
-    void record(Clause.Ref rule, FactSubject position) {
+    void record(RuleRef rule, FactSubject position) {
         spokenFor.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).add(position);
     }
 
@@ -57,13 +62,13 @@ final class ReadingEvidence {
      * nothing read, however well the other half went — so an end placed by one conjunct does not
      * answer for the conjunct beside it.
      */
-    boolean anyLeftStanding(Clause.Ref rule, Collection<FactSubject> positions) {
+    boolean anyLeftStanding(RuleRef rule, Collection<FactSubject> positions) {
         Set<FactSubject> standing = left.get(rule);
         return standing != null && positions.stream().anyMatch(standing::contains);
     }
 
     /** A part of {@code rule} was taken in by nothing, of the positions it named. */
-    void leftStanding(Clause.Ref rule, Set<FactSubject> positions) {
+    void leftStanding(RuleRef rule, Set<FactSubject> positions) {
         left.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).addAll(positions);
     }
 
@@ -74,7 +79,7 @@ final class ReadingEvidence {
      * algebra and another by everything else, and a clause reaching it is filed under whichever the
      * reading recognised.
      */
-    boolean tookIn(Clause.Ref rule, Collection<FactSubject> positions) {
+    boolean tookIn(RuleRef rule, Collection<FactSubject> positions) {
         if (anyLeftStanding(rule, positions)) {
             return false;
         }

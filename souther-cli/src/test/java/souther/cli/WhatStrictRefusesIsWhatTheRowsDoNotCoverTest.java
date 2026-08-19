@@ -1,5 +1,6 @@
 package souther.cli;
 
+import souther.compiler.check.RuleRef;
 import souther.compiler.source.SourceId;
 
 import org.junit.jupiter.api.Test;
@@ -268,10 +269,10 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
                 new BoundaryObligation(
                         new BoundaryTarget.AtPlace(new AxisId("weigh", "w.a"), Carrier.WHOLE,
                                 Count.of(100)),
-                        new OriginRef.InvariantOrigin(new Clause.Ref(
+                        new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
                                 new Clause.Id(TypeSymbols.declared(
                                         new TypeKey("example.rate", "Amount")), 0),
-                                java.util.Optional.of(new ClauseName("cap")))),
+                                java.util.Optional.of(new ClauseName("cap"))))),
                         BoundaryObligation.BoundarySide.AT),
                 new BoundaryAssessment.Coverage.Hit(),
                 new BoundaryAssessment.Writability.WitnessedByRow(),

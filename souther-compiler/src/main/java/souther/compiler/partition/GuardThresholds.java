@@ -4,6 +4,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Location;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Carrier;
+import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
@@ -320,9 +321,9 @@ public final class GuardThresholds {
         // line answers: the two sides of it are decided by both positions at once. `singles` is false
         // because this is a line and not a value singled out, and the row that meets it is the row on
         // it.
-        OriginRef.GuardOrigin origin = new OriginRef.GuardOrigin(guard, site,
-                plan.site(site).obligation(),
-                Citation.of(iff.pos()),
+        OriginRef.GuardOrigin origin = new OriginRef.GuardOrigin(
+                new RuleRef.Guard(plan.site(site).comparison()),
+                new OriginRef.GuardOrigin.Read(guard, site, Citation.of(iff.pos())),
                 true, placed.witness(), drawn.holdsAtTheLine(), false);
         BoundaryObligation made = new BoundaryObligation(
                 new BoundaryTarget.EqualTerms(behavior, drawn.on(), drawn.against(),
@@ -436,9 +437,11 @@ public final class GuardThresholds {
         if (drawn == null) {
             return null;
         }
-        OriginRef.GuardOrigin origin = new OriginRef.GuardOrigin(guard, site,
-                plan.site(site).obligation(), Citation.of(iff.pos()), drawn.valueBelongsBelow(),
-                placed.witness(), drawn.holdsAtTheValue(), drawn.singles());
+        OriginRef.GuardOrigin origin = new OriginRef.GuardOrigin(
+                new RuleRef.Guard(plan.site(site).comparison()),
+                new OriginRef.GuardOrigin.Read(guard, site, Citation.of(iff.pos())),
+                drawn.valueBelongsBelow(), placed.witness(), drawn.holdsAtTheValue(),
+                drawn.singles());
         if (drawn.singles()) {
             singled.add(new Guards.Singled(drawn.term(), drawn.value(), origin));
             return drawn.term().path();

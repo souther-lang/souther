@@ -499,7 +499,8 @@ public final class InvariantChecker {
         Gathering gathering = new Gathering() {
 
             @Override
-            public void gathered(Clause.Ref from, Core clause, Set<FactSubject> spokenFor) {
+            public void gathered(RuleRef.Invariant from, Core clause,
+                                 Set<FactSubject> spokenFor) {
                 written.add(new Written(from, clause));
                 spokenFor.forEach(spoken -> took.record(from, spoken));
             }
@@ -525,14 +526,18 @@ public final class InvariantChecker {
                     notGathered.add(FieldDomains.THE_VALUE);
                     continue;
                 }
-                written.add(new Written(Clause.Ref.of(declared), stated));
+                // Where this clause becomes a rule of the model something can be attributed to.
+                // Everything below carries the origin as it is: what is written down here is read
+                // back by a report, and a reader handed the clause reference instead would have to
+                // decide for itself which of the rules that draw a line it was looking at.
+                RuleRef.Invariant origin = new RuleRef.Invariant(Clause.Ref.of(declared));
+                written.add(new Written(origin, stated));
                 Predicates.Owed owed = c.predicates.obligations(stated, k, at, false);
                 // And the reading that builds the numeric constraints, said by what it produced.
                 // `value * 2 >= 4` is beyond the two readings below and is taken in here about the
                 // position itself; `value * value >= 4` comes back about an atom standing for the
                 // product, which is not the position and is not a reading of it.
-                Predicates.subjectsIn(owed)
-                        .forEach(spoken -> took.record(Clause.Ref.of(declared), spoken));
+                Predicates.subjectsIn(owed).forEach(spoken -> took.record(origin, spoken));
                 read &= !owed.unreadable();
                 k = c.predicates.assume(owed, k, Known.Held.OF_THE_VALUE);
             }
@@ -718,16 +723,17 @@ public final class InvariantChecker {
      *
      * @param path     where the coordinate sits, read from the value these are of
      * @param measured whether the coordinate is a count taken of the position rather than its value
-     * @param from     the clause that placed it, which is what names the line. The clause and not
+     * @param from     the rule that placed it, which is what names the line. The clause and not
      *                 the declaration it is on: two clauses of one declaration placing an end at
      *                 one value are two rules a row could be owed to, and held as declarations
      *                 they came back as one
      */
-    record Direct(String path, boolean measured, Clause.Ref from, InvariantBound bound) {}
+    record Direct(String path, boolean measured, RuleRef.Invariant from,
+                  InvariantBound bound) {}
 
     /** One clause reaching a value, rebased onto the positions of that value, and which clause it
      * is. */
-    private record Written(Clause.Ref from, Core clause) {}
+    private record Written(RuleRef.Invariant from, Core clause) {}
 
     /**
      * Told what a walk over a value gathers, as it gathers it.
@@ -749,7 +755,7 @@ public final class InvariantChecker {
          *                  deciding it from the clause's shape is guessing at another reader's
          *                  semantics
          */
-        void gathered(Clause.Ref from, Core clause, Set<FactSubject> spokenFor);
+        void gathered(RuleRef.Invariant from, Core clause, Set<FactSubject> spokenFor);
 
         /**
          * A rule of this value that reached no reading, either because it could not be stated or
@@ -777,13 +783,13 @@ public final class InvariantChecker {
      *
      * @param narrowers the declarations whose clauses compare each coordinate to something without
      *                  placing an end on it, outermost first
-     * @param raised    what each clause reaching this value raises, keyed on the clause. Beside the
-     *                  ends rather than derived from them: a clause that placed no end may have
-     *                  raised a question all the same, and a clause that placed one raised more than
-     *                  the line. Nothing here says whether anything answered
+     * @param raised    what each clause reaching this value raises, keyed on the rule it is.
+     *                  Beside the ends rather than derived from them: a clause that placed no end
+     *                  may have raised a question all the same, and a clause that placed one raised
+     *                  more than the line. Nothing here says whether anything answered
      */
     record Reading(List<Direct> directs, Map<String, List<TypeSymbol>> narrowers,
-                   Map<Clause.Ref, Required> raised) {}
+                   Map<RuleRef, Required> raised) {}
 
     private Reading directsIn(List<Written> stated, Denotations at,
                                    Map<String, FactSubject> atoms, Map<String, FactSubject> keys,
@@ -805,7 +811,7 @@ public final class InvariantChecker {
         held.forEach((path, atom) -> byName.put(atom, new Coordinate(path, true, Carrier.WHOLE)));
         List<Direct> out = new ArrayList<>();
         Map<String, List<TypeSymbol>> narrowers = new LinkedHashMap<>();
-        Map<Clause.Ref, Required> raised = new LinkedHashMap<>();
+        Map<RuleRef, Required> raised = new LinkedHashMap<>();
         stated.forEach(each ->
                 direct(each.clause(), each.from(), at, byName, out, narrowers, raised, took,
                         typeAt));
@@ -816,7 +822,7 @@ public final class InvariantChecker {
     }
 
     /** What {@code clause} raises, taken together with whatever its other conjuncts raised. */
-    private static void raises(Map<Clause.Ref, Required> into, Clause.Ref rule,
+    private static void raises(Map<RuleRef, Required> into, RuleRef.Invariant rule,
                                ClauseStates states) {
         into.merge(rule, Required.ofInvariant(states), Required::and);
     }
@@ -830,8 +836,9 @@ public final class InvariantChecker {
      * nothing read on the strength of the half that was, which is how `value >= 1 && value * value
      * >= 4` came back with nothing to say while the same two rules written apart were reported.
      */
-    private void settle(Core part, Clause.Ref rule, ClauseStates states, Denotations at,
-                        Map<FactSubject, Coordinate> byName, Map<Clause.Ref, Required> raised,
+    private void settle(Core part, RuleRef.Invariant rule, ClauseStates states,
+                        Denotations at,
+                        Map<FactSubject, Coordinate> byName, Map<RuleRef, Required> raised,
                         ReadingEvidence took, Map<String, Type> typeAt) {
         raises(raised, rule, states);
         if (!(states instanceof ClauseStates.SomethingElse other)) {
@@ -878,10 +885,10 @@ public final class InvariantChecker {
      * asked once — read apart, the second would be a walk that had to agree with this one about which
      * comparisons it had already accounted for.
      */
-    private void direct(Core clause, Clause.Ref from, Denotations at,
+    private void direct(Core clause, RuleRef.Invariant from, Denotations at,
                         Map<FactSubject, Coordinate> byName, List<Direct> out,
                         Map<String, List<TypeSymbol>> narrowers,
-                        Map<Clause.Ref, Required> raised, ReadingEvidence took,
+                        Map<RuleRef, Required> raised, ReadingEvidence took,
                         Map<String, Type> typeAt) {
         if (!(clause instanceof Core.Binary bin)) {
             settle(clause, from, states(clause, at, byName), at, byName, raised, took, typeAt);
@@ -935,13 +942,14 @@ public final class InvariantChecker {
             // The declaration and not the clause. Which declaration took an edge in is what ADR-0090
             // names beside a line, and what a reader is sent to look at is the declaration holding
             // the relation.
-            relating(clause, from.id().declaredOn(), at, byName, narrowers);
+            relating(clause, from.clause().id().declaredOn(), at, byName, narrowers);
             return;
         }
         if (end instanceof InvariantBound.Read.AnEnd placed) {
             out.add(new Direct(found.path(), found.measured(), from, placed.bound()));
         }
     }
+
 
     /**
      * What a comparison that placed no end is about.

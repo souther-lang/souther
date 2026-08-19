@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorContract;
+import souther.compiler.check.RuleRef;
 import souther.compiler.check.StatedContract;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
@@ -169,7 +170,8 @@ public final class EnsuresThresholds {
             reportUnread(comparison, rule.value(), reads, symbols, out.unread());
             return;
         }
-        OriginRef.EnsuresOrigin origin = new OriginRef.EnsuresOrigin(rule.id(), clause,
+        OriginRef.EnsuresOrigin origin = new OriginRef.EnsuresOrigin(
+                new RuleRef.Ensures(rule.id(), clause),
                 drawn.valueBelongsBelow(), drawn.holdsAtTheValue(), drawn.singles());
         if (drawn.singles()) {
             out.singled().add(
@@ -207,7 +209,8 @@ public final class EnsuresThresholds {
         BoundaryObligation made = new BoundaryObligation(
                 new BoundaryTarget.EqualTerms(out.behavior(), drawn.on(), drawn.against(),
                         drawn.carrier()),
-                new OriginRef.EnsuresOrigin(rule.id(), clause, true, drawn.holdsAtTheLine(), false),
+                new OriginRef.EnsuresOrigin(new RuleRef.Ensures(rule.id(), clause), true,
+                        drawn.holdsAtTheLine(), false),
                 BoundaryObligation.BoundarySide.AT);
         if (out.between().stream().noneMatch(had -> had.equals(made))) {
             out.between().add(made);

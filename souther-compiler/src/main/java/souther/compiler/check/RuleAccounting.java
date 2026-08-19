@@ -26,18 +26,19 @@ import java.util.function.Function;
  */
 public final class RuleAccounting {
 
-    private final Clause.Ref rule;
+    private final RuleRef rule;
     private final Required required;
     private final Map<Owed, Outcome> answers;
 
-    private RuleAccounting(Clause.Ref rule, Required required, Map<Owed, Outcome> answers) {
+    private RuleAccounting(RuleRef rule, Required required, Map<Owed, Outcome> answers) {
         this.rule = rule;
         this.required = required;
         this.answers = Collections.unmodifiableMap(answers);
     }
 
     /**
-     * The accounting of {@code rule}, with {@code answered} asked once for each question it raises.
+     * The accounting of {@code rule}, with {@code answered} asked once for each question it
+     * raises.
      *
      * <p>The only way to one of these, and not one anything outside this package can take. What is
      * closed here is which questions there are — {@code answered} is asked for them and never
@@ -45,7 +46,7 @@ public final class RuleAccounting {
      * caller hold a genuine {@link Required} beside answers it wrote itself. A reader outside wants
      * a finished accounting, never a way to make one.
      */
-    static RuleAccounting of(Clause.Ref rule, Required required,
+    static RuleAccounting of(RuleRef rule, Required required,
                              Function<Owed, Outcome> answered) {
         Map<Owed, Outcome> answers = new LinkedHashMap<>();
         for (Owed each : required.obligations()) {
@@ -59,8 +60,8 @@ public final class RuleAccounting {
         return new RuleAccounting(rule, required, answers);
     }
 
-    /** Which rule. */
-    public Clause.Ref rule() {
+    /** Which rule of the model, as everything that names a rule names it. */
+    public RuleRef rule() {
         return rule;
     }
 
@@ -104,8 +105,13 @@ public final class RuleAccounting {
      * granularity wearing another's name — which is the shape this whole accounting was written
      * against. A reason belongs here once the readings say why per part of a clause, and until then
      * an absent one is the honest answer.
+     *
+     * <p>The rule as {@link RuleRef}, all the way to the report that names it. Carried as the
+     * clause reference the reading had in hand, the one reader of these built the identity at the
+     * last moment — right while only invariants raise a question, and a decision about what a rule
+     * is taken by whoever consumed one.
      */
-    public record Unanswered(Clause.Ref rule, Owed owed) {}
+    public record Unanswered(RuleRef rule, Owed owed) {}
 
     @Override
     public String toString() {

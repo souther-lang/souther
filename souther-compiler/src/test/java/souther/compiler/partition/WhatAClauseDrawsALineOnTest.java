@@ -231,7 +231,7 @@ class WhatAClauseDrawsALineOnTest {
 
         assertEquals(List.of(), valuesOf(clauses));
         assertEquals(1, clauses.singled().size(), clauses.singled().toString());
-        assertTrue(clauses.singled().get(0).origin().besideTheCut().isEmpty(),
+        assertTrue(BoundaryObligation.besideTheCut(clauses.singled().get(0).origin()).isEmpty(),
                 "a value singled out has no neighbour: the values either side of it are one class");
     }
 
