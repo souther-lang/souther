@@ -264,6 +264,35 @@ final class Terms {
         };
     }
 
+    /**
+     * The environment {@code li}'s body is read in: {@code li}'s binder entered as what its
+     * initializer denotes.
+     *
+     * <p>Here because identity is built here. What a name is about, where it is, and what the term
+     * grammar calls it are three answers this class gives, and a caller that asks for the three and
+     * puts them together is a second place deciding what a binding means.
+     *
+     * <p>The initializer is read in the environment outside the binding, and the binder is entered
+     * as what that reading found. What is recorded about the name is recorded under that denotation
+     * and not under the binding; recording it under the binding is what made a named subexpression a
+     * term of its own, answering differently from the very expression it was given (#676).
+     */
+    Denotations inside(Core.LetIn li, Denotations at) {
+        // Entering a binding a walk is already inside is not a second binding of it. A branch is
+        // read from where its conditional stood, which is inside these, over a tree that still holds
+        // them.
+        if (at.valueOf(li.binder().id()) == li.value()) {
+            return at;
+        }
+        // What the name is about is what it was given is about. Where even the identity reading has
+        // nothing to name — an expression answering nothing at all — the name is what there is, and
+        // it is one value however many times it is read.
+        FactSubject about = subjectOf(li.value(), at);
+        return at.binding(li.binder().id(), li.value(),
+                about != null ? about : placeSubject(li.binder().id()),
+                locationOf(li.value(), at), bodyKey(li.value(), at));
+    }
+
     /** What {@code e} folds to where every part of it is written out, or {@code null} where any part
      * of it is computed at run time and there is nothing to fold. */
     static Object folded(Core e) {
