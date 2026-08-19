@@ -389,8 +389,13 @@ public final class SpecChecker {
                 }
                 // A unit is in no construction set, so `builds` is false for one however the body is
                 // written — and E1006 would say the body never built it, which is a different claim
-                // and often a false one. The entry has its own answer (E1026), said once, by the
-                // check that is asked of every clause rather than only of the ones with a body.
+                // and often a false one. The entry has its own answer (E1026), raised by the check
+                // that reads every clause of the module.
+                //
+                // Load-bearing rather than belt-and-braces: this reader is reached by the
+                // per-behavior query as well, which asks about one body and not about the module, so
+                // the clause check has not run before it. Measured from there by
+                // `askingOneBodyOfSuchAModuleReportsNoOverDeclaration`.
                 if (isUnitData(declaredName.answered().type(), symbols)) {
                     continue;
                 }

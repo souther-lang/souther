@@ -1,6 +1,9 @@
 package souther.compiler;
 
+import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.diag.Primary;
+import souther.compiler.query.Bodies;
+import souther.compiler.query.Compilation;
 
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.HumanRenderer;
@@ -13,6 +16,7 @@ import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -104,6 +108,37 @@ class CompileUnitValueTest {
         e.diagnostics().forEach(d -> assertEquals("E1026", d.code(), said.toString()));
         assertTrue(said.get(0).contains("Mark") && said.get(1).contains("Note"), said.toString());
         assertTrue(said.get(2).contains("Mark"), said.toString());
+    }
+
+    /**
+     * Asking one body of such a module does not turn the entry into an over-declaration.
+     *
+     * <p>The per-behavior query asks about a body and not about a module, so the clause check has
+     * not run when the body's own reader meets the entry. What that reader would otherwise say is
+     * E1006 — "declares `constructs Mark` but never builds Mark" — and the body does build the unit,
+     * so the sentence would be false and the hint would send an author to the wrong edit.
+     *
+     * <p>This is the reachable case that the skip in the E1006 loop is for. Through
+     * {@code Compiler.compile} the module check raises E1026 first and nothing gets that far, which
+     * is why the skip has to be measured from here.
+     */
+    @Test
+    void askingOneBodyOfSuchAModuleReportsNoOverDeclaration() {
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+                data Mark
+                data Out = { n: Int }
+                behavior f : (n: Int) -> Out | Mark
+                    constructs Out, Mark
+                let f (n) = if n > 0 then Out { n = n } else Mark
+                """, "Main");
+
+        assertNotNull(compilation.db().ask(new Bodies.CheckedBehavior("demo", "f")).value(),
+                "the body is read, whatever the clause around it says");
+        assertTrue(compilation.reports().stream()
+                        .map(found -> DiagnosticRenderer.legacyBody(found.report().diagnostic()))
+                        .noneMatch(said -> said.contains("never builds")),
+                "and the entry is not reported as one the body never built");
     }
 
     /** A unit has no fields, so an invariant on it has nothing to observe and nothing it could
