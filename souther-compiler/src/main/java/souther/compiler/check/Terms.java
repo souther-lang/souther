@@ -63,6 +63,23 @@ final class Terms {
     /** How each atom outside the affine fragment was computed. */
     private final Map<FactSubject, Derivation> derivations = new HashMap<>();
 
+    /**
+     * The walk each atom that is a reduction's answer was reached by.
+     *
+     * <p>Beside {@link #derivations} and not among them. A derivation is what one expression is made
+     * of — a product of two values, a quotient by a written number — and it is read off the operands
+     * where they stand. A walk is what a library operation does with a closure it applies over and
+     * over, which no arrangement of an expression's parts says. Held as two tables because they are
+     * two facts: an operation the library gains is a row here and never a new shape of arithmetic,
+     * and a shape of arithmetic the language gains is the other way about.
+     *
+     * <p>What is held is what was read of the walk here, as numbers. Nothing in it is a tree to be
+     * read again and nothing in it holds what the names around the call denoted — a walk whose parts
+     * could not be read at naming time is not recorded at all, rather than recorded as somewhere to
+     * go back to.
+     */
+    private final Map<FactSubject, InductiveBounds.Walk> reductions = new HashMap<>();
+
     /** The subject each evaluation this could not name is, made once per occurrence. Identity-keyed:
      * an occurrence is a node, and two nodes are two evaluations however alike they are written. */
     private final java.util.IdentityHashMap<Core, EvaluationId> evaluations =
@@ -74,6 +91,11 @@ final class Terms {
     /** What each atom this named outside the affine fragment was computed from. */
     Map<FactSubject, Derivation> derivations() {
         return derivations;
+    }
+
+    /** The walk each atom this named as a reduction's answer was reached by. */
+    Map<FactSubject, InductiveBounds.Walk> reductions() {
+        return reductions;
     }
 
     Terms(Symbols symbols) {
@@ -307,7 +329,7 @@ final class Terms {
     }
 
     /** The list {@code e} is, written where it is or written where the name it is was given one. */
-    private Core listedOut(Core e, Denotations at) {
+    Core listedOut(Core e, Denotations at) {
         if (!(e instanceof Core.Read r)) {
             return e;
         }
@@ -406,6 +428,10 @@ final class Terms {
      * expression knows — which is why the walk that reads the operands is not handed one.
      */
     private void recording(FactSubject atom, Core e, Denotations at) {
+        if (asOperator(e) instanceof Core.PreservedCall call) {
+            recordingWalk(atom, call, e, at);
+            return;
+        }
         if (!(asOperator(e) instanceof Core.Binary b)) {
             return;
         }
@@ -421,6 +447,63 @@ final class Terms {
         if (had != null && !sameDerivation(had, made)) {
             throw new OneTermTwoDerivations("atom `" + atom.rendered() + "` was computed as "
                     + had + " and as " + made);
+        }
+    }
+
+    /**
+     * Records the walk {@code atom} is the answer of, where the call is a reduction and every part of
+     * it is a number this reads.
+     *
+     * <p>Here for the reason {@link #recording} is here: an atom's name is made in this class, and
+     * what is filed against a name belongs where the name is made. What is filed is numbers — a form
+     * for the seed, a form for what the step answers, an atom for the accumulator, and what holds of
+     * everything else the step is handed. Read now, because now is when what the names around the
+     * call denote is known; kept as values, because a table that outlives a reading may not hold one.
+     *
+     * <p>The step's parameters are entered as places of their own before the step is read. They are
+     * places: a walk hands its step a value the step may state things about, and reading it as an
+     * evaluation of the node it is written at would give one parameter two atoms where the step reads
+     * it twice.
+     *
+     * <p>A step this cannot read as arithmetic is recorded as nothing rather than as a walk with a
+     * part missing. That is the fragment this proves over, stated once: a step branching on its
+     * element is outside it, and so is a seed that is what some behavior answered.
+     */
+    private void recordingWalk(FactSubject atom, Core.PreservedCall call, Core e, Denotations at) {
+        Reductions.Reducing walk = Reductions.reducing(call, at);
+        if (walk == null) {
+            return;
+        }
+        LinearForm<FactSubject> seed = affineOf(walk.seed(), at);
+        if (seed == null) {
+            return;
+        }
+        // Named against the walk and not against the bindings the step was written with: the walk's
+        // own atom normalises those bindings, so two readings of one walk are one atom and would
+        // otherwise carry two accumulators under it (Term.Shape.HANDED).
+        List<Hir.Binder> params = walk.step().params();
+        FactSubject accumulator = null;
+        Denotations inside = at;
+        for (int i = 0; i < params.size(); i++) {
+            FactSubject handed = FactSubject.of(interned.handed(atom.identity(), i));
+            inside = inside.location(params.get(i).id(), handed, handed.identity());
+            if (params.get(i) == walk.accumulator()) {
+                accumulator = handed;
+            }
+        }
+        LinearForm<FactSubject> step = affineOf(walk.step().body(), inside);
+        if (step == null) {
+            return;
+        }
+        // The accumulator is a number of the kind the walk answers, whether or not the step read it:
+        // a step that ignores it names it nowhere, and a range is still asserted about it here.
+        named(accumulator, granularityOf(e.type()));
+        InductiveBounds.Walk made = new InductiveBounds.Walk(seed, accumulator, step,
+                StepInputFacts.of(walk, inside, this, symbols));
+        InductiveBounds.Walk had = reductions.putIfAbsent(atom, made);
+        if (had != null && !had.equals(made)) {
+            throw new OneTermTwoDerivations("atom `" + atom.rendered() + "` is the answer of two"
+                    + " different walks");
         }
     }
 

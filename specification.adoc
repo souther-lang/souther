@@ -1637,6 +1637,60 @@ A bound derived this way is not a fact about the value that is kept and read bac
 
 What is derived is derived once, from what is known where the clause is read. Nothing derived here is read back to derive something further about the same value: a bound that tightened under its own answers would be a procedure that decides when to stop, which this is not. A value computed from another such value is read through — `+a * b / 100+` reads what the product was bounded to — because that is the expression's own structure and not a second round over the same one.
 
+[#invariant-discharge-reduction]
+==== What a walk from a seed answers
+
+A `+List.fold+` walks a container and hands its step an accumulator and an element, over and over, and answers the accumulator it ends with. What it answers is a value the guards may say nothing about, in the way a product is (<<invariant-discharge-terms>>), and reading it needs neither the length of the container nor the walk written out.
+
+A range holds the answer where two things hold: the seed is inside it, and the step, given an accumulator inside it and what the container guarantees of everything else it hands the step, answers inside it again. Each is asked once. Nothing here iterates towards an answer, nothing widens, and nothing depends on how many elements there are or on the order they arrive in — so the same rule reads a walk over a `+Set+` and over a `+Map+`.
+
+What that establishes is conditional, and the condition is not this procedure's to discharge: *if the walk answers at all, its answer is in the range*. A step whose arithmetic aborts part way — an addition past what an `+Int+` holds (<<primitives>>) — answers nothing, and a range saying where an answer lies says nothing about a run that produces none. Whether the arithmetic can abort and whether the walk terminates are other questions, and neither is weakened by this and neither is assumed by it.
+
+[,souther]
+----
+data Money = Int
+    invariant value >= 0
+
+data Line =
+    { amount: NonNeg
+    }
+
+behavior total : (xs: List<Line>) -> Money
+let total (xs) = Money(List.fold((sum, x) -> sum + x.amount.value, 0, xs))
+// discharged: the seed is at zero, and an accumulator at or above zero
+// plus an amount at or above zero is at or above zero again
+----
+
+The ranges tried are made from the seed and there are four of them: the seed's own range, the range open above it, the range open below it, and the seed's range together with what the step answers where nothing is assumed about the accumulator — which is the whole answer for a step that does not read the accumulator at all. Where more than one is established the answer is what they all say. Which ranges are tried is not a rule an author has to predict: one that cannot be established costs nothing and settles nothing, and a range established is established whichever others were tried beside it.
+
+The seed and what the step answers must both be arithmetic the procedure derives in. A step that chooses between two answers is not read, and neither is one over a value that is what a behavior answered.
+
+[,souther]
+----
+behavior total : (xs: List<Line>) -> Money
+let total (xs) =
+    // not read: the step is a choice and not arithmetic, so the walk is left
+    // to the run-time check exactly as before
+    Money(List.fold((sum, x) -> if x.amount.value > 0 then sum else 0 - 1, 0, xs))
+----
+
+What the container guarantees of what it hands the step is what a value of that type guarantees, and what a container written out holds. An element of a `+List<Line>+` carries `+Line+`'s invariant wherever the walk is; a `+[1, 2]+` written on the line holds those two numbers and nothing else, so every element of it is between them. A relation a guard states about *some* element is not this: it says nothing about the element the walk is at, and a walk is not established by it.
+
+[,souther]
+----
+behavior total : () -> Money
+let total = Money(List.fold((sum, x) -> sum + x, 0, [1, 2]))
+// discharged: every element written there is above zero
+
+behavior other : () -> Money
+let other = Money(List.fold((sum, x) -> sum + x, 0, [1, 0 - 2]))
+// reported: an element written there is below zero, so the answer may be
+----
+
+The operations read this way are `+List.fold+` and the `+List.foldFrom+` it is sugar for, `+List.foldRight+`, `+Set.fold+` and `+Map.fold+`. That an operation walks a container from a seed is not something its declaration says — an operation of the same shape could apply its closure once — so it is stated rather than read off, and every operation the library declares with that shape either is stated to be one or is written down as not being one. Where the seed and the accumulator are is read off the declaration: the seed is the argument of the type the operation answers, and the accumulator is the closure parameter of that type, which is why `+List.foldRight+` — whose step takes the element first — needs nothing written about it.
+
+A bound established this way belongs to the reading that established it, as a derived bound does (<<invariant-discharge-arithmetic>>): what the step is read against is what the reading holds, and nothing established about the accumulator while the step is read is true anywhere else.
+
 [#invariant-discharge-quantified]
 ==== A relation over every element, read at the element
 

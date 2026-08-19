@@ -92,6 +92,19 @@ final class Term {
         HELD,
         /** The empty optional, at the type of the position it fills. */
         NONE,
+        /**
+         * A value a walk hands its step, read where that walk is being proved about.
+         *
+         * <p>Named against the walk and by which parameter it arrives on, because that is what makes
+         * it one value. The step's parameters are bindings, and two readings of one walk bind them
+         * twice — a walk is keyed by what it is written over, with the step's binders normalised, so
+         * the very same walk arrives with different bindings and is one atom. An accumulator named by
+         * its binding was then two values under one name, which is what the check refuses to hold.
+         *
+         * <p>And by the walk, not only by the position: two walks in one body each hand their step an
+         * accumulator, and they are two values.
+         */
+        HANDED,
         /** A value opened, over the scrutinee and each arm's body. */
         MATCHED,
         /** An attempted construction, over what it builds and what each of its departures answers. */
@@ -182,7 +195,7 @@ final class Term {
     boolean standsOnAnEvaluation() {
         return switch (shape) {
             case EVALUATION -> true;
-            case ON, HELD -> parts.get(0).standsOnAnEvaluation();
+            case ON, HELD, HANDED -> parts.get(0).standsOnAnEvaluation();
             default -> false;
         };
     }
@@ -220,6 +233,8 @@ final class Term {
             case CALLED -> joined(sb.append(((ValueName) of).name()).append('('), ", ").append(')');
             case SOME -> sb.append("Some(").append(parts.get(0).rendered()).append(')');
             case HELD -> sb.append("held(").append(parts.get(0).rendered()).append(')');
+            case HANDED -> sb.append("handed(").append(parts.get(0).rendered()).append(", ")
+                    .append(of).append(')');
             case NONE -> sb.append("None:").append(of);
             case MATCHED -> joined(sb.append("match("), ", ").append(')');
             case ATTEMPTED -> joined(sb.append("attempt("), ", ").append(')');
@@ -457,6 +472,11 @@ final class Term {
                 return optional.parts.get(0);
             }
             return of(Shape.HELD, null, List.of(optional));
+        }
+
+        /** What the walk {@code walk} hands its step on parameter {@code param}. */
+        Term handed(Term walk, int param) {
+            return of(Shape.HANDED, param, List.of(walk));
         }
 
         /** The empty optional. Held at the type of the position, since the absent value of one
