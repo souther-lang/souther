@@ -274,12 +274,13 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
     }
 
     /**
-     * A divisor nothing holds away from zero is a quotient nothing is known of, and the clause
+     * A divisor nothing holds away from zero is one this rule says nothing about, and the clause
      * stands.
      *
-     * <p>Where the divisor's range admits zero there is no bound to give: a divisor as near zero as
-     * the range allows sends the quotient past every value on both sides, and at zero the divide
-     * produces nothing at all.
+     * <p>Holding every admitted divisor off zero is what the rule asks for before it states
+     * anything, and what is written here does not. That is not a claim that the divides which do
+     * answer are unbounded — over the whole numbers this one divides by at least one — it is that a
+     * rule stated over the ends of a range is not one that can answer for a range through zero.
      */
     @Test
     void aQuotientByAValueNothingHoldsAwayFromZeroIsStillOwed() {

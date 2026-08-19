@@ -153,17 +153,25 @@ final class DerivedBounds {
      * What a truncating divide lies between, under what this reading holds of the two it was
      * computed from.
      *
-     * <p>The divisor is read twice over: what the path proves of it, and what the operator's divisor
-     * can be at all ({@link Derivation.Quotient#divisorExtent}). The second is not a sharpening of
-     * the first. A form is composed over numbers of any size, so what a reading proves of one can be
-     * a range of numbers the operand never is, and where the two share nothing this operator has no
-     * divisor here — which is a different thing from a divisor it has and cannot bound.
+     * <p><b>Whether the rule applies is decided here, and it is two questions.</b> The divisor is
+     * read twice over: what the path proves of it, and what the operator's divisor can be at all
+     * ({@link Derivation.Quotient#divisorExtent}). The second is not a sharpening of the first — a
+     * form is composed over numbers of any size, so what a reading proves of one can be a range of
+     * numbers the operand never is. Where the two share nothing, this operator has no divisor here.
+     * Where they share values but zero is among them, it has one and this rule says nothing about
+     * it: what a divide by a range straddling zero comes to depends on how the values are spaced,
+     * and a rule stated over the ends of a range is not a rule that can answer for it.
      *
-     * <p>Nothing is derived where they share nothing, and a range holding no value is not what says
-     * so. That a rule has no operands to fire on is not a proof that the path has no execution: read
-     * as an empty range it would be taken into the domain as a contradiction, and a contradictory
-     * domain proves every clause there is — so a construction nothing here can read would come out
-     * discharged. What a rule that does not apply contributes is nothing.
+     * <p>Neither answer is a claim about the quotients. In particular the second is not a statement
+     * that they run past every value: over the whole numbers a divisor between zero and five divides
+     * by one at the nearest, and the successful divides are bounded. What is said is that this rule
+     * does not establish where they are — which is what an unapplied rule contributes, and is not
+     * the same thing as a bound.
+     *
+     * <p><b>Nothing derived, and not an empty range.</b> That a rule has no operands to fire on is
+     * not a proof that the path has no execution: read as an empty range it would be taken into the
+     * domain as a contradiction, and a contradictory domain proves every clause there is — so a
+     * construction nothing here can read would come out discharged rather than owed.
      *
      * <p>The dividend is not held to its own extent. It could be, and it would be sound; it would
      * also be a sharpening of a bound that is already sound, which is a different reason from the
@@ -174,7 +182,7 @@ final class DerivedBounds {
                                    Set<FactSubject> deriving) {
         Bounds divisor = boundsOf(quotient.divisor(), base, terms, done, deriving)
                 .meet(quotient.divisorExtent());
-        if (!divisor.holdsAValue()) {
+        if (!divisor.holdsAValue() || divisor.admits(Count.ZERO)) {
             return new Bounds(null, null);
         }
         return Intervals.truncatingQuotient(

@@ -19,10 +19,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * the box the two ranges make, and truncation toward zero is non-decreasing, so the corners put
  * through it are still the extremes.
  *
- * <p>What is bounded is the values the operation produced. The pairs it aborts on — a zero divisor,
- * and the one quotient no {@code Int} holds — contribute none, so a range here is a range of what
- * the successful divides came to and says nothing about whether every pair the operands admit is
- * one the operator answers.
+ * <p>What is bounded is the values the operation produced. The one pair inside such a box that it
+ * aborts on — {@code Long.MIN_VALUE} over {@code -1}, whose quotient no {@code Int} holds —
+ * contributes none, so a range here is a range of what the successful divides came to and says
+ * nothing about whether every pair the operands admit is one the operator answers. A zero divisor is
+ * the other pair it aborts on, and it is refused here rather than answered for: what a range through
+ * zero leaves depends on how its values are spaced, which a range does not say.
  */
 class AQuotientIsTheHullOfItsDefinedCornersTest {
 
@@ -154,27 +156,27 @@ class AQuotientIsTheHullOfItsDefinedCornersTest {
     }
 
     /**
-     * A divisor a range admits zero at bounds the quotient no way.
+     * A range admitting zero is not a divisor to read, and this says so rather than answering.
      *
-     * <p>Not an end of it either: a divisor as near zero as the range allows sends the quotient past
-     * every value on both sides, and at zero the operation produces nothing at all. Answered rather
-     * than refused, because a range is what this is asked for and "no bound to give" is a range.
+     * <p>What it would leave is not something a range says. Over the whole numbers {@code [0, 5]}
+     * divides by one at the nearest and the successful quotients are bounded; over a dense order
+     * there is no nearest and they are not. Answering a range here would state the second of those
+     * as arithmetic, and it is the caller — which knows how its values are spaced and what its rule
+     * needs established — that has the question.
      */
     @Test
-    void aDivisorThatAdmitsZeroBoundsTheQuotientNoWay() {
-        Bounds quotient = Intervals.truncatingQuotient(between(1L, 10L), between(0L, 5L));
-
-        assertNull(quotient.min());
-        assertNull(quotient.max());
+    void aRangeAdmittingZeroIsRefusedRatherThanAnswered() {
+        assertThrows(IllegalArgumentException.class,
+                () -> Intervals.truncatingQuotient(between(1L, 10L), between(0L, 5L)));
     }
 
     /**
      * A divisor kept off zero only by not reaching it still runs the quotient past every value.
      *
-     * <p>Nothing between the ends bounds how small the divisor is, so the quotient has no end that
-     * way. A discrete carrier does not arrive here like this — a strict bound on one is sharpened
-     * onto the adjacent count — and the arithmetic is written for the range and not for the carrier
-     * that happened to hand it over.
+     * <p>This is the case the ends really do settle: nothing between them bounds how small the
+     * divisor is, so the quotient has no end that way whatever the spacing. A discrete carrier does
+     * not arrive here like this — a strict bound on one is sharpened onto the adjacent count — and
+     * the arithmetic is written for the range and not for the carrier that happened to hand it over.
      */
     @Test
     void aDivisorOpenAtZeroIsUnboundedTheWayItsMagnitudeRuns() {

@@ -64,11 +64,12 @@ public final class Intervals {
      * What {@code x / y} lies between, given what each of them does.
      *
      * <p><b>What this bounds is the values the operation produces.</b> {@code /} over whole numbers
-     * does not answer everywhere: a zero divisor aborts, and so does the one pair whose quotient no
-     * {@code Int} holds (spec §stdlib-int). Those pairs contribute no value, so a range that takes
-     * them in is a range of what the successful divides came to and nothing else. What follows from
-     * that is what a caller must not read into an answer here: a range coming back — top included —
-     * does not say the operation is defined for every pair the two ranges admit. Whether it is is a
+     * does not answer everywhere, and one of the pairs it aborts on lies inside ranges this is asked
+     * about: {@code Long.MIN_VALUE} over {@code -1} is a quotient no {@code Int} holds (spec
+     * §stdlib-int), and both of its operands are ordinary values of their type. That pair leaves no
+     * value, so what comes back is a range of what the successful divides came to and nothing else.
+     * What a caller must not read into it is the other thing: a range coming back — top included —
+     * does not say the operation answers for every pair the two ranges admit. Whether it does is a
      * different question with a different answer, and answering it here would be an interval that
      * means two things.
      *
@@ -90,11 +91,15 @@ public final class Intervals {
      * what it lands on; a bound looser than the true one proves less and never rejects a program the
      * rules admit.
      *
-     * @param divisor a range holding at least one value. Whether the rule this belongs to has any
-     *                divisor to read is the caller's question and is asked before this
-     *                ({@code DerivedBounds}): a range with nothing in it is not a divisor whose sign
-     *                and magnitude could be read, and answering for it here would put "no such
-     *                operand" and "no bound to give" in one value.
+     * @param divisor a range holding at least one value and none of them zero. Both are the caller's
+     *                to establish ({@code DerivedBounds}), and neither could be answered here as a
+     *                range: a range with nothing in it is not a divisor whose sign and magnitude
+     *                could be read, and what a range admitting zero leaves depends on how its values
+     *                are spaced, which is not something a range says. Over the whole numbers a
+     *                divisor between zero and five divides by one at the nearest, and the quotients
+     *                are bounded; over a dense order there is no nearest and they are not. A caller
+     *                that has a divisor it cannot hold off zero has a rule that does not apply, and
+     *                answering that here would put it in the same value as a bound.
      */
     public static NumericDomain.Bounds truncatingQuotient(NumericDomain.Bounds dividend,
                                                           NumericDomain.Bounds divisor) {
@@ -102,9 +107,7 @@ public final class Intervals {
             throw new IllegalArgumentException("a range holding no value is not a divisor to read");
         }
         if (divisor.admits(Count.ZERO)) {
-            // Every value on both sides: a divisor as near zero as you like sends the quotient past
-            // any number, and the pair at zero produces nothing at all.
-            return new NumericDomain.Bounds(null, null);
+            throw new IllegalArgumentException("a range admitting zero is not a divisor to read");
         }
         End belowX = End.below(dividend.min());
         End aboveX = End.above(dividend.max());
