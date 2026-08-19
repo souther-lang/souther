@@ -160,7 +160,7 @@ final class PathEngine {
      * expression it was given.
      *
      * <p>Nothing is recorded of the name itself. A name is read as the expression it was given —
-     * {@link Terms#affine} reads through it, and reads through a field taken off it the same way —
+     * {@link Terms#affineOf} reads through it, and reads through a field taken off it the same way —
      * so there is no second reading for a fact about the name to be needed by. Recording one meant
      * giving the name's own atom the bounds of the form it was given, which is what a guard read one
      * way and a construction read the other had between them, and a bound is not a relation: it left
