@@ -48,7 +48,7 @@ class AnOperationThatChoosesIsReadCaseByCaseTest {
     @Test
     void aSmallerOfTwoIsWhatBothOfThemAre() {
         assertEquals(List.of(), codesOf(TYPES + """
-                behavior smaller : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                behavior smaller : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg
                 let smaller (a, b) = {
                     guard a >= 0
                         else Bad
@@ -83,7 +83,7 @@ class AnOperationThatChoosesIsReadCaseByCaseTest {
     @Test
     void aClampedValueInsideBothEndsIsTheValueItself() {
         assertEquals(List.of(), codesOf(TYPES + """
-                behavior narrow : (n: Int) -> Middle | Bad constructs Middle, Bad
+                behavior narrow : (n: Int) -> Middle | Bad constructs Middle
                 let narrow (n) = {
                     guard n > 4
                         else Bad
@@ -105,7 +105,7 @@ class AnOperationThatChoosesIsReadCaseByCaseTest {
     @Test
     void aSmallerOfTwoIsNotEstablishedByTheFirstOfThemAlone() {
         assertEquals(List.of("E2011"), codesOf(TYPES + """
-                behavior smaller : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                behavior smaller : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg
                 let smaller (a, b) = {
                     guard a >= 0
                         else Bad
@@ -117,7 +117,7 @@ class AnOperationThatChoosesIsReadCaseByCaseTest {
     @Test
     void aSmallerOfTwoIsNotEstablishedByTheSecondOfThemAlone() {
         assertEquals(List.of("E2011"), codesOf(TYPES + """
-                behavior smaller : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                behavior smaller : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg
                 let smaller (a, b) = {
                     guard b >= 0
                         else Bad
@@ -129,7 +129,7 @@ class AnOperationThatChoosesIsReadCaseByCaseTest {
     @Test
     void aLargerOfTwoIsNotHeldDownByTheFirstOfThemAlone() {
         assertEquals(List.of("E2011"), codesOf(TYPES + """
-                behavior larger : (a: Int, b: Int) -> Pct | Bad constructs Pct, Bad
+                behavior larger : (a: Int, b: Int) -> Pct | Bad constructs Pct
                 let larger (a, b) = {
                     guard a >= 0 && a <= 100
                         else Bad
@@ -143,7 +143,7 @@ class AnOperationThatChoosesIsReadCaseByCaseTest {
     @Test
     void aLargerOfTwoIsNotHeldDownByTheSecondOfThemAlone() {
         assertEquals(List.of("E2011"), codesOf(TYPES + """
-                behavior larger : (a: Int, b: Int) -> Pct | Bad constructs Pct, Bad
+                behavior larger : (a: Int, b: Int) -> Pct | Bad constructs Pct
                 let larger (a, b) = {
                     guard a >= 0
                         else Bad
@@ -168,7 +168,7 @@ class AnOperationThatChoosesIsReadCaseByCaseTest {
     @Test
     void aGuardNoCaseCanSatisfyIsNotWalkedPast() {
         assertEquals(List.of(), codesOf(TYPES + """
-                behavior odd : (a: Int, b: Int) -> AboveTen | Bad constructs AboveTen, Bad
+                behavior odd : (a: Int, b: Int) -> AboveTen | Bad constructs AboveTen
                 let odd (a, b) = {
                     guard a >= 10
                         else Bad
@@ -191,7 +191,7 @@ class AnOperationThatChoosesIsReadCaseByCaseTest {
     @Test
     void guardsThatCannotAllHoldAreNotWalkedPastEitherWhereTheFormsAreKeptAsWritten() {
         assertEquals(List.of(), codesOf(TYPES + """
-                behavior sum : (a: Int, b: Int, c: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                behavior sum : (a: Int, b: Int, c: Int) -> NonNeg | Bad constructs NonNeg
                 let sum (a, b, c) = {
                     guard a + c < 0
                         else Bad
@@ -214,7 +214,7 @@ class AnOperationThatChoosesIsReadCaseByCaseTest {
     @Test
     void aGuardIsReadAgainstWhatTheOperationsInsideItAnswer() {
         assertEquals(List.of(), codesOf(TYPES + """
-                behavior nearest : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                behavior nearest : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg
                 let nearest (a, b) = {
                     guard Int.min(Int.abs(a), Int.abs(b)) < 0
                         else Bad
@@ -228,7 +228,7 @@ class AnOperationThatChoosesIsReadCaseByCaseTest {
     void aGuardIsReadAgainstTheSizesInsideItToo() {
         assertEquals(List.of(), codesOf(TYPES + """
                 behavior shorter : (xs: List<Int>, ys: List<Int>) -> NonNeg | Bad
-                    constructs NonNeg, Bad
+                    constructs NonNeg
                 let shorter (xs, ys) = {
                     guard Int.min(List.length(xs), List.length(ys)) < 0
                         else Bad

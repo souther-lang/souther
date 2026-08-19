@@ -24,7 +24,7 @@ class CompileSharedInstanceTest {
             data Flag = Bool
             data Tally = { n: Int }
 
-            behavior marks : (f: Flag) -> List<Mark> constructs Mark
+            behavior marks : (f: Flag) -> List<Mark>
             let marks (f) = [Mark | f.value]
 
             behavior sumUp : (xs: List<Int>) -> Tally constructs Tally

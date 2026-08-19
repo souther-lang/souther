@@ -219,7 +219,7 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
                         | Off -> Active(On)
 
                 behavior pick : (f: Flag) -> Answer
-                    constructs Answer, Active, On
+                    constructs Answer, Active
 
                 let pick (f) = {
                     let f = defaulted(f)

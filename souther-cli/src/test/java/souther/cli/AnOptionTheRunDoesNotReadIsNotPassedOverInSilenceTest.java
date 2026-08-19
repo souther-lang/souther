@@ -86,7 +86,6 @@ class AnOptionTheRunDoesNotReadIsNotPassedOverInSilenceTest {
             data Long
 
             behavior classify : (shift: Shift) -> Short | Long
-                constructs Short, Long
 
             let classify (shift) =
                 if shift.endsAt.value - shift.startsAt.value >= 480 then Long else Short

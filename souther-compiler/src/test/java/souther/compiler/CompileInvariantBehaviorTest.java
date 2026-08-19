@@ -110,12 +110,13 @@ class CompileInvariantBehaviorTest {
                 module demo
                 data Draft = { cost: Int }
                 data Rejected = { why: String }
-                data Flagged
-                behavior adjust : (d: Draft) -> Draft | Rejected | Flagged constructs Flagged
+                data Flagged = { at: Int }
+                behavior adjust : (d: Draft) -> Draft | Rejected | Flagged
+                    constructs Flagged
 
                 let adjust (d) = {
                     guard d.cost > 0 else Rejected { why = "nonpositive" }
-                    guard d.cost < 1000 else Flagged
+                    guard d.cost < 1000 else Flagged { at = d.cost }
                     d
                 }
                 """;

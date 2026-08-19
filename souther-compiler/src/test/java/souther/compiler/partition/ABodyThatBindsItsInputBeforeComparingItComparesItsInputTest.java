@@ -42,7 +42,6 @@ class ABodyThatBindsItsInputBeforeComparingItComparesItsInputTest {
             data Hot
 
             behavior throughTheField : (temp: Temp) -> Cold | Comfortable | Hot
-                constructs Cold, Comfortable, Hot
             let throughTheField (temp) =
                 if temp.value < 240 then Cold
                 else if temp.value < 260 then Comfortable
@@ -53,7 +52,6 @@ class ABodyThatBindsItsInputBeforeComparingItComparesItsInputTest {
                 | "hot"         : (Temp(300)) -> Hot
 
             behavior openedInTheParameter : (temp: Temp) -> Cold | Comfortable | Hot
-                constructs Cold, Comfortable, Hot
             let openedInTheParameter (Temp(t)) =
                 if t < 240 then Cold
                 else if t < 260 then Comfortable
@@ -64,7 +62,6 @@ class ABodyThatBindsItsInputBeforeComparingItComparesItsInputTest {
                 | "hot"         : (Temp(300)) -> Hot
 
             behavior openedInTheBody : (temp: Temp) -> Cold | Comfortable | Hot
-                constructs Cold, Comfortable, Hot
             let openedInTheBody (temp) = {
                 let Temp(t) = temp
                 if t < 240 then Cold
@@ -77,7 +74,6 @@ class ABodyThatBindsItsInputBeforeComparingItComparesItsInputTest {
                 | "hot"         : (Temp(300)) -> Hot
 
             behavior aliasedInTheBody : (temp: Temp) -> Cold | Comfortable | Hot
-                constructs Cold, Comfortable, Hot
             let aliasedInTheBody (temp) = {
                 let t = temp.value
                 if t < 240 then Cold

@@ -52,7 +52,6 @@ class AGeneratedFixtureSaysWhatItsNamesDenoteTest {
             data Verdict = Ok | No
 
             behavior f : (r: Req) -> Verdict
-                constructs Ok, No
             let f (r) = { guard r.amount.value < 500 else Ok
                 No }
             """;

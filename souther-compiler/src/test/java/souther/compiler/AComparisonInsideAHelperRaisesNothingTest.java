@@ -55,7 +55,6 @@ class AComparisonInsideAHelperRaisesNothingTest {
                 let big (n: Int) = n <= 10 * 2
 
                 behavior f : (r: R) -> X | Y
-                    constructs X, Y
                 let f (r) = %s
 
                 example f

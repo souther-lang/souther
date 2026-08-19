@@ -61,7 +61,7 @@ class CompileDateLiteralTest {
                 data OnTime
 
                 behavior check : (due: Due, today: Date) -> Overdue | OnTime
-                    constructs Overdue, OnTime
+                    constructs Overdue
 
                 let check (due, today) = {
                     let late = daysBetween(due.on, today)

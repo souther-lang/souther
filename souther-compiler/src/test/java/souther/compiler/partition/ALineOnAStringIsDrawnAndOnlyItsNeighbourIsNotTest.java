@@ -41,7 +41,6 @@ class ALineOnAStringIsDrawnAndOnlyItsNeighbourIsNotTest {
             data Era = Newer | Older
 
             behavior classifyMonth : (m: YearMonth) -> Era
-                constructs Newer, Older
             let classifyMonth (m) = {
                 guard m.value < "2026-08" else Newer
                 Older

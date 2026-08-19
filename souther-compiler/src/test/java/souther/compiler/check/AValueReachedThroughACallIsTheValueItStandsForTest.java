@@ -74,7 +74,7 @@ class AValueReachedThroughACallIsTheValueItStandsForTest {
             let deductionTotal (d: Deductions): Amount = d.tax + d.premium
 
             behavior settle : (e: Earnings, d: Deductions) -> Refund | FeeTooHigh
-                constructs Refund, Net, FeeTooHigh
+                constructs Refund, Net
             """;
 
     /** How the check came out on each construction of {@code source}. */
@@ -212,7 +212,7 @@ class AValueReachedThroughACallIsTheValueItStandsForTest {
         String m = LOCATES + """
 
                 behavior settle : (order: Order, fee: Amount) -> Refund | FeeTooHigh
-                    constructs Refund, Net, FeeTooHigh
+                    constructs Refund, Net
 
                 let settle (order, fee) = {
                     guard amountOf(order).value >= fee.value else FeeTooHigh
@@ -229,7 +229,7 @@ class AValueReachedThroughACallIsTheValueItStandsForTest {
         String m = LOCATES + """
 
                 behavior settle : (order: Order, fee: Amount) -> Refund | FeeTooHigh
-                    constructs Refund, Net, FeeTooHigh
+                    constructs Refund, Net
 
                 let settle (order, fee) = {
                     guard amountOf(order).value >= fee.value else FeeTooHigh
@@ -364,7 +364,7 @@ class AValueReachedThroughACallIsTheValueItStandsForTest {
                 let same (n: Net): Net = n
 
                 behavior halve : (x: Decimal) -> Half | NotANet
-                    constructs Half, Net, NotANet
+                    constructs Half, Net
 
                 let halve (x) = {
                     if Net(x) as n then Half(same(n).value) else NotANet

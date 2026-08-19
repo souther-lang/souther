@@ -41,11 +41,9 @@ class AComparisonInsideAConjunctionIsStillTheModelsLineTest {
             data Manual
 
             behavior alone : (r: Request) -> Auto | Manual
-                constructs Auto, Manual
             let alone (r) = if r.cost <= 100000 then Auto else Manual
 
             behavior inAConjunction : (r: Request) -> Auto | Manual
-                constructs Auto, Manual
             let inAConjunction (r) =
                 if r.cost >= 0 && r.cost <= 100000 then Auto else Manual
 

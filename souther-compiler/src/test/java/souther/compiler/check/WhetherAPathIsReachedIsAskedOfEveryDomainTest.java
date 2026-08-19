@@ -49,7 +49,7 @@ class WhetherAPathIsReachedIsAskedOfEveryDomainTest {
             data Bad
             data NEL = List<Int>
                 invariant nonEmpty = List.length(value) >= 1
-            behavior f : (a: List<Int>, b: List<Int>) -> NEL | Bad constructs NEL, Bad
+            behavior f : (a: List<Int>, b: List<Int>) -> NEL | Bad constructs NEL
             """;
 
     /** What this compile warns about, as the codes it says it under. The codes and not how many

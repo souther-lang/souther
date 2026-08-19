@@ -106,7 +106,6 @@ class RunnerTest {
         Path file = write("len.sou", """
                 data NotFound
                 behavior lengthOf : (key: String) -> Int | NotFound
-                    constructs NotFound
                 let lengthOf (key) = {
                     guard String.length(key) > 0 else NotFound
                     String.length(key)
@@ -122,7 +121,6 @@ class RunnerTest {
                 data Approved
                 data Rejected
                 behavior decide : (n: Int) -> Approved | Rejected
-                    constructs Approved, Rejected
                 let decide (n) = if n > 0 then Approved else Rejected
                 """);
         assertEquals("\"Approved\"", Runner.run(file, "decide", "1"));

@@ -62,7 +62,7 @@ class CompileModuleChainTest {
             data Priced = { total: Int }
             data Empty
             behavior price : (amount: Int) -> Priced | Empty
-                constructs Priced, Empty
+                constructs Priced
             let price (amount) = if amount > 0 then Priced { total = amount } else Empty
             """;
     private static final String PB = """

@@ -79,7 +79,7 @@ class AQuestionAboutACountIsNotOneAboutTheValueItCountsTest {
                 data TooShort
 
                 behavior price : (c: Code) -> Ok | TooShort
-                    constructs Ok, TooShort
+                    constructs Ok
                     ensures TooShort -> String.length(c.text) <= 10 * 2
                 let price (c) = TooShort
 

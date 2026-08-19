@@ -53,7 +53,7 @@ class WhatStoppedADerivationIsWhatIsReportedTest {
                 module demo
                 data Ok
                 data Cyclic = Cyclic
-                behavior run : (x: Cyclic) -> Ok constructs Ok
+                behavior run : (x: Cyclic) -> Ok
                 let run (x) = Ok
                 """, "run"), "x");
 
@@ -72,7 +72,7 @@ class WhatStoppedADerivationIsWhatIsReportedTest {
                 module demo
                 data Ok
                 data Item = { charge: Int }
-                behavior run : (items: List<Item>) -> Ok constructs Ok
+                behavior run : (items: List<Item>) -> Ok
                 let run (items) =
                     { guard List.length(List.filter((i) -> i.charge >= 21000, items)) < 1 else Ok
                       Ok }
@@ -101,7 +101,7 @@ class WhatStoppedADerivationIsWhatIsReportedTest {
                 module demo
                 data Ok
                 data Item = { charge: Int }
-                behavior run : (items: List<Item>) -> Ok constructs Ok
+                behavior run : (items: List<Item>) -> Ok
                 let run (items) = { guard List.length(items) < -1 else Ok
                     Ok }
                 """, "run"), "items");
@@ -129,7 +129,7 @@ class WhatStoppedADerivationIsWhatIsReportedTest {
                 data Approved = { id: Int }
                 data Decision = Approved | Rejected
                 data DecisionN = Decision
-                behavior run : (x: DecisionN) -> Ok constructs Ok
+                behavior run : (x: DecisionN) -> Ok
                 let run (x) = Ok
                 """, "run");
 
@@ -149,7 +149,7 @@ class WhatStoppedADerivationIsWhatIsReportedTest {
                 module demo
                 data Ok
                 data Item = { charge: Int }
-                behavior run : (items: List<Item>) -> Ok constructs Ok
+                behavior run : (items: List<Item>) -> Ok
                 let run (items) = { guard List.length(items) < 3 else Ok
                     Ok }
                 """, "run");

@@ -52,7 +52,6 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
                 data High
 
                 behavior pick : (PARAMETER) -> Low | High
-                    constructs Low, High
 
                 let pick (NAME) =
                     if CONDITION

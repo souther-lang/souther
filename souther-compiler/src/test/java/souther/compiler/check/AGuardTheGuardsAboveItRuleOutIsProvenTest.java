@@ -40,7 +40,7 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
             data Charged = { yen: Int }
 
             behavior charge : (a: Amount) -> Free | Charged
-                constructs Free, Charged
+                constructs Charged
 
             let charge (a) = {
                 guard a.value < 5000 else Free
@@ -58,7 +58,7 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
             data Charged = { yen: Int }
 
             behavior charge : (a: Amount) -> Free | Charged
-                constructs Free, Charged
+                constructs Charged
 
             let charge (a) = {
                 guard a.value < 5000 else Free
@@ -76,7 +76,7 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
             data Charged = { yen: Int }
 
             behavior charge : (a: Amount) -> Free | Charged
-                constructs Free, Charged
+                constructs Charged
 
             let charge (a) = {
                 guard a.value < 2000000 else Free
@@ -180,7 +180,7 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
             data Charged = { yen: Int }
 
             behavior charge : (a: Amount) -> Free | Charged
-                constructs Free, Charged
+                constructs Charged
 
             let charge (a) = {
                 guard a.value < 5000 else Free
@@ -274,7 +274,6 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
             data No
 
             behavior mk : (n: Name, xs: List<Int>) -> Ok | No
-                constructs Ok, No
 
             let mk (n, xs) = {
                     guard List.length(List.filter(x -> x > 0, xs)) >= 1 else No
@@ -290,7 +289,6 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
             data No
 
             behavior mk : (n: Name, xs: List<Int>) -> Ok | No
-                constructs Ok, No
 
             let mk (n, xs) = {
                     guard String.length(n.value) >= 0 else No
@@ -379,7 +377,7 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
                 behavior opaque : () -> Int
 
                 behavior charge : (a: Amount) -> Free | Charged
-                    constructs Free, Charged
+                    constructs Charged
                     depends on opaque
                 let charge (a, opaque) = {
                     let x = opaque()

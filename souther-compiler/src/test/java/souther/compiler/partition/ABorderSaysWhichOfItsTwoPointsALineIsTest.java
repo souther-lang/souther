@@ -59,7 +59,6 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
                 data Result = Ok | No
 
                 behavior sized : (n: Int) -> Result
-                    constructs Ok, No
 
                 let sized (n) =
                     if n %s 100 then Ok else No
@@ -271,7 +270,6 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
                 data Ok
 
                 behavior take : (h: Holder) -> Ok
-                    constructs Ok
 
                 let take (h) = Ok
 

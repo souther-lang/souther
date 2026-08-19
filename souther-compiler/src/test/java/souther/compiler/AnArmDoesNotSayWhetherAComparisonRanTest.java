@@ -39,7 +39,6 @@ class AnArmDoesNotSayWhetherAComparisonRanTest {
             data Manual
 
             behavior gate : (r: Request) -> Auto | Manual
-                constructs Auto, Manual
             let gate (r) =
                 if r.rank >= 0 && r.cost <= 100000 then Auto else Manual
 

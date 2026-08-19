@@ -158,7 +158,7 @@ class CompileOptionMatchTest {
             data Next = { member: String }
             data Nobody
 
-            behavior peek : (q: Queue) -> Next | Nobody constructs Next, Nobody
+            behavior peek : (q: Queue) -> Next | Nobody constructs Next
 
             let peek (q) =
                 match q.head with

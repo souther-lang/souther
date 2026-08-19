@@ -104,7 +104,7 @@ class AComparisonCallStatesTheOrderItDecidesTest {
     private static String guarded(String condition) {
         return DECIMALS
                 + "\nbehavior settle : (paid: Decimal, fee: Decimal) -> Refund | FeeTooHigh\n"
-                + "    constructs Refund, Net, FeeTooHigh\n\n"
+                + "    constructs Refund, Net\n\n"
                 + "let settle (paid, fee) = {\n"
                 + "    guard " + condition + " else FeeTooHigh\n"
                 + "    Refund { net = Net(paid - fee) }\n"
@@ -117,7 +117,7 @@ class AComparisonCallStatesTheOrderItDecidesTest {
         String m = DECIMALS + """
 
                 behavior settle : (paid: Decimal, fee: Decimal) -> Refund | FeeTooHigh
-                    constructs Refund, Net, FeeTooHigh
+                    constructs Refund, Net
 
                 let settle (paid, fee) = {
                     guard Decimal.compare(paid, fee) >= 0 else FeeTooHigh
@@ -134,7 +134,7 @@ class AComparisonCallStatesTheOrderItDecidesTest {
         String m = DECIMALS + """
 
                 behavior settle : (paid: Decimal, fee: Decimal) -> Refund | FeeTooHigh
-                    constructs Refund, Net, FeeTooHigh
+                    constructs Refund, Net
 
                 let settle (paid, fee) = {
                     guard Decimal.compare(paid, fee) < 0 else FeeTooHigh
@@ -150,7 +150,7 @@ class AComparisonCallStatesTheOrderItDecidesTest {
         String m = INTS + """
 
                 behavior settle : (hi: Int, lo: Int) -> Held | TooSmall
-                    constructs Held, Span, TooSmall
+                    constructs Held, Span
 
                 let settle (hi, lo) = {
                     guard Int.compare(hi, lo) >= 0 else TooSmall
@@ -171,7 +171,7 @@ class AComparisonCallStatesTheOrderItDecidesTest {
         String m = INTS + """
 
                 behavior settle : (hi: Int, lo: Int) -> Held | TooSmall
-                    constructs Held, Span, TooSmall
+                    constructs Held, Span
 
                 let settle (hi, lo) = {
                     guard Int.compare(hi, lo) >= 0 else TooSmall
@@ -188,7 +188,7 @@ class AComparisonCallStatesTheOrderItDecidesTest {
         String m = INTS + """
 
                 behavior settle : (hi: Int, lo: Int) -> Held | TooSmall
-                    constructs Held, Span, TooSmall
+                    constructs Held, Span
 
                 let settle (hi, lo) = {
                     guard Int.compare(hi, lo) >= 2 else TooSmall
@@ -214,7 +214,7 @@ class AComparisonCallStatesTheOrderItDecidesTest {
                 data Backwards
 
                 behavior span : (from: Date, to: Date) -> Period | Backwards
-                    constructs Period, Backwards
+                    constructs Period
 
                 let span (from, to) = {
                     guard Date.daysBetween(from, to) >= 0 else Backwards
@@ -237,7 +237,7 @@ class AComparisonCallStatesTheOrderItDecidesTest {
                 data Backwards
 
                 behavior span : (from: Date, to: Date) -> Period | Backwards
-                    constructs Period, Backwards
+                    constructs Period
 
                 let span (from, to) = {
                     guard Date.daysBetween(from, to) >= 0 else Backwards
@@ -263,7 +263,7 @@ class AComparisonCallStatesTheOrderItDecidesTest {
                 data Backwards
 
                 behavior span : (start: DateTime, end: DateTime) -> Window | Backwards
-                    constructs Window, Backwards
+                    constructs Window
 
                 let span (start, end) = {
                     guard DateTime.minutesBetween(start, end) >= 0 else Backwards
@@ -313,7 +313,7 @@ class AComparisonCallStatesTheOrderItDecidesTest {
             data OverCap
 
             behavior build : (lines: List<Line>) -> Quote | OverCap
-                constructs Quote, Rate, OverCap
+                constructs Quote, Rate
 
             let build (lines) = {
                 guard withinCaps(lines) else OverCap
@@ -360,7 +360,7 @@ class AComparisonCallStatesTheOrderItDecidesTest {
                 data NotOrdered
 
                 behavior order : (a: Int, b: Int) -> Ordered | NotOrdered
-                    constructs Ordered, NotOrdered
+                    constructs Ordered
 
                 let order (a, b) = {
                     guard a >= b else NotOrdered

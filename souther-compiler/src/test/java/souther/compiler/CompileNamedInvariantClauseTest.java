@@ -40,7 +40,7 @@ class CompileNamedInvariantClauseTest {
                 %s
 
                 behavior build : (xs: List<Int>) -> Accepted | NoItems | DuplicateItem
-                    constructs Accepted, Items, NoItems, DuplicateItem
+                    constructs Accepted, Items
 
                 let build (xs) = {
                     guard Items(xs) as items else%s
@@ -122,7 +122,7 @@ class CompileNamedInvariantClauseTest {
                     invariant unique = List.allDistinctBy(x -> x, value)
 
                 behavior build : (xs: List<Int>) -> Accepted | NoItems
-                    constructs Accepted, Items, NoItems
+                    constructs Accepted, Items
 
                 let build (xs) = {
                     guard Items(xs) as items else NoItems
@@ -166,7 +166,7 @@ class CompileNamedInvariantClauseTest {
                     invariant unique = List.allDistinctBy(x -> x, value)
 
                 behavior build : (xs: List<Int>) -> Accepted | NoItems | DuplicateItem
-                    constructs Accepted, Items, NoItems, DuplicateItem
+                    constructs Accepted, Items
 
                 let build (xs) =
                     if Items(xs) as items
@@ -287,7 +287,7 @@ class CompileNamedInvariantClauseTest {
                 data Fine = { order: Order }
 
                 behavior make : (req: Request) -> Fine | NoTotal | NoLines
-                    constructs Fine, Order, NoTotal, NoLines
+                    constructs Fine, Order
 
                 let make (req) = {
                     guard Order { total = req.total, lines = req.lines } as order else
@@ -346,7 +346,7 @@ class CompileNamedInvariantClauseTest {
                 data Accepted = { items: Items }
 
                 behavior build : (xs: List<Int>) -> Accepted | NoItems | DuplicateItem
-                    constructs Accepted, Items, NoItems, DuplicateItem
+                    constructs Accepted, Items
 
                 let build (xs) = {
                     guard Items(xs) as items else
@@ -372,7 +372,7 @@ class CompileNamedInvariantClauseTest {
                 data Accepted = { items: Items }
 
                 behavior build : (xs: List<Int>) -> Accepted | NoItems
-                    constructs Accepted, Items, NoItems
+                    constructs Accepted, Items
 
                 let build (xs) = {
                     guard Items(xs) as items else
@@ -443,7 +443,7 @@ class CompileNamedInvariantClauseTest {
                 data Accepted
 
                 behavior build : (xs: List<Int>) -> Accepted | NoItems
-                    constructs Accepted, NoItems
+                    constructs Accepted
 
                 let build (xs) = {
                     guard List.length(xs) >= 1 else

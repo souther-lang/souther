@@ -54,7 +54,7 @@ class ANameGoesBackOnTheWayItCameOffTest {
             data DecisionN = Decision
             data DecisionNN = DecisionN
 
-            behavior run : (x: DecisionN) -> Ok constructs Ok
+            behavior run : (x: DecisionN) -> Ok
             let run (x) = Ok
             """;
 

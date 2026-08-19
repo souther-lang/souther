@@ -43,7 +43,6 @@ class WhatBuildsATemporalIsWhatTheNameDenotesTest {
             data Fresh
 
             behavior freshness : (on: Date) -> Stale | Fresh
-                constructs Stale, Fresh
             let freshness (on) = if on < Date("2026-01-01") then Stale else Fresh
             """;
 
@@ -69,7 +68,6 @@ class WhatBuildsATemporalIsWhatTheNameDenotesTest {
             behavior asOf : (s: String) -> Date
 
             behavior freshness : (on: Date) -> Stale | Fresh
-                constructs Stale, Fresh
                 depends on asOf
             let freshness (on, asOf) = if on < asOf("2026-01-01") then Stale else Fresh
             """;

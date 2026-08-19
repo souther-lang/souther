@@ -40,7 +40,7 @@ class AWordTheSchemaAdmitsIsOneADocumentCarriesTest {
                 module demo
                 data Ok
                 data Cyclic = Cyclic
-                behavior run : (x: Cyclic) -> Ok constructs Ok
+                behavior run : (x: Cyclic) -> Ok
                 let run (x) = Ok
                 """);
 
@@ -53,7 +53,7 @@ class AWordTheSchemaAdmitsIsOneADocumentCarriesTest {
                 module demo
                 data Ok
                 data Item = { charge: Int }
-                behavior run : (items: List<Item>) -> Ok constructs Ok
+                behavior run : (items: List<Item>) -> Ok
                 let run (items) =
                     { guard List.length(List.filter((i) -> i.charge >= 21000, items)) < 1 else Ok
                       Ok }

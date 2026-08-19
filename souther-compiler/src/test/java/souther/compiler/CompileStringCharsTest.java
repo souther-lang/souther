@@ -137,7 +137,7 @@ class CompileStringCharsTest {
             data 符号 = String invariant String.matches("[0-9]+", value)
             data 妥当
             data 不正
-            behavior 検証 : (s: 符号) -> 妥当 | 不正 constructs 妥当, 不正
+            behavior 検証 : (s: 符号) -> 妥当 | 不正
             let 零 = List.get(0, String.codePoints("0")) |> Option.withDefault(0)
             let 桁和 (s: String) = fold((acc, c) -> acc + (c - 零), 0, String.codePoints(s))
             let 検証 (s) = {

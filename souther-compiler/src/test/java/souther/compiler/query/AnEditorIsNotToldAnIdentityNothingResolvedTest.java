@@ -53,7 +53,7 @@ class AnEditorIsNotToldAnIdentityNothingResolvedTest {
             data A = { n: Int }
 
             behavior f : (n: Int) -> A
-                constructs A, Nowhere
+                constructs A
             let f (n) = A { n = n }
             """;
 

@@ -39,7 +39,6 @@ class AnEdgeNothingPromisesSaysWhatWasTriedTest {
                 invariant together = low.value /= high.value
 
             behavior check : (p: Pair) -> Ok
-                constructs Ok
 
             let check (p) = Ok
 

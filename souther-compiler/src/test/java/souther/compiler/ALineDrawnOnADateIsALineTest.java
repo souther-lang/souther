@@ -32,7 +32,6 @@ class ALineDrawnOnADateIsALineTest {
             data Fresh
 
             behavior freshness : (on: Date) -> Stale | Fresh
-                constructs Stale, Fresh
             let freshness (on) = if on < Date("2026-01-01") then Stale else Fresh
 
             example freshness

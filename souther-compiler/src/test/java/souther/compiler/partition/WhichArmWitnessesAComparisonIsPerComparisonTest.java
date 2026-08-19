@@ -43,7 +43,6 @@ class WhichArmWitnessesAComparisonIsPerComparisonTest {
                 data High
 
                 behavior pick : (r: Request) -> Low | High
-                    constructs Low, High
 
                 let pick (r) =
                     if CONDITION

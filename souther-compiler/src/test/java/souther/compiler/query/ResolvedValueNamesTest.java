@@ -246,7 +246,6 @@ class ResolvedValueNamesTest {
                 data Approved
 
                 behavior f : (n: Int) -> Approved
-                    constructs Approved
                 let f (n) = Approved
                 """;
 
@@ -304,7 +303,7 @@ class ResolvedValueNamesTest {
                 let double (n: Int): Int = n * 2
 
                 behavior f : (xs: List<Int>) -> Amount | Approved
-                    constructs Amount, Approved
+                    constructs Amount
                 let f (xs) = {
                     let total = List.length(xs)
                     if total > 0 then Amount(double(total)) else Approved
@@ -334,7 +333,7 @@ class ResolvedValueNamesTest {
                 data Approved
 
                 behavior f : (n: Int) -> Amount | Approved
-                    constructs Amount, Approved
+                    constructs Amount
                 let f (n) = if n > 0 then Amount(n) else Approved
                 """);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);

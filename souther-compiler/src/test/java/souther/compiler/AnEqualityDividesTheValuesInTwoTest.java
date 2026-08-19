@@ -36,7 +36,6 @@ class AnEqualityDividesTheValuesInTwoTest {
             data Again
 
             behavior verdict : (retries: Int) -> GiveUp | Again
-                constructs GiveUp, Again
             let verdict (retries) = if retries == 3 then GiveUp else Again
 
             example verdict
@@ -52,7 +51,6 @@ class AnEqualityDividesTheValuesInTwoTest {
             data Never
 
             behavior verdict : (retries: Int) -> GiveUp | Again | Never
-                constructs GiveUp, Again, Never
             let verdict (retries) =
                 if retries == 3 then GiveUp
                 else if retries <= 0 then Never
@@ -73,7 +71,6 @@ class AnEqualityDividesTheValuesInTwoTest {
                 invariant hi = value <= 1m
 
             behavior pick : (x: Ratio) -> A | B
-                constructs A, B
 
             let pick (x) = if x.value == 0.5m then A else B
 

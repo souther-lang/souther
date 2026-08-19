@@ -32,7 +32,6 @@ class CompileNewtypeComparisonTest {
     private String result(String body, long amount, long budget) throws Exception {
         String model = BASE + """
                 behavior 判定 : (m: 見積) -> 予算内 | 予算超過
-                    constructs 予算内, 予算超過
                 """ + body;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(model), getClass().getClassLoader());
         Object m = Codecs.decoded(loader, "demo.見積", Map.of("額", amount, "予算", budget));
@@ -83,7 +82,6 @@ class CompileNewtypeComparisonTest {
                 data 数量 = Int
                 data 明細 = { 額: 金額, 個数: 数量 }
                 behavior 判定 : (d: 明細) -> 予算内 | 予算超過
-                    constructs 予算内, 予算超過
                 let 判定 (d) = {
                     guard d.額 <= d.個数 else 予算超過
                     予算内
@@ -97,7 +95,6 @@ class CompileNewtypeComparisonTest {
         // `限度` is an Int parameter (not a literal), so it must be wrapped as 金額(限度) to compare.
         String model = BASE + """
                 behavior 判定 : (m: 見積, 限度: Int) -> 予算内 | 予算超過
-                    constructs 予算内, 予算超過
                 let 判定 (m, 限度) = {
                     guard m.額 <= 限度 else 予算超過
                     予算内
@@ -111,7 +108,6 @@ class CompileNewtypeComparisonTest {
         // the explicit `.value` form remains valid (comparing the underlying Int directly)
         String model = BASE + """
                 behavior 判定 : (m: 見積) -> 予算内 | 予算超過
-                    constructs 予算内, 予算超過
                 let 判定 (m) = {
                     guard m.額.value <= 100 else 予算超過
                     予算内

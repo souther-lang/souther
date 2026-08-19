@@ -59,7 +59,7 @@ class WhichFindingsABuildRefusesOverIsWrittenDownTest {
             data TooHeavy
 
             behavior ship : (grade: Grade, weight: Weight) -> Shipped | TooHeavy
-                constructs Shipped, TooHeavy, Weight
+                constructs Shipped, Weight
 
             let ship (grade, weight) = {
                 guard weight <= Weight(100) else TooHeavy
@@ -193,7 +193,7 @@ class WhichFindingsABuildRefusesOverIsWrittenDownTest {
                 data TooLarge
 
                 behavior check : (r: Req) -> Ok | TooSmall | TooLarge
-                    constructs Ok, TooSmall, TooLarge, Amount
+                    constructs Amount
 
                 let check (r) = {
                     guard r.small >= Amount(10) else TooSmall

@@ -172,7 +172,7 @@ class HighValueDiagnosticTest {
                 data B
                 data C
                 data S = A | B | C
-                behavior pick : (s: S) -> A | B | C constructs A
+                behavior pick : (s: S) -> A | B | C
                 let pick (s) = match s with
                     | A as a -> a
                 """);

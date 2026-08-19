@@ -38,7 +38,7 @@ class AForkInAScrutineeIsReadOnceTest {
             data Answer = Int
 
             behavior pick : (f: Flag) -> Answer
-                constructs Answer, Yes, Nope
+                constructs Answer
 
             let pick (f) = match (match f with
                     | On      -> Yes
@@ -62,7 +62,7 @@ class AForkInAScrutineeIsReadOnceTest {
             data Answer = Int
 
             behavior pick : (l: Live) -> Answer
-                constructs Answer, Yes, Nope
+                constructs Answer
 
             let pick (l) = match (match l.value with
                     | On      -> Yes

@@ -117,7 +117,7 @@ class APredicateCarriesExactlyAsFarAsItsRuleSaysTest {
                 data Bad
                 data Held = %s
                     invariant %s
-                behavior build : (c: %s) -> Held | Bad constructs Held, Bad
+                behavior build : (c: %s) -> Held | Bad constructs Held
                 let build (c) = {
                     guard %s
                         else Bad

@@ -258,7 +258,6 @@ class ThresholdNormalizationTest {
                 data Size = Bigger | Smaller
 
                 behavior classifyStage : (s: Stage) -> Size
-                    constructs Bigger, Smaller, Qualified
                 let classifyStage (s) = {
                     guard s < Qualified else Bigger
                     Smaller }

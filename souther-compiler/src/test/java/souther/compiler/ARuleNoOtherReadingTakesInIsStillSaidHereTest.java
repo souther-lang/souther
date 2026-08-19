@@ -45,7 +45,6 @@ class ARuleNoOtherReadingTakesInIsStillSaidHereTest {
                 data Long
 
                 behavior weigh : (t: Tag) -> Short | Long
-                    constructs Short, Long
                 let weigh (t) = if String.length(t.value) > 3 then Long else Short
                 """);
 
@@ -70,7 +69,6 @@ class ARuleNoOtherReadingTakesInIsStillSaidHereTest {
                 data Long
 
                 behavior weigh : (t: Tag) -> Short | Long
-                    constructs Short, Long
                 let weigh (t) = if String.length(t.value) > 3 then Long else Short
                 """);
 

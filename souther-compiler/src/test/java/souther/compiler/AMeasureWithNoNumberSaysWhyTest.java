@@ -110,7 +110,6 @@ class AMeasureWithNoNumberSaysWhyTest {
             data Verdict = Approved | Rejected
 
             behavior judge : (q: Ask) -> Verdict
-                constructs Approved, Rejected
             let judge (q) = Approved
             """;
 

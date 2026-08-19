@@ -32,7 +32,7 @@ class CstSlicesTest {
                 data Cart = { items: List<LineItem> }
                 data Empty
 
-                behavior quote : (c: Cart) -> Cart | Empty constructs Cart, Empty
+                behavior quote : (c: Cart) -> Cart | Empty constructs Cart
                 let quote (c) = if List.length(c.items) >= 1 then c else Empty
 
                 let itemCount (c: Cart) = List.length(c.items)

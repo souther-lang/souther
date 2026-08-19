@@ -43,28 +43,46 @@ class CompileBareIdentifierTest {
         assertTrue(Compiler.compile(src).containsKey("demo.F"));
     }
 
-    /** With nothing bound, the same name is the unit's construction and needs declaring. */
+    /**
+     * With nothing bound, the same name is the unit's construction — and needs no declaring.
+     *
+     * <p>A unit data is in no behavior's construction set (spec §constructs-excludes-unit-data), so
+     * the bare name being a construction is not a thing the clause records. What proves the name was
+     * read as one is the class the compile emits, not a demand to declare it.
+     */
     @Test
     void anUnboundNameConstructsTheUnitData() {
-        // the bare name `立替` resolves to a unit construction: `空` is declared but `立替` is also
-        // built, so the undeclared `立替` is E1002 — proving the bare name counts as a construction.
         String src = """
                 module demo
                 data 立替
                 data 空
-                behavior f : (x: Int) -> 立替 | 空 constructs 空
+                behavior f : (x: Int) -> 立替 | 空
                 let f (x) = if x > 0 then 立替 else 空
                 """;
-        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("E1002", e.code());
+        assertTrue(Compiler.compile(src).containsKey("demo.立替"));
     }
 
+    /** And naming it in the clause is refused rather than accepted. */
     @Test
-    void declaringItLetsTheUnitBeConstructed() {
+    void declaringItIsRefused() {
         String src = """
                 module demo
                 data 立替
-                behavior f : (x: Int) -> 立替 constructs 立替
+                behavior f : (x: Int) -> 立替
+                    constructs 立替
+                let f (x) = 立替
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertEquals("E1026", e.code());
+    }
+
+    /** The unit is still built where the name is written, clause or no clause. */
+    @Test
+    void theUnitIsBuiltWithNoClauseAtAll() {
+        String src = """
+                module demo
+                data 立替
+                behavior f : (x: Int) -> 立替
                 let f (x) = 立替
                 """;
         assertTrue(Compiler.compile(src).containsKey("demo.F"));

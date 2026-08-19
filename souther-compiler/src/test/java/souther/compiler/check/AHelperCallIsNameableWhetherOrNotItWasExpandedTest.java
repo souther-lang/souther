@@ -64,7 +64,7 @@ class AHelperCallIsNameableWhetherOrNotItWasExpandedTest {
                 %s
 
                 behavior go : (n: Int) -> NonNeg | TooSmall
-                    constructs NonNeg, TooSmall
+                    constructs NonNeg
                 let go (n) = {
                     guard step(n) >= 0 else TooSmall
                     NonNeg(step(n))

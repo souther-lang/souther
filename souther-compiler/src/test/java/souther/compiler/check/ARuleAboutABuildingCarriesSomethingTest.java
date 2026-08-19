@@ -36,7 +36,7 @@ class ARuleAboutABuildingCarriesSomethingTest {
                     data NoItems
                     data Lines = List<Int>
                         invariant List.length(value) >= 1
-                    behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines, NoItems
+                    behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines
                     let build (xs) = {
                         guard List.length(xs) >= 1
                             else NoItems
@@ -48,7 +48,7 @@ class ARuleAboutABuildingCarriesSomethingTest {
                     data NoItems
                     data Lines = List<Int>
                         invariant List.length(value) >= 1
-                    behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines, NoItems
+                    behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines
                     let build (xs) = {
                         guard List.length(xs) >= 1
                             else NoItems
@@ -61,7 +61,7 @@ class ARuleAboutABuildingCarriesSomethingTest {
                     data Row = { a: Int }
                     data Rows = List<Row>
                         invariant List.length(value) >= 1
-                    behavior build : (xs: List<Row>) -> Rows | NoItems constructs Rows, NoItems
+                    behavior build : (xs: List<Row>) -> Rows | NoItems constructs Rows
                     let build (xs) = {
                         guard List.length(xs) >= 1
                             else NoItems
@@ -73,7 +73,7 @@ class ARuleAboutABuildingCarriesSomethingTest {
                     data NoItems
                     data Lines = List<Int>
                         invariant List.length(value) >= 1
-                    behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines, NoItems
+                    behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines
                     let build (xs) = {
                         guard List.length(xs) >= 1
                             else NoItems
@@ -85,7 +85,7 @@ class ARuleAboutABuildingCarriesSomethingTest {
                     data NoItems
                     data Lines = List<Int>
                         invariant List.length(value) >= 1
-                    behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines, NoItems
+                    behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines
                     let build (xs) = {
                         guard List.length(xs) >= 1
                             else NoItems
@@ -98,7 +98,7 @@ class ARuleAboutABuildingCarriesSomethingTest {
                     data Index = Map<String, Int>
                         invariant Map.size(value) >= 1
                     behavior build : (m: Map<String, Int>) -> Index | NoEntries
-                        constructs Index, NoEntries
+                        constructs Index
                     let build (m) = {
                         guard Map.size(m) >= 1
                             else NoEntries
@@ -111,7 +111,7 @@ class ARuleAboutABuildingCarriesSomethingTest {
                     data Index = Map<String, Int>
                         invariant Map.size(value) >= 1
                     behavior build : (m: Map<String, Int>) -> Index | NoEntries
-                        constructs Index, NoEntries
+                        constructs Index
                     let build (m) = {
                         guard Map.size(m) >= 1
                             else NoEntries
@@ -123,7 +123,7 @@ class ARuleAboutABuildingCarriesSomethingTest {
                     data TooMany
                     data Lines = List<Int>
                         invariant List.length(value) <= 10
-                    behavior build : (xs: List<Int>) -> Lines | TooMany constructs Lines, TooMany
+                    behavior build : (xs: List<Int>) -> Lines | TooMany constructs Lines
                     let build (xs) = {
                         guard List.length(xs) <= 10
                             else TooMany
@@ -135,7 +135,7 @@ class ARuleAboutABuildingCarriesSomethingTest {
                     data TooMany
                     data Lines = List<Int>
                         invariant List.length(value) <= 10
-                    behavior build : (xs: List<Int>) -> Lines | TooMany constructs Lines, TooMany
+                    behavior build : (xs: List<Int>) -> Lines | TooMany constructs Lines
                     let build (xs) = {
                         guard List.length(xs) <= 10
                             else TooMany
@@ -148,7 +148,7 @@ class ARuleAboutABuildingCarriesSomethingTest {
                     data Row = { a: Int }
                     data Rows = List<Row>
                         invariant List.length(value) <= 10
-                    behavior build : (xs: List<Row>) -> Rows | TooMany constructs Rows, TooMany
+                    behavior build : (xs: List<Row>) -> Rows | TooMany constructs Rows
                     let build (xs) = {
                         guard List.length(xs) <= 10
                             else TooMany
@@ -160,7 +160,7 @@ class ARuleAboutABuildingCarriesSomethingTest {
                     data TooMany
                     data Lines = List<Int>
                         invariant List.length(value) <= 10
-                    behavior build : (xs: List<Int>) -> Lines | TooMany constructs Lines, TooMany
+                    behavior build : (xs: List<Int>) -> Lines | TooMany constructs Lines
                     let build (xs) = {
                         guard List.length(xs) <= 10
                             else TooMany
@@ -172,7 +172,7 @@ class ARuleAboutABuildingCarriesSomethingTest {
                     data TooMany
                     data Lines = List<Int>
                         invariant List.length(value) <= 10
-                    behavior build : (xs: List<Int>) -> Lines | TooMany constructs Lines, TooMany
+                    behavior build : (xs: List<Int>) -> Lines | TooMany constructs Lines
                     let build (xs) = {
                         guard List.length(xs) <= 10
                             else TooMany
@@ -184,7 +184,7 @@ class ARuleAboutABuildingCarriesSomethingTest {
                     data TooMany
                     data Lines = List<Int>
                         invariant List.length(value) <= 10
-                    behavior build : (xs: List<Int>) -> Lines | TooMany constructs Lines, TooMany
+                    behavior build : (xs: List<Int>) -> Lines | TooMany constructs Lines
                     let build (xs) = {
                         guard List.length(xs) <= 10
                             else TooMany
@@ -196,7 +196,7 @@ class ARuleAboutABuildingCarriesSomethingTest {
                     data TooMany
                     data Index = Map<String, Int>
                         invariant Map.size(value) <= 10
-                    behavior build : (m: Map<String, Int>) -> Index | TooMany constructs Index, TooMany
+                    behavior build : (m: Map<String, Int>) -> Index | TooMany constructs Index
                     let build (m) = {
                         guard Map.size(m) <= 10
                             else TooMany
@@ -208,7 +208,7 @@ class ARuleAboutABuildingCarriesSomethingTest {
                     data TooMany
                     data Index = Map<String, Int>
                         invariant Map.size(value) <= 10
-                    behavior build : (m: Map<String, Int>) -> Index | TooMany constructs Index, TooMany
+                    behavior build : (m: Map<String, Int>) -> Index | TooMany constructs Index
                     let build (m) = {
                         guard Map.size(m) <= 10
                             else TooMany
@@ -221,7 +221,7 @@ class ARuleAboutABuildingCarriesSomethingTest {
                     data Index = Map<String, Int>
                         invariant Map.size(value) <= 10
                     behavior build : (a: Map<String, Int>, b: Map<String, Int>) -> Index | TooMany
-                        constructs Index, TooMany
+                        constructs Index
                     let build (a, b) = {
                         guard Map.size(a) <= 10
                             else TooMany
@@ -234,7 +234,7 @@ class ARuleAboutABuildingCarriesSomethingTest {
                     data Index = Map<String, Int>
                         invariant Map.size(value) <= 10
                     behavior build : (a: Map<String, Int>, b: Map<String, Int>) -> Index | TooMany
-                        constructs Index, TooMany
+                        constructs Index
                     let build (a, b) = {
                         guard Map.size(a) <= 10
                             else TooMany
@@ -246,7 +246,7 @@ class ARuleAboutABuildingCarriesSomethingTest {
                     data TooMany
                     data Tags = Set<String>
                         invariant Set.size(value) <= 10
-                    behavior build : (s: Set<String>) -> Tags | TooMany constructs Tags, TooMany
+                    behavior build : (s: Set<String>) -> Tags | TooMany constructs Tags
                     let build (s) = {
                         guard Set.size(s) <= 10
                             else TooMany
@@ -258,7 +258,7 @@ class ARuleAboutABuildingCarriesSomethingTest {
                     data TooMany
                     data Tags = Set<String>
                         invariant Set.size(value) <= 10
-                    behavior build : (s: Set<String>) -> Tags | TooMany constructs Tags, TooMany
+                    behavior build : (s: Set<String>) -> Tags | TooMany constructs Tags
                     let build (s) = {
                         guard Set.size(s) <= 10
                             else TooMany
@@ -270,7 +270,7 @@ class ARuleAboutABuildingCarriesSomethingTest {
                     data TooMany
                     data Tags = Set<String>
                         invariant Set.size(value) <= 10
-                    behavior build : (s: Set<String>) -> Tags | TooMany constructs Tags, TooMany
+                    behavior build : (s: Set<String>) -> Tags | TooMany constructs Tags
                     let build (s) = {
                         guard Set.size(s) <= 10
                             else TooMany
@@ -283,7 +283,7 @@ class ARuleAboutABuildingCarriesSomethingTest {
                     data Tags = Set<String>
                         invariant Set.size(value) <= 10
                     behavior build : (a: Set<String>, b: Set<String>) -> Tags | TooMany
-                        constructs Tags, TooMany
+                        constructs Tags
                     let build (a, b) = {
                         guard Set.size(a) <= 10
                             else TooMany
@@ -296,7 +296,7 @@ class ARuleAboutABuildingCarriesSomethingTest {
                     data Tags = Set<String>
                         invariant Set.size(value) <= 10
                     behavior build : (a: Set<String>, b: Set<String>) -> Tags | TooMany
-                        constructs Tags, TooMany
+                        constructs Tags
                     let build (a, b) = {
                         guard Set.size(a) <= 10
                             else TooMany

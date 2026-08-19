@@ -30,7 +30,6 @@ class CompileFixtureNamesAValueTest {
                 let acme = Lead { name = "Acme", score = 72, budgetConfirmed = true }
 
                 behavior qualify : (l: Lead) -> Accepted | Rejected
-                    constructs Accepted, Rejected
 
                 let qualify (l) = if l.score >= 70 && l.budgetConfirmed then Accepted else Rejected
 
@@ -51,7 +50,6 @@ class CompileFixtureNamesAValueTest {
                 let acme = Lead { name = "Acme", score = 72, budgetConfirmed = true }
 
                 behavior qualify : (l: Lead) -> Accepted | Rejected
-                    constructs Accepted, Rejected
 
                 let qualify (l) = if l.score >= 70 && l.budgetConfirmed then Accepted else Rejected
 
@@ -77,7 +75,6 @@ class CompileFixtureNamesAValueTest {
                 let acme = Lead { name = "Acme", score = acmeScore }
 
                 behavior qualify : (l: Lead) -> Accepted | Rejected
-                    constructs Accepted, Rejected
 
                 let qualify (l) = if l.score.value >= 70 then Accepted else Rejected
 
@@ -102,7 +99,6 @@ class CompileFixtureNamesAValueTest {
                 let acme = Deal { makers = Set.fromList([ ContactId("c-1"), ContactId("c-2") ]) }
 
                 behavior staffed : (d: Deal) -> Enough | TooFew
-                    constructs Enough, TooFew
 
                 let staffed (d) = if Set.size(d.makers) >= 2 then Enough else TooFew
 
@@ -127,7 +123,6 @@ class CompileFixtureNamesAValueTest {
                 let opening = Ledger { balances = start }
 
                 behavior settle : (l: Ledger) -> Balanced | Unbalanced
-                    constructs Balanced, Unbalanced
 
                 let settle (l) = if Map.size(l.balances) == 0 then Balanced else Unbalanced
 
@@ -155,7 +150,6 @@ class CompileFixtureNamesAValueTest {
                 data Unbalanced
 
                 behavior settle : (l: Ledger) -> Balanced | Unbalanced
-                    constructs Balanced, Unbalanced
 
                 let settle (l) = if Map.size(l.balances) == 0 then Balanced else Unbalanced
 
@@ -180,7 +174,6 @@ class CompileFixtureNamesAValueTest {
                 let acme = Lead { name = "Acme", score = raise(71) }
 
                 behavior qualify : (l: Lead) -> Accepted | Rejected
-                    constructs Accepted, Rejected
 
                 let qualify (l) = if l.score >= 70 then Accepted else Rejected
 
@@ -204,7 +197,6 @@ class CompileFixtureNamesAValueTest {
                 let acme = Lead { name = "Acme", score = String.length("Acme") }
 
                 behavior qualify : (l: Lead) -> Accepted | Rejected
-                    constructs Accepted, Rejected
 
                 let qualify (l) = if l.score >= 70 then Accepted else Rejected
 

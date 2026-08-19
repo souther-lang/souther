@@ -51,7 +51,6 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
                         data Verdict = Ok | No
 
                         behavior f : (d: ShippingDay) -> Verdict
-                            constructs Ok, No
                         let f (d) = { guard d.value.value < Date("2026-08-01") else Ok
                             No }
                         """));
@@ -73,7 +72,6 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
                         data Verdict = Ok | No
 
                         behavior f : (a: ShippingAmount) -> Verdict
-                            constructs Ok, No
                         let f (a) = { guard a.value.value < 500 else Ok
                             No }
                         """));

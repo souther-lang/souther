@@ -46,11 +46,9 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
             data Stage = Prospecting | Qualified | Won
 
             behavior alone : (r: Request) -> Auto | Manual
-                constructs Auto, Manual
             let alone (r) = if r.cost <= 100000 then Auto else Manual
 
             behavior inAConjunction : (r: Request) -> Auto | Manual
-                constructs Auto, Manual
             let inAConjunction (r) =
                 if r.cost >= 0 && r.cost <= 100000 then Auto else Manual
 
@@ -59,24 +57,19 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
             data Outer = { middle: Middle }
 
             behavior tooDeep : (o: Outer) -> Auto | Manual
-                constructs Auto, Manual
             let tooDeep (o) = if o.middle.deep.note == "x" then Auto else Manual
 
             behavior byEquality : (r: Request) -> Auto | Manual
-                constructs Auto, Manual
             let byEquality (r) = if r.cost == 3 then Auto else Manual
 
             behavior byDateTime : (at: DateTime) -> Auto | Manual
-                constructs Auto, Manual
             let byDateTime (at) =
                 if at < DateTime("2026-01-01T00:00:00") then Auto else Manual
 
             behavior byCase : (s: Qualified) -> Auto | Manual
-                constructs Auto, Manual, Won
             let byCase (s) = if s < Won then Auto else Manual
 
             behavior nothingCompared : (r: Request) -> Auto | Manual
-                constructs Auto, Manual
             let nothingCompared (r) =
                 match r.kind with
                     | Domestic -> Auto
@@ -90,15 +83,12 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
                 invariant value >= 100
 
             behavior boundedByADate : (c: Cutoff) -> Auto | Manual
-                constructs Auto
             let boundedByADate (c) = Auto
 
             behavior boundedByAnUnreadableEnd : (m: Stepped) -> Auto | Manual
-                constructs Auto
             let boundedByAnUnreadableEnd (m) = Auto
 
             behavior boundedByANumber : (a: Amount) -> Auto | Manual
-                constructs Auto
             let boundedByANumber (a) = Auto
             """;
 

@@ -200,7 +200,7 @@ class AHelpersArmIsOneObligationHoweverOftenItIsCalledTest {
                     invariant value >= 0
 
                 behavior twoFilters : (items: List<Item>) -> Count
-                    constructs Count, Kept, Dropped
+                    constructs Count
                 let twoFilters (items) =
                     Count(List.length(List.filter(i -> i.mark == Kept, items))
                         + List.length(List.filter(i -> i.mark == Dropped, items)))

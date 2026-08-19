@@ -57,18 +57,20 @@ class CompileHelperFnTest {
     @Test
     void aHelpersConstructionCountsAgainstTheCallersPermission() {
         // the helper `makeTag` builds `Tag`, attributed to the caller `label`: `Blank` is declared
-        // but `Tag` (via the helper) is also built, so the undeclared `Tag` is E1002.
+        // but `Tag` (via the helper) is also built, so the undeclared `Tag` is E1002. `Blank` carries
+        // a field because a unit is in no construction set and so could not be the declared entry.
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
                 module demo
                 import String ( length )
 
                 data Id = String
                 data Tag = { a: String, b: String }
-                data Blank
+                data Blank = { why: String }
 
-                behavior label : (id: Id) -> Tag | Blank constructs Blank
+                behavior label : (id: Id) -> Tag | Blank
+                    constructs Blank
 
-                let label (id) = if length(id.value) > 0 then makeTag(id) else Blank
+                let label (id) = if length(id.value) > 0 then makeTag(id) else Blank { why = "" }
 
                 let makeTag (id: Id) = Tag { a = id.value, b = id.value }
                 """));

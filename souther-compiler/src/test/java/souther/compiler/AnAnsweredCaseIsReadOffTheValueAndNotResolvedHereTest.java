@@ -48,7 +48,7 @@ class AnAnsweredCaseIsReadOffTheValueAndNotResolvedHereTest {
 
             data In = { n: Int }
 
-            behavior f : (i: In) -> up.Answer constructs up.Yes, up.No
+            behavior f : (i: In) -> up.Answer
             let f (i) = if i.n > 0 then up.Yes else up.No
 
             example f
@@ -64,7 +64,7 @@ class AnAnsweredCaseIsReadOffTheValueAndNotResolvedHereTest {
 
             data In = { n: Int }
 
-            behavior g : (i: In) -> Answer constructs Yes, No
+            behavior g : (i: In) -> Answer
             let g (i) = if i.n > 0 then Yes else No
 
             example g
@@ -85,7 +85,7 @@ class AnAnsweredCaseIsReadOffTheValueAndNotResolvedHereTest {
             data In = { n: Int }
             data Yes = { irrelevant: String }
 
-            behavior h : (i: In) -> up.Answer constructs up.Yes, up.No
+            behavior h : (i: In) -> up.Answer
             let h (i) = if i.n > 0 then up.Yes else up.No
 
             example h

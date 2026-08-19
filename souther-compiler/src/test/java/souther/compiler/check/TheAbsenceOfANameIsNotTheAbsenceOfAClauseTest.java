@@ -49,7 +49,7 @@ class TheAbsenceOfANameIsNotTheAbsenceOfAClauseTest {
                 invariant ordered = low <= high
 
             behavior widen : (low: Int, high: Int) -> Bound | Bad
-                constructs Bound, Bad
+                constructs Bound
 
             let widen (low, high) = {
                 guard low >= 0
@@ -92,7 +92,7 @@ class TheAbsenceOfANameIsNotTheAbsenceOfAClauseTest {
                 invariant low <= high
 
             behavior widen : (low: Int, high: Int) -> Bound | Bad
-                constructs Bound, Bad
+                constructs Bound
 
             let widen (low, high) = {
                 guard low >= 0

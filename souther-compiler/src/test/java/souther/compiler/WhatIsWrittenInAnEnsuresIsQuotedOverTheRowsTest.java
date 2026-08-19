@@ -40,7 +40,6 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
 
             behavior findTodo : (id: TodoId) -> Todo | NotFound
                 constructs Todo
-                constructs NotFound
                 ensures found = Todo -> value.id.value == id.value
                 ensures asked = NotFound -> id.value > 0
 
@@ -105,7 +104,6 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
 
                 behavior findTodo : (id: TodoId) -> Todo | NotFound
                     constructs Todo
-                    constructs NotFound
                     ensures both = Todo -> value.id.value == id.value
                           | NotFound -> id.value > 0
 
@@ -182,7 +180,6 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
 
                 behavior wrong : (n: TodoId, k: Kind) -> Todo | NotFound
                     constructs Todo
-                    constructs NotFound
                     ensures nope = Other -> n.value > 0
 
                 let wrong (n, k) = if n.value > 5 then Todo { id = n } else NotFound
@@ -232,7 +229,6 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
 
                 behavior findTodo : (id: TodoId) -> Todo | NotFound
                     constructs Todo
-                    constructs NotFound
                     ensures asked = NotFound -> positive(id)
 
                 let findTodo (id) = if id.value > 0 then Todo { id = id } else NotFound

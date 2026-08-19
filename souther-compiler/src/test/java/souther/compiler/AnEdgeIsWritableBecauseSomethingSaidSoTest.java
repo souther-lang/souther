@@ -55,7 +55,6 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
             data Ok
 
             behavior f : (n: N) -> Ok
-                constructs Ok
 
             let f (n) = Ok
 
@@ -108,7 +107,6 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
             data Ok
 
             behavior place : (amount: Amount, code: Code) -> Ok
-                constructs Ok
 
             let place (amount, code) = Ok
 
@@ -172,7 +170,6 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
                 data Ok
 
                 behavior place : (order: Order) -> Ok
-                    constructs Ok
 
                 let place (order) = Ok
 
@@ -197,7 +194,6 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
                 data Ok
 
                 behavior f : (n: N) -> Ok
-                    constructs Ok
 
                 let f (n) = Ok
 
@@ -232,14 +228,12 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
                 data Ok
 
                 behavior f : (n: N) -> Ok
-                    constructs Ok
 
                 let f (n) = Ok
 
                 data Other
 
                 behavior g : (n: N) -> Other
-                    constructs Other
 
                 let g (n) = Other
 
@@ -275,7 +269,6 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
                 data Big
 
                 behavior f : (n: N) -> Ok | Big
-                    constructs Ok, Big
 
                 let f (n) = if n.value <= 4 then Ok else Big
 
@@ -358,11 +351,9 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
             data Ok
 
             behavior onADate : (c: Cutoff) -> Ok
-                constructs Ok
             let onADate (c) = Ok
 
             behavior onAMoment : (m: Moment) -> Ok
-                constructs Ok
             let onAMoment (m) = Ok
 
             example onADate

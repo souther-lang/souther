@@ -65,7 +65,7 @@ class CompileInjectedFactoryTest {
                 data Done = { result: Int }
                 data Failed
                 data In = { x: Int }
-                behavior mk : (i: In) -> Done | Failed constructs Done, Failed
+                behavior mk : (i: In) -> Done | Failed constructs Done
                 """, "demo.Mk");
         Class<?> failed = mk.getClassLoader().loadClass("demo.Failed");
         Method unit = mk.getDeclaredMethod("Failed");
@@ -128,7 +128,7 @@ class CompileInjectedFactoryTest {
                 data Member = { id: Int }
                 data Missing
                 data In = { x: Int }
-                behavior mk : (i: In) -> Member | Missing constructs Missing
+                behavior mk : (i: In) -> Member | Missing
                 """, "demo.Mk");
         assertDoesNotThrow(() -> mk.getDeclaredMethod("Missing"),
                 "the constructed type has its factory");

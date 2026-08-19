@@ -39,7 +39,6 @@ class AnEndIsWhereItsRuleStopsTest {
             data Ok
 
             behavior take : (h: Holder) -> Ok
-                constructs Ok
 
             let take (h) = Ok
             """;
@@ -86,7 +85,6 @@ class AnEndIsWhereItsRuleStopsTest {
                 data Ok
 
                 behavior take : (h: Holder) -> Ok
-                    constructs Ok
 
                 let take (h) = Ok
 
@@ -127,7 +125,6 @@ class AnEndIsWhereItsRuleStopsTest {
                 data Ok
 
                 behavior take : (h: Holder) -> Ok
-                    constructs Ok
 
                 let take (h) = Ok
                 """, "--generate");
@@ -161,7 +158,6 @@ class AnEndIsWhereItsRuleStopsTest {
                 data No
 
                 behavior pick : (r: Ratio) -> Ok | No
-                    constructs Ok, No
 
                 let pick (r) = {
                     guard r.value > 5.0m else No
@@ -200,7 +196,6 @@ class AnEndIsWhereItsRuleStopsTest {
                 data Ok
 
                 behavior take : (p: Pair, flag: Bool) -> Ok
-                    constructs Ok
 
                 let take (p, flag) = Ok
                 """, "--generate");
@@ -228,7 +223,6 @@ class AnEndIsWhereItsRuleStopsTest {
                 data No
 
                 behavior pick : (r: AboveFive) -> Ok | No
-                    constructs Ok, No
 
                 let pick (r) = {
                     guard r.value < 10m else No

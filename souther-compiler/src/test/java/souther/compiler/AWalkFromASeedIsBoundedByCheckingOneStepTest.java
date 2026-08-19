@@ -349,7 +349,7 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
                 data Bad
 
                 behavior total : (xs: List<Int>) -> Money | Bad
-                    constructs Money, Bad
+                    constructs Money
 
                 let total (xs) = {
                     let sum = List.fold((acc, x) -> acc + x, 0, xs)

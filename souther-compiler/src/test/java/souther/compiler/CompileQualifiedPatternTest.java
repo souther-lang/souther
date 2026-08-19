@@ -34,7 +34,7 @@ class CompileQualifiedPatternTest {
                         data In = { a: Int? }
                         data Out = { n: Int }
                         data Missing
-                        behavior go : (i: In) -> Out | Missing constructs Out, Missing
+                        behavior go : (i: In) -> Out | Missing constructs Out
                         let go (i) = match i.a with
                             | Option.Some v -> Out { n = v }
                             | None -> Missing

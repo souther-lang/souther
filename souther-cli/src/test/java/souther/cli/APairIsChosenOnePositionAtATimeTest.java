@@ -36,7 +36,6 @@ class APairIsChosenOnePositionAtATimeTest {
                 data Ok
 
                 behavior f : (r: R, flag: Bool) -> Ok
-                    constructs Ok
 
                 let f (r, flag) = Ok
                 """.replace("CLAUSE", clauses);
@@ -114,7 +113,6 @@ class APairIsChosenOnePositionAtATimeTest {
                 data Ok
 
                 behavior f : (r: R, flag: Bool) -> Ok
-                    constructs Ok
 
                 let f (r, flag) = Ok
                 """.replace("FIELDS", fields.toString()).replace("RULE", rule.toString());
@@ -159,7 +157,6 @@ class APairIsChosenOnePositionAtATimeTest {
                 data Ok
 
                 behavior f : (r: R, flag: Bool) -> Ok
-                    constructs Ok
 
                 let f (r, flag) = Ok
                 """.replace("FIELDS", fields.toString());
@@ -207,7 +204,6 @@ class APairIsChosenOnePositionAtATimeTest {
                 data Ok
 
                 behavior f : (band: Band, flag: Bool) -> Ok
-                    constructs Ok
 
                 let f (band, flag) = Ok
                 """;

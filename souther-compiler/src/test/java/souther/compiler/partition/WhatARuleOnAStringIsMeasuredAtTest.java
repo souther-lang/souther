@@ -154,7 +154,6 @@ class WhatARuleOnAStringIsMeasuredAtTest {
                 data Era = Newer | Older
 
                 behavior f : (x: String) -> Era
-                    constructs Newer, Older
                 let f (x) = {
                     GUARD
                     Older

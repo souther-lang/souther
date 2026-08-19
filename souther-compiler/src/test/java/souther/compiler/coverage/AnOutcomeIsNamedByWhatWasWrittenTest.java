@@ -45,7 +45,7 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
             data Low
 
             behavior price : (temp: Int) -> Hot | Low
-                constructs Hot, Low
+                constructs Hot
             let price (temp) = {
                 guard temp >= 240 else Low
                 Hot { at = temp }
@@ -66,7 +66,7 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
             data Low
 
             behavior price : (temp: Int) -> Warm | Low
-                constructs Warm, Low
+                constructs Warm
             let price (temp) = if Warm(temp) as w then w else Low
             """;
 
@@ -77,7 +77,7 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
             data Low
 
             behavior price : (temp: Int) -> Warm | Low
-                constructs Warm, Low
+                constructs Warm
             let price (temp) = {
                 guard Warm(temp) as w else Low
                 w

@@ -92,7 +92,7 @@ class CompileSpecChapter23Test {
                 申請:    事前承認待ち,
                 承認者ID: 従業員ID
             ) -> 事前承認済み | 承認権限なし
-                constructs 事前承認済み, 承認権限なし
+                constructs 事前承認済み
                 depends on 現在時刻
 
             let 事前承認する (申請, 承認者ID, 現在時刻) = {
