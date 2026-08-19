@@ -161,26 +161,20 @@ final class PathEngine {
      * expression it was given.
      *
      * <p>Nothing is recorded of the name itself. A name is read as the expression it was given —
-     * {@link Terms#affine} reads through it, and reads through a field taken off it the same way —
+     * {@link Terms#affineOf} reads through it, and reads through a field taken off it the same way —
      * so there is no second reading for a fact about the name to be needed by. Recording one meant
      * giving the name's own atom the bounds of the form it was given, which is what a guard read one
      * way and a construction read the other had between them, and a bound is not a relation: it left
      * the guard settling nothing about the construction (#676).
+     *
+     * <p>What the binder means is {@link Terms#inside}'s answer and not this walk's. A reader that
+     * decides for itself what a binder denotes is a second account of it, and the second account is
+     * weaker than the first wherever it was written for a narrower purpose — which is what a
+     * reduction's step read by (#867). Nothing else here is owed: the knowledge is what stood before
+     * the binding, because the initializer was read before this.
      */
     Entered bindLet(Core.LetIn li, Known k, Denotations at) {
-        // Entering a binding a walk is already inside is not a second binding of it. A branch is
-        // read from where its conditional stood, which is inside these, over a tree that still holds
-        // them.
-        if (at.valueOf(li.binder().id()) == li.value()) {
-            return new Entered(k, at);
-        }
-        // What the name is about is what it was given is about. Where even the identity reading has
-        // nothing to name — an expression answering nothing at all — the name is what there is, and
-        // it is one value however many times it is read.
-        FactSubject about = terms.subjectOf(li.value(), at);
-        return new Entered(k, at.binding(li.binder().id(), li.value(),
-                about != null ? about : terms.placeSubject(li.binder().id()),
-                terms.locationOf(li.value(), at), terms.bodyKey(li.value(), at)));
+        return new Entered(k, terms.inside(li, at));
     }
 
     /**

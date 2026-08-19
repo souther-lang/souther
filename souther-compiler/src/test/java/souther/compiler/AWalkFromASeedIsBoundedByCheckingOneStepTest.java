@@ -39,6 +39,10 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
 
             data AtLeastTen = Int
                 invariant tenUp = value >= 10
+
+            let fee   (l: Line): NonNegInt = l.amount
+            let seven (l: Line): Int = 7
+            let twice (n: Int): Int = n * 2
             """;
 
     private static Compiler.Compiled compiled(String body) {
@@ -354,5 +358,61 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
                     Money(sum)
                 }
                 """)), "the guard states the clause of the value the construction is given");
+    }
+
+    /**
+     * A step calling a helper that takes a record, which is where the walk read the expansion the
+     * inlining left and stopped at the binding it made.
+     *
+     * <p>The binding holds a {@code Line}, which is no number, and the reading of the arithmetic gave
+     * the whole expansion up over that — so the step was one atom and the walk was owed whatever it
+     * did. What the binding holds decides what can be said about it and not whether it may be read
+     * through: it denotes the element, so the place under it is the element's field, which is the
+     * place the walk wrote {@code NonNegInt}'s rule about (#867).
+     */
+    @Test
+    void aStepCallingAHelperThatTakesARecordReadsTheElementTheBindingDenotes() {
+        assertFalse(owed(compiled("""
+                behavior total : (xs: List<Line>) -> Money
+                    constructs Money
+
+                let total (xs) = Money(List.fold((acc, x) -> acc + fee(x).value, 0, xs))
+                """)), "the binding the expansion made denotes the element, so `x.amount` is bounded");
+    }
+
+    /** The same helper written with an argument the arithmetic reads: what the two differ in is the
+     * parameter's type and nothing else, so the one above is not about what a helper answers. */
+    @Test
+    void aStepCallingAHelperThatTakesANumberIsReadTheSameWay() {
+        assertFalse(owed(compiled("""
+                behavior total : (xs: List<Line>) -> Money
+                    constructs Money
+
+                let total (xs) = Money(List.fold((acc, x) -> acc + twice(x.amount.value), 0, xs))
+                """)), "a helper over a number was always read through, and a record is read the same");
+    }
+
+    /** And the helper's body is a written number here, which the rule discharges where it is written
+     * at the call — so what was reported was the binding standing in front of it and not the step. */
+    @Test
+    void aStepCallingAHelperThatAnswersAWrittenNumberAnswersThatNumber() {
+        assertFalse(owed(compiled("""
+                behavior total : (xs: List<Line>) -> AtLeastTen
+                    constructs AtLeastTen
+
+                let total (xs) = AtLeastTen(List.fold((acc, x) -> seven(x) + 10, 10, xs))
+                """)), "the step answers seventeen whatever the accumulator was");
+    }
+
+    /** The neighbour that stays reported: the same helper, subtracted. Reading through the binding is
+     * what lets the step be read at all, and reading it is not discharging it. */
+    @Test
+    void aStepSubtractingWhatSuchAHelperAnswersIsOwed() {
+        assertTrue(owed(compiled("""
+                behavior total : (xs: List<Line>) -> Money
+                    constructs Money
+
+                let total (xs) = Money(List.fold((acc, x) -> acc - fee(x).value, 0, xs))
+                """)), "an accumulator at or above zero less an amount at or above zero may go below");
     }
 }
