@@ -274,9 +274,16 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
                 java.util.Optional.of(new ClauseName("cap")))), true);
         // A bound at 100 over a position the rules leave at 100 and up: the ON point is the whole of
         // what it owes, and a row is at it.
-        Border border = Border.atAPlace(new AxisId("weigh", "w.a"),
-                Cut.at(Carrier.WHOLE, Count.of(100), origin), origin,
-                souther.compiler.inputs.BoundaryDomain.on(Carrier.WHOLE),
+        Border border = Border.at(
+                souther.compiler.partition.BoundaryTarget.at(
+                        new souther.compiler.partition.BorderQuantity.OfACoordinate(
+                                new AxisId("weigh", "w.a"),
+                                new souther.compiler.inputs.NumericTerm.ValueOf(
+                                        souther.compiler.inputs.TermPath.of("w").then("a")),
+                                Carrier.WHOLE),
+                        new souther.compiler.partition.Level.OnACarrier(
+                                Carrier.WHOLE, Count.of(100))),
+                origin,
                 new souther.compiler.numeric.NumericDomain.Bounds(
                         souther.compiler.numeric.Endpoint.inclusive(Count.of(100)), null));
         java.util.EnumMap<PointRole, ItemAssessment> items =

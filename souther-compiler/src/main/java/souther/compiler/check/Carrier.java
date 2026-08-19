@@ -200,6 +200,18 @@ public sealed interface Carrier {
         return cases.isEmpty() ? null : new Ordinal(places.enumeration(), cases);
     }
 
+    /**
+     * Whether this order's places count to a number.
+     *
+     * <p>What makes the distance between two of its values a value itself. Seven of the eight count;
+     * a string is ordered and has no number under it, so two strings a rule holds apart stand in an
+     * order and stand no measurable distance apart. Asked here rather than by testing for the one
+     * carrier, so a ninth added answers it the way it answers everything else about itself.
+     */
+    default boolean counts() {
+        return !(this instanceof Text);
+    }
+
     /** How the counts on this carrier are spaced, which is what decides whether a strict bound has a
      * next count to step to. */
     default Granularity spacing() {

@@ -18,7 +18,6 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.StructuralInspection;
 import souther.compiler.inputs.TypeBounds;
-import souther.compiler.inputs.BoundaryDomain;
 import souther.compiler.inputs.Membership;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
@@ -568,32 +567,6 @@ public final class Partitions {
     }
 
     /**
-     * A place both positions of a line between them can hold, or null where their rules leave none.
-     *
-     * <p>What proves a row can be written on such a line. The line is where the two positions are
-     * equal, so a row on it writes one place at both — and whether one exists is the two positions'
-     * ranges read together, which is a question the rules answer without anything being built.
-     *
-     * <p>Which place a pair of ends gives up is {@link Carrier#somethingInside}'s single rule, so a
-     * range open at both ends answers the same way here as anywhere else, and a carrier whose values
-     * are strings answers it the way a carrier whose values count does.
-     *
-     * <p>Null is not a proof of the opposite. Two ranges that leave no place leave none, and that is a
-     * fact about the rules; a range this could not read in full is a range this did not read, and the
-     * caller is the one holding whether that happened.
-     */
-    public static Place commonPlace(Map<NumericTerm, NumericDomain.Bounds> domains,
-                                    BoundaryTarget.EqualTerms line) {
-        NumericDomain.Bounds on = domains.get(line.on());
-        NumericDomain.Bounds against = domains.get(line.against());
-        Endpoint min = Endpoint.lower(on == null ? null : on.min(),
-                against == null ? null : against.min());
-        Endpoint max = Endpoint.upper(on == null ? null : on.max(),
-                against == null ? null : against.max());
-        return line.carrier().somethingInside(min, max);
-    }
-
-    /**
      * The borders a position's rules drew, one per rule that drew a cut.
      *
      * <p>One entry per line and not per point. What each of them owes a row at, in each of the four
@@ -607,15 +580,20 @@ public final class Partitions {
      */
     public static List<Border> bordersOf(Axis axis, Symbols symbols,
                                          NumericDomain.Bounds within) {
-        BoundaryDomain domain = axis.term().intervals(axis.type(), symbols);
         List<Border> out = new ArrayList<>();
         for (Cut cut : axis.cuts()) {
+            // The carrier is the cut's, which is the one the rule was read on. Asked of the axis
+            // instead, a line drawn on a count taken of a position would be written back as a value
+            // of the position.
+            BoundaryTarget target = BoundaryTarget.at(
+                    new BorderQuantity.OfACoordinate(axis.id(), axis.term(), cut.carrier()),
+                    new Level.OnACarrier(cut.carrier(), cut.at()));
             for (OriginRef origin : cut.origins()) {
                 // Null where the position does not reach the line at all, which is the line and not
                 // one of its points: the rule drew it about the type, and what is left of the type
                 // here may stop short of it — `low < high` under one `[0, 1]` leaves `low` every
                 // value up to 1 and not 1 itself.
-                Border border = Border.atAPlace(axis.id(), cut, origin, domain, within);
+                Border border = Border.at(target, origin, within);
                 if (border != null) {
                     out.add(border);
                 }

@@ -243,9 +243,9 @@ public final class EnsuresThresholds {
      * relation changes at is a pair of counts that are equal — so a row putting one count in both
      * positions has met it.
      *
-     * <p>{@code valueBelongsBelow} is not a question this line answers — the two sides of it are
-     * decided by both positions at once — and {@code singles} is false, because this is a line and
-     * not a value singled out.
+     * <p>Which side of the line the pair on it belongs to is derived from the operator, the way it
+     * is for a bound on one position, so that one reading of a border serves both. {@code singles} is
+     * false, because this is a line and not a value singled out.
      */
     private static void between(Core.Binary comparison, StatedContract.StatedRule rule,
                                 String clause, InputReads reads, Symbols symbols, Drawn out) {
@@ -253,12 +253,12 @@ public final class EnsuresThresholds {
         if (drawn == null) {
             return;
         }
-        Border made = Border.betweenTerms(
-                new BoundaryTarget.EqualTerms(out.behavior(), drawn.on(), drawn.against(),
-                        drawn.carrier()),
-                new OriginRef.EnsuresOrigin(new RuleRef.Ensures(rule.id(), clause), true,
-                        drawn.holdsAtTheLine(), false),
-                drawn.onIsAboveWhereItHolds());
+        Border made = Border.at(
+                BoundaryTarget.at(new BorderQuantity.Apart(out.behavior(), drawn.on(),
+                        drawn.against(), drawn.carrier()), BorderQuantity.steps(0)),
+                new OriginRef.EnsuresOrigin(new RuleRef.Ensures(rule.id(), clause),
+                        drawn.valueBelongsBelow(), drawn.holdsAtTheLine(), false),
+                null);
         if (out.between().stream().noneMatch(had -> had.equals(made))) {
             out.between().add(made);
         }

@@ -133,7 +133,7 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
     /** What that point is against, or null where none is owed. */
     public String against(PointRole role) {
         souther.compiler.partition.Criterion criterion = border.demand(role).criterion();
-        return criterion == null ? null : criterion.against(border.cut());
+        return criterion == null ? null : border.cut().of().writtenAt(criterion.against());
     }
 
     /** The left of the {@code left = right} a report names this line by. */

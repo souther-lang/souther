@@ -189,7 +189,7 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
      */
     @Test
     void aBoundThatStopsShortOfItsValueDrawsNoBorderAtIt() {
-        assertEquals(Criterion.AtThePlace.class,
+        assertEquals(Criterion.AtTheLevel.class,
                 borderOf(new OriginRef.InvariantOrigin(invariant(), true))
                         .demand(PointRole.ON).criterion().getClass(),
                 "a bound that admits its own end is at that end's ON point");
@@ -204,9 +204,7 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
     private static Border borderOf(OriginRef origin) {
         Carrier carrier = new Carrier.Whole();
         boolean admits = origin instanceof OriginRef.InvariantOrigin bound && bound.holdsAtTheValue();
-        return Border.atAPlace(new AxisId("take", "h.a"),
-                Cut.at(carrier, Count.of(5), origin),
-                origin, BoundaryDomain.on(carrier),
+        return Border.at(lineAt(new AxisId("take", "h.a"), carrier, Count.of(5)), origin,
                 new NumericDomain.Bounds(new Endpoint(Count.of(5), admits), null));
     }
 
@@ -230,15 +228,14 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
         OriginRef closed = new OriginRef.EnsuresOrigin(
                 new RuleRef.Ensures(new BehaviorContract.RuleId(null, 0, 0, null), "cap"),
                 true, true, false);
-        Border border = Border.atAPlace(new AxisId("cap", "n"),
-                Cut.at(carrier, Count.of(100), closed), closed, BoundaryDomain.on(carrier),
+        Border border = Border.at(lineAt(new AxisId("cap", "n"), carrier, Count.of(100)), closed,
                 new NumericDomain.Bounds(null, null));
 
-        assertEquals("= 100", border.demand(PointRole.ON).criterion().asked(border.cut()));
-        assertEquals("= 101", border.demand(PointRole.OFF).criterion().asked(border.cut()));
-        assertEquals("< 100", border.demand(PointRole.IN).criterion().asked(border.cut()),
+        assertEquals("= 100", border.demand(PointRole.ON).criterion().asked(border.cut().of()));
+        assertEquals("= 101", border.demand(PointRole.OFF).criterion().asked(border.cut().of()));
+        assertEquals("< 100", border.demand(PointRole.IN).criterion().asked(border.cut().of()),
                 "99 is inside the partition and away from the border, which is the IN point");
-        assertEquals("> 101", border.demand(PointRole.OUT).criterion().asked(border.cut()));
+        assertEquals("> 101", border.demand(PointRole.OUT).criterion().asked(border.cut().of()));
 
         // A bound owes nothing outside itself, and says which of the three answers settled it.
         Border bound = borderOf(new OriginRef.InvariantOrigin(invariant(), true));
@@ -246,8 +243,17 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
                 bound.demand(PointRole.OFF));
         assertEquals(new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
                 bound.demand(PointRole.OUT));
-        assertEquals("/= 5", bound.demand(PointRole.IN).criterion().asked(bound.cut()),
+        assertEquals("/= 5", bound.demand(PointRole.IN).criterion().asked(bound.cut().of()),
                 "and everything else the position admits is inside the bound");
+    }
+
+    /** A line on one position's own values, at a place of its carrier. */
+    private static BoundaryTarget lineAt(AxisId axis, Carrier carrier,
+                                         souther.compiler.numeric.Place at) {
+        return BoundaryTarget.at(new BorderQuantity.OfACoordinate(axis,
+                        new souther.compiler.inputs.NumericTerm.ValueOf(
+                                souther.compiler.inputs.TermPath.of(axis.term())), carrier),
+                new Level.OnACarrier(carrier, at));
     }
 
     /** The clause the bound tests name, which is only an identity here. */

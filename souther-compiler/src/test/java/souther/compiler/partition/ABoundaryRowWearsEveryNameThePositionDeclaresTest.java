@@ -108,14 +108,14 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
                     : Partitions.bordersOf(axis, symbols, p.domains().get(axis.term()))) {
               for (PointRole role : List.of(PointRole.ON, PointRole.OFF)) {
                 if (!(border.demand(role).criterion()
-                        instanceof Criterion.AtThePlace each)) {
+                        instanceof Criterion.AtTheLevel each)) {
                     continue;   // no row is owed there, so there is none to write
                 }
                 out.add(role + " -> "
-                        + (Generator.probe(subject, border.label(role),
-                                new BoundaryTarget.AtPlace(
-                                        ((BoundaryTarget.AtPlace) border.cut()).axis(),
-                                        border.cut().carrier(), each.place()),
+                        + (Generator.probeFixing(subject, border.label(role), axis.term()
+                                        .carrierAt(axis.type(), symbols),
+                                java.util.Map.of(axis.term(),
+                                        ((Level.OnACarrier) each.at()).at()),
                                 Generator.CandidateCheck.ANY)
                                 instanceof Generator.BoundaryAttempt.Built built
                                         ? String.join(", ", built.row().inputs().stream()

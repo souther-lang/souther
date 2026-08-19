@@ -467,19 +467,20 @@ public final class GuardThresholds {
         if (drawn == null) {
             return;
         }
-        // Below and inclusive are what a threshold's arms are read off, and neither is a question this
-        // line answers: the two sides of it are decided by both positions at once. `singles` is false
-        // because this is a line and not a value singled out, and the row that meets it is the row on
-        // it. Which way round the two stand where the comparison holds is the compared terms' to say,
-        // and it is handed to the border rather than kept here.
+        // Which side of the line the pair on it belongs to is the compared terms' to derive, so
+        // that a border reads a rule relating two positions the way it reads a bound on one.
+        // `singles` is false because this is a line and not a value singled out, and the row that
+        // meets it is the row on it. The line is where the two meet, which is where they stand no
+        // steps apart — and no rule narrows a distance here, so the border is read against
+        // everything the order holds.
         OriginRef.GuardOrigin origin = new OriginRef.GuardOrigin(
                 new RuleRef.Guard(plan.site(site).comparison()),
                 new OriginRef.GuardOrigin.Read(guard, site, Citation.of(iff.pos())),
-                true, placed.witness(), drawn.holdsAtTheLine(), false);
-        Border made = Border.betweenTerms(
-                new BoundaryTarget.EqualTerms(behavior, drawn.on(), drawn.against(),
-                        drawn.carrier()),
-                origin, drawn.onIsAboveWhereItHolds());
+                drawn.valueBelongsBelow(), placed.witness(), drawn.holdsAtTheLine(), false);
+        Border made = Border.at(
+                BoundaryTarget.at(new BorderQuantity.Apart(behavior, drawn.on(), drawn.against(),
+                        drawn.carrier()), BorderQuantity.steps(0)),
+                origin, null);
         if (out.stream().noneMatch(had -> had.equals(made))) {
             out.add(made);
         }
