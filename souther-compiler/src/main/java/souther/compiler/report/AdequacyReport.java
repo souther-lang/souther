@@ -790,8 +790,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case THE_RULES_REFUSE_IT -> "excluded — the rules leave no value there";
             case THE_CARRIER_NAMES_NO_NEIGHBOUR ->
                     "these values name no neighbour, so the point cannot be written";
-            case THIS_READING_NAMES_NO_POINT_BESIDE_A_RELATION ->
-                    "the step here is on the difference, which this compiler has no way to name";
             case THE_RULE_NAMES_A_VALUE_NOT_A_SIDE ->
                     "the rule names a value rather than a side, so neither neighbour is the nearer";
         };

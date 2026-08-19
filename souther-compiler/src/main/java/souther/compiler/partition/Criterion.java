@@ -20,13 +20,32 @@ public sealed interface Criterion {
     record AtThePlace(souther.compiler.numeric.Place place) implements Criterion {}
 
     /**
-     * A row that writes one place at both terms of a line between two positions.
+     * A row whose {@code on} term stands exactly {@code steps} from its {@code against} term —
+     * below where that is negative, above where it is positive, and on the line itself at zero.
      *
-     * <p>No place of its own. Where the line is is a relation the row satisfies, and the value a
-     * search happens to find that satisfies it is a witness — written here, one row on the line would
-     * name every other row on it a different item.
+     * <p>A line between two positions is a border on the difference the two fall apart by, and this
+     * is that border's {@link AtThePlace}. Which is the whole of why the four points of such a line
+     * are ordinary: the point one step inside {@code a < b} is the pair where {@code a} is {@code b}
+     * less one, and reading it as a place at either term is what made it look like a point nothing
+     * could name.
+     *
+     * <p>No place of its own, at any step. Where the line is is a relation a row satisfies, and the
+     * pair a search happens to find that satisfies it is a witness — written here, one row on the
+     * line would name every other row on it a different item.
      */
-    record WhereTheTermsMeet() implements Criterion {}
+    record WhereTheTermsAreApartBy(int steps) implements Criterion {}
+
+    /**
+     * A row whose {@code on} term stands further from its {@code against} term than {@code steps},
+     * the way {@code towards} says.
+     *
+     * <p>The same border's {@link Region.Beyond}: a side of the line, starting past the point
+     * against it on that side. Where the carrier names no value one step from the line the side
+     * starts at the line itself, which is what a side of a border at a place does for the same
+     * reason.
+     */
+    record WhereTheTermsAreFurtherApartThan(int steps, Region.Towards towards)
+            implements Criterion {}
 
     /** A row anywhere in one side of the border, away from the line. */
     record InTheRegion(Region region) implements Criterion {}
@@ -46,14 +65,26 @@ public sealed interface Criterion {
     /** How this relates a row's value to what it is against. */
     default String operator() {
         return switch (this) {
-            case AtThePlace _, WhereTheTermsMeet _ -> "=";
+            case AtThePlace _ -> "=";
+            case WhereTheTermsAreApartBy _ -> "=";
+            case WhereTheTermsAreFurtherApartThan apart ->
+                    apart.towards() == Region.Towards.ABOVE ? ">" : "<";
             case InTheRegion side -> switch (side.region()) {
                 case Region.Beyond beyond -> beyond.towards() == Region.Towards.ABOVE ? ">" : "<";
                 case Region.AdmittedOtherThan _ -> "/=";
-                case Region.TermsApart apart ->
-                        apart.onIsTowards() == Region.Towards.ABOVE ? ">" : "<";
             };
         };
+    }
+
+    /**
+     * The other term, stepped, as a report writes it.
+     *
+     * <p>The step is on the difference and not on either term, so it is written beside the term
+     * rather than folded into a value: a reader is told that the point is one step from where the
+     * two meet, which is what it is.
+     */
+    private static String stepped(String term, int steps) {
+        return steps == 0 ? term : steps < 0 ? term + " - " + -steps : term + " + " + steps;
     }
 
     /**
@@ -67,11 +98,11 @@ public sealed interface Criterion {
     default String against(BoundaryTarget cut) {
         return switch (this) {
             case AtThePlace at -> cut.carrier().written(at.place());
-            case WhereTheTermsMeet _ -> cut.right();
+            case WhereTheTermsAreApartBy apart -> stepped(cut.right(), apart.steps());
+            case WhereTheTermsAreFurtherApartThan apart -> stepped(cut.right(), apart.steps());
             case InTheRegion side -> switch (side.region()) {
                 case Region.Beyond beyond -> cut.carrier().written(beyond.from());
                 case Region.AdmittedOtherThan other -> cut.carrier().written(other.excluded());
-                case Region.TermsApart _ -> cut.right();
             };
         };
     }

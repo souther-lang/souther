@@ -369,7 +369,10 @@ class WhatAClauseDrawsALineOnTest {
         // The line divides neither position and still has two sides: a row where `from` is under
         // `to` is inside it and one where `from` is over `to` is outside, which is as much a
         // coverage item as the row on the line.
-        assertEquals("< to", line.demand(PointRole.IN).criterion().asked(line.cut()));
+        // `<` is open at the line, so the pair one step under it is the ON point and the side
+        // away from the border starts under that.
+        assertEquals("= to - 1", line.demand(PointRole.ON).criterion().asked(line.cut()));
+        assertEquals("< to - 1", line.demand(PointRole.IN).criterion().asked(line.cut()));
         assertEquals("> to", line.demand(PointRole.OUT).criterion().asked(line.cut()));
         assertEquals(List.of("from", "to"),
                 clauses.unread().stream().map(each -> each.at().toString()).toList());

@@ -280,17 +280,28 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         String report = report(TWO_NEWTYPES);
 
         assertTrue(report.contains("no row is at the OFF point benefitOf/charge = ceiling"), report);
-        assertTrue(report.contains("border      borders 3   coverage items 6/7   excluded 4"), report);
+        assertTrue(report.contains("border      borders 3   coverage items 6/8   excluded 4"), report);
     }
 
-    /** The row on the line meets it, and the line is met by a row that reached the comparison — the
-     *  same rule a line against a constant is met by. */
+    /**
+     * The row on the line meets the point where the two terms meet, and is met by a row that reached
+     * the comparison — the same rule a line against a constant is met by.
+     *
+     * <p>And meets that point alone. The border owes a row one step from the line as well, which is
+     * a different pair: `charge > ceiling` is open where they meet, so the row on the line is the
+     * point outside and the point inside is where the charge is one over. A reading that had them as
+     * one set would call this border covered on the strength of a row that is at the other side of
+     * it.
+     */
     @Test
     void aRowOnTheLineMeetsIt() {
         String report = report(ON_THE_LINE);
 
-        assertTrue(report.contains("border      borders 3   coverage items 7/7   excluded 4"), report);
-        assertFalse(report.contains("point benefitOf/charge = ceiling"), report);
+        assertTrue(report.contains("border      borders 3   coverage items 7/8   excluded 4"), report);
+        assertFalse(report.contains("no row is at the OFF point benefitOf/charge = ceiling ("),
+                report);
+        assertTrue(report.contains("no row is at the ON point benefitOf/charge = ceiling + 1"),
+                report);
     }
 
     /**
@@ -305,7 +316,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         String report = report(NO_AXIS);
 
         assertTrue(report.contains("no row is at the OFF point benefitOf/charge = ceiling"), report);
-        assertTrue(report.contains("border      borders 1   coverage items 2/3"), report);
+        assertTrue(report.contains("border      borders 1   coverage items 2/4"), report);
     }
 
     /** An enumeration counts on the place its cases are declared at, so it reaches this by the same

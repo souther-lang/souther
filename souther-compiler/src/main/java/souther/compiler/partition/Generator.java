@@ -345,9 +345,11 @@ public final class Generator {
                     within == null
                             ? new souther.compiler.numeric.NumericDomain.Bounds(null, null)
                             : within);
-            // The place a row writes at both positions is the pair's answer and is worked out where
-            // the pair is; asked here it would be a value one term happens to hold.
-            case Criterion.WhereTheTermsMeet _ -> null;
+            // A pair is not a place at one term. Which pair stands for a point of a line between
+            // two positions is worked out where the pair is; asked here it would be a value one of
+            // them happens to hold.
+            case Criterion.WhereTheTermsAreApartBy _,
+                    Criterion.WhereTheTermsAreFurtherApartThan _ -> null;
         };
     }
 
@@ -363,10 +365,10 @@ public final class Generator {
      * as readily as one on it.
      */
     public static BoundaryAttempt probeBetween(Subject subject, String label,
-                                               BoundaryTarget.EqualTerms line, Place at,
-                                               CandidateCheck check) {
-        FixtureTemplate on = written(subject, line.on(), line.carrier(), at);
-        FixtureTemplate against = written(subject, line.against(), line.carrier(), at);
+                                               BoundaryTarget.EqualTerms line, Place onAt,
+                                               Place againstAt, CandidateCheck check) {
+        FixtureTemplate on = written(subject, line.on(), line.carrier(), onAt);
+        FixtureTemplate against = written(subject, line.against(), line.carrier(), againstAt);
         if (on == null || against == null) {
             // What this has no way to write, and not a position with no values. The line may be the
             // easiest row in the file to write by hand — two strings of one length are — and
@@ -378,8 +380,8 @@ public final class Generator {
         decided.put(line.on().path().toString(), List.of(on));
         decided.put(line.against().path().toString(), List.of(against));
         Map<String, Place> settled = new LinkedHashMap<>();
-        settled.put(line.on().path().toString(), at);
-        settled.put(line.against().path().toString(), at);
+        settled.put(line.on().path().toString(), onAt);
+        settled.put(line.against().path().toString(), againstAt);
         List<FixtureTemplate> inputs = new ArrayList<>();
         for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
             String head = subject.parameters().get(p);

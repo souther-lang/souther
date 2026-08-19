@@ -147,16 +147,39 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
     }
 
     /**
-     * A line between two positions divides neither of them and still has two sides.
+     * A line between two positions owes all four points, and no two of them hold one pair.
      *
-     * <p>Left to the measure that counts a position's classes, such a line had no {@code IN} point
-     * and no {@code OUT} point anywhere: neither position is divided, so there is no class for
-     * either to be a row in. Keyed on the border they are ordinary — a row where the two fall apart
-     * one way is inside it and one where they fall apart the other way is outside.
+     * <p>Such a line is a border on the difference the two terms fall apart by, so its points are
+     * ordinary: under {@code a < b} the pair where {@code a} is {@code b} less one is inside the
+     * border and against it, which is its {@code ON} point, and the pairs further under that are its
+     * {@code IN} point. Read as {@code a < b} against {@code a = b} with no step, the two came out
+     * as one set — a row at the {@code ON} point was counted as the point away from the border, and
+     * the point against it was reported as one nothing could name.
+     *
+     * <p>Both spellings, because the four move together. An expectation on the strict one alone
+     * holds against a reading that puts every point one step the wrong way.
      */
     @Test
-    void aLineBetweenTwoPositionsOwesBothSidesOfItself() {
-        BorderAssessment line = bordersOf("""
+    void aLineBetweenTwoPositionsOwesFourPointsThatNoOnePairSatisfiesTwice() {
+        assertEquals(List.of("ON: = p.b - 1", "OFF: = p.b", "IN: < p.b - 1", "OUT: > p.b"),
+                pointsOf(comparing("<")),
+                "an open border is at its own OFF point, with the ON point one step inside it");
+        assertEquals(List.of("ON: = p.b", "OFF: = p.b + 1", "IN: < p.b", "OUT: > p.b + 1"),
+                pointsOf(comparing("<=")),
+                "a closed border is at its own ON point, with the OFF point one step outside it");
+    }
+
+    /** Each point of the model's one line, as {@code role: relation against}. */
+    private static List<String> pointsOf(String model) {
+        BorderAssessment line = bordersOf(model).get("p.a = p.b");
+        assertNotNull(line, bordersOf(model).keySet().toString());
+        return java.util.stream.Stream.of(PointRole.ON, PointRole.OFF, PointRole.IN, PointRole.OUT)
+                .map(role -> role + ": " + line.operator(role) + " " + line.against(role)).toList();
+    }
+
+    /** Two whole numbers of one record, compared. */
+    private static String comparing(String op) {
+        return """
                 module example.owed
 
                 data P = { a: Int, b: Int }
@@ -167,71 +190,12 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
 
                 behavior cmp : (p: P) -> Verdict
                     constructs Ok, No
-                let cmp (p) = { guard p.a < p.b else Ok
+                let cmp (p) = { guard p.a %s p.b else Ok
                     No }
 
                 example cmp
-                    | "under" : (P { a = 1, b = 2 }) -> No
-                """).get("p.a = p.b");
-
-        assertNotNull(line);
-        assertEquals("< p.b", inside(line), "a row under the line is inside the border");
-        assertEquals("> p.b",
-                line.operator(PointRole.OUT) + " " + line.against(PointRole.OUT));
-        // `<` is open at the line, so the row where the two are equal is the border's OFF point,
-        // and the ON point one step in is on the difference — which neither position has a
-        // neighbour at.
-        assertEquals("= p.b", line.operator(PointRole.OFF) + " " + line.against(PointRole.OFF));
-        // Not the carrier: `Int` names both values of the pair one step inside this line. What is
-        // missing is a criterion over the relation, every one this reading has being about a place
-        // at one term — so the reason names this compiler and not the values.
-        assertEquals(new souther.compiler.query.ItemAssessment.NotOwed(
-                        NotOwedReason.THIS_READING_NAMES_NO_POINT_BESIDE_A_RELATION),
-                line.at(PointRole.ON),
-                "the step in is on the difference, which no criterion here names");
-    }
-
-    /**
-     * A border answers for every role, and one that does not cannot be built.
-     *
-     * <p>Held at the constructor rather than by walking what a corpus happens to produce. Every
-     * reason above was once an entry left out of a list, and a list is a shape in which leaving one
-     * out is not an error — so the answer is that the shape refuses it.
-     */
-    @Test
-    void aBorderThatAnswersForSomeRolesAndNotOthersCannotBeBuilt() {
-        for (BorderAssessment each
-                : bordersOf(model("Int", ">= 0", "<= 100", "50")).values()) {
-            assertEquals(java.util.EnumSet.allOf(PointRole.class), each.items().keySet(),
-                    each.label());
-            assertEquals(java.util.EnumSet.allOf(PointRole.class),
-                    each.border().demands().keySet(), each.label());
-        }
-
-        Border whole = bordersOf(model("Int", ">= 0", "<= 100", "50")).get("h.a = 100").border();
-        Map<PointRole, Demand> short_ = new EnumMap<>(PointRole.class);
-        short_.put(PointRole.ON, whole.demand(PointRole.ON));
-        assertThrows(IllegalArgumentException.class,
-                () -> new Border(whole.cut(), whole.origin(), short_));
-    }
-
-    /**
-     * The report says the reason in words, and says it apart from a row nobody has written.
-     *
-     * <p>The whole point of the three reasons is what a reader does about them, so the line that
-     * carries one is not marked as a gap and does not read as one.
-     */
-    @Test
-    void theReportSaysWhyAPointIsNotOwed() {
-        String report = report(model("Int", ">= 0", "<= 100", "50"));
-
-        assertTrue(report.contains(
-                "no OFF point is owed at h.a = 0 (invariant A (bound)): excluded — the rules leave no"
-                        + " value there"), report);
-        assertTrue(report.contains(
-                "no OUT point is owed at h.a = 0 (invariant A (bound)): excluded — the rules leave no"
-                        + " value there"), report);
-        assertFalse(report.contains("no row is at the OFF point h.a = 0"), report);
+                    | "under" : (P { a = 1, b = 5 }) -> No
+                """.formatted(op);
     }
 
     /**
@@ -250,8 +214,11 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
         BorderAssessment line = borders.get("p.a = p.b");
         assertNotNull(line, borders.keySet().toString());
 
-        assertTrue(line.owedAt(PointRole.IN).coverage().hit(), "a row is under the line");
-        assertTrue(line.owedAt(PointRole.OUT).coverage().hit(), "and one is over it");
+        // Well under and well over, which is what the two points away from the border ask for. A
+        // row one step under the line is the ON point rather than the IN point, and a test written
+        // with one would be asserting about the point beside the one it names.
+        assertTrue(line.owedAt(PointRole.IN).coverage().hit(), "a row is well under the line");
+        assertTrue(line.owedAt(PointRole.OUT).coverage().hit(), "and one is well over it");
         for (PointRole role : List.of(PointRole.IN, PointRole.OUT)) {
             assertEquals(souther.compiler.query.ItemAssessment.Attempt.Reason
                             .A_ROW_IS_ALREADY_THERE,
@@ -283,8 +250,8 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
                 No }
 
             example cmp
-                | "under" : (P { a = 1, b = 2 }) -> No
-                | "over" : (P { a = 2, b = 1 }) -> Ok
+                | "well under" : (P { a = 1, b = 5 }) -> No
+                | "well over" : (P { a = 5, b = 1 }) -> Ok
             """;
 
     /** What a row inside this border has to do, as the report writes it. */

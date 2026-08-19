@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.BoundaryDomain;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 
@@ -200,16 +201,49 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
         boolean holdsHere = holdsAtTheValue(origin);
         Region.Towards inside =
                 onIsAboveWhereTheRuleHolds ? Region.Towards.ABOVE : Region.Towards.BELOW;
+        Region.Towards outside = opposite(inside);
+        // Which way the point against the line on each side lies from it. Where the line's own pair
+        // satisfies the rule, that pair is the ON point and the OFF point is one step out; where it
+        // does not, the pair is the OFF point and the ON point is one step in.
+        int towardsTheOnPoint = holdsHere ? 0 : stepOf(inside);
+        int towardsTheOffPoint = holdsHere ? stepOf(outside) : 0;
+
         Map<PointRole, Demand> demands = new EnumMap<>(PointRole.class);
-        demands.put(holdsHere ? PointRole.ON : PointRole.OFF,
-                new Demand.Owed(new Criterion.WhereTheTermsMeet()));
-        demands.put(holdsHere ? PointRole.OFF : PointRole.ON,
-                new Demand.NotOwed(NotOwedReason.THIS_READING_NAMES_NO_POINT_BESIDE_A_RELATION));
-        demands.put(PointRole.IN,
-                new Demand.Owed(new Criterion.InTheRegion(new Region.TermsApart(inside))));
-        demands.put(PointRole.OUT,
-                new Demand.Owed(new Criterion.InTheRegion(new Region.TermsApart(opposite(inside)))));
+        demands.put(PointRole.ON, apartBy(towardsTheOnPoint, line));
+        demands.put(PointRole.OFF, apartBy(towardsTheOffPoint, line));
+        // And each side runs from the point against the line on that side, where the carrier names
+        // one, and from the line itself where it does not — the same rule a border at a place
+        // follows, for the same reason: the pairs one step away are not there to be left out.
+        demands.put(PointRole.IN, new Demand.Owed(new Criterion.WhereTheTermsAreFurtherApartThan(
+                steps(line, towardsTheOnPoint), inside)));
+        demands.put(PointRole.OUT, new Demand.Owed(new Criterion.WhereTheTermsAreFurtherApartThan(
+                steps(line, towardsTheOffPoint), outside)));
         return new Border(line, origin, demands);
+    }
+
+    /** Which way a step {@code towards} moves the difference two terms fall apart by. */
+    private static int stepOf(Region.Towards towards) {
+        return towards == Region.Towards.ABOVE ? 1 : -1;
+    }
+
+    /**
+     * The point where the two terms stand {@code steps} apart, or why the carrier has none there.
+     *
+     * <p>Zero steps is where they meet and every carrier names it. A step either way is a pair one
+     * apart, which takes a carrier whose values step — the same thing a border at a place asks for
+     * the value beside it, asked of the difference instead of the place.
+     */
+    private static Demand apartBy(int steps, BoundaryTarget.EqualTerms line) {
+        if (steps != 0 && line.carrier().spacing() != Granularity.DISCRETE) {
+            return new Demand.NotOwed(NotOwedReason.THE_CARRIER_NAMES_NO_NEIGHBOUR);
+        }
+        return new Demand.Owed(new Criterion.WhereTheTermsAreApartBy(steps));
+    }
+
+    /** Where a side starts: the point against the line on that side where the carrier names one,
+     *  and the line itself where it does not. */
+    private static int steps(BoundaryTarget.EqualTerms line, int against) {
+        return line.carrier().spacing() == Granularity.DISCRETE ? against : 0;
     }
 
     /**

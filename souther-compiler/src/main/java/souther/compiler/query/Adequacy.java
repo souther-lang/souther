@@ -767,8 +767,10 @@ public final class Adequacy {
                 @Override
                 public Generator.BoundaryAttempt attemptBetween(String label,
                         souther.compiler.partition.BoundaryTarget.EqualTerms line,
-                        souther.compiler.numeric.Place at) {
-                    return built(() -> Generator.probeBetween(subject, label, line, at, check));
+                        souther.compiler.numeric.Place onAt,
+                        souther.compiler.numeric.Place againstAt) {
+                    return built(() ->
+                            Generator.probeBetween(subject, label, line, onAt, againstAt, check));
                 }
 
                 private Generator.BoundaryAttempt built(

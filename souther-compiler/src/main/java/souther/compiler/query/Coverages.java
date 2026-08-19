@@ -411,7 +411,7 @@ final class Coverages {
         /** The same for a line between two positions, which is not at a count of its own: the count
          * to write at both of them is the rules' answer about the pair and is handed in. */
         souther.compiler.partition.Generator.BoundaryAttempt attemptBetween(
-                String label, BoundaryTarget.EqualTerms line, Place at);
+                String label, BoundaryTarget.EqualTerms line, Place onAt, Place againstAt);
     }
 
     /**
@@ -650,26 +650,73 @@ final class Coverages {
             case Criterion.InTheRegion side -> switch (side.region()) {
                 case Region.Beyond beyond -> beyond::holds;
                 case Region.AdmittedOtherThan other -> other::holds;
-                // A pair of terms falling apart is not a place of one position. Reaching here is the
-                // border and the criterion it built disagreeing about which shape the line has.
-                case Region.TermsApart _ -> throw new IllegalStateException(
-                        "a line at a place was given a criterion about two terms");
             };
-            case Criterion.WhereTheTermsMeet _ -> throw new IllegalStateException(
+            // A pair of terms falling apart is not a place of one position. Reaching here is the
+            // border and the criterion it built disagreeing about which shape the line has.
+            case Criterion.WhereTheTermsAreApartBy _,
+                    Criterion.WhereTheTermsAreFurtherApartThan _ -> throw new IllegalStateException(
                     "a line at a place was given a criterion about two terms");
         };
     }
 
-    /** The same for a border between two positions, where the row writes two places. */
+    /**
+     * The same for a border between two positions, where the row writes two places.
+     *
+     * <p>Read as one border on the difference the two terms fall apart by. A point of it is where
+     * that difference is exactly so many steps, and a side of it is where it is more than that — so
+     * the four are told apart the way a border at a place tells its four apart, and none of them
+     * holds a pair that another one holds. Read as `on` against `against` with no step, the pair one
+     * step inside `a < b` fell into the side beside it and was counted as the point away from the
+     * border rather than the one against it.
+     */
     private static java.util.function.BiPredicate<Place, Place> holdingBetween(
-            Criterion criterion) {
+            Criterion criterion, souther.compiler.check.Carrier carrier) {
         return switch (criterion) {
-            case Criterion.WhereTheTermsMeet _ -> Place::sameAs;
-            case Criterion.InTheRegion side when side.region() instanceof Region.TermsApart apart ->
-                    apart::holds;
+            case Criterion.WhereTheTermsAreApartBy apart -> (on, against) ->
+                    stepped(against, apart.steps(), carrier).filter(on::sameAs).isPresent();
+            case Criterion.WhereTheTermsAreFurtherApartThan apart -> (on, against) ->
+                    stepped(against, apart.steps(), carrier)
+                            .filter(from -> apart.towards() == Region.Towards.ABOVE
+                                    ? on.compareTo(from) > 0 : on.compareTo(from) < 0)
+                            .isPresent();
             case Criterion.InTheRegion _, Criterion.AtThePlace _ -> throw new IllegalStateException(
                     "a line between two positions was given a criterion about one place");
         };
+    }
+
+    /**
+     * How far apart a pair standing for one point of a line between two positions is.
+     *
+     * <p>A point is that difference exactly; a side is one step further out than where it starts,
+     * which is the least of it and so the pair nearest the border that is still in it. Any pair in
+     * the side would do — what is offered is a candidate and not the item — and the nearest one is
+     * the one an author reads against the point beside it.
+     */
+    private static int standingApartBy(Criterion criterion) {
+        return switch (criterion) {
+            case Criterion.WhereTheTermsAreApartBy apart -> apart.steps();
+            case Criterion.WhereTheTermsAreFurtherApartThan apart -> apart.steps()
+                    + (apart.towards() == Region.Towards.ABOVE ? 1 : -1);
+            case Criterion.AtThePlace _, Criterion.InTheRegion _ -> throw new IllegalStateException(
+                    "a line between two positions was given a criterion about one place");
+        };
+    }
+
+    /**
+     * A place {@code steps} from {@code at} on this carrier, or nothing where it names none.
+     *
+     * <p>Nothing rather than the place itself. A step off the end of what a carrier counts is not a
+     * pair anything stands in, and answering with {@code at} would put every row on the line into
+     * the point one step from it.
+     */
+    private static java.util.Optional<Place> stepped(Place at, int steps,
+                                                     souther.compiler.check.Carrier carrier) {
+        if (steps == 0) {
+            return java.util.Optional.of(at);
+        }
+        souther.compiler.inputs.BoundaryDomain domain =
+                souther.compiler.inputs.BoundaryDomain.on(carrier);
+        return steps > 0 ? domain.successor(at) : domain.predecessor(at);
     }
 
     /**
@@ -717,17 +764,12 @@ final class Coverages {
 
             @Override
             public Met met(Criterion criterion, List<RowOutcome> rows) {
-                return metBetween(line, where, rows, holdingBetween(criterion), site);
+                return metBetween(line, where, rows,
+                        holdingBetween(criterion, line.carrier()), site);
             }
 
             @Override
             public ItemAssessment.Attempt search(Criterion criterion, String label) {
-                // Only the row on the line is composed. A side of such a line is a set of pairs and
-                // this reading has no criterion for one, so nothing here builds a candidate for it —
-                // said as a search that came to nothing, which is what it is.
-                if (!(criterion instanceof Criterion.WhereTheTermsMeet)) {
-                    return nothingComposedOne(label);
-                }
                 if (at == null) {
                     // The rules leave the two positions no place in common.
                     return nothingComposedOne(label);
@@ -736,7 +778,14 @@ final class Coverages {
                     return new ItemAssessment.Attempt.NotAttempted(
                             ItemAssessment.Attempt.Reason.NO_CLASSES);
                 }
-                return whatCameOfIt(probe.attemptBetween(label, line, at));
+                // A pair, and every one of the four is one. What is fixed is the difference the two
+                // terms stand at: a point of the line is that difference exactly, and a side of it
+                // is one step further out — which is a pair as much as the row on the line is, and
+                // is why all four are composed rather than only the one where they meet.
+                java.util.Optional<Place> on =
+                        stepped(at, standingApartBy(criterion), line.carrier());
+                return on.isEmpty() ? nothingComposedOne(label)
+                        : whatCameOfIt(probe.attemptBetween(label, line, on.get(), at));
             }
 
             @Override

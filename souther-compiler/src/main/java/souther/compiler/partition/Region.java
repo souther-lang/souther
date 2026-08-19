@@ -15,8 +15,10 @@ import souther.compiler.numeric.Place;
  * what one region is: two searches that composed different values inside one region found the same
  * coverage item.
  *
- * <p>Sealed over three shapes because the borders have three, and a reader that assumed the first
- * would ask a line between two positions for a place it has none of.
+ * <p>Two shapes, both of them about places at one term. A line between two positions has sides too,
+ * and they are not sets of one position's values — a row is in one of them by writing two places
+ * that stand in the right order — so they are said as a criterion over the pair
+ * ({@link Criterion.WhereTheTermsAreFurtherApartThan}) rather than as a region here.
  */
 public sealed interface Region {
 
@@ -83,22 +85,6 @@ public sealed interface Region {
     }
 
     /**
-     * The places where two terms of one line fall apart, on the side {@code onIsTowards} names.
-     *
-     * <p>A line between two positions divides neither of them, so neither side of it is a set of one
-     * position's values — it is a set of pairs, and a row is in it by writing two places that stand
-     * in the right order. That is the whole of the difference from the other two shapes, and it is
-     * why the row is read at both terms rather than at an axis.
-     */
-    record TermsApart(Towards onIsTowards) implements Region {
-
-        public boolean holds(Place on, Place against) {
-            int order = on.compareTo(against);
-            return onIsTowards == Towards.ABOVE ? order > 0 : order < 0;
-        }
-    }
-
-    /**
      * Whether the rules leave this region no place at all, where that can be settled.
      *
      * <p>A proof and never a search that came up empty. Where the ends are known and have crossed,
@@ -117,10 +103,6 @@ public sealed interface Region {
                     && within.min().inclusive() && within.max().inclusive()
                     && within.min().at().sameAs(other.excluded())
                     && within.max().at().sameAs(other.excluded());
-            // Two ranges overlapping is not two positions holding a pair, and two ranges failing to
-            // overlap is not two positions holding none: what refuses a pair need not be in either
-            // range. Nothing here settles it, so the point stays owed and a witness decides.
-            case TermsApart _ -> false;
         };
     }
 
@@ -141,7 +123,6 @@ public sealed interface Region {
                     carrier.somethingInside(beyond.low(within), beyond.high(within)), beyond);
             case AdmittedOtherThan other ->
                     carrier.somethingOtherThan(java.util.List.of(other.excluded()), within);
-            case TermsApart _ -> null;
         };
     }
 
