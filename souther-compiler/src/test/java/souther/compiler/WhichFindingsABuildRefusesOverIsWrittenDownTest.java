@@ -96,7 +96,7 @@ class WhichFindingsABuildRefusesOverIsWrittenDownTest {
         String human = report().human(SourceNameResolver.identity());
 
         assertTrue(human.contains("      ! no row uses `C`"), human);
-        assertTrue(human.contains("      · no row is in `C`"), human);
+        assertTrue(human.contains("      · no row is in `C` at grade"), human);
     }
 
     /**
@@ -167,7 +167,7 @@ class WhichFindingsABuildRefusesOverIsWrittenDownTest {
         // because two parameters of one type produce two findings a class name alone cannot tell
         // apart.
         assertEquals(List.of("C (in #1)"), subjects(findings, "input_case_unspecified"));
-        assertEquals(List.of("C"), subjects(findings, "axis_class_uncovered"));
+        assertEquals(List.of("C (at grade)"), subjects(findings, "axis_class_uncovered"));
         assertEquals("refused", disposition(findings, "input_case_unspecified"));
         assertEquals("reported", disposition(findings, "axis_class_uncovered"));
     }

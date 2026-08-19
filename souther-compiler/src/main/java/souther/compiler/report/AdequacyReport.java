@@ -645,12 +645,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     excluded == 0 ? "" : "   excluded " + excluded,
                     notes(partition.axes(), a -> !a.status().counted(),
                             a -> whyNoAxis(a.reason()))));
+            // The position as well as the class. A class name alone is the same words about two
+            // positions of one behavior whose types divide into classes named after the same cases,
+            // and a reader told one of them cannot say which position to write the row at. Which
+            // name a position goes by is settled here and not by the class: the two the axis holds
+            // are for different readers, and this one writes the term a row is written against.
             for (Adequacy.Finding f : behavior.findings()) {
                 if (f.about() instanceof About.AClassNoRowIsIn(var missing)) {
-                    out.append(String.format("      %s %s `%s`%n", mark(f),
+                    out.append(String.format("      %s %s `%s` at %s%n", mark(f),
                             f.status() == MeasurementStatus.PARTIAL
                                     ? "undecided whether a row is in" : "no row is in",
-                            missing.name()));
+                            missing.name(), missing.axis().path()));
                 }
             }
             // Not a finding: nothing is owed here, and what the line says is what the model already
@@ -1676,7 +1681,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * an axis's {@code classes} under that axis, an arm's label is one in {@code branch.unreached},
      * and an axis and a value name a {@code boundaries} entry. An input's case carries its position
      * with it, because two parameters of one type give two findings a class name alone cannot tell
-     * apart.
+     * apart — and a class of a position carries its position for exactly that reason, which this
+     * used to say of the inputs and not of the axes.
      */
     private static String subject(Adequacy.Finding finding, DocumentSources sources) {
         return switch (finding.about()) {
@@ -1686,7 +1692,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case About.AnArmNoRowGoesThrough(var arm) -> ArmVocabulary.label(arm);
             case About.ACaseNoRowExpects(var missing) -> missing.name();
             case About.ACaseNothingWasSeenToProduce(var missing) -> missing.name();
-            case About.AClassNoRowIsIn(var missing) -> missing.name();
+            case About.AClassNoRowIsIn(var missing) ->
+                    missing.name() + " (at " + missing.axis().path() + ")";
             case About.APositionNoLineDivides(var position) -> position.at().toString();
             case About.APositionThisCouldNotRead(var position) -> position.at();
             case About.APositionWhoseRulesWereNotReached(var axis) -> axis.path();
