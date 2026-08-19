@@ -38,6 +38,11 @@ public sealed interface DeclarationMessage extends Message {
 
     record RemoveTheConstructsEntry(String data) implements DeclarationMessage, Supporting {}
 
+    /** Apart from {@link ItDeclaresConstructsAndNeverBuilds}: the body may well build the unit, and
+     *  the entry is wrong anyway, because a unit data is in no construction set. */
+    @Code(DiagnosticCode.E1026)
+    record ItNamesAUnitDataInConstructs(String behavior, String data) implements DeclarationMessage, Reported {}
+
     @Code(DiagnosticCode.E1101)
     record AnInvariantExpressionIsBool(String given) implements DeclarationMessage, Reported {}
 

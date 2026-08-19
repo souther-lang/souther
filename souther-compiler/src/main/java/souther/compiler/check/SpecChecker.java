@@ -387,6 +387,13 @@ public final class SpecChecker {
                 if (declaredName.answered() == null) {
                     continue;
                 }
+                // A unit is in no construction set, so `builds` is false for one however the body is
+                // written — and E1006 would say the body never built it, which is a different claim
+                // and often a false one. The entry has its own answer (E1026), said once, by the
+                // check that is asked of every clause rather than only of the ones with a body.
+                if (isUnitData(declaredName.answered().type(), symbols)) {
+                    continue;
+                }
                 if (!constructed.builds(declaredName.answered().type())) {
                     disagreements.add(Diagnostic.at(spec.pos())
                                     .hint(new DeclarationMessage.RemoveTheConstructsEntry(name)).say(new DeclarationMessage.ItDeclaresConstructsAndNeverBuilds(spec.name(), name)).build());
@@ -495,11 +502,50 @@ public final class SpecChecker {
     private static final String DISCRIMINATOR = "type";
 
 
+    /** Whether a name resolves to a unit data of this compilation or of a module it reads. */
+    private static boolean isUnitData(TypeSymbol type, Symbols symbols) {
+        return symbols.declarations().declaration(type.key()) instanceof Hir.UnitData;
+    }
+
+    /**
+     * No entry of a {@code constructs} clause is a unit data (spec §constructs-excludes-unit-data).
+     *
+     * <p>Asked of the clause and of nothing else, so it is the same answer for an injected behavior
+     * and an implemented one. A unit is constructed where its name is written and holds no
+     * construction authority — it has no fields, carries no invariant, and has one value, so there
+     * is no telling a minted one from the existing one passed through. Collected into the set, the
+     * position a unit name stood in decided the clause: {@code r.kind == Domestic} demanded an entry
+     * that {@code match r.kind with | Domestic} did not.
+     *
+     * <p>Every entry of one clause, rather than the first, and handed back rather than raised: the
+     * caller has the module's other clauses to ask the same of, and a wrong clause is one thing to
+     * rewrite. That is the reason E1002 and E1006 report each name too.
+     */
+    static List<Diagnostic> unitDataNamedInConstructs(Hir.SpecBehavior spec, Symbols symbols) {
+        List<Diagnostic> named = new ArrayList<>();
+        for (Hir.Name name : spec.constructs()) {
+            // A name that answers nothing names no data to be kept or removed; it is reported where
+            // it is written.
+            if (name.answered() != null && isUnitData(name.answered().type(), symbols)) {
+                String c = name.written();
+                named.add(Diagnostic.at(spec.pos())
+                        .hint(new DeclarationMessage.RemoveTheConstructsEntry(c))
+                        .say(new DeclarationMessage.ItNamesAUnitDataInConstructs(spec.name(), c))
+                        .build());
+            }
+        }
+        return named;
+    }
+
     /**
      * An injected behavior's declared {@code constructs} must each be Java-buildable (spec §java-base-class):
-     * a unit data (the base class hands the implementation a {@code protected} factory) or an
-     * exposed data (its {@code decoder} is public). A non-unit, unexposed one is E1305 — Java has
-     * no way to mint it.
+     * an exposed data, whose {@code decoder} is public. An unexposed one is E1305 — Java has no way
+     * to mint it.
+     *
+     * <p>Every entry is a non-unit data (spec §constructs-excludes-unit-data), so this reaches all of
+     * them. A unit case of the output is creatable without being exposed, through the
+     * {@code protected} factory the base class carries for it — which the output type supplies, not
+     * this clause.
      */
     static void checkInjectionConstructs(Hir.SpecBehavior spec, Symbols symbols,
                                                  boolean exposeAll, Set<String> exposed) {
@@ -509,9 +555,6 @@ public final class SpecChecker {
                 continue;   // it names no type to be built from outside; reported where written
             }
             TypeSymbol built = name.answered().type();
-            if (symbols.declarations().declaration(built.key()) instanceof Hir.UnitData) {
-                continue;   // a unit has a generated factory
-            }
             // What Java needs is a way in: the decoder, which a module publishes by exposing the type.
             // For a type of another module that is its own `exposing` to answer, not this one's.
             // `exposed` lists this module's own names, so the resolved name is what to look up — a

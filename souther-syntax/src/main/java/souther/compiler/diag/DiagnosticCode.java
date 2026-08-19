@@ -50,6 +50,7 @@ public enum DiagnosticCode {
     E1023("a-name-is-in-scope", "check.unknown.title"),
     E1024("a-name-held-as-a-value-is-a-value", "check.unknown.title"),
     E1025("a-standard-library-function-is-called-qualified", "check.unknown.title"),
+    E1026("constructs-excludes-unit-data", "e1026.title"),
     E1101("invariant-expression-is-bool", "e1101.title"),
     E1102("invariant-needs-a-value-to-constrain", "check.invariant.invalid.title"),
     E1103("invariant-clause-names-are-distinct", "check.invariant.invalid.title"),

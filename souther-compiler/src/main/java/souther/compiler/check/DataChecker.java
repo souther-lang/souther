@@ -259,24 +259,18 @@ public final class DataChecker {
             }
             // a block builds under the enclosing behavior's permission (spec §blocks)
             case Hir.Block block -> collectConstructs(block.body(), out, symbols, recConstructs);
-            // a bare name that denotes a unit data is that unit's construction (spec §unit-data). Read off
-            // what the name denotes rather than resolved again from its spelling: a reader with a
-            // unit data spelled like the one another module's published body builds was recording
-            // its own type as the one built. Carried or not is asked of the name for the same reason
-            // it is asked of a construction node — it is the same question about the same thing.
-            // `constructs` governs what this compilation declares; a unit the language gives
-            // (`HALF_UP`) is vocabulary, not business data — as `None` is.
-            case Hir.Var.Denoting v when v.denotes() instanceof ValueName.OfType named
-                    && symbols.declarations().declaredByCompilation(named.type().key())
-                    && symbols.declarations().declaration(named.type().key()) instanceof Hir.UnitData -> {
-                Map<TypeSymbol, String> side = named.origin().carried(named.type())
-                        ? out.carried() : out.originated();
-                side.putIfAbsent(named.type(), v.written().quoted());
-            }
             case Hir.IntLit _ -> { }
             case Hir.DecimalLit _ -> { }
             case Hir.StringLit _ -> { }
             case Hir.BoolLit _ -> { }
+            // A bare name denoting a unit data constructs that unit's value (spec §unit-data) and
+            // is still not collected here. A construction set records what a behavior holds authority to
+            // build, and a unit needs none: it has no fields, can carry no invariant, and has one
+            // value, so minting another is not tellable from passing the existing one through — which
+            // is the distinction the clause exists to record (spec §constructs-excludes-unit-data).
+            // Collected, it made the position a unit name is written in decide the clause: comparing
+            // against a case (`r.kind == Domestic`) demanded an entry that opening the same case
+            // with `match` did not, since only the first is an expression.
             case Hir.Var _ -> { }
             // it builds nothing: no value is made where it stands
             case Hir.Unreachable _ -> { }
