@@ -1,6 +1,7 @@
 package souther.compiler.values;
 
 import org.junit.jupiter.api.Named;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -95,6 +96,36 @@ class WhatIsGuaranteedIsNeverMoreThanWhatIsAdmittedTest {
                 made("two alternatives neither of which can be taken",
                         says(VALUE, A).meet(says(VALUE, B))
                                 .join(says(OTHER, A).meet(says(OTHER, B)))));
+    }
+
+    /**
+     * A guarantee a conjunction was read from is a guarantee about the conjunction.
+     *
+     * <p>What is held is one set per position, which stands for the product of those sets — every
+     * choice of one value per position standing together. A choice between two alternatives that
+     * each name two positions is not that: the union of two products is not a product, and the
+     * smallest one containing it holds pairs neither alternative does.
+     *
+     * <p>Left as a guarantee, the pairs it gained are what a conjunction beside it is then unable to
+     * refuse. Below, each choice leaves {@code value} open on its own and the two of them together
+     * leave only {@code value = A}: an {@code other} of {@code B} is asked for by one and refused by
+     * the other. A reading that guaranteed every value at {@code value} here would hand a choice
+     * around it a cover for a position the rules hold to one value.
+     */
+    @Test
+    void aChoiceOverTwoPositionsLeavesNoGuaranteeForAConjunctionToRestOn() {
+        AdmissibleValues<String> together = says(VALUE, A).meet(says(OTHER, A));
+        AdmissibleValues<String> apart = says(VALUE, B).meet(says(OTHER, B));
+        AdmissibleValues<String> otherB = says(VALUE, B).meet(says(OTHER, A));
+
+        AdmissibleValues<String> one = together.join(apart);
+        AdmissibleValues<String> two = together.join(otherB);
+        AdmissibleValues<String> both = one.meet(two);
+
+        assertEquals(ValueSet.oneOf(Set.of(A, B)), both.at(VALUE),
+                "read one position at a time, both choices leave value open to either");
+        assertEquals(ValueSet.NONE, both.guaranteedAt(VALUE),
+                "but only value = A stands, so neither value is one this reading can promise");
     }
 
     /** Every value guaranteed at a position is a value admitted there. */

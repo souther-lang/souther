@@ -181,6 +181,34 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
     }
 
     /**
+     * A choice over two positions leaves nothing for an alternative beside it to rest on.
+     *
+     * <p>Read one position at a time, each of the two choices leaves {@code a} open, and so does
+     * what they leave together — but the pairs they agree on are only {@code a = 5, b = 0}, since
+     * an {@code a} of anything else is asked for with {@code b = 1} by one and with {@code b = 0}
+     * by the other. What the rules leave {@code a} is {@code 5} and whatever the third alternative
+     * admits, and no reading here can say the third alternative admits anything.
+     *
+     * <p>So the position is one this cannot speak for. A reading that read what each position holds
+     * on its own and offered that as cover would answer that the model divides {@code a} no way at
+     * all, on the strength of a pair no value of this type takes.
+     */
+    @Test
+    void aChoiceOverTwoPositionsCoversNothingForTheAlternativeBesideIt() {
+        FieldDomains read = of("""
+                module demo
+
+                data R = { a: Int, b: Int }
+                    invariant said =
+                        (((a == 5 && b == 0) || (a /= 5 && b == 1))
+                         && ((a == 5 && b == 0) || (a /= 5 && b == 0)))
+                        || Int.abs(a) >= 2
+                """, "R");
+
+        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, "a");
+    }
+
+    /**
      * A rule this cannot read stated beside one it can takes nothing away from what the read one
      * says, and leaves the position one this cannot speak for.
      *

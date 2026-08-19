@@ -78,7 +78,8 @@ import java.util.function.BinaryOperator;
  */
 public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> unread,
                                   boolean dropped, boolean nothing,
-                                  Map<A, ValueSet> guaranteed, ValueSet defaultGuaranteed) {
+                                  Map<A, ValueSet> guaranteed, ValueSet defaultGuaranteed,
+                                  boolean guaranteedTogether) {
 
     /**
      * @param values  what each position admits. A position at {@link ValueSet#ANY} is left out, so
@@ -93,13 +94,18 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
      *                there having been an alternative it could not read, and not by whatever the
      *                rule in that alternative was about
      * @param guaranteed which values each position is guaranteed to admit — read through
-     *                {@link #guaranteedAt} rather than off this map, since a position guaranteed
-     *                {@code defaultGuaranteed} is left out and what is held is what differs from it
+     *                {@link #guaranteedAt} rather than off this map, which holds a position whose
+     *                guarantee is the default as well. Kept rather than dropped because the keys
+     *                are which positions the guarantee has been shaped by, and a choice asks how
+     *                many that is
      * @param defaultGuaranteed what a position this holds no guarantee for is guaranteed to admit.
      *                Not {@link #dropped} said another way: {@code value == 5} joined with a rule
      *                nothing could read has this at {@link ValueSet#ANY} and {@code dropped} set,
      *                because the alternative that was read guarantees every value at every position
      *                it says nothing about, while a rule of the choice did go unread
+     * @param guaranteedTogether whether one value may be taken from each position's guarantee and
+     *                the whole of them stand together in this reading. What a conjunction needs of
+     *                its sides and what a choice over more than one position does not leave
      */
     public AdmissibleValues {
         Map<A, ValueSet> said = new LinkedHashMap<>();
@@ -113,23 +119,19 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
         // iteration order of an immutable copy does not.
         values = Collections.unmodifiableMap(said);
         unread = Collections.unmodifiableMap(new LinkedHashMap<>(unread));
-        // A reading that admits nothing guarantees nothing, and at every position rather than at
-        // the one that emptied: no value of it exists, so there is none to be counted on anywhere.
-        // Settled here because every way of building one of these arrives at nothing differently —
-        // a leaf left no value, two rules that cannot both hold, a caller that showed it from
-        // outside — and a guarantee surviving any of them is a lower bound on the empty set.
-        if (nothing || said.values().stream().anyMatch(ValueSet::isEmpty)) {
+        // A guarantee empty at one position is empty at all of them. What is held is one set per
+        // position standing for the product of them, and a product with an empty side is empty —
+        // so there is no value at any position that this can promise. This is also where a reading
+        // that admits nothing arrives, by whichever way it got there: a leaf left no value, two
+        // rules that cannot both hold, a caller that showed it from outside.
+        if (nothing || said.values().stream().anyMatch(ValueSet::isEmpty)
+                || defaultGuaranteed.isEmpty() || guaranteed.values().stream()
+                        .anyMatch(ValueSet::isEmpty)) {
             guaranteed = Map.of();
             defaultGuaranteed = ValueSet.NONE;
+            guaranteedTogether = true;
         }
-        Map<A, ValueSet> beyond = new LinkedHashMap<>();
-        ValueSet otherwise = defaultGuaranteed;
-        guaranteed.forEach((atom, set) -> {
-            if (!set.equals(otherwise)) {
-                beyond.put(atom, set);
-            }
-        });
-        guaranteed = Collections.unmodifiableMap(beyond);
+        guaranteed = Collections.unmodifiableMap(new LinkedHashMap<>(guaranteed));
     }
 
     /**
@@ -141,14 +143,24 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
      * answer is what the model leaves: a rule reaching across two positions is read here one
      * position at a time, so what is reported can be wider than the rules are with every rule read.
      *
-     * <p><b>Carried through both connectives and read by one.</b> {@link #join} discharges an
-     * unread rule at a position the alternatives already cover, because a choice one of whose
-     * alternatives admits every value there admits every value there. {@link #meet} does not, and
-     * this is not an omission: a rule stated beside others narrows rather than widens, so what an
-     * unread one costs there is answered by the positions it names — which is what {@link #unread}
-     * has held all along. The two connectives are dual in what they do to the values and are not
-     * dual in this, and folding them together would report a conjunction short of its rules at
-     * every position wherever a single clause of it went unread.
+     * <p><b>A choice composes these and a conjunction promises nothing.</b> Either alternative of a
+     * choice holding is enough, so what the two of them promise a position is what either does, and
+     * that is read at the position — {@code (value == 5 || value /= 5) || anything} promises every
+     * value at {@code value}, whichever way its alternatives are bracketed.
+     *
+     * <p>A conjunction may compose them only where both sides promise their positions together, and
+     * the limit is the representation's rather than the connective's. What is held is one set per
+     * position standing for the product of them, and a choice over more than one position leaves no
+     * such product: {@code (a == 5 && b == 0) || (a /= 5 && b == 1)} leaves {@code a} at every value
+     * and {@code b} at two, which as a product holds {@code a = 5, b = 1} — a pair neither
+     * alternative stands for. Met with a rule admitting only {@code b = 0}, sets like that would say
+     * {@code a} is still free while the rules hold it to 5. So {@link #guaranteedTogether} says
+     * whether the promise is one about whole values, and a conjunction promises nothing where it is
+     * not.
+     *
+     * <p>Which is why {@link #unread} is not answered from these under a conjunction either. A rule
+     * stated beside others narrows rather than widens, so what an unread one costs there is
+     * answered by the positions it names, and that is the account {@code unread} has kept all along.
      */
     public ValueSet guaranteedAt(A atom) {
         return guaranteed.getOrDefault(atom, defaultGuaranteed);
@@ -156,7 +168,7 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
 
     /** Nothing read and nothing missed, which is what a reading starts from. */
     public static <A> AdmissibleValues<A> top() {
-        return new AdmissibleValues<>(Map.of(), Map.of(), false, false, Map.of(), ValueSet.ANY);
+        return new AdmissibleValues<>(Map.of(), Map.of(), false, false, Map.of(), ValueSet.ANY, true);
     }
 
     /**
@@ -168,13 +180,13 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
      */
     public AdmissibleValues<A> leavingNothing() {
         return isBottom() ? this
-                : new AdmissibleValues<>(Map.of(), unread, dropped, true, Map.of(), ValueSet.NONE);
+                : new AdmissibleValues<>(Map.of(), unread, dropped, true, Map.of(), ValueSet.NONE, true);
     }
 
     /** One position said to admit {@code set}, and nothing missed. */
     public static <A> AdmissibleValues<A> at(A atom, ValueSet set) {
         return new AdmissibleValues<>(Map.of(atom, set), Map.of(), false, false,
-                Map.of(atom, set), ValueSet.ANY);
+                Map.of(atom, set), ValueSet.ANY, true);
     }
 
     /**
@@ -190,7 +202,7 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
         // Nothing is guaranteed anywhere, and at the positions it does not name as much as at the
         // ones it does: what a rule this has no word for admits is not known, so a choice offering
         // it as an alternative is offering nothing that can be counted on.
-        return new AdmissibleValues<>(Map.of(), spoiled, true, false, Map.of(), ValueSet.NONE);
+        return new AdmissibleValues<>(Map.of(), spoiled, true, false, Map.of(), ValueSet.NONE, true);
     }
 
     /** What {@code atom} may hold, everything being admitted where nothing was said. */
@@ -220,11 +232,17 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
     public AdmissibleValues<A> meet(AdmissibleValues<A> other) {
         Map<A, ValueSet> out = new LinkedHashMap<>(values);
         other.values.forEach((atom, set) -> out.merge(atom, set, ValueSet::meet));
+        // Promising what both sides promise, where both promise their positions together. Where
+        // one of them does not, the sets it holds are each true of some value and of no one value
+        // at once, and met they would promise a combination neither reading has — so the
+        // conjunction promises nothing. See {@link #guaranteedAt}.
+        boolean apart = !guaranteedTogether || !other.guaranteedTogether;
         return new AdmissibleValues<>(out, union(unread, other.unread),
                 dropped || other.dropped, nothing || other.nothing,
-                guaranteedBy(guaranteed, defaultGuaranteed,
+                apart ? Map.of() : guaranteedBy(guaranteed, defaultGuaranteed,
                         other.guaranteed, other.defaultGuaranteed, ValueSet::meet),
-                defaultGuaranteed.meet(other.defaultGuaranteed));
+                apart ? ValueSet.NONE : defaultGuaranteed.meet(other.defaultGuaranteed),
+                !apart);
     }
 
     /**
@@ -250,7 +268,7 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
                 }
             });
             return new AdmissibleValues<>(both, union(unread, other.unread),
-                    dropped || other.dropped, true, Map.of(), ValueSet.NONE);
+                    dropped || other.dropped, true, Map.of(), ValueSet.NONE, true);
         }
         if (isBottom()) {
             return other;
@@ -292,8 +310,16 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
                 standing.put(atom, why);
             }
         });
+        // The promise survives as one about whole values only where the alternatives are shaped by
+        // no more than one position between them. A union of two products alike everywhere but at
+        // one place is the product with that place widened; anywhere else it holds a value from one
+        // alternative at one position beside a value from the other at another, which is a
+        // combination neither of them stands for.
+        Set<A> shapedBy = new LinkedHashSet<>(guaranteed.keySet());
+        shapedBy.addAll(other.guaranteed.keySet());
         return new AdmissibleValues<>(out, standing, dropped || other.dropped, false,
-                covered, coveredElsewhere);
+                covered, coveredElsewhere,
+                guaranteedTogether && other.guaranteedTogether && shapedBy.size() <= 1);
     }
 
     /** What both sides guarantee, at every position either of them holds a guarantee for, each
