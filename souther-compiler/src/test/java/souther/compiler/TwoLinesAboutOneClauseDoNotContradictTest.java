@@ -17,10 +17,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * guard} printed both of these, four rows apart:
  *
  * <pre>
- *     partition   axes 1   single-axis 2/2
+ *     partition   axes 1   IN points 2/2
  *       · read in part: length (a rule about it is one this compiler did not read)
- *     boundary    2/4
- *       ! no row is at price/length = 1 (invariant Length (min))
+ *     border      2/4
+ *       ! no row is at the ON point price/length = 1 (invariant Length (min))
  * </pre>
  *
  * <p>The clause the first line said had gone unread is the clause the second draws its line from,

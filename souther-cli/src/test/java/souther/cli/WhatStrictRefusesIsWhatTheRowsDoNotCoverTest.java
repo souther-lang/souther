@@ -161,7 +161,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
         Run before = examples(WAITING_AND_UNCOVERED, "--generate", "--boundaries", "--strict");
 
         assertEquals(1, before.code(), before.out() + before.err());
-        assertTrue(before.out().contains("no row is at baseRate/score = 0"), before.out());
+        assertTrue(before.out().contains("no row is at the ON point baseRate/score = 0"), before.out());
         assertTrue(before.out().contains("1 row waiting for a `let`."), before.out());
         // The row the block proposes, which is what the pasted model below answers.
         assertTrue(before.out().contains("| (RiskScore(0)) -> <?>"), before.out());

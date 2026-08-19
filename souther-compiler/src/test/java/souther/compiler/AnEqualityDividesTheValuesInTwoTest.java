@@ -102,7 +102,7 @@ class AnEqualityDividesTheValuesInTwoTest {
     void rowsOnEitherSideCoverIt() {
         String human = reportOf(MODEL);
 
-        assertTrue(human.contains("single-axis 2/2"), human);
+        assertTrue(human.contains("IN points 2/2"), human);
         assertFalse(human.contains("no row is in"), human);
     }
 
@@ -117,7 +117,7 @@ class AnEqualityDividesTheValuesInTwoTest {
     void theValueIsOwedAndItsNeighbourIsNot() {
         String human = reportOf(MODEL);
 
-        assertTrue(human.contains("boundary    1/1"), human);
+        assertTrue(human.contains("border      1/1"), human);
     }
 
     /**

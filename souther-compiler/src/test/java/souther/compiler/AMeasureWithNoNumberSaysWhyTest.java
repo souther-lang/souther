@@ -158,13 +158,13 @@ class AMeasureWithNoNumberSaysWhyTest {
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not measured (no partition axis was derived at any position)
                       · not derivable: w.v
-                    boundary    not measured (no line was derived at any position)
+                    border      not measured (no line was derived at any position)
                     branch      not measured (no row names this behavior)
                   narrow                   implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not measured (no partition axis was derived at any position)
                       · not derivable: m.v
-                    boundary    not measured (no line was derived at any position)
+                    border      not measured (no line was derived at any position)
                     branch      not measured (no row names this behavior)
                   both                     implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
@@ -172,23 +172,23 @@ class AMeasureWithNoNumberSaysWhyTest {
                   baseRate                 injected      rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not measured (no partition axis was derived at any position)
-                    boundary    0/0   (2 not measured: no row names this behavior)
+                    border      0/0   (2 not measured: no row names this behavior)
                     branch      not applicable (this behavior has no body)
                   rated                    implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not measured (no partition axis was derived at any position)
-                    boundary    0/0   (2 not measured: no row names this behavior)
+                    border      0/0   (2 not measured: no row names this behavior)
                     branch      not measured (no row names this behavior)
                   classify                 implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
-                    partition   axes 1   single-axis 1/2
+                    partition   axes 1   IN points 1/2
                       · no row is in `No`
-                    boundary    not measured (no line was derived at any position)
+                    border      not measured (no line was derived at any position)
                     branch      0/0
                   sift                     implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
-                    partition   axes 2   single-axis 0/0   (2 not measured: no row names this behavior)
-                    boundary    not measured (no line was derived at any position)
+                    partition   axes 2   IN points 0/0   (2 not measured: no row names this behavior)
+                    border      not measured (no line was derived at any position)
                     branch      not measured (no row names this behavior)
 
                 7 behaviors: 6 implemented, 1 injected; 0 rows waiting for a `let`.

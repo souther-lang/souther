@@ -410,7 +410,7 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
 
         String report = reportOn(twice);
 
-        assertEquals("partition   axes 1   single-axis 1/2   excluded 1", partitionLineOf(report),
+        assertEquals("partition   axes 1   IN points 1/2   excluded 1", partitionLineOf(report),
                 () -> "one case is out of the denominator:\n" + report);
         assertTrue(report.contains("`Off` is declared unreachable on every path"),
                 () -> "and both arms' words are kept:\n" + report);
@@ -428,7 +428,7 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
     void aClaimOffTheAxesIsNotCountedInTheLineThatCountsThem() {
         String report = reportOn(PAST_THE_LIMIT);
 
-        assertTrue(partitionLineOf(report).startsWith("partition   axes 12   single-axis 12/24"),
+        assertTrue(partitionLineOf(report).startsWith("partition   axes 12   IN points 12/24"),
                 () -> "the counts are over the positions it has axes for:\n" + report);
         assertFalse(partitionLineOf(report).contains("excluded"),
                 () -> "and nothing left the denominator this line counts:\n" + report);

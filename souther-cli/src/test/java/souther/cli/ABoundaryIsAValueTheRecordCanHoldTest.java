@@ -399,13 +399,13 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 """;
         String report = reportOn(holed);
 
-        assertFalse(report.contains("not known to be writable: f/r.a = 0"),
+        assertFalse(report.contains("not known to be writable: the ON point f/r.a = 0"),
                 () -> "there is a row at it:\n" + report);
         // The row settles its own edge without anything being built for it, and the other edge is
         // settled by building one. Two kinds of witness, and the projection proves neither.
-        assertTrue(report.contains("boundary    1/2"),
+        assertTrue(report.contains("border      1/2"),
                 () -> "the row at 0 is met, and 10 was built and is owed:\n" + report);
-        assertTrue(report.contains("no row is at f/r.a = 10"), () -> report);
+        assertTrue(report.contains("no row is at the ON point f/r.a = 10"), () -> report);
     }
 
     /**
@@ -484,7 +484,7 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
 
         List<String> owed = boundariesOf(holed);
 
-        assertTrue(report.contains("not known to be writable: f/n = 0"), () -> report);
+        assertTrue(report.contains("not known to be writable: the ON point f/n = 0"), () -> report);
         assertFalse(owed.stream().anyMatch(l -> l.contains("f/n = 0")),
                 () -> "0 is in the range and the decoder refuses it: " + owed);
         // A refusal at one edge says nothing about the other. `value /= 0` leaves the top of the

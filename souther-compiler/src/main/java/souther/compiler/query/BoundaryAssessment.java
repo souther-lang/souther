@@ -218,6 +218,17 @@ public record BoundaryAssessment(BoundaryObligation obligation, Coverage coverag
         return obligation.side();
     }
 
+    /**
+     * Which point of the border a row here would be, in the words domain testing gives them.
+     *
+     * <p>Derived from {@link #side()} and the rule, and beside it rather than in place of it. The two
+     * answer different questions — where the value sits around the cut, and what a row at it is for —
+     * and a document carrying one of them cannot produce the other.
+     */
+    public BoundaryObligation.PointRole pointRole() {
+        return obligation.pointRole();
+    }
+
     /** How a row at this boundary describes itself: where the edge is, and what value it takes. The
      * generator writes these same words on the row it offers, so a row and a note about the boundary
      * it stands for name it the same way. */

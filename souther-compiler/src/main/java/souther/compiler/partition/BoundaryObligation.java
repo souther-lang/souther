@@ -25,6 +25,61 @@ public record BoundaryObligation(BoundaryTarget target, OriginRef origin, Bounda
     }
 
     /**
+     * Which of the two points around a border this one is, in the words domain testing gives them.
+     *
+     * <p>Not a second spelling of {@link BoundarySide}. That says where the value sits around the cut
+     * and is what says how to read {@link BoundaryTarget#right()}; this says what a row written there
+     * is for. Which one a side is turns on whether the border is closed or open, so the same
+     * {@code AT} is the {@code ON} point of {@code <= 3000} and the {@code OFF} point of
+     * {@code < 3000} — two facts, and a report that kept one of them could not print the other.
+     */
+    public enum PointRole {
+        /** Inside the partition the border bounds, and closest to the border. */
+        ON,
+        /** Outside it, and closest to the border. */
+        OFF
+    }
+
+    /** Which point this obligation asks for. */
+    public PointRole pointRole() {
+        return pointRole(origin, side);
+    }
+
+    /**
+     * The same, of an origin and a side apart from an obligation.
+     *
+     * <p>One derivation and no other. What is printed for a person, what the JSON carries and what a
+     * row offered at the value is called are three readings of this — worked out three times they
+     * would agree until one of them was corrected.
+     *
+     * <p>{@code holdsAtTheValue} is the whole of the input beside the side: the cut is inside the
+     * partition exactly where the rule is satisfied there, which is what tells {@code <=} from
+     * {@code <}. Every origin carries it, an invariant's included — its end is read rather than
+     * assumed inclusive, and the ends that reach a report are inclusive because a strict bound on a
+     * continuous carrier is dropped further down and not because a bound is always closed.
+     *
+     * <p>Answered for {@code BELOW} and {@code ABOVE} under a bound as well, though
+     * {@link #besideTheCut} owes no row there. What a value one step outside a bound would be is not
+     * in doubt, and a side with no answer would be a case a reader has to handle for a value that
+     * never arrives.
+     */
+    public static PointRole pointRole(OriginRef origin, BoundarySide side) {
+        boolean holds = holdsAtTheValue(origin);
+        boolean inside = side == BoundarySide.AT ? holds : !holds;
+        return inside ? PointRole.ON : PointRole.OFF;
+    }
+
+    /** Whether the cut value itself satisfies the rule that drew the line. */
+    private static boolean holdsAtTheValue(OriginRef origin) {
+        return switch (origin) {
+            case OriginRef.GuardOrigin g -> g.holdsAtTheValue();
+            case OriginRef.EnsuresOrigin e -> e.holdsAtTheValue();
+            case OriginRef.InvariantOrigin i -> i.holdsAtTheValue();
+            case OriginRef.NarrowedOrigin n -> holdsAtTheValue(n.bound());
+        };
+    }
+
+    /**
      * How a row at this boundary describes itself.
      *
      * <p>The generator writes these same words on the row it offers, so a row and a note about the
