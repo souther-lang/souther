@@ -67,7 +67,7 @@ public sealed interface DeclarationMessage extends Message {
     @Code(DiagnosticCode.E1305)
     record AnInjectedBehaviorConstructsWhatIsKept(String behavior, String data) implements DeclarationMessage, Reported {}
 
-    record ExposeItOrMakeItAUnitData(String data) implements DeclarationMessage, Supporting {}
+    record ExposeIt(String data) implements DeclarationMessage, Supporting {}
 
     @Code(DiagnosticCode.E1501)
     record CyclicModuleDependency() implements DeclarationMessage, Reported {}

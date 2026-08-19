@@ -27,8 +27,8 @@ import java.util.Map;
  * declaration at a time; the language's own vocabulary — the prelude's runtime-backed data — is
  * declared by no module of the compilation and is answered beside it. {@link #declaration} sees
  * both, because a name that denotes one types like a name that denotes the other;
- * {@link #declaredByCompilation} sees only the first, because what a compilation may construct is
- * governed by {@code constructs} and the language's vocabulary is not.
+ * {@link #declaredByCompilation} sees only the first, because a construction set is made of the
+ * data a compilation declares and never of the language's vocabulary.
  *
  * <p>Asked one identity at a time. {@link #declaredIn} enumerates, for the questions that really are
  * about a whole module — which sum a case belongs to, what a "did you mean" may offer — and is not
@@ -120,8 +120,8 @@ public final class Declarations<D> {
 
     /** Whether {@code name} is declared by a module of this compilation — as opposed to a
      * declaration the language gives (the prelude's runtime-backed data), which resolves and types
-     * like any other but belongs to no module here. The construction discipline asks this: what a
-     * compilation declares is governed by {@code constructs}; the language's vocabulary is not. */
+     * like any other but belongs to no module here. The construction discipline asks this: a
+     * construction set holds data a compilation declares, and never the language's vocabulary. */
     public boolean declaredByCompilation(TypeKey address) {
         return registry.declaration(address) != null;
     }

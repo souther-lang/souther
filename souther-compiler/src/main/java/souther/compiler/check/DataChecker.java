@@ -103,10 +103,16 @@ public final class DataChecker {
     }
 
     /**
-     * What a body builds, in the two kinds a permission check tells apart: {@code originated} is what
-     * this body is answerable for, {@code carried} what another module's published value or helper
-     * built and this body was handed. Each maps the type to the spelling it was written with, so a
-     * report quotes the source.
+     * What a body builds <b>that a construction set is made of</b>, in the two kinds a permission
+     * check tells apart: {@code originated} is what this body is answerable for, {@code carried}
+     * what another module's published value or helper built and this body was handed. Each maps the
+     * type to the spelling it was written with, so a report quotes the source.
+     *
+     * <p><b>Not every construction is in here, and the two questions are not the same one</b> (spec
+     * §constructs-excludes-unit-data). {@code let f (_) = Domestic} constructs the unit and this
+     * answers {@code builds(Domestic) == false}, because a unit carries no construction authority to
+     * be declared or checked. A reader wanting every construction — for a walk over what a body
+     * makes, rather than over what its clause must name — wants its own reader and not this one.
      *
      * <p>The split is what makes the carried ones invisible to the requirement and still visible to
      * the redundancy check: a behavior does not have to declare `constructs` for a construction that
@@ -119,7 +125,8 @@ public final class DataChecker {
             return new Constructs(new LinkedHashMap<>(), new LinkedHashMap<>());
         }
 
-        /** Whether {@code built} is built here at all, however it got here. */
+        /** Whether {@code built} is in the set this body contributes, however it got here.
+         *  A unit data never is, whatever the body writes (spec §constructs-excludes-unit-data). */
         public boolean builds(TypeSymbol built) {
             return originated.containsKey(built) || carried.containsKey(built);
         }
@@ -151,7 +158,11 @@ public final class DataChecker {
     }
 
     /**
-     * The data types {@code e} constructs.
+     * What {@code e} contributes to the construction set of the behavior it belongs to.
+     *
+     * <p>Narrower than "the data types {@code e} constructs", and the difference is the unit data
+     * (spec §constructs-excludes-unit-data). A bare unit name still constructs its value and is not
+     * collected.
      *
      * <p>{@code bound} carries the names in scope, because a bare identifier is a unit data's
      * construction only when nothing has bound it — a local of the same name wins (spec §unit-data).

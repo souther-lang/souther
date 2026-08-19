@@ -47,11 +47,13 @@ class CompileBareIdentifierTest {
      * With nothing bound, the same name is the unit's construction — and needs no declaring.
      *
      * <p>A unit data is in no behavior's construction set (spec §constructs-excludes-unit-data), so
-     * the bare name being a construction is not a thing the clause records. What proves the name was
-     * read as one is the class the compile emits, not a demand to declare it.
+     * the bare name being a construction is not a thing the clause records. That leaves the class
+     * file no help at all as a witness: {@code demo.立替} is emitted by the declaration whether or
+     * not the body ever writes the name. So the behavior is run, and what proves the name was read
+     * as the construction is the value each arm comes back with.
      */
     @Test
-    void anUnboundNameConstructsTheUnitData() {
+    void anUnboundNameConstructsTheUnitData() throws Exception {
         String src = """
                 module demo
                 data 立替
@@ -59,7 +61,12 @@ class CompileBareIdentifierTest {
                 behavior f : (x: Int) -> 立替 | 空
                 let f (x) = if x > 0 then 立替 else 空
                 """;
-        assertTrue(Compiler.compile(src).containsKey("demo.立替"));
+        BytesClassLoader loader =
+                new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+        Object f = Emitted.behavior(loader, "demo", "f").getConstructor().newInstance();
+
+        assertEquals("demo.立替", Codecs.apply(f, 1L).getClass().getName());
+        assertEquals("demo.空", Codecs.apply(f, 0L).getClass().getName());
     }
 
     /** And naming it in the clause is refused rather than accepted. */

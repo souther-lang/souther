@@ -8,7 +8,9 @@ The spec DSL states, via parse-don't-validate, that "a validated email address i
 
 ## Decision
 
-A value of `data T` can be produced only by: `T`'s derived decoder, the implementation (Souther `let` or injected Java) of a behavior whose construction set includes T, or compiler-generated code. The authority to construct is held by the *behavior*, not by its implementation. That set is written with `constructs` on the behavior; on a let-backed behavior it may be omitted and inferred from the visible body, while an injected behavior must declare it (no body to infer from, and it drives factory generation — ADR-0006, `[#java-base-class]`).
+A value of `data T` can be produced only by: `T`'s derived decoder, the implementation (Souther `let` or injected Java) of a behavior whose construction set includes T, or compiler-generated code. The authority to construct is held by the *behavior*, not by its implementation. That set is written with `constructs` on the behavior; on a let-backed behavior it may be omitted and inferred from the visible body, while an injected behavior declares what its implementation may build (ADR-0006, `[#java-base-class]`).
+
+**A unit data is outside that set, deliberately** (`[#constructs-excludes-unit-data]`). Writing its name constructs its value, and no behavior holds or declares authority over it — it MUST NOT be named in `constructs`. This is not a hole in the rule above but the rule's own scope: authority guards `[#invariant-on-construct]`, and a unit has no fields, carries no invariant, and has one value, so there is nothing to validate and no telling a minted one from the existing one passed through. The unit factories an injected base carries come from its output type's cases rather than from the clause.
 
 ## Why this is not a per-type choice
 

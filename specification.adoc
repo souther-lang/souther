@@ -1088,7 +1088,7 @@ Whether a name is declared is answered within the module — its own declaration
 
 The explicit declaration stays available, and is how a case that carries a comment of its own is written.
 
-[[a-unit-introduced-by-a-case-list-is-not-declared-again]]Where a position introduces the type, writing the declaration as well SHOULD be avoided: `+data Rank = Manager | Staff+` beside `+data Staff+` says one thing twice, and the second spelling is the one that goes stale — a case renamed in the list leaves the bare declaration behind as a type nothing refers to. The vocabulary a model reads by is the case list, so let it be the declaration. Write the separate `+data+` when the case has something of its own to carry: a comment, or an `+exposing+` entry the sum does not give it. A unit is in no `+constructs+` clause either (<<constructs-excludes-unit-data>>), so for most units the case list is the only place the name is written at all.
+[[a-unit-introduced-by-a-case-list-is-not-declared-again]]Where a position introduces the type, writing the declaration as well SHOULD be avoided: `+data Rank = Manager | Staff+` beside `+data Staff+` says one thing twice, and the second spelling is the one that goes stale — a case renamed in the list leaves the bare declaration behind as a type nothing refers to. The vocabulary a model reads by is the case list, so let it be the declaration. Write the separate `+data+` when the case has something of its own to carry: a comment, or an `+exposing+` entry the sum does not give it. This is a modelling convention rather than a consequence of <<constructs-excludes-unit-data>>; what the two amount to together is that for most units the case list is the only place the name is written at all.
 
 A unit data MUST NOT carry an `+invariant+`: it has no field for one to observe and no value it could reject (<<invariant-declaration>>). Writing one is a compile error rather than a clause with no effect.
 
@@ -2137,7 +2137,7 @@ A behavior's *input* type is always a single named type, including a named sum (
 [#constructs]
 === Data construction authority (constructs)
 
-A behavior that constructs data MAY write the constructed type in `+constructs+`. This is an internal construction authority; unlike a dependency (`+depends on+`), it is invisible to callers. So for a behavior with a `+let+` implementation it is *optional* — omit it and it is inferred from the body. If written, it MUST *exactly match* the body. An injected behavior has no body to infer from, so what it writes is what its implementation may build, and it MUST write every such data (<<java-base-class>>). A behavior building nothing outside its construction set writes no clause, injected or not: the unit cases of an injected behavior's output get their factories from the output type rather than from this clause (<<constructs-excludes-unit-data>>).
+A behavior that constructs data MAY write the constructed type in `+constructs+`. This is an internal construction authority; unlike a dependency (`+depends on+`), it is invisible to callers. So for a behavior with a `+let+` implementation it is *optional* — omit it and it is inferred from the body. If written, it MUST *exactly match* the body. An injected behavior has no body to infer from, so what it writes is what its implementation may build, and it MUST write every such data (<<java-base-class>>). A behavior whose construction set is empty writes no clause, injected or not: the unit cases of an injected behavior's output get their factories from the output type rather than from this clause (<<constructs-excludes-unit-data>>).
 
 Exact agreement is two obligations, and a declaration can fail either one on its own:
 
@@ -5636,11 +5636,13 @@ The cycle is reported wherever it closes, and the edges may be calls, `+depends 
 [,text]
 ----
 Injected behavior `findMember` declares `constructs StoredData`, but StoredData is
-neither a unit data nor exposed, so Java cannot build it.
-Hint: Expose StoredData, or make it a unit data.
+not exposed, so Java cannot build it.
+Hint: Expose StoredData.
 ----
 
-Emitted when a data that is neither a unit nor exposed is listed in the `+constructs+` of an injection-subject behavior (implemented from Java; <<java-base-class>>), because Java would have no way to create that value.
+Emitted when an unexposed data is listed in the `+constructs+` of an injection-subject behavior (implemented from Java; <<java-base-class>>), because Java would have no way to create that value.
+
+Exposing it is the whole of the hint. Making it a unit was the other way out while a unit could be named here; a unit is in no construction set now (<<constructs-excludes-unit-data>>), so taking that advice would answer this diagnostic with E1026 on the same entry. A unit case of the output needs neither: the base class carries its factory whatever `+exposing+` says.
 
 [#e1702]
 === A pipeline stage takes more than one input
