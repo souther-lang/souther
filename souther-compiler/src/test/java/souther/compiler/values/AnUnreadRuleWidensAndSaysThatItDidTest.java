@@ -169,6 +169,13 @@ class AnUnreadRuleWidensAndSaysThatItDidTest {
      * a value satisfying the other branch is under no obligation from this one — and the rule over
      * there may name positions this one never mentions, so borrowing its reason would say of this
      * position something no rule said about it.
+     *
+     * <p>The position that rule named is a different matter, and the choice speaks for it. The
+     * alternative that was read says nothing about {@code other}, so it admits every value there —
+     * and a choice one of whose alternatives admits every value at a position admits every value at
+     * it, whatever the alternative beside it turned out to say. The rule is still one nothing read,
+     * and where that is the question the accounting of rules answers it rather than this. Which
+     * position keeps a reason of its own is {@link #aRuleThatNamedThePositionOutranksTheBranchThatWidenedIt}.
      */
     @Test
     void aPositionTakenBackByAnAlternativeSaysAnAlternativeTookItBack() {
@@ -177,8 +184,8 @@ class AnUnreadRuleWidensAndSaysThatItDidTest {
                         UnreadReason.RELATES_TWO_POSITIONS));
 
         assertEquals(UnreadReason.ALTERNATIVE_NOT_READ, either.whyUnread(VALUE));
-        assertEquals(UnreadReason.RELATES_TWO_POSITIONS, either.whyUnread(OTHER),
-                "the position the rule named keeps what the rule was");
+        assertTrue(either.speaksFor(OTHER),
+                "the alternative that was read admits every value there, so the choice does");
     }
 
     /** And where a rule already named the position, that is what is said: a rule written about this
