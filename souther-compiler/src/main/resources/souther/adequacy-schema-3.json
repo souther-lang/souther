@@ -564,7 +564,7 @@
               },
               "items": {
                 "type": "array",
-                "description": "The four coverage items this border owes, keyed on the border the way the technique keys them. Two of them used to be entries of `boundaries` and the other two were not written at all — they were counted by `equivalencePartitions`, whose unit is a position's class and which has no word for a row on the far side of a line.",
+                "description": "The four coverage items this border owes, keyed on the border the way the technique keys them. All four are here and each exactly once: how many of them a border owes a row at is the rule's answer and not a constant, so a role it owes none in carries `notOwed` rather than being left out — a document short of one would read as this compiler being short of an item the technique asks for. Two of them used to be entries of `boundaries` and the other two were not written at all.",
                 "items": {
                   "type": "object",
                   "required": [
@@ -585,9 +585,10 @@
                       "enum": [
                         "the_rules_refuse_it",
                         "the_carrier_names_no_neighbour",
+                        "this_reading_names_no_point_beside_a_relation",
                         "the_rule_names_a_value_not_a_side"
                       ],
-                      "description": "Why no row is owed here, present exactly when one is not. `the_rules_refuse_it` is the model's own answer — nothing outside an invariant's bound can be constructed, so the two points out there are excluded and counted out; `the_carrier_names_no_neighbour` is this language having no name for the value one step from the line, which a `Decimal`, a `DateTime` and a `String` do not; `the_rule_names_a_value_not_a_side` is what an equality draws, where neither neighbour is nearer to being outside than the other. The three ask opposite things of a reader, which is why the key is a word and not a flag."
+                      "description": "Why no row is owed here, present exactly when one is not. `the_rules_refuse_it` is the model's own answer — nothing outside an invariant's bound can be constructed, so the two points out there are excluded and counted out; `the_carrier_names_no_neighbour` is this language having no name for the value one step from a line at a place, which a `Decimal`, a `DateTime` and a `String` do not; `this_reading_names_no_point_beside_a_relation` is the same point of a line between two positions, where the step is on the difference the two fall apart by and every criterion this compiler has is about a place at one term; `the_rule_names_a_value_not_a_side` is what an equality draws, where neither neighbour is nearer to being outside than the other. The four ask different things of a reader — two are the model and the rule having settled the point, and two are limits of this language and this compiler — which is why the key is a word and not a flag."
                     },
                     "relation": {
                       "type": "string",
@@ -616,8 +617,123 @@
                         "no_arm_witnesses_it"
                       ]
                     }
+                  },
+                  "oneOf": [
+                    {
+                      "required": [
+                        "notOwed"
+                      ],
+                      "not": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "relation"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "against"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "hit"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "knownWritable"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "status"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "reason"
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "required": [
+                        "relation",
+                        "against",
+                        "hit",
+                        "knownWritable",
+                        "status"
+                      ],
+                      "not": {
+                        "required": [
+                          "notOwed"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "minItems": 4,
+                "maxItems": 4,
+                "allOf": [
+                  {
+                    "contains": {
+                      "properties": {
+                        "point": {
+                          "const": "on"
+                        }
+                      },
+                      "required": [
+                        "point"
+                      ]
+                    },
+                    "minContains": 1,
+                    "maxContains": 1
+                  },
+                  {
+                    "contains": {
+                      "properties": {
+                        "point": {
+                          "const": "off"
+                        }
+                      },
+                      "required": [
+                        "point"
+                      ]
+                    },
+                    "minContains": 1,
+                    "maxContains": 1
+                  },
+                  {
+                    "contains": {
+                      "properties": {
+                        "point": {
+                          "const": "in"
+                        }
+                      },
+                      "required": [
+                        "point"
+                      ]
+                    },
+                    "minContains": 1,
+                    "maxContains": 1
+                  },
+                  {
+                    "contains": {
+                      "properties": {
+                        "point": {
+                          "const": "out"
+                        }
+                      },
+                      "required": [
+                        "point"
+                      ]
+                    },
+                    "minContains": 1,
+                    "maxContains": 1
                   }
-                }
+                ]
               }
             }
           }

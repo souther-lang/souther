@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.partition.Border;
+import souther.compiler.partition.Demand;
 import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.partition.OriginRef;
 import souther.compiler.partition.PointRole;
@@ -30,7 +31,45 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
             throw new IllegalArgumentException(
                     "a border assessed in some of its roles and not others: " + items);
         }
+        // And each of them assessed as what the border says it owes. The two records answer the same
+        // question about the same role — what is owed there — and holding them apart without holding
+        // them together leaves a point the rules refuse carrying a row that is at it. What a report
+        // prints and what a build refuses over read one of the two, so they may not disagree.
+        for (PointRole role : EnumSet.allOf(PointRole.class)) {
+            agrees(border, role, items.get(role));
+        }
         items = java.util.Collections.unmodifiableMap(new EnumMap<>(items));
+    }
+
+    /**
+     * That an item answers for the demand its border makes in that role.
+     *
+     * <p>Checked rather than derived, because the two are made by different things: the border says
+     * what is owed and the measure says what became of it, and a measure that answered about a role
+     * it had not been told about is the two coming apart. Deriving the item from the demand instead
+     * would put the measure's answer where its question is.
+     */
+    private static void agrees(Border border, PointRole role, ItemAssessment item) {
+        Demand demand = border.demand(role);
+        switch (item) {
+            case null -> throw new IllegalArgumentException(
+                    "a border with a point role it names and does not assess: " + role);
+            case ItemAssessment.NotOwed not -> {
+                if (!(demand instanceof Demand.NotOwed owed) || owed.reason() != not.reason()) {
+                    throw new IllegalArgumentException("the " + role + " point of " + border.label()
+                            + " is assessed as not owed for " + not.reason()
+                            + ", and its border says " + demand);
+                }
+            }
+            case ItemAssessment.Owed owed -> {
+                if (!(demand instanceof Demand.Owed asked)
+                        || !asked.criterion().equals(owed.criterion())) {
+                    throw new IllegalArgumentException("the " + role + " point of " + border.label()
+                            + " is assessed against " + owed.criterion()
+                            + ", and its border asks " + demand);
+                }
+            }
+        }
     }
 
     /** What became of one role. Never null. */

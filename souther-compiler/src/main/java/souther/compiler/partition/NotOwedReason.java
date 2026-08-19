@@ -33,13 +33,27 @@ public enum NotOwedReason {
     /**
      * The border is drawn and the carrier names no value one step from it.
      *
-     * <p>A {@code Decimal}, a {@code DateTime} and a {@code String} have no next value, and the
-     * difference two positions of a line between them fall apart by is not a value either of them has
-     * a neighbour at. The point the technique asks for cannot be written down in this language, which
-     * is a limit of the language and not a gap in the rows: an item that cannot exist is not one
-     * anybody is short of.
+     * <p>A {@code Decimal}, a {@code DateTime} and a {@code String} have no next value. The point
+     * the technique asks for cannot be written down in this language, which is a limit of the
+     * language and not a gap in the rows: an item that cannot exist is not one anybody is short of.
      */
     THE_CARRIER_NAMES_NO_NEIGHBOUR,
+
+    /**
+     * The point one step from a line between two positions, which this reading has no way to name.
+     *
+     * <p>Told apart from the carrier having no next value, which is what it used to be said as, and
+     * that was false of every whole number: the pair one step inside {@code a < b} is the pair where
+     * {@code a} is {@code b} less one, and an {@code Int} names both of those values perfectly well.
+     * What is missing is a criterion — every one this reading has is about a place at a term, and
+     * the step here is on the difference the two terms fall apart by, which is at neither of them.
+     *
+     * <p>So it is a fact about this compiler, said in the words this report keeps for those, and not
+     * about the model or about the values. What would close it is a criterion over the relation
+     * rather than over a place; nothing needs one yet, and a reason that blamed the carrier would
+     * have the next reader looking for a conversion that is already there.
+     */
+    THIS_READING_NAMES_NO_POINT_BESIDE_A_RELATION,
 
     /**
      * The rule names a value rather than ordering the values around it.

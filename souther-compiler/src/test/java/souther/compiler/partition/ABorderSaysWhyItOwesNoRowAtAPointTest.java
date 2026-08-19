@@ -182,9 +182,13 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
         // and the ON point one step in is on the difference — which neither position has a
         // neighbour at.
         assertEquals("= p.b", line.operator(PointRole.OFF) + " " + line.against(PointRole.OFF));
+        // Not the carrier: `Int` names both values of the pair one step inside this line. What is
+        // missing is a criterion over the relation, every one this reading has being about a place
+        // at one term — so the reason names this compiler and not the values.
         assertEquals(new souther.compiler.query.ItemAssessment.NotOwed(
-                        NotOwedReason.THE_CARRIER_NAMES_NO_NEIGHBOUR), line.at(PointRole.ON),
-                "the step in is on the difference, which neither position has a neighbour at");
+                        NotOwedReason.THIS_READING_NAMES_NO_POINT_BESIDE_A_RELATION),
+                line.at(PointRole.ON),
+                "the step in is on the difference, which no criterion here names");
     }
 
     /**

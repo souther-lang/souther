@@ -324,9 +324,9 @@ public final class Generator {
      * candidates that were tried, and another value of the same edge may build; what comes back says
      * which of the two happened and leaves the reading to the caller.
      */
-    public static BoundaryAttempt probe(Subject subject, BoundaryTarget.AtPlace place,
-                                        CandidateCheck check) {
-        return probeAt(subject, place, check);
+    public static BoundaryAttempt probe(Subject subject, String label,
+                                        BoundaryTarget.AtPlace place, CandidateCheck check) {
+        return probeAt(subject, label, place, check);
     }
 
     /**
@@ -362,9 +362,9 @@ public final class Generator {
      * search that settled one and left the other to its own range would produce a row beside the line
      * as readily as one on it.
      */
-    public static BoundaryAttempt probeBetween(Subject subject, BoundaryTarget.EqualTerms line,
-                                               Place at, CandidateCheck check) {
-        String label = line.left() + " = " + line.right();
+    public static BoundaryAttempt probeBetween(Subject subject, String label,
+                                               BoundaryTarget.EqualTerms line, Place at,
+                                               CandidateCheck check) {
         FixtureTemplate on = written(subject, line.on(), line.carrier(), at);
         FixtureTemplate against = written(subject, line.against(), line.carrier(), at);
         if (on == null || against == null) {
@@ -430,8 +430,8 @@ public final class Generator {
     }
 
     /** A row at a line drawn at one count of one position. */
-    private static BoundaryAttempt probeAt(Subject subject, BoundaryTarget.AtPlace place,
-                                           CandidateCheck check) {
+    private static BoundaryAttempt probeAt(Subject subject, String label,
+                                           BoundaryTarget.AtPlace place, CandidateCheck check) {
         // The obligation was read off this subject's axes, so one it names is one this has. A
         // subject without it is two structures that disagree, which is not a search result and has
         // no reading in a report.
@@ -439,7 +439,6 @@ public final class Generator {
                 .orElseThrow(() -> new IllegalStateException(
                         "boundary names axis " + place.axis() + ", which "
                                 + "this subject has no axis at"));
-        String label = place.left() + " = " + place.right();
         Edge edge = edgeOf(axis, place.carrier(), place.at(), subject.symbols());
         if (edge.values().isEmpty()) {
             return new BoundaryAttempt.Unresolved(

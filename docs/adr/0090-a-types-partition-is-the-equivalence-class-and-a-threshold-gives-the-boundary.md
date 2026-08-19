@@ -288,7 +288,7 @@ them were answered by the measure that counts how many of a position's classes s
 is a different unit and has no word for a row on the far side of a line. The border answers for all
 four, including the roles it owes nothing in.
 
-A point nobody is owed a row at says which of three things settled it, because they ask opposite
+A point nobody is owed a row at says which of four things settled it, because they ask different
 things of a reader. The rules leaving no value there is the model's own answer and the point is
 *excluded* — the word this specification already uses for a case the rules refuse, one arity up —
 so an invariant's `OFF` and `OUT` points are counted out rather than left blank, and so is the `IN`
@@ -297,6 +297,15 @@ language having no way to write the point down, which is an item that cannot exi
 nobody has got to. A rule that names a value rather than ordering the values around it has no side
 for a nearest-outside point to be nearest on: under `x == 5` the 4 and the 6 stand alike, and
 choosing one would invent the answer.
+
+The fourth is this compiler and not the values. A line between two positions has a point one step
+inside it — over whole numbers it is the pair where `a` is `b` less one — and every point this
+reading can ask for is a place at one term, while that step is on the difference the two terms fall
+apart by. So the point is not owed, and the reason names the reading rather than the carrier: said
+as the carrier having no neighbour, which is what it was said as, it was false of every whole number
+and would send a reader after a conversion that is already written. What would close it is a point
+asked for over the relation, which nothing needs yet; the two sides of such a line are asked for
+already, since being in one of them is a relation a row satisfies rather than a step.
 
 Which of the four a build is told about is decided per measure, the way it is for every other
 finding. A row against the line is what simplified domain coverage asks for and is a gap a build can

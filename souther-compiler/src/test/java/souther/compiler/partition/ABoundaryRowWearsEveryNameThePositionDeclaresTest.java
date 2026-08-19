@@ -114,7 +114,7 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
                     continue;   // no row is owed there, so there is none to write
                 }
                 out.add(role + " -> "
-                        + (Generator.probe(subject,
+                        + (Generator.probe(subject, border.label(role),
                                 new BoundaryTarget.AtPlace(
                                         ((BoundaryTarget.AtPlace) border.cut()).axis(),
                                         border.cut().carrier(), each.place()),

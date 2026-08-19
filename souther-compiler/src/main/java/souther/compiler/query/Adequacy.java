@@ -759,16 +759,16 @@ public final class Adequacy {
             return new Coverages.Probe() {
 
                 @Override
-                public Generator.BoundaryAttempt attempt(
+                public Generator.BoundaryAttempt attempt(String label,
                         souther.compiler.partition.BoundaryTarget.AtPlace at) {
-                    return built(() -> Generator.probe(subject, at, check));
+                    return built(() -> Generator.probe(subject, label, at, check));
                 }
 
                 @Override
-                public Generator.BoundaryAttempt attemptBetween(
+                public Generator.BoundaryAttempt attemptBetween(String label,
                         souther.compiler.partition.BoundaryTarget.EqualTerms line,
                         souther.compiler.numeric.Place at) {
-                    return built(() -> Generator.probeBetween(subject, line, at, check));
+                    return built(() -> Generator.probeBetween(subject, label, line, at, check));
                 }
 
                 private Generator.BoundaryAttempt built(

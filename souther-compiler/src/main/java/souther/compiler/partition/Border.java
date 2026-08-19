@@ -44,6 +44,12 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
             throw new IllegalArgumentException(
                     "a border that does not answer for every point role: " + demands);
         }
+        // And an answer at every one of them. A key with nothing under it is the same silence the
+        // roles were made total to stop, wearing the shape that was supposed to have refused it.
+        if (demands.containsValue(null)) {
+            throw new IllegalArgumentException(
+                    "a border with a point role it names and does not answer: " + demands);
+        }
         demands = java.util.Collections.unmodifiableMap(new EnumMap<>(demands));
     }
 
@@ -181,7 +187,9 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
      * line drew.
      *
      * <p>What it has no room for is the point one step from the line. That step is on the difference
-     * the two positions fall apart by, and no carrier names a neighbour there.
+     * the two positions fall apart by, and every criterion this reading has is about a place at one
+     * term — which is a limit of the reading and not of the carrier, since the pair one step inside
+     * {@code a < b} over whole numbers is one both positions name values for.
      *
      * @param onIsAboveWhereTheRuleHolds which way round the two terms stand where the comparison is
      *                                   satisfied, which is what the operator says and what a line
@@ -196,7 +204,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
         demands.put(holdsHere ? PointRole.ON : PointRole.OFF,
                 new Demand.Owed(new Criterion.WhereTheTermsMeet()));
         demands.put(holdsHere ? PointRole.OFF : PointRole.ON,
-                new Demand.NotOwed(NotOwedReason.THE_CARRIER_NAMES_NO_NEIGHBOUR));
+                new Demand.NotOwed(NotOwedReason.THIS_READING_NAMES_NO_POINT_BESIDE_A_RELATION));
         demands.put(PointRole.IN,
                 new Demand.Owed(new Criterion.InTheRegion(new Region.TermsApart(inside))));
         demands.put(PointRole.OUT,

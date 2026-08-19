@@ -368,7 +368,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // boundary measure is made in full. Holding the verdict open for it would say a
                 // model was unmeasured on the strength of the one measure that was.
                 add(measures, behavior.partition().bounded().status());
-                BorderAssessment.pointsOf(behavior.partition().boundaries())
+                // And of a border's four points, the two a build refuses over. Which of them is a
+                // gap a build is held to is decided per measure, and a measure that refuses nothing
+                // cannot leave a verdict undetermined for want of an answer — read that way, a row
+                // whose value could not be read at an IN point held a model open while every point
+                // a build asks about had been measured in full. What the report says about itself
+                // still reads all four: how much of the measurement was made and what a build is
+                // held to are two questions.
+                BorderAssessment.pointsOf(behavior.partition().boundaries()).stream()
+                        .filter(p -> p.role().againstTheLine())
                         .forEach(p -> add(measures, p.item().status()));
                 // A dropped axis that was carrying a line some rule drew took boundaries with it, and
                 // nothing can ask about them now. One that was only classifying took a measure no
@@ -777,6 +785,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case THE_RULES_REFUSE_IT -> "excluded — the rules leave no value there";
             case THE_CARRIER_NAMES_NO_NEIGHBOUR ->
                     "these values name no neighbour, so the point cannot be written";
+            case THIS_READING_NAMES_NO_POINT_BESIDE_A_RELATION ->
+                    "the step here is on the difference, which this compiler has no way to name";
             case THE_RULE_NAMES_A_VALUE_NOT_A_SIDE ->
                     "the rule names a value rather than a side, so neither neighbour is the nearer";
         };
