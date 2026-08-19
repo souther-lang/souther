@@ -669,6 +669,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // across two positions is the neighbouring technique rather than this one, and printed at
         // the end of the partition line it sat beside the border counts where a reader could add
         // them up into a total neither of them is part of.
+        //
+        // Under the same condition as before and not a new one: these counts used to be the tail of
+        // the partition line, which is written in the arm this tests for. Moving them out of that
+        // arm is what makes the condition something to spell rather than something to inherit.
         if (partition.partitioned().status().counted()) {
             String combinations = combinations(partition.pairs());
             if (!combinations.isEmpty()) {
