@@ -84,20 +84,36 @@ class ADiagnosticNamesThePointInTheReportsWordsTest {
     }
 
     /**
-     * What a row at the point shows is asked of the point and not of the border.
+     * The hint is keyed on the role, and the open border is what says so.
      *
-     * <p>The hint used to be said of both: a row on the line is what tells {@code <=} from
-     * {@code <}, which is true of the {@code ON} point and is not what a row one step outside it
-     * shows. Two points, two things to say.
+     * <p>Which point carries the line's own value turns on the border being closed or open: the
+     * guard's line is closed, so its {@code ON} point is the value it was written with, and the
+     * clause's is open, so its {@code OFF} point is. A hint about where the value falls against the
+     * line would therefore be inverted on one of the two borders while reading correctly on the
+     * other — and the four points here are two of each, so a hint keyed on the wrong axis cannot
+     * pass this.
      */
     @Test
-    void theHintIsAboutThePointTheSentenceNames() {
-        assertInstanceOf(ExampleMessage.ARowOnTheLineTellsTwoRulesApart.class,
-                theOneAt("100").notes().get(0).said(),
-                "a row on the line is what the ON point is for");
-        assertInstanceOf(ExampleMessage.ARowPastTheLineShowsWhereTheRuleStops.class,
-                theOneAt("0").notes().get(0).said(),
-                "a row one step outside it is the other half of the pair");
+    void everyOnPointGetsTheInsideHintAndEveryOffPointTheOutsideOne() {
+        for (String inside : List.of("100", "1")) {
+            assertInstanceOf(ExampleMessage.ARowJustInsideShowsTheBorderIsNotFurtherIn.class,
+                    theOneAt(inside).notes().get(0).said(),
+                    () -> "the ON point at " + inside + ": " + theOneAt(inside).said());
+        }
+        for (String outside : List.of("101", "0")) {
+            assertInstanceOf(ExampleMessage.ARowJustOutsideShowsTheBorderIsNotFurtherOut.class,
+                    theOneAt(outside).notes().get(0).said(),
+                    () -> "the OFF point at " + outside + ": " + theOneAt(outside).said());
+        }
+    }
+
+    /** And the four are two roles on two borders, which is what makes the loop above a control. */
+    @Test
+    void theFourPointsAreTwoRolesOnAClosedBorderAndAnOpenOne() {
+        assertEquals(List.of("ON", "OFF", "OFF", "ON"),
+                List.of("100", "101", "0", "1").stream()
+                        .map(at -> theOneAt(at).values().get("point")).toList(),
+                "the closed border is at its ON point and the open one at its OFF point");
     }
 
     /** The one E1916 whose sentence carries that value, which is what names the border's point. */

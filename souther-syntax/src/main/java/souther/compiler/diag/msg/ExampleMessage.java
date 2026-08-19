@@ -301,18 +301,23 @@ public sealed interface ExampleMessage extends Message {
     record TheConstructThatDrawsTheLine(souther.compiler.diag.Localizable construct)
             implements ExampleMessage, Supporting {}
 
-    /** What a row on the line tells apart, which is said of the {@code ON} point. */
-    record ARowOnTheLineTellsTwoRulesApart() implements ExampleMessage, Supporting {}
-
     /**
-     * And what a row one step past it shows, which is the other point of the pair.
+     * What a row at the {@code ON} point shows.
      *
-     * <p>Two hints and not one said of both. A row on the line is what tells a rule written
-     * {@code <=} from one written {@code <}, and that is true of the point inside the partition and
-     * says nothing about the point outside it — which shows the other half: that the rule stops
-     * where it was written to and not a step further on.
+     * <p>Said in the same words the sentence above it just used. A hint keyed on where the value
+     * falls against the line would be a second vocabulary for one finding, which is the cost this
+     * diagnostic was being fixed to stop charging — and it is not the same axis: which of the two
+     * points carries the line's own value turns on whether the border is closed, so
+     * {@code n <= 100} is at its {@code ON} point on the line and {@code n < 100} is at its
+     * {@code OFF} point there.
+     *
+     * <p>What tells a rule written {@code <=} from one written {@code <} is the border being closed
+     * or open, which the report says of the border and not of either of its points.
      */
-    record ARowPastTheLineShowsWhereTheRuleStops() implements ExampleMessage, Supporting {}
+    record ARowJustInsideShowsTheBorderIsNotFurtherIn() implements ExampleMessage, Supporting {}
+
+    /** And what a row at the {@code OFF} point shows, which is the other half of the pair. */
+    record ARowJustOutsideShowsTheBorderIsNotFurtherOut() implements ExampleMessage, Supporting {}
 
     /**
      * No row goes through an arm of the body.

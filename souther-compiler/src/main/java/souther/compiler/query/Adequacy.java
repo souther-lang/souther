@@ -2131,15 +2131,16 @@ public final class Adequacy {
                 case OUTPUT_CASE_UNSPECIFIED ->
                         built.hint(new ExampleMessage.WriteARowExpectingThatCase(text(said, 0)));
                 case BOUNDARY_UNMET -> {
-                    // Asked of the point and not of the border. A row on the line is what tells a
-                    // rule written `<=` from one written `<`, which is true of the point inside the
-                    // partition and is not what the point one step outside it shows — said of both,
-                    // one of the two warnings was hinting at the other one's row.
+                    // Asked of the point, and in the point's own vocabulary. A hint saying which
+                    // side of the line the value falls on would be keyed on the border being closed
+                    // or open rather than on the role — `n <= 100` is at its ON point on the line
+                    // and `n < 100` is at its OFF point there — so it would be a second reading of
+                    // one finding, sitting under a sentence that just named the role.
                     switch (point(said)) {
                         case ON -> built.hint(
-                                new ExampleMessage.ARowOnTheLineTellsTwoRulesApart());
+                                new ExampleMessage.ARowJustInsideShowsTheBorderIsNotFurtherIn());
                         case OFF -> built.hint(
-                                new ExampleMessage.ARowPastTheLineShowsWhereTheRuleStops());
+                                new ExampleMessage.ARowJustOutsideShowsTheBorderIsNotFurtherOut());
                         // Reported and warned about by nothing, which is where the two kinds part.
                         // Reaching this is a finding built for a point no diagnostic is written
                         // for, and answering it with a neighbour's hint is what that would cost.
