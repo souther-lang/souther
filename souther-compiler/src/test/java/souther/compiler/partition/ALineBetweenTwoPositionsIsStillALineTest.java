@@ -47,7 +47,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = NoBenefit | Benefit
 
             behavior benefitOf : (charge: Charge, ceiling: Ceiling) -> Result
-                constructs NoBenefit, Benefit, Charge
+                constructs Benefit, Charge
             let benefitOf (charge, ceiling) = {
                 guard charge.value > ceiling.value else NoBenefit
                 Benefit { amount = Charge(charge.value - ceiling.value) }
@@ -75,7 +75,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = NoBenefit | Benefit
 
             behavior benefitOf : (charge: Int, ceiling: Int) -> Result
-                constructs NoBenefit, Benefit
+                constructs Benefit
             let benefitOf (charge, ceiling) = {
                 guard charge > ceiling else NoBenefit
                 Benefit { amount = charge - ceiling }
@@ -100,7 +100,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = No | Yes
 
             behavior cmp : (a: Rank, b: Rank) -> Result
-                constructs No, Yes
+                constructs Yes
             let cmp (a, b) = {
                 guard a > b else No
                 Yes { r = a }
@@ -120,7 +120,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = No | Yes
 
             behavior cmp : (a: String, b: String) -> Result
-                constructs No, Yes
+                constructs Yes
             let cmp (a, b) = {
                 guard a > b else No
                 Yes { s = a }
@@ -146,7 +146,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = No | Yes
 
             behavior cmp : (a: Bronze, b: Gold) -> Result
-                constructs No, Yes
+                constructs Yes
             let cmp (a, b) = {
                 guard a > b else No
                 Yes { r = a }
@@ -166,7 +166,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = No | Yes
 
             behavior cmp : (a: String, b: String) -> Result
-                constructs No, Yes
+                constructs Yes
             let cmp (a, b) = {
                 guard String.length(a) > String.length(b) else No
                 Yes { s = a }
@@ -190,7 +190,6 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = No | Yes
 
             behavior cmp : (p: Pair) -> Result
-                constructs No, Yes
             let cmp (p) = {
                 guard p.a > p.b else No
                 Yes
@@ -220,7 +219,6 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = No | Yes
 
             behavior cmp : (a: NonZero, b: Zero) -> Result
-                constructs No, Yes
             let cmp (a, b) = {
                 guard a.value > b.value else No
                 Yes
@@ -240,7 +238,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = NoBenefit | Benefit
 
             behavior benefitOf : (charge: Int, ceiling: Int) -> Result
-                constructs NoBenefit, Benefit
+                constructs Benefit
             let benefitOf (charge, ceiling) = {
                 guard charge > ceiling + 1000 else NoBenefit
                 Benefit { amount = charge - ceiling }
@@ -265,7 +263,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = No | Yes
 
             behavior cmp : (a: Low, b: High) -> Result
-                constructs No, Yes
+                constructs Yes
             let cmp (a, b) = {
                 guard a.value > b.value else No
                 Yes { v = a }

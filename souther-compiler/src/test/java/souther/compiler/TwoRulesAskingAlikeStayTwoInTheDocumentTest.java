@@ -45,7 +45,6 @@ class TwoRulesAskingAlikeStayTwoInTheDocumentTest {
             data Missing
 
             behavior f : (r: R) -> Found | Missing
-                constructs Found, Missing
                 ensures Found -> r.a <= 10 * 2
                 ensures Found -> r.a >= 20 * 2
             let f (r) = Missing
@@ -63,7 +62,6 @@ class TwoRulesAskingAlikeStayTwoInTheDocumentTest {
             data Y
 
             behavior f : (r: R) -> X | Y
-                constructs X, Y
             let f (r) = if r.a <= 10 * 2 && r.a >= 20 * 2 then X else Y
 
             example f

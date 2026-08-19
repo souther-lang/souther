@@ -41,10 +41,10 @@ class APositionUnderANameIsReachedThroughItTest {
             data Slot = { flag: Bool }
             data SlotN = Slot
 
-            behavior bare : (x: Slot) -> Ok constructs Ok
+            behavior bare : (x: Slot) -> Ok
             let bare (x) = Ok
 
-            behavior wrapped : (x: SlotN) -> Ok constructs Ok
+            behavior wrapped : (x: SlotN) -> Ok
             let wrapped (x) = Ok
 
             example bare
@@ -64,10 +64,10 @@ class APositionUnderANameIsReachedThroughItTest {
             data Pair = { low: N, high: N } invariant low.value < high.value
             data PairN = Pair
 
-            behavior bare : (p: Pair) -> Ok constructs Ok
+            behavior bare : (p: Pair) -> Ok
             let bare (p) = Ok
 
-            behavior wrapped : (p: PairN) -> Ok constructs Ok
+            behavior wrapped : (p: PairN) -> Ok
             let wrapped (p) = Ok
             """;
 

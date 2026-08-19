@@ -49,7 +49,7 @@ class CompileImplicitUnitDataTest {
                 data Priced = { total: Int }
 
                 behavior quote : (c: Cart) -> Priced | EmptyCart
-                    constructs Priced, EmptyCart
+                    constructs Priced
 
                 let quote (c) = {
                     guard c.n >= 1 else EmptyCart
@@ -73,7 +73,7 @@ class CompileImplicitUnitDataTest {
 
                 data Cart = { n: Int }
 
-                behavior close : (c: Cart) -> Closed constructs Closed
+                behavior close : (c: Cart) -> Closed
                 let close (c) = Closed
                 """);
 
@@ -129,11 +129,11 @@ class CompileImplicitUnitDataTest {
                 data Cart = { n: Int }
                 data Out = { n: Int }
 
-                behavior f : (c: Cart) -> Out constructs Out, Refused
+                behavior f : (c: Cart) -> Out constructs Out, Basket
                 let f (c) = Out { n = 1 }
                 """));
 
-        assertTrue(e.getMessage().contains("Refused"), e.getMessage());
+        assertTrue(e.getMessage().contains("Basket"), e.getMessage());
     }
 
     /** A qualified name says which module declares it, so it is a reference wherever it is written. */
@@ -174,7 +174,7 @@ class CompileImplicitUnitDataTest {
 
                 data Cart = { n: Int }
 
-                behavior finish : (c: Cart) -> Done constructs Done
+                behavior finish : (c: Cart) -> Done
                 let finish (c) = Done
                 """));
 

@@ -114,7 +114,6 @@ class ABoundaryCarriesTheModelsOwnVocabularyTest {
                 data Undivided
 
                 behavior divide : (a: Int, b: Int) -> Int | Undivided
-                    constructs Undivided
                 let divide (a, b) = {
                     guard b /= 0 else Undivided
                     a
@@ -132,7 +131,6 @@ class ABoundaryCarriesTheModelsOwnVocabularyTest {
                 data Undivided
 
                 behavior divide : (a: Int, b: Int) -> Int | Undivided
-                    constructs Undivided
                 let divide (a, b) = match Int.divide(a, b) with
                     | Int as n -> n
                     | DivisionByZero -> Undivided

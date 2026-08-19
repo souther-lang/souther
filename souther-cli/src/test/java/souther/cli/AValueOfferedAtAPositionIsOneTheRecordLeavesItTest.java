@@ -49,7 +49,6 @@ class AValueOfferedAtAPositionIsOneTheRecordLeavesItTest {
                 data Ok
 
                 behavior f : (r: R, flag: Bool) -> Ok
-                    constructs Ok
 
                 let f (r, flag) = Ok
                 """.replace("CLAUSES", clauses).replace("FIELD", field);

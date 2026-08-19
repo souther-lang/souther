@@ -46,10 +46,10 @@ class ADeclaredCaseIsNotYetAClassThePositionHoldsTest {
             data Stage = Prospecting | Qualified | Won
             data StageI = Stage invariant value >= Qualified
 
-            behavior boundStage : (x: StageI) -> Ok constructs Ok
+            behavior boundStage : (x: StageI) -> Ok
             let boundStage (x) = Ok
 
-            behavior guardStage : (x: Stage) -> Ok constructs Ok
+            behavior guardStage : (x: Stage) -> Ok
             let guardStage (x) = { guard x < Qualified else Ok
                 Ok }
             """;

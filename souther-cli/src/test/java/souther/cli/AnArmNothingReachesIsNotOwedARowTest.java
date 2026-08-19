@@ -54,7 +54,6 @@ class AnArmNothingReachesIsNotOwedARowTest {
             data Big
 
             behavior classify : (pair: Pair) -> Small | Big
-                constructs Small, Big
 
             let classify (pair) =
                 if pair.b.value >= 50
@@ -238,7 +237,6 @@ class AnArmNothingReachesIsNotOwedARowTest {
                 data B
 
                 behavior f : (n: N) -> A | B
-                    constructs BUILDS
 
                 let f (n) = BODY
 
@@ -283,7 +281,6 @@ class AnArmNothingReachesIsNotOwedARowTest {
                 data Kind = Alpha | Beta | Gamma | Delta | Epsilon | Zeta
 
                 behavior f : (n: N) -> Kind
-                    constructs Alpha, Beta
 
                 let f (n) =
                     if n.value > 100 then Beta else Alpha

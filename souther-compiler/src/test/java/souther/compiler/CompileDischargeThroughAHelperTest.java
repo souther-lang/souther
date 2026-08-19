@@ -45,7 +45,7 @@ class CompileDischargeThroughAHelperTest {
                 data Cart = { quantity: Int }
                 let one (c: Cart): Qty = Qty(c.quantity)
                 behavior toQty : (cart: Cart) -> Qty | TooSmall
-                    constructs Qty, TooSmall
+                    constructs Qty
                 let toQty (cart) = {
                     guard cart.quantity >= 1
                         else TooSmall

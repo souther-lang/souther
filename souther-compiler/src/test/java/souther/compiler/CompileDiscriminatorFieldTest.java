@@ -33,7 +33,7 @@ class CompileDiscriminatorFieldTest {
                 module m exposing ( Ok, NotFound, bill )
                 data Ok = { type: String }
                 data NotFound
-                behavior bill : (n: Int) -> Ok | NotFound constructs Ok, NotFound
+                behavior bill : (n: Int) -> Ok | NotFound constructs Ok
                 let bill (n) = if n > 0 then Ok { type = "mine" } else NotFound
                 """));
         assertTrue(e.getMessage().contains("type"), e.getMessage());
@@ -48,7 +48,7 @@ class CompileDiscriminatorFieldTest {
                 data Miss = { reason: String }
                 data Answer = Hit | Miss
                 data NoAnswer
-                behavior ask : (n: Int) -> Answer | NoAnswer constructs Hit, Miss, NoAnswer
+                behavior ask : (n: Int) -> Answer | NoAnswer constructs Hit, Miss
                 let ask (n) = {
                     guard n >= 0 else NoAnswer
                     if n > 0 then Hit { type = "mine" } else Miss { reason = "no" }

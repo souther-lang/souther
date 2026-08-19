@@ -89,7 +89,7 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
      * them is a value the clause or the guards reach. */
     private static String behaviorWith(int unrelated) {
         StringBuilder b = new StringBuilder(TYPES);
-        b.append("behavior total : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg, Bad\n");
+        b.append("behavior total : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg\n");
         b.append("let total (a, b) = {\n");
         b.append("    guard a >= 0\n        else Bad\n");
         b.append("    guard b >= 0\n        else Bad\n");
@@ -124,7 +124,7 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
     @Test
     void aDerivedBoundDoesNotReachAnotherRecipeThroughADomainRelation() {
         assertEquals(List.of(), warningsOf(TYPES + """
-                behavior f : (a: Int, b: Int, q: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                behavior f : (a: Int, b: Int, q: Int) -> NonNeg | Bad constructs NonNeg
                 let f (a, b, q) = {
                     guard a >= 0
                         else Bad
@@ -137,7 +137,7 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
                 """));
 
         assertEquals(List.of("E2011"), warningsOf(TYPES + """
-                behavior f : (a: Int, b: Int, c: Int, q: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                behavior f : (a: Int, b: Int, c: Int, q: Int) -> NonNeg | Bad constructs NonNeg
                 let f (a, b, c, q) = {
                     guard a >= 0
                         else Bad
@@ -157,7 +157,7 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
     @Test
     void theSameSecondRecipeIsDerivedWhereTheGuardBoundsItsFactorOutright() {
         assertEquals(List.of(), warningsOf(TYPES + """
-                behavior f : (c: Int, q: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                behavior f : (c: Int, q: Int) -> NonNeg | Bad constructs NonNeg
                 let f (c, q) = {
                     guard c >= 0
                         else Bad
@@ -195,7 +195,7 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
                     invariant value <= 0
                 data Bad
                 behavior f : (a: Int, b: Int, z: Int, q: Int) -> NonPos | Bad
-                    constructs NonPos, Bad
+                    constructs NonPos
                 let f (a, b, z, q) = {
                     guard a >= 0
                         else Bad
@@ -215,7 +215,7 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
                     invariant value <= 0
                 data Bad
                 behavior f : (a: Int, b: Int, z: Int, q: Int) -> NonPos | Bad
-                    constructs NonPos, Bad
+                    constructs NonPos
                 let f (a, b, z, q) = {
                     guard z <= 0
                         else Bad
@@ -238,7 +238,7 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
     @Test
     void aClauseReadCaseByCaseReachesAProductStandingInACase() {
         assertEquals(List.of(), warningsOf(TYPES + """
-                behavior f : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                behavior f : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg
                 let f (a, b) = {
                     guard a >= 0
                         else Bad

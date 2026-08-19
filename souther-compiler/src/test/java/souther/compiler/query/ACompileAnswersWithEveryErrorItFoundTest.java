@@ -32,27 +32,30 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ACompileAnswersWithEveryErrorItFoundTest {
 
-    /** Three behaviors, each short of exactly one `constructs` entry — the unit case its line
-     *  holds. One name each, so what is counted here is the behaviors and not the names within one:
+    /** Three behaviors, each short of exactly one `constructs` entry — the case its line holds.
+     *  One name each, so what is counted here is the behaviors and not the names within one:
      *  a clause short of several is its own question (E1002 reports each of them). */
     private static final String THREE_UNDER_DECLARED = """
             module m.a exposing ( Ticket, CookLine, ItemCookState, Pending, InProgress, Done, start, finish, reopen )
 
+            data Pending = { at: Int }
+            data InProgress = { since: Int }
+            data Done = { at: Int }
             data ItemCookState = Pending | InProgress | Done
             data CookLine = { state: ItemCookState }
             data Ticket = { lines: List<CookLine> }
 
             behavior start : (t: Ticket) -> Ticket
                 constructs Ticket, CookLine
-            let start (t) = Ticket { lines = [ CookLine { state = InProgress } ] }
+            let start (t) = Ticket { lines = [ CookLine { state = InProgress { since = 0 } } ] }
 
             behavior finish : (t: Ticket) -> Ticket
                 constructs Ticket, CookLine
-            let finish (t) = Ticket { lines = [ CookLine { state = Done } ] }
+            let finish (t) = Ticket { lines = [ CookLine { state = Done { at = 0 } } ] }
 
             behavior reopen : (t: Ticket) -> Ticket
                 constructs Ticket, CookLine
-            let reopen (t) = Ticket { lines = [ CookLine { state = Pending } ] }
+            let reopen (t) = Ticket { lines = [ CookLine { state = Pending { at = 0 } } ] }
             """;
 
     private static CompileException failure(String source) {
@@ -207,7 +210,7 @@ class ACompileAnswersWithEveryErrorItFoundTest {
                 data Ticket = { lines: List<CookLine> }
 
                 behavior start : (t: Ticket) -> Ticket
-                    constructs Ticket, CookLine, InProgress
+                    constructs Ticket, CookLine
                 let start (t) = Ticket { lines = [ CookLine { state = InProgress } ] }
                 """);
     }

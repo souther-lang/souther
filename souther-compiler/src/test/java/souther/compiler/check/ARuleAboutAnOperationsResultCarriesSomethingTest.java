@@ -61,7 +61,7 @@ class ARuleAboutAnOperationsResultCarriesSomethingTest {
                     data Bad
                     data AtLeastTen = Int
                         invariant value >= 10
-                    behavior whole : (d: Decimal) -> AtLeastTen | Bad constructs AtLeastTen, Bad
+                    behavior whole : (d: Decimal) -> AtLeastTen | Bad constructs AtLeastTen
                     let whole (d) = {
                         guard d >= 11.0m
                             else Bad
@@ -75,7 +75,7 @@ class ARuleAboutAnOperationsResultCarriesSomethingTest {
                     data Bad
                     data BelowTen = Int
                         invariant value < 10
-                    behavior whole : (d: Decimal) -> BelowTen | Bad constructs BelowTen, Bad
+                    behavior whole : (d: Decimal) -> BelowTen | Bad constructs BelowTen
                     let whole (d) = {
                         guard d <= 9.0m
                             else Bad
@@ -96,7 +96,7 @@ class ARuleAboutAnOperationsResultCarriesSomethingTest {
                     data Bad
                     data NonNeg = Int
                         invariant value >= 0
-                    behavior smaller : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                    behavior smaller : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg
                     let smaller (a, b) = {
                         guard a >= 0
                             else Bad
@@ -111,7 +111,7 @@ class ARuleAboutAnOperationsResultCarriesSomethingTest {
                     data NonNegD = Decimal
                         invariant value >= 0.0m
                     behavior smaller : (a: Decimal, b: Decimal) -> NonNegD | Bad
-                        constructs NonNegD, Bad
+                        constructs NonNegD
                     let smaller (a, b) = {
                         guard a >= 0.0m
                             else Bad
@@ -185,7 +185,7 @@ class ARuleAboutAnOperationsResultCarriesSomethingTest {
                     data Bad
                     data NonNegD = Decimal
                         invariant value >= 0.0m
-                    behavior widen : (n: Int) -> NonNegD | Bad constructs NonNegD, Bad
+                    behavior widen : (n: Int) -> NonNegD | Bad constructs NonNegD
                     let widen (n) = {
                         guard n >= 0
                             else Bad

@@ -62,58 +62,45 @@ class ADecoderMayNotSupplyANameAFixtureDidNotWriteTest {
             data Filed = { amount: AmountN, filedOn: Date }
 
             behavior takesInt : (n: Int) -> Ok
-                constructs Ok
             let takesInt (n) = Ok
 
             behavior takesAmount : (a: AmountN) -> Ok
-                constructs Ok
             let takesAmount (a) = Ok
 
             behavior takesNested : (a: AmountNN) -> Ok
-                constructs Ok
             let takesNested (a) = Ok
 
             behavior takesOrder : (o: Order) -> Ok
-                constructs Ok
             let takesOrder (o) = Ok
 
             behavior takesMany : (a: List<AmountN>) -> Ok
-                constructs Ok
             let takesMany (a) = Ok
 
             behavior takesIntList : (l: List<Int>) -> Ok
-                constructs Ok
             let takesIntList (l) = Ok
 
             behavior takesSet : (s: Set<AmountN>) -> Ok
-                constructs Ok
             let takesSet (s) = Ok
 
             behavior takesMap : (m: Map<String, AmountN>) -> Ok
-                constructs Ok
             let takesMap (m) = Ok
 
             behavior takesHeld : (h: Held) -> Ok
-                constructs Ok
             let takesHeld (h) = Ok
 
             behavior takesOk : (x: Ok) -> Ok
             let takesOk (x) = x
 
             behavior takesA : (a: A) -> Ok
-                constructs Ok
             let takesA (a) = Ok
 
             behavior takesS : (s: S) -> Ok
-                constructs Ok
             let takesS (s) = Ok
 
             behavior takesDecision : (d: DecisionN) -> Ok
-                constructs Ok
             let takesDecision (d) = Ok
 
             behavior takesFiled : (f: Filed) -> Ok
-                constructs Ok
             let takesFiled (f) = Ok
 
             behavior echo : (d: DecisionN) -> DecisionN

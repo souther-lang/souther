@@ -39,7 +39,7 @@ class AnOperationsOwnGuaranteeDischargesAClauseTest {
     @Test
     void aDecimalMadeFromAnIntIsThatNumber() {
         assertEquals(List.of(), warningsOf(TYPES + """
-                behavior widen : (n: Int) -> NonNegD | Bad constructs NonNegD, Bad
+                behavior widen : (n: Int) -> NonNegD | Bad constructs NonNegD
                 let widen (n) = {
                     guard n >= 0
                         else Bad
@@ -110,7 +110,7 @@ class AnOperationsOwnGuaranteeDischargesAClauseTest {
         assertEquals(List.of(), warningsOf(TYPES + """
                 data AtLeastTen = Int
                     invariant value >= 10
-                behavior whole : (d: Decimal) -> AtLeastTen | Bad constructs AtLeastTen, Bad
+                behavior whole : (d: Decimal) -> AtLeastTen | Bad constructs AtLeastTen
                 let whole (d) = {
                     guard d >= 11.0m
                         else Bad

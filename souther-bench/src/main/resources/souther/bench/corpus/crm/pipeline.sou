@@ -397,7 +397,6 @@ behavior probabilityOf : (opp: Opportunity) -> Probability
 let probabilityOf (opp) = probabilityFor(opp)
 
 behavior categoryOf : (opp: Opportunity) -> ForecastCategory
-    constructs Pipeline, BestCase, Commit, Closed, Omitted
 
 let categoryOf (opp) =
     match opp with
@@ -539,7 +538,7 @@ behavior nextOpportunityId : () -> OpportunityId
 
 behavior openFromLead : (converted: LeadConverted) -> Prospecting | NoOpportunityRequested
     depends on nextOpportunityId
-    constructs Prospecting, OpportunityName, NoOpportunityRequested
+    constructs Prospecting, OpportunityName
 
 let openFromLead (converted, nextOpportunityId) =
     match converted.intent with
@@ -593,7 +592,7 @@ let convertAndOpen (lead, request, accounts, contacts, openFromLead) =
 // later.
 behavior qualifyOpportunity : (opp: Prospecting, on: Date, primaryContactId: ContactId)
         -> Qualification | AmountNotStated
-    constructs Qualification, AmountNotStated
+    constructs Qualification
 
 let qualifyOpportunity (opp, on, primaryContactId) = {
     guard Decimal.compare(opp.amount.value, 0.0m) > 0 else AmountNotStated
@@ -612,7 +611,7 @@ example qualifyOpportunity
 // are dropped before the guard, so PainPoint and Needs are both built on a path where their invariants
 // already hold — the guard-then-wrap shape, twice in one behavior.
 behavior recordNeeds : (opp: Qualification, points: List<String>) -> NeedsAnalysis | NoNeedsRecorded
-    constructs NeedsAnalysis, Needs, PainPoint, NoNeedsRecorded
+    constructs NeedsAnalysis, Needs, PainPoint
 
 let recordNeeds (opp, points) = {
     let usable = List.filter(p -> String.length(String.trim(p)) >= 1, points)
@@ -633,7 +632,7 @@ example recordNeeds
 // the one a sales methodology actually states, and it is checkable because the needs are in the state.
 behavior proposeValue : (opp: NeedsAnalysis, businessCase: String, criteria: List<String>)
         -> ValueProposition | BusinessCaseMissesNeeds
-    constructs ValueProposition, BusinessCase, DecisionCriterion, BusinessCaseMissesNeeds
+    constructs ValueProposition, BusinessCase, DecisionCriterion
 
 let answersANeed (businessCase: String, Needs(points)): Bool =
     List.any(p -> String.contains(String.lowercase(p.value), String.lowercase(businessCase)), points)
@@ -654,7 +653,7 @@ let proposeValue (opp, businessCase, criteria) = {
 // DecisionMakers' own non-empty invariant, asked of the set the ids actually make.
 behavior identifyDecisionMakers : (opp: ValueProposition, ids: List<ContactId>)
         -> IdDecisionMakers | NoDecisionMakers
-    constructs IdDecisionMakers, DecisionMakers, NoDecisionMakers
+    constructs IdDecisionMakers, DecisionMakers
 
 let identifyDecisionMakers (opp, ids) = {
     guard DecisionMakers(Set.fromList(ids)) as makers else NoDecisionMakers
@@ -666,7 +665,7 @@ let identifyDecisionMakers (opp, ids) = {
 // single-threaded deal, and naming it as a case is the cheapest thing this model does for a sales team.
 behavior assessPerception : (opp: IdDecisionMakers, champion: ContactId, risks: List<String>)
         -> PerceptionAnalysis | ChampionNotADecisionMaker
-    constructs PerceptionAnalysis, PerceivedRisk, ChampionNotADecisionMaker
+    constructs PerceptionAnalysis, PerceivedRisk
 
 let assessPerception (opp, champion, risks) = {
     guard Set.contains(champion, opp.decisionMakers.value) else ChampionNotADecisionMaker
@@ -683,7 +682,7 @@ let assessPerception (opp, champion, risks) = {
 // its `constructs`.
 behavior sendProposal : (opp: PerceptionAnalysis, number: QuoteNumber, on: Date, proposed: Amount)
         -> ProposalPriceQuote | ProposalAfterCloseDate
-    constructs ProposalPriceQuote, ProposalAfterCloseDate
+    constructs ProposalPriceQuote
 
 let sendProposal (opp, number, on, proposed) = {
     guard Date.daysBetween(on, opp.closeDate) >= 0 else ProposalAfterCloseDate
@@ -703,7 +702,7 @@ let withdrawProposal (opp) = PerceptionAnalysis { ...opp }
 // cross-field invariant, so the state cannot exist with a floor above the ask.
 behavior openNegotiation : (opp: ProposalPriceQuote, on: Date, floor: Amount)
         -> NegotiationReview | FloorAboveAsk
-    constructs NegotiationReview, FloorAboveAsk
+    constructs NegotiationReview
 
 let openNegotiation (opp, on, floor) = {
     guard Decimal.compare(floor.value, opp.amount.value) <= 0 else FloorAboveAsk
@@ -762,7 +761,7 @@ data Renurture       = { revisitOn: Date }
 data PriceReview     = { gap: Amount }
 
 behavior lossFollowUp : (lost: ClosedLost) -> CompetitiveIntel | Renurture | PriceReview | NoFollowUp
-    constructs CompetitiveIntel, Renurture, PriceReview, NoFollowUp
+    constructs CompetitiveIntel, Renurture, PriceReview
 
 let lossFollowUp (lost) =
     match lost.reason with
@@ -811,7 +810,7 @@ example lossFollowUp
 // produces a report rather than a quietly-updated field. Pulling it in, or leaving it where it is, is not a
 // slip and says so.
 behavior slipCloseDate : (opp: OpenOpportunity, newDate: Date) -> SlipReport | NotASlip
-    constructs SlipReport, NotASlip
+    constructs SlipReport
 
 let slipCloseDate (opp, newDate) = {
     let was = opp.closeDate
@@ -921,7 +920,7 @@ let topDeals (opps, n) =
 // also why no outcome here is a DivisionByZero — the model does not carry a case it can never return, and
 // the guard is what earns that. Finding F5.
 behavior winRateOf : (closed: List<ClosedOpportunity>) -> WinRate | NoClosedDeals
-    constructs WinRate, Probability, NoClosedDeals
+    constructs WinRate, Probability
 
 let isWon (opp: ClosedOpportunity): Bool =
     match opp with

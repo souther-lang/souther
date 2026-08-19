@@ -109,7 +109,6 @@ class AnOrdinalIsNeverWhatAnEnumerationIsWrittenAsTest {
                         data Verdict = Ok | No
 
                         behavior f : (s: Qualified) -> Verdict
-                            constructs Ok, No, Won
                         let f (s) = { guard s < Won else Ok
                             No }
                         """, "Main");

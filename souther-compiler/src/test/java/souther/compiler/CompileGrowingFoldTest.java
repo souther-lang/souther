@@ -91,7 +91,7 @@ class CompileGrowingFoldTest {
                 data Empty
                 data Out = Doubled | Empty
 
-                behavior run : (b: Bag) -> Out constructs Doubled, Empty
+                behavior run : (b: Bag) -> Out constructs Doubled
                 let run (b) =
                     if Doubled { ys = List.map(x -> x * 2, b.xs) } as d then d else Empty
                 """, "builder"));

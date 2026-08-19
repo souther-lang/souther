@@ -143,10 +143,17 @@ class CompilePublishedHelperTest {
                 """)));
     }
 
-    /** The reader's own unit data is still the reader's to declare. */
+    /**
+     * The reader's own unit data is no more the reader's to declare than a carried one.
+     *
+     * <p>Where the two above turn on whose construction it is, this one says the question is not
+     * asked of a unit at all: it is in no construction set, carried or originated
+     * (spec §constructs-excludes-unit-data). Both answers, because a check that had stopped reading
+     * the clause would pass the first alone.
+     */
     @Test
-    void theReadersOwnUnitDataIsStillItsToDeclare() {
-        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+    void theReadersOwnUnitDataIsNoMoreItsToDeclareThanACarriedOne() {
+        String src = """
                 module order exposing ( Marker, Out, bill )
 
                 data Marker
@@ -154,8 +161,12 @@ class CompilePublishedHelperTest {
 
                 behavior bill : (n: Int) -> Out constructs Out
                 let bill (n) = Out { v = if Marker == Marker then n else 0 }
-                """));
+                """;
+        assertDoesNotThrow(() -> Compiler.compile(src));
 
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compile(src.replace("constructs Out", "constructs Out, Marker")));
+        assertEquals("E1026", e.code());
         assertTrue(e.getMessage().contains("Marker"), e.getMessage());
     }
 

@@ -31,7 +31,6 @@ class AnEnsuresBetweenTwoPositionsSinglesNothingOutTest {
                 data No
 
                 behavior f : (r: R) -> Ok | No
-                    constructs Ok, No
                     ensures No -> %s
                 let f (r) = No
 

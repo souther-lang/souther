@@ -65,7 +65,7 @@ class CompileInjectedFactoryTest {
                 data Done = { result: Int }
                 data Failed
                 data In = { x: Int }
-                behavior mk : (i: In) -> Done | Failed constructs Done, Failed
+                behavior mk : (i: In) -> Done | Failed constructs Done
                 """, "demo.Mk");
         Class<?> failed = mk.getClassLoader().loadClass("demo.Failed");
         Method unit = mk.getDeclaredMethod("Failed");
@@ -119,20 +119,28 @@ class CompileInjectedFactoryTest {
         return names;
     }
 
+    /**
+     * The two factories come from two places, and this behavior writes no clause at all.
+     *
+     * <p>`Missing` gets one because it is a unit case of the output type, which is where a base
+     * class reads its unit factories from (spec §java-base-class) — not from `constructs`, where a
+     * unit could not be named anyway (spec §constructs-excludes-unit-data). `Member` gets none
+     * because a field-bearing type gets its factory from the clause, and a value read through a
+     * decoder is not in one: by shape alone there is no telling it from a minted one, which is what
+     * the clause is there to say.
+     */
     @Test
     void aPassThroughOutputTypeGetsNoFactory() throws Exception {
-        // `mk` reads Member through a decoder (it is not in `constructs`), so no factory is handed out
-        // for it — only `Missing`, which the behavior mints.
         Class<?> mk = base("""
                 module demo
                 data Member = { id: Int }
                 data Missing
                 data In = { x: Int }
-                behavior mk : (i: In) -> Member | Missing constructs Missing
+                behavior mk : (i: In) -> Member | Missing
                 """, "demo.Mk");
         assertDoesNotThrow(() -> mk.getDeclaredMethod("Missing"),
-                "the constructed type has its factory");
+                "a unit case of the output has its factory");
         assertThrows(NoSuchMethodException.class, () -> mk.getDeclaredMethod("Member", long.class),
-                "no factory for a pass-through (non-constructed) type");
+                "no factory for a pass-through the clause does not name");
     }
 }

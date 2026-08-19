@@ -29,7 +29,6 @@ class CompileInjectionConstructsTest {
                 data 会員なし
 
                 behavior findMember : (id: Id) -> Member | 会員なし
-                    constructs 会員なし
                 """));
     }
 

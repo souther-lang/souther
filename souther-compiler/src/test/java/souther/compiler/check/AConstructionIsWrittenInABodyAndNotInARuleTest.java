@@ -52,7 +52,7 @@ class AConstructionIsWrittenInABodyAndNotInARuleTest {
         org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> Compiler.compile(TYPES + """
 
                 behavior pick : (at: Cutoff) -> Verdict
-                    constructs Ok, No, Cutoff
+                    constructs Cutoff
 
                 let pick (at) = {
                     guard at < Cutoff(Time("16:00:00")) else No
@@ -88,7 +88,6 @@ class AConstructionIsWrittenInABodyAndNotInARuleTest {
         assertEquals("E1017", refused(TYPES + """
 
                 behavior at : (t: Cutoff) -> Verdict
-                    constructs Ok
                     ensures asked = Ok -> t < Cutoff(Time("16:00:00"))
 
                 let at (t) = Ok

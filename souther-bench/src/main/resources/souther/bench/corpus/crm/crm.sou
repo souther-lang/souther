@@ -271,7 +271,6 @@ data ContactBook = List<Contact>
 // below, because a threshold with only one side tested is a threshold nobody has checked.
 
 behavior tierOf : (a: Account) -> AccountTier
-    constructs Enterprise, MidMarket, SmallBusiness
 
 let tierOf (a) =
     if a.employees >= 1000 then Enterprise
@@ -452,7 +451,7 @@ let campaignsOf (lead: OpenLead): Set<CampaignName> = lead.campaigns
 // tell a user about. The guard discharges the invariant the spread brought in.
 
 behavior recordTouch : (lead: OpenLead, on: Date) -> WorkingLead | TouchBeforeCreation
-    constructs WorkingLead, TouchBeforeCreation
+    constructs WorkingLead
 
 let recordTouch (lead, on) =
     match lead with
@@ -527,7 +526,7 @@ data CampaignCost   = { campaign: CampaignName }
 
 behavior attributionOf : (source: LeadSource)
         -> PartnerCredit | EmployeeCredit | VendorCost | CampaignCost | NoAttribution
-    constructs PartnerCredit, EmployeeCredit, VendorCost, CampaignCost, NoAttribution
+    constructs PartnerCredit, EmployeeCredit, VendorCost, CampaignCost
 
 let attributionOf (source) =
     match source with
@@ -565,7 +564,7 @@ example attributionOf
 
 behavior qualifyLead : (lead: WorkingLead, on: Date, rawScore: Int, budgetConfirmed: Bool)
         -> QualifiedLead | ScoreBelowThreshold
-    constructs QualifiedLead, LeadScore, ScoreBelowThreshold
+    constructs QualifiedLead, LeadScore
 
 let qualifyLead (lead, on, rawScore, budgetConfirmed) = {
     guard rawScore >= 60 else ScoreBelowThreshold
@@ -601,7 +600,7 @@ data RevisitOn = { on: Date }
 // Only a BANT failure comes back, and only BadTiming says when. Two stages of match, because the rule is
 // two sentences: is this a qualification failure at all, and does it name a date.
 behavior nurturePlan : (lead: DisqualifiedLead) -> RevisitOn | NoRevisit
-    constructs RevisitOn, NoRevisit
+    constructs RevisitOn
 
 let nurturePlan (lead) =
     match lead.reason with
@@ -692,7 +691,7 @@ data PossibleDuplicate =
 
 behavior screenForDuplicates : (lead: NewLead, accounts: AccountBook, contacts: ContactBook)
         -> NoDuplicate | PossibleDuplicate | NoEmailOnLead
-    constructs NoDuplicate, PossibleDuplicate, NoEmailOnLead, DomainName
+    constructs PossibleDuplicate, DomainName
 
 let screenForDuplicates (lead, accounts, contacts) = {
     guard List.length(emailOf(lead.reach)) >= 1 else NoEmailOnLead
@@ -717,7 +716,6 @@ let screenForDuplicates (lead, accounts, contacts) = {
 // this declaration would have to grant — which is also why an injected behavior's non-unit `constructs`
 // has to be exposed (E1305) and this one has nothing to expose.
 behavior findAccountByDomain : (domain: DomainName) -> Account | AccountNotFound
-    constructs AccountNotFound
 
 data MatchedAccount = { leadId: LeadId, accountId: AccountId }
 
@@ -727,7 +725,7 @@ data MatchedAccount = { leadId: LeadId, accountId: AccountId }
 // sources: one reads a set it was given, one asks the database about a key.
 behavior linkLeadToAccount : (lead: NewLead) -> MatchedAccount | UnmatchedLead | NoEmailOnLead
     depends on findAccountByDomain
-    constructs MatchedAccount, UnmatchedLead, NoEmailOnLead, DomainName
+    constructs MatchedAccount, DomainName
 
 let linkLeadToAccount (lead, findAccountByDomain) =
     match List.get(0, domainsOf(lead.reach)) with
@@ -834,8 +832,7 @@ let blockingReasons (lead: QualifiedLead, request: ConversionRequest,
 behavior convertLead : (lead: QualifiedLead, request: ConversionRequest,
                         accounts: AccountBook, contacts: ContactBook)
         -> LeadConverted | ConversionBlocked
-    constructs LeadConverted, ConvertedLead, Account, Contact, ConversionBlocked, DomainName,
-               BudgetNotConfirmed, CloseDateInPast, DuplicateAccount, DuplicateContact
+    constructs LeadConverted, ConvertedLead, Account, Contact, ConversionBlocked, DomainName, CloseDateInPast, DuplicateAccount, DuplicateContact
 
 let convertLead (lead, request, accounts, contacts) =
     if ConversionBlocked { reasons = blockingReasons(lead, request, accounts, contacts) } as blocked

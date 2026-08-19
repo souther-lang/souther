@@ -59,7 +59,7 @@ class CompileUnitOnlySumBoundaryTest {
                 data In = { n: Int }
                 data Out = { byStage: Map<Stage, Int> }
 
-                behavior run : (i: In) -> Out constructs Out, Won
+                behavior run : (i: In) -> Out constructs Out
 
                 let run (i) = Out { byStage = Map.singleton(Won, i.n) }
                 """;

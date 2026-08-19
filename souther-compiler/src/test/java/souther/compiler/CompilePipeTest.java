@@ -117,7 +117,7 @@ class CompilePipeTest {
                 data NoRight
 
                 behavior reject : (p: Pending, by: Id) -> Rejected | NoRight
-                    constructs Rejected, NoRight
+                    constructs Rejected
 
                 let reject (p, by) = {
                     guard by == p.boss else NoRight

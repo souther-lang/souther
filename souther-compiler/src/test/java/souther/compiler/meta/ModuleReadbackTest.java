@@ -48,7 +48,7 @@ class ModuleReadbackTest {
                 data Declined
 
                 behavior charge : (a: Amount) -> Receipt | Declined
-                    constructs Receipt, Declined
+                    constructs Receipt
                 let charge (a) = if a.value > 0 then Receipt { paid = a } else Declined
 
                 let withinCap (n: Int) = n <= 1000000
@@ -170,7 +170,7 @@ class ModuleReadbackTest {
                 data Item = { sku: Sku, unit: Money, count: Int }
                 data Priced = { amount: Money }
                 data Missing
-                behavior price : (i: Item) -> Priced | Missing constructs Priced, Missing
+                behavior price : (i: Item) -> Priced | Missing constructs Priced
                 let price (i) = if i.count >= 1 then Priced { amount = i.unit } else Missing
                 """;
         String order = """

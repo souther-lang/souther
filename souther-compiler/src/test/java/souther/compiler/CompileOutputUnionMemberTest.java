@@ -31,7 +31,6 @@ class CompileOutputUnionMemberTest {
                 module m exposing ( NoAnswer, half )
                 data NoAnswer
                 behavior half : (n: Int) -> Int | NoAnswer
-                    constructs NoAnswer
                 let half (n) = if n >= 0 then n / 2 else NoAnswer
                 """);
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
@@ -56,7 +55,7 @@ class CompileOutputUnionMemberTest {
                 import up ( Yen )
                 data NothingOwed
                 behavior owed : (a: Yen, b: Yen) -> Yen | NothingOwed
-                    constructs Yen, NothingOwed
+                    constructs Yen
                 let owed (a, b) = if a.value >= b.value then Yen(a.value - b.value) else NothingOwed
                 """));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
@@ -73,7 +72,6 @@ class CompileOutputUnionMemberTest {
                 data NoOrders
                 data Order = { id: String }
                 behavior list : (n: Int) -> List<Order> | NoOrders
-                    constructs NoOrders
                 let list (n) = NoOrders
                 """));
         assertTrue(e.getMessage().contains("List"), e.getMessage());
@@ -151,7 +149,6 @@ class CompileOutputUnionMemberTest {
                 import money ( Yen )
                 data NoCharge
                 behavior charge : (a: Yen) -> Yen | NoCharge
-                    constructs NoCharge
                 let charge (a) = if a.value > 0 then a else NoCharge
                 """, """
                 module down exposing ( Free, bill )
@@ -159,7 +156,6 @@ class CompileOutputUnionMemberTest {
                 import up ( NoCharge, charge )
                 data Free
                 behavior bill : (a: Yen) -> Yen | Free
-                    constructs Free
                 let bill (a) =
                     match charge(a) with
                     | Yen as y  -> y
@@ -195,10 +191,8 @@ class CompileOutputUnionMemberTest {
                 data NothingOwed
                 data NoRefund
                 behavior owed : (a: Yen) -> Yen | NothingOwed
-                    constructs NothingOwed
                 let owed (a) = if a.value > 0 then a else NothingOwed
                 behavior refund : (a: Yen) -> Yen | NoRefund
-                    constructs NoRefund
                 let refund (a) = if a.value > 0 then a else NoRefund
                 """));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
@@ -220,7 +214,7 @@ class CompileOutputUnionMemberTest {
                 import up ( Yen )
                 data NothingOwed
                 behavior owed : (a: Yen, b: Yen) -> Yen | NothingOwed
-                    constructs Yen, NothingOwed
+                    constructs Yen
                 let owed (a, b) = if a.value >= b.value then Yen(a.value - b.value) else NothingOwed
                 example owed
                     | "what is left after paying part of it" :
@@ -237,7 +231,6 @@ class CompileOutputUnionMemberTest {
                 module m exposing ( NoAnswer, half )
                 data NoAnswer
                 behavior half : (n: Int) -> Int | NoAnswer
-                    constructs NoAnswer
                 let half (n) = if n >= 0 then n / 2 else NoAnswer
                 example half
                     | "half of seven, rounded down" :
@@ -262,7 +255,6 @@ class CompileOutputUnionMemberTest {
                 import up ( Yen )
                 data NothingOwed
                 behavior owed : (a: Yen) -> Yen | NothingOwed
-                    constructs NothingOwed
                 let owed (a) = if a.value > 0 then a else NothingOwed
                 """));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
@@ -293,7 +285,7 @@ class CompileOutputUnionMemberTest {
                 import up ( Yen )
                 data NothingOwed
                 behavior owed : (a: Yen) -> Yen | NothingOwed
-                    constructs Yen, NothingOwed
+                    constructs Yen
                 """));
         byte[] impl = Subclasses.compile(classes, "consumer.HalfOwed", """
                 package consumer;
@@ -335,7 +327,6 @@ class CompileOutputUnionMemberTest {
                         data YenCase = String
                         data NothingOwed
                         behavior owed : (a: Yen) -> Yen | NothingOwed
-                            constructs NothingOwed
                         let owed (a) = if a.value > 0 then a else NothingOwed
                         """)));
         assertTrue(e.getMessage().contains("`YenCase`"), e.getMessage());
@@ -348,7 +339,6 @@ class CompileOutputUnionMemberTest {
                 data IntCase = String
                 data NoAnswer
                 behavior half : (n: Int) -> Int | NoAnswer
-                    constructs NoAnswer
                 let half (n) = if n >= 0 then n / 2 else NoAnswer
                 """));
         assertTrue(e.getMessage().contains("`IntCase`"), e.getMessage());
@@ -363,7 +353,6 @@ class CompileOutputUnionMemberTest {
                 behavior intCase : (n: Int) -> Int
                 let intCase (n) = n
                 behavior half : (n: Int) -> Int | NoAnswer
-                    constructs NoAnswer
                 let half (n) = if n >= 0 then n / 2 else NoAnswer
                 """));
         assertTrue(e.getMessage().contains("`IntCase`"), e.getMessage());

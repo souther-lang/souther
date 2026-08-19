@@ -137,7 +137,7 @@ class APositionAReadingIsMadeOfIsProvedToBeOneTest {
         assertThrows(CompileException.class, () -> souther.compiler.Compiler.compile("""
                 module demo
                 data Ok
-                behavior run : (x: (Int, String)) -> Ok constructs Ok
+                behavior run : (x: (Int, String)) -> Ok
                 let run (x) = Ok
                 """), "a tuple parameter never reaches a partition");
 
@@ -145,7 +145,7 @@ class APositionAReadingIsMadeOfIsProvedToBeOneTest {
                 module demo
                 data Ok
                 data Holder = { f: (Int) -> Int }
-                behavior run : (h: Holder) -> Ok constructs Ok
+                behavior run : (h: Holder) -> Ok
                 let run (h) = Ok
                 """), "a function field never reaches a partition");
     }

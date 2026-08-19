@@ -40,11 +40,9 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
             data No
 
             behavior quote : (parcel: Parcel) -> Ok | No
-                constructs Ok
             let quote (parcel) = Ok
 
             behavior mix : (order: Order) -> Ok | No
-                constructs Ok, No
             let mix (order) =
                 if Int.add(order.straw.value, order.choco.value) <= 150 then Ok else No
 
@@ -54,22 +52,18 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
             data Bare = { x: Int, y: Int }
 
             behavior byRule : (p: Pair) -> Ok | No
-                constructs Ok
             let byRule (p) = Ok
 
             behavior byGuard : (b: Bare) -> Ok | No
-                constructs Ok, No
             let byGuard (b) = if b.x < b.y + 1 then Ok else No
 
             data Sole = { x: Int }
                 invariant x < x + 1
 
             behavior byRuleAboutOne : (s: Sole) -> Ok | No
-                constructs Ok
             let byRuleAboutOne (s) = Ok
 
             behavior byGuardAboutOne : (b: Bare) -> Ok | No
-                constructs Ok, No
             let byGuardAboutOne (b) = if b.x < b.x + 1 then Ok else No
             """;
 
@@ -196,7 +190,6 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
                 data Ok
 
                 behavior stage : (q: AtLeastQualified) -> Ok
-                    constructs Ok
                 let stage (q) = Ok
                 """, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());

@@ -96,84 +96,68 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
             data StageI  = Stage    invariant value >= Qualified
 
             behavior guardWholeBare : (x: Int) -> Verdict
-                constructs Ok, No
             let guardWholeBare (x) = { guard x < 5000 else Ok
                 No }
 
             behavior guardDenseBare : (x: Decimal) -> Verdict
-                constructs Ok, No
             let guardDenseBare (x) = { guard x < 0.5m else Ok
                 No }
 
             behavior guardDayBare : (x: Date) -> Verdict
-                constructs Ok, No
             let guardDayBare (x) = { guard x < Date("2026-08-01") else Ok
                 No }
 
             behavior guardMomentBare : (x: DateTime) -> Verdict
-                constructs Ok, No
             let guardMomentBare (x) = { guard x < DateTime("2026-08-01T00:00:00") else Ok
                 No }
 
             behavior guardTextBare : (x: String) -> Verdict
-                constructs Ok, No
             let guardTextBare (x) = { guard x < "2026-08" else Ok
                 No }
 
             behavior guardTimeBare : (x: Time) -> Verdict
-                constructs Ok, No
             let guardTimeBare (x) = { guard x < Time("16:00:00") else Ok
                 No }
 
             behavior guardNanoBare : (x: Instant) -> Verdict
-                constructs Ok, No
             let guardNanoBare (x) = { guard x < Instant("2026-08-01T00:00:00Z") else Ok
                 No }
 
             behavior guardStageBare : (x: Stage) -> Verdict
-                constructs Ok, No, Qualified
             let guardStageBare (x) = { guard x < Qualified else Ok
                 No }
 
             behavior guardWholeWrapped : (x: WholeN) -> Verdict
-                constructs Ok, No
             let guardWholeWrapped (x) = { guard x.value < 5000 else Ok
                 No }
 
             behavior guardDenseWrapped : (x: DenseN) -> Verdict
-                constructs Ok, No
             let guardDenseWrapped (x) = { guard x.value < 0.5m else Ok
                 No }
 
             behavior guardDayWrapped : (x: DayN) -> Verdict
-                constructs Ok, No
             let guardDayWrapped (x) = { guard x.value < Date("2026-08-01") else Ok
                 No }
 
             behavior guardMomentWrapped : (x: MomentN) -> Verdict
-                constructs Ok, No
             let guardMomentWrapped (x) = {
                 guard x.value < DateTime("2026-08-01T00:00:00") else Ok
                 No }
 
             behavior guardTextWrapped : (x: TextN) -> Verdict
-                constructs Ok, No
             let guardTextWrapped (x) = { guard x.value < "2026-08" else Ok
                 No }
 
             behavior guardTimeWrapped : (x: TimeN) -> Verdict
-                constructs Ok, No
             let guardTimeWrapped (x) = { guard x.value < Time("16:00:00") else Ok
                 No }
 
             behavior guardNanoWrapped : (x: NanoN) -> Verdict
-                constructs Ok, No
             let guardNanoWrapped (x) = {
                 guard x.value < Instant("2026-08-01T00:00:00Z") else Ok
                 No }
 
             behavior guardStageWrapped : (x: StageN) -> Verdict
-                constructs Ok, No, Qualified
             let guardStageWrapped (x) = { guard x.value < Qualified else Ok
                 No }
 
@@ -181,77 +165,69 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
             // newtype is the value it carries, so `x < WholeN(5000)` compares two of them and the
             // line is the one `x < 5000` draws at the value inside.
             behavior guardWholeBuilt : (x: WholeN) -> Verdict
-                constructs Ok, No, WholeN
+                constructs WholeN
             let guardWholeBuilt (x) = { guard x < WholeN(5000) else Ok
                 No }
 
             behavior guardDenseBuilt : (x: DenseN) -> Verdict
-                constructs Ok, No, DenseN
+                constructs DenseN
             let guardDenseBuilt (x) = { guard x < DenseN(0.5m) else Ok
                 No }
 
             behavior guardDayBuilt : (x: DayN) -> Verdict
-                constructs Ok, No, DayN
+                constructs DayN
             let guardDayBuilt (x) = { guard x < DayN(Date("2026-08-01")) else Ok
                 No }
 
             behavior guardMomentBuilt : (x: MomentN) -> Verdict
-                constructs Ok, No, MomentN
+                constructs MomentN
             let guardMomentBuilt (x) = {
                 guard x < MomentN(DateTime("2026-08-01T00:00:00")) else Ok
                 No }
 
             behavior guardTimeBuilt : (x: TimeN) -> Verdict
-                constructs Ok, No, TimeN
+                constructs TimeN
             let guardTimeBuilt (x) = { guard x < TimeN(Time("16:00:00")) else Ok
                 No }
 
             behavior guardNanoBuilt : (x: NanoN) -> Verdict
-                constructs Ok, No, NanoN
+                constructs NanoN
             let guardNanoBuilt (x) = {
                 guard x < NanoN(Instant("2026-08-01T00:00:00Z")) else Ok
                 No }
 
             behavior guardTextBuilt : (x: TextN) -> Verdict
-                constructs Ok, No, TextN
+                constructs TextN
             let guardTextBuilt (x) = { guard x < TextN("2026-08") else Ok
                 No }
 
             behavior guardStageBuilt : (x: StageN) -> Verdict
-                constructs Ok, No, StageN, Qualified
+                constructs StageN
             let guardStageBuilt (x) = { guard x < StageN(Qualified) else Ok
                 No }
 
             behavior boundWhole  : (x: WholeI)  -> Ok
-                constructs Ok
             let boundWhole (x) = Ok
 
             behavior boundDense  : (x: DenseI)  -> Ok
-                constructs Ok
             let boundDense (x) = Ok
 
             behavior boundDay    : (x: DayI)    -> Ok
-                constructs Ok
             let boundDay (x) = Ok
 
             behavior boundMoment : (x: MomentI) -> Ok
-                constructs Ok
             let boundMoment (x) = Ok
 
             behavior boundText   : (x: TextI)   -> Ok
-                constructs Ok
             let boundText (x) = Ok
 
             behavior boundTime   : (x: TimeI)   -> Ok
-                constructs Ok
             let boundTime (x) = Ok
 
             behavior boundNano   : (x: NanoI)   -> Ok
-                constructs Ok
             let boundNano (x) = Ok
 
             behavior boundStage  : (x: StageI)  -> Ok
-                constructs Ok
             let boundStage (x) = Ok
 
             // The wider line is guarded first, so both departures are ones values reach. Written
@@ -259,20 +235,17 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
             // is under one, and the line at two divides nothing — which is a model with a dead
             // branch in it and not a position with three classes.
             behavior twoLinesDense : (x: Decimal) -> Verdict
-                constructs Ok, No
             let twoLinesDense (x) = { guard x < 2.0m else No
                 guard x < 1.0m else Ok
                 Ok }
 
             behavior twoLinesMoment : (x: DateTime) -> Verdict
-                constructs Ok, No
             let twoLinesMoment (x) = {
                 guard x < DateTime("2026-08-01T00:00:02") else No
                 guard x < DateTime("2026-08-01T00:00:01") else Ok
                 Ok }
 
             behavior openOnBothSidesDense : (x: Decimal) -> Verdict
-                constructs Ok, No
             let openOnBothSidesDense (x) = { guard x < 2.0m else No
                 guard x <= 1.0m else Ok
                 Ok }
@@ -284,20 +257,17 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
                     && value <= DateTime("2026-08-01T00:00:01")
 
             behavior singledDense : (x: TwoDecimals) -> Verdict
-                constructs Ok, No
             let singledDense (x) = { guard x.value == 0.0m else Ok
                 guard x.value == 1.0m else No
                 Ok }
 
             behavior singledMoment : (x: TwoMoments) -> Verdict
-                constructs Ok, No
             let singledMoment (x) = {
                 guard x.value == DateTime("2026-08-01T00:00:00") else Ok
                 guard x.value == DateTime("2026-08-01T00:00:01") else No
                 Ok }
 
             behavior openOnBothSidesMoment : (x: DateTime) -> Verdict
-                constructs Ok, No
             let openOnBothSidesMoment (x) = {
                 guard x <= DateTime("2026-08-01T00:00:01") else Ok
                 guard x < DateTime("2026-08-01T00:00:02") else No

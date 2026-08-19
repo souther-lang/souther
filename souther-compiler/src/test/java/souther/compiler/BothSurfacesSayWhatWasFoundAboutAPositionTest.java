@@ -42,7 +42,7 @@ class BothSurfacesSayWhatWasFoundAboutAPositionTest {
             data Accepted = { at: Int }
 
             behavior classify : (n: Int) -> Accepted | Low
-                constructs Accepted, Low
+                constructs Accepted
 
             let classify (n) = {
                 guard n >= 60 else Low

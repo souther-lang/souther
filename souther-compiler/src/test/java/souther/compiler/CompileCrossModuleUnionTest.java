@@ -172,7 +172,7 @@ class CompileCrossModuleUnionTest {
                     constructs Label
                 behavior instruct : (a: Allocated) -> Shipped | NoLabel
                     depends on printLabel
-                    constructs Shipped, NoLabel
+                    constructs Shipped
                 let instruct (a, printLabel) =
                     if String.length(a.sku.value) > 0
                     then Shipped { sku = a.sku, label = printLabel(a.sku) }
@@ -229,7 +229,7 @@ class CompileCrossModuleUnionTest {
                 data Token = { v: String }
                 data NoToken
                 behavior mint : () -> Token | NoToken
-                    constructs Token, NoToken
+                    constructs Token
                 """;
         String stamping = """
                 module down exposing ( Stamped, Unstamped, stamp )
@@ -238,7 +238,7 @@ class CompileCrossModuleUnionTest {
                 data Unstamped
                 behavior stamp : (n: Int) -> Stamped | Unstamped
                     depends on mint
-                    constructs Stamped, Unstamped
+                    constructs Stamped
                 let stamp (n, mint) =
                     match mint() with
                     | Token as t -> Stamped { v = t.v }

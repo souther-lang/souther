@@ -96,7 +96,7 @@ class EveryForkIsReadUnderWhatItsBindingCarriesTest {
                 data Charged = { yen: Int }
 
                 behavior pick : (f: Flag, a: Amount) -> Free | Charged
-                    constructs Free, Charged
+                    constructs Charged
 
                 let pick (f, a) = match f with
                     | On -> {
@@ -126,7 +126,7 @@ class EveryForkIsReadUnderWhatItsBindingCarriesTest {
                 data Charged = { yen: Int }
 
                 behavior pick : (raw: Int) -> Free | Charged
-                    constructs Free, Charged, Amount
+                    constructs Charged, Amount
 
                 let pick (raw) = if Amount(raw) as a then {
                         guard a.value < 200 else Free
@@ -156,7 +156,7 @@ class EveryForkIsReadUnderWhatItsBindingCarriesTest {
                 data Charged = { yen: Int }
 
                 behavior charge : (a: Amount) -> Free | Charged
-                    constructs Free, Charged
+                    constructs Charged
 
                 let charge (a) = {
                     guard a.value < 200 else Free
@@ -225,7 +225,7 @@ class EveryForkIsReadUnderWhatItsBindingCarriesTest {
                 data Charged = { yen: Int }
 
                 behavior pick : (a: Amount, xs: List<Int>) -> Free | Charged
-                    constructs Free, Charged
+                    constructs Charged
 
                 let pick (a, xs) = {
                     guard List.length(List.filter(x -> x > 0, xs)) >= 1 else Free

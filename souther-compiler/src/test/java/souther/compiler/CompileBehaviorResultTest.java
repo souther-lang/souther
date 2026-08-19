@@ -66,7 +66,6 @@ class CompileBehaviorResultTest {
             data 会員なし
 
             behavior findMember : (id: Id) -> Member | 会員なし
-                constructs 会員なし
             """;
 
     /** Spec §jvm-anonymous-union, §java-base-class: the abstract base a Java implementation

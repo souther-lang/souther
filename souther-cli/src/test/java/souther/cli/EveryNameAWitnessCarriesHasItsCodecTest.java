@@ -64,7 +64,7 @@ class EveryNameAWitnessCarriesHasItsCodecTest {
             let keys (k) = k
 
             behavior answer : (n: Int) -> Note | Empty
-                constructs Note, Empty, Sku
+                constructs Note, Sku
             let answer (n) =
                 if n > 0 then Note { at = DateTime("2026-01-01T00:00:00"), sku = Sku("s") } else Empty
             """;

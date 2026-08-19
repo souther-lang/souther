@@ -31,7 +31,7 @@ class CompileAttemptedConstructionTest {
             data Rejected
 
             behavior take : (raw: String) -> Accepted | Rejected
-                constructs Accepted, Code, Rejected
+                constructs Accepted, Code
 
             let take (raw) = {
                 guard Code(raw) as c else Rejected
@@ -149,7 +149,7 @@ class CompileAttemptedConstructionTest {
                 data Skipped
 
                 behavior take : (raw: String) -> Kept | Skipped
-                    constructs Kept, Code, Skipped
+                    constructs Kept, Code
 
                 let take (raw) = {
                     guard Code(raw) as c else Skipped
@@ -176,7 +176,7 @@ class CompileAttemptedConstructionTest {
                 data TooSmall
 
                 behavior diff : (p: Pair) -> Money | TooSmall
-                    constructs Money, TooSmall
+                    constructs Money
 
                 let diff (p) = {
                     guard Money(p.a.value - p.b.value) as d else TooSmall
@@ -204,7 +204,7 @@ class CompileAttemptedConstructionTest {
                 data TooSmall
 
                 behavior calc : (x: Int) -> Money | TooSmall
-                    constructs Money, TooSmall
+                    constructs Money
 
                 let calc (x) = {
                     guard Money(-1m) as m else TooSmall
@@ -233,7 +233,7 @@ class CompileAttemptedConstructionTest {
                 data Required = { note: String }
 
                 behavior judge : (age: Int) -> Required | NotRequired
-                    constructs Required, NotRequired, A
+                    constructs Required, NotRequired
 
                 let judge (age) =
                     if NotRequired { reasons = [ A | age >= 75 ] } as excluded
@@ -258,7 +258,7 @@ class CompileAttemptedConstructionTest {
                 data Skipped
 
                 behavior take : (raw: String) -> Kept | Skipped
-                    constructs Kept, Skipped
+                    constructs Kept
 
                 let take (raw) = {
                     guard Code(raw) as c else Skipped
@@ -285,7 +285,7 @@ class CompileAttemptedConstructionTest {
                 data Rejected
 
                 behavior take : (raw: String) -> Accepted | Rejected
-                    constructs Accepted, Code, Rejected
+                    constructs Accepted, Code
 
                 let take (raw) = {
                     guard Code(raw) as c else Rejected
@@ -310,7 +310,7 @@ class CompileAttemptedConstructionTest {
                 data Skipped
 
                 behavior take : (n: Int) -> Kept | Skipped
-                    constructs Kept, Skipped
+                    constructs Kept
 
                 let take (n) = {
                     guard n > 0 as c else Skipped
@@ -447,7 +447,7 @@ class CompileAttemptedConstructionTest {
                     ++ (if n >= 20 then [] else [ CloseDateInPast ])
 
                 behavior convert : (n: Int) -> Converted | Blocked
-                    constructs Converted, Blocked, BudgetNotConfirmed, CloseDateInPast
+                    constructs Converted, Blocked
 
                 let convert (n) =
                     if Blocked { reasons = blockingReasons(n) } as blocked

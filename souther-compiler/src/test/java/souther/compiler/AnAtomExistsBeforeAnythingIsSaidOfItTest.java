@@ -33,7 +33,7 @@ class AnAtomExistsBeforeAnythingIsSaidOfItTest {
             data Fine
 
             behavior f : (%s) -> NonNeg | Fine
-                constructs NonNeg, Fine
+                constructs NonNeg
 
             let f (%s) = {
                 %s

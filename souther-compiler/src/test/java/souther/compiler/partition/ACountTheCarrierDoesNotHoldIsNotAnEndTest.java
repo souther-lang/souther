@@ -61,7 +61,6 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
                     invariant value > Won
 
                 behavior f : (s: PastEnd) -> Verdict
-                    constructs Ok
                 let f (s) = Ok
                 """));
     }
@@ -73,7 +72,6 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
                     invariant value < Prospecting
 
                 behavior f : (s: BeforeStart) -> Verdict
-                    constructs Ok
                 let f (s) = Ok
                 """));
     }
@@ -93,7 +91,6 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
                     invariant value > Date("+999999999-12-31")
 
                 behavior f : (s: PastDate) -> Verdict
-                    constructs Ok
                 let f (s) = Ok
                 """));
     }
@@ -107,7 +104,6 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
                     invariant value >= Qualified
 
                 behavior f : (s: FromQualified) -> Verdict
-                    constructs Ok
                 let f (s) = Ok
                 """));
     }

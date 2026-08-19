@@ -31,11 +31,9 @@ data 出荷済み =
 
 // 台帳は外にあるので実装は注入される。自分で作る側の case を constructs に書く。
 behavior 台帳へ書く : (指示: 出荷指示) -> 出荷済み | 書けなかった
-    constructs 書けなかった
 
 behavior 出荷する : (指示: 出荷指示) -> 出荷済み | 重量超過 | 書けなかった
     depends on 台帳へ書く
-    constructs 重量超過
 
 let 上限 = Weight(30000)
 

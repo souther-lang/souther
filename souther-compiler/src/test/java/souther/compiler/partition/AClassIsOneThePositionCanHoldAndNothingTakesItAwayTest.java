@@ -441,7 +441,7 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                 data Refused = { at: String }
 
                 behavior classify : (s: StageI) -> Accepted | Refused
-                    constructs Accepted, Refused, Qualified
+                    constructs Accepted, Refused
 
                 let classify (s) =
                     if s.value < Qualified then Accepted { at = "x" }
@@ -481,7 +481,7 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                 data Refused = { at: String }
 
                 behavior classify : (s: StageI) -> Accepted | Refused
-                    constructs Accepted, Refused, Won
+                    constructs Accepted, Refused
 
                 let classify (s) =
                     if s.value < Won then Accepted { at = "x" }

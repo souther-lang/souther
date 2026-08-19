@@ -58,14 +58,14 @@ class WhereADeclarationCameFromDoesNotDecideItsDischargeTest {
             data TooSmall
 
             behavior take : (paid: Decimal) -> Amount | TooSmall
-                constructs Amount, TooSmall
+                constructs Amount
             let take (paid) = {
                 guard paid >= 0m else TooSmall
                 Amount(paid)
             }
 
             behavior fill : (xs: List<Int>) -> Bag | TooSmall
-                constructs Bag, TooSmall
+                constructs Bag
             let fill (xs) = {
                 guard List.length(xs) >= 1 else TooSmall
                 Bag(xs)

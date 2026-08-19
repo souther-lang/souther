@@ -52,7 +52,7 @@ class AnOrderReachesThroughTheNameThatWrapsItTest {
                 data In = { stage: StageN }
                 data Out = { before: Bool, after: Bool }
 
-                behavior run : (i: In) -> Out constructs Out, StageN, Qualified
+                behavior run : (i: In) -> Out constructs Out, StageN
 
                 let run (i) = Out {
                     before = i.stage < StageN(Qualified),
@@ -262,7 +262,7 @@ class AnOrderReachesThroughTheNameThatWrapsItTest {
                 %s
                 data Out = { v: Bool }
 
-                behavior run : (s: StageN) -> Out constructs Out, Qualified
+                behavior run : (s: StageN) -> Out constructs Out
 
                 let run (s) = Out { v = s < Qualified }
                 """.formatted(STAGES)));

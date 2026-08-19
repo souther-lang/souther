@@ -35,7 +35,6 @@ class CompileOutputUnionEncoderTest {
                 module m exposing ( NoAnswer, half )
                 data NoAnswer
                 behavior half : (n: Int) -> Int | NoAnswer
-                    constructs NoAnswer
                 let half (n) = if n >= 0 then n / 2 else NoAnswer
                 """), getClass().getClassLoader());
         Object answered = Codecs.apply(loader.loadClass("m.Half").getMethod("of").invoke(null), 7L);
@@ -54,7 +53,7 @@ class CompileOutputUnionEncoderTest {
                 import up ( Yen )
                 data NothingOwed
                 behavior owed : (a: Yen) -> Yen | NothingOwed
-                    constructs Yen, NothingOwed
+                    constructs Yen
                 let owed (a) = if a.value > 0 then Yen(a.value) else NothingOwed
                 """)), getClass().getClassLoader());
         Object owed = loader.loadClass("down.Owed").getMethod("of").invoke(null);
@@ -70,7 +69,6 @@ class CompileOutputUnionEncoderTest {
                 data Approved
                 data Rejected
                 behavior decide : (n: Int) -> Approved | Rejected
-                    constructs Approved, Rejected
                 let decide (n) = if n > 0 then Approved else Rejected
                 """), getClass().getClassLoader());
         Object decide = loader.loadClass("m.Decide").getMethod("of").invoke(null);
@@ -87,7 +85,7 @@ class CompileOutputUnionEncoderTest {
                 data Answer = Hit | Miss
                 data NoAnswer
                 behavior ask : (n: Int) -> Answer | NoAnswer
-                    constructs Hit, Miss, NoAnswer
+                    constructs Hit, Miss
                 let ask (n) = {
                     guard n >= 0 else NoAnswer
                     if n > 0 then Hit { score = n } else Miss { reason = "no" }
@@ -109,7 +107,7 @@ class CompileOutputUnionEncoderTest {
                 data Answer = Hit | Miss
                 data NoAnswer
                 behavior ask : (n: Int) -> Answer | NoAnswer
-                    constructs Hit, Miss, NoAnswer
+                    constructs Hit, Miss
                 let ask (n) = {
                     guard n >= 0 else NoAnswer
                     if n > 0 then Hit { score = n } else Miss { reason = "no" }
@@ -126,7 +124,7 @@ class CompileOutputUnionEncoderTest {
                 data Ok = { v: Int }
                 data NotFound
                 behavior bill : (n: Int) -> Ok | NotFound
-                    constructs Ok, NotFound
+                    constructs Ok
                 let bill (n) = if n > 0 then Ok { v = n } else NotFound
                 """), getClass().getClassLoader());
     }

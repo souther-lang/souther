@@ -62,7 +62,7 @@ class AConstructionIsJudgedByWhatItBuildsTest {
         return TYPES + """
 
                 behavior make : (%s) -> NonNeg | TooSmall
-                    constructs NonNeg, TooSmall
+                    constructs NonNeg
                 let make (x) = {
                     guard %s else TooSmall
                     %s
@@ -140,12 +140,12 @@ class AConstructionIsJudgedByWhatItBuildsTest {
         reads(Verdict.PROVED, MONEY + """
 
                 behavior make : (held: Money, fee: Money) -> Money | TooSmall
-                    constructs %s TooSmall
+                    %s
                 let make (held, fee) = {
                     guard fee <= held else TooSmall
                     %s
                 }
-                """.formatted(constructs == null ? "" : "Money,", body));
+                """.formatted(constructs == null ? "" : constructs, body));
     }
 
     /**

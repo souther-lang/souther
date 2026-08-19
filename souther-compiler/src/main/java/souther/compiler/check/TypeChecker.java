@@ -4,6 +4,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.msg.DataMessage;
@@ -381,6 +382,20 @@ public final class TypeChecker {
         // settled from a call to an injected behavior (issue #178), and read again by every body check. It
         // arrives here rather than being built again because it is one question.
         Set<String> injectionTargets = new HashSet<>();
+        // Asked of every clause, implemented or injected: what may be named in one is a question
+        // about the clause and not about who implements it (spec §constructs-excludes-unit-data).
+        // Every behavior's, before the first is raised — a wrong clause is one thing to rewrite, and
+        // an author with two of them should not learn the second by building again. This is what
+        // E1002 and E1006 do within one clause, one frame out.
+        List<Diagnostic> unitEntries = new ArrayList<>();
+        for (Hir.BehaviorDef b : module.behaviors()) {
+            if (b instanceof Hir.SpecBehavior any) {
+                unitEntries.addAll(SpecChecker.unitDataNamedInConstructs(any, symbols));
+            }
+        }
+        if (!unitEntries.isEmpty()) {
+            throw CompileException.ofAll(unitEntries, DiagnosticRenderer.legacyBody(unitEntries.get(0)));
+        }
         for (Hir.BehaviorDef b : module.behaviors()) {
             if (b instanceof Hir.SpecBehavior spec && !fns.containsKey(spec.name())) {
                 // `depends on` names what an implementation calls (§depends-on), and an injection target has

@@ -48,7 +48,6 @@ class ACallIsAValueOnlyWhenItIsTheConstructionTest {
                 behavior openingAt : (spelled: String) -> PRIM
 
                 behavior pick : (t: PRIM) -> Ok | No
-                    constructs Ok, No
                     depends on openingAt
 
                 let pick (t, openingAt) =

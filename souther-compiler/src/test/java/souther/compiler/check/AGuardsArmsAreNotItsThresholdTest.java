@@ -37,7 +37,6 @@ class AGuardsArmsAreNotItsThresholdTest {
             data Same
 
             behavior pick : (n: Count) -> Low | High | Same
-                constructs Low, High, Same
 
             let pick (n) = {
                 guard n.value >= 6 else Low

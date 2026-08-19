@@ -52,7 +52,7 @@ class CompileEnumerationOrderTest {
                 data In = { n: Int }
                 data Out = { b: Bool }
 
-                behavior run : (i: In) -> Out constructs Out, Prospecting, Gold
+                behavior run : (i: In) -> Out constructs Out
 
                 let run (i) = Out { b = Prospecting < Gold }
                 """;
@@ -89,7 +89,7 @@ class CompileEnumerationOrderTest {
                 data In = { n: Int }
                 data Out = { stages: List<Stage> }
 
-                behavior run : (i: In) -> Out constructs Out, Prospecting, Won, Lost
+                behavior run : (i: In) -> Out constructs Out
 
                 let run (i) = Out { stages = List.sort([ Lost, Won, Prospecting ]) }
                 """;
@@ -106,7 +106,7 @@ class CompileEnumerationOrderTest {
                 data In = { n: Int }
                 data Out = { early: Bool, late: Bool }
 
-                behavior run : (i: In) -> Out constructs Out, Prospecting, Won
+                behavior run : (i: In) -> Out constructs Out
 
                 let run (i) = Out { early = Prospecting < Won, late = Won < Prospecting }
                 """;
@@ -128,7 +128,7 @@ class CompileEnumerationOrderTest {
                 data In = { n: Int }
                 data Out = { early: Bool }
 
-                behavior run : (i: In) -> Out constructs Out, Prospecting, Won
+                behavior run : (i: In) -> Out constructs Out
 
                 let run (i) = {
                     let s: Stage = Prospecting
@@ -155,7 +155,7 @@ class CompileEnumerationOrderTest {
                 data In = { n: Int }
                 data Out = { stages: List<Stage> }
 
-                behavior run : (i: In) -> Out constructs Out, Prospecting, Negotiation
+                behavior run : (i: In) -> Out constructs Out
 
                 let run (i) = Out { stages = List.sort([ Negotiation, Prospecting ]) }
                 """;
@@ -173,7 +173,7 @@ class CompileEnumerationOrderTest {
                 data In = { n: Int }
                 data Out = { stages: List<Stage> }
 
-                behavior run : (i: In) -> Out constructs Out, Prospecting, Won
+                behavior run : (i: In) -> Out constructs Out
 
                 let run (i) = Out { stages = List.sort([ Won, Prospecting ]) }
                 """;
@@ -193,7 +193,7 @@ class CompileEnumerationOrderTest {
                 data In = { n: Int }
                 data Out = { deals: List<Deal> }
 
-                behavior run : (i: In) -> Out constructs Out, Deal, Won, Negotiation, Prospecting
+                behavior run : (i: In) -> Out constructs Out, Deal
 
                 let run (i) =
                     Out { deals = List.sortBy(d -> d.stage,

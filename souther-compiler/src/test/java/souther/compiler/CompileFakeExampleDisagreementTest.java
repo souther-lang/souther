@@ -521,7 +521,6 @@ class CompileFakeExampleDisagreementTest {
 
                 behavior use : () -> Done
                     depends on lookup
-                    constructs Done
                 let use (lookup) = match lookup() with
                     | Found   -> Done
                     | Missing -> Done

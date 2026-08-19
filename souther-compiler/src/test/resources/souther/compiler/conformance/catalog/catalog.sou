@@ -35,7 +35,7 @@ data Rate = Decimal
     invariant value > 0.00m && value < 1.00m
 
 behavior discount : (item: Item, rate: Rate) -> Discounted | TooCheap
-    constructs Discounted, Price, TooCheap
+    constructs Discounted, Price
     ensures Discounted -> value.sku == item.sku
 
 // A helper the behavior reaches. `private` is not written on it: that modifier is a core privilege

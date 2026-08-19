@@ -58,7 +58,7 @@ class ANamedComputedValueIsReadAsWhatItWasGivenTest {
             let takenOf (r: Rem, si: Yen): Yen = r.commute + si
 
             behavior boundFirst : (r: Rem, uplift: Yen, si: Yen) -> Net | TooMuch
-                constructs Net, TooMuch
+                constructs Net
 
             """;
 

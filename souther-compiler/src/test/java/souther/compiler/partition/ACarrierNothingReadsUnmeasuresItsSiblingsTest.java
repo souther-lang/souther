@@ -52,7 +52,6 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
             data Shape = Wide
 
             behavior classify : (s: Span) -> Shape
-                constructs Wide
             let classify (s) = Wide
             """;
 
@@ -72,7 +71,6 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
             data Shape = Wide
 
             behavior classify : (s: Span) -> Shape
-                constructs Wide
             let classify (s) = Wide
             """;
 

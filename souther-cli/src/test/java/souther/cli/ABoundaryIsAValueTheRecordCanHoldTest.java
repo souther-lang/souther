@@ -40,7 +40,6 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
             data LongShift
 
             behavior classifyInterval : (interval: WorkInterval) -> ShortShift | LongShift
-                constructs ShortShift, LongShift
 
             let classifyInterval (interval) =
                 if interval.endsAt.value - interval.startsAt.value >= 480
@@ -69,7 +68,6 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
             data Ok
 
             behavior classify : (band: Band) -> Ok
-                constructs Ok
 
             let classify (band) = Ok
 
@@ -201,7 +199,6 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 data Big
 
                 behavior classify : (pair: Pair) -> Small | Big
-                    constructs Small, Big
 
                 let classify (pair) =
                     if pair.b.value >= 50
@@ -305,7 +302,6 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 data No
 
                 behavior classify : (input: Input) -> Yes | No
-                    constructs Yes, No
 
                 let classify (input) = if input.interval.startsAt.value >= 100 then Yes else No
 
@@ -390,7 +386,6 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 data Ok
 
                 behavior f : (r: R) -> Ok
-                    constructs Ok
 
                 let f (r) = Ok
 
@@ -437,7 +432,6 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 data Ok
 
                 behavior f : (root: Root) -> Ok
-                    constructs Ok
 
                 let f (root) = Ok
 
@@ -473,7 +467,6 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 data Ok
 
                 behavior f : (n: N) -> Ok
-                    constructs Ok
 
                 let f (n) = Ok
 

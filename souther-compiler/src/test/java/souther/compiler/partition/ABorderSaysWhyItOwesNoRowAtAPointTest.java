@@ -52,7 +52,6 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
                 data Verdict = Ok | No
 
                 behavior take : (h: H) -> Verdict
-                    constructs Ok, No
                 let take (h) = { guard h.a.value %s else Ok
                     No }
 
@@ -287,7 +286,6 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
                 data Verdict = Ok | No
 
                 behavior cmp : (p: P) -> Verdict
-                    constructs Ok, No
                 let cmp (p) = { guard p.a %s p.b else Ok
                     No }
 
@@ -343,7 +341,6 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
             data Verdict = Ok | No
 
             behavior cmp : (p: P) -> Verdict
-                constructs Ok, No
             let cmp (p) = { guard p.a < p.b else Ok
                 No }
 

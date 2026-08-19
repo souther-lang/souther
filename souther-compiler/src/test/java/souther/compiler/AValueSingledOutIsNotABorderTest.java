@@ -40,7 +40,6 @@ class AValueSingledOutIsNotABorderTest {
                 data B
 
                 behavior b : (r: R) -> A | B
-                    constructs A, B
                 let b (r) = if %s then A else B
 
                 example b

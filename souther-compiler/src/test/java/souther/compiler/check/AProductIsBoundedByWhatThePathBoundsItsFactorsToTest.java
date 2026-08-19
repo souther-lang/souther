@@ -63,7 +63,7 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
     @Test
     void aProductOfTwoFactorsGuardedAtOrAboveZeroIsAtOrAboveZero() {
         assertEquals(List.of(), warningsOf(TYPES + """
-                behavior total : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                behavior total : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg
                 let total (a, b) = {
                     guard a >= 0
                         else Bad
@@ -88,7 +88,7 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
     @Test
     void aProductGivenANameIsBoundedWhereTheProductIs() {
         assertEquals(List.of(), warningsOf(TYPES + """
-                behavior total : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                behavior total : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg
                 let total (a, b) = {
                     guard a >= 0
                         else Bad
@@ -105,7 +105,7 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
     @Test
     void aProductOfTwoFactorsAtOrBelowZeroIsAtOrAboveZero() {
         assertEquals(List.of(), warningsOf(TYPES + """
-                behavior total : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                behavior total : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg
                 let total (a, b) = {
                     guard a <= 0
                         else Bad
@@ -120,7 +120,7 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
     @Test
     void aProductWithOneUnboundedFactorIsStillOwed() {
         assertEquals(List.of("E2011"), warningsOf(TYPES + """
-                behavior total : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                behavior total : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg
                 let total (a, b) = {
                     guard a >= 0
                         else Bad
@@ -133,7 +133,7 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
     @Test
     void aProductOfTwoDecimalsThePathBoundsIsBounded() {
         assertEquals(List.of(), warningsOf(TYPES + """
-                behavior total : (a: Decimal, b: Decimal) -> NonNegD | Bad constructs NonNegD, Bad
+                behavior total : (a: Decimal, b: Decimal) -> NonNegD | Bad constructs NonNegD
                 let total (a, b) = {
                     guard a >= 0.0m
                         else Bad
@@ -149,7 +149,7 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
     @Test
     void aQuotientOfAScaledValueByAWrittenConstantIsBounded() {
         assertEquals(List.of(), warningsOf(TYPES + """
-                behavior part : (x: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                behavior part : (x: Int) -> NonNeg | Bad constructs NonNeg
                 let part (x) = {
                     guard x >= 0
                         else Bad
@@ -162,7 +162,7 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
     @Test
     void aQuotientOfAValueBoundedBothWaysIsBoundedBothWays() {
         assertEquals(List.of(), warningsOf(TYPES + """
-                behavior part : (x: Int) -> Pct | Bad constructs Pct, Bad
+                behavior part : (x: Int) -> Pct | Bad constructs Pct
                 let part (x) = {
                     guard x >= 0
                         else Bad
@@ -178,7 +178,7 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
     @Test
     void aQuotientOverAProductReadsWhatTheProductIsBoundedTo() {
         assertEquals(List.of(), warningsOf(TYPES + """
-                behavior part : (a: Int, b: Int) -> Pct | Bad constructs Pct, Bad
+                behavior part : (a: Int, b: Int) -> Pct | Bad constructs Pct
                 let part (a, b) = {
                     guard a >= 0
                         else Bad
@@ -205,7 +205,7 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
     @Test
     void aQuotientByAValueTheGuardsHoldAwayFromZeroIsBounded() {
         assertEquals(List.of(), warningsOf(TYPES + """
-                behavior part : (x: Int, k: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                behavior part : (x: Int, k: Int) -> NonNeg | Bad constructs NonNeg
                 let part (x, k) = {
                     guard x >= 0
                         else Bad
@@ -260,7 +260,7 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
     @Test
     void aQuotientOfAProductByAValueReadsBoth() {
         assertEquals(List.of(), warningsOf(TYPES + """
-                behavior part : (a: Int, b: Int, c: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                behavior part : (a: Int, b: Int, c: Int) -> NonNeg | Bad constructs NonNeg
                 let part (a, b, c) = {
                     guard a >= 0
                         else Bad
@@ -285,7 +285,7 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
     @Test
     void aQuotientByAValueNothingHoldsAwayFromZeroIsStillOwed() {
         assertEquals(List.of("E2011"), warningsOf(TYPES + """
-                behavior part : (x: Int, k: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                behavior part : (x: Int, k: Int) -> NonNeg | Bad constructs NonNeg
                 let part (x, k) = {
                     guard x >= 0
                         else Bad
@@ -309,7 +309,7 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
         assertEquals("E2010", errorOf(TYPES + """
                 data SmallNeg = Int
                     invariant value >= 0 - 10 && value <= 0 - 1
-                behavior part : (x: Int, k: SmallNeg) -> NonNeg | Bad constructs NonNeg, Bad
+                behavior part : (x: Int, k: SmallNeg) -> NonNeg | Bad constructs NonNeg
                 let part (x, k) = {
                     guard x >= 100
                         else Bad
@@ -343,7 +343,7 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
         InvariantChecker.GAVE_UP = gaveUp;
         try {
             assertEquals(List.of("E2011"), warningsOf(TYPES + """
-                    behavior part : (x: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                    behavior part : (x: Int) -> NonNeg | Bad constructs NonNeg
                     let part (x) = {
                         guard x >= 0
                             else Bad
@@ -376,7 +376,7 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
         assertEquals(List.of("E2011"), warningsOf(TYPES + """
                 data NotAbove = Decimal
                     invariant value <= 0.0m
-                behavior part : (x: Decimal) -> NotAbove | Bad constructs NotAbove, Bad
+                behavior part : (x: Decimal) -> NotAbove | Bad constructs NotAbove
                 let part (x) = {
                     guard x >= 0.0m
                         else Bad
@@ -401,7 +401,7 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
     void aClauseReachesAProductThroughAGuardThatEquatesTheTwo() {
         assertEquals(List.of(), warningsOf(TYPES + """
                 behavior total : (a: Int, b: Int, total: Int) -> NonNeg | Bad
-                    constructs NonNeg, Bad
+                    constructs NonNeg
                 let total (a, b, total) = {
                     guard a >= 0
                         else Bad
@@ -429,7 +429,7 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
         assertEquals(List.of("E2011"), warningsOf(TYPES + """
                 data NotAbove = Decimal
                     invariant value <= 0.0m
-                behavior total : (a: Decimal, b: Decimal) -> NotAbove | Bad constructs NotAbove, Bad
+                behavior total : (a: Decimal, b: Decimal) -> NotAbove | Bad constructs NotAbove
                 let total (a, b) = {
                     guard a >= 0.0m
                         else Bad
@@ -458,7 +458,7 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
         assertEquals("E2010", errorOf(TYPES + """
                 data FarBelow = Decimal
                     invariant value <= 0.0m - 1000.0m
-                behavior total : (a: Decimal, b: Decimal) -> FarBelow | Bad constructs FarBelow, Bad
+                behavior total : (a: Decimal, b: Decimal) -> FarBelow | Bad constructs FarBelow
                 let total (a, b) = {
                     guard a >= 0.0m
                         else Bad
@@ -502,7 +502,7 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
     @Test
     void aProductThePathPutsBelowZeroIsRefused() {
         assertEquals("E2010", errorOf(TYPES + """
-                behavior total : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                behavior total : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg
                 let total (a, b) = {
                     guard a >= 1
                         else Bad

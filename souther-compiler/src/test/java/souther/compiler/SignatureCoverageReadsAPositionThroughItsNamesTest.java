@@ -45,15 +45,12 @@ class SignatureCoverageReadsAPositionThroughItsNamesTest {
             data OtherN = Decision
 
             behavior bare : (decision: Decision) -> Ok
-                constructs Ok
             let bare (decision) = Ok
 
             behavior wrapped : (decision: DecisionN) -> Ok
-                constructs Ok
             let wrapped (decision) = Ok
 
             behavior twice : (decision: DecisionNN) -> Ok
-                constructs Ok
             let twice (decision) = Ok
 
             behavior makes : (id: Int) -> DecisionN

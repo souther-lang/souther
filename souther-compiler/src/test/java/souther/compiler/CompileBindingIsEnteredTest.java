@@ -112,7 +112,7 @@ class CompileBindingIsEnteredTest {
                 module demo
                 """ + TYPES + """
                 data Nope
-                behavior use : (x: Int) -> Q | Nope constructs Q, Nope
+                behavior use : (x: Int) -> Q | Nope constructs Q
                 let use (x) = if Q(x * x) as q then Q(0 - q.value - 1) else Nope
                 """;
         assertEquals("E2010", errorFrom(m),

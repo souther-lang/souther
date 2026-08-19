@@ -313,6 +313,6 @@ class DecoderPathAgreementTest {
         if (type.contains("Day")) {
             return ", Day";
         }
-        return type.contains("Outcome") ? ", Won" : "";
+        return "";
     }
 }

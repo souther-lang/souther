@@ -326,7 +326,7 @@ class CrossProjectImportTest {
                 module app.billing
                 import shared.terms ( Terms, Net30 )
                 data Req = { n: Int }
-                behavior pick : (r: Req) -> Terms constructs Net30
+                behavior pick : (r: Req) -> Terms
                 let pick (r) = Net30
                 """), path);
 
@@ -352,7 +352,7 @@ class CrossProjectImportTest {
                 import shared.money ( Amount )
                 data NothingOwed
                 behavior owed : (a: Amount, b: Amount) -> Amount | NothingOwed
-                    constructs Amount, NothingOwed
+                    constructs Amount
                 let owed (a, b) = if a.value >= b.value then Amount(a.value - b.value) else NothingOwed
                 """), published(LIBRARY));
 

@@ -37,7 +37,7 @@ class CompileValueNamespaceCollisionTest {
 
                 let Ready = In { n = 1 }
 
-                behavior go : (i: In) -> Ready constructs Ready
+                behavior go : (i: In) -> Ready
                 let go (i) = Ready
                 """);
 
@@ -147,7 +147,7 @@ class CompileValueNamespaceCollisionTest {
                         data Out = { bumped: Int }
 
                         behavior go : (i: In) -> Out | Tag
-                            constructs Out, Tag
+                            constructs Out
                         let go (i) = {
                             guard i.n > 0
                                 else Tag

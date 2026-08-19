@@ -37,7 +37,7 @@ class ModuleMetadataTest {
             data Declined
 
             behavior charge : (a: Amount) -> Receipt | Declined
-                constructs Receipt, Declined
+                constructs Receipt
             let charge (a) = if a.value > 0 then Receipt { paid = a } else Declined
 
             let withinCap (n: Int) = n <= 1000000
@@ -62,7 +62,7 @@ class ModuleMetadataTest {
         Annotation charge = annotation(classes, "shared.money.Charge", "SoutherBehavior");
         assertEquals("""
                 behavior charge : (a: Amount) -> Receipt | Declined
-                    constructs Receipt, Declined""", string(charge, "signature"));
+                    constructs Receipt""", string(charge, "signature"));
         assertFalse(bool(charge, "injected"), "charge has a let, so nothing injects it");
     }
 
