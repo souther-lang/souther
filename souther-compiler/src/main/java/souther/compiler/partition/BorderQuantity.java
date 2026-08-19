@@ -5,9 +5,11 @@ import souther.compiler.inputs.BoundaryDomain;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -252,6 +254,148 @@ public sealed interface BorderQuantity {
                         beyond.towards() == Towards.ABOVE ? order > 0 : order < 0;
                 case Criterion.AnythingBut _ -> order != 0;
             };
+        }
+    }
+
+    /**
+     * What an arithmetic form over several positions comes to.
+     *
+     * <p>The quantity domain testing exists for. An equivalence partition is defined by conditions
+     * that may involve more than one variable (ISTQB CTAL-TA v4.0 §3.1.1), and each such condition
+     * defines a border; a rule like {@code 300 * straw + 600 * choco <= 4800} draws a line that is
+     * not a value of either position, and the four sides of the box those two positions sit in are
+     * not it.
+     *
+     * <p><b>Its levels are a lattice.</b> What {@code 300x + 600y} comes to over whole numbers is
+     * every multiple of three hundred and nothing between them, so the value past a threshold of
+     * 4800 is 5100 — not 4801, and not whatever value some coordinate takes next. Which coordinates
+     * move to reach it is the search's answer and not the report's: the report asks an author for a
+     * row where the form comes to 5100, the same way a line between two positions asks for a row
+     * where they stand one apart rather than naming a value for either.
+     *
+     * <p>Constant-free, because {@link AffineReading} moves the constant to the threshold. Left in,
+     * the values {@code 2 * a} takes would be the even numbers under one spelling and the odd ones
+     * shifted by nine under another.
+     */
+    record OverAForm(String behavior, LinearForm<NumericTerm> form, Carrier of)
+            implements BorderQuantity {
+
+        public OverAForm {
+            if (behavior == null || form == null || of == null || form.coefs().isEmpty()) {
+                throw new IllegalArgumentException("a form quantity names positions and one order");
+            }
+            if (form.constant().signum() != 0) {
+                throw new IllegalArgumentException(
+                        "a quantity carries no constant; it belongs to the threshold: " + form);
+            }
+        }
+
+        /**
+         * Every multiple of the greatest common divisor of the coefficients, where the positions
+         * count in steps; every number where they do not.
+         *
+         * <p>Bézout's, and exact rather than a guess: the values {@code Σ cᵢxᵢ} takes over the whole
+         * numbers are exactly the multiples of {@code gcd(cᵢ)}. What the rules leave the positions
+         * does not enter here — a level this says the form takes may be one no row can be written
+         * at, and that is the search's answer rather than a reason to move the border.
+         */
+        @Override
+        public LevelSpace levels() {
+            return of.spacing() == souther.compiler.numeric.Granularity.DISCRETE
+                    ? LevelSpace.steppingBy(gcdOf(form.coefs().values())) : LevelSpace.dense();
+        }
+
+        @Override
+        public Carrier carrier() {
+            return of;
+        }
+
+        @Override
+        public Stands standsAt(Criterion where, Observation row) {
+            java.math.BigDecimal at = java.math.BigDecimal.ZERO;
+            for (Map.Entry<NumericTerm, java.math.BigDecimal> each : form.coefs().entrySet()) {
+                NumericTerm.Reading read =
+                        each.getKey().read(row.at(each.getKey().path()), of);
+                if (read instanceof NumericTerm.Reading.Missing) {
+                    return Stands.UNREADABLE;
+                }
+                if (!(read instanceof NumericTerm.Reading.Number number)) {
+                    return Stands.NO;
+                }
+                at = at.add(Count.number(number.value()).at().multiply(each.getValue()));
+            }
+            return where.holds(levels(), new Level.ACount(new Count(at)))
+                    ? Stands.YES : Stands.NO;
+        }
+
+        @Override
+        public Standing standingAt(Criterion where) {
+            return new Standing.OfAForm(form, levels(), where);
+        }
+
+        @Override
+        public String named() {
+            return new AxisId(behavior, left()).toString();
+        }
+
+        /**
+         * The form as an author would write it.
+         *
+         * <p>In one order whatever order the coefficients were recorded in. A form is a map and a
+         * report is a document that is compared against the one written last time, so the terms are
+         * named in an order the form itself settles.
+         */
+        @Override
+        public String left() {
+            StringBuilder out = new StringBuilder();
+            for (Map.Entry<NumericTerm, java.math.BigDecimal> each : ordered()) {
+                java.math.BigDecimal coef = each.getValue();
+                if (out.isEmpty()) {
+                    out.append(coef.signum() < 0 ? "-" : "");
+                } else {
+                    out.append(coef.signum() < 0 ? " - " : " + ");
+                }
+                java.math.BigDecimal size = coef.abs();
+                if (size.compareTo(java.math.BigDecimal.ONE) != 0) {
+                    out.append(size.stripTrailingZeros().toPlainString()).append(" * ");
+                }
+                out.append(each.getKey());
+            }
+            return out.toString();
+        }
+
+        @Override
+        public String writtenAt(Level level) {
+            if (!(level instanceof Level.ACount count)) {
+                throw new IllegalStateException(
+                        "a form was asked to write a level that is not a number: " + level);
+            }
+            return count.at().key();
+        }
+
+        @Override
+        public BoundaryTarget.Shape shape() {
+            return BoundaryTarget.Shape.OVER_A_FORM;
+        }
+
+        private java.util.List<Map.Entry<NumericTerm, java.math.BigDecimal>> ordered() {
+            return form.coefs().entrySet().stream()
+                    .sorted(java.util.Comparator.comparing(e -> e.getKey().toString())).toList();
+        }
+
+        /** The step the form's values move in: the greatest common divisor of its coefficients,
+         *  taken over them as whole numbers at their common scale so a decimal coefficient answers
+         *  the way a whole one does. */
+        static java.math.BigDecimal gcdOf(java.util.Collection<java.math.BigDecimal> coefs) {
+            int scale = 0;
+            for (java.math.BigDecimal coef : coefs) {
+                scale = Math.max(scale, Math.max(coef.scale(), 0));
+            }
+            java.math.BigInteger together = java.math.BigInteger.ZERO;
+            for (java.math.BigDecimal coef : coefs) {
+                together = together.gcd(coef.setScale(scale).unscaledValue().abs());
+            }
+            return new java.math.BigDecimal(together, scale);
         }
     }
 

@@ -45,8 +45,8 @@ class TwoRulesAskingAlikeStayTwoInTheDocumentTest {
             data Missing
 
             behavior f : (r: R) -> Found | Missing
-                ensures Found -> r.a <= 10 * 2
-                ensures Found -> r.a >= 20 * 2
+                ensures Found -> r.a <= Int.min(20, 30)
+                ensures Found -> r.a >= Int.min(40, 50)
             let f (r) = Missing
 
             example f
@@ -62,7 +62,7 @@ class TwoRulesAskingAlikeStayTwoInTheDocumentTest {
             data Y
 
             behavior f : (r: R) -> X | Y
-            let f (r) = if r.a <= 10 * 2 && r.a >= 20 * 2 then X else Y
+            let f (r) = if r.a <= Int.min(20, 30) && r.a >= Int.min(40, 50) then X else Y
 
             example f
                 | "one" : (R { a = 1 }) -> Y
@@ -171,7 +171,7 @@ class TwoRulesAskingAlikeStayTwoInTheDocumentTest {
                 module a
 
                 data Amount = Int
-                    invariant cap = value <= 10 * 2
+                    invariant cap = value <= Int.min(20, 30)
 
                 behavior f : (x: Amount) -> Int
                 let f (x) = x.value
@@ -182,7 +182,7 @@ class TwoRulesAskingAlikeStayTwoInTheDocumentTest {
                 module b
 
                 data Amount = Int
-                    invariant cap = value <= 10 * 2
+                    invariant cap = value <= Int.min(20, 30)
 
                 behavior g : (x: Amount) -> Int
                 let g (x) = x.value

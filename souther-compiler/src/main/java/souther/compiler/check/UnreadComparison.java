@@ -98,11 +98,16 @@ public final class UnreadComparison {
      * {@code x < x + 1} has a position on both sides and one position, so there is no second one
      * for a class to be about — what a reader would have to be given is a reading of the form, and
      * being sent after a relation sends them looking for a position the model never wrote.
+     *
+     * <p>Which side each of them is written on is no part of it. {@code 3 * a + 6 * b <= 48} names
+     * two positions on one side and relates them exactly as {@code a < b} does — neither is divided
+     * by it, and which values of one are on which side depends on the other. Counted per side, such
+     * a rule came back as a form nobody could read, two tokens from a border drawn on it.
      */
     public static <K> BlockReason why(Side<K> left, Side<K> right) {
         Set<K> named = new LinkedHashSet<>(left.positions());
         named.addAll(right.positions());
-        if (!left.positions().isEmpty() && !right.positions().isEmpty() && named.size() > 1) {
+        if (named.size() > 1) {
             return new BlockReason.ComparisonBetweenPositions();
         }
         // The side that names one, and the left where both do — which is the side a threshold would

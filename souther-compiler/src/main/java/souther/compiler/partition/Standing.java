@@ -46,4 +46,19 @@ public sealed interface Standing {
      */
     record OfTwoOnOneCarrier(NumericTerm on, NumericTerm against, Carrier of, Criterion where)
             implements Standing {}
+
+    /**
+     * An arithmetic form over several positions, held at a value of the form or past one.
+     *
+     * <p>The one constraint here that has to be searched for. A level of a form is reached by many
+     * assignments and by none, and which it is depends on what every rule leaves each position — so
+     * this names the equation and the caller hands in the box.
+     *
+     * <p>The order the form's own values sit on comes with it. Which levels a form takes is the
+     * quantity's answer, and a search that worked it out again from the coefficients would be the
+     * quantity's reading written a second time, free to disagree with it about where the next level
+     * is.
+     */
+    record OfAForm(souther.compiler.numeric.NumericDomain.LinearForm<NumericTerm> form,
+                   LevelSpace levels, Criterion where) implements Standing {}
 }

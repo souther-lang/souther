@@ -84,6 +84,18 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 .toList();
     }
 
+    /**
+     * The lines the declarations place, which is what these two tests are about.
+     *
+     * <p>The body of the behavior draws lines of its own — {@code endsAt <= startsAt + 480} holds the
+     * two ends within a working day, which is a line on how far apart they stand — and those are a
+     * different rule's. Counted together, a reading that learned to draw one more of them would fail
+     * these tests without anything having changed about where the record stops.
+     */
+    private static List<String> placedByTheRecord(String model) throws Exception {
+        return boundariesOf(model).stream().filter(line -> line.contains("(invariant")).toList();
+    }
+
     private static String reportOn(String model, String... extra) throws Exception {
         Path file = Files.createTempDirectory("souther-boundary").resolve("model.sou");
         Files.writeString(file, model);
@@ -102,7 +114,7 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
 
     @Test
     void anEdgeIsWhereTheRecordStopsAndNotWhereTheFieldsTypeDoes() throws Exception {
-        List<String> asked = boundariesOf(TIMESHEET);
+        List<String> asked = placedByTheRecord(TIMESHEET);
 
         assertEquals(4, asked.size(), () -> "asked for " + asked);
         assertTrue(asked.stream().anyMatch(l -> l.contains("interval.startsAt = 1439")),
@@ -494,7 +506,7 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
      * narrowing above is read as that rule doing it. */
     @Test
     void withoutTheRuleBothEndsKeepTheirTypesRange() throws Exception {
-        List<String> asked = boundariesOf(TIMESHEET.replace(
+        List<String> asked = placedByTheRecord(TIMESHEET.replace(
                 "    invariant endsAfterStart = startsAt < endsAt\n", ""));
 
         assertEquals(4, asked.size(), () -> "asked for " + asked);

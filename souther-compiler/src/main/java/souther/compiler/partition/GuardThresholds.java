@@ -465,6 +465,7 @@ public final class GuardThresholds {
                                 Symbols symbols, List<Border> out) {
         ComparedTerms drawn = ComparedTerms.of(placed.comparison(), reads, symbols);
         if (drawn == null) {
+            overAForm(behavior, iff, placed, plan, guard, site, reads, symbols, out);
             return;
         }
         // Which side of the line the pair on it belongs to is the compared terms' to derive, so
@@ -479,9 +480,47 @@ public final class GuardThresholds {
                 drawn.valueBelongsBelow(), placed.witness(), drawn.holdsAtTheLine(), false);
         Border made = Border.at(
                 BoundaryTarget.at(new BorderQuantity.Apart(behavior, drawn.on(), drawn.against(),
-                        drawn.carrier()), BorderQuantity.steps(0)),
+                        drawn.carrier()), BorderQuantity.steps(drawn.stepsApart())),
                 origin, null);
         if (out.stream().noneMatch(had -> had.equals(made))) {
+            out.add(made);
+        }
+    }
+
+    /**
+     * The line a comparison over an arithmetic form draws: the place where the form meets the value
+     * the rule names.
+     *
+     * <p>Read where neither of the narrower readings could be, and about the same comparison. This is
+     * the case domain testing exists for — a partition defined by a condition over more than one
+     * variable — and the four sides of the box its positions sit in are not it.
+     *
+     * <p>It divides no position. Which values of one are on which side depends on the others, and a
+     * class is a set of values of one position, so this is a line without a partition and the two
+     * answers are kept apart.
+     */
+    private static void overAForm(String behavior, Core.If iff, Placed placed,
+                                  CoverageSites.Plan plan, CoverageSites.GuardRef guard, int site,
+                                  InputReads reads, Symbols symbols, List<Border> out) {
+        AffineReading read = AffineReading.of(placed.comparison(), reads, symbols);
+        if (read == null || !read.orders()) {
+            return;
+        }
+        Carrier carrier = read.carrier(symbols,
+                term -> term.carrierAt(placed.comparison().left().type(), symbols));
+        if (carrier == null || !carrier.counts()) {
+            return;
+        }
+        ComparisonClaim.Cut cut = (ComparisonClaim.Cut) read.claim();
+        OriginRef.GuardOrigin origin = new OriginRef.GuardOrigin(
+                new RuleRef.Guard(plan.site(site).comparison()),
+                new OriginRef.GuardOrigin.Read(guard, site, Citation.of(iff.pos())),
+                cut.valueBelongsBelow(), placed.witness(), cut.holdsAtTheValue(), false);
+        Border made = Border.at(
+                BoundaryTarget.at(new BorderQuantity.OverAForm(behavior, read.form(), carrier),
+                        new Level.ACount(new souther.compiler.numeric.Count(read.cut()))),
+                origin, null);
+        if (made != null && out.stream().noneMatch(had -> had.equals(made))) {
             out.add(made);
         }
     }

@@ -351,13 +351,25 @@ class ALineBetweenTwoPositionsIsStillALineTest {
                 report);
     }
 
-    /** One side has to be a position and not something taken of one. Where it is not, the line is
-     *  where the difference is a constant, which is not a place either position can be asked for. */
+    /**
+     * An offset on one side moves the line rather than taking it away.
+     *
+     * <p>{@code charge > ceiling + 1000} is {@code charge - ceiling > 1000}: a line on the same
+     * distance, one thousand along it. Read as a position against a position, the offset made the
+     * second side something no line could be drawn against, and the rule went unread — while the
+     * check enforced it and refused every row past it.
+     *
+     * <p>It still divides neither position, so the note under the classes measure is the one a
+     * relation gets.
+     */
     @Test
-    void anOperandThatIsNotAPositionDrawsNone() {
+    void anOffsetOnOneSideMovesTheLineRatherThanTakingItAway() {
         String report = report(NOT_A_TERM);
 
-        assertFalse(report.contains("no row is at"), report);
+        assertTrue(report.contains("no row is at the OFF point benefitOf/charge = ceiling + 1000"),
+                report);
+        assertTrue(report.contains("no row is at the ON point benefitOf/charge = ceiling + 1001"),
+                report);
         assertTrue(report.contains("not read: charge"), report);
     }
 

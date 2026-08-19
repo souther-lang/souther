@@ -445,6 +445,8 @@ public final class GeneratedRows {
                     "every value tried was refused at construction, which does not make the"
                             + " combination impossible";
             case SEARCH_LIMIT -> "the search stopped before reaching it";
+            case THE_RULES_LEAVE_NOTHING_THERE ->
+                    "the rules leave no value here, and every combination they do leave was tried";
             case NOTHING_TO_BUILD_AGAINST ->
                     "the module's classes were not there to build a candidate against";
             case LINKAGE_FAILED ->

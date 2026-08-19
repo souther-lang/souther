@@ -448,7 +448,7 @@ class WhatAClauseDrawsALineOnTest {
                 data NotFound = { asked: TodoId }
 
                 behavior findTodo : (id: TodoId) -> Todo | NotFound
-                    ensures asked = NotFound -> id.value + 1 > 10
+                    ensures asked = NotFound -> Int.multiply(id.value, id.value) > 10
                 """, "findTodo");
 
         assertEquals(List.of(), valuesOf(clauses), "nothing here reads a line out of that form");

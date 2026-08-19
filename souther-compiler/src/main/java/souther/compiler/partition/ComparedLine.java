@@ -7,6 +7,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 
 /**
@@ -53,13 +54,48 @@ record ComparedLine(NumericTerm term, Place value, boolean valueBelongsBelow,
             op = mirrored(op);
         }
         if (term == null || value == null) {
-            return null;
+            // Nothing here is a position against a value the carrier writes. It may still be a
+            // statement about one position: `a + 1 <= 10` and `a <= b - b + 9` are both `a <= 9`,
+            // and which quantity a rule cuts is the arithmetic's answer rather than the spelling's.
+            return fromTheForm(comparison, reads, symbols);
         }
         return switch (ComparisonClaim.of(op)) {
             case ComparisonClaim.Cut cut -> new ComparedLine(term, value, cut.valueBelongsBelow(),
                     cut.holdsAtTheValue(), false);
             // A value singled out has no low side of its own — the values either side of it are one
             // class — so the side is written down as one answer and read by nobody.
+            case ComparisonClaim.Singled singled ->
+                    new ComparedLine(term, value, true, singled.holdsAtTheValue(), true);
+            case ComparisonClaim.Nothing _ -> null;
+        };
+    }
+
+    /**
+     * The line the canonical form draws where it cuts one position with a coefficient of one.
+     *
+     * <p>A coefficient of one and no other, because that is what makes the quantity the position's
+     * own values. {@code 2 * a <= 9} cuts something that is not {@code a}: it takes the even numbers,
+     * nine is not one of them, and reading it as a line on {@code a} would put a row at four and a
+     * half. That is a quantity of its own ({@link BorderQuantity.OverAForm}) and is read elsewhere.
+     */
+    private static ComparedLine fromTheForm(Core.Binary comparison, InputReads reads,
+                                            Symbols symbols) {
+        AffineReading read = AffineReading.of(comparison, reads, symbols);
+        if (read == null) {
+            return null;
+        }
+        if (read.facesTheOtherWay()) {
+            read = read.mirrored();
+        }
+        NumericTerm term = read.oneCoordinate();
+        Carrier carrier = Carrier.ofValue(comparison.left().type(), symbols);
+        if (term == null || carrier == null || !carrier.counts()) {
+            return null;
+        }
+        Place value = Count.of(read.cut());
+        return switch (read.claim()) {
+            case ComparisonClaim.Cut cut -> new ComparedLine(term, value, cut.valueBelongsBelow(),
+                    cut.holdsAtTheValue(), false);
             case ComparisonClaim.Singled singled ->
                     new ComparedLine(term, value, true, singled.holdsAtTheValue(), true);
             case ComparisonClaim.Nothing _ -> null;

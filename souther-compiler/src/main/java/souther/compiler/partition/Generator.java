@@ -140,6 +140,16 @@ public final class Generator {
             ALL_CANDIDATES_REJECTED,
             /** The search stopped before it got here. */
             SEARCH_LIMIT,
+            /**
+             * The rules leave no value here, and the whole of what they leave was walked.
+             *
+             * <p>Apart from every other word here, and the difference is the whole point of having
+             * it. The rest say what this compiler did not manage; this one says what the model
+             * settles — every position of the point is bounded, every combination of those bounds
+             * was tried, and none of them reaches it. A reader may act on this and may not act on
+             * the others (ADR-0091).
+             */
+            THE_RULES_LEAVE_NOTHING_THERE,
             /** The module's classes were not there to build a candidate against. */
             NOTHING_TO_BUILD_AGAINST,
             /** The generated classes would not link, so the decoders could not be reached. Told

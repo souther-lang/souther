@@ -57,7 +57,7 @@ class AQuestionAboutACountIsNotOneAboutTheValueItCountsTest {
 
                 behavior price : (c: Code) -> Int
                 let price (c) =
-                    if String.length(c.text) <= 10 * 2 then 1 else 2
+                    if String.length(c.text) <= Int.min(20, 30) then 1 else 2
 
                 example price
                     | "one" : (Code { text = "a" }) -> 2
@@ -80,7 +80,7 @@ class AQuestionAboutACountIsNotOneAboutTheValueItCountsTest {
 
                 behavior price : (c: Code) -> Ok | TooShort
                     constructs Ok
-                    ensures TooShort -> String.length(c.text) <= 10 * 2
+                    ensures TooShort -> String.length(c.text) <= Int.min(20, 30)
                 let price (c) = TooShort
 
                 example price

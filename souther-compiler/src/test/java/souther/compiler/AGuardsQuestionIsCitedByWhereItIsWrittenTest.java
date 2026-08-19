@@ -40,7 +40,7 @@ class AGuardsQuestionIsCitedByWhereItIsWrittenTest {
 
             behavior price : (length: Length) -> Int
             let price (length) =
-                if length.value <= 10 * 2 then 1 else 2
+                if length.value <= Int.min(20, 30) then 1 else 2
 
             example price
                 | "one" : (Length(1)) -> 1

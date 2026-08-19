@@ -255,7 +255,7 @@ public final class EnsuresThresholds {
         }
         Border made = Border.at(
                 BoundaryTarget.at(new BorderQuantity.Apart(out.behavior(), drawn.on(),
-                        drawn.against(), drawn.carrier()), BorderQuantity.steps(0)),
+                        drawn.against(), drawn.carrier()), BorderQuantity.steps(drawn.stepsApart())),
                 new OriginRef.EnsuresOrigin(new RuleRef.Ensures(rule.id(), clause),
                         drawn.valueBelongsBelow(), drawn.holdsAtTheLine(), false),
                 null);

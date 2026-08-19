@@ -72,13 +72,20 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
      * <p>The half that always worked, here so that the half below cannot pass by accident: what
      * separates the two is one {@code invariant value >= 0} on the fields' own type, which is not a
      * fact about this clause.
+     *
+     * <p>What it is named as is that it relates the two rather than dividing either. A form over two
+     * fields says nothing about where either of them stops on its own, which is the same thing
+     * {@code length < width} says and is said in the same words — counted a side at a time, a rule
+     * naming both of its positions on one side came back as a form nobody could read.
      */
     @Test
     void aClauseNoEndCameOutOfIsNamedAtEveryFieldItCompares() {
         FieldDomains read = readingOf(BARE, "Parcel");
 
-        assertEquals(List.of(new BlockReason.UnreadComparisonForm()), reasonsAt(read, "length"));
-        assertEquals(List.of(new BlockReason.UnreadComparisonForm()), reasonsAt(read, "width"));
+        assertEquals(List.of(new BlockReason.ComparisonBetweenPositions()),
+                reasonsAt(read, "length"));
+        assertEquals(List.of(new BlockReason.ComparisonBetweenPositions()),
+                reasonsAt(read, "width"));
     }
 
     /**
@@ -94,8 +101,10 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
         FieldDomains read = readingOf(MEASURED, "Parcel");
 
         assertFalse(read.placedAt("length").isEmpty(), "`Cm` places an end here");
-        assertEquals(List.of(new BlockReason.UnreadComparisonForm()), reasonsAt(read, "length"));
-        assertEquals(List.of(new BlockReason.UnreadComparisonForm()), reasonsAt(read, "width"));
+        assertEquals(List.of(new BlockReason.ComparisonBetweenPositions()),
+                reasonsAt(read, "length"));
+        assertEquals(List.of(new BlockReason.ComparisonBetweenPositions()),
+                reasonsAt(read, "width"));
     }
 
     /**

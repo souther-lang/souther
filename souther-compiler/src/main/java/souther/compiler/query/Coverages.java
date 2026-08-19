@@ -560,10 +560,23 @@ final class Coverages {
                 return switch (realizer.realize(quantity.standingAt(criterion))) {
                     case Realization.Found found ->
                             whatCameOfIt(probe.attempt(label, quantity.carrier(), found.fixing()));
-                    // Neither is a claim that no row exists. What the rules refuse is already an
-                    // item nobody is owed, settled where the border was made; reaching here is a
-                    // search that did not settle it.
-                    case Realization.Impossible _, Realization.Unknown _ -> nothingComposedOne(label);
+                    // And the two ways of finding nothing are not one answer. A walk of the whole
+                    // of what the rules leave that reaches no value settles the point; a search
+                    // that stopped, or one that composed no candidate at all, settles nothing
+                    // (ADR-0091).
+                    case Realization.Impossible _ -> new ItemAssessment.Attempt.Unresolved(
+                            new souther.compiler.partition.Generator.UnresolvedCombination(
+                                    java.util.List.of(label),
+                                    souther.compiler.partition.Generator.UnresolvedCombination
+                                            .Reason.THE_RULES_LEAVE_NOTHING_THERE));
+                    case Realization.Unknown unknown -> switch (unknown.why()) {
+                        case NOTHING_COMPOSED_ONE -> nothingComposedOne(label);
+                        case THE_SEARCH_RAN_OUT -> new ItemAssessment.Attempt.Unresolved(
+                                new souther.compiler.partition.Generator.UnresolvedCombination(
+                                        java.util.List.of(label),
+                                        souther.compiler.partition.Generator.UnresolvedCombination
+                                                .Reason.SEARCH_LIMIT));
+                    };
                 };
             }
 

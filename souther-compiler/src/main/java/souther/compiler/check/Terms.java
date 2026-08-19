@@ -180,16 +180,30 @@ final class Terms {
      * itself. Reading it as the operator is what puts it on the one path the operator already has,
      * rather than on a second path that would have to be kept saying the same thing. */
     static Core asOperator(Core e) {
-        if (e instanceof Core.PreservedCall call && call.args().size() == 2) {
-            Hir.BinOp op = DischargeRules.operator(call.operation());
-            if (op != null) {
-                // Not a comparison any source wrote: a preserved call read as the operator it
-                // stands for. This tree is the discharge reader's, never the tree that runs.
-                return new Core.Binary(op, call.args().get(0), call.args().get(1),
-                        CoverageOrigin.unwritten(), call.type(), call.pos());
-            }
+        // Asked of the operation the call resolved to and not of the representation it is in. A
+        // body that runs holds `Int.add` as a call to a library name and the tree a declaration's
+        // rules are read in holds it standing, and the arithmetic is the same arithmetic — read in
+        // one representation and not the other, a rule the check enforced was one the measure
+        // reported as unread. `NumericMeasures` already asks about a size call this way.
+        ValueName operation = switch (e) {
+            case Core.Call call when call.fn() instanceof Core.Reached reached
+                    && reached.name() instanceof souther.compiler.types.ReachName.OfLibrary library ->
+                    library.target();
+            case Core.PreservedCall preserved -> preserved.operation();
+            case null, default -> null;
+        };
+        List<Core> args = switch (e) {
+            case Core.Call call -> call.args();
+            case Core.PreservedCall preserved -> preserved.args();
+            case null, default -> List.of();
+        };
+        if (operation == null || args.size() != 2) {
+            return e;
         }
-        return e;
+        Hir.BinOp op = DischargeRules.operator(operation);
+        // Not a comparison any source wrote: a call read as the operator it stands for.
+        return op == null ? e : new Core.Binary(op, args.get(0), args.get(1),
+                CoverageOrigin.unwritten(), e.type(), e.pos());
     }
 
     /**
@@ -212,64 +226,39 @@ final class Terms {
      * such an account can be written, so there is none.
      */
     LinearForm<FactSubject> affineOf(Core raw, Denotations at) {
-        Core e = asOperator(raw);
-        if (e instanceof Core.PreservedCall) {
-            // A call that folds is the number it folds to. `String.length("1A")` is 2, and a clause
-            // about it is decided rather than owed — the run-time check is not what should answer a
-            // question the compiler has already computed. Asked once: folding walks the subtree, and
-            // a pattern in it is a regex to run.
-            BigDecimal folded = constantNumber(e);
-            if (folded != null) {
-                return LinearForm.constant(folded);
-            }
-        }
-        LinearForm<FactSubject> composed = composed(e, at);
-        return composed != null ? composed : leafOf(e, at);
+        return AffineForms.of(raw, at, leaves);
     }
 
-    /** {@code e} read as arithmetic over what its parts answer, or {@code null} where this has no
-     * rule for it or the rule it has does not compose. */
-    private LinearForm<FactSubject> composed(Core e, Denotations at) {
-        return switch (e) {
-            case Core.Int i -> LinearForm.constant(BigDecimal.valueOf(i.value()));
-            case Core.Decimal d -> LinearForm.constant(d.value());
-            case Core.Neg n -> negate(affineOf(n.operand(), at));
-            case Core.Binary b when b.op() == Hir.BinOp.ADD ->
-                    add(affineOf(b.left(), at), affineOf(b.right(), at), false);
-            case Core.Binary b when b.op() == Hir.BinOp.SUB ->
-                    add(affineOf(b.left(), at), affineOf(b.right(), at), true);
-            // scalar multiply by a constant (Amount * 2) is linear; `/` and a variable product are not
-            // (a divide truncates for Int, and a variable factor is non-linear), so those come back
-            // here as one value rather than as arithmetic over two.
-            case Core.Binary b when b.op() == Hir.BinOp.MUL ->
-                    scale(affineOf(b.left(), at), affineOf(b.right(), at));
-            // A newtype's `.value` read off something that is not a place: what it wraps is what it
-            // is, which is the rule a location is keyed by ({@link #pathKey}) read of a computed
-            // value too. Without it `f(x).value` is one value where the same call given a name is
-            // the arithmetic its body wrote — a name deciding what can be said of an expression.
-            //
-            // Whether the target is a place is asked of what it denotes and not of how it is spelled.
-            // A name given a computed value is no more a place than the call it was given, and asked
-            // by the spelling it came out one: `gross` was read through to the arithmetic behind it
-            // and `gross.value` was an atom of its own, so a guard over the one settled nothing about
-            // a construction over the other (#676).
-            case Core.FieldAccess fa when !isAPlace(fa.target(), at)
-                    && !Location.isStep(fa.target().type(), fa.field(), symbols) ->
-                    affineOf(fa.target(), at);
-            // A binding an expansion introduced (`let $0_n = n.value in $0_n * 2`) is what a helper
-            // becomes, so reading through it is reading what the author wrote at the call. The body
-            // is read with the binder entered, which is the one account of what a name means
-            // ({@link #inside}); what the binder was given is read where a read of it asks, which
-            // {@link #givenForm} and {@link #writtenValue} answer from the environment.
-            //
-            // Whether what it holds is a number is not asked. A binding denotes what it was given
-            // whatever kind of value that is, so a helper taking a record binds a record and the
-            // places under the binder are the places under the record — which is what makes the
-            // facts a walk recorded about them reach the step that reads them (#867).
-            case Core.LetIn li -> affineOf(li.body(), inside(li, at));
-            default -> null;
-        };
-    }
+    /**
+     * What this reader calls a leaf, which is the whole of what is its own about the walk.
+     *
+     * <p>Which nodes compose is a fact about the language and is {@link AffineForms}'s; what a leaf
+     * is called and what a name means inside a binding are this reader's. The measure that finds the
+     * line a rule draws reads the same tree through the same walk with its own answers to these.
+     */
+    private final AffineForms.Leaves<FactSubject, Denotations> leaves =
+            new AffineForms.Leaves<>() {
+
+                @Override
+                public LinearForm<FactSubject> leafOf(Core e, Denotations at) {
+                    return Terms.this.leafOf(e, at);
+                }
+
+                @Override
+                public Denotations inside(Core.LetIn li, Denotations at) {
+                    return Terms.this.inside(li, at);
+                }
+
+                @Override
+                public boolean readsThrough(Core.FieldAccess fa, Denotations at) {
+                    // A newtype's `.value` read off something that is not a place: what it wraps is
+                    // what it is, which is the rule a location is keyed by ({@link #pathKey}) read of
+                    // a computed value too. Without it `f(x).value` is one value where the same call
+                    // given a name is the arithmetic its body wrote.
+                    return !isAPlace(fa.target(), at)
+                            && !Location.isStep(fa.target().type(), fa.field(), symbols);
+                }
+            };
 
     /**
      * The environment {@code li}'s body is read in: {@code li}'s binder entered as what its

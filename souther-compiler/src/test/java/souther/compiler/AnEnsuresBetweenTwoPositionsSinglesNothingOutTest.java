@@ -57,6 +57,6 @@ class AnEnsuresBetweenTwoPositionsSinglesNothingOutTest {
     @Test
     void andOneAboutASinglePositionStillDoes() {
         assertEquals(Set.of(CoverageObligation.SINGLETON, CoverageObligation.PARTITION),
-                raisedBy("r.a == 10 * 2"));
+                raisedBy("r.a == Int.min(20, 30)"));
     }
 }
