@@ -1938,7 +1938,7 @@ public final class Adequacy {
                 // which section of a document says this follows from the question.
                 out.add(new Finding(Kind.RULE_UNACCOUNTED, behavior.name(),
                         MeasurementStatus.NOT_MEASURED, Citation.of(behavior.pos()),
-                        List.of(each.subject(), each.rule(), asked(each.question()),
+                        List.of(each.subject(), each.cited(), asked(each.question()),
                                 each.question())));
             }
             for (souther.compiler.partition.Partitions.OmittedAxis dropped : partition.omitted()) {
@@ -1953,6 +1953,7 @@ public final class Adequacy {
             return switch (question) {
                 case ADMITTED_VALUES -> "which values may stand at";
                 case BOUNDARY -> "where the values stop on";
+                case PARTITION -> "which classes a row is owed in at";
             };
         }
 

@@ -40,5 +40,21 @@ public enum CoverageObligation {
      * <p>Subject: the number the position is measured at. Raised by every rule that places an end,
      * whether it divides the position or only stops it.
      */
-    BOUNDARY
+    BOUNDARY,
+
+    /**
+     * Classes a row is owed in, one either side of a line.
+     *
+     * <p>Subject: the position. Raised by a rule that treats the two sides of a line differently
+     * and leaves values on both — which is what a class is. A {@code guard}'s comparison is one, and
+     * so is a clause of an {@code ensures} about an input; an invariant's bound is not, because
+     * everything outside it is refused at construction and there is no class on the far side
+     * (ADR-0090). That is a fact about the construct the rule is written in and not about the
+     * comparison, which is why the two are asked separately where a rule raises this.
+     *
+     * <p>Beside {@link #BOUNDARY} and never instead of it. One line, two questions: which rows are
+     * owed at the line, and which rows are owed either side of it. A rule that draws a line raises
+     * both, and a measure counting one for the other reports a model divided where nothing said so.
+     */
+    PARTITION
 }

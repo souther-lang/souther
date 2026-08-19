@@ -74,7 +74,10 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
      * the one place that names a rule, and everything here is a string by the time it arrives.
      *
      * @param at       the position, spelled the way a report names it
-     * @param rule     the rule, as a report names it
+     * @param cited    how a reader finds the rule: the name the author gave it, or where they wrote
+     *                 it where they gave none. Not what tells one rule from another, and never a key
+     *                 — a comparison is written rather than named, and a document that spelled a
+     *                 place as a name would send an author looking for a clause called {@code if}
      * @param question what about the position it raised, in the words a document promises. Which
      *                 measure's section a reader meets it in follows from this and is decided where
      *                 the document is written — the question is the model's and the sections are
@@ -85,7 +88,7 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
      *                 about a number taken of one — and a renderer choosing between the two is how a
      *                 reading of a string's values came to be printed against its length
      */
-    public record Unanswered(String at, String rule,
+    public record Unanswered(String at, souther.compiler.check.RuleCitation cited,
                              souther.compiler.check.CoverageObligation question, String subject) {}
 
     /**

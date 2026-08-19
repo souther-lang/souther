@@ -5,6 +5,9 @@ import souther.compiler.check.Location;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
+import souther.compiler.check.Owed;
+import souther.compiler.check.Required;
+import souther.compiler.check.RuleAccounting;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.UnreadComparison;
 import souther.compiler.inputs.BlockReason;
@@ -68,10 +71,21 @@ public final class GuardThresholds {
      */
     public record Guards(List<Threshold> thresholds,
                          List<UnreadRule> unread, List<Singled> singled,
-                         List<BoundaryObligation> between) {
+                         List<BoundaryObligation> between,
+                         List<AtAPosition> accounting) {
 
         public static final Guards NONE =
-                new Guards(List.of(), List.of(), List.of(), List.of());
+                new Guards(List.of(), List.of(), List.of(), List.of(), List.of());
+
+        /**
+         * One comparison's accounting, and the position a reader is sent to for it.
+         *
+         * <p>The position is beside the accounting rather than inside it. What a rule raises is
+         * about a subject of its own — the number a line falls on — and where in a behavior's inputs
+         * that number is read from is what a document keys the question by, which is a question
+         * about the walk that found it.
+         */
+        public record AtAPosition(TermPath at, RuleAccounting accounting) {}
 
         /**
          * A value a body singles out rather than orders.
@@ -86,6 +100,7 @@ public final class GuardThresholds {
         public Guards {
             thresholds = List.copyOf(thresholds);
             unread = List.copyOf(unread);
+            accounting = List.copyOf(accounting);
             singled = List.copyOf(singled);
             between = List.copyOf(between);
         }
@@ -98,20 +113,22 @@ public final class GuardThresholds {
                             InputDomain inputs, Symbols symbols) {
         List<Threshold> found = new ArrayList<>();
         List<UnreadRule> unread = new ArrayList<>();
+        List<Guards.AtAPosition> accounting = new ArrayList<>();
         List<Guards.Singled> singled = new ArrayList<>();
         List<BoundaryObligation> between = new ArrayList<>();
         walk(behavior, body, plan, InputReads.of(inputs), symbols, found, unread,
-                singled, between);
-        return new Guards(found, unread, singled, between);
+                singled, between, accounting);
+        return new Guards(found, unread, singled, between, accounting);
     }
 
     private static void walk(String behavior, Core e, CoverageSites.Plan plan,
                              InputReads reads, Symbols symbols, List<Threshold> out,
                              List<UnreadRule> unread,
-                             List<Guards.Singled> singled, List<BoundaryObligation> between) {
+                             List<Guards.Singled> singled, List<BoundaryObligation> between,
+                             List<Guards.AtAPosition> accounting) {
         if (e instanceof Core.If iff) {
             List<Core> read =
-                    read(behavior, iff, plan, reads, symbols, out, singled, between);
+                    read(behavior, iff, plan, reads, symbols, out, singled, between, accounting);
             // Every comparison this condition holds that nothing turned into a line — asked of the
             // comparisons and not of the positions. One position carries more than one statement,
             // and a line read at it says nothing about the rest: kept per position, a threshold on
@@ -132,7 +149,7 @@ public final class GuardThresholds {
         InputReads inside = e instanceof Core.LetIn let ? reads.and(let.binder(), let.value())
                 : reads;
         Core.forEachChild(e, child -> walk(behavior, child, plan, inside, symbols, out,
-                unread, singled, between));
+                unread, singled, between, accounting));
     }
 
     /**
@@ -263,7 +280,8 @@ public final class GuardThresholds {
     private static List<Core> read(String behavior, Core.If iff, CoverageSites.Plan plan,
                                    InputReads reads, Symbols symbols,
                                    List<Threshold> out,
-                                   List<Guards.Singled> singled, List<BoundaryObligation> between) {
+                                   List<Guards.Singled> singled, List<BoundaryObligation> between,
+                                   List<Guards.AtAPosition> accounting) {
         // The comparisons a line came of, and not the positions they were about. A position carries
         // more than one statement and reading one of them settles nothing about the others.
         List<Core> made = new ArrayList<>();
@@ -285,14 +303,55 @@ public final class GuardThresholds {
                     out, singled);
             if (here != null) {
                 made.add(each.comparison());
+                raises(accounting, plan, site, guard, iff, each.comparison(), here,
+                        new Required.LineRead.ALineOnThePosition());
                 continue;
             }
             // A line this could not read as a count of one position may still be one between two.
             // Not added to `made`: what the partition could not read here it still could not read,
             // and a boundary answering does not answer for it (spec §example-partition).
+            int drawn = between.size();
             between(behavior, iff, each, plan, guard, site, reads, symbols, between);
+            List<TermPath> named = new ArrayList<>();
+            mentioned(each.comparison().left(), reads, symbols, named);
+            mentioned(each.comparison().right(), reads, symbols, named);
+            if (named.isEmpty()) {
+                continue;   // a comparison about no position of the input raises nothing about one
+            }
+            // Filed at the position the reading names first, which is the one a line between two
+            // would be read `on`. One comparison is one line however many positions it mentions, so
+            // this is where a reader is sent and not a question raised once apiece.
+            raises(accounting, plan, site, guard, iff, each.comparison(), named.get(0),
+                    between.size() > drawn ? new Required.LineRead.ALineBetweenTwoPositions()
+                            : new Required.LineRead.NoLine(
+                                    why(each.comparison(), reads, symbols)));
         }
         return made;
+    }
+
+    /**
+     * What one comparison raises, and what the reading of it answered.
+     *
+     * <p>Off the comparison and not off the lines that came back. A comparison states where the
+     * values stop by being written that way, and a line this could not read is exactly the case
+     * where nothing answers it — walked from the lines, such a rule would be one the model never
+     * wrote.
+     */
+    private static void raises(List<Guards.AtAPosition> out, CoverageSites.Plan plan, int site,
+                               CoverageSites.GuardRef guard, Core.If iff, Core.Binary comparison,
+                               TermPath at, Required.LineRead read) {
+        out.add(new Guards.AtAPosition(at, RuleAccounting.ofComparison(
+                new RuleRef.Guard(plan.site(site).comparison()),
+                souther.compiler.check.ComparisonClaim.of(comparison.op()),
+                // Relative to the position it is filed at, as an invariant's subject is relative to
+                // the value its clause is on. A count taken of the position is the other subject,
+                // and which of the two it is is what the reading that found the term already said.
+                Owed.Subject.at(""), read,
+                // A comparison is written rather than named, so a reader is sent where the author
+                // wrote it. The construct's own place and not the reading's: one comparison inside a
+                // helper is one rule however many calls read it.
+                new souther.compiler.check.RuleCitation.WrittenAt(
+                        guard.origin().kind(), Citation.of(iff.pos())))));
     }
 
     /**

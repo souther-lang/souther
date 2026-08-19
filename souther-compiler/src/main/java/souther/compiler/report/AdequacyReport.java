@@ -664,7 +664,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             said.classId(), said.at(), because(said.reasons()),
                             unproven(said.why())));
         }
-        undivided(out, behavior);
+        undivided(out, behavior, names, declaredIn);
         // On a line of its own, and this is the whole of why it has one. Counting combinations
         // across two positions is the neighbouring technique rather than this one, and printed at
         // the end of the partition line it sat beside the border counts where a reader could add
@@ -708,7 +708,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // A line the model drew that nothing here answered for, said whether or not a border came
         // of it. It is exactly where none did that the question stands, so this cannot be written
         // by walking the borders.
-        unaccounted(out, behavior,
+        unaccounted(out, behavior, names, declaredIn,
                 question -> question == souther.compiler.check.CoverageObligation.BOUNDARY);
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.BOUNDARY_UNMET)) {
             // The rule as this report writes it. The finding carries the rule and not words about
@@ -742,7 +742,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * the position went undivided sat two rows under a boundary count that was counting the line that
      * very comparison drew — one measure's silence printed as though it were the other's.
      */
-    private static void undivided(StringBuilder out, BehaviorReport behavior) {
+    private static void undivided(StringBuilder out, BehaviorReport behavior,
+                                  SourceNameResolver names, SourceId declaredIn) {
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_NOT_DERIVABLE)) {
             out.append(String.format("      %s not derivable: %s%n", mark(f), f.args().get(0)));
         }
@@ -765,7 +766,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // question about a line is the border measure's to print, two sections down, and printing
         // it here put a sentence about where the values stop under the heading for how they are
         // divided.
-        unaccounted(out, behavior, question -> question
+        unaccounted(out, behavior, names, declaredIn, question -> question
                 != souther.compiler.check.CoverageObligation.BOUNDARY);
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_OMITTED)) {
             out.append(String.format("      %s omitted: %s (axis limit)%n",
@@ -963,14 +964,33 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * model asked.
      */
     private static void unaccounted(StringBuilder out, BehaviorReport behavior,
+                                    SourceNameResolver names,
+                                    souther.compiler.source.SourceId declaredIn,
                                     java.util.function.Predicate<
                                             souther.compiler.check.CoverageObligation> mine) {
+
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.RULE_UNACCOUNTED)) {
             if (mine.test((souther.compiler.check.CoverageObligation) f.args().get(3))) {
                 out.append(String.format("      %s not accounted for: %s — %s %s%n",
-                        mark(f), f.args().get(1), f.args().get(2), f.args().get(0)));
+                        mark(f), cited((souther.compiler.check.RuleCitation) f.args().get(1),
+                                names, declaredIn),
+                        f.args().get(2), f.args().get(0)));
             }
         }
+    }
+
+    /**
+     * How a report writes the rule a question is about.
+     *
+     * <p>A name where the author gave one and a place where they did not, which is the same handle
+     * a border prints for the line a comparison drew — the two share the formatter and the words,
+     * and nothing else. What they must not share is an identity: where a rule was read is the
+     * partition's and one rule has as many of those as it has readings.
+     */
+    private static String cited(souther.compiler.check.RuleCitation cited,
+                                SourceNameResolver names,
+                                souther.compiler.source.SourceId declaredIn) {
+        return cited.said(names, declaredIn);
     }
 
     public static String readingWord(PartitionEvidence.AxisCoverage.Reading read) {
@@ -1187,7 +1207,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             for (PartitionEvidence.Unanswered each : partition.unanswered()) {
                 ObjectNode one = standing.addObject();
                 one.put("at", each.at());
-                one.put("rule", each.rule());
+                // The rendered label, which is what this key has always been. What it is rendered
+                // from is beside it: a name is a name, and a place is a place, and a consumer that
+                // needs to open a file wants the second rather than a string to take apart.
+                // The same handle the border prints for a line the comparison drew, through the
+                // table of sources this document carries.
+                one.put("rule", each.cited().said(sources::written, null));
                 one.put("question", word(each.question()));
                 one.put("subject", each.subject());
             }
@@ -1391,8 +1416,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // The rule and what it was left saying. Named by the position alone, two rules nothing
             // took in at one position serialised as two identical objects, and the human line named
             // them while a consumer of the document could not tell them apart.
+            // Written to join the `unanswered` entry this came out of, which names the rule the
+            // same way. A place is spelled without a file here, as every other subject in this
+            // array is: what tells one source from another is the table at the top of the document,
+            // and a subject is a key into what is already beside it.
             case RULE_UNACCOUNTED ->
-                    args.get(1) + " — " + args.get(2) + " " + args.get(0);
+                    ((souther.compiler.check.RuleCitation) args.get(1)).label()
+                            + " — " + args.get(2) + " " + args.get(0);
             case INPUT_CASE_UNSPECIFIED ->
                     String.valueOf(args.get(0)) + " (in #" + args.get(1) + ")";
             case BOUNDARY_UNMET -> args.get(0) + " = " + args.get(1);

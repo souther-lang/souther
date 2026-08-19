@@ -281,6 +281,17 @@
           "unclassifiedRows" : 0,
           "status" : "complete"
         } ],
+        "unanswered" : [ {
+          "at" : "指示.受付日",
+          "rule" : "if@1:54:5",
+          "question" : "boundary",
+          "subject" : "指示.受付日"
+        }, {
+          "at" : "指示.受付日",
+          "rule" : "if@1:54:5",
+          "question" : "partition",
+          "subject" : "指示.受付日"
+        } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
           "axis" : "出荷する/String.length(指示.番号)",
@@ -374,6 +385,14 @@
         "kind" : "partition_not_read",
         "disposition" : "reported",
         "subject" : "指示.品目"
+      }, {
+        "kind" : "rule_unaccounted",
+        "disposition" : "reported",
+        "subject" : "if@54:5 — where the values stop on 指示.受付日"
+      }, {
+        "kind" : "rule_unaccounted",
+        "disposition" : "reported",
+        "subject" : "if@54:5 — which classes a row is owed in at 指示.受付日"
       } ]
     } ]
   } ],

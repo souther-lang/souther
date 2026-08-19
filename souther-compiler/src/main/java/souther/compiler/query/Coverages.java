@@ -73,7 +73,12 @@ final class Coverages {
                 both(clauses.thresholds(), guards.thresholds()), symbols,
                 both(clauses.unread(), guards.unread()),
                 both(clauses.singled(), guards.singled()),
-                both(clauses.between(), guards.between()), arrives);
+                both(clauses.between(), guards.between()), arrives,
+                // What each comparison raised and what the reading of it answered, from both
+                // producers. Carried rather than derived from the lines that came back: a
+                // comparison this could not read draws no line, and that is when its questions
+                // stand.
+                both(clauses.accounting(), guards.accounting()));
     }
 
     /** The two producers' lines, in one list. */
@@ -126,6 +131,18 @@ final class Coverages {
             if (axis.derivable()) {
                 axes.add(coverageOf(axis, readings));
                 divided.add(axis);
+            }
+        }
+        // And what a body's and a declaration's comparisons left standing, which no axis carries:
+        // the position a comparison is about need not be one anything divided.
+        for (souther.compiler.partition.GuardThresholds.Guards.AtAPosition each
+                : partitioning.compared()) {
+            for (souther.compiler.check.RuleAccounting.Unanswered open
+                    : each.accounting().unansweredQuestions()) {
+                standing.add(new PartitionEvidence.Unanswered(each.at().toString(),
+                        open.cited(), open.owed().obligation(),
+                        open.owed().subject().measured()
+                                ? "count of " + each.at() : each.at().toString()));
             }
         }
         return new PartitionEvidence(PartitionEvidence.Partitioned.of(axes),
@@ -287,7 +304,7 @@ final class Coverages {
     private static List<PartitionEvidence.Unanswered> unansweredAt(Axis axis) {
         return axis.unanswered().stream()
                 .map(each -> new PartitionEvidence.Unanswered(axis.path().toString(),
-                        each.rule().named(), each.owed().obligation(),
+                        each.cited(), each.owed().obligation(),
                         // The subject the question carries, resolved against the axis it is at. A
                         // question about the position is spelled as the position and one about a
                         // number taken of it as the term, and which of the two it is was settled

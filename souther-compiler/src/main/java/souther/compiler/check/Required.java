@@ -192,6 +192,77 @@ public sealed interface Required {
     }
 
     /**
+     * What a comparison written in a body or in an {@code ensures} raises about a position.
+     *
+     * <p>The invariant producer's counterpart, and the same classification underneath. What the
+     * comparison places is {@link ComparisonClaim}'s and is read off the operator; whether there is
+     * anything on the far side of the line is the construct's, and here there is — a body chooses
+     * between the two sides and a clause holds a behavior to one, so both are values a row can
+     * carry. An invariant refuses everything outside its bound at construction, which is why that
+     * producer raises no {@link CoverageObligation#PARTITION} and this one does (ADR-0090).
+     *
+     * <p>{@code read} is a reading and never a verdict. A caller says what it made of the
+     * comparison and this says what that answers, so the questions and their answers are paired in
+     * one place — handed a verdict, a caller could answer a question the model never raised.
+     *
+     * @param claim what the comparison places, from the comparison alone
+     * @param about the position the line is on, as the reading that found it names it
+     * @param read  what that reading came to
+     */
+    public static Required ofComparison(ComparisonClaim claim, Owed.Subject about, LineRead read) {
+        Set<Owed> owed = new LinkedHashSet<>();
+        switch (claim) {
+            case ComparisonClaim.Cut _, ComparisonClaim.Singled _ -> {
+                owed.add(new Owed(CoverageObligation.BOUNDARY, about));
+                // A line between two positions divides neither: where one stands against another is
+                // not a set of one position's values, so there is no class of one for a row to be
+                // owed in. The line itself is still a line and rows are still owed at it.
+                if (!(read instanceof LineRead.ALineBetweenTwoPositions)) {
+                    owed.add(new Owed(CoverageObligation.PARTITION, about));
+                }
+            }
+            // Reached only by asking what an operator that compares nothing places. Every caller
+            // walks comparisons; one arriving here has read something else as one.
+            case ComparisonClaim.Nothing _ -> throw new IllegalArgumentException(
+                    "a comparison that places nothing is not one this raises questions about");
+        }
+        return new Some(owed);
+    }
+
+    /**
+     * What a reading of a body's or a declaration's comparison came to.
+     *
+     * <p>Three answers and not a line-or-nothing. A comparison this could not read as a line on one
+     * position may still be one between two, and the second is a line rows are owed at while
+     * dividing neither position — told apart here so that what it answers and what it leaves
+     * standing are not the same set.
+     */
+    public sealed interface LineRead {
+
+        /** A line on the position, which is where the classes either side of it come from. */
+        record ALineOnThePosition() implements LineRead {}
+
+        /** A line where two positions hold one count, which divides neither of them. */
+        record ALineBetweenTwoPositions() implements LineRead {}
+
+        /**
+         * Neither, and what would have to change first.
+         *
+         * <p>In the words of the reading that turns a rule into a line, which is the same vocabulary
+         * an invariant's own gives — a {@code guard}'s comparison and a newtype's bound are two
+         * producers of one kind of evidence (spec §example-partition).
+         */
+        record NoLine(souther.compiler.inputs.BlockReason why) implements LineRead {
+
+            public NoLine {
+                if (why == null) {
+                    throw new IllegalArgumentException("a reading that stopped says why");
+                }
+            }
+        }
+    }
+
+    /**
      * Both, for a clause read one conjunct at a time.
      *
      * <p>A conjunction is one rule the author wrote, and what it raises is what its parts raise

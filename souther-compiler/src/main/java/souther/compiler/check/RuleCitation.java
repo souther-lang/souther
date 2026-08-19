@@ -1,0 +1,122 @@
+package souther.compiler.check;
+
+import souther.compiler.diag.Citation;
+import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.source.SourceId;
+import souther.compiler.types.CoverageConstruct;
+
+/**
+ * How a reader finds the rule a question is about.
+ *
+ * <p>A projection of {@link RuleRef} for a document to print, and never an identity. Two rules are
+ * the same rule when their {@code RuleRef}s are equal; what this adds is a handle an author can act
+ * on, which is not the same thing and must not become a key — a rule written once and read twice is
+ * one rule, and a rule and the handle for it are not in step wherever a name is absent.
+ *
+ * <p>Two answers, because rules are found two ways. An author names a clause of an invariant and
+ * looks it up by that name; a comparison in a body has no name and is found where it is written. A
+ * single string over both would have to spell a place as a name, and {@link RuleRef#named} says why
+ * that is wrong for the one that has none: a comparison is written rather than named.
+ *
+ * <p><b>Not {@link souther.compiler.partition.OriginRef}.</b> That says where a rule was read, and
+ * one rule read in two calls of a helper has two of them — so putting it here would make a document
+ * choose which reading to show for a question the model raised once. This says where the rule was
+ * written, which is the rule's own and is one however often it is read.
+ */
+public sealed interface RuleCitation {
+
+    /** The name the author gave it, as a report writes the rule. */
+    record Named(String name) implements RuleCitation {
+
+        public Named {
+            if (name == null || name.isEmpty()) {
+                throw new IllegalArgumentException("a rule called nothing is cited by where it is");
+            }
+        }
+    }
+
+    /**
+     * Where the author wrote it, for a rule that has no name.
+     *
+     * <p>{@link Citation} and not a bare position, because where a rule is written and where a
+     * reader is standing are not always the same file: a comparison inside a helper is written
+     * there and reached from the call, and the same type says both.
+     */
+    record WrittenAt(CoverageConstruct construct, Citation at) implements RuleCitation {
+
+        public WrittenAt {
+            if (construct == null || at == null) {
+                throw new IllegalArgumentException("a rule with no name is found by where it is");
+            }
+        }
+    }
+
+    /**
+     * How a report writes this, where it knows what to call a source.
+     *
+     * <p>The one formatter, shared with the borders a comparison draws — a rule and a line the same
+     * rule drew are found the same way, and two spellings of one place would read as two places.
+     * What is not shared is an identity: where a rule was read is
+     * {@link souther.compiler.partition.OriginRef}'s and one rule has as many of those as it has
+     * readings.
+     */
+    default String said(SourceNameResolver names, SourceId sectionSource) {
+        return switch (this) {
+            case Named named -> named.name();
+            // Written here, and reached from somewhere else: a comparison inside a helper is one
+            // rule and a reader is sent to two places, which the citation already tells apart.
+            case WrittenAt written -> wordFor(written.construct())
+                    + joining(written.at()) + written.at().said(names, sectionSource);
+        };
+    }
+
+    /**
+     * What goes between the construct and the place.
+     *
+     * <p>Shared with the borders the same rule drew, which is the whole of what those two have in
+     * common: a word, and how it joins to a place. Neither holds the other's identity.
+     */
+    static String joining(Citation at) {
+        return at instanceof Citation.Elsewhere ? " in " : "@";
+    }
+
+    /**
+     * The same handle with no file in it, for a place in a document that has no way to name one.
+     *
+     * <p>A key and not a sentence. A finding's subject joins to the entry it came out of, and what
+     * tells one source from another is the table at the head of the document rather than a name
+     * repeated in every subject — which is why every other subject in that array is spelled this
+     * way too.
+     */
+    default String label() {
+        return switch (this) {
+            case Named named -> named.name();
+            // The declaration a reader is sent to, where there is one, and the place otherwise.
+            // A comparison out of sight is written in something with a name, and the position this
+            // compile met it at is where the caller stands rather than where the rule is.
+            case WrittenAt written -> wordFor(written.construct()) + "@" + switch (written.at()) {
+                case Citation.Written w -> w.at().toString();
+                case Citation.Unplaced u -> u.at().toString();
+                case Citation.Elsewhere e -> e.provenance().toString();
+            };
+        };
+    }
+
+    /**
+     * What a report calls the construct a rule was written in.
+     *
+     * <p>English, like every other word a report writes from a rule. What a diagnostic says instead
+     * is chosen in the reader's language, from the same construct.
+     */
+    static String wordFor(CoverageConstruct construct) {
+        return switch (construct) {
+            case IF -> "if";
+            case GUARD -> "guard";
+            case COMPREHENSION -> "comprehension";
+            // A comparison is read off a fork's condition, and these are not forks. Reaching one is
+            // this reader and the walk that numbered the fork disagreeing about what wrote the rule.
+            case MATCH, BINARY, NOT_WRITTEN -> throw new IllegalStateException(
+                    "a rule was written in something that is not a fork: " + construct);
+        };
+    }
+}

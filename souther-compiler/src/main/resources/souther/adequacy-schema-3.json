@@ -39,8 +39,8 @@
       "enum": ["unsupported_syntax", "rules_not_read_at_all", "unsupported_domain", "unsupported_partition_shape", "depth_limit", "type_unresolved", "unsupported_traversal"]
     },
     "coverageQuestion": {
-      "description": "What a rule of the model raises that something has to answer. `admitted_values` is which values may stand at a position; `boundary` is a line rows are owed at. Only the questions this compiler issues today: a question nothing raises is one every model answers by nobody having asked it, so a word arrives here in the same change that starts raising it.",
-      "enum": ["admitted_values", "boundary"]
+      "description": "What a rule of the model raises that something has to answer. `admitted_values` is which values may stand at a position; `boundary` is a line rows are owed at; `partition` is the classes either side of such a line, which a rule raises where it leaves values on both sides. Only the questions this compiler issues today: a question nothing raises is one every model answers by nobody having asked it, so a word arrives here in the same change that starts raising it.",
+      "enum": ["admitted_values", "boundary", "partition"]
     },
     "status": {
       "description": "Whether a measure has a number. `unavailable` says only that it has none; the `reason` beside it says why, and the two are not read off one another.",
@@ -334,7 +334,7 @@
             "additionalProperties": false,
             "properties": {
               "at": { "type": "string", "description": "The position the rule is written about, as a report names it." },
-              "rule": { "type": "string", "description": "The rule, as a report names it — `invariant Length (even)`." },
+              "rule": { "type": "string", "description": "How a reader finds the rule: the name the author gave it where there is one — `invariant Length (even)` — and where it is written where there is none, as `if@<source>:<line>:<column>`. A comparison in a body is written rather than named, so a document that spelled every rule as a name would send an author looking for a clause called `if`. The same handle a `boundaries` entry writes for a line the same rule drew." },
               "question": { "$ref": "#/$defs/coverageQuestion" },
               "subject": { "type": "string", "description": "What the question is about, as a report names it. The questions do not share a subject: which values may stand somewhere is about the position, and a line is about a number taken of it — so a `String` bounded on its length raises one about `code` and one about `String.length(code)`, and `at` beside them is the first." }
             }

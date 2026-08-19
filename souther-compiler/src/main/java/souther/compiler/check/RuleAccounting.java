@@ -27,11 +27,14 @@ import java.util.function.Function;
 public final class RuleAccounting {
 
     private final RuleRef rule;
+    private final RuleCitation cited;
     private final Required required;
     private final Map<Owed, Outcome> answers;
 
-    private RuleAccounting(RuleRef rule, Required required, Map<Owed, Outcome> answers) {
+    private RuleAccounting(RuleRef rule, RuleCitation cited, Required required,
+                           Map<Owed, Outcome> answers) {
         this.rule = rule;
+        this.cited = cited;
         this.required = required;
         this.answers = Collections.unmodifiableMap(answers);
     }
@@ -57,12 +60,49 @@ public final class RuleAccounting {
             }
             answers.put(each, outcome);
         }
-        return new RuleAccounting(rule, required, answers);
+        return new RuleAccounting(rule, new RuleCitation.Named(rule.named()), required, answers);
+    }
+
+    /**
+     * The accounting of one comparison, from what it places and what a reading made of it.
+     *
+     * <p>The way in from outside this package, and it takes a reading rather than answers. What a
+     * caller has is what it managed with the comparison; which questions that answers is settled
+     * here, beside every other accounting, so a reader cannot pair a genuine {@link Required} with
+     * answers it wrote itself.
+     */
+    public static RuleAccounting ofComparison(RuleRef rule, ComparisonClaim claim,
+                                              Owed.Subject about, Required.LineRead read,
+                                              RuleCitation cited) {
+        Required required = Required.ofComparison(claim, about, read);
+        return new RuleAccounting(rule, cited, required, answersOf(rule, required, read).answers);
+    }
+
+    private static RuleAccounting answersOf(RuleRef rule, Required required,
+                                            Required.LineRead read) {
+        return of(rule, required, _ -> switch (read) {
+            // The reading that draws the line answers both of the questions the line raises: the
+            // classes either side of it are what it divided the position into, and the values it
+            // named are where the rows go.
+            case Required.LineRead.ALineOnThePosition _,
+                 Required.LineRead.ALineBetweenTwoPositions _ ->
+                    new Outcome.Accounted(Reader.THE_END_READING);
+            // And where it drew none, both stand. Which is the whole of why they are raised off the
+            // comparison: read off the lines that came back, a line nothing could read would be a
+            // rule the model never wrote.
+            case Required.LineRead.NoLine no ->
+                    new Outcome.Unaccounted(new Why.TheEndReadingSays(no.why()));
+        });
     }
 
     /** Which rule of the model, as everything that names a rule names it. */
     public RuleRef rule() {
         return rule;
+    }
+
+    /** How a reader finds it, which is not what tells it from another rule. */
+    public RuleCitation cited() {
+        return cited;
     }
 
     /** What it raises. */
@@ -93,7 +133,7 @@ public final class RuleAccounting {
     public List<Unanswered> unansweredQuestions() {
         return answers.entrySet().stream()
                 .filter(e -> e.getValue() instanceof Outcome.Unaccounted)
-                .map(e -> new Unanswered(rule, e.getKey()))
+                .map(e -> new Unanswered(rule, cited, e.getKey()))
                 .toList();
     }
 
@@ -111,7 +151,7 @@ public final class RuleAccounting {
      * last moment — right while only invariants raise a question, and a decision about what a rule
      * is taken by whoever consumed one.
      */
-    public record Unanswered(RuleRef rule, Owed owed) {}
+    public record Unanswered(RuleRef rule, RuleCitation cited, Owed owed) {}
 
     @Override
     public String toString() {
@@ -177,7 +217,14 @@ public final class RuleAccounting {
     /** Which reading answered a question. */
     public enum Reader {
 
-        /** The reading that turns a clause into an end a line can be drawn at. */
+        /**
+         * The reading that turns a rule into a line.
+         *
+         * <p>One word for it wherever the rule is written. A {@code guard}'s comparison and a
+         * newtype's bound are two producers of one kind of evidence (spec §example-partition), and
+         * a reader told which of them answered would be holding a fact about this compiler's
+         * arrangement of readers rather than about the model.
+         */
         THE_END_READING,
 
         /**
