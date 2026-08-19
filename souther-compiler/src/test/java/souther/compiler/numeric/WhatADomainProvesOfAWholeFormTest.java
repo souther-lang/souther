@@ -85,7 +85,7 @@ class WhatADomainProvesOfAWholeFormTest {
         Bounds bounds = d.boundsOf(atom(A).minus(atom(B)));
 
         assertEquals(Endpoint.inclusive(Count.of(0)), bounds.max());
-        assertTrue(d.boundsOf(atom(A)).isEmpty(), "nothing bounds either atom on its own");
+        assertTrue(d.boundsOf(atom(A)).saysNothing(), "nothing bounds either atom on its own");
     }
 
     /** A form over an atom nothing was said about lies nowhere in particular. */
@@ -93,7 +93,7 @@ class WhatADomainProvesOfAWholeFormTest {
     void aFormOverAnUnboundedAtomIsUnbounded() {
         Bounds bounds = NumericDomain.<String>top().boundsOf(atom(A));
 
-        assertTrue(bounds.isEmpty());
+        assertTrue(bounds.saysNothing());
     }
 
     /** Where the guards contradict there is no value to bound, and the domain says so rather than
@@ -105,6 +105,6 @@ class WhatADomainProvesOfAWholeFormTest {
                 .assume(atom(A).minus(num(1)), Rel.LE, whole(A));
 
         assertTrue(d.isBottom());
-        assertTrue(d.boundsOf(atom(A).plus(num(3))).isEmpty());
+        assertTrue(d.boundsOf(atom(A).plus(num(3))).saysNothing());
     }
 }

@@ -681,7 +681,7 @@ public final class Partitions {
         }
         NumericTerm term = position.term();
         AxisId id = AxisId.of(behavior, term);
-        if (position.numericDomain() != null && !position.numericDomain().isEmpty()) {
+        if (position.numericDomain() != null && !position.numericDomain().saysNothing()) {
             domains.put(term, position.numericDomain());
         }
         switch (LocalInspection.of(position, symbols)) {
@@ -1108,7 +1108,7 @@ public final class Partitions {
 
         DeclaredBounds.Bounds own = DeclaredBounds.of(new Type.Ref(newtype), symbols);
         NumericDomain.Bounds bounds = TypeBounds.admissible(own, within);
-        Place held = bounds == null || bounds.isEmpty() ? null : inside(bounds, own.carrier());
+        Place held = bounds == null || bounds.saysNothing() ? null : inside(bounds, own.carrier());
         FixtureTemplate at = held == null ? null
                 : FixtureTemplate.on(own.carrier(), held, symbols.scope()::reach);
         if (at != null) {
