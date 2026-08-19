@@ -73,35 +73,48 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
      * downstream that took one of them apart would have to be taught the next; the words come from
      * the one place that names a rule, and everything here is a string by the time it arrives.
      *
-     * @param rule     which rule of the model raised it. What tells one question from another, and
-     *                 never what a document shows: a rule is the same rule however many readings
-     *                 met it, and a handle for finding it is not in step with that wherever a rule
-     *                 has no name. Carried because the two are different questions and the seam
-     *                 that dropped this had a reader keying on the handle
-     * @param at       the position, spelled the way a report names it
-     * @param cited    how a reader finds the rule: the name the author gave it, or where they wrote
-     *                 it where they gave none. Not what tells one rule from another, and never a key
-     *                 — a comparison is written rather than named, and a document that spelled a
-     *                 place as a name would send an author looking for a clause called {@code if}
-     * @param question what about the position it raised, in the words a document promises. Which
-     *                 measure's section a reader meets it in follows from this and is decided where
-     *                 the document is written — the question is the model's and the sections are
-     *                 the report's
-     * @param subject  what the question is about, as the reading that raised it named it. Carried
-     *                 as what it is rather than as words for it: the questions do not share a
-     *                 subject — which values may stand somewhere is about a position, a border is
-     *                 about a number taken of one, and a border between two moving terms is about
-     *                 the comparison that drew it — and two of those cannot be told apart once they
-     *                 are one string. Which is what happened: a place named by its comparison came
-     *                 out as the same words for every comparison there is
-     * @param measure  the number the position is measured by, where a border falls on one. Beside
-     *                 the subject because it is the reading's spelling of it and this document
-     *                 promises both
+     * @param asked   the question as the accounting that raised it holds it: which rule, how a
+     *                reader finds that rule, and what is owed. Handed on whole rather than taken
+     *                apart — every round of this lost a part at a seam, and what is not taken apart
+     *                cannot lose one. Which rule it is tells one question from another; the handle
+     *                beside it is what a document shows and is not in step with that wherever a rule
+     *                has no name
+     * @param at      the position it is about, spelled the way a report names it. The walk's and not
+     *                the accounting's: which position of a behavior's inputs a rule was filed at is
+     *                what the walk that found it says, and the subject is relative to it
+     * @param measure the number the position is measured by, where a border falls on one. Beside the
+     *                subject because it is the reading's spelling of it and this document promises
+     *                both
      */
-    public record Unanswered(souther.compiler.check.RuleRef rule, String at,
-                             souther.compiler.check.RuleCitation cited,
-                             souther.compiler.check.CoverageObligation question,
-                             souther.compiler.check.Owed.Subject subject, String measure) {}
+    public record Unanswered(souther.compiler.check.RuleAccounting.Unanswered asked, String at,
+                             String measure) {
+
+        /** Which rule of the model raised it, which is what tells one question from another. */
+        public souther.compiler.check.RuleRef rule() {
+            return asked.rule();
+        }
+
+        /** How a reader finds that rule, which is not what tells it from another. */
+        public souther.compiler.check.RuleCitation cited() {
+            return asked.cited();
+        }
+
+        /** What it asks. Which measure's section a reader meets it in follows from this. */
+        public souther.compiler.check.CoverageObligation question() {
+            return asked.owed().obligation();
+        }
+
+        /**
+         * And what it asks it about.
+         *
+         * <p>As the reading that raised it named it, and not as words for it: a position, a number
+         * taken of one, and the comparison that drew a border between two moving terms are three
+         * things, and two of them cannot be told apart once they are one string.
+         */
+        public souther.compiler.check.Owed.Subject subject() {
+            return asked.owed().subject();
+        }
+    }
 
     /**
      * A position something is written about that this reading did not turn into a line, and what

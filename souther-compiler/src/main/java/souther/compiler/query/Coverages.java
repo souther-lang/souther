@@ -151,12 +151,11 @@ final class Coverages {
                 if (!asked.add(java.util.Map.entry(open.rule(), open.owed()))) {
                     continue;
                 }
-                standing.add(new PartitionEvidence.Unanswered(open.rule(), each.at().toString(),
-                        open.cited(), open.owed().obligation(),
+                standing.add(new PartitionEvidence.Unanswered(open, each.at().toString(),
                         // Spelled by the term itself, which is the one thing that spells a term. A
                         // second spelling here is a second key for one subject, and a document
                         // promises `String.length(code)` beside `code`.
-                        open.owed().subject(), measureSaid(open.owed().subject(), each)));
+                        measureSaid(open.owed().subject(), each)));
             }
         }
         return new PartitionEvidence(PartitionEvidence.Partitioned.of(axes),
@@ -317,8 +316,7 @@ final class Coverages {
      */
     private static List<PartitionEvidence.Unanswered> unansweredAt(Axis axis) {
         return axis.unanswered().stream()
-                .map(each -> new PartitionEvidence.Unanswered(each.rule(), axis.path().toString(),
-                        each.cited(), each.owed().obligation(), each.owed().subject(),
+                .map(each -> new PartitionEvidence.Unanswered(each, axis.path().toString(),
                         // The number the line falls on, where it falls on one. Which of the two the
                         // question is about was settled where it was raised — not here, and not by
                         // whatever a renderer has to hand.
