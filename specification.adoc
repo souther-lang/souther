@@ -1088,6 +1088,8 @@ Whether a name is declared is answered within the module — its own declaration
 
 The explicit declaration stays available, and is how a case that carries a comment of its own is written.
 
+[[a-unit-introduced-by-a-case-list-is-not-declared-again]]Where a position introduces the type, writing the declaration as well SHOULD be avoided: `+data Rank = Manager | Staff+` beside `+data Staff+` says one thing twice, and the second spelling is the one that goes stale — a case renamed in the list leaves the bare declaration behind as a type nothing refers to. The vocabulary a model reads by is the case list, so let it be the declaration. Write the separate `+data+` when the case has something of its own to carry: a comment, or an `+exposing+` entry the sum does not give it. A unit is in no `+constructs+` clause either (<<constructs-excludes-unit-data>>), so for most units the case list is the only place the name is written at all.
+
 A unit data MUST NOT carry an `+invariant+`: it has no field for one to observe and no value it could reject (<<invariant-declaration>>). Writing one is a compile error rather than a clause with no effect.
 
 A data body MUST NOT be empty: `+data T = { }+` names a type with one value, which is what a unit data is, so it is a second spelling of one. The two are not interchangeable where it counts — an empty product is built as `+T {}+` and a unit by its name alone — so the declaration form silently decides how the value is written. Writing it is a compile error naming the unit form. A body of spreads alone (`+data T = { ...CommonItems }+`) is not empty: what it includes gives it its fields (<<field-spread>>).
@@ -1376,7 +1378,7 @@ data NonNeg = Int
 data Fine
 
 behavior settle : (xs: List<Int>, bill: Int) -> NonNeg | Fine
-    constructs NonNeg, Fine
+    constructs NonNeg
 let settle (xs, bill) = {
     guard List.sum(xs) >= bill else Fine
     NonNeg(List.sum(xs) - bill) // discharged: the guard is about this value
@@ -2044,7 +2046,7 @@ behavior preApprove : (
     request: AwaitingPreApproval,
     approverId: EmployeeId
 ) -> PreApproved | NotAuthorized
-    constructs PreApproved, NotAuthorized // a type. Implementation is a let or Java injection
+    constructs PreApproved // a type. Implementation is a let or Java injection
 
 behavior placeOrder = validateOrder >-> priceOrder >-> allocateStock
 // a composition. It is itself the implementation
@@ -2091,7 +2093,7 @@ behavior preApprove : (
     request: AwaitingPreApproval,
     approverId: EmployeeId
 ) -> PreApproved | NotAuthorized
-    constructs PreApproved, NotAuthorized
+    constructs PreApproved
 ----
 
 The commonest shape a model asks for is "the amount, or the reason there is none", and the value it answers with is usually a primitive or a type another module owns. Both are members (<<union-member>>), so the behavior answers with the value itself and no type is declared to hold it.
@@ -2135,12 +2137,14 @@ A behavior's *input* type is always a single named type, including a named sum (
 [#constructs]
 === Data construction authority (constructs)
 
-A behavior that constructs data MAY write the constructed type in `+constructs+`. This is an internal construction authority; unlike a dependency (`+depends on+`), it is invisible to callers. So for a behavior with a `+let+` implementation it is *optional* — omit it and it is inferred from the body. If written, it MUST *exactly match* the body. An injected behavior has no body, and its declaration is the input to factory generation, so it MUST always write it (<<java-base-class>>).
+A behavior that constructs data MAY write the constructed type in `+constructs+`. This is an internal construction authority; unlike a dependency (`+depends on+`), it is invisible to callers. So for a behavior with a `+let+` implementation it is *optional* — omit it and it is inferred from the body. If written, it MUST *exactly match* the body. An injected behavior has no body to infer from, so what it writes is what its implementation may build, and it MUST write every such data (<<java-base-class>>). A behavior building nothing outside its construction set writes no clause, injected or not: the unit cases of an injected behavior's output get their factories from the output type rather than from this clause (<<constructs-excludes-unit-data>>).
 
 Exact agreement is two obligations, and a declaration can fail either one on its own:
 
-* [[constructs-authority-complete]]every data the implementation constructs MUST appear in the clause (<<e1002>>);
-* [[constructs-no-overdeclaration]]every data the clause names MUST actually be constructed (<<e1006>>).
+* [[constructs-authority-complete]]every data in the behavior's construction set MUST appear in the clause (<<e1002>>);
+* [[constructs-no-overdeclaration]]every data the clause names MUST be in that set (<<e1006>>).
+
+What the set is made of is <<constructs-excludes-unit-data>>: a unit data is constructed but holds no construction authority, so it is not in the set and MUST NOT be named.
 
 [,souther]
 ----
@@ -2154,9 +2158,33 @@ An entry names a type the way a type is named anywhere else, so a type another m
 
 The following count as data construction: a record literal (`+TypeName { ... }+`), a sum data constructor, a unit data construction, and constructing a collection containing new data as elements. Returning an existing value unchanged does not count as construction.
 
+Construction and *membership of a behavior's construction set* are not the same question, and a unit data is where they part. [[constructs-excludes-unit-data]]A unit-data construction does not contribute to a behavior's construction set and requires no construction authority, and a unit data MUST NOT be named in `+constructs+` (<<e1026>>). Writing `+Domestic+` still constructs the `+Domestic+` value (<<unit-data>>); what it does not do is put `+Domestic+` in the set the clause declares.
+
+A unit data has no fields, cannot declare an invariant (<<unit-data>>), and has exactly one value. So there is nothing for <<invariant-on-construct>> to guard, and no observable difference between minting another `+Domestic+` and passing an existing one through — which is the very distinction the clause exists to record. Authority is not what a unit needs either: a case is reachable through the decoder or the `+protected+` factory rather than by being named, which is what <<closed-construction>> already rests on for cases (<<jvm-anonymous-union>>).
+
+This keeps the clause exact rather than optional. Were a unit merely allowed to be omitted, `+constructs Member+` and `+constructs Member, Missing+` would both be correct for one body and the exact match above would say nothing.
+
+[,souther]
+----
+data Kind = Domestic | Overseas
+data Missing
+
+// `Domestic` is compared against, not declared: the clause names `Decision` alone
+behavior classify : (r: Request) -> Decision
+    constructs Decision
+let classify (r) =
+    if r.kind == Domestic then Decision { auto = true } else Decision { auto = false }
+
+// and `Missing` is a unit, so it is not named either
+behavior find : (id: MemberId) -> Member | Missing
+    constructs Member
+----
+
+Every one of these constructs the unit value and none of them puts it in the set: `+Domestic+` written bare, `+f(Domestic)+`, `+[Domestic]+`, `+r.kind == Domestic+`, and `+guard allowed else Domestic+`. A helper `+let+` that mentions or returns a unit likewise carries none to its caller.
+
 The built-in `+Some+` / `+None+` (<<algebraic-types>>) do not count as data construction. Option is not domain data but an auxiliary type and has no invariant, so <<invariant-on-construct>> has nothing to guard. So `+constructs+` is not required to put a value in a `+?+` field (<<optional>>) — and since Option cannot be written as a type, there is no way to declare `+constructs Some+` anyway (<<algebraic-types>>).
 
-*If you write `+constructs+`, you may not omit anything the implementation constructs.* The departure value of `+guard ... else+` (<<guard>>) is the same: `+else NotAuthorized+` constructs one unit data, so if declaring, include it in `+constructs NotAuthorized+` (omitting it is E1002). Being a failure case is no exception — what <<closed-construction>> closes is construction, regardless of success or failure.
+*If you write `+constructs+`, you may not omit anything in the behavior's construction set.* The departure value of `+guard ... else+` (<<guard>>) is no exception: `+else TooManyPending { limit = n }+` builds a record on the failure path and belongs in the clause, and what <<closed-construction>> closes is construction regardless of success or failure. A departure written as a bare unit case — `+else NotAuthorized+` — is the usual shape and is a unit-data construction, so it is not in the set and is not named (<<constructs-excludes-unit-data>>).
 
 ==== What constructs is for
 
@@ -2168,7 +2196,7 @@ behavior preApprove : (
     request: AwaitingPreApproval,
     approverId: EmployeeId
 ) -> PreApproved | NotAuthorized
-    constructs PreApproved, NotAuthorized // creates new states
+    constructs PreApproved // creates new states
 
 behavior checkCeiling : (a: Amount) -> Amount | OverCeiling
     constructs OverCeiling // Amount returns the input as is; not created
@@ -2176,7 +2204,7 @@ behavior checkCeiling : (a: Amount) -> Amount | OverCeiling
 
 Both have `+Amount+` / `+PreApproved+` in the output, but one creates and the other passes through. This distinction does not appear in the output type. Writing it leaves it in the declaration and makes a check against reading and mis-taking. Omit it and it is inferred — write it (opt-in) if you want the reading and the check.
 
-Creating a type that does not appear in the output also shows here. The `+constructs HighValueTravel, InsufficientAuthority, ClientCost+` of `+decidePreApproval = (...) -> List<PreApprovalReason>+` is information nowhere in the output type.
+Creating a type that does not appear in the output also shows here. The `+constructs HighValueTravel, InsufficientAuthority+` of `+decidePreApproval = (...) -> List<PreApprovalReason>+` is information nowhere in the output type.
 
 A helper `+let+` (with no corresponding behavior) may also construct data, but a helper `+let+` is not a specification statement and does not declare its own `+constructs+`. Its *construction set is inferred transitively* (folding in any helper `+let+` it calls). If the calling behavior writes `+constructs+`, it MUST include that set (E1002 if it does not); if omitted, that set is folded into the inference. A block is the same, constructing under the enclosing behavior's authority (<<blocks>>).
 
@@ -2323,7 +2351,7 @@ behavior preApprove : (
     approverId: EmployeeId
 ) -> PreApproved | NotAuthorized
     depends on now
-    constructs PreApproved, NotAuthorized
+    constructs PreApproved
 ----
 
 What is written is the name of a behavior whose *requirement set is not empty* (<<requirement-propagation>>) — one with no implementation (<<injected-behavior>>), or one whose own `+let+` declares `+depends on+` — declared in this module or imported from another (<<modules>>). Write it if the `+let+` uses that name. Even when used indirectly by passing it to a helper `+let+`, the one passing is you, so you write it.
@@ -2556,7 +2584,7 @@ behavior preApprove : (
     approverId: EmployeeId
 ) -> PreApproved | NotAuthorized
     depends on now
-    constructs PreApproved, NotAuthorized
+    constructs PreApproved
 
 let preApprove (request, approverId, now) = {
     guard approverId == request.applicant.managerId else NotAuthorized
@@ -2668,7 +2696,7 @@ Which behaviors get a `+let+` and which are injected is not decided mechanically
 [#java-base-class]
 === Java base-class generation
 
-A behavior subject to injection (wrote a type, no `+let+`; <<injected-behavior>>) is generated as an *abstract base class*, and for each unit data listed in `+constructs+` has a `+protected+` factory that constructs it. Whether it takes one input or several is orthogonal to injection, exactly as for a `+let+`-implemented behavior (<<jvm-behavior>>): a *single* input extends the unary `+Behavior<In, Out>+` (so it still composes with `+>->+`) and inherits its `+apply+`; *any other count* makes it a standalone abstract class with a typed `+apply(A, B, …)+` and no `+Behavior+` supertype. Two or more inputs are more than `+>->+` passes along, and a behavior taking none has nothing to receive, so neither can follow an arrow; both can still be a pipeline's first stage, which receives the pipeline's own arguments (<<sequential-composition>>). A zero-input behavior therefore declares `+apply()+` and is handed nothing — it produces rather than transforms. A Java implementation overrides that typed `+apply+` directly, so several inputs are passed as arguments rather than bundled into a record. A collection parameter keeps its `+java.util.List+` / `+Map+` / `+Set+` (or the runtime `+Option+`) type with its element type, not `+Object+`.
+A behavior subject to injection (wrote a type, no `+let+`; <<injected-behavior>>) is generated as an *abstract base class*, and has a `+protected+` factory for each unit data among its output's cases and for each data its `+constructs+` names. The two come from different places on purpose: a unit is told from a decoded pass-through output by its shape alone, while a field-bearing one is not, so only the latter needs the clause to say it (<<constructs-excludes-unit-data>>). Whether it takes one input or several is orthogonal to injection, exactly as for a `+let+`-implemented behavior (<<jvm-behavior>>): a *single* input extends the unary `+Behavior<In, Out>+` (so it still composes with `+>->+`) and inherits its `+apply+`; *any other count* makes it a standalone abstract class with a typed `+apply(A, B, …)+` and no `+Behavior+` supertype. Two or more inputs are more than `+>->+` passes along, and a behavior taking none has nothing to receive, so neither can follow an arrow; both can still be a pipeline's first stage, which receives the pipeline's own arguments (<<sequential-composition>>). A zero-input behavior therefore declares `+apply()+` and is handed nothing — it produces rather than transforms. A Java implementation overrides that typed `+apply+` directly, so several inputs are passed as arguments rather than bundled into a record. A collection parameter keeps its `+java.util.List+` / `+Map+` / `+Set+` (or the runtime `+Option+`) type with its element type, not `+Object+`.
 
 [,souther]
 ----
@@ -2696,7 +2724,7 @@ This abstract base class is *always public*, regardless of whether it is in `+ex
 Because the base is public and the implementation overrides `+apply+` from outside the module, the implementation *writes* the behavior's input type and its output type. A type the module keeps to itself cannot be written there, and no raw-typed override stands in for it — the erased signature clashes with the one being overridden. So an injected behavior's input and output MUST be exposed by the module that declares them, whether or not the behavior itself is in `+exposing+` (<<exposed-surface>>).
 
 [#injected-constructs-are-creatable]
-When a *non-unit* data is listed in `+constructs+` and that data is not exposed with `+exposing+`, it is a compile error (E1305). A factory is generated only for a unit data, and a non-exposed data has no decoder either, so a Java implementation would have no way to create that value. If exposed, it can be created via the decoder (<<jvm-codec>>). The requirement is that it be either a unit data or an exposed data.
+When a data listed in `+constructs+` is not exposed with `+exposing+`, it is a compile error (E1305). A non-exposed data has no public decoder, so a Java implementation would have no way to create that value; if exposed, it can be created via the decoder (<<jvm-codec>>). Every entry is a non-unit data (<<constructs-excludes-unit-data>>), so this reaches all of them. A unit case of the output is creatable without being exposed, through the `+protected+` factory the base class carries for it.
 
 What is confined is <<invariant-on-construct>>. An invariant-bearing data is always checked whether it goes through `+__construct+` or the decoder. So even if it can be created from outside, *no unvalidated value can be created*. A unit data has nothing to validate, so nothing is lost by allowing it to be created from outside.
 
@@ -2729,7 +2757,7 @@ behavior checkScheduleOverlap : (
     sameApplicantRequests: List<TravelRequest>,
     request: Drafting
 ) -> Drafting | ScheduleOverlap
-    constructs ScheduleOverlap // Drafting returns the input as is; not created
+// neither is created: `Drafting` is the input returned as is, and `ScheduleOverlap` is a unit
 
 // a behavior with no implementation (reads the outside)
 behavior readRequestsOfApplicant : (applicant: EmployeeId) -> List<TravelRequest>
@@ -4523,6 +4551,17 @@ Hint: Remove `Amount` from the `constructs` clause.
 ----
 
 If `+constructs+` is written, it MUST NOT list something not constructed. Paired with E1002 (too few), it keeps the declaration exactly matching the construction set, so the declaration correctly reads "creates new / passes through" (<<constructs>>). Same position as the `+depends on+` over-declaration E1603.
+
+[#e1026]
+=== A unit data named in constructs
+
+[,text]
+----
+Behavior `find` names `Missing` in `constructs`, but a unit data is not part of a construction set.
+Hint: Remove `Missing` from the `constructs` clause.
+----
+
+A unit data is constructed and carries no construction authority, so it is in no behavior's construction set and is named in no clause (<<constructs-excludes-unit-data>>). Distinct from E1006, which says the body never built the data: here the body may well build it, and the entry is still wrong. Keeping the two apart is what lets E1006 go on meaning "declared but never built".
 
 [#e1003-removed]
 === (retired)
@@ -6716,7 +6755,7 @@ behavior decidePreApproval : (
     applicant:     Employee,
     costBearer:    CostBearer
 ) -> List<PreApprovalReason>
-    constructs HighValueTravel, InsufficientAuthority, ClientCost
+    constructs HighValueTravel, InsufficientAuthority
 
 // behavior submitTravelRequest = Drafting -> Submitted OR AwaitingPreApproval (both success → bare sum)
 behavior submitTravelRequest : (request: Drafting) -> Submitted | AwaitingPreApproval
@@ -6729,7 +6768,7 @@ behavior preApprove : (
     approverId: EmployeeId
 ) -> PreApproved | NotAuthorized
     depends on now
-    constructs PreApproved, NotAuthorized
+    constructs PreApproved
 
 // --- implementations ---
 
