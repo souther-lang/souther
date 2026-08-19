@@ -153,10 +153,22 @@ public final class InvariantChecker {
         }
     }
 
-    /** How many conditionals a construction opens before the rest is left to the run-time check.
-     * Each one doubles the paths, and a value written over three of them is not what the bound is
-     * protecting against so much as what it declines to spend the time on. */
-    private static final int BRANCHES_OPENED = 3;
+    /**
+     * How many readings of a body one path down its case splits may cost, before the rest is left to
+     * the run-time check.
+     *
+     * <p>Counted in readings and not in splits opened. The two were one number for as long as every
+     * split had two arms: three nested {@code if}s are eight readings, which is what this bound used
+     * to be written as. A {@code match} has an arm per case, so the same three of them over a sum of
+     * twelve is one thousand seven hundred and twenty-eight — the same bound naming a cost two orders
+     * of magnitude apart, which is a bound that stopped saying what it was for.
+     *
+     * <p>Eight, so that {@code if}s open exactly as far as they did. A split is opened while the
+     * path has not already multiplied past this, which lets a wide {@code match} be opened once
+     * however wide it is — the first one costs nothing so far — and stops the nesting of them.
+     */
+    private static final int READINGS_A_PATH_MAY_COST = 8;
+
 
     /** The rules this check reads a program by: entering a binding, taking a condition as holding,
      * and reading what a type guarantees. Held apart from the check ({@link PathEngine}) because the
@@ -1180,7 +1192,7 @@ public final class InvariantChecker {
                 in = c.enter(new Core.Read(p.getValue().name(), p.getKey(), p.getValue().type(),
                         body.pos()), in.known(), in.at());
             }
-            c.entering(body, in.known(), in.at(), 0);
+            c.entering(body, in.known(), in.at(), 1);
         } catch (RuntimeException why) {
             // fail-open: the run-time invariant check remains the backstop
             gaveUp("analyze", why);
@@ -1229,14 +1241,14 @@ public final class InvariantChecker {
      * binding's body, each of which is read with something further settled. Those are the places
      * that come back through here, so a call is read once, where it stands, and not once for every
      * node standing over it — read again from a descendant it lands on the subjects it already
-     * holds, and costs the depth of a body over again at every node of it (#826).
+     * holds, and costs the cost of a body over again at every node of it (#826).
      *
      * <p>Nothing reaches what this was handed, so there is nothing under it to be about. Asked here
      * and again of the reading, because the reading is itself a place the conditions can come to
      * contradict.
      */
-    private void entering(Core e, Known given, Denotations at, int depth) {
-        entering(e, e, given, at, depth);
+    private void entering(Core e, Known given, Denotations at, int cost) {
+        entering(e, e, given, at, cost);
     }
 
     /**
@@ -1245,26 +1257,26 @@ public final class InvariantChecker {
      *
      * <p>Which is what a walk that rebuilds an expression is owed. Entering a binding that stood
      * inside a value walks the expression with the binding's body put where the binding was, and
-     * opening a conditional a value is handed walks it once with each branch put there. Either way
+     * opening a case split a value is handed walks it once with each arm put there. Either way
      * the tree is the whole expression — what the source would have written without the helper or
-     * the conditional, and what the rest of this walk reads — while everything but the part put in
+     * the split, and what the rest of this walk reads — while everything but the part put in
      * was read where the region was entered.
      *
      * <p>Reading that part again would land on the subjects it already holds, under a denotation it
      * cannot tell apart: a binder an expansion introduced was written around its own body, and the
-     * binders a conditional stands inside scope over the conditional and no further, so nothing
+     * binders a split stands inside scope over the split and no further, so nothing
      * standing beside either was written where it could name them.
      *
      * <p>And nothing is unread where what was put in went somewhere the reading had already stopped.
      * The requirement is over what the reading reaches from here, which is not past a region
      * boundary; a branch put in beyond one is read by the region that owns it, when the walk arrives
-     * there. Which of the two a conditional is, is what {@link ConditionalSite#read} answers.
+     * there. Which of the two a split is, is what {@link SplitSite#read} answers.
      */
-    private void entering(Core e, Core unread, Known given, Denotations at, int depth) {
+    private void entering(Core e, Core unread, Known given, Denotations at, int cost) {
         if (given.reachesNothing()) {
             return;
         }
-        walk(e, unread == null ? given : engine.answering(unread, given, at), at, depth);
+        walk(e, unread == null ? given : engine.answering(unread, given, at), at, cost);
     }
 
     /**
@@ -1280,7 +1292,7 @@ public final class InvariantChecker {
      * may: a reading that covers this step covers a child exactly as far. So a step that reaches
      * nothing stands in a region that reached nothing, and that was settled where it was entered.
      */
-    private void walk(Core e, Known k, Denotations at, int depth) {
+    private void walk(Core e, Known k, Denotations at, int cost) {
         if (k.reachesNothing()) {
             return;
         }
@@ -1295,61 +1307,67 @@ public final class InvariantChecker {
             // already reads — so a construction moved into a helper reads the terms its caller's
             // guards settled, which is what the expansion is for.
             if (!(standing.value() instanceof Core.Block)) {
-                walk(standing.value(), k, at, depth);
+                walk(standing.value(), k, at, cost);
             }
             Entered in = bindLet(standing, k, at);
             entering(without(e, Set.of(standing), standing.body()), standing.body(), in.known(),
-                    in.at(), depth);
+                    in.at(), cost);
             return;
         }
-        ConditionalSite site = conditionalValueIn(e);
-        if (site != null && depth < BRANCHES_OPENED) {
-            // A conditional in a value position is one of its two branches, and which one is decided
-            // by its condition. So this is read once with each standing there, under that condition,
-            // and what the two readings find is said once. Every place a conditional can be given —
-            // to a field, to a name, to a guard — is this one place.
-            Core.If value = site.conditional();
-            // Everything about the conditional is read where it stands, which is inside every binder
-            // on the way down to it and not at the outer place the reading is decided on: what its
-            // condition settles, and what the condition's own subtree is. Read at the outer place the
-            // condition names binders nothing has entered, which denote nothing — it would settle
-            // nothing, and a construction written inside it would be one nothing can be said of.
+        SplitSite site = splitValueIn(e);
+        if (site != null && cost < READINGS_A_PATH_MAY_COST) {
+            // A case split in a value position is one of its arms, and which one is decided by what
+            // it asks — an `if` by its condition, a `match` by which case the scrutinee is. So this
+            // is read once with each arm standing there, under what choosing that arm settles, and
+            // what the readings find is said once. Every place such a value can be given — to a
+            // field, to a name, to a guard — is this one place.
+            Core value = site.split();
+            // Everything about the split is read where it stands, which is inside every binder on the
+            // way down to it and not at the outer place the reading is decided on: what it asks, and
+            // what the asking's own subtree is. Read at the outer place, what it asks names binders
+            // nothing has entered, which denote nothing — it would settle nothing, and a construction
+            // written inside it would be one nothing can be said of.
             Entered inside = scopeOf(site, k, at);
             Known within = inside.known();
             Denotations there = inside.at();
-            // The condition is read here only where the reading stopped short of it. Reached
+            // What the split asks is read here only where the reading stopped short of it. Reached
             // from where the region was entered, it stands in `within` already.
+            Core asked = asked(value);
             if (site.read()) {
-                walk(value.cond(), within, there, depth);
+                walk(asked, within, there, cost);
             } else {
-                entering(value.cond(), within, there, depth);
+                entering(asked, within, there, cost);
             }
-            Set<Core> alike = sameConditional(e, value, there);
-            // The readings start from where the conditional stood, not from outside it. The tree each
-            // is given still holds those binders and walks into them again, which is why entering one
-            // already entered is nothing: a second transition would forget what the branch settled.
-            // Only the branch is unread. Everything beside the conditional was read where this
-            // region was entered and stands in `within`, and the two readings differ in what the
-            // condition settles rather than in what stands outside it. Where the reading stopped
-            // short of the conditional, nothing here is: the branch stands where the region that
-            // owns it reads it, and this walk reaches that region on its way down.
-            say(reading(without(e, alike, value.then()), site.read() ? value.then() : null,
-                            predicates.assumeCond(value.cond(), within, there, true).known(), there, depth),
-                    reading(without(e, alike, value.els()), site.read() ? value.els() : null,
-                            predicates.assumeCond(value.cond(), within, there, false).known(), there, depth));
+            Set<Core> alike = sameSplit(e, value, there);
+            // The readings start from where the split stood, not from outside it. The tree each is
+            // given still holds those binders and walks into them again, which is why entering one
+            // already entered is nothing: a second transition would forget what the arm settled.
+            // Only the arm is unread. Everything beside the split was read where this region was
+            // entered and stands in `within`, and the readings differ in what choosing an arm settles
+            // rather than in what stands outside it. Where the reading stopped short of the split,
+            // nothing here is: the arm stands where the region that owns it reads it, and this walk
+            // reaches that region on its way down.
+            List<Arm> arms = armsOf(value, within, there);
+            List<Map<Occurrence, Reported>> readings = new ArrayList<>();
+            for (Arm arm : arms) {
+                readings.add(reading(without(e, alike, arm.body()),
+                        site.read() ? arm.body() : null,
+                        arm.under().known(), arm.under().at(), cost * arms.size()));
+            }
+            say(readings);
             return;
         }
         switch (e) {
             case Core.Construct made -> {
                 judge(made, k, at, false);
-                Core.forEachChild(made, child -> walk(child, k, at, depth));
+                Core.forEachChild(made, child -> walk(child, k, at, cost));
             }
             case Core.If iff -> {
-                walk(iff.cond(), k, at, depth);
+                walk(iff.cond(), k, at, cost);
                 entering(iff.then(), predicates.assumeCond(iff.cond(), k, at, true).known(), at,
-                        depth);
+                        cost);
                 entering(iff.els(), predicates.assumeCond(iff.cond(), k, at, false).known(), at,
-                        depth);
+                        cost);
             }
             case Core.IfConstructed ic -> {
                 // The attempt's own construction cannot abort — a failing invariant is the else
@@ -1357,7 +1375,7 @@ public final class InvariantChecker {
                 // possible one. Its field values are walked on their own so a construction nested
                 // inside an argument is still an ordinary, aborting one.
                 judge(ic.construct(), k, at, true);
-                Core.forEachChild(ic.construct(), child -> walk(child, k, at, depth));
+                Core.forEachChild(ic.construct(), child -> walk(child, k, at, cost));
                 // Reaching `then` is the construction having held, so the binding carries the type's
                 // invariant exactly as an input of that type does — which is a location, and not the
                 // construction read again. What the construction denotes is what the check could say
@@ -1365,22 +1383,22 @@ public final class InvariantChecker {
                 // expression it cannot name denotes nothing, and inheriting that would drop the one
                 // thing reaching this branch established.
                 Entered in = engine.enteringBuilt(ic, k, at);
-                entering(ic.then(), in.known(), in.at(), depth);
+                entering(ic.then(), in.known(), in.at(), cost);
                 // Each departure stands where the invariant did not hold, and nothing was built
                 // there, so none of them is seeded with anything the attempt would have guaranteed.
-                ic.els().forEach(arm -> entering(arm.body(), k, at, depth));
+                ic.els().forEach(arm -> entering(arm.body(), k, at, cost));
             }
             case Core.LetIn li -> {
                 // A closure is read where it is applied: what its parameter holds is decided there,
                 // and reading it here would read every construction in it with the element unknown.
                 if (!(li.value() instanceof Core.Block)) {
-                    walk(li.value(), k, at, depth);
+                    walk(li.value(), k, at, cost);
                 }
                 Entered in = bindLet(li, k, at);
-                entering(li.body(), in.known(), in.at(), depth);
+                entering(li.body(), in.known(), in.at(), cost);
             }
             case Core.Match m -> {
-                walk(m.scrutinee(), k, at, depth);
+                walk(m.scrutinee(), k, at, cost);
                 for (Core.Case c : m.cases()) {
                     // A sum has no fields of its own, so the scrutinee is not a location any clause
                     // could have named — the case's value names only itself. What the arm binds is a
@@ -1390,15 +1408,15 @@ public final class InvariantChecker {
                     // decided by which behavior answered and which case this arm opened, and the
                     // first of those is a question about what is being matched.
                     Entered in = engine.enteringArm(c, m.scrutinee(), k, at);
-                    entering(c.body(), in.known(), in.at(), depth);
+                    entering(c.body(), in.known(), in.at(), cost);
                 }
             }
-            case Core.PreservedCall call -> walkCall(call, k, at, depth);
+            case Core.PreservedCall call -> walkCall(call, k, at, cost);
             // A closure the reading stopped at, reached as a value like any other. What its body
             // answers is decided where the closure is applied, so nothing out here read it, and it
             // is a region of its own however it was arrived at.
-            case Core.Block block -> Core.forEachChild(block, b -> entering(b, k, at, depth));
-            default -> Core.forEachChild(e, child -> walk(child, k, at, depth));
+            case Core.Block block -> Core.forEachChild(block, b -> entering(b, k, at, cost));
+            default -> Core.forEachChild(e, child -> walk(child, k, at, cost));
         }
     }
 
@@ -1407,13 +1425,13 @@ public final class InvariantChecker {
      * every other at what the closure was typed with — so a construction inside the closure is
      * analyzed rather than left opaque. A closure is where its parameters are values, which is here
      * and not where the block is written. */
-    private void walkCall(Core.PreservedCall call, Known k, Denotations at, int depth) {
+    private void walkCall(Core.PreservedCall call, Known k, Denotations at, int cost) {
         Handed handed = Combinators.handedTo(call, at);
         for (Core arg : call.args()) {
             // The closure is asked by identity: a call may write one expression twice, and only the
             // argument the operation applies is the one an element arrives in.
             if (handed == null || arg != handed.closure()) {
-                walk(arg, k, at, depth);
+                walk(arg, k, at, cost);
                 continue;
             }
             Core container = handed.container();
@@ -1433,7 +1451,7 @@ public final class InvariantChecker {
             for (Quantified q : relations) {
                 k2 = predicates.instantiate(q, element, k2, in.at());
             }
-            entering(handed.step().body(), k2, in.at(), depth);
+            entering(handed.step().body(), k2, in.at(), cost);
         }
     }
 
@@ -1477,9 +1495,9 @@ public final class InvariantChecker {
     }
 
     /**
-     * The verdict for one construction, over what each field is being given. A conditional never
+     * The verdict for one construction, over what each field is being given. A case split never
      * reaches here: the walk opens it before anything is checked, so what a field is given is a
-     * value and not a choice of two.
+     * value and not a choice of arms.
      */
     private Judgment verdictOf(Core.Construct nd, Hir.Data type, Known k, Denotations at) {
         Map<String, BindingId> fields = clauses.bindingsOf(nd.typeName(), type);
@@ -1511,8 +1529,8 @@ public final class InvariantChecker {
 
     /**
      * How a construction came out. A construction is checked before it is reported so that one
-     * written over a conditional can be checked on each branch and answered once — which of the two
-     * values it is is not decided here, so what holds of the construction is what holds of both.
+     * written over a case split can be checked on each arm and answered once — which of the arms'
+     * values it is is not decided here, so what holds of the construction is what holds of all.
      */
     enum Verdict {
         /** Every clause is discharged. */
@@ -1960,7 +1978,7 @@ public final class InvariantChecker {
 
     /**
      * Which construction a reading found: the one in the body as it was written. A reading is that
-     * body with a conditional replaced, so the constructions along the way to the replacement are
+     * body with a case split replaced, so the constructions along the way to the replacement are
      * rebuilt — those are the same construction given a different value, and they answer together.
      * One written inside the replacement is only in the reading that reached it, and one beside it
      * is the very node, unchanged.
@@ -1986,10 +2004,10 @@ public final class InvariantChecker {
     }
 
     /**
-     * Where a walk is reading one branch, what it finds is collected here rather than said. A body
-     * read on each branch of a conditional reads every construction after it once per branch, and one
-     * construction is one answer: it is the branches together that decide, the same as for a
-     * construction the conditional is written inside.
+     * Where a walk is reading one arm, what it finds is collected here rather than said. A body
+     * read on each arm of a case split reads every construction after it once per arm, and one
+     * construction is one answer: it is the arms together that decide, the same as for a
+     * construction the split is written inside.
      */
     private Capture capturing;
 
@@ -2005,12 +2023,12 @@ public final class InvariantChecker {
      * answer ({@link Known#reachesNothing}) and not a second one taken here: this collects what the
      * reading found and decides nothing about whether there was anything to find. */
     private Map<Occurrence, Reported> reading(Core e, Core unread, Known k, Denotations at,
-                                              int depth) {
+                                              int cost) {
         Capture outer = capturing;
         Capture mine = Capture.empty();
         capturing = mine;
         try {
-            entering(e, unread, k, at, depth + 1);
+            entering(e, unread, k, at, cost);
         } finally {
             capturing = outer;
         }
@@ -2018,10 +2036,15 @@ public final class InvariantChecker {
     }
 
     /**
-     * A conditional a value is handed, and the bindings in scope where it stands. The two go
-     * together: a node is found by searching down from the outside, and what it means is settled by
-     * where it was found, so a search that answered with the node alone would leave the reading to
-     * work the scope out again — which is what it got wrong.
+     * A case split a value is handed, and the bindings in scope where it stands. A case split is a
+     * node answering one of several arms where which one is decided by something a reading can
+     * assume — an {@code if} by its condition, a {@code match} by which case the scrutinee is — and
+     * which arms those are is {@link #armsOf}'s answer, so nothing reading a site asks which of the
+     * forms it was handed.
+     *
+     * <p>The node and the scope go together: a node is found by searching down from the outside, and
+     * what it means is settled by where it was found, so a search that answered with the node alone
+     * would leave the reading to work the scope out again — which is what it got wrong.
      *
      * <p>Every binder the search descends through is carried, and not only the ones a construction
      * outside could have been read against. What stands in scope decides two things: what the
@@ -2029,10 +2052,10 @@ public final class InvariantChecker {
      * a construction written inside a condition is a construction like any other, and reading it
      * where its binders are not entered is reading it as something nothing can be said of.
      */
-    private record ConditionalSite(Core.If conditional, List<Binder> scope, boolean read) {
+    private record SplitSite(Core split, List<Binder> scope, boolean read) {
 
-        static ConditionalSite at(Core.If conditional) {
-            return new ConditionalSite(conditional, List.of(), true);
+        static SplitSite at(Core split) {
+            return new SplitSite(split, List.of(), true);
         }
 
         /**
@@ -2044,33 +2067,27 @@ public final class InvariantChecker {
          * read, so the branch put in its place is read here; a site the reading reached stands where
          * everything has, and reading it again would seed what is already held.
          */
-        ConditionalSite pastTheReading() {
-            return new ConditionalSite(conditional, scope, false);
+        SplitSite pastTheReading() {
+            return new SplitSite(split, scope, false);
         }
 
-        /** One binder the conditional stands inside, as the environment its body is read in. */
+        /** One binder the split stands inside, as the environment its body is read in. */
         private interface Binder {
             Entered entering(PathEngine engine, Known k, Denotations at);
         }
 
         /** The same site, read from outside {@code binder} — so {@code binder} is the outermost of
          * what it is inside. */
-        ConditionalSite under(Binder binder) {
+        SplitSite under(Binder binder) {
             List<Binder> outer = new ArrayList<>();
             outer.add(binder);
             outer.addAll(scope);
-            return new ConditionalSite(conditional, List.copyOf(outer), read);
+            return new SplitSite(split, List.copyOf(outer), read);
         }
 
         /** A {@code let}'s body, read with the name standing for what it was given. */
         static Binder of(Core.LetIn li) {
             return (engine, k, at) -> engine.bindLet(li, k, at);
-        }
-
-        /** A {@code match} arm's body, read with what the arm binds standing for a value of the
-         * case's type — a value this reading introduces, carrying what that type guarantees. */
-        static Binder of(Core.Case arm) {
-            return (engine, k, at) -> engine.enteringLiftedArm(arm, k, at);
         }
 
         /** An attempted construction's success branch, read with the binding carrying the invariant
@@ -2080,9 +2097,61 @@ public final class InvariantChecker {
         }
     }
 
+    /** One arm of a case split, with the reading choosing it stands in. */
+    private record Arm(Core body, Entered under) {}
+
+    /** Whether {@code e} is a case split — a node answering one of several arms, where which one is
+     * decided by something a reading can assume. */
+    private static boolean isASplit(Core e) {
+        return e instanceof Core.If || e instanceof Core.Match;
+    }
+
+    /**
+     * What {@code split} asks to decide which arm it answers.
+     *
+     * <p>Read where the split stands, and read whatever the answer is: a construction written in a
+     * condition or in a scrutinee is a construction like any other.
+     */
+    private static Core asked(Core split) {
+        return switch (split) {
+            case Core.If iff -> iff.cond();
+            case Core.Match m -> m.scrutinee();
+            default -> throw new IllegalStateException(
+                    "a site was opened at " + split.getClass().getSimpleName()
+                            + ", which is not a case split — `asked` and `armsOf` answer for the same"
+                            + " forms and one of them was given a form the other does not have");
+        };
+    }
+
+    /**
+     * The arms {@code split} answers one of, each with what choosing it settles.
+     *
+     * <p>Where the enumeration is, so that the reading above never asks which form of split it was
+     * handed. An {@code if} has two arms decided by its condition; a {@code match} has one per case,
+     * decided by which case the scrutinee is — and the arm is entered <em>with</em> that scrutinee,
+     * which is what says the value the arm binds is the one already there ({@link
+     * PathEngine#enteringArm}) rather than a value of its own.
+     */
+    private List<Arm> armsOf(Core split, Known within, Denotations there) {
+        return switch (split) {
+            case Core.If iff -> List.of(
+                    new Arm(iff.then(), new Entered(
+                            predicates.assumeCond(iff.cond(), within, there, true).known(), there)),
+                    new Arm(iff.els(), new Entered(
+                            predicates.assumeCond(iff.cond(), within, there, false).known(), there)));
+            case Core.Match m -> m.cases().stream()
+                    .map(arm -> new Arm(arm.body(),
+                            engine.enteringArm(arm, m.scrutinee(), within, there)))
+                    .toList();
+            default -> throw new IllegalStateException(
+                    "a site was opened at " + split.getClass().getSimpleName()
+                            + ", which is not a case split");
+        };
+    }
+
     /**
      * The first binding standing inside a value {@code e} is handed, or {@code null} where it is
-     * handed none. What those values are is the same account as {@link #conditionalValueIn}'s: a
+     * handed none. What those values are is the same account as {@link #splitValueIn}'s: a
      * binding the walk steps into next is one it enters itself.
      */
     private static Core.LetIn bindingInValueIn(Core e) {
@@ -2126,84 +2195,75 @@ public final class InvariantChecker {
     }
 
     /**
-     * The first conditional {@code e} gives a value to, or {@code null} where it gives none. A
-     * conditional in tail position — an {@code if}'s own branches, a {@code let}'s body, a case's
-     * body — is where the walk goes next rather than a value it is handed, and a closure's body is
-     * read where the closure is applied.
+     * The first case split {@code e} gives a value to, or {@code null} where it gives none. A split
+     * in tail position — an {@code if}'s own branches, a {@code let}'s body, a case's body — is where
+     * the walk goes next rather than a value it is handed, and a closure's body is read where the
+     * closure is applied.
      */
-    private static ConditionalSite conditionalValueIn(Core e) {
+    private static SplitSite splitValueIn(Core e) {
         return switch (e) {
             // Where the walk goes next is not a value it is handed: an `if`'s own branches, a `let`'s
             // body and a case's body are read after this, each with what is known there.
-            case Core.If iff -> conditionalIn(iff.cond());
-            case Core.IfConstructed ic -> conditionalIn(ic.construct());
-            case Core.LetIn li -> conditionalIn(li.value());
-            case Core.Match m -> conditionalIn(m.scrutinee());
-            default -> conditionalIn(e);
+            case Core.If iff -> splitIn(iff.cond());
+            case Core.IfConstructed ic -> splitIn(ic.construct());
+            case Core.LetIn li -> splitIn(li.value());
+            case Core.Match m -> splitIn(m.scrutinee());
+            default -> splitIn(e);
         };
     }
 
-    /** The first conditional inside a value, with what it is inside. Everything under one is part of
+    /** The first case split inside a value, with what it is inside. Everything under one is part of
      * it, including the body of a binding an expansion introduced — {@code let $0 = r in if $0.a > b
      * then ...} is a helper called on an argument, which is one value however many bindings writing
-     * it took. Those bindings are what the conditional is read in the scope of; a binding is not in
-     * scope for the value it is itself given, so a conditional found there is inside nothing. */
-    private static ConditionalSite conditionalIn(Core e) {
+     * it took. Those bindings are what the split is read in the scope of; a binding is not in
+     * scope for the value it is itself given, so a split found there is inside nothing. */
+    private static SplitSite splitIn(Core e) {
         if (e instanceof Core.If iff) {
-            return ConditionalSite.at(iff);
+            return SplitSite.at(iff);
         }
         if (e instanceof Core.Block) {
             return null;   // read where the closure is applied
         }
         if (e instanceof Core.LetIn li) {
-            ConditionalSite given = conditionalIn(li.value());
+            SplitSite given = splitIn(li.value());
             if (given != null) {
                 return given;
             }
-            ConditionalSite inside = conditionalIn(li.body());
+            SplitSite inside = splitIn(li.body());
             return inside == null ? null
-                    : inside.pastTheReading().under(ConditionalSite.of(li));
+                    : inside.pastTheReading().under(SplitSite.of(li));
         }
         if (e instanceof Core.Match m) {
-            ConditionalSite asked = conditionalIn(m.scrutinee());
-            if (asked != null) {
-                return asked;
-            }
-            for (Core.Case arm : m.cases()) {
-                ConditionalSite inside = conditionalIn(arm.body());
-                if (inside == null) {
-                    continue;
-                }
-                // A case that binds nothing introduces nothing: its body is read as the arm's own.
-                ConditionalSite there = inside.pastTheReading();
-                return arm.binding() == null || arm.bindType() == null
-                        ? there : there.under(ConditionalSite.of(arm));
-            }
-            return null;
+            // What it asks is computed on the way to its own value, so a split found there is inside
+            // nothing and is the one to open. The `match` itself is the next one: it answers one of
+            // its arms, and its arms are read as arms rather than searched for a split to lift out
+            // of one — which is what leaves an arm's binding standing for the value it opened.
+            SplitSite asked = splitIn(m.scrutinee());
+            return asked != null ? asked : SplitSite.at(m);
         }
         if (e instanceof Core.IfConstructed ic) {
-            ConditionalSite tried = conditionalIn(ic.construct());
+            SplitSite tried = splitIn(ic.construct());
             if (tried != null) {
                 return tried;
             }
-            ConditionalSite held = conditionalIn(ic.then());
+            SplitSite held = splitIn(ic.then());
             if (held != null) {
-                return held.pastTheReading().under(ConditionalSite.of(ic));
+                return held.pastTheReading().under(SplitSite.of(ic));
             }
             // A departure stands where the invariant did not hold and nothing was built, so it is
             // inside nothing the attempt would have guaranteed.
             for (Core.ElseArm arm : ic.els()) {
-                ConditionalSite departed = conditionalIn(arm.body());
+                SplitSite departed = splitIn(arm.body());
                 if (departed != null) {
                     return departed.pastTheReading();
                 }
             }
             return null;
         }
-        ConditionalSite[] found = {null};
+        SplitSite[] found = {null};
         Core.forEachChild(e, child -> {
             if (found[0] == null) {
-                found[0] = conditionalIn(child);
+                found[0] = splitIn(child);
             }
         });
         return found[0];
@@ -2211,7 +2271,7 @@ public final class InvariantChecker {
 
     /**
      * {@code e} with every occurrence of {@code was} replaced by {@code becomes}. Occurrence is by
-     * what it computes and not by where it is written: an author who writes one conditional twice —
+     * what it computes and not by where it is written: an author who writes one case split twice —
      * once to guard on and once to build from — wrote one value, and reading the two as two would
      * make the guard say nothing about what is built.
      */
@@ -2238,16 +2298,16 @@ public final class InvariantChecker {
     }
 
     /**
-     * Every conditional in {@code e} that computes what {@code value} computes, {@code value}
-     * included. Asked once for the two readings, since which nodes those are does not depend on which
-     * branch is being read.
+     * Every case split in {@code e} that computes what {@code value} computes, {@code value}
+     * included. Asked once for all the readings, since which nodes those are does not depend on which
+     * arm is being read.
      *
      * <p>{@code at} is where {@code value} stands, which is what keying it needs. A candidate
-     * elsewhere in {@code e} is keyed there too rather than in its own scope, so two conditionals
-     * that compute the same value under different bindings are read as two — which is the thing this
+     * elsewhere in {@code e} is keyed there too rather than in its own scope, so two splits that
+     * compute the same value under different bindings are read as two — which is the thing this
      * exists to prevent, still unanswered for that shape.
      */
-    private Set<Core> sameConditional(Core e, Core.If value, Denotations at) {
+    private Set<Core> sameSplit(Core e, Core value, Denotations at) {
         Set<Core> alike = Collections.newSetFromMap(new IdentityHashMap<>());
         alike.add(value);
         Term key = terms.bodyKey(value, at);
@@ -2261,30 +2321,40 @@ public final class InvariantChecker {
         if (e instanceof Core.Block) {
             return;
         }
-        if (e instanceof Core.If && key.equals(terms.bodyKey(e, at))) {
+        if (isASplit(e) && key.equals(terms.bodyKey(e, at))) {
             alike.add(e);
             return;
         }
         Core.forEachChild(e, child -> collectAlike(child, key, at, alike));
     }
 
-    /** Says of each construction the two readings reached what the two of them together decide. One
-     * that only one reading reached is discharged on the other: it is not there to violate anything. */
-    private void say(Map<Occurrence, Reported> a, Map<Occurrence, Reported> b) {
-        Set<Occurrence> at = new LinkedHashSet<>(a.keySet());
-        at.addAll(b.keySet());
+    /**
+     * Says of each construction the readings reached what all of them together decide. One that only
+     * some readings reached is decided by those: the others did not discharge it because it was not
+     * there to discharge.
+     *
+     * <p>As many readings as the split has arms, folded rather than taken two at a time. What that
+     * rests on is {@link Judgment#of}, which is a join written so that the order branches are
+     * combined in decides nothing — a clause both readings found is the two merged, and one only
+     * one of them found is kept where it is unsettled. Folded over three arms or over two, the
+     * answer is the same answer.
+     */
+    private void say(List<Map<Occurrence, Reported>> readings) {
+        Set<Occurrence> at = new LinkedHashSet<>();
+        readings.forEach(found -> at.addAll(found.keySet()));
         for (Occurrence one : at) {
-            Reported x = a.get(one);
-            Reported y = b.get(one);
-            if (x == null || y == null) {
-                // Written inside one branch, so the other reading did not discharge it — it was not
-                // there to discharge. What the reading that reached it found is what it is.
-                Reported said = x != null ? x : y;
-                report(one.of(), said.type(), said.pos(), said.attempted(), said.judgment());
-                continue;
+            Reported said = null;
+            Judgment judgment = null;
+            for (Map<Occurrence, Reported> found : readings) {
+                Reported reached = found.get(one);
+                if (reached == null) {
+                    continue;
+                }
+                said = said == null ? reached : said;
+                judgment = judgment == null ? reached.judgment()
+                        : Judgment.of(judgment, reached.judgment());
             }
-            report(one.of(), x.type(), x.pos(), x.attempted(),
-                    Judgment.of(x.judgment(), y.judgment()));
+            report(one.of(), said.type(), said.pos(), said.attempted(), judgment);
         }
     }
 
@@ -2386,11 +2456,11 @@ public final class InvariantChecker {
 
     // --- introducing a binding -----------------------------------------------------------------
 
-    /** Where {@code site}'s conditional stands: {@code k} and {@code at} with every binder it is
+    /** Where {@code site}'s case split stands: {@code k} and {@code at} with every binder it is
      * inside entered, outermost first. */
-    private Entered scopeOf(ConditionalSite site, Known k, Denotations at) {
+    private Entered scopeOf(SplitSite site, Known k, Denotations at) {
         Entered in = new Entered(k, at);
-        for (ConditionalSite.Binder binder : site.scope()) {
+        for (SplitSite.Binder binder : site.scope()) {
             in = binder.entering(engine, in.known(), in.at());
         }
         return in;
