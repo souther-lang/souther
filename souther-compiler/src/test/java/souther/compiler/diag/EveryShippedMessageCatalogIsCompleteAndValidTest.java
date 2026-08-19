@@ -9,7 +9,9 @@ import souther.compiler.diag.msg.MessageValues;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.Ordering;
 import souther.compiler.check.Prelude;
+import souther.compiler.types.Type;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -35,6 +37,7 @@ import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * Every catalog that ships is complete on its own and valid on its own.
@@ -74,6 +77,14 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
      */
     private static final ResourceBundle.Control CONTROL =
             ResourceBundle.Control.getNoFallbackControl(ResourceBundle.Control.FORMAT_PROPERTIES);
+
+    /**
+     * The messages that write out which values are ordered: what {@code sort} takes, and what
+     * {@code <} takes. Named here rather than found by pattern, so that renaming one of them fails
+     * the check that holds it to the compiler's answer instead of silently removing it.
+     */
+    private static final List<String> ORDERED_VALUE_KEYS =
+            List.of("kind.ordered.list", "type.comparison-needs-ordered-values-of-one-type");
 
     /** An argument reference: {@code {0}}, and {@code {10}} too — a single digit is not the rule. */
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{(\\d+)}");
@@ -390,6 +401,51 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
             }
         }
         assertEquals(List.of(), duplicated);
+    }
+
+    /**
+     * The two messages that spell out which values are ordered name exactly the primitives that are.
+     *
+     * <p>Both sentences write the set out by hand, in every language, which makes each of them a
+     * copy of the table in {@code Ordering}. A copy is wrong the day the original changes and says
+     * nothing about it: an eighth ordered primitive would leave two sentences quietly listing seven,
+     * and the only reader who finds out is the author who wrote a comparison the compiler accepts
+     * and the message says it should not.
+     *
+     * <p>Held as a set of tokens and not as a substring, because {@code DateTime} contains
+     * {@code Date} and {@code Time}: a sentence that had lost both of the shorter names would pass a
+     * {@code contains} against either. And over every catalog that ships, because a translation is a
+     * separate copy of the same table.
+     */
+    @Test
+    void everyCatalogListsTheOrderedPrimitivesAndOnlyThose() throws IOException {
+        Set<String> ordered = new TreeSet<>();
+        for (Type.Prim prim : Type.Prim.values()) {
+            if (Ordering.of(prim, null) != null) {
+                ordered.add(prim.shown());
+            }
+        }
+        Map<String, Set<String>> named = new TreeMap<>();
+        for (Catalog catalog : catalogs()) {
+            Properties messages = load(catalog.path());
+            for (String key : ORDERED_VALUE_KEYS) {
+                String sentence = messages.getProperty(key);
+                assertNotNull(sentence, catalog.name() + " defines no " + key
+                        + ", so the sentence this holds to the ordered set was renamed or removed");
+                Set<String> found = new TreeSet<>();
+                for (Type.Prim prim : Type.Prim.values()) {
+                    if (Pattern.compile("\\b" + prim.shown() + "\\b").matcher(sentence).find()) {
+                        found.add(prim.shown());
+                    }
+                }
+                named.put(catalog.name() + " " + key, found);
+            }
+        }
+        Map<String, Set<String>> expected = new TreeMap<>();
+        for (String where : named.keySet()) {
+            expected.put(where, ordered);
+        }
+        assertEquals(expected, named);
     }
 
     @Test

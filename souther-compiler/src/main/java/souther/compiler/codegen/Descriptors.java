@@ -227,6 +227,12 @@ final class Descriptors {
     static final MethodTypeDesc MTD_Strings_fromInt = MethodTypeDesc.of(CD_String, ConstantDescs.CD_long);
     static final ClassDesc CD_Comparable = ClassDesc.of("java.lang.Comparable");
     static final MethodTypeDesc MTD_compareTo_Object = MethodTypeDesc.of(ConstantDescs.CD_int, CD_Object);
+
+    /** {@code Integer.compare(int, int)}: the sign of two places in an enumeration's declaration,
+     *  which is what a {@code compareTo} over a newtype wrapping one answers with. */
+    static final ClassDesc CD_Integer = ClassDesc.of("java.lang.Integer");
+    static final MethodTypeDesc MTD_Integer_compare =
+            MethodTypeDesc.of(ConstantDescs.CD_int, ConstantDescs.CD_int, ConstantDescs.CD_int);
     static final MethodTypeDesc MTD_Map_put = MethodTypeDesc.of(CD_Object, CD_Object, CD_Object);
     static final MethodTypeDesc MTD_Map_containsKey =
             MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object);

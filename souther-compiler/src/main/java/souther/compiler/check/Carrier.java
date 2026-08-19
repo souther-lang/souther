@@ -145,34 +145,59 @@ public sealed interface Carrier {
      * {@code data StageN = Stage} the same carrier as a bare {@code Stage}.
      */
     static Carrier ofValue(Type type, Symbols symbols) {
-        Type base = TypeOps.base(type, symbols);
-        if (base instanceof Type.Prim prim) {
-            return switch (prim) {
-                case INT -> WHOLE;
-                case DECIMAL -> DENSE;
-                case DATE -> Carrier.DATE;
-                case DATETIME -> MOMENT;
-                case TIME -> Carrier.TIME;
-                case INSTANT -> Carrier.INSTANT;
-                // `String` is ordered lexicographically and stands for itself, having no count to
-                // embed into and needing none. `Bool` and `Raw` are not ordered at all.
-                case STRING -> TEXT;
-                case BOOL, RAW -> null;
-            };
+        // Which order a value of this type is compared on is {@link Ordering}'s, and this asks it
+        // rather than deciding what an enumeration is a second time. Every one of its answers is
+        // answered for here, so an order added there is one this has to place or say it has no
+        // count for — the direction #856 went silent in was a reader measuring what another refused.
+        Ordering how = Ordering.of(type, symbols);
+        if (how == null) {
+            return null;
         }
-        // The enumeration itself, and not an order a value of it can be compared on. Which order
-        // two operands are comparable by is a wider question and has its own answer
-        // ({@link TypeOps#comparisonEnumeration}): a case and a union of cases are both comparable
-        // on their sum's order without ranging over it. Answered with that wider order, a position
-        // declared as one case took the whole enumeration's counts, and the line drawn on it asked
-        // for a row at a value the position cannot hold.
-        if (!(base instanceof Type.Ref ref)
-                || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.SumData sum)
-                || !TypeOps.isUnitOnlySum(base, symbols)) {
+        Type base = TypeOps.base(type, symbols);
+        return switch (how.opened()) {
+            // Being ordered is not being counted: two dates order alike whatever a line on one is
+            // counted in, and which count that is belongs here and is asked of the type.
+            case Ordering.Longs _, Ordering.Natural _ -> countOf(base);
+            // What is left is the one thing a carrier asks that an order does not: whether the
+            // position's values range over the whole of it. A case and a union of cases are
+            // comparable on their sum's order without ranging over it, and a position declared as
+            // one case, given the sum's counts, was asked for a row at a value it cannot hold.
+            case Ordering.Places places -> base instanceof Type.Ref ref
+                    && ref.name().equals(places.enumeration()) ? ordinalOf(places, symbols) : null;
+            // `opened` answers for the value with the names off, which is never one still wearing
+            // them.
+            case Ordering.Wrapped _ ->
+                    throw new IllegalStateException("an opened order is never a wrapped one: " + type);
+        };
+    }
+
+    /** The count a primitive's values are placed on. */
+    private static Carrier countOf(Type base) {
+        if (!(base instanceof Type.Prim prim)) {
+            return null;
+        }
+        return switch (prim) {
+            case INT -> WHOLE;
+            case DECIMAL -> DENSE;
+            case DATE -> Carrier.DATE;
+            case DATETIME -> MOMENT;
+            case TIME -> Carrier.TIME;
+            case INSTANT -> Carrier.INSTANT;
+            // `String` is ordered lexicographically and stands for itself, having no count to
+            // embed into and needing none. `Bool` and `Raw` are not ordered at all.
+            case STRING -> TEXT;
+            case BOOL, RAW -> null;
+        };
+    }
+
+    /** The cases in the order they are declared, which is the order itself and not a set. The
+     *  declaration is read for that list alone: whether this is an enumeration is already answered. */
+    private static Carrier ordinalOf(Ordering.Places places, Symbols symbols) {
+        if (!(symbols.declarations().declaration(places.enumeration().key()) instanceof Hir.SumData sum)) {
             return null;
         }
         List<TypeSymbol> cases = TypeOps.leafCases(sum, symbols);
-        return cases.isEmpty() ? null : new Ordinal(ref.name(), cases);
+        return cases.isEmpty() ? null : new Ordinal(places.enumeration(), cases);
     }
 
     /** How the counts on this carrier are spaced, which is what decides whether a strict bound has a

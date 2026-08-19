@@ -16,6 +16,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.check.Ordering;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 import souther.compiler.core.GrowingFold;
@@ -1159,7 +1160,7 @@ final class BodyGen {
             // is read off the key's result type.
             if ("List.sortBy".equals(call.name())
                     && call.args().get(0).type() instanceof Type.FnOf key
-                    && TypeOps.orderingEnumeration(key.result(), symbols) instanceof TypeSymbol ordering) {
+                    && sumOrdering(key.result()) instanceof TypeSymbol ordering) {
                 code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
                 emitFunctionValue(call.args().get(0),
                         List.of(((Type.ListOf) call.args().get(1).type()).element()));
@@ -1745,43 +1746,55 @@ final class BodyGen {
                     }
                 }
                 default -> {
-                    // An enumeration compares by where its case stands in the declaration, which the
-                    // sum answers for both operands — `stage < Won` pairs a sum with one of its cases.
-                    TypeSymbol enumOf = orderingOf(bin);
-                    if (enumOf != null) {
-                        genExpr(bin.left());
-                        code.invokestatic(cd(enumOf), ORDER_METHOD, MTD_order, true);
-                        genExpr(bin.right());
-                        code.invokestatic(cd(enumOf), ORDER_METHOD, MTD_order, true);
-                        comparisonMaterialize(bin.op(), false);
+                    // A single-value newtype compares by its underlying value, so each operand is
+                    // opened to that value right after it is pushed (金額 <= 金額, 金額 <= 100 — the
+                    // checker allows only same newtype or a bare literal).
+                    //
+                    // An ordering is emitted from the order the operands open to and from nothing
+                    // else, and the switch below carries no `default`: reading the representation
+                    // instead is what let `StageN < StageN` fall past every ordering arm into the
+                    // equality test at the bottom, and an order added to {@link Ordering} would
+                    // fall the same way through an `instanceof` chain (issue #856). An equality is
+                    // the representation's own question and stays below.
+                    if (orderingOf(bin) instanceof Ordering how) {
+                        switch (how) {
+                            case Ordering.Longs _ -> {
+                                unwrapNewtypeValue(genExpr(bin.left()));
+                                unwrapNewtypeValue(genExpr(bin.right()));
+                                comparisonMaterialize(bin.op(), true);
+                            }
+                            case Ordering.Natural _ -> {
+                                // These all carry as Comparable — String, BigDecimal, LocalDate,
+                                // LocalTime, LocalDateTime, Instant — so one compareTo reduces the
+                                // order to its sign against 0. BigDecimal.compareTo ignores scale,
+                                // which matches Decimal equality (spec §equality); the others order
+                                // lexicographically / in time.
+                                unwrapNewtypeValue(genExpr(bin.left()));
+                                unwrapNewtypeValue(genExpr(bin.right()));
+                                code.invokeinterface(CD_Comparable, "compareTo", MTD_compareTo_Object);
+                                code.iconst_0();
+                                comparisonMaterialize(bin.op(), false);
+                            }
+                            case Ordering.Places places -> {
+                                // An enumeration compares by where its case stands in the
+                                // declaration, which the sum answers for both operands —
+                                // `stage < Won` pairs a sum with one of its cases, and
+                                // `x < StageN(Qualified)` two wrappers over one sum.
+                                unwrapNewtypeValue(genExpr(bin.left()));
+                                code.invokestatic(cd(places.enumeration()), ORDER_METHOD, MTD_order, true);
+                                unwrapNewtypeValue(genExpr(bin.right()));
+                                code.invokestatic(cd(places.enumeration()), ORDER_METHOD, MTD_order, true);
+                                comparisonMaterialize(bin.op(), false);
+                            }
+                            // `opened` answers for the value the operands are opened to, which is
+                            // never one a name is still worn over.
+                            case Ordering.Wrapped _ -> throw new IllegalStateException(
+                                    "an opened order is never a wrapped one: " + bin.left().type());
+                        }
                         return;
                     }
-                    // A single-value newtype compares by its underlying value: open each operand to
-                    // that value right after it is pushed, then the primitive comparison below applies
-                    // (金額 <= 金額, 金額 <= 100 — the checker allows only same newtype or a bare literal).
                     Type lt = unwrapNewtypeValue(genExpr(bin.left()));
                     unwrapNewtypeValue(genExpr(bin.right()));
-                    boolean ordering = switch (bin.op()) {
-                        case LT, LE, GT, GE -> true;
-                        default -> false;
-                    };
-                    // Which primitives compare through an object, asked of each one so that an
-                    // ordered primitive added later cannot fall past this into the paths below.
-                    boolean viaComparable = lt instanceof Type.Prim lp && switch (lp) {
-                        case STRING, DECIMAL, DATE, TIME, DATETIME, INSTANT -> true;
-                        // Int is ordered too, and is compared with the long instructions below
-                        case INT, BOOL, RAW -> false;
-                    };
-                    if (ordering && viaComparable) {
-                        // These all carry as Comparable — String, BigDecimal, LocalDate, LocalTime,
-                        // LocalDateTime, Instant — so one compareTo reduces the order to its sign
-                        // against 0. BigDecimal.compareTo ignores scale, which matches
-                        // Decimal equality (spec §equality); the others order lexicographically / in time.
-                        code.invokeinterface(CD_Comparable, "compareTo", MTD_compareTo_Object);
-                        code.iconst_0();
-                        comparisonMaterialize(bin.op(), false);
-                        return;
-                    }
                     if (lt == Type.STRING) {
                         code.invokevirtual(CD_String, "equals",
                                 MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
@@ -1807,23 +1820,53 @@ final class BodyGen {
             }
         }
 
-        /** The enumeration a {@code <}/{@code <=}/{@code >}/{@code >=} orders its operands by, or
-         * null when this is not that comparison. */
-        private TypeSymbol orderingOf(Core.Binary bin) {
+        /** How a {@code <}/{@code <=}/{@code >}/{@code >=} compares its operands, or null when this
+         * is not that comparison. Whether the two may be compared at all was settled by
+         * {@code BinaryElaborator} against the types as written; this reads what they open to. */
+        private Ordering orderingOf(Core.Binary bin) {
             boolean ordering = switch (bin.op()) {
                 case LT, LE, GT, GE -> true;
                 default -> false;
             };
-            return ordering
-                    ? TypeOps.comparisonEnumeration(bin.left().type(), bin.right().type(), symbols)
-                    : null;
+            if (!ordering) {
+                return null;
+            }
+            Ordering how = Ordering.ofComparison(bin.left().type(), bin.right().type(), symbols);
+            if (how == null) {
+                throw new IllegalStateException("a comparison the checker admitted has no order: "
+                        + bin.left().type() + " " + bin.op() + " " + bin.right().type());
+            }
+            return how.opened();
         }
 
         /** The enumeration a list's elements are ordered by, or null when they are ordered otherwise
          * (an ordered primitive or a newtype over one, which carry their own {@code Comparable}). */
         private TypeSymbol elementOrdering(Core arg) {
-            return arg.type() instanceof Type.ListOf lo
-                    ? TypeOps.orderingEnumeration(lo.element(), symbols) : null;
+            return arg.type() instanceof Type.ListOf lo ? sumOrdering(lo.element()) : null;
+        }
+
+        /** The sum that answers for values of {@code t}, or null where the value carries its own
+         * order. Asked of the value as the runtime is handed it, so a newtype over an enumeration
+         * answers null and sorts by the {@code compareTo} its own class carries — the sum's
+         * {@code __order} would be handed the wrapper and not the case.
+         *
+         * <p>Every order is answered for rather than "everything but a {@code Places} sorts by
+         * natural order", so an order added to {@link Ordering} has to say which of the two it is
+         * instead of inheriting the answer that happens to be right for these three. */
+        private TypeSymbol sumOrdering(Type t) {
+            Ordering how = Ordering.of(t, symbols);
+            if (how == null) {
+                return null;
+            }
+            return switch (how.asHeld()) {
+                case Ordering.Places places -> places.enumeration();
+                // A long boxes to a Comparable and a newtype's own class carries a compareTo, so
+                // for both of these the runtime's natural order is the order.
+                case Ordering.Longs _, Ordering.Natural _ -> null;
+                // `asHeld` answers for the value as its own type holds it, which is never wrapped.
+                case Ordering.Wrapped _ ->
+                        throw new IllegalStateException("a held order is never a wrapped one: " + t);
+            };
         }
 
         private void comparisonMaterialize(Hir.BinOp op, boolean isLong) {

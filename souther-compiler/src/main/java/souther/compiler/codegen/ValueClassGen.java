@@ -5,6 +5,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.check.Ordering;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.MatchElaborator;
 
@@ -454,10 +455,19 @@ final class ValueClassGen {
 
     /** A single-value newtype over an ordered type — ordered by the value it wraps (ADR-0047), which
      * the class carries as {@link Comparable} so {@code sort} / {@code max} / {@code min} compare it
-     * by natural order, and a Java reader can put it in a {@code TreeSet}. */
+     * by natural order, and a Java reader can put it in a {@code TreeSet}. The order it carries is
+     * {@link #orderOfWrapped}: claiming one here that the {@code compareTo} below cannot emit is
+     * what left {@code data StageN = Stage} declaring {@code Comparable} and throwing on the first
+     * Java reader that compared two (issue #856). */
     private boolean isOrderedNewtype(Hir.Data data, Map<String, Type> fields) {
         return data.newtype() && fields.size() == 1
-                && TypeOps.supportsOrdering(fields.values().iterator().next(), symbols);
+                && orderOfWrapped(fields.values().iterator().next()) != null;
+    }
+
+    /** How the value a newtype wraps compares, as the newtype's own field holds it. */
+    private Ordering orderOfWrapped(Type value) {
+        Ordering how = Ordering.of(value, symbols);
+        return how == null ? null : how.asHeld();
     }
 
     /** {@code Record} plus each interface, with {@code Comparable} bound to the class itself, so a
@@ -516,24 +526,46 @@ final class ValueClassGen {
     }
 
     /**
-     * Emits {@code compareTo}: an {@code Int} newtype compares its {@code long} carrier, any other
-     * ordered value is itself {@link Comparable} — a {@code String} / {@code BigDecimal} /
-     * {@code LocalDate} / {@code LocalDateTime}, or a newtype over one, which carries its own
-     * {@code compareTo}. The erased {@code compareTo(Object)} bridge is what the runtime's
-     * natural-order compare calls.
+     * Emits {@code compareTo}, from the order the wrapped value has rather than from a guess at its
+     * representation. An {@code Int} newtype compares its {@code long} carrier; a value the JVM
+     * carries as {@link Comparable} — a {@code String} / {@code BigDecimal} / {@code LocalDate} /
+     * {@code LocalTime} / {@code LocalDateTime} / {@code Instant}, or a newtype over one — compares
+     * itself; a value of an enumeration has no {@code compareTo} of its own, because the order lives
+     * on the sum and one unit data may be a case of two (ADR-0069), so its place is read off the sum.
+     *
+     * <p>That last arm is the one that was missing. "Ordered and not an {@code Int}" was read as
+     * "{@code Comparable}", which every ordered value but an enumeration's is, and the class went out
+     * declaring an interface it could not honour. The erased {@code compareTo(Object)} bridge is what
+     * the runtime's natural-order compare calls.
      */
     private void emitCompareTo(ClassBuilder cb, ClassDesc cdName, Map.Entry<String, Type> value) {
         ClassDesc fd = jvmType(value.getValue());
+        Ordering how = orderOfWrapped(value.getValue());
         cb.withMethodBody("compareTo", MethodTypeDesc.of(ConstantDescs.CD_int, cdName),
                 ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL, code -> {
                     code.aload(0);
                     code.getfield(cdName, value.getKey(), fd);
+                    if (how instanceof Ordering.Places places) {
+                        code.invokestatic(cd(places.enumeration()), ORDER_METHOD, MTD_order, true);
+                    }
                     code.aload(1);
                     code.getfield(cdName, value.getKey(), fd);
-                    if (value.getValue() == Type.INT) {
-                        code.lcmp();   // -1 / 0 / 1, which is compareTo's contract
-                    } else {
-                        code.invokeinterface(CD_Comparable, "compareTo", MTD_compareTo_Object);
+                    switch (how) {
+                        case Ordering.Longs _ ->
+                                code.lcmp();   // -1 / 0 / 1, which is compareTo's contract
+                        case Ordering.Natural _ ->
+                                code.invokeinterface(CD_Comparable, "compareTo", MTD_compareTo_Object);
+                        case Ordering.Places places -> {
+                            code.invokestatic(cd(places.enumeration()), ORDER_METHOD, MTD_order, true);
+                            code.invokestatic(CD_Integer, "compare", MTD_Integer_compare, false);
+                        }
+                        // asHeld answers for the newtype as its own class holds it, and a newtype is
+                        // Comparable, so nothing reaches here.
+                        case Ordering.Wrapped _ -> throw new IllegalStateException(
+                                "a wrapped order is never what a value is held as: " + value.getValue());
+                        case null -> throw new IllegalStateException(
+                                "compareTo is emitted only where isOrderedNewtype found an order: "
+                                        + value.getValue());
                     }
                     code.ireturn();
                 });

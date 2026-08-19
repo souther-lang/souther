@@ -80,6 +80,11 @@ both list has no order of its own, and comparing it takes the order from the sum
 Reordering an enumeration's cases changes its order, which is the cost F#, Haskell, Rust and Java
 all accept for the same feature.
 
+Making an enumeration ordered puts it into the set ADR-0047's newtype rule composes with, so a
+newtype over one is ordered by it. That was settled under issue #856, where the compiler had been
+answering both ways at once; the same refusal holds through the name, a newtype over a case two sums
+list having no order to carry.
+
 None of the three changes what a sum is. It is still not assignment-compatible with the data its
 cases spread, and still exhaustively checked per layer. Deciding which case a value is stays `match`.
 

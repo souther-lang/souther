@@ -50,27 +50,30 @@ public final class TypeOps {
 
     /**
      * What a position may require of a type. {@link #EQUALITY} is what {@code ==} requires and what a
-     * {@code Set} requires of its element and a {@code Map} of its key; {@link #ORDERING} is what
-     * {@code sort} and a {@code sortBy} key require; {@link #EXTERNAL_FORM} is what a data's field, a
-     * newtype's base and a behavior's input and output require.
+     * {@code Set} requires of its element and a {@code Map} of its key; {@link #EXTERNAL_FORM} is
+     * what a data's field, a newtype's base and a behavior's input and output require.
+     *
+     * <p>Ordering is not one of these. Both of these are answered {@code true} or {@code false} and
+     * nothing more is wanted, while a reader that admits an ordered value goes on to ask what orders
+     * it — so the answer is a witness and lives in {@link Ordering}, and {@link #supportsOrdering}
+     * is that witness existing. Kept as a row here, the capability had one answer and the four
+     * places that emit a comparison each worked out the other for themselves (issue #856).
      */
-    public enum Requires { EQUALITY, ORDERING, EXTERNAL_FORM }
+    public enum Requires { EQUALITY, EXTERNAL_FORM }
 
     /**
-     * Whether {@code t} answers {@code required}. One table, so all three answers for a type
-     * constructor are read in one place, and neither switch carries a {@code default}: a constructor
-     * added to {@link Type}, or a fourth question added here, stops compiling until it is answered —
-     * which is where "can the representation actually do this?" gets asked.
+     * Whether {@code t} answers {@code required}. One table, so both answers for a type constructor
+     * are read in one place, and neither switch carries a {@code default}: a constructor added to
+     * {@link Type}, or a third question added here, stops compiling until it is answered — which is
+     * where "can the representation actually do this?" gets asked.
      *
-     * <p>The three are separate questions, and the arms combine their children differently. Equality
-     * and the external form descend into what a collection holds. An ordering does not: a collection
-     * has none of its own whatever it holds.
+     * <p>The two are separate questions, and the arms combine their children differently: a tuple
+     * carries values through a computation and is never encoded, whatever it holds.
      *
-     * <p>They are also asked at different times, which is why the question is a parameter rather than
-     * three fields computed together. Equality and the external form are answered by the shape of the
-     * type alone; only an ordering consults the module, to learn what a {@code Ref} denotes. A
-     * {@code Set}'s element is asked for equality while its own type is still being resolved, and
-     * there is no answer about ordering to be had yet.
+     * <p>Both are answered by the shape of the type alone. Ordering was the row that consulted the
+     * module, to learn what a {@code Ref} denotes, and it is no longer one of these — it is a
+     * witness rather than a yes, and {@link Ordering} holds it. The {@code symbols} parameter is
+     * what that row read and is threaded for a third question that needs it.
      *
      * <p>{@code Raw} answers yes to equality because its value's own {@code equals} answers, and that
      * is the only answer available: a Raw is an arbitrary Java object and the language promises
@@ -83,34 +86,27 @@ public final class TypeOps {
      */
     public static boolean answers(Type t, Requires required, Symbols symbols) {
         return switch (t) {
-            case Type.Prim p -> switch (required) {
+            case Type.Prim _ -> switch (required) {
                 case EQUALITY, EXTERNAL_FORM -> true;
-                case ORDERING -> isOrdered(p);
             };
-            case Type.Ref r -> switch (required) {
+            case Type.Ref _ -> switch (required) {
                 case EQUALITY, EXTERNAL_FORM -> true;
-                case ORDERING -> isOrdered(base(r, symbols)) || orderingEnumeration(r, symbols) != null;
             };
-            case Type.Union u -> switch (required) {
+            case Type.Union _ -> switch (required) {
                 case EQUALITY, EXTERNAL_FORM -> true;
-                case ORDERING -> orderingEnumeration(u, symbols) != null;
             };
             case Type.ListOf l -> switch (required) {
                 case EQUALITY, EXTERNAL_FORM -> answers(l.element(), required, symbols);
-                case ORDERING -> false;
             };
             case Type.SetOf s -> switch (required) {
                 case EQUALITY, EXTERNAL_FORM -> answers(s.element(), required, symbols);
-                case ORDERING -> false;
             };
             case Type.OptionOf o -> switch (required) {
                 case EQUALITY, EXTERNAL_FORM -> answers(o.element(), required, symbols);
-                case ORDERING -> false;
             };
             case Type.MapOf m -> switch (required) {
                 case EQUALITY, EXTERNAL_FORM -> answers(m.key(), required, symbols)
                         && answers(m.value(), required, symbols);
-                case ORDERING -> false;
             };
             case Type.TupleOf tu -> switch (required) {
                 case EQUALITY -> {
@@ -122,12 +118,11 @@ public final class TypeOps {
                     yield true;
                 }
                 // a tuple carries values through a computation and is never encoded, whatever it holds
-                case ORDERING, EXTERNAL_FORM -> false;
+                case EXTERNAL_FORM -> false;
             };
             case Type.FnOf _ -> false;
             case Type.Open _, Type.Nothing _, Type.Never _, Type.Erroneous _ -> switch (required) {
                 case EQUALITY, EXTERNAL_FORM -> true;
-                case ORDERING -> false;
             };
         };
     }
@@ -144,10 +139,13 @@ public final class TypeOps {
     }
 
     /** Whether values of this type have an ordering — what {@code sort} and a {@code sortBy} key
-     * require of what they order. A single-value newtype is ordered by the value it wraps
-     * (ADR-0047), and an enumeration by the order its cases are declared in. */
+     * require of what they order, and what {@code <} requires of two operands of one type. A
+     * single-value newtype is ordered by the value it wraps (ADR-0047), and an enumeration by the
+     * order its cases are declared in (ADR-0069), so a newtype over an enumeration is ordered by
+     * that enumeration. This is {@link Ordering#of} having an answer, and asking it any other way is
+     * a second definition of the same word. */
     public static boolean supportsOrdering(Type t, Symbols symbols) {
-        return answers(t, Requires.ORDERING, symbols);
+        return Ordering.of(t, symbols) != null;
     }
 
     /**
@@ -1412,26 +1410,19 @@ public final class TypeOps {
                 && symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data d && d.newtype();
     }
 
-    /** The ordered primitives: the ones the JVM carries as {@link Comparable}, so {@code <}/{@code >}
-     * and {@code sort} work on them (spec §primitives, §stdlib-list). */
-    static boolean isOrdered(Type t) {
-        return switch (t) {
-            case Type.Prim p -> switch (p) {
-                case INT, STRING, DECIMAL, DATE, TIME, DATETIME, INSTANT -> true;
-                case BOOL, RAW -> false;
-            };
-            case Type.Ref _, Type.ListOf _, Type.MapOf _, Type.SetOf _, Type.OptionOf _,
-                 Type.Union _, Type.FnOf _, Type.Open _, Type.Nothing _, Type.Never _,
-                 Type.TupleOf _, Type.Erroneous _ -> false;
-        };
-    }
-
     /**
      * The enumeration two operands of {@code <}/{@code <=}/{@code >}/{@code >=} are ordered by, or
      * null when they are not both values of one. Either side may name it: {@code stage < Won}
      * carries the order on the left, and a case listed by two sums takes the one it is compared with.
+     *
+     * <p>Which types this is asked of decides what it means, so it is not visible outside this
+     * package. Asked of the operands as written it is the nominal admissibility rule, and that is
+     * {@code BinaryElaborator}'s alone: two different newtypes over one enumeration must not meet
+     * here. Asked of what they open to it is how the comparison emits, and that is
+     * {@link Ordering#ofComparison}. The backend reaching past both and asking this itself is how
+     * the same type came to be ordered to one reader and not to another (issue #856).
      */
-    public static TypeSymbol comparisonEnumeration(Type lt, Type rt, Symbols symbols) {
+    static TypeSymbol comparisonEnumeration(Type lt, Type rt, Symbols symbols) {
         TypeSymbol named = orderingEnumeration(lt, symbols);
         if (named == null) {
             named = orderingEnumeration(rt, symbols);
@@ -1465,7 +1456,7 @@ public final class TypeOps {
      * be a case of two sums, which place it differently, so no one order is the value's own. The
      * order therefore belongs to the sum and not to the case value.
      */
-    public static TypeSymbol orderingEnumeration(Type t, Symbols symbols) {
+    static TypeSymbol orderingEnumeration(Type t, Symbols symbols) {
         Set<TypeSymbol> candidates = orderingCandidates(t, symbols);
         return candidates != null && candidates.size() == 1 ? candidates.iterator().next() : null;
     }
