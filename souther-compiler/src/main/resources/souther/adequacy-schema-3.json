@@ -40,7 +40,7 @@
     },
     "ruleId": {
       "type": "object",
-      "description": "What tells one rule of the model from every other, which is not what a reader is shown. The coordinates differ by kind because rules are told apart by different things, and every part of an identity is written: a declaration is its module and its name — two modules may each declare an `Amount`, and they are two types — and a behavior's constructs are numbered from zero in each source, so which source is part of which construct. A key within this document rather than a name; a consumer joins entries by it and shows `rule`.",
+      "description": "What tells one rule of the model from every other, which is not what a reader is shown. The coordinates differ by kind because rules are told apart by different things, and every part of an identity is written: a declaration is its module and its name — two modules may each declare an `Amount`, and they are two types — and a behavior's constructs are numbered from zero in each source, so which source is part of which construct. A key within this document rather than a name; a consumer groups by it and shows `rule`. It names the rule and not the question — one rule raises more than one, and `question` and `subject` beside it are what tell those apart.",
       "required": ["kind", "declaredIn"],
       "additionalProperties": false,
       "oneOf": [
@@ -118,6 +118,13 @@
         "type": "object",
         "required": ["kind", "disposition", "subject"],
         "additionalProperties": false,
+        "allOf": [
+          {
+            "if": { "properties": { "kind": { "const": "rule_unaccounted" } }, "required": ["kind"] },
+            "then": { "required": ["ruleId"] },
+            "else": { "not": { "required": ["ruleId"] } }
+          }
+        ],
         "properties": {
           "kind": {
             "description": "What the measure established. `output_case_unspecified` is a case of the output no row expects and `output_case_unverified` is one some row expects and nothing was seen to produce; `input_case_unspecified` is a case of an input no row applies the behavior to and `axis_class_uncovered` is a class of a derived position no row is in — the two read alike about one class and only one of them is refused over. `boundary_unmet` is a line some rule draws that no row sits on, `arm_unreached` an arm of the body no row goes through. `partition_not_derivable`, `partition_not_read`, `partition_rules_not_reached` and `partition_omitted` are positions the model divides no way, positions some rule about which was not read, positions the axes did measure whose rules the walk never reached, and positions past the axis limit. `rule_unaccounted` is one question a rule raised that nothing answered — said whether or not an axis came back for the position it is about, since a rule this compiler could not read is exactly the one no axis is derived from, and named for the question rather than for a measure because which section a reader meets it under follows from what it asks.",
@@ -127,8 +134,8 @@
             "description": "What a build does about this one. `refused` is a gap `--strict` and a warned build refuse over; `reported` is a kind neither refuses over, whatever its measurement managed; `undecided` is a kind they would refuse over, from a measurement that came to no answer — telling an author to write a row they may already have written is worse than saying nothing, so it is named and not refused.",
             "enum": ["refused", "undecided", "reported"]
           },
+          "ruleId": { "$ref": "#/$defs/ruleId", "description": "Which rule the finding is about, where it is about one. `subject` beside it is what a reader is shown, and two rules an author named alike are shown the same words — so this is what says they are two. It names the rule and not the question: one rule raises more than one, and `subject` beside it is what tells those apart. Written for `rule_unaccounted` and for no other kind." },
           "subject": {
-          "ruleId": { "$ref": "#/$defs/ruleId", "description": "Which rule the finding is about, where it is about one. `subject` beside it is what a reader is shown, and two rules an author named alike are shown the same words — so a consumer joining a finding to the question it came from joins on this. Written for `rule_unaccounted` and for no other kind." },
             "type": "string",
             "description": "What the finding is about, written to name what is already in this document: a class name is one of an axis's `classes`, an arm's label one in `branch.unreached`, and `axis = value` names a `boundaries` entry. An input's case carries its position — `C (in #1)` — because two parameters of one type give two findings a class name alone cannot tell apart."
           },
