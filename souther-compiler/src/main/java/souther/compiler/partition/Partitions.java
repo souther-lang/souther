@@ -716,7 +716,7 @@ public final class Partitions {
                     case StructuralInspection.Pending pending ->
                             out.add(Axis.pendingAt(id, term, position.type(),
                                     position.unansweredQuestions(), position.rulesNotReached(), pending,
-                                    position.valuesUnread()));
+                                    leftUnread(position)));
                 }
             }
         }
@@ -724,6 +724,22 @@ public final class Partitions {
 
 
 
+
+    /**
+     * What a position with no evidence is left with, where an absence may not be concluded from it.
+     *
+     * <p>The end reading's answer ahead of the value reading's, where both have one. A rule this
+     * read for a line and could not use is the nearer of the two: lifting that limit is what would
+     * give the position an axis, and the reading that turns clauses into sets of values has no word
+     * for a range at all — so it names one limit while the report's own line names another, and one
+     * position came back with two causes for one clause.
+     *
+     * <p>The first, as a comparison's is. What a reader has to lift is the first limit in the way.
+     */
+    private static BlockReason leftUnread(Position position) {
+        return position.unreadRules().isEmpty() ? position.valuesUnread()
+                : position.unreadRules().getFirst().why();
+    }
 
     // --- small helpers ----------------------------------------------------------------------------
 

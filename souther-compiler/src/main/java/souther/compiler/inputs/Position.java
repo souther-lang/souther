@@ -161,7 +161,19 @@ public sealed interface Position permits ReadPosition {
      */
     BlockReason valuesUnread();
 
-    /** The rules written about this position that the reading could not turn into an end. */
+    /**
+     * The rules written about this position that the reading of ends could not turn into one.
+     *
+     * <p>Whichever value they are written on: a clause of this position's own type and a clause of
+     * the value it sits in are two ways of saying where its values stop, and both come from the one
+     * reading that draws lines from clauses.
+     *
+     * <p>Beside whatever the position is otherwise left with and not folded into it. A position
+     * carries more than one statement, so an end read at it says nothing about the rule beside it —
+     * kept as what the position was left with if nothing divided it, a bound on a field's own type
+     * answered for the record's clause about the same field, and the clause was dropped in silence
+     * (issue #868).
+     */
     List<UnreadRule> unreadRules();
 
     /** Whether the position is made of positions, and what it is left with if nothing answers for
