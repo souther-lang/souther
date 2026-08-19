@@ -706,6 +706,17 @@ public final class FieldDomains {
      * clause placing an end at 0 beside one that takes the 0 away leaves a position whose first
      * value is 1, and the end as written is not where the position starts.
      */
+    /** What a cause is filed under, so that two runs print them the same way round. */
+    private static String orderOf(ProjectionEvidence.Cause cause) {
+        return switch (cause) {
+            case ProjectionEvidence.Cause.Unavailable it -> "1 " + it.path();
+            case ProjectionEvidence.Cause.Unrepresented it ->
+                    "2 " + it.rule().named() + " " + it.path();
+            case ProjectionEvidence.Cause.Lossy it ->
+                    "3 " + it.rule().named() + " " + it.atom() + " " + it.losses();
+        };
+    }
+
     public NumericDomain.Bounds leftAt(String path, boolean measured) {
         // The axis the caller is on, and not whichever of the two this position happens to have. A
         // `String` is measured two ways — its own order, and the length of it — and answering with
@@ -816,6 +827,12 @@ public final class FieldDomains {
             }
         }));
         causes.addAll(lossy);
+        // In an order that does not move between runs. Parts are keyed by the node the tree holds,
+        // which is an identity, and a map keyed on one iterates by where the addresses landed — so
+        // a value with two conjuncts short of the bounds printed its two causes in whichever order
+        // this run happened to give them. Sorted rather than kept in insertion order, because the
+        // causes come from three producers and there is no one order they arrive in.
+        causes.sort(java.util.Comparator.comparing(FieldDomains::orderOf));
         return causes.isEmpty() ? new ProjectionEvidence.Exact()
                 : new ProjectionEvidence.Approximate(causes);
     }

@@ -424,7 +424,10 @@ public final class InvariantChecker {
         public Seeded {
             notGathered = Set.copyOf(notGathered);
             unreadOfEveryValue = Set.copyOf(unreadOfEveryValue);
-            readBy = Map.copyOf(readBy);
+            // Insertion order, which is the order the declarations write their clauses. `Map.copyOf`
+            // iterates in an order salted once per JVM run, and what is read off these is a list of
+            // causes a report prints.
+            readBy = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(readBy));
         }
 
         /** What a walk that fell over comes to: no position named, no rule read, and saying so of
@@ -864,7 +867,6 @@ public final class InvariantChecker {
     }
 
     /**
-    /**
      * What each reading made of each part of each rule, as each of them said so while reading it.
      *
      * <p>Per part, because a conjunction is one rule read a conjunct at a time and evidence gathered
@@ -872,9 +874,8 @@ public final class InvariantChecker {
      * was. Keyed by the part as the tree holds it, so the walk that reads the clause afterwards
      * finds this reading's own answer about the very node it holds rather than reading it again.
      *
-     * @param constrained what the reading that builds the numeric constraints took each part in
-     *                    about
-     * @param adopted     what the reading that turns clauses into sets of values took it in about
+     * @param read    what the reading that builds the numeric constraints made of each part
+     * @param adopted what the reading that turns clauses into sets of values took each part in about
      */
     record PartsRead(Map<RuleRef, Map<Core, PartRead>> read,
                      Map<RuleRef, Map<Core, Set<FactSubject>>> adopted) {
@@ -890,6 +891,28 @@ public final class InvariantChecker {
         Set<FactSubject> adoptedIn(RuleRef rule, Core part) {
             Map<Core, Set<FactSubject>> said = adopted.get(rule);
             return said == null ? null : said.get(part);
+        }
+    }
+
+    /**
+     * A part of a rule that the readings which seeded the value never read.
+     *
+     * <p>The seeding hands the whole clause to the readings this walk goes back over, so the two
+     * meet the same parts. Where they do not, what one of them says about a conjunct is being asked
+     * for a conjunct it never saw — and read as "nothing constrained here" it would answer for the
+     * position that conjunct names.
+     *
+     * <p>Not an ordinary limit, so not swallowed. A shape a walk has no rule for leaves the run-time
+     * check standing; this is the two walks disagreeing about what the clause is made of, and a
+     * value that came back with nothing to say for that reason reads exactly like a value whose
+     * rules were all read.
+     */
+    static final class APartNoReadingSaw extends TheCheckDisagreesWithItself {
+
+        private static final long serialVersionUID = 1L;
+
+        APartNoReadingSaw(Core part) {
+            super("a part of a rule the readings that seeded it never read: " + part);
         }
     }
 
@@ -1051,8 +1074,7 @@ public final class InvariantChecker {
         PartRead read = parts.readIn(rule, part);
         Set<FactSubject> constrained = read == null ? null : read.constrained();
         if (here == null || constrained == null) {
-            throw new IllegalStateException(
-                    "a part of a rule the readings that seeded it never read: " + part);
+            throw new APartNoReadingSaw(part);
         }
         Set<FactSubject> standing = new LinkedHashSet<>();
         for (FactSubject name : about) {
