@@ -7,6 +7,7 @@ import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.observe.OutputCaseEvidence;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.PartitionEvidence;
 
 import java.util.List;
 
@@ -16,10 +17,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 /**
  * The states a finding's subject may not be in, refused where the value is made.
  *
- * <p>Every one of these was reachable while what a finding is about was a {@code List<Object>} of a
- * message's arguments, and every one of them was found by a reader rather than at construction. The
- * shapes that replaced the list are what says so now, so a subject is what the type promises rather
- * than what its producer happens to be doing.
+ * <p>Two of them are what the list of a message's arguments left to whoever produced it: which input
+ * a case is of lived in the index of the list the evidence arrived in, and nothing said the evidence
+ * agreed. The third is newer than that. A finding about nothing was not constructible while the
+ * subject was a list, because copying one refuses a null element; the shapes that replaced it had to
+ * be told to keep what the copy was doing by accident, and this is where they are held to it.
  */
 class WhatAFindingIsAboutIsHeldByTheTypeTest {
 
@@ -45,6 +47,19 @@ class WhatAFindingIsAboutIsHeldByTheTypeTest {
                 () -> new About.ACaseNoRowAppliesItTo(InputCaseEvidence.none(0), null));
         assertThrows(NullPointerException.class,
                 () -> new About.ACaseNoRowAppliesItTo(null, null));
+    }
+
+    /**
+     * And a class is a class of a position, which the value itself says.
+     *
+     * <p>One step under the shape above it. A finding refusing an absent class would still take one
+     * that named no position, and the reader that found out would be whichever sentence names the
+     * position — which is the whole of what this class was added for.
+     */
+    @Test
+    void aClassOfNoPositionIsRefused() {
+        assertThrows(NullPointerException.class,
+                () -> new PartitionEvidence.AxisClass(null, "No"));
     }
 
     /**

@@ -462,6 +462,16 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
      * reason {@link BorderAssessment.Point} exists: a count, a document and a finding are three
      * readings of one item, and each of them flattening it its own way is where a part goes missing.
      */
-    public record AxisClass(AxisCoverage axis, String name) {}
+    public record AxisClass(AxisCoverage axis, String name) {
+
+        public AxisClass {
+            // A class with no position is the thing this exists to make unsayable. Held here and
+            // not only where a finding takes one: the value is what says a class is a class of
+            // something, and a reader that got one without a position would find out at whichever
+            // sentence names the position first.
+            java.util.Objects.requireNonNull(axis, "a class is a class of a position");
+            java.util.Objects.requireNonNull(name, "a class of a position has a name");
+        }
+    }
 
 }

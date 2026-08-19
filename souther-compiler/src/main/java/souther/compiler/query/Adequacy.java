@@ -1733,7 +1733,7 @@ public final class Adequacy {
      *
      * <p>{@code about} is what the measure established, as itself. Every reader projects it into its
      * own words; nothing here does that for them. It used to be the arguments of a message in the
-     * order its key took them, which made the shape of eleven kinds' payloads follow from what four
+     * order its key took them, which made the shape of every kind's payload follow from what four
      * of them needed for one of three readers, and left the rest carrying whatever a report happened
      * to print.
      *
