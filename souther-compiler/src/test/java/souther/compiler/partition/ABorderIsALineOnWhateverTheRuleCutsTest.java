@@ -286,6 +286,144 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
                 "a proof does not arrive under the opening a failed search gets:\n" + report);
     }
 
+    /** Two positions whose values fill: every distance is a distance, and no distance has a next
+     *  one. */
+    private static String dense(String condition) {
+        return """
+                module example.dense
+
+                data D = Decimal
+                    invariant value >= 0m
+                    invariant value <= 100m
+
+                data No = { why: Int }
+                data Yes = { v: Int }
+                data Result = No | Yes
+
+                behavior f : (a: D, b: D) -> Result
+                    constructs No, Yes
+                let f (a, b) = {
+                    guard %s else No { why = 0 }
+                    Yes { v = 1 }
+                }
+
+                example f
+                    | "under" : (D(1m), D(50m)) -> Yes { v = 1 }
+                    | "over" : (D(50m), D(1m)) -> No { why = 0 }
+                """.formatted(condition);
+    }
+
+    /**
+     * A distance is a number, and it is one on an order with no smallest step too.
+     *
+     * <p>Two decimals a rule holds one apart are one apart. Read as a count of the carrier's steps
+     * and reached by walking them, a carrier with no step answered "nowhere" for every pair — so the
+     * border was met by no row, including the rows that meet it, and nothing could compose one.
+     */
+    @Test
+    void aDistanceOverAnOrderWithNoStepIsStillADistance() {
+        String report = report(dense("a.value <= b.value - 1m"));
+
+        assertTrue(report.contains("point f/a = b - 1"), report);
+        assertFalse(report.contains("nothing composed one"),
+                "a pair one apart is composable over decimals:\n" + report);
+    }
+
+    /**
+     * And it need not be a whole number of anything.
+     *
+     * <p>Held as a count of steps, a threshold of half a step was an {@code ArithmeticException}
+     * thrown out of the measure rather than a rule read or refused.
+     */
+    @Test
+    void aDistanceNeedNotBeAWholeNumberOfSteps() {
+        String report = report(dense("a.value <= b.value - 0.5m"));
+
+        assertTrue(report.contains("point f/a = b - 0.5"), report);
+    }
+
+    /**
+     * The place a pair stands at answers to both positions at the distance the rule names.
+     *
+     * <p>Two positions each left {@code [0, 100]} have every place in common where the rule cuts
+     * where they meet, and only {@code [1, 100]} where it holds them one apart — the pair at zero
+     * puts the first at minus one, which its own rules refuse. Intersected without the distance, the
+     * search offered exactly that pair and the report said every value tried had been refused.
+     */
+    @Test
+    void thePlaceAPairStandsAtAnswersToBothPositionsAtThatDistance() {
+        String report = report(dense("a.value <= b.value - 1m"));
+
+        assertFalse(report.contains("was refused"),
+                "the pair offered is one both positions admit:\n" + report);
+    }
+
+    /**
+     * A form over positions whose values fill is not walked, and nothing is proved by not walking it.
+     *
+     * <p>{@code 2a + 4b = 9} holds at {@code a = 0.5, b = 2}. A search that enumerated the box one
+     * whole number at a time missed it and reported that the rules leave no value there — which is
+     * the one answer a reader may act on, so an unsound proof here is worse than an unsettled
+     * search (ADR-0091).
+     */
+    @Test
+    void aFormOverAnOrderThatFillsIsNotProvedEmptyByAWalkOverWholeNumbers() {
+        String report = report(dense("a.value * 2m + b.value * 4m <= 9m"));
+
+        assertTrue(report.contains("point f/2 * a + 4 * b = 9"), report);
+        assertFalse(report.contains("the rules leave no value at 2 * a + 4 * b"),
+                "nothing walked the whole of this box, so nothing was proved about it:\n" + report);
+    }
+
+    /**
+     * A rule written the other way round is the same rule.
+     *
+     * <p>{@code 48 >= 3a + 6b} and {@code 3a + 6b <= 48} draw one line. Turned round in two of the
+     * three readings and not the third, the first drew its border on {@code -3a - 6b} at
+     * {@code -48} — the same four points under a name no author wrote, and a different line from the
+     * rule written the other way.
+     */
+    @Test
+    void aRuleWrittenTheOtherWayRoundIsTheSameRule() {
+        String report = report(guarded(
+                "48 >= Int.add(Int.multiply(3, a.value), Int.multiply(6, b.value))"));
+
+        assertTrue(report.contains("no row is at the ON point f/3 * a + 6 * b = 48"), report);
+        assertFalse(report.contains("-3 * a"), report);
+    }
+
+    /**
+     * And a rule is read the same way wherever it is written.
+     *
+     * <p>Which quantity a comparison cuts was settled in three places, and the reading of a
+     * behavior's clauses called two of them — so a form in an {@code ensures} drew no border while
+     * the same form in a {@code guard} drew one.
+     */
+    @Test
+    void aFormInAnEnsuresDrawsTheLineAFormInAGuardDraws() {
+        String report = report("""
+                module example.ens
+
+                data Bound = Int
+                    invariant value >= 0
+                    invariant value <= 10
+
+                data No = { why: Int }
+                data Yes = { v: Int }
+                data Result = No | Yes
+
+                behavior f : (a: Bound, b: Bound) -> Result
+                    ensures asked = Yes -> Int.add(Int.multiply(3, a.value),
+                        Int.multiply(6, b.value)) <= 48
+
+                example f
+                    | "one" : (Bound(1), Bound(1)) -> Yes { v = 1 }
+                """);
+
+        assertTrue(report.contains("no row is at the ON point f/3 * a + 6 * b = 48"), report);
+        assertTrue(report.contains("no row is at the OFF point f/3 * a + 6 * b = 51"), report);
+    }
+
     private static String report(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());

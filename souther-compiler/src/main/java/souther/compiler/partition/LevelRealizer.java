@@ -70,25 +70,44 @@ public final class LevelRealizer {
      * fact about the ranges and the pair may be refused or admitted by a rule neither range holds.
      */
     private Realization ofTwo(Standing.OfTwoOnOneCarrier two) {
-        Place common = commonPlace(bounds(two.on()), bounds(two.against()), two.of());
+        Place common = commonPlace(bounds(two.on()), bounds(two.against()), two.of(),
+                two.where().against().asACount());
         if (common == null) {
             return new Realization.Unknown(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE);
         }
-        // Where the first has to stand relative to the second: the place so many of the carrier's
-        // steps from it, and then whatever the item asks of that place.
-        Optional<Place> from = stepped(common, stepsOf(two.where().against()), two.of());
-        if (from.isEmpty()) {
+        // Where the first has to stand relative to the second: the place the level's distance from
+        // it, and then whatever the item asks of that place. Arithmetic on the carrier's counts and
+        // not a walk along it — a walk is an addition that only exists where the order has a
+        // smallest step, so a rule over two decimals had no pair anything could compose.
+        Place from = movedBy(common, two.where().against(), two.of());
+        if (from == null) {
             return new Realization.Unknown(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE);
         }
-        Place at = placeMeeting(relativeTo(two.where(), from.get(), two.of()), two.of(),
-                bounds(two.on()));
-        if (at == null || !meets(two.where(), at.compareTo(from.get()))) {
+        Place at = placeMeeting(relativeTo(two.where(), from, two.of()), two.of(), bounds(two.on()));
+        if (at == null || !meets(two.where(), at.compareTo(from))) {
             return new Realization.Unknown(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE);
         }
         Map<NumericTerm, Place> fixing = new LinkedHashMap<>();
         fixing.put(two.on(), at);
         fixing.put(two.against(), common);
         return new Realization.Found(fixing);
+    }
+
+    /**
+     * The place {@code from} moved by the distance a level names, or null where the carrier holds
+     * none there.
+     *
+     * <p>The distance is a number on the carrier's counts, so this is addition. Where the carrier's
+     * values do not count there is no distance to add, and the only level such a quantity takes is
+     * the one where the two meet — so the place is the one they meet at and any other level names
+     * nothing.
+     */
+    private static Place movedBy(Place from, Level level, Carrier carrier) {
+        Count apart = level.asACount();
+        if (!carrier.counts()) {
+            return apart.signum() == 0 ? from : null;
+        }
+        return carrier.onTheGrid(Count.number(from).plus(apart));
     }
 
     /**
@@ -117,26 +136,57 @@ public final class LevelRealizer {
         // one of them. Asked of the order the form's own values sit on, which is the one place that
         // says whether they step at all.
         boolean whole = levels.neighbour(new Level.ACount(Count.ZERO), Towards.ABOVE).isPresent();
-        Towards outward = over.where() instanceof Criterion.Beyond beyond ? beyond.towards() : null;
-        Level level = over.where().against();
         boolean bounded = true;
-        for (int step = 0; step < (outward == null ? 1 : LEVELS_OF_A_SIDE); step++) {
-            if (outward != null) {
-                Optional<Level> past = levels.neighbour(level, outward);
-                if (past.isEmpty()) {
-                    return new Realization.Unknown(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE);
-                }
-                level = past.get();
-            }
+        for (Level level : levelsToTry(levels, over.where())) {
             Search search = new Search(terms, whole);
-            Map<NumericTerm, Place> found = search.solve(placeOf(level));
+            Map<NumericTerm, Place> found = search.solve(level.asACount());
             if (found != null) {
                 return new Realization.Found(found);
             }
             bounded &= search.exhaustive();
         }
-        return bounded && outward == null ? new Realization.Impossible()
+        // A point asks for one level and a side asks for any level past one, so only the first can
+        // be settled by looking: a walk of the whole box that reaches the level nothing else does is
+        // a proof, and a side that none of the levels tried reached is a side this stopped looking
+        // at.
+        return bounded && over.where() instanceof Criterion.AtTheLevel
+                ? new Realization.Impossible()
                 : new Realization.Unknown(Realization.Unknown.Reason.THE_SEARCH_RAN_OUT);
+    }
+
+    /**
+     * The levels a row at this item could stand at, nearest first.
+     *
+     * <p>A point stands at one level and nowhere else. A side is met anywhere past its own end, and
+     * a class of everything but one level is met at either of the two beside it — so both are asked
+     * for at the levels nearest the one they are written against, outward, until the budget runs
+     * out. Which is why a side that came back empty settles nothing while a point may.
+     */
+    private static List<Level> levelsToTry(LevelSpace levels, Criterion where) {
+        Level from = where.against();
+        return switch (where) {
+            case Criterion.AtTheLevel _ -> List.of(from);
+            case Criterion.Beyond beyond -> outward(levels, from, beyond.towards());
+            case Criterion.AnythingBut _ -> {
+                List<Level> either = new java.util.ArrayList<>(outward(levels, from, Towards.ABOVE));
+                either.addAll(outward(levels, from, Towards.BELOW));
+                yield either;
+            }
+        };
+    }
+
+    private static List<Level> outward(LevelSpace levels, Level from, Towards towards) {
+        List<Level> out = new java.util.ArrayList<>();
+        Level at = from;
+        for (int step = 0; step < LEVELS_OF_A_SIDE; step++) {
+            Optional<Level> past = levels.neighbour(at, towards);
+            if (past.isEmpty()) {
+                break;
+            }
+            at = past.get();
+            out.add(at);
+        }
+        return out;
     }
 
     /** How far out a side is looked at before the search gives up on it. A side is met anywhere past
@@ -175,8 +225,8 @@ public final class LevelRealizer {
             return everyEndKnown && taken < STEPS_A_SEARCH_MAY_TAKE;
         }
 
-        Map<NumericTerm, Place> solve(Place target) {
-            return walk(0, Count.number(target).at()) ? fixing() : null;
+        Map<NumericTerm, Place> solve(Count target) {
+            return walk(0, target.at()) ? fixing() : null;
         }
 
         private Map<NumericTerm, Place> fixing() {
@@ -193,25 +243,44 @@ public final class LevelRealizer {
             }
             java.math.BigDecimal coef = terms.get(i).getValue();
             NumericDomain.Bounds within = bounds(terms.get(i).getKey());
-            java.math.BigDecimal low = endOf(within.min());
-            java.math.BigDecimal high = endOf(within.max());
+            java.math.BigDecimal low = endOf(within.min(), true);
+            java.math.BigDecimal high = endOf(within.max(), false);
             if (i == terms.size() - 1) {
-                // The last position is solved rather than tried: what is left over has to be its
-                // coefficient's multiple, and the value that makes it up is one number.
-                java.math.BigDecimal[] divided = owed.divideAndRemainder(coef);
-                if (divided[1].signum() != 0 || (whole && divided[0].stripTrailingZeros().scale() > 0)
-                        || below(divided[0], low) || above(divided[0], high)) {
+                // The last position is solved rather than tried. Where its values step, what is left
+                // over has to be its coefficient's multiple; where they fill, it is a division and
+                // the answer is whatever number it comes to — asked for a whole number there, a form
+                // over decimals came back unsolvable at every level it holds.
+                java.math.BigDecimal solved;
+                if (whole) {
+                    java.math.BigDecimal[] divided = owed.divideAndRemainder(coef);
+                    if (divided[1].signum() != 0) {
+                        return false;
+                    }
+                    solved = divided[0];
+                } else {
+                    try {
+                        solved = owed.divide(coef);
+                    } catch (ArithmeticException nonTerminating) {
+                        // A quotient with no end is not a value a model writes, and rounding one
+                        // would offer a row that misses the level by however much was rounded off.
+                        everyEndKnown = false;
+                        return false;
+                    }
+                }
+                if (below(solved, low) || above(solved, high)) {
                     return false;
                 }
-                at[i] = new Count(divided[0]);
+                at[i] = new Count(solved);
                 return true;
             }
-            if (low == null || high == null) {
-                // A position nothing bounds is not one this walks. Held at nothing, it is left where
-                // the rules leave everything else and the answer says the search did not settle it.
+            if (low == null || high == null || !whole) {
+                // Not a position this can walk. One nothing bounds has no ends to run between; one
+                // whose values fill has no next value to step to, so there is no enumeration of it
+                // at all. Either way this takes one value and goes on, and says that what it walked
+                // was not the whole of the box — a proof may only come out of a walk that was.
                 everyEndKnown = false;
-                at[i] = Count.ZERO;
-                return walk(i + 1, owed);
+                at[i] = low != null ? new Count(low) : Count.ZERO;
+                return walk(i + 1, owed.subtract(coef.multiply(Count.number(at[i]).at())));
             }
             for (java.math.BigDecimal x = low; x.compareTo(high) <= 0;
                     x = x.add(java.math.BigDecimal.ONE)) {
@@ -226,13 +295,29 @@ public final class LevelRealizer {
             return false;
         }
 
-        private java.math.BigDecimal endOf(Endpoint end) {
+        /**
+         * One end of what the rules leave a position, as a number this can start or stop at.
+         *
+         * <p>Rounded inwards and never outwards, and the excluded end excluded. A bound of
+         * {@code > 0} leaves one, not zero; a bound of {@code >= 2.4} over whole numbers leaves
+         * three, not two. Rounded the other way, the search offers a value the position refuses and
+         * the decoder turns the row down — which arrives as every candidate having been rejected,
+         * and reads as the model refusing an edge it admits.
+         */
+        private java.math.BigDecimal endOf(Endpoint end, boolean low) {
             if (end == null || !(end.at() instanceof Count count)) {
                 return null;
             }
             java.math.BigDecimal number = count.at();
-            return whole ? number.setScale(0, end.inclusive()
-                    ? java.math.RoundingMode.HALF_UP : java.math.RoundingMode.HALF_UP) : number;
+            if (!whole) {
+                return number;
+            }
+            java.math.BigDecimal onTheGrid = number.setScale(0,
+                    low ? java.math.RoundingMode.CEILING : java.math.RoundingMode.FLOOR);
+            // An end the rules exclude, already on the grid, is one value further in.
+            boolean atTheEnd = onTheGrid.compareTo(number) == 0;
+            return end.inclusive() || !atTheEnd ? onTheGrid
+                    : onTheGrid.add(java.math.BigDecimal.valueOf(low ? 1 : -1));
         }
 
         private static boolean below(java.math.BigDecimal x, java.math.BigDecimal low) {
@@ -320,32 +405,40 @@ public final class LevelRealizer {
      * caller is the one holding whether that happened.
      */
     public static Place commonPlace(NumericDomain.Bounds on, NumericDomain.Bounds against,
-                                    Carrier carrier) {
-        Endpoint min = Endpoint.lower(on == null ? null : on.min(),
+                                    Carrier carrier, Count apart) {
+        NumericDomain.Bounds moved = carrier.counts() ? shifted(on, apart.negate()) : on;
+        Endpoint min = Endpoint.lower(moved == null ? null : moved.min(),
                 against == null ? null : against.min());
-        Endpoint max = Endpoint.upper(on == null ? null : on.max(),
+        Endpoint max = Endpoint.upper(moved == null ? null : moved.max(),
                 against == null ? null : against.max());
         return carrier.somethingInside(min, max);
     }
 
-    /** The place {@code steps} of the carrier's own steps from {@code from}, or nothing where the
-     *  carrier names no value that far. */
-    private static Optional<Place> stepped(Place from, long steps, Carrier carrier) {
-        BoundaryDomain domain = BoundaryDomain.on(carrier);
-        Optional<Place> walked = Optional.of(from);
-        for (long taken = 0; taken < Math.abs(steps); taken++) {
-            walked = walked.flatMap(at -> steps > 0 ? domain.successor(at) : domain.predecessor(at));
+    /**
+     * What the rules leave one position, read as what they leave the other one standing that far
+     * from it.
+     *
+     * <p>The distance is part of the question. Two positions each left {@code [0, 100]} have every
+     * place in common where the rule cuts where they meet, and only {@code [1, 100]} where it holds
+     * them one apart — the pair at zero would put the first at minus one, which its own rules
+     * refuse. Intersected without the distance, the search offered exactly that pair and the report
+     * said every value tried had been refused.
+     */
+    private static NumericDomain.Bounds shifted(NumericDomain.Bounds bounds, Count by) {
+        if (bounds == null) {
+            return null;
         }
-        return walked;
+        return new NumericDomain.Bounds(moved(bounds.min(), by), moved(bounds.max(), by));
+    }
+
+    private static Endpoint moved(Endpoint end, Count by) {
+        return end == null || !(end.at() instanceof Count count) ? end
+                : new Endpoint(count.plus(by), end.inclusive());
     }
 
     private NumericDomain.Bounds bounds(NumericTerm term) {
         NumericDomain.Bounds held = within == null ? null : within.apply(term);
         return held == null ? new NumericDomain.Bounds(null, null) : held;
-    }
-
-    private static long stepsOf(Level level) {
-        return level instanceof Level.ACount count ? count.at().at().longValueExact() : 0;
     }
 
     private static Place placeOf(Level level) {

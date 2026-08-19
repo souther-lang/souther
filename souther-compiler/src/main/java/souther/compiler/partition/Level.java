@@ -69,6 +69,21 @@ public sealed interface Level {
         }
     }
 
+    /**
+     * This level as the number it is.
+     *
+     * <p>Only where it is one. A level on a carrier is a value of that carrier and may be a string,
+     * and a caller that has established it is holding a number — a distance, or what a form comes to
+     * — is holding one of these. The narrowing is here so that it is one line to find rather than a
+     * cast written wherever a number was wanted.
+     */
+    default Count asACount() {
+        if (!(this instanceof ACount count)) {
+            throw new IllegalStateException("a level that is not a number was asked for one: " + this);
+        }
+        return count.at();
+    }
+
     /** What makes two levels one level: what they are, and not how the number was written. The same
      *  rule {@link Place#key()} states, asked of a level so that a reader holding one never reaches
      *  past it for the place inside. */

@@ -306,42 +306,70 @@ public final class GuardThresholds {
             // comparison has no site is this reader and the plan disagreeing about what a condition
             // is made of.
             int site = plan.requireComparisonSiteOf(each.comparison());
-            ComparedLine here = readOne(behavior, iff, each, plan, guard, site, reads, symbols,
-                    out, singled);
-            if (here != null) {
-                made.add(each.comparison());
-                raises(accounting, plan, site, guard, iff, each.comparison(),
-                        here.term().path(), here.term(),
-                        subjectsOf(each.comparison(), reads, symbols, null),
-                        new Required.LineRead.ALineOnThePosition());
+            // What the comparison cuts is one question with one answer ({@link Cutting}). What is
+            // added here is what meeting the line takes, which is a guard's own answer and no other
+            // rule's.
+            Cutting cutting = Cutting.of(behavior, each.comparison(), reads, symbols);
+            if (cutting == null) {
+                raisesNoLine(accounting, plan, site, guard, iff, each.comparison(), reads, symbols);
                 continue;
             }
-            // A line this could not read as a count of one position may still be one between two.
-            // Not added to `made`: what the partition could not read here it still could not read,
-            // and a boundary answering does not answer for it (spec §example-partition).
-            int drawn = between.size();
-            between(behavior, iff, each, plan, guard, site, reads, symbols, between);
-            List<TermPath> named = new ArrayList<>();
-            mentioned(each.comparison().left(), reads, symbols, named);
-            mentioned(each.comparison().right(), reads, symbols, named);
-            if (named.isEmpty()) {
-                continue;   // a comparison about no position of the input raises nothing about one
+            OriginRef.GuardOrigin origin = new OriginRef.GuardOrigin(
+                    new RuleRef.Guard(plan.site(site).comparison()),
+                    new OriginRef.GuardOrigin.Read(guard, site, Citation.of(iff.pos())),
+                    cutting.valueBelongsBelow(), each.witness(), cutting.holdsAtTheValue(),
+                    cutting.singles());
+            NumericTerm divided = cutting.dividedPosition();
+            if (divided == null) {
+                // A line on something that is not one position's own values. Not added to `made`:
+                // what the partition could not read here it still could not read, and a boundary
+                // answering does not answer for it (spec §example-partition).
+                Border drawn = Border.at(cutting.target(), origin, null);
+                if (drawn != null && between.stream().noneMatch(had -> had.equals(drawn))) {
+                    between.add(drawn);
+                }
+                List<TermPath> named = new ArrayList<>();
+                mentioned(each.comparison().left(), reads, symbols, named);
+                mentioned(each.comparison().right(), reads, symbols, named);
+                if (named.isEmpty()) {
+                    continue;   // a comparison about no position of the input raises nothing
+                }
+                // Filed at the position the reading names first, which is the one a line between two
+                // would be read `on`. One comparison is one line however many positions it mentions.
+                raises(accounting, plan, site, guard, iff, each.comparison(), named.get(0),
+                        comparedTerm(each.comparison(), reads, symbols),
+                        subjectsOf(each.comparison(), reads, symbols, null),
+                        new Required.LineRead.ALineBetweenTwoPositions());
+                continue;
             }
-            // Filed at the position the reading names first, which is the one a line between two
-            // would be read `on`. One comparison is one line however many positions it mentions, so
-            // this is where a reader is sent and not a question raised once apiece.
-            // The side that names the position is readable even where the other one is not, so
-            // what the line is on is known here too: a bound this could not fold is still a bound on
-            // a length where it was written about one. Read off the position alone, a question about
-            // a count came back spelled as the string it counts.
-            NumericTerm about = comparedTerm(each.comparison(), reads, symbols);
-            raises(accounting, plan, site, guard, iff, each.comparison(), named.get(0), about,
+            made.add(each.comparison());
+            Place value = ((Level.OnACarrier) cutting.at()).at();
+            if (cutting.singles()) {
+                singled.add(new Guards.Singled(divided, value, origin));
+            } else {
+                out.add(new Threshold(divided, value, cutting.valueBelongsBelow(), origin));
+            }
+            raises(accounting, plan, site, guard, iff, each.comparison(), divided.path(), divided,
                     subjectsOf(each.comparison(), reads, symbols, null),
-                    between.size() > drawn ? new Required.LineRead.ALineBetweenTwoPositions()
-                            : new Required.LineRead.NoLine(
-                                    why(each.comparison(), reads, symbols)));
+                    new Required.LineRead.ALineOnThePosition());
         }
         return made;
+    }
+
+    /** What a comparison nothing read raises, filed at the position the reading names first. */
+    private static void raisesNoLine(List<Guards.AtAPosition> accounting, CoverageSites.Plan plan,
+                                     int site, CoverageSites.GuardRef guard, Core.If iff,
+                                     Core.Binary comparison, InputReads reads, Symbols symbols) {
+        List<TermPath> named = new ArrayList<>();
+        mentioned(comparison.left(), reads, symbols, named);
+        mentioned(comparison.right(), reads, symbols, named);
+        if (named.isEmpty()) {
+            return;   // a comparison about no position of the input raises nothing about one
+        }
+        raises(accounting, plan, site, guard, iff, comparison, named.get(0),
+                comparedTerm(comparison, reads, symbols),
+                subjectsOf(comparison, reads, symbols, null),
+                new Required.LineRead.NoLine(why(comparison, reads, symbols)));
     }
 
     /**
@@ -442,89 +470,6 @@ public final class GuardThresholds {
                         guard.origin().kind(), Citation.of(comparison.pos())))));
     }
 
-    /**
-     * The line a comparison between two positions draws: the place where the two hold one count.
-     *
-     * <p>Read where a threshold could not be, and about the same comparison. A rule relating two
-     * positions is not a partition of either (spec §what-a-position-admits), and that is an answer
-     * about the classes rather than about the line — the row on the line is what tells a rule written
-     * {@code >} from one written {@code >=}, and it is writable whenever the two positions have a
-     * count they can both hold.
-     *
-     * <p>Asked of the carrier and not of the type. Two operands compare only when they are of one type,
-     * and a type is not what makes a line measurable: an enumeration's case is comparable on its sum's
-     * order while carrying no places of its own, and two newtypes of one base are two types whose
-     * values are ordered alike. What both sides can be read as is the carrier, so that is what is
-     * required to be one.
-     *
-     * <p>An equality is not one of these. {@code a == b} puts the whole of one arm on the line, and
-     * that arm is already a row the branch measure asks for.
-     */
-    private static void between(String behavior, Core.If iff, Placed placed, CoverageSites.Plan plan,
-                                CoverageSites.GuardRef guard, int site, InputReads reads,
-                                Symbols symbols, List<Border> out) {
-        ComparedTerms drawn = ComparedTerms.of(placed.comparison(), reads, symbols);
-        if (drawn == null) {
-            overAForm(behavior, iff, placed, plan, guard, site, reads, symbols, out);
-            return;
-        }
-        // Which side of the line the pair on it belongs to is the compared terms' to derive, so
-        // that a border reads a rule relating two positions the way it reads a bound on one.
-        // `singles` is false because this is a line and not a value singled out, and the row that
-        // meets it is the row on it. The line is where the two meet, which is where they stand no
-        // steps apart — and no rule narrows a distance here, so the border is read against
-        // everything the order holds.
-        OriginRef.GuardOrigin origin = new OriginRef.GuardOrigin(
-                new RuleRef.Guard(plan.site(site).comparison()),
-                new OriginRef.GuardOrigin.Read(guard, site, Citation.of(iff.pos())),
-                drawn.valueBelongsBelow(), placed.witness(), drawn.holdsAtTheLine(), false);
-        Border made = Border.at(
-                BoundaryTarget.at(new BorderQuantity.Apart(behavior, drawn.on(), drawn.against(),
-                        drawn.carrier()), BorderQuantity.steps(drawn.stepsApart())),
-                origin, null);
-        if (out.stream().noneMatch(had -> had.equals(made))) {
-            out.add(made);
-        }
-    }
-
-    /**
-     * The line a comparison over an arithmetic form draws: the place where the form meets the value
-     * the rule names.
-     *
-     * <p>Read where neither of the narrower readings could be, and about the same comparison. This is
-     * the case domain testing exists for — a partition defined by a condition over more than one
-     * variable — and the four sides of the box its positions sit in are not it.
-     *
-     * <p>It divides no position. Which values of one are on which side depends on the others, and a
-     * class is a set of values of one position, so this is a line without a partition and the two
-     * answers are kept apart.
-     */
-    private static void overAForm(String behavior, Core.If iff, Placed placed,
-                                  CoverageSites.Plan plan, CoverageSites.GuardRef guard, int site,
-                                  InputReads reads, Symbols symbols, List<Border> out) {
-        AffineReading read = AffineReading.of(placed.comparison(), reads, symbols);
-        if (read == null || !read.orders()) {
-            return;
-        }
-        Carrier carrier = read.carrier(symbols,
-                term -> term.carrierAt(placed.comparison().left().type(), symbols));
-        if (carrier == null || !carrier.counts()) {
-            return;
-        }
-        ComparisonClaim.Cut cut = (ComparisonClaim.Cut) read.claim();
-        OriginRef.GuardOrigin origin = new OriginRef.GuardOrigin(
-                new RuleRef.Guard(plan.site(site).comparison()),
-                new OriginRef.GuardOrigin.Read(guard, site, Citation.of(iff.pos())),
-                cut.valueBelongsBelow(), placed.witness(), cut.holdsAtTheValue(), false);
-        Border made = Border.at(
-                BoundaryTarget.at(new BorderQuantity.OverAForm(behavior, read.form(), carrier),
-                        new Level.ACount(new souther.compiler.numeric.Count(read.cut()))),
-                origin, null);
-        if (made != null && out.stream().noneMatch(had -> had.equals(made))) {
-            out.add(made);
-        }
-    }
-
     /** One comparison of a condition, and which arms of the {@code if} prove it was evaluated. */
     private record Placed(Core.Binary comparison, OriginRef.GuardOrigin.Witness witness) {}
 
@@ -613,33 +558,6 @@ public final class GuardThresholds {
         }
     }
 
-
-    /** The position a line was drawn on by one comparison, or null where none was. */
-    private static ComparedLine readOne(String behavior, Core.If iff, Placed placed,
-                                    CoverageSites.Plan plan, CoverageSites.GuardRef guard, int site,
-                                    InputReads reads,
-                                    Symbols symbols, List<Threshold> out,
-                                    List<Guards.Singled> singled) {
-        Core.Binary comparison = placed.comparison();
-        // What the comparison draws is read the same way wherever a comparison is written, so it is
-        // asked of the one reader that says. What is added here is what meeting the line takes,
-        // which is a guard's own answer and no other rule's.
-        ComparedLine drawn = ComparedLine.of(comparison, reads, symbols);
-        if (drawn == null) {
-            return null;
-        }
-        OriginRef.GuardOrigin origin = new OriginRef.GuardOrigin(
-                new RuleRef.Guard(plan.site(site).comparison()),
-                new OriginRef.GuardOrigin.Read(guard, site, Citation.of(iff.pos())),
-                drawn.valueBelongsBelow(), placed.witness(), drawn.holdsAtTheValue(),
-                drawn.singles());
-        if (drawn.singles()) {
-            singled.add(new Guards.Singled(drawn.term(), drawn.value(), origin));
-            return drawn;
-        }
-        out.add(new Threshold(drawn.term(), drawn.value(), drawn.valueBelongsBelow(), origin));
-        return drawn;
-    }
 
     private static CoverageSites.GuardRef guardOf(CoverageSites.Plan plan, Core.If iff) {
         int[] arms = plan.probesOf(iff);

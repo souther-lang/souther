@@ -58,8 +58,13 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
         if (whole.coefs().isEmpty()) {
             return null;   // a comparison of constants states nothing about any position
         }
-        return new AffineReading(new LinearForm<>(BigDecimal.ZERO, whole.coefs()),
+        AffineReading read = new AffineReading(new LinearForm<>(BigDecimal.ZERO, whole.coefs()),
                 whole.constant().negate(), ComparisonClaim.of(comparison.op()));
+        // Turned round here and nowhere else. `48 >= 3a + 6b` and `3a + 6b <= 48` are one rule, and
+        // a reader that met the first without turning it round drew its border on `-3a - 6b` — the
+        // same four points under a name no author wrote, and a different line from the rule written
+        // the other way.
+        return read.facesTheOtherWay() ? read.mirrored() : read;
     }
 
     /** {@code e} as an affine form over the behavior's positions, or null where it is not one. */
@@ -85,9 +90,9 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
         });
     }
 
-    /** The one position this cuts where it cuts one with a coefficient of one, or null. Read after
-     *  {@link #mirrored()}, so a form written {@code -x} is one written {@code x} against the
-     *  opposite threshold. */
+    /** The one position this cuts where it cuts one with a coefficient of one, or null. A form
+     *  written {@code -x} has already been turned round by {@link #of}, so this asks about the
+     *  coefficient as the canonical form has it. */
     NumericTerm oneCoordinate() {
         if (form.coefs().size() != 1) {
             return null;
@@ -125,13 +130,13 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
      * <p>{@code -x <= -5} states what {@code x >= 5} states. Which of the two a reading meets is
      * whichever way the author wrote the subtraction, and it is not a difference between two rules.
      */
-    AffineReading mirrored() {
+    private AffineReading mirrored() {
         return new AffineReading(form.negate(), cut.negate(), turned(claim));
     }
 
     /** Whether the quantity is written with every coefficient negative, which is the same statement
      *  turned round. */
-    boolean facesTheOtherWay() {
+    private boolean facesTheOtherWay() {
         return form.coefs().values().stream().allMatch(c -> c.signum() < 0);
     }
 

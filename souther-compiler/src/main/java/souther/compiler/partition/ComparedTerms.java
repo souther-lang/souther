@@ -7,6 +7,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.numeric.Count;
 
 /**
  * The line a comparison between two positions draws: the place where the two hold one count.
@@ -34,12 +35,13 @@ import souther.compiler.inputs.NumericTerm;
  *                       nothing about either side of it: {@code a < b} and {@code a > b} agree there
  *                       and are opposite everywhere else. Together the two say which way the rule is
  *                       satisfied, which is what a border is read off
- * @param stepsApart     how far apart the rule holds them, in the carrier's own steps. Zero where
- *                       the rule cuts where they meet, which is every comparison written as one
- *                       position against another
+ * @param stepsApart     how far apart the rule holds them, as a number on the carrier's counts.
+ *                       Zero where the rule cuts where they meet, which is every comparison written
+ *                       as one position against another. A number and not a count of steps: an order
+ *                       with no smallest step still holds its values a distance apart
  */
 record ComparedTerms(NumericTerm on, NumericTerm against, Carrier carrier,
-                     boolean holdsAtTheLine, boolean valueBelongsBelow, long stepsApart) {
+                     boolean holdsAtTheLine, boolean valueBelongsBelow, Count stepsApart) {
 
     /**
      * Which side of the line the pair standing on it belongs to.
@@ -66,7 +68,7 @@ record ComparedTerms(NumericTerm on, NumericTerm against, Carrier carrier,
             NumericTerm against = GuardThresholds.termOf(comparison.right(), reads, symbols);
             if (on != null && against != null) {
                 return new ComparedTerms(on, against, carrier, holdsAtTheLine(comparison.op()),
-                        holdsAtTheLine(comparison.op()) == !onIsAbove(comparison.op()), 0);
+                        holdsAtTheLine(comparison.op()) == !onIsAbove(comparison.op()), Count.ZERO);
             }
         }
         return fromTheForm(comparison, carrier, reads, symbols);
@@ -90,16 +92,15 @@ record ComparedTerms(NumericTerm on, NumericTerm against, Carrier carrier,
             return null;
         }
         NumericTerm[] two = read.twoCoordinates();
-        if (two == null) {
-            read = read.mirrored();
-            two = read.twoCoordinates();
-        }
         if (two == null || !carrier.counts()) {
             return null;
         }
         ComparisonClaim.Cut cut = (ComparisonClaim.Cut) read.claim();
+        // The distance as the number it is. Held as a count of the carrier's steps, a threshold
+        // that is not a whole number of them — which two decimals a rule holds half apart give —
+        // was an exception thrown out of the measure.
         return new ComparedTerms(two[0], two[1], carrier, cut.holdsAtTheValue(),
-                cut.valueBelongsBelow(), read.cut().longValueExact());
+                cut.valueBelongsBelow(), new Count(read.cut()));
     }
 
     /** Which side the left of the comparison is on where the comparison is satisfied. Read off the

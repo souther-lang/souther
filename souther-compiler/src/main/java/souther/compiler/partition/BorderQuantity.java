@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
-import souther.compiler.inputs.BoundaryDomain;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
@@ -116,11 +115,15 @@ public sealed interface BorderQuantity {
      * position — so this is a line without a partition, and the two answers are kept apart rather
      * than the second refusing the first.
      *
-     * <p>Its levels are a count of the carrier's own steps and are on no carrier: two strings a rule
-     * holds apart have no number between them, and a carrier with no numbers asked to write one is
-     * what {@link Level} exists to make impossible. So a level here is stepped <em>from</em> the
-     * other position rather than turned into a value — which is also how a report writes it, and the
-     * two agree because there is one answer.
+     * <p>Its levels are the difference of two counts and are on no carrier: two strings a rule holds
+     * apart have no number between them, and a carrier with no numbers asked to write one is what
+     * {@link Level} exists to make impossible. So a level here is written <em>beside</em> the other
+     * position rather than turned into a value of either.
+     *
+     * <p>The difference, and not a number of steps walked from one side to the other. A walk is an
+     * addition that only exists where the order has a smallest step, and two decimals a rule holds
+     * one apart are one apart — read by walking, every such rule was met by no row and had no row
+     * anything could compose.
      *
      * <p>One carrier, because both sides are ordered by it. Two operands may be comparable and share
      * no carrier — an enumeration's case is comparable on its sum's order without ranging over it —
@@ -154,18 +157,23 @@ public sealed interface BorderQuantity {
                     ? LevelSpace.steppingBy(java.math.BigDecimal.ONE) : LevelSpace.dense();
         }
 
+        @Override
+        public Carrier carrier() {
+            return of;
+        }
+
         /**
          * Both sides through the term's own reader, which is the one that reaches a count through the
          * newtype a position may be written as. Compared as places and not as observed values: the
          * two positions are of one carrier and need not be of one type — {@code Charge} against
          * {@code Ceiling} is what the domain this was found in is made of — and two values of
          * different types are never equal however much the numbers inside them agree.
+         *
+         * <p>How far apart they stand is the difference of two counts, and where the carrier's
+         * values do not count it is their order and nothing else. Taken by stepping one side to the
+         * other, a carrier with no step answered "nowhere" for every pair — so a rule over two
+         * decimals read as met by no row, including the rows that meet it.
          */
-        @Override
-        public Carrier carrier() {
-            return of;
-        }
-
         @Override
         public Stands standsAt(Criterion where, Observation row) {
             NumericTerm.Reading here = on.read(row.at(on.path()), of);
@@ -178,13 +186,27 @@ public sealed interface BorderQuantity {
                     || !(there instanceof NumericTerm.Reading.Number againstAt)) {
                 return Stands.NO;
             }
-            // Stepped from the other position rather than subtracted. A carrier whose values do not
-            // count has no difference to take and does have an order, and stepping asks it only for
-            // what it has: where the step is zero every carrier answers, and where it is not the
-            // criterion only ever names a step the order was already asked for.
-            Optional<Place> from = stepped(againstAt.value(), where.against());
-            return from.isPresent() && holdsBetween(where, onAt.value(), from.get())
-                    ? Stands.YES : Stands.NO;
+            if (!of.counts()) {
+                // No number between them, and an order all the same. The only level such a quantity
+                // takes is the one where they meet, so what the item asks is which way round they
+                // stand from it.
+                return holdsByOrder(where, onAt.value().compareTo(againstAt.value()))
+                        ? Stands.YES : Stands.NO;
+            }
+            Count apart = Count.number(onAt.value()).minus(Count.number(againstAt.value()));
+            return where.holds(levels(), new Level.ACount(apart)) ? Stands.YES : Stands.NO;
+        }
+
+        /** Whether a pair standing {@code order} round from where they meet is at the item, for a
+         *  carrier whose values do not count. Only the level where they meet is a level here, so an
+         *  item is at it, above it or below it and nothing else. */
+        private static boolean holdsByOrder(Criterion where, int order) {
+            return switch (where) {
+                case Criterion.AtTheLevel _ -> order == 0;
+                case Criterion.Beyond beyond ->
+                        beyond.towards() == Towards.ABOVE ? order > 0 : order < 0;
+                case Criterion.AnythingBut _ -> order != 0;
+            };
         }
 
         @Override
@@ -203,17 +225,18 @@ public sealed interface BorderQuantity {
         }
 
         /**
-         * The other position, stepped.
+         * The other position, and how far from it.
          *
-         * <p>The step is on the distance and not on either position, so it is written beside the
-         * other one rather than folded into a value: a reader is told that the point is so far from
-         * where the two meet, which is what it is.
+         * <p>The distance is on neither position, so it is written beside the other one rather than
+         * folded into a value: a reader is told that the point is so far from where the two meet,
+         * which is what it is.
          */
         @Override
         public String writtenAt(Level level) {
-            long steps = stepsOf(level);
-            return steps == 0 ? against.toString()
-                    : steps < 0 ? against + " - " + -steps : against + " + " + steps;
+            Count apart = level.asACount();
+            return apart.signum() == 0 ? against.toString()
+                    : apart.signum() < 0 ? against + " - " + apart.negate().key()
+                            : against + " + " + apart.key();
         }
 
         @Override
@@ -221,39 +244,13 @@ public sealed interface BorderQuantity {
             return BoundaryTarget.Shape.BETWEEN_POSITIONS;
         }
 
-        /** The place the {@code on} term has to be at or past, which is the other one moved by the
-         *  level. Empty where the carrier names no value that far, which is what leaves such an item
-         *  unwritable rather than at a value nobody named. */
-        Optional<Place> stepped(Place from, Level by) {
-            BoundaryDomain domain = BoundaryDomain.on(of);
-            long steps = stepsOf(by);
-            Optional<Place> walked = Optional.of(from);
-            for (long taken = 0; taken < Math.abs(steps); taken++) {
-                walked = walked.flatMap(
-                        at -> steps > 0 ? domain.successor(at) : domain.predecessor(at));
-            }
-            return walked;
-        }
-
-        private static long stepsOf(Level level) {
+        /** The distance a level names, as a number of the carrier's counts. */
+        static Count apartBy(Level level) {
             if (!(level instanceof Level.ACount count)) {
                 throw new IllegalStateException(
-                        "a distance was asked about a level that is not a number of steps: " + level);
+                        "a distance was asked about a level that is not a number: " + level);
             }
-            return count.at().at().longValueExact();
-        }
-
-        /** Whether {@code at} stands the criterion's way of the place the level names. Read off the
-         *  criterion's own relation, so that the two positions are compared the way one position and
-         *  a value are. */
-        private static boolean holdsBetween(Criterion where, Place at, Place from) {
-            int order = at.compareTo(from);
-            return switch (where) {
-                case Criterion.AtTheLevel _ -> order == 0;
-                case Criterion.Beyond beyond ->
-                        beyond.towards() == Towards.ABOVE ? order > 0 : order < 0;
-                case Criterion.AnythingBut _ -> order != 0;
-            };
+            return count.at();
         }
     }
 
@@ -448,9 +445,8 @@ public sealed interface BorderQuantity {
         ObservedValue at(TermPath path);
     }
 
-    /** A level of this quantity written as a whole number of its own steps, for a caller that has one
-     *  rather than a level. */
-    static Level steps(long n) {
-        return new Level.ACount(Count.of(n));
+    /** A number as a level of this quantity, for a caller holding one rather than a level. */
+    static Level at(Count count) {
+        return new Level.ACount(count);
     }
 }

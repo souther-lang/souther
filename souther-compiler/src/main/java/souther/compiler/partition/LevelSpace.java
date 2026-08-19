@@ -100,14 +100,27 @@ public interface LevelSpace {
                 return carrier != null && carrier.onTheGrid(placeOf(level)) != null;
             }
 
+            /**
+             * The level itself where the carrier holds it, and the first count it does hold that way
+             * otherwise.
+             *
+             * <p>Rounded the way {@code towards} asks and never the other way. Not every number
+             * between two of a carrier's counts is one of them — halfway between two moments is a
+             * number and not a date-time — and a threshold written between two of them has its two
+             * points either side of it, not both on whichever side rounding happened to land.
+             */
             @Override
             public Optional<Level> nearestAtOrBeyond(Level from, Towards towards) {
                 if (attainable(from)) {
                     return Optional.of(from);
                 }
-                Place onTheGrid = carrier == null ? null : carrier.onTheGrid(placeOf(from));
-                return onTheGrid == null ? Optional.empty()
-                        : Optional.of(new Level.OnACarrier(carrier, onTheGrid));
+                if (carrier == null || !(placeOf(from) instanceof Count count)) {
+                    return Optional.empty();   // an order with no numbers holds what it holds
+                }
+                Place rounded = carrier.onTheGrid(count.rounded(towards == Towards.ABOVE
+                        ? java.math.RoundingMode.CEILING : java.math.RoundingMode.FLOOR));
+                return rounded == null ? Optional.empty()
+                        : Optional.of(new Level.OnACarrier(carrier, rounded));
             }
 
             @Override

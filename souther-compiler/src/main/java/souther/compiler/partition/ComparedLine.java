@@ -32,8 +32,8 @@ import souther.compiler.numeric.Place;
  *                          values either side of it. An equality says nothing about ranges: what it
  *                          distinguishes is the value from every other value
  */
-record ComparedLine(NumericTerm term, Place value, boolean valueBelongsBelow,
-                    boolean holdsAtTheValue, boolean singles) {
+record ComparedLine(NumericTerm term, Place value, Carrier carrier,
+                    boolean valueBelongsBelow, boolean holdsAtTheValue, boolean singles) {
 
     /**
      * What {@code comparison} draws, or null where it draws nothing.
@@ -59,13 +59,16 @@ record ComparedLine(NumericTerm term, Place value, boolean valueBelongsBelow,
             // and which quantity a rule cuts is the arithmetic's answer rather than the spelling's.
             return fromTheForm(comparison, reads, symbols);
         }
+        Carrier carrier = Carrier.ofValue(
+                op == comparison.op() ? comparison.left().type() : comparison.right().type(),
+                symbols);
         return switch (ComparisonClaim.of(op)) {
-            case ComparisonClaim.Cut cut -> new ComparedLine(term, value, cut.valueBelongsBelow(),
-                    cut.holdsAtTheValue(), false);
+            case ComparisonClaim.Cut cut -> new ComparedLine(term, value, carrier,
+                    cut.valueBelongsBelow(), cut.holdsAtTheValue(), false);
             // A value singled out has no low side of its own — the values either side of it are one
             // class — so the side is written down as one answer and read by nobody.
             case ComparisonClaim.Singled singled ->
-                    new ComparedLine(term, value, true, singled.holdsAtTheValue(), true);
+                    new ComparedLine(term, value, carrier, true, singled.holdsAtTheValue(), true);
             case ComparisonClaim.Nothing _ -> null;
         };
     }
@@ -84,9 +87,6 @@ record ComparedLine(NumericTerm term, Place value, boolean valueBelongsBelow,
         if (read == null) {
             return null;
         }
-        if (read.facesTheOtherWay()) {
-            read = read.mirrored();
-        }
         NumericTerm term = read.oneCoordinate();
         Carrier carrier = Carrier.ofValue(comparison.left().type(), symbols);
         if (term == null || carrier == null || !carrier.counts()) {
@@ -94,10 +94,10 @@ record ComparedLine(NumericTerm term, Place value, boolean valueBelongsBelow,
         }
         Place value = Count.of(read.cut());
         return switch (read.claim()) {
-            case ComparisonClaim.Cut cut -> new ComparedLine(term, value, cut.valueBelongsBelow(),
-                    cut.holdsAtTheValue(), false);
+            case ComparisonClaim.Cut cut -> new ComparedLine(term, value, carrier,
+                    cut.valueBelongsBelow(), cut.holdsAtTheValue(), false);
             case ComparisonClaim.Singled singled ->
-                    new ComparedLine(term, value, true, singled.holdsAtTheValue(), true);
+                    new ComparedLine(term, value, carrier, true, singled.holdsAtTheValue(), true);
             case ComparisonClaim.Nothing _ -> null;
         };
     }

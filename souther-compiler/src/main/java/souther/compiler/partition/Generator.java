@@ -378,10 +378,14 @@ public final class Generator {
             }
             Outcome tried = valueAt(subject, p, here, settled, Map.of(), check);
             if (tried.value() == null) {
-                // Where the refusal is of the values an edge offered, what the edge held back
-                // outranks it: values that were never built were not among the ones refused.
+                // Where the refusal is of the values one edge offered, what that edge held back
+                // outranks it: values that were never built were not among the ones refused. Only
+                // where one edge offered them, though — a point of a form fixes several positions
+                // under one parameter, and which of their edges the refusal was about is not
+                // something this knows. Taken from whichever came first, the reason named the wrong
+                // position's search.
                 UnresolvedCombination.Reason why = tried.reason();
-                if (!here.isEmpty()
+                if (here.size() == 1
                         && why == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED) {
                     why = heldBack.getOrDefault(here.keySet().iterator().next(), why);
                 }

@@ -414,9 +414,6 @@ final class Coverages {
     }
 
     /**
-     * Everything known about each line one position's rules drew.    }
-
-    /**
      * Everything known about each line one position's rules drew.
      *
      * <p>The one place either question about a boundary is answered. Whether a row sits at it is read
@@ -616,7 +613,6 @@ final class Coverages {
     }
 
     /**
-     * Which of two readings of one line the report keeps.    /**
      * Which of two readings of one line the report keeps.
      *
      * <p>Existential and per point, the same way an arm is: a row met a point if it met it through

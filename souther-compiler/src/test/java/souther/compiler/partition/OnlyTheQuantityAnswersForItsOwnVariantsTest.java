@@ -41,12 +41,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class OnlyTheQuantityAnswersForItsOwnVariantsTest {
 
-    /** The files that decide which quantity a rule cut, and the quantity's own. */
+    /**
+     * The files that decide which quantity a rule cut, and the quantity's own.
+     *
+     * <p>Two of them, because deciding is one question with one answer: {@link Cutting} reads a
+     * comparison and {@link Partitions} reads what a position's declarations left. The readings that
+     * find the comparisons — a body's conditions, a behavior's clauses — used to be on this list and
+     * are not: each of them decided a little of it, and a rule written {@code 48 >= 3a + 6b} came out
+     * as a border on {@code -3a - 6b} while the same rule in an {@code ensures} came out as no
+     * border at all.
+     */
     private static final Set<String> MAY_NAME_ONE = Set.of(
             "souther/compiler/partition/BorderQuantity.java",
-            "souther/compiler/partition/Partitions.java",
-            "souther/compiler/partition/GuardThresholds.java",
-            "souther/compiler/partition/EnsuresThresholds.java");
+            "souther/compiler/partition/Cutting.java",
+            "souther/compiler/partition/Partitions.java");
 
     @Test
     void noReaderOutsideTheQuantityAsksWhichQuantityItIs() throws IOException {
