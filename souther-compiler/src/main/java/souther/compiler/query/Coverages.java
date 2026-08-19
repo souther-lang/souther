@@ -135,11 +135,23 @@ final class Coverages {
         }
         // And what a body's and a declaration's comparisons left standing, which no axis carries:
         // the position a comparison is about need not be one anything divided.
+        //
+        // By the rule and the question, which is what one occurrence of a question is. A comparison
+        // inside a helper is read once per call and is one rule (`RuleRef`), so readings of it are
+        // one question raised once — walked as a list, a document says the same thing as many times
+        // as the walk met it, and a consumer cannot tell that from two rules asking alike. Keyed on
+        // the identity and not on everything an entry happens to carry, so a handle changing shape
+        // cannot quietly turn one question into two.
+        Set<java.util.Map.Entry<souther.compiler.check.RuleRef, souther.compiler.check.Owed>> asked =
+                new LinkedHashSet<>();
         for (souther.compiler.partition.GuardThresholds.Guards.AtAPosition each
                 : partitioning.compared()) {
             for (souther.compiler.check.RuleAccounting.Unanswered open
                     : each.accounting().unansweredQuestions()) {
-                standing.add(new PartitionEvidence.Unanswered(each.at().toString(),
+                if (!asked.add(java.util.Map.entry(open.rule(), open.owed()))) {
+                    continue;
+                }
+                standing.add(new PartitionEvidence.Unanswered(open.rule(), each.at().toString(),
                         open.cited(), open.owed().obligation(),
                         // Spelled by the term itself, which is the one thing that spells a term. A
                         // second spelling here is a second key for one subject, and a document
@@ -305,7 +317,7 @@ final class Coverages {
      */
     private static List<PartitionEvidence.Unanswered> unansweredAt(Axis axis) {
         return axis.unanswered().stream()
-                .map(each -> new PartitionEvidence.Unanswered(axis.path().toString(),
+                .map(each -> new PartitionEvidence.Unanswered(each.rule(), axis.path().toString(),
                         each.cited(), each.owed().obligation(), each.owed().subject(),
                         // The number the line falls on, where it falls on one. Which of the two the
                         // question is about was settled where it was raised — not here, and not by

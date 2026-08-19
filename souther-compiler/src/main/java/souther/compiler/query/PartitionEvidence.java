@@ -73,6 +73,11 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
      * downstream that took one of them apart would have to be taught the next; the words come from
      * the one place that names a rule, and everything here is a string by the time it arrives.
      *
+     * @param rule     which rule of the model raised it. What tells one question from another, and
+     *                 never what a document shows: a rule is the same rule however many readings
+     *                 met it, and a handle for finding it is not in step with that wherever a rule
+     *                 has no name. Carried because the two are different questions and the seam
+     *                 that dropped this had a reader keying on the handle
      * @param at       the position, spelled the way a report names it
      * @param cited    how a reader finds the rule: the name the author gave it, or where they wrote
      *                 it where they gave none. Not what tells one rule from another, and never a key
@@ -93,7 +98,8 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
      *                 the subject because it is the reading's spelling of it and this document
      *                 promises both
      */
-    public record Unanswered(String at, souther.compiler.check.RuleCitation cited,
+    public record Unanswered(souther.compiler.check.RuleRef rule, String at,
+                             souther.compiler.check.RuleCitation cited,
                              souther.compiler.check.CoverageObligation question,
                              souther.compiler.check.Owed.Subject subject, String measure) {}
 
