@@ -1362,7 +1362,8 @@ public final class Adequacy {
                     // that the switch stays exhaustive over the kinds rather than over the ones
                     // thought of here.
                     case OUTPUT_CASE_UNVERIFIED, AXIS_CLASS_UNCOVERED, PARTITION_NOT_DERIVABLE,
-                            PARTITION_NOT_READ, PARTITION_READ_IN_PART, PARTITION_OMITTED ->
+                            PARTITION_NOT_READ, PARTITION_RULE_UNACCOUNTED, PARTITION_RULES_NOT_REACHED,
+                            PARTITION_OMITTED ->
                             throw new IllegalStateException("not a gap a build refuses: " + gap);
                 }));
             }
@@ -1643,15 +1644,28 @@ public final class Adequacy {
         /** A position something is written about that this did not read, with what stopped it. */
         PARTITION_NOT_READ(null, false),
         /**
-         * A position the axes measure whose rules this reading is short of, with what stopped it.
+         * A rule written about a position the axes measure that nothing took in.
          *
          * <p>Told apart from {@link #PARTITION_NOT_READ} because they are different things to act
          * on. Nothing was established about a position this could not read; here the classes are
-         * what the model was read to say, and what went unread may yet refuse one of them — so a
-         * reader is told that the numbers beside it rest on a reading that did not run to the end,
-         * rather than that there are none.
+         * what the model was read to say, and this rule may yet refuse a value one of them holds —
+         * so a reader is told that the numbers beside it rest on rules one of which nothing
+         * accounted for, rather than that there are none.
+         *
+         * <p>Named by the rule. A position was all a reader used to be given, which sent them
+         * looking for a rule the sentence never named — and the sentence was written off one
+         * reading's account of itself, so it was said of models every rule of which had been read
+         * (issue #842).
          */
-        PARTITION_READ_IN_PART(null, false),
+        PARTITION_RULE_UNACCOUNTED(null, false),
+        /**
+         * A position the axes measure whose rules the walk never reached.
+         *
+         * <p>Its own finding beside {@link #PARTITION_RULE_UNACCOUNTED}. There is no rule to name,
+         * and a reader told that every rule was accounted for is told the opposite of the one thing
+         * worth knowing about the position.
+         */
+        PARTITION_RULES_NOT_REACHED(null, false),
         /** A position left out because the axis limit was reached. */
         PARTITION_OMITTED(null, false);
 
@@ -1890,10 +1904,26 @@ public final class Adequacy {
             // much was read is what the axis carries — asked here rather than worked out a second
             // time from the lists above, which answer about rules and not about positions.
             for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
-                if (axis.read() instanceof PartitionEvidence.AxisCoverage.Reading.InPart short_) {
-                    out.add(new Finding(Kind.PARTITION_READ_IN_PART, behavior.name(),
+                // A position the axes measure whose rules nothing looked at. Said apart from the
+                // rules below: there is no rule to name, and there is no rule to name because
+                // nothing was seen rather than because everything was accounted for.
+                if (axis.read().reach()
+                        == PartitionEvidence.AxisCoverage.Reach.SOME_OUT_OF_SIGHT) {
+                    out.add(new Finding(Kind.PARTITION_RULES_NOT_REACHED, behavior.name(),
                             MeasurementStatus.NOT_MEASURED, Citation.of(behavior.pos()),
-                            List.of(axis.path(), said(short_.why()))));
+                            List.of(axis.path())));
+                }
+                // One per rule, and said whether or not something is out of sight beside them: a
+                // rule that arrived and went unaccounted for is a fact about the rule, and a
+                // subtree nothing entered is a fact about the walk. A position was all a reader
+                // used to be given, and the rules a position carries are not one thing to act on.
+                for (PartitionEvidence.AxisCoverage.Unanswered each : axis.read().unanswered()) {
+                    // The subject the question carries, and not the axis's own number. A length
+                    // bound says which strings may stand at the position and draws its line on the
+                    // count, and the axis is named after the second.
+                    out.add(new Finding(Kind.PARTITION_RULE_UNACCOUNTED, behavior.name(),
+                            MeasurementStatus.NOT_MEASURED, Citation.of(behavior.pos()),
+                            List.of(each.subject(), each.rule(), asked(each.question()))));
                 }
             }
             for (souther.compiler.partition.Partitions.OmittedAxis dropped : partition.omitted()) {
@@ -1901,6 +1931,14 @@ public final class Adequacy {
                         MeasurementStatus.COMPLETE, Citation.of(behavior.pos()),
                         List.of(dropped.axis().toString())));
             }
+        }
+
+        /** What a rule raised, in the words a report writes it in. */
+        private static String asked(souther.compiler.check.CoverageObligation question) {
+            return switch (question) {
+                case ADMITTED_VALUES -> "which values may stand at";
+                case BOUNDARY -> "where the values stop on";
+            };
         }
 
         /** What stopped a derivation, in the words a report writes it in. */

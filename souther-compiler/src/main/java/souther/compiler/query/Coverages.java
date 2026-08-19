@@ -272,16 +272,35 @@ final class Coverages {
 
     private static PartitionEvidence.AxisCoverage coverageOf(Axis axis, Readings readings) {
         List<String> classes = axis.classes().stream().map(PartitionClass::id).toList();
-        // What the axis already says about how far the rules were read, in the word a document
-        // promises. Read off the axis rather than worked out here: the reading that made the
-        // classes is the one that knows what it was short of.
-        PartitionEvidence.AxisCoverage.Reading read =
-                axis.read() instanceof souther.compiler.values.AdmissibleSet.Completeness.Partial
-                        partial
-                        ? new PartitionEvidence.AxisCoverage.Reading.InPart(
-                                souther.compiler.partition.ReportedReason.of(
-                                        souther.compiler.inputs.BlockReason.of(partial.why())))
-                        : PartitionEvidence.AxisCoverage.READ_IN_FULL;
+        // What the axis already says about which of this position's rules nothing accounted for,
+        // each named. Read off the axis rather than worked out here, and in the questions' own
+        // words: the vocabulary beside it says why a division could not be derived, which is a
+        // different question, and borrowing it left a reader with a sentence that named neither
+        // (issue #842).
+        PartitionEvidence.AxisCoverage.Reading read = new PartitionEvidence.AxisCoverage.Reading(
+                axis.rulesNotReached()
+                        ? PartitionEvidence.AxisCoverage.Reach.SOME_OUT_OF_SIGHT
+                        : PartitionEvidence.AxisCoverage.Reach.EVERY_RULE,
+                // What the axis already says about which of this position's rules nothing accounted
+                // for, each named. Read off the axis rather than worked out here, and in the
+                // questions' own words: the vocabulary beside it says why a division could not be
+                // derived, which is a different question, and borrowing it left a reader with a
+                // sentence that named neither (issue #842).
+                axis.unanswered().stream()
+                        .map(each -> {
+                            // The subject the question carries, resolved against the axis it is at.
+                            // A question about the position is spelled as the position and one
+                            // about a number taken of it as the term, and which of the two it is
+                            // was settled where the question was raised — not here, and not by
+                            // whatever a renderer has to hand.
+                            String subject = each.owed().subject().measured()
+                                    ? axis.term().toString() : axis.path().toString();
+                            return new PartitionEvidence.AxisCoverage.Unanswered(
+                                    new souther.compiler.partition.OriginRef
+                                            .InvariantOrigin(each.rule()).named(),
+                                    each.owed().obligation(), subject);
+                        })
+                        .toList());
         // Nothing a body claims is in scope here. What a row is owed at is counted first and on its
         // own, and what was declared about those positions is put beside it afterwards
         // ({@link ClaimReport}) — which is what keeps a claim from narrowing a denominator by being

@@ -61,14 +61,20 @@ public final class FieldDomains {
      * those is a reading that found no rules.
      */
     public static final FieldDomains NONE =
-            new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), true,
-                    Set.of(THE_VALUE), NO_POSITIONS, ConstraintState.top(),
-                    null, null, null, Map.of(), () -> true);
+            new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(),
+                    new ReadingEvidence(), Map.of(), true, Set.of(THE_VALUE), NO_POSITIONS,
+                    ConstraintState.top(), null, null, null, Map.of(), () -> true);
 
     private final Map<String, NumericDomain.Bounds> byField;
     /** The ends the record's own clauses place, which is a different question from the range they
      * leave — see {@link #placedAt}. */
     private final List<InvariantChecker.Direct> directs;
+    /** What each clause reaching this value raises, keyed on the clause. */
+    private final Map<Clause.Ref, Required> raised;
+    /** Which readings took each clause in, as each of them said so. */
+    private final ReadingEvidence took;
+    /** The accounting, worked out once. Every position of a value asks the same question of it. */
+    private volatile Map<Clause.Ref, RuleAccounting> accounting;
     /** Which declarations relate each coordinate to something else, and so could have moved where it
      * stops — see {@link #narrowedBy}. */
     private final Map<String, List<TypeSymbol>> narrowers;
@@ -108,6 +114,7 @@ public final class FieldDomains {
                          Map<String, ValueSet> admittedByField,
                          Map<String, UnreadReason> unreadByField,
                          List<InvariantChecker.Direct> directs,
+                         Map<Clause.Ref, Required> raised, ReadingEvidence took,
                          Map<String, List<TypeSymbol>> narrowers,
                          boolean seeded, Set<String> notGathered,
                          SequencedMap<FactSubject, String> positions,
@@ -119,6 +126,8 @@ public final class FieldDomains {
         this.admittedByField = admittedByField;
         this.unreadByField = unreadByField;
         this.directs = directs;
+        this.raised = raised;
+        this.took = took;
         this.narrowers = narrowers;
         this.seeded = seeded;
         this.notGathered = notGathered;
@@ -279,7 +288,7 @@ public final class FieldDomains {
                 named(seeded, field).forEach(term -> placeOf.putIfAbsent(term, field)));
         return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), Map.copyOf(admitted),
                 Map.copyOf(unread), seeded.reading().directs(),
-                seeded.reading().narrowers(),
+                seeded.reading().raised(), seeded.took(), seeded.reading().narrowers(),
                 seeded.everyClauseRead(), seeded.notGathered(), placeOf,
                 seeded.constraints(), named, data, symbols, settled,
                 // Classifying the rules is a second reading of every one of them. Asked when the
@@ -303,7 +312,7 @@ public final class FieldDomains {
      * @param from     the declaration the clause is written on, which is what names the line
      * @param lower    whether this bounds the coordinate below; otherwise above
      */
-    public record Placed(String path, boolean measured, TypeSymbol from, boolean lower, Endpoint end) {}
+    public record Placed(String path, boolean measured, Clause.Ref from, boolean lower, Endpoint end) {}
 
     /**
      * The declaration whose clause could have moved where the coordinate at {@code path} stops, or
@@ -379,6 +388,93 @@ public final class FieldDomains {
     /** This value read again without the clauses of the declarations {@code skip} names. */
     private FieldDomains without(java.util.function.Predicate<TypeSymbol> skip) {
         return of(named, data, symbols, settled, InvariantChecker.Reach.withoutClausesOf(skip));
+    }
+
+    /**
+     * What each clause reaching this value raises, keyed on the clause.
+     *
+     * <p>Questions and not answers. A clause is here whether or not anything took it in, which is
+     * what makes it a list of what has to be settled rather than a list of what this compiler
+     * managed — the second is what a completeness written per reader amounts to, and it says the
+     * model was read in full for exactly as long as nobody adds a reader.
+     */
+    public Map<Clause.Ref, Required> required() {
+        return raised;
+    }
+
+    /**
+     * Every rule reaching this value, every question it raises, and what answered each.
+     *
+     * <p>The questions come from the rules and the answers from whichever reading took the rule in.
+     * Which is the whole arrangement: an ordering bound and an equality raise the same question
+     * about which values may stand at a position, and it is answered by the reading of ends in the
+     * first case and by the reading of values in the second — so a completeness read off either
+     * reading alone reports a model that was read in full as one this compiler could not read.
+     */
+    public Map<Clause.Ref, RuleAccounting> accounting() {
+        Map<Clause.Ref, RuleAccounting> had = accounting;
+        if (had != null) {
+            return had;
+        }
+        Map<Clause.Ref, RuleAccounting> out = new LinkedHashMap<>();
+        raised.forEach((rule, required) ->
+                out.put(rule, RuleAccounting.of(rule, required, owed -> answered(rule, owed))));
+        // Insertion order, which is the order the declaration writes its clauses. `Map.copyOf`
+        // iterates in an order salted once per JVM run, and these reach a checked-in document.
+        accounting = java.util.Collections.unmodifiableMap(out);
+        return accounting;
+    }
+
+    /** What answered one question of one rule. */
+    private RuleAccounting.Outcome answered(Clause.Ref rule, Owed owed) {
+        return switch (owed.obligation()) {
+            case ADMITTED_VALUES -> admissionAnswered(rule, owed.subject());
+            // Raised only where an end was read off the rule, so the reading that raised it is the
+            // one that answered it.
+            case BOUNDARY ->
+                    new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_END_READING);
+        };
+    }
+
+    /**
+     * What answered "which values may stand here" for one rule at one position.
+     *
+     * <p>Any reading that took the rule in will do, and that is the whole of it. A question is
+     * unanswered exactly where no reading adopted the clause — not where the reading that names the
+     * question was short of the position's rules, which is a fact about that reading and is true at
+     * every numeric position an invariant bounds.
+     *
+     * <p>Asked per rule and never per position. One clause's failure is not the account of the
+     * clause beside it: {@code value >= 1} leaves the reading of values short at a position, and
+     * {@code value == 7} written beside it was taken in whole.
+     */
+    private RuleAccounting.Outcome admissionAnswered(Clause.Ref rule, Owed.Subject where) {
+        List<FactSubject> named = named(where.path());
+        // A part of the rule nothing took in outranks everything else about it. An end placed by
+        // one conjunct is not an account of the conjunct written beside it.
+        if (took.anyLeftStanding(rule, named)) {
+            return new RuleAccounting.Outcome.Unaccounted(
+                    unreadByField.getOrDefault(where.path(), UnreadReason.FORM_NOT_READ));
+        }
+        // The reading that turns this clause into where the values stop, said by the end it placed.
+        if (directs.stream()
+                .anyMatch(d -> d.from().equals(rule) && d.path().equals(where.path()))) {
+            return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_END_READING);
+        }
+        // And the readings that hold what a clause says about the values themselves, each said by
+        // that reading at the point it adopted the clause.
+        if (took.tookIn(rule, named)) {
+            return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_VALUE_READING);
+        }
+        UnreadReason why = unreadByField.get(where.path());
+        return new RuleAccounting.Outcome.Unaccounted(
+                why == null ? UnreadReason.FORM_NOT_READ : why);
+    }
+
+    /** Every name the position at {@code path} answers to. */
+    private java.util.List<FactSubject> named(String path) {
+        return positions.entrySet().stream().filter(e -> e.getValue().equals(path))
+                .map(Map.Entry::getKey).toList();
     }
 
     /** Every end the rules place, wherever it is. */
@@ -483,7 +579,7 @@ public final class FieldDomains {
         // clauses it was handed, and a clause it could not turn into an obligation is one this
         // reading may have taken in whole; borrowing it would settle this reading's completeness by
         // a fragment that is not this reading's.
-        return reachedTheRulesAt(path) ? AdmissibleSet.complete(values)
+        return everyRuleReachedAt(path) ? AdmissibleSet.complete(values)
                 : AdmissibleSet.partial(values, UnreadReason.NOT_REACHED);
     }
 
@@ -498,8 +594,14 @@ public final class FieldDomains {
      * <p>A stop at {@link #THE_VALUE} is different in kind and is why the paths are compared rather
      * than counted: the declaration's own clause can name any position of it, so a clause of it
      * that never arrived leaves every position short of its rules.
+     *
+     * <p>Asked here rather than read off what a reading came back short of. A position can be both
+     * — a rule that arrived and could not be read, beside a subtree the walk never entered — and
+     * {@link #admits} answers with the first of the two because it has one slot to answer in, so
+     * reach taken from there is lost wherever another reason won it. A caller that wants to know
+     * whether anything is out of sight wants this.
      */
-    private boolean reachedTheRulesAt(String path) {
+    public boolean everyRuleReachedAt(String path) {
         for (String stopped : notGathered) {
             if (stopped.equals(THE_VALUE) || path.equals(stopped)
                     || path.startsWith(stopped + ".")) {

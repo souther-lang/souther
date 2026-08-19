@@ -696,7 +696,8 @@ public final class Partitions {
                     uncertain.add(term);
                 }
                 out.add(new Axis(id, term, position.type(), divided.classes(),
-                        divided.cuts().cuts(), divided.completeness(), null, null));
+                        divided.cuts().cuts(), divided.unanswered(), divided.rulesNotReached(),
+                        null, null));
             }
             // Nothing local divides the position, which is what licenses asking what it is made of.
             // Whether the reading got to the end of the rules is carried rather than acted on here:
@@ -714,7 +715,8 @@ public final class Partitions {
                     // position from completing as one the model divides no way.
                     case StructuralInspection.Pending pending ->
                             out.add(Axis.pendingAt(id, term, position.type(),
-                                    position.completeness(), pending, position.valuesUnread()));
+                                    position.unansweredQuestions(), position.rulesNotReached(), pending,
+                                    position.valuesUnread()));
                 }
             }
         }

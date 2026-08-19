@@ -612,12 +612,14 @@ final class PathEngine {
             gathering.missed(path);
         }
         for (Clauses.Stated one : stated.clauses()) {
+            // Read before it is handed over, so that what is recorded is this reading's own answer
+            // about this clause rather than a guess made from its shape somewhere else.
+            Predicates.Owed owed = predicates.obligations(one.expr(), out, at, false);
             if (gathering != null) {
-                gathering.gathered(ref.name(), one.expr());
+                gathering.gathered(one.clause().ref(), one.expr(), Predicates.subjectsIn(owed));
             }
             predicates.quantifiedBy(one.expr(), at, true, quantified);
-            out = predicates.assume(predicates.obligations(one.expr(), out, at, false), out,
-                    Known.Held.OF_THE_VALUE);
+            out = predicates.assume(owed, out, Known.Held.OF_THE_VALUE);
         }
         out = out.and(quantified);
         if (data.newtype()) {

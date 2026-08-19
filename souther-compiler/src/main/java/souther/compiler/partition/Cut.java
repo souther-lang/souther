@@ -32,6 +32,11 @@ public record Cut(Carrier carrier, Place at, List<OriginRef> origins) {
 
     /** The same cut, also drawn by {@code origin}. */
     public Cut and(OriginRef origin) {
+        // Once per rule. One clause can place both ends at one value — `value >= 5 && value <= 5` —
+        // and holding it twice owes the line two rows to the same rule and prints it twice.
+        if (origins.contains(origin)) {
+            return this;
+        }
         List<OriginRef> all = new java.util.ArrayList<>(origins);
         all.add(origin);
         return new Cut(carrier, at, all);

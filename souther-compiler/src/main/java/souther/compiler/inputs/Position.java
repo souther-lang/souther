@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.RuleAccounting;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.Type;
@@ -60,12 +61,18 @@ public sealed interface Position permits ReadPosition {
     boolean nothingExists();
 
     /**
-     * Whether every rule of the value this position sits in was read.
+     * Whether every rule of the value this position sits in was read into a bound.
      *
      * <p>Asked of the whole value and not of this position, because that is what it is about: a
      * rule this compiler could not read is a way the value can be refused wherever in it the rule
      * is written, so an edge at one of its positions is only as certain as the reading of all of
      * them.
+     *
+     * <p>Read and not answered. Whether a rule was taken in by something is the wider question and
+     * is not this one: {@code invariant nonzero = value /= 0} is read whole by the reading that
+     * turns clauses into sets of values, and the edge at 0 is a row nobody can write all the same.
+     * An edge is promised where the range is exact, which is where every rule became a bound
+     * ({@link souther.compiler.check.RuleAccounting} answers the other one).
      */
     boolean everyRuleOfTheValueWasRead();
 
@@ -100,8 +107,48 @@ public sealed interface Position permits ReadPosition {
      */
     Admits admissionOf(TypeSymbol leaf);
 
-    /** How much of what the rules say about this position's values was read. */
+    /**
+     * How much of what the rules say about this position's values one reading took in.
+     *
+     * <p>That reading's account of itself, and nothing else. Nothing downstream decides anything
+     * from it: the reading that turns clauses into sets of values has no word for a range, so it is
+     * short of the rules at every numeric position an invariant bounds while two other readings
+     * have those rules whole — and a measure written off this said a model had gone unread on the
+     * strength of a fact about this compiler (issue #842). What a report is about is
+     * {@link #unansweredQuestions()}.
+     *
+     * <p>Kept because the two are different answers and saying so is what stops them being merged
+     * again: a position can carry a partial reading here and no question standing there, and a test
+     * that could not state the pair could not hold the difference.
+     */
     AdmissibleSet.Completeness completeness();
+
+    /**
+     * The questions the rules written about this position raise that nothing answered, each naming
+     * the rule that raised it.
+     *
+     * <p>Not {@link #completeness()}. That is one reading's account of itself, and a reading being
+     * short of a position's rules says nothing about whether the rules went unread: the reading
+     * that turns a clause into a set of values has no word for a range, so it is short at every
+     * numeric position an invariant bounds — while the reading that turns the same clause into
+     * where the values stop had it whole. Read as the model's completeness, that is a rule reported
+     * unread two lines above the boundary drawn from it (issue #842).
+     *
+     * <p>Empty where every rule about the position was taken in by something, whichever reading
+     * that was. A reader deciding whether the numbers beside this position rest on a complete
+     * reading of the model wants this and not a reading's own account.
+     */
+    List<RuleAccounting.Unanswered> unansweredQuestions();
+
+    /**
+     * Whether the walk never reached the rules written about this position.
+     *
+     * <p>Beside {@link #unansweredQuestions()} and not among them. A rule nothing took in is a rule
+     * this compiler saw and made nothing of; here nothing was seen, so there is no rule to name and
+     * no question to raise — and an empty list of questions says every rule was accounted for,
+     * which is the opposite (issue #791).
+     */
+    boolean rulesNotReached();
 
     /**
      * What stopped the reading of which values this position may hold, or null where nothing did.

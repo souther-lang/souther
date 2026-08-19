@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Every word the shipped schema allows is one somebody accounted for.
  *
- * <p>Every enumerated field of {@code adequacy-schema-1.json} is a second spelling of a Java enum.
+ * <p>Every enumerated field of {@code adequacy-schema-2.json} is a second spelling of a Java enum.
  * The two are edited in different files by different hands, and until this test nothing noticed when
  * one moved: `ROW_TIMED_OUT` became `ROW_UNDECIDED` when a row stopped being held to a clock, the
  * rename was right, and the schema went on promising a word that had not been emitted since.
@@ -59,7 +59,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class EverySchemaWordIsAccountedForTest {
 
-    private static final String SCHEMA = "/souther/adequacy-schema-1.json";
+    private static final String SCHEMA = "/souther/adequacy-schema-2.json";
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     /**
@@ -172,6 +172,11 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "branch", "properties", "unreached", "items", "properties",
                             "construct"),
                     souther.compiler.types.CoverageConstruct.class, constructWords(), Set.of()),
+            // What a rule of the model raises. Only the questions this compiler issues today: a
+            // word arrives here in the same change that starts raising it, so the enum and the
+            // schema move together or the compile stops.
+            new Vocabulary("coverageQuestion", List.of("$defs", "coverageQuestion"),
+                    souther.compiler.check.CoverageObligation.class),
             new Vocabulary("partition.axesMeasure.reason",
                     List.of("$defs", "partition", "properties", "axesMeasure", "properties",
                             "reason"),
@@ -278,19 +283,55 @@ class EverySchemaWordIsAccountedForTest {
     }
 
     /**
-     * And the other field with no enum behind it: how far a position's rules were read, which is
-     * two arms of a sealed type rather than an enumeration.
+     * And the other field with no enum behind it: whether anything the rules raise about a position
+     * is left standing, which is derived from two things rather than enumerated.
+     *
+     * <p>Both of the things, since either alone leaves the other's word unwritten: a position can
+     * have a rule nothing accounted for, or a subtree the walk never entered, or both, and all
+     * three are the same word here.
      */
     @Test
-    void theOtherFieldWithNoEnumBehindItIsWrittenFromTheArmsOfAReading() {
-        assertEquals(Set.of(AdequacyReport.readingWord(
-                        new PartitionEvidence.AxisCoverage.Reading.InFull()),
+    void theOtherFieldWithNoEnumBehindItIsWrittenFromWhatAReadingLeavesStanding() {
+        PartitionEvidence.AxisCoverage.Unanswered one =
+                new PartitionEvidence.AxisCoverage.Unanswered("r",
+                        souther.compiler.check.CoverageObligation.ADMITTED_VALUES, "s");
+
+        assertEquals(Set.copyOf(List.of(
+                        AdequacyReport.readingWord(PartitionEvidence.AxisCoverage.ANSWERED),
                         AdequacyReport.readingWord(
-                                new PartitionEvidence.AxisCoverage.Reading.InPart(
-                                        souther.compiler.partition.UndividedPosition.Reason
-                                                .DEPTH_LIMIT))),
+                                new PartitionEvidence.AxisCoverage.Reading(
+                                        PartitionEvidence.AxisCoverage.Reach.EVERY_RULE,
+                                        List.of(one))),
+                        AdequacyReport.readingWord(
+                                new PartitionEvidence.AxisCoverage.Reading(
+                                        PartitionEvidence.AxisCoverage.Reach.SOME_OUT_OF_SIGHT,
+                                        List.of())),
+                        AdequacyReport.readingWord(
+                                new PartitionEvidence.AxisCoverage.Reading(
+                                        PartitionEvidence.AxisCoverage.Reach.SOME_OUT_OF_SIGHT,
+                                        List.of(one))))),
                 allowedAt(schema(), List.of("$defs", "partition", "properties", "axes", "items",
                         "properties", "read", "properties", "extent")));
+    }
+
+    /**
+     * The three places this schema says which version it is agree.
+     *
+     * <p>Its name, the number a document carries, and the identifier a resolver keys on. They are
+     * edited in different places and one of them was left behind: a copy raised to 2 kept the
+     * `$id` of the first, so two schemas claimed one canonical name and a consumer holding a cache
+     * would be handed whichever it fetched first.
+     */
+    @Test
+    void theVersionIsTheSameInAllThreePlacesItIsWritten() {
+        assertEquals(AdequacyReport.SCHEMA_VERSION,
+                schema().get("properties").get("schemaVersion").get("const").asInt(),
+                "what a document carries is what this schema demands");
+        assertTrue(SCHEMA.endsWith("-" + AdequacyReport.SCHEMA_VERSION + ".json"),
+                "and the file is named for it: " + SCHEMA);
+        assertTrue(schema().get("$id").asString()
+                        .endsWith("adequacy-" + AdequacyReport.SCHEMA_VERSION + ".json"),
+                "and so is the identifier a resolver keys on: " + schema().get("$id"));
     }
 
     /** Every enumerated field of the schema is either held above or named as the exception. */
@@ -444,7 +485,7 @@ class EverySchemaWordIsAccountedForTest {
 
     private static JsonNode schema() {
         try (InputStream in = AdequacyReport.class.getResourceAsStream(SCHEMA)) {
-            assertNotNull(in, "adequacy-schema-1.json ships beside the compiler");
+            assertNotNull(in, "adequacy-schema-2.json ships beside the compiler");
             return JSON.readTree(new String(in.readAllBytes(), StandardCharsets.UTF_8));
         } catch (java.io.IOException e) {
             throw new AssertionError(e);

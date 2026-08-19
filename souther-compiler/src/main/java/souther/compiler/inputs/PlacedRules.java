@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.FieldDomains;
+import souther.compiler.check.RuleAccounting;
 import souther.compiler.check.Rules;
 import souther.compiler.check.Shape;
 import souther.compiler.check.Symbols;
@@ -11,6 +12,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -62,6 +64,38 @@ record PlacedRules(TypeSymbol value, Rules rules) {
      */
     AdmissibleSet admits(TermPath path) {
         return rules.admits(String.join(".", path.fields()));
+    }
+
+    /**
+     * The questions the rules reaching this value raise about the position at {@code path} that
+     * nothing answered, each with the rule that raised it.
+     *
+     * <p>Asked of the questions and not of the readings. A reading being short of a position's
+     * rules is a fact about that reading; whether a rule went unaccounted for is a fact about the
+     * model, and the two come apart wherever one reading answers what another could not — which is
+     * every bound on a number, since the reading that turns clauses into sets of values has no word
+     * for a range.
+     */
+    List<RuleAccounting.Unanswered> unanswered(TermPath path) {
+        String where = String.join(".", path.fields());
+        List<RuleAccounting.Unanswered> out = new ArrayList<>();
+        bounds().accounting().values().forEach(accounting ->
+                accounting.unansweredQuestions().stream()
+                        .filter(each -> each.owed().subject().path().equals(where))
+                        .forEach(out::add));
+        return List.copyOf(out);
+    }
+
+    /**
+     * Whether the gathering reached every rule written about the position at {@code path}.
+     *
+     * <p>Asked of the gathering, which is what knows. A position can carry both a rule that arrived
+     * and could not be read and a subtree the walk never entered, and what a reading came back
+     * short of has one slot to answer in — so reach read off {@link #admits} is lost wherever
+     * another reason won it.
+     */
+    boolean everyRuleReachedAt(TermPath path) {
+        return rules.everyRuleReachedAt(String.join(".", path.fields()));
     }
 
     /** The ends the clauses reaching this value place on the coordinates at {@code path}, which is

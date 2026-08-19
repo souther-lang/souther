@@ -494,7 +494,7 @@ class AMeasureWithNoNumberSaysWhyTest {
                 MeasurementStatus.COMPLETE, Adequacy.BranchEvidence.Reason.NO_BODY));
         assertThrows(IllegalArgumentException.class, () -> new PartitionEvidence.AxisCoverage(
                 "a", "a", List.of(), java.util.Set.of(), 0, MeasurementStatus.NOT_MEASURED, null,
-                PartitionEvidence.AxisCoverage.READ_IN_FULL));
+                PartitionEvidence.AxisCoverage.ANSWERED));
         // And a position handed over with no account of what was read about its values. The classes
         // beside it mean one thing on a reading that ran to the end and another on one that did
         // not, so a coverage that does not say which is a set of classes nobody can read.

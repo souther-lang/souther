@@ -1,5 +1,5 @@
 {
-  "schemaVersion" : 1,
+  "schemaVersion" : 2,
   "compilerVersion" : "<version>",
   "status" : "complete",
   "adequacy" : "satisfied",
@@ -61,7 +61,7 @@
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
           "axis" : "discount/String.length(item.sku)",
-          "origin" : "invariant Sku (min)",
+          "origin" : "invariant Sku #1",
           "side" : "at",
           "kind" : "at_value",
           "value" : "1",
@@ -70,7 +70,7 @@
           "status" : "complete"
         }, {
           "axis" : "discount/item.price",
-          "origin" : "invariant Price (min)",
+          "origin" : "invariant Price #1",
           "side" : "at",
           "kind" : "at_value",
           "value" : "0",
@@ -79,7 +79,7 @@
           "status" : "complete"
         }, {
           "axis" : "discount/item.weight",
-          "origin" : "invariant Weight (min)",
+          "origin" : "invariant Weight #1",
           "side" : "at",
           "kind" : "at_value",
           "value" : "1",
@@ -159,7 +159,7 @@
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
           "axis" : "台帳へ書く/String.length(指示.番号)",
-          "origin" : "invariant 送り状番号 (min)",
+          "origin" : "invariant 送り状番号 #1",
           "side" : "at",
           "kind" : "at_value",
           "value" : "1",
@@ -168,7 +168,7 @@
           "status" : "complete"
         }, {
           "axis" : "台帳へ書く/指示.重量",
-          "origin" : "invariant Weight (min)",
+          "origin" : "invariant Weight #1",
           "side" : "at",
           "kind" : "at_value",
           "value" : "1",
@@ -255,8 +255,7 @@
           "axis" : "出荷する/指示.重量",
           "path" : "指示.重量",
           "read" : {
-            "extent" : "partial",
-            "stoppedBy" : "unsupported_syntax"
+            "extent" : "complete"
           },
           "classes" : [ "指示.重量/1 <= x <= 30000", "指示.重量/30000 < x" ],
           "covered" : [ "指示.重量/1 <= x <= 30000", "指示.重量/30000 < x" ],
@@ -280,7 +279,7 @@
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
           "axis" : "出荷する/String.length(指示.番号)",
-          "origin" : "invariant 送り状番号 (min)",
+          "origin" : "invariant 送り状番号 #1",
           "side" : "at",
           "kind" : "at_value",
           "value" : "1",
@@ -289,7 +288,7 @@
           "status" : "complete"
         }, {
           "axis" : "出荷する/指示.重量",
-          "origin" : "invariant Weight (min)",
+          "origin" : "invariant Weight #1",
           "side" : "at",
           "kind" : "at_value",
           "value" : "1",
@@ -366,10 +365,6 @@
         "kind" : "partition_not_read",
         "disposition" : "reported",
         "subject" : "指示.品目"
-      }, {
-        "kind" : "partition_read_in_part",
-        "disposition" : "reported",
-        "subject" : "指示.重量"
       } ]
     } ]
   } ],

@@ -62,7 +62,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
      *  in — which is a second way a position can be left unable to reach an absence. */
     private static Axis pending(StructuralInspection.Pending found, BlockReason unread) {
         return Axis.pendingAt(ID, new NumericTerm.ValueOf(AT), Type.BOOL,
-                souther.compiler.values.AdmissibleSet.READ_IN_FULL, found, unread);
+                java.util.List.of(), false, found, unread);
     }
 
     /**

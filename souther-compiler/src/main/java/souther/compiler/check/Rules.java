@@ -49,6 +49,21 @@ public sealed interface Rules {
      */
     record NoneWritten() implements Rules {}
 
+    /**
+     * Whether the gathering reached every rule written about the position at {@code path}.
+     *
+     * <p>The same two answers this type exists to keep apart, asked of reach. A value of a kind that
+     * carries no clause has no rule for a walk to reach, which is not a walk that stopped — read as
+     * the second, every plain {@code String} in every model would be a position with something out
+     * of sight.
+     */
+    default boolean everyRuleReachedAt(String path) {
+        return switch (this) {
+            case Read read -> read.domains().everyRuleReachedAt(path);
+            case NoneWritten _ -> true;
+        };
+    }
+
     /** What the rules leave the position at {@code path}, which is {@link ValueSet#ANY} read in
      *  full where no rule was written at all. */
     default AdmissibleSet admits(String path) {
