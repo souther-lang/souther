@@ -49,21 +49,41 @@ interface ClauseReading<S> {
      * holds. Carried down, every denial meets a leaf, where it is one.
      */
     default S read(Core e, boolean positive) {
+        return read(e, positive, null);
+    }
+
+    /**
+     * The same, telling {@code per} what each part of the clause came to as it is read.
+     *
+     * <p>Keyed by the part as the tree holds it, so a reader that walks the same clause afterwards
+     * finds what this reading made of the very node it is looking at. Asked again instead, that
+     * reader is a second reading of the part, and two readings of one conjunct agree only for as
+     * long as nobody changes one of them.
+     */
+    default S read(Core e, boolean positive, java.util.function.BiConsumer<Core, S> per) {
+        S out = readInto(e, positive, per);
+        if (per != null) {
+            per.accept(e, out);
+        }
+        return out;
+    }
+
+    private S readInto(Core e, boolean positive, java.util.function.BiConsumer<Core, S> per) {
         Core under = Predicates.negated(e);
         if (under != null) {
-            return read(under, !positive);
+            return read(under, !positive, per);
         }
         if (e instanceof Core.Binary bin) {
             // Stated, a conjunction gives both sides; denied, it gives the choice between their
             // denials. And the same the other way round, which is the whole of what a denial does
             // to a connective.
             if (bin.op() == Hir.BinOp.AND) {
-                return positive ? both(read(bin.left(), true), read(bin.right(), true))
-                        : either(read(bin.left(), false), read(bin.right(), false));
+                return positive ? both(read(bin.left(), true, per), read(bin.right(), true, per))
+                        : either(read(bin.left(), false, per), read(bin.right(), false, per));
             }
             if (bin.op() == Hir.BinOp.OR) {
-                return positive ? either(read(bin.left(), true), read(bin.right(), true))
-                        : both(read(bin.left(), false), read(bin.right(), false));
+                return positive ? either(read(bin.left(), true, per), read(bin.right(), true, per))
+                        : both(read(bin.left(), false, per), read(bin.right(), false, per));
             }
         }
         return leaf(e, positive);

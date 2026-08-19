@@ -287,6 +287,10 @@
               "axis": { "type": "string" },
               "origin": { "type": "string", "description": "The rule that drew this line — a type's invariant, a behavior's `ensures`, or the fork of a body a condition was written in, named by the construct the author wrote it as (`if`, `guard` or `comprehension`) and where. Prose rather than a word list: which rules there are is the model's question, not this document's." },
               "side": { "enum": ["below", "at", "above"] },
+              "point": {
+                "enum": ["on", "off"],
+                "description": "Which point of the border a row here would be, in the words domain testing gives them (ISTQB CTAL-TA v4.0 §3.1.1): `on` is inside the equivalence partition the border bounds and closest to it, `off` is outside it and closest to it. Not another spelling of `side`, which says where the value sits around the cut and so says how to read `value`. Which one a side is turns on whether the border is closed or open, so the same `at` is the `on` point of `x <= 100` and the `off` point of `x < 100`, and neither key produces the other. Absent in a document written before this key existed."
+              },
               "kind": {
                 "enum": ["at_value", "between_positions"],
                 "description": "What this line is a line at. `at_value` is a place of the position `axis` names, which is what an invariant's bound and a guard against a constant draw. `between_positions` is a guard comparing one position against another: the line is where the two hold the same place, `axis` names the left of it and `value` the other position rather than a value. Reading `value` without reading this reads a position's name as a value. Absent in a document written before this key existed, where every line was at a value."

@@ -399,13 +399,13 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 """;
         String report = reportOn(holed);
 
-        assertFalse(report.contains("not known to be writable: f/r.a = 0"),
+        assertFalse(report.contains("not known to be writable: the ON point f/r.a = 0"),
                 () -> "there is a row at it:\n" + report);
         // The row settles its own edge without anything being built for it, and the other edge is
         // settled by building one. Two kinds of witness, and the projection proves neither.
-        assertTrue(report.contains("boundary    1/2"),
+        assertTrue(report.contains("border      1/2"),
                 () -> "the row at 0 is met, and 10 was built and is owed:\n" + report);
-        assertTrue(report.contains("no row is at f/r.a = 10"), () -> report);
+        assertTrue(report.contains("no row is at the ON point f/r.a = 10"), () -> report);
     }
 
     /**
@@ -455,10 +455,11 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
     /**
      * A newtype taken straight as a parameter is held to its own rules like any other position.
      *
-     * <p>It has no siblings, which is why it has no per-field bounds to hand out. It still has rules
-     * a range cannot keep, and `value /= 0` makes the bottom of `[0, 10]` a value the decoder
-     * refuses. Answering the question at the door for a newtype is what made this depend on whether
-     * the type was a parameter or a field of one.
+     * <p>It has no siblings, which is why it has no per-field bounds to hand out. Its own rules are
+     * read all the same, and they leave it `[1, 10]`: `within` writes the bottom at 0 and `nonzero`
+     * takes the 0 away, so the line `within` placed is at the first value the position has. A line
+     * at the 0 would be a line at no value of `N`, and asking whether a row can be written there
+     * asks about a value the model excludes.
      */
     @Test
     void aNewtypeTakenStraightIsHeldToItsOwnRules() throws Exception {
@@ -484,13 +485,16 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
 
         List<String> owed = boundariesOf(holed);
 
-        assertTrue(report.contains("not known to be writable: f/n = 0"), () -> report);
-        assertFalse(owed.stream().anyMatch(l -> l.contains("f/n = 0")),
-                () -> "0 is in the range and the decoder refuses it: " + owed);
-        // A refusal at one edge says nothing about the other. `value /= 0` leaves the top of the
-        // range alone, and a value was built there, so that one is a row somebody is owed.
+        assertFalse(report.contains("f/n = 0"),
+                () -> "0 is no value of `N`, so it is no line of it: " + report);
+        assertTrue(owed.stream().anyMatch(l -> l.contains("f/n = 1")),
+                () -> "the line `within` placed is at the first value the rules leave: " + owed);
         assertTrue(owed.stream().anyMatch(l -> l.contains("f/n = 10")),
-                () -> "and the top of the same range builds: " + owed);
+                () -> "and the top of the same range: " + owed);
+        // Both are rows an author is owed rather than edges nothing promises. The bounds state
+        // every rule of the value — the denial became an end rather than a hole — so what is
+        // missing is the row and not the reading.
+        assertFalse(report.contains("not known to be writable"), () -> report);
     }
 
     /** The same two fields with the rule removed keep the whole of their type's range, so the

@@ -154,7 +154,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aRecordsBoundOnItsOwnNumberPlacesAnEdge() {
         String report = report(MODEL);
 
-        assertTrue(report.contains("no row is at onTally/v.n = 1 (invariant Tally #1)"), report);
+        assertTrue(report.contains("no row is at the ON point onTally/v.n = 1 (invariant Tally #1)"), report);
     }
 
     /**
@@ -168,7 +168,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         String report = report(MODEL);
 
         assertTrue(report.contains(
-                "no row is at onBag/List.length(v.xs) = 1 (invariant Bag #1)"), report);
+                "no row is at the ON point onBag/List.length(v.xs) = 1 (invariant Bag #1)"), report);
     }
 
     /** Both ends, so that this is read as the rules being met and not as a floor being special. */
@@ -176,8 +176,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void bothEndsOfARecordsOwnBoundAreEdges() {
         String report = report(MODEL);
 
-        assertTrue(report.contains("no row is at onBoth/v.n = 1 (invariant Both #1)"), report);
-        assertTrue(report.contains("no row is at onBoth/v.n = 10 (invariant Both #2)"), report);
+        assertTrue(report.contains("no row is at the ON point onBoth/v.n = 1 (invariant Both #1)"), report);
+        assertTrue(report.contains("no row is at the ON point onBoth/v.n = 10 (invariant Both #2)"), report);
     }
 
     /** A clause governing the position from the declaration it sits inside reaches it, and names
@@ -187,7 +187,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         String report = report(MODEL);
 
         assertTrue(report.contains(
-                "no row is at onOuter/v.inner.n = 1 (invariant Inner #1)"), report);
+                "no row is at the ON point onOuter/v.inner.n = 1 (invariant Inner #1)"), report);
     }
 
     /** And the outer record's own clause where it is the tighter of the two. */
@@ -196,7 +196,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         String report = report(MODEL);
 
         assertTrue(report.contains(
-                "no row is at onTight/v.inner.n = 5 (invariant Tight #1)"), report);
+                "no row is at the ON point onTight/v.inner.n = 5 (invariant Tight #1)"), report);
     }
 
     /**
@@ -315,7 +315,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                     partition   not measured (no partition axis was derived at any position)
                       · not read: v.startsAt (the comparison relates it to another position rather than dividing it)
                       · not read: v.endsAt (the comparison relates it to another position rather than dividing it)
-                    boundary    not measured (no line was derived at any position)
+                    border      not measured (no line was derived at any position)
                 """), report);
     }
 
@@ -324,14 +324,14 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aBoundAgainstAnotherFieldPlacesNoEdge() {
         String report = report(MODEL);
 
-        assertFalse(report.contains("no row is at onFloor/"), report);
+        assertFalse(report.contains("point onFloor/"), report);
         assertTrue(report.contains("""
                   onFloor                  implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not measured (no partition axis was derived at any position)
                       · not read: v.n (the comparison relates it to another position rather than dividing it)
                       · not read: v.min (the comparison relates it to another position rather than dividing it)
-                    boundary    not measured (no line was derived at any position)
+                    border      not measured (no line was derived at any position)
                 """), report);
     }
 
@@ -347,8 +347,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aRangeNarrowedByAnotherPositionsBoundIsNotAnEdge() {
         String report = report(MODEL);
 
-        assertTrue(report.contains("no row is at onR/v.b = 10 (invariant R #2)"), report);
-        assertFalse(report.contains("no row is at onR/v.a"), report);
+        assertTrue(report.contains("no row is at the ON point onR/v.b = 10 (invariant R #2)"), report);
+        assertFalse(report.contains("point onR/v.a"), report);
     }
 
     /**
@@ -363,8 +363,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aRangeNarrowedThroughAnotherPositionsTypeIsNotAnEdgeEither() {
         String report = report(MODEL);
 
-        assertTrue(report.contains("no row is at onUnder/v.b = 10 (invariant B #1)"), report);
-        assertFalse(report.contains("no row is at onUnder/v.a"), report);
+        assertTrue(report.contains("no row is at the ON point onUnder/v.b = 10 (invariant B #1)"), report);
+        assertFalse(report.contains("point onUnder/v.a"), report);
     }
 
     /** The rules written on newtypes are measured as they were. A repair that moved these rather
@@ -374,10 +374,10 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         String report = report(ON_NEWTYPES);
 
         assertTrue(report.contains(
-                "no row is at onName/String.length(v) = 1 (invariant Name #1)"), report);
+                "no row is at the ON point onName/String.length(v) = 1 (invariant Name #1)"), report);
         assertTrue(report.contains(
-                "no row is at onCart/List.length(c) = 1 (invariant Cart #1)"), report);
-        assertTrue(report.contains("no row is at onHop/v.n = 1 (invariant Count #1)"), report);
+                "no row is at the ON point onCart/List.length(c) = 1 (invariant Cart #1)"), report);
+        assertTrue(report.contains("no row is at the ON point onHop/v.n = 1 (invariant Count #1)"), report);
     }
 
     /**
@@ -391,7 +391,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aTighterRecordClauseOwnsTheLineRatherThanNarrowingIt() {
         String report = report(ON_NEWTYPES);
 
-        assertTrue(report.contains("no row is at onMoved/v.n = 5 (invariant Moved #1)"), report);
+        assertTrue(report.contains("no row is at the ON point onMoved/v.n = 5 (invariant Moved #1)"), report);
         assertFalse(report.contains("within Moved"), report);
     }
 
@@ -438,7 +438,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aRuleFromOutsideDoesNotChooseWhichCoordinateAPositionIsMeasuredAt() {
         String report = report(TWO_WAYS);
 
-        assertTrue(report.contains("no row is at onPerson/v.name = m (invariant Name #1)"),
+        assertTrue(report.contains("no row is at the ON point onPerson/v.name = m (invariant Name #1)"),
                 report);
         assertFalse(report.contains("String.length(v.name"),
                 "the record's clause states an end on a coordinate this position is not measured at:\n"
@@ -464,7 +464,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not measured (no partition axis was derived at any position)
                       · not read: v.s (a rule about it is one this compiler did not read)
-                    boundary    not measured (no line was derived at any position)
+                    border      not measured (no line was derived at any position)
                 """), report);
     }
 

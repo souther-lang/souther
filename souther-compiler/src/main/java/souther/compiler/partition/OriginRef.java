@@ -39,8 +39,21 @@ public sealed interface OriginRef {
      * word {@code min} or {@code max}, which says what the clause did: two clauses of one
      * declaration bounding a position at one value came out as one origin, and the cut kept one
      * rule where ADR-0090 says it keeps every rule that drew it.
+     *
+     * @param holdsAtTheValue whether the cut value is one the bound admits, which is the end's own
+     *                        inclusivity and is what says whether a row at the cut is the border's
+     *                        {@code ON} point or its {@code OFF} point. Carried for the same reason
+     *                        a guard's origin carries it: nothing downstream can work it back out.
+     *                        A discrete carrier steps a strict bound onto the value it leaves, so
+     *                        {@code value > 5} on an {@code Int} arrives as an inclusive 6; a
+     *                        continuous one has no step, so {@code value > 5.0m} on a
+     *                        {@code Decimal} arrives here as an exclusive 5. Both are built. No
+     *                        report shows the second today, because a cut on a continuous carrier
+     *                        goes no further than this — which is a fact about how far the
+     *                        derivation gets and not one about the end, and reading the end is what
+     *                        keeps the two from being confused if it ever does get further
      */
-    record InvariantOrigin(RuleRef.Invariant rule) implements OriginRef {
+    record InvariantOrigin(RuleRef.Invariant rule, boolean holdsAtTheValue) implements OriginRef {
 
         public InvariantOrigin {
             if (rule == null) {

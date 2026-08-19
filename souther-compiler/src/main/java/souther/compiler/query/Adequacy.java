@@ -1875,9 +1875,14 @@ public final class Adequacy {
                 // written at — that edge is where the reading stopped rather than where the model
                 // does, and a row at it may be one nobody can write.
                 if (boundary.isUnmetGap()) {
+                    // Which point of the border this is, carried rather than worked out again by
+                    // whoever prints the finding. It is the assessment's answer, and a reader that
+                    // re-derived it from the rule would be the second place the closed-border rule
+                    // is written.
                     out.add(new Finding(Kind.BOUNDARY_UNMET, behavior.name(),
                             MeasurementStatus.COMPLETE, Citation.of(behavior.pos()),
-                            List.of(boundary.axis(), boundary.value(), boundary.rule())));
+                            List.of(boundary.axis(), boundary.value(), boundary.rule(),
+                                    boundary.pointRole())));
                 }
             }
             // What the model divides this position no way at all, which is the classes question and

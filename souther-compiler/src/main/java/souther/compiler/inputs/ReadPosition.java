@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.ProjectionEvidence;
 import souther.compiler.check.RuleAccounting;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
@@ -28,9 +29,10 @@ import java.util.List;
  */
 record ReadPosition(TermPath path, TypeView view, NumericTerm term,
                     NumericDomain.Bounds numericDomain, DeclaredBounds.Bounds ownEnds,
-                    NumericDomain.Bounds narrowedEnds, List<TypeSymbol> narrowedLower,
+                    NumericDomain.Bounds narrowedEnds, NumericDomain.Bounds rangeLeft,
+                    List<TypeSymbol> narrowedLower,
                     List<TypeSymbol> narrowedUpper, boolean nothingExists,
-                    boolean everyRuleOfTheValueWasRead, List<Case> declared, ReadingResult reading,
+                    ProjectionEvidence projection, List<Case> declared, ReadingResult reading,
                     ObligationDomain obligations, AdmissibleSet.Completeness completeness,
                     BlockReason valuesUnread, List<UnreadRule> unreadRules,
                     List<RuleAccounting.Unanswered> unansweredQuestions, boolean rulesNotReached,

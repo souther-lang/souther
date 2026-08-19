@@ -66,8 +66,12 @@ public record BoundaryLine(BoundaryTarget target, BoundaryObligation.BoundarySid
                     g.witness(), g.holdsAtTheValue(), g.singles(), List.of());
             case OriginRef.EnsuresOrigin e -> new Drawing(e.rule(), e.valueBelongsBelow(),
                     null, e.holdsAtTheValue(), e.singles(), List.of());
+            // A bound leaves nothing outside itself, so no value below or above it is a line of its
+            // own and `valueBelongsBelow` has nothing to say. Whether the cut is one of the range's
+            // own does have something to say, and telling two ends at one value apart by it is what
+            // keeps a bound that admits the value from folding into one that stops short of it.
             case OriginRef.InvariantOrigin i ->
-                    new Drawing(i.rule(), false, null, false, false, List.of());
+                    new Drawing(i.rule(), false, null, i.holdsAtTheValue(), false, List.of());
             case OriginRef.NarrowedOrigin n -> {
                 Drawing inner = drawnBy(n.bound());
                 yield new Drawing(inner.rule(), inner.valueBelongsBelow(), inner.witness(),

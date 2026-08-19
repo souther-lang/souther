@@ -250,7 +250,7 @@ class AHelpersArmIsOneObligationHoweverOftenItIsCalledTest {
                 """);
 
         // The record's own minimum, and the two the guard draws at 100.
-        assertTrue(report.contains("boundary    0/3"),
+        assertTrue(report.contains("border      0/3"),
                 () -> "one line per rule, not one per reading of it:\n" + report);
         assertEquals(1, count(report, "a = 100"),
                 () -> "and the line at 100 is written once:\n" + report);
