@@ -12,6 +12,7 @@ import souther.compiler.diag.msg.InvariantMessage;
 import souther.compiler.diag.msg.Message;
 import souther.compiler.diag.msg.Supporting;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -426,7 +427,8 @@ public final class InvariantChecker {
          *  every position, since nothing here knows which of them the rules were about. */
         static Seeded nothingRead() {
             return new Seeded(ConstraintState.top(), Map.of(), Map.of(), Map.of(),
-                    new Reading(List.of(), Map.of(), Map.of()), new ReadingEvidence(), false,
+                    new Reading(List.of(), List.of(), Map.of(), Map.of()), new ReadingEvidence(),
+                    false,
                     Set.of(FieldDomains.THE_VALUE));
         }
 
@@ -790,7 +792,15 @@ public final class InvariantChecker {
         void missed(String path);
     }
 
-    /** A coordinate a clause reaching this value could be about. */
+    /**
+     * A coordinate a clause reaching this value could be about.
+     *
+     * @param carrier what its values are ordered on, or null where nothing here draws a line on
+     *                them. Here rather than left out, because a coordinate is a coordinate whether
+     *                or not an end can be read on it: gated on having one, a rule written about a
+     *                position no line is drawn on named nothing, and the reading that could say so
+     *                had never heard of the position
+     */
     private record Coordinate(String path, boolean measured, Carrier carrier) {}
 
     /**
@@ -809,7 +819,8 @@ public final class InvariantChecker {
      *                  may have raised a question all the same, and a clause that placed one raised
      *                  more than the line. Nothing here says whether anything answered
      */
-    record Reading(List<Direct> directs, Map<String, List<TypeSymbol>> narrowers,
+    record Reading(List<Direct> directs, List<FieldDomains.Unread> unread,
+                   Map<String, List<TypeSymbol>> narrowers,
                    Map<RuleRef, Required> raised) {}
 
     private Reading directsIn(List<Written> stated, Denotations at,
@@ -819,26 +830,25 @@ public final class InvariantChecker {
         Map<FactSubject, Coordinate> byName = new LinkedHashMap<>();
         keys.forEach((path, key) -> {
             Carrier carrier = Carrier.ofValue(typeAt.get(path), symbols);
-            if (carrier != null) {
-                byName.put(key, new Coordinate(path, false, carrier));
-                FactSubject atom = atoms.get(path);
-                if (atom != null) {
-                    byName.put(atom, new Coordinate(path, false, carrier));
-                }
+            byName.put(key, new Coordinate(path, false, carrier));
+            FactSubject atom = atoms.get(path);
+            if (atom != null) {
+                byName.put(atom, new Coordinate(path, false, carrier));
             }
         });
         // A count is a whole number whatever it counts, so nothing about the container decides how
         // its sizes are spaced.
         held.forEach((path, atom) -> byName.put(atom, new Coordinate(path, true, Carrier.WHOLE)));
         List<Direct> out = new ArrayList<>();
+        List<FieldDomains.Unread> unread = new ArrayList<>();
         Map<String, List<TypeSymbol>> narrowers = new LinkedHashMap<>();
         Map<RuleRef, Required> raised = new LinkedHashMap<>();
         stated.forEach(each ->
-                direct(each.clause(), each.from(), at, byName, out, narrowers, raised, took,
+                direct(each.clause(), each.from(), at, byName, out, unread, narrowers, raised, took,
                         typeAt));
         // Insertion order, kept: `Map.copyOf` iterates in an order salted once per JVM run, and
         // what a report prints for a position is these in the order the declaration writes them.
-        return new Reading(List.copyOf(out), Map.copyOf(narrowers),
+        return new Reading(List.copyOf(out), List.copyOf(unread), Map.copyOf(narrowers),
                 java.util.Collections.unmodifiableMap(new LinkedHashMap<>(raised)));
     }
 
@@ -908,6 +918,7 @@ public final class InvariantChecker {
      */
     private void direct(Core clause, RuleRef.Invariant from, Denotations at,
                         Map<FactSubject, Coordinate> byName, List<Direct> out,
+                        List<FieldDomains.Unread> unread,
                         Map<String, List<TypeSymbol>> narrowers,
                         Map<RuleRef, Required> raised, ReadingEvidence took,
                         Map<String, Type> typeAt) {
@@ -917,8 +928,8 @@ public final class InvariantChecker {
         }
         if (bin.op() == Hir.BinOp.AND) {
             // One rule the author wrote, so what it raises is what its conjuncts raise together.
-            direct(bin.left(), from, at, byName, out, narrowers, raised, took, typeAt);
-            direct(bin.right(), from, at, byName, out, narrowers, raised, took, typeAt);
+            direct(bin.left(), from, at, byName, out, unread, narrowers, raised, took, typeAt);
+            direct(bin.right(), from, at, byName, out, unread, narrowers, raised, took, typeAt);
             return;
         }
         if (!InvariantBound.ordering(bin.op()) && bin.op() != Hir.BinOp.EQ) {
@@ -960,6 +971,18 @@ public final class InvariantChecker {
             case InvariantBound.Read.NoEnd _ -> states(bin, at, byName);
         }, at, byName, raised, took, typeAt);
         if (end instanceof InvariantBound.Read.NoEnd) {
+            // A rule saying where the values stop that no end came out of, said as that. Here,
+            // where the reading gave up, because this is the reading a report's line would have
+            // come from: the reading that turns clauses into sets of values has no word for a range
+            // and calls every bound unread, and the accounting beside it answers whether anything
+            // took the rule in — which a construction's discharge check does for a clause no line
+            // was drawn from. Neither of them is the question, and both were being asked it.
+            //
+            // Per rule and not per position, as a `guard`'s comparison already is (spec
+            // §example-partition). A position carries more than one statement, and an end read at
+            // it says nothing about the rule beside it: kept as what the position was left with,
+            // a bound on a field's own type swallowed the record's clause about the same field.
+            unreadEnds(bin, from, at, byName, unread);
             // The declaration and not the clause. Which declaration took an edge in is what ADR-0090
             // names beside a line, and what a reader is sent to look at is the declaration holding
             // the relation.
@@ -1003,16 +1026,101 @@ public final class InvariantChecker {
      */
     private void namedIn(Core e, Denotations at, Map<FactSubject, Coordinate> byName,
                          List<Owed.Subject> out) {
-        FactSubject named = nameOf(e, at);
-        Coordinate here = named == null ? null : byName.get(named);
-        if (here != null) {
-            Owed.Subject where = Owed.Subject.at(here.path());
+        for (Coordinate each : coordinatesIn(e, at, byName)) {
+            Owed.Subject where = Owed.Subject.at(each.path());
             if (!out.contains(where)) {
                 out.add(where);
             }
+        }
+    }
+
+    /**
+     * The coordinates {@code e} names, one per place, in the order the walk meets them.
+     *
+     * <p>Where a place answers to more than one name — a number is called one thing by the interval
+     * algebra and another by everything else — the first is kept, which is the value's own
+     * coordinate rather than a count taken of it. What is asked of one of these afterwards is what
+     * its values are ordered on, and a count is ordered as a whole number whatever it counts.
+     */
+    private List<Coordinate> coordinatesIn(Core e, Denotations at,
+                                           Map<FactSubject, Coordinate> byName) {
+        List<Coordinate> out = new ArrayList<>();
+        coordinates(e, at, byName, out);
+        return out;
+    }
+
+    private void coordinates(Core e, Denotations at, Map<FactSubject, Coordinate> byName,
+                             List<Coordinate> out) {
+        FactSubject named = nameOf(e, at);
+        Coordinate here = named == null ? null : byName.get(named);
+        if (here != null) {
+            if (out.stream().noneMatch(had -> had.path().equals(here.path()))) {
+                out.add(here);
+            }
+            return;   // a coordinate names itself, and nothing under it is a coordinate of its own
+        }
+        Core.forEachChild(e, child -> coordinates(child, at, byName, out));
+    }
+
+    /**
+     * What one ordering comparison that placed no end leaves for a report to say, at each position
+     * it names.
+     *
+     * <p>Only an ordering. A rule of another shape — a format, a membership, an equality — says
+     * which values exist and not where they stop, so naming it as a line nothing read would send an
+     * author after a boundary nobody wrote; and an equality names a value rather than an end, which
+     * a report has nowhere to put — saying it went unread would state an obligation that does not
+     * exist yet.
+     *
+     * <p>One finding per position and not one per clause, because that is what a reader acts on and
+     * what a {@code guard}'s comparison already produces: a clause relating two coordinates has no
+     * single position to be filed under, and both sides of it are positions this drew no line
+     * through.
+     *
+     * <p>Which limit stopped it is {@link UnreadComparison}'s, so a {@code guard} of this shape
+     * cannot come to a different answer. What is read here is only what each side of the comparison
+     * came to, which is this reader's own way of looking a coordinate up.
+     */
+    private void unreadEnds(Core.Binary comparison, RuleRef.Invariant from, Denotations at,
+                            Map<FactSubject, Coordinate> byName, List<FieldDomains.Unread> out) {
+        if (!InvariantBound.ordering(comparison.op())) {
             return;
         }
-        Core.forEachChild(e, child -> namedIn(child, at, byName, out));
+        BlockReason why = UnreadComparison.why(sideOf(comparison.left(), at, byName),
+                sideOf(comparison.right(), at, byName));
+        for (Coordinate each : coordinatesIn(comparison, at, byName)) {
+            FieldDomains.Unread said = new FieldDomains.Unread(each.path(), from, why);
+            if (!out.contains(said)) {
+                out.add(said);
+            }
+        }
+    }
+
+    /**
+     * What one side of a comparison came to here.
+     *
+     * <p>Which coordinates it names is the recursive question and whether it <em>is</em> one is the
+     * narrower one, and the two are what tell a coordinate inside an expression from a coordinate.
+     * Asked the narrow question alone, {@code y + 1} named nothing and a clause relating two
+     * coordinates came back as a form nobody could read — which is the answer a {@code guard}
+     * writing the same comparison does not get.
+     *
+     * <p>By the place and not by the name. A place answers to more than one name — a number is
+     * called one thing by the interval algebra and another by everything else — so two sides
+     * naming one place through two of its names would be a comparison against another position.
+     */
+    private UnreadComparison.Side<String> sideOf(Core e, Denotations at,
+                                                 Map<FactSubject, Coordinate> byName) {
+        List<Coordinate> named = coordinatesIn(e, at, byName);
+        if (named.isEmpty()) {
+            return new UnreadComparison.Side.NamesNothing<>();
+        }
+        FactSubject itself = nameOf(e, at);
+        Coordinate here = itself == null ? null : byName.get(itself);
+        return here == null
+                ? new UnreadComparison.Side.NamesInside<>(new LinkedHashSet<>(
+                        named.stream().map(Coordinate::path).toList()))
+                : new UnreadComparison.Side.IsOne<>(here.path(), here.carrier() != null);
     }
 
     /**

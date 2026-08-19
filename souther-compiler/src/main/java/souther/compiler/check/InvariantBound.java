@@ -193,32 +193,6 @@ public record InvariantBound(boolean lower, Endpoint end) {
         return orders(op);
     }
 
-    /**
-     * Whether {@code clause} says where the value stops, however this reading turned out.
-     *
-     * <p>Two questions, and only the second was being asked. Whether a bound was read is
-     * {@link #of}'s; whether the model states one at all is this, and a caller with only the first
-     * answer reports "the model bounds this position no way" about a declaration two lines above it.
-     * A rule of another shape — a format, a quantifier over what the value holds — is not one of
-     * these: it says which values exist and not where they stop, and naming it as a line nothing read
-     * would send an author after a boundary nobody wrote.
-     *
-     * <p>An equality is not one either. It names a value rather than an end, is not read by
-     * {@link #of}, and a report has nowhere to put one — so saying it went unread would state an
-     * obligation that does not exist yet.
-     *
-     * @param measure the operation the number is taken by, or null where the number is the value
-     *                itself
-     */
-    public static boolean statesAnEnd(Hir.Expr clause, ValueName measure) {
-        if (!(clause instanceof Hir.Binary bin) || !orders(bin.op())) {
-            return false;
-        }
-        return measure == null
-                ? isValue(bin.left()) || isValue(bin.right())
-                : takesSizeOfValue(bin.left(), measure) || takesSizeOfValue(bin.right(), measure);
-    }
-
     /** Whether an operator says where values stop rather than which one a value is. */
     private static boolean orders(Hir.BinOp op) {
         return switch (op) {
@@ -246,18 +220,13 @@ public record InvariantBound(boolean lower, Endpoint end) {
     }
 
     /**
-     * Whether the expression is {@code measure} applied to the newtype's value.
+     * Whether {@code e} is {@code measure} applied to the named subject: {@code value} inside a
+     * newtype's rule, a field's name inside the rule of the record that has it.
      *
      * <p>Asked of the name the application resolved to, not of how it was spelled: an import lets a
      * library operation be written without its qualifier, and a reader comparing text would miss
      * every clause written that way while looking as though it had read them.
      */
-    private static boolean takesSizeOfValue(Hir.Expr e, ValueName measure) {
-        return takesSizeOf(e, measure, VALUE);
-    }
-
-    /** The same of a named subject: {@code value} inside a newtype's rule, a field's name inside the
-     * rule of the record that has it. */
     private static boolean takesSizeOf(Hir.Expr e, ValueName measure, String subject) {
         return e instanceof Hir.Apply call && call.args().size() == 1
                 && call.args().get(0) instanceof Hir.Var arg && arg.name().equals(subject)
