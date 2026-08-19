@@ -1669,7 +1669,7 @@ public final class Adequacy {
         /**
          * A position the axes measure whose rules the walk never reached.
          *
-         * <p>Its own finding beside {@link #PARTITION_RULE_UNACCOUNTED}. There is no rule to name,
+         * <p>Its own finding beside {@link #RULE_UNACCOUNTED}. There is no rule to name,
          * and a reader told that every rule was accounted for is told the opposite of the one thing
          * worth knowing about the position.
          */

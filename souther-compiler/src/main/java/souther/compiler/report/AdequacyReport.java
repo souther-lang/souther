@@ -1350,7 +1350,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             ObjectNode f = out.addObject();
             f.put("kind", word(finding.kind()));
             f.put("disposition", word(finding.disposition()));
-            f.put("subject", subject(finding));
+            f.put("subject", subject(finding, sources));
             // Present where the kind has one. A finding a build is not told about under any code is
             // not one with an empty code, and a consumer joining these to the diagnostics a build
             // printed reads the difference.
@@ -1402,7 +1402,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * name a {@code boundaries} entry. An input's case carries its position with it, because two
      * parameters of one type give two findings a class name alone cannot tell apart.
      */
-    private static String subject(Adequacy.Finding finding) {
+    private static String subject(Adequacy.Finding finding, DocumentSources sources) {
         List<Object> args = finding.args();
         return switch (finding.kind()) {
             // The label and not the arm, and the same label `branch.unreached` writes: this field
@@ -1416,12 +1416,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // The rule and what it was left saying. Named by the position alone, two rules nothing
             // took in at one position serialised as two identical objects, and the human line named
             // them while a consumer of the document could not tell them apart.
-            // Written to join the `unanswered` entry this came out of, which names the rule the
-            // same way. A place is spelled without a file here, as every other subject in this
-            // array is: what tells one source from another is the table at the top of the document,
-            // and a subject is a key into what is already beside it.
+            // Written to join the `unanswered` entry this came out of, so the rule is named by the
+            // one method that names it. Spelled a second way here, the join this exists for held
+            // for a rule with a name and broke for every rule found by where it is written.
             case RULE_UNACCOUNTED ->
-                    ((souther.compiler.check.RuleCitation) args.get(1)).label()
+                    ((souther.compiler.check.RuleCitation) args.get(1))
+                            .said(sources::written, null)
                             + " — " + args.get(2) + " " + args.get(0);
             case INPUT_CASE_UNSPECIFIED ->
                     String.valueOf(args.get(0)) + " (in #" + args.get(1) + ")";

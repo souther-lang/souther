@@ -85,7 +85,13 @@ public final class GuardThresholds {
          * that number is read from is what a document keys the question by, which is a question
          * about the walk that found it.
          */
-        public record AtAPosition(TermPath at, RuleAccounting accounting) {}
+        public record AtAPosition(TermPath at, NumericTerm term, RuleAccounting accounting) {
+            public AtAPosition {
+                if (at == null || accounting == null) {
+                    throw new IllegalArgumentException("an accounting is filed somewhere");
+                }
+            }
+        }
 
         /**
          * A value a body singles out rather than orders.
@@ -299,11 +305,12 @@ public final class GuardThresholds {
             // comparison has no site is this reader and the plan disagreeing about what a condition
             // is made of.
             int site = plan.requireComparisonSiteOf(each.comparison());
-            TermPath here = readOne(behavior, iff, each, plan, guard, site, reads, symbols,
+            ComparedLine here = readOne(behavior, iff, each, plan, guard, site, reads, symbols,
                     out, singled);
             if (here != null) {
                 made.add(each.comparison());
-                raises(accounting, plan, site, guard, iff, each.comparison(), here,
+                raises(accounting, plan, site, guard, iff, each.comparison(),
+                        here.term().path(), here.term(), subjectOf(here.term()),
                         new Required.LineRead.ALineOnThePosition());
                 continue;
             }
@@ -321,12 +328,45 @@ public final class GuardThresholds {
             // Filed at the position the reading names first, which is the one a line between two
             // would be read `on`. One comparison is one line however many positions it mentions, so
             // this is where a reader is sent and not a question raised once apiece.
+            // The side that names the position is readable even where the other one is not, so
+            // what the line is on is known here too: a bound this could not fold is still a bound on
+            // a length where it was written about one. Read off the position alone, a question about
+            // a count came back spelled as the string it counts.
+            NumericTerm about = comparedTerm(each.comparison(), reads, symbols);
             raises(accounting, plan, site, guard, iff, each.comparison(), named.get(0),
+                    about, subjectOf(about),
                     between.size() > drawn ? new Required.LineRead.ALineBetweenTwoPositions()
                             : new Required.LineRead.NoLine(
                                     why(each.comparison(), reads, symbols)));
         }
         return made;
+    }
+
+    /**
+     * What the question is about, relative to the position it is filed at.
+     *
+     * <p>An invariant's subject is relative to the value its clause is on, and this is the same
+     * thing one frame out. Which of the two it is was settled by the reading that found the term: a
+     * {@code String} bounded on its length raises about the string and draws its line on the count,
+     * and a document promises both spellings.
+     */
+    static Owed.Subject subjectOf(NumericTerm term) {
+        // Null where neither side named a number this reads. The position is what the comparison is
+        // about then, and nothing says a count was what the line was on.
+        return new Owed.Subject("", term instanceof NumericTerm.SizeOf);
+    }
+
+    /** The number a comparison is about, from whichever side names one. */
+    static NumericTerm comparedTerm(Core.Binary comparison, InputReads reads, Symbols symbols) {
+        NumericTerm left = termOf(comparison.left(), reads, symbols);
+        return left != null ? left : termOf(comparison.right(), reads, symbols);
+    }
+
+    /** Every position an expression names, for a reader outside this walk. */
+    static List<TermPath> namedIn(Core e, InputReads reads, Symbols symbols) {
+        List<TermPath> out = new ArrayList<>();
+        mentioned(e, reads, symbols, out);
+        return out;
     }
 
     /**
@@ -339,14 +379,12 @@ public final class GuardThresholds {
      */
     private static void raises(List<Guards.AtAPosition> out, CoverageSites.Plan plan, int site,
                                CoverageSites.GuardRef guard, Core.If iff, Core.Binary comparison,
-                               TermPath at, Required.LineRead read) {
-        out.add(new Guards.AtAPosition(at, RuleAccounting.ofComparison(
+                               TermPath at, NumericTerm term, Owed.Subject about,
+                               Required.LineRead read) {
+        out.add(new Guards.AtAPosition(at, term, RuleAccounting.ofComparison(
                 new RuleRef.Guard(plan.site(site).comparison()),
                 souther.compiler.check.ComparisonClaim.of(comparison.op()),
-                // Relative to the position it is filed at, as an invariant's subject is relative to
-                // the value its clause is on. A count taken of the position is the other subject,
-                // and which of the two it is is what the reading that found the term already said.
-                Owed.Subject.at(""), read,
+                about, read,
                 // A comparison is written rather than named, so a reader is sent where the author
                 // wrote it. The construct's own place and not the reading's: one comparison inside a
                 // helper is one rule however many calls read it.
@@ -486,7 +524,7 @@ public final class GuardThresholds {
 
 
     /** The position a line was drawn on by one comparison, or null where none was. */
-    private static TermPath readOne(String behavior, Core.If iff, Placed placed,
+    private static ComparedLine readOne(String behavior, Core.If iff, Placed placed,
                                     CoverageSites.Plan plan, CoverageSites.GuardRef guard, int site,
                                     InputReads reads,
                                     Symbols symbols, List<Threshold> out,
@@ -506,10 +544,10 @@ public final class GuardThresholds {
                 drawn.singles());
         if (drawn.singles()) {
             singled.add(new Guards.Singled(drawn.term(), drawn.value(), origin));
-            return drawn.term().path();
+            return drawn;
         }
         out.add(new Threshold(drawn.term(), drawn.value(), drawn.valueBelongsBelow(), origin));
-        return drawn.term().path();
+        return drawn;
     }
 
     private static CoverageSites.GuardRef guardOf(CoverageSites.Plan plan, Core.If iff) {

@@ -499,14 +499,30 @@ public final class FieldDomains {
      * says nothing about the other.
      */
     private RuleAccounting.Outcome boundaryAnswered(RuleRef rule, Owed.Subject where) {
-        // The end this rule placed, wherever in it the conjunct that placed it was written. A rule
-        // raises one question about its line and is read a conjunct at a time, so a half that drew
-        // nothing is not an account of the half that drew it — asked of the record of what went
-        // unread alone, `value >= 1 && Int.abs(value) >= 2` left its own line unanswered.
-        if (directs.stream().anyMatch(d -> d.from().equals(rule)
-                && d.path().equals(where.path()) && d.measured() == where.measured())) {
-            return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_END_READING);
+        // Every conjunct that asked, and not whichever one happened to be read. A rule is read a
+        // conjunct at a time and files one question about its line, so the two ways of reading the
+        // record are both wrong: asked of what went unread alone, `value >= 1 && Int.abs(value) >= 2`
+        // left its own line unanswered by the half that draws none, and asked of the ends alone,
+        // `value >= 1 && value <= 10 * 2` reported the half nothing could read as answered by the
+        // half beside it. The parts each say what they raised, and an end says which part placed it.
+        for (Map.Entry<Core, Required> part : raisedByPart
+                .getOrDefault(rule, Map.of()).entrySet()) {
+            boolean asked = part.getValue().obligations().stream()
+                    .anyMatch(owed -> owed.obligation() == CoverageObligation.BOUNDARY
+                            && owed.subject().equals(where));
+            if (!asked) {
+                continue;
+            }
+            if (directs.stream().noneMatch(d -> d.from().equals(rule) && d.part() == part.getKey()
+                    && d.path().equals(where.path()) && d.measured() == where.measured())) {
+                return unreadAnswerFor(rule, where);
+            }
         }
+        return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_END_READING);
+    }
+
+    /** What the reading of ends said about the rule at this position, where it said anything. */
+    private RuleAccounting.Outcome unreadAnswerFor(RuleRef rule, Owed.Subject where) {
         for (Unread said : unread) {
             if (said.from().equals(rule) && said.path().equals(where.path())) {
                 return new RuleAccounting.Outcome.Unaccounted(

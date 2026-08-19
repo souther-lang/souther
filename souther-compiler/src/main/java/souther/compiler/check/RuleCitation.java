@@ -81,28 +81,6 @@ public sealed interface RuleCitation {
     }
 
     /**
-     * The same handle with no file in it, for a place in a document that has no way to name one.
-     *
-     * <p>A key and not a sentence. A finding's subject joins to the entry it came out of, and what
-     * tells one source from another is the table at the head of the document rather than a name
-     * repeated in every subject — which is why every other subject in that array is spelled this
-     * way too.
-     */
-    default String label() {
-        return switch (this) {
-            case Named named -> named.name();
-            // The declaration a reader is sent to, where there is one, and the place otherwise.
-            // A comparison out of sight is written in something with a name, and the position this
-            // compile met it at is where the caller stands rather than where the rule is.
-            case WrittenAt written -> wordFor(written.construct()) + "@" + switch (written.at()) {
-                case Citation.Written w -> w.at().toString();
-                case Citation.Unplaced u -> u.at().toString();
-                case Citation.Elsewhere e -> e.provenance().toString();
-            };
-        };
-    }
-
-    /**
      * What a report calls the construct a rule was written in.
      *
      * <p>English, like every other word a report writes from a rule. What a diagnostic says instead

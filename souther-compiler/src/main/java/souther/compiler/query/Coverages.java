@@ -141,8 +141,11 @@ final class Coverages {
                     : each.accounting().unansweredQuestions()) {
                 standing.add(new PartitionEvidence.Unanswered(each.at().toString(),
                         open.cited(), open.owed().obligation(),
-                        open.owed().subject().measured()
-                                ? "count of " + each.at() : each.at().toString()));
+                        // Spelled by the term itself, which is the one thing that spells a term. A
+                        // second spelling here is a second key for one subject, and a document
+                        // promises `String.length(code)` beside `code`.
+                        open.owed().subject().measured() && each.term() != null
+                                ? each.term().toString() : each.at().toString()));
             }
         }
         return new PartitionEvidence(PartitionEvidence.Partitioned.of(axes),

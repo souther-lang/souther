@@ -13,6 +13,7 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.UnreadRule;
 import souther.compiler.types.BindingId;
@@ -177,14 +178,23 @@ public final class EnsuresThresholds {
             int had = out.between().size();
             between(comparison, rule, clause, reads, symbols, out);
             reportUnread(comparison, rule.value(), reads, symbols, out.unread());
-            raises(out, rule, clause, comparison, mentionedIn(comparison, reads, symbols),
+            // Every position the comparison names, by the walk a body's conditions use. Asked of
+            // `ComparedTerms` instead, a comparison this could not read as a line between two
+            // positions had no position to be filed at — which is exactly the comparison whose
+            // questions stand, so the clause that most needs saying said nothing.
+            List<TermPath> named = GuardThresholds.namedIn(comparison, reads, symbols);
+            NumericTerm about = GuardThresholds.comparedTerm(comparison, reads, symbols);
+            raises(out, rule, clause, comparison, rule.value(),
+                    named.isEmpty() ? null : named.get(0), about,
+                    GuardThresholds.subjectOf(about),
                     out.between().size() > had
                             ? new Required.LineRead.ALineBetweenTwoPositions()
                             : new Required.LineRead.NoLine(
                                     GuardThresholds.why(comparison, reads, symbols)));
             return;
         }
-        raises(out, rule, clause, comparison, drawn.term().path(),
+        raises(out, rule, clause, comparison, rule.value(), drawn.term().path(), drawn.term(),
+                GuardThresholds.subjectOf(drawn.term()),
                 new Required.LineRead.ALineOnThePosition());
         OriginRef.EnsuresOrigin origin = new OriginRef.EnsuresOrigin(
                 new RuleRef.Ensures(rule.id(), clause),
@@ -206,22 +216,25 @@ public final class EnsuresThresholds {
      * read is exactly where nothing answers it.
      */
     private static void raises(Drawn out, StatedContract.StatedRule rule, String clause,
-                               Core.Binary comparison, TermPath at, Required.LineRead read) {
+                               Core.Binary comparison, BindingId answer, TermPath at,
+                               NumericTerm term, Owed.Subject about, Required.LineRead read) {
         if (at == null) {
             return;   // about no position of the input, so it raises nothing about one
         }
+        // A comparison against the answer draws no line a row can be written at, and that is not a
+        // reading falling short: what a row chooses is what the behavior is applied to, so there is
+        // nothing for a row to be at. `value.sku == item.sku` was read and understood, and raising a
+        // question about where `item.sku` stops would report a model this compiler read perfectly as
+        // one it could not.
+        if (readsTheAnswer(comparison, answer)) {
+            return;
+        }
         RuleRef.Ensures named = new RuleRef.Ensures(rule.id(), clause);
-        out.accounting().add(new GuardThresholds.Guards.AtAPosition(at,
+        out.accounting().add(new GuardThresholds.Guards.AtAPosition(at, term,
                 RuleAccounting.ofComparison(named, ComparisonClaim.of(comparison.op()),
                         // A clause belongs to a behavior, so there is always something to call it.
-                        Owed.Subject.at(""), read,
+                        about, read,
                         new souther.compiler.check.RuleCitation.Named(named.named()))));
-    }
-
-    /** The first position a comparison names, which is the one a line between two is read `on`. */
-    private static TermPath mentionedIn(Core.Binary comparison, InputReads reads, Symbols symbols) {
-        ComparedTerms drawn = ComparedTerms.of(comparison, reads, symbols);
-        return drawn == null ? null : drawn.on().path();
     }
 
     /**

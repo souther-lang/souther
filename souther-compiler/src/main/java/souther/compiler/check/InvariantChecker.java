@@ -1161,7 +1161,14 @@ public final class InvariantChecker {
         // coordinate compared for order against something naming no other coordinate states where
         // the values stop, whether or not the number on the other side is one this could fold.
         ClauseStates shape = states(bin, at, byName);
+        // And nothing of this value on the other side. `ARelation` is only what
+        // `Relates.twoPositions` recognises, which wants each whole side to be a position — so
+        // `width <= height + 1` is not one, and read as a bound it raised a question about where
+        // `width` stops that no reading can ever answer, because a rule relating two positions
+        // places no end (ADR-0090). The reader already knows: the reason it records for such a
+        // comparison is `ComparisonBetweenPositions`.
         if (about != null && InvariantBound.ordering(op)
+                && coordinatesIn(bound, at, byName).isEmpty()
                 && shape instanceof ClauseStates.SomethingElse named) {
             Set<Owed.Subject> positions = new LinkedHashSet<>(named.positions());
             // The coordinate the bound is on, which the walk over the comparison names anyway. Added

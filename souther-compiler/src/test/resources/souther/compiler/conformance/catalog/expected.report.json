@@ -388,11 +388,11 @@
       }, {
         "kind" : "rule_unaccounted",
         "disposition" : "reported",
-        "subject" : "if@54:5 — where the values stop on 指示.受付日"
+        "subject" : "if@1:54:5 — where the values stop on 指示.受付日"
       }, {
         "kind" : "rule_unaccounted",
         "disposition" : "reported",
-        "subject" : "if@54:5 — which classes a row is owed in at 指示.受付日"
+        "subject" : "if@1:54:5 — which classes a row is owed in at 指示.受付日"
       } ]
     } ]
   } ],
