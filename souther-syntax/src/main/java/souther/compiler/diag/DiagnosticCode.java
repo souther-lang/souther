@@ -167,7 +167,7 @@ public enum DiagnosticCode {
     E1911("example-does-not-reach-unreachable", "check.example.title"),
     E1913("every-output-case-is-expected-by-a-row", "check.example.title"),
     E1915("every-input-case-is-used-by-a-row", "check.example.title"),
-    E1916("every-guard-boundary-has-a-row", "check.example.title"),
+    E1916("every-border-has-a-row-against-its-line", "check.example.title"),
     E1918("every-arm-has-a-row", "check.example.title"),
     E1919("stand-in-and-recorded-row-agree", "check.example.title"),
     E1920("stand-in-comparison-completes", "check.example.title"),

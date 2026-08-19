@@ -301,7 +301,7 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
     @Test
     void aLineAForkDrewIsSaidInEveryLanguageItIsAskedIn() {
         Diagnostic edge = saidAbout(IN_SIGHT).edge();
-        assertInstanceOf(ExampleMessage.NoRowIsAtTheLineAConstructDrew.class, edge.said(),
+        assertInstanceOf(ExampleMessage.NoRowIsAtThePointOfTheBorderAConstructDrew.class, edge.said(),
                 "a rule with no name reports its own message");
         assertFalse(DiagnosticRenderer.body(edge, Locale.JAPANESE).contains("a guard"),
                 () -> "no English is assembled into a Japanese sentence: "

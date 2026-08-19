@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>The line is where the two are equal. A guard's arms are above the line and below-or-on it, so a
  * row on the line takes the same arm as one well below it, and the arms cannot stand in for it — a
  * row on the line is the one thing that tells a rule written {@code >} from one written {@code >=}
- * (spec §every-guard-boundary-has-a-row).
+ * (spec §every-border-has-a-row-against-its-line).
  *
  * <p>Nothing asked for it. The reader that turns a comparison into a line wants a constant on one
  * side, and where there is none it produced nothing at all: no line, no obligation, and a note saying

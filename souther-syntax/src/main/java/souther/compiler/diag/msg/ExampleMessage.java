@@ -255,9 +255,25 @@ public sealed interface ExampleMessage extends Message {
     record NoRowAppliesItToThatCase(String caseName, String at, String behavior)
             implements ExampleMessage, Reported {}
 
-    /** No row sits on a boundary an invariant draws. */
+    /**
+     * No row is at one of the points a border owes, the rule that drew it having a name.
+     *
+     * <p>{@code point} is which of them, in the word domain testing gives it (ISTQB CTAL-TA v4.0
+     * §3.1.1). The report writes the same word for the same finding, and a reader handed a
+     * vocabulary by one of the two surfaces was being asked to translate at the other.
+     *
+     * <p>The same word in every catalog. {@code ON} and {@code OFF} are the technique's terms for
+     * the two points against the line rather than English words for them, so they are handed over
+     * as a name is and what a catalog holds is the sentence around them. A catalog that translated
+     * them would be answering a reader who practises the technique in words it has no term for.
+     *
+     * <p>The border is named by the rule that drew it and not by the point: only one of the two
+     * points carries the value the rule was written with, so a sentence saying the line is here
+     * would be false of whichever point is the step over.
+     */
     @Code(DiagnosticCode.E1916)
-    record NoRowIsAtThatBoundary(String at, String value, String rule) implements ExampleMessage, Reported {}
+    record NoRowIsAtThePointOfTheBorderARuleDrew(String point, String at, String value, String rule)
+            implements ExampleMessage, Reported {}
 
     /**
      * The same, where a fork of a body drew the line.
@@ -276,8 +292,8 @@ public sealed interface ExampleMessage extends Message {
      * <p>Where the construct is written is not here either. It is a place, and a place is pointed at.
      */
     @Code(DiagnosticCode.E1916)
-    record NoRowIsAtTheLineAConstructDrew(String at, String value,
-                                          souther.compiler.diag.Localizable construct)
+    record NoRowIsAtThePointOfTheBorderAConstructDrew(String point, String at, String value,
+                                                     souther.compiler.diag.Localizable construct)
             implements ExampleMessage, Reported {}
 
     /** Said beside the construct a line was drawn in, the sentence naming the rule without a place —
@@ -285,8 +301,23 @@ public sealed interface ExampleMessage extends Message {
     record TheConstructThatDrawsTheLine(souther.compiler.diag.Localizable construct)
             implements ExampleMessage, Supporting {}
 
-    /** What a row on the line tells apart. */
-    record ARowOnTheLineTellsTwoRulesApart() implements ExampleMessage, Supporting {}
+    /**
+     * What a row at the {@code ON} point shows.
+     *
+     * <p>Said in the same words the sentence above it just used. A hint keyed on where the value
+     * falls against the line would be a second vocabulary for one finding, which is the cost this
+     * diagnostic was being fixed to stop charging — and it is not the same axis: which of the two
+     * points carries the line's own value turns on whether the border is closed, so
+     * {@code n <= 100} is at its {@code ON} point on the line and {@code n < 100} is at its
+     * {@code OFF} point there.
+     *
+     * <p>What tells a rule written {@code <=} from one written {@code <} is the border being closed
+     * or open, which the report says of the border and not of either of its points.
+     */
+    record ARowJustInsideShowsTheBorderIsNotFurtherIn() implements ExampleMessage, Supporting {}
+
+    /** And what a row at the {@code OFF} point shows, which is the other half of the pair. */
+    record ARowJustOutsideShowsTheBorderIsNotFurtherOut() implements ExampleMessage, Supporting {}
 
     /**
      * No row goes through an arm of the body.

@@ -7,6 +7,7 @@ import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.GenerationReason;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.Generator;
+import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
@@ -392,25 +393,33 @@ public final class GeneratedRows {
     /**
      * What a gap is about, in the words its own finding carries.
      *
-     * <p>Read off the arguments the finding was established with, so that a subject printed here and
+     * <p>Read off the value the finding was established with, so that a subject printed here and
      * a subject printed in the report are the same words about the same thing.
      */
     private static String about(Adequacy.Finding gap) {
-        return switch (gap.kind()) {
-            case BOUNDARY_UNMET -> gap.args().get(0) + " = " + gap.args().get(1);
+        return switch (gap.about()) {
+            case About.APointOfABorder(var point) -> {
+                if (!point.role().againstTheLine()) {
+                    // Reported under no code, so no build refuses over it and no disposition is
+                    // held for one.
+                    throw new IllegalStateException("not a gap a build refuses: " + gap);
+                }
+                yield point.border().axis() + " = " + point.against();
+            }
             // The arm's own short name, which is what the report writes and what the document's
             // `subject` joins on. The finding carries the arm rather than words about it, so that
             // the sentence a diagnostic says in the reader's language and the words written here
             // are two readings of one arm rather than one of them being handed the other's.
-            case ARM_UNREACHED -> ArmVocabulary.label(
-                    (souther.compiler.coverage.CoverageSites.Site) gap.args().get(0));
-            case INPUT_CASE_UNSPECIFIED, OUTPUT_CASE_UNSPECIFIED ->
-                    String.valueOf(gap.args().get(0));
+            case About.AnArmNoRowGoesThrough(var arm) -> ArmVocabulary.label(arm);
+            case About.ACaseNoRowAppliesItTo(var input, var missing) -> missing.name();
+            case About.ACaseNoRowExpects(var missing) -> missing.name();
             // Not gaps a build refuses, and a disposition is not held for one. Listed rather than
-            // defaulted so that a kind added later has to be given words here.
-            case OUTPUT_CASE_UNVERIFIED, AXIS_CLASS_UNCOVERED, DOMAIN_POINT_UNCOVERED,
-                    PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ, RULE_UNACCOUNTED,
-                    PARTITION_RULES_NOT_REACHED, PARTITION_OMITTED ->
+            // defaulted so that a shape added later has to be given words here.
+            case About.ACaseNothingWasSeenToProduce _, About.AClassNoRowIsIn _,
+                    About.APositionNoLineDivides _, About.APositionThisCouldNotRead _,
+                    About.AQuestionNothingAnswered _,
+                    About.APositionWhoseRulesWereNotReached _,
+                    About.APositionPastTheAxisLimit _ ->
                     throw new IllegalStateException("not a gap a build refuses: " + gap);
         };
     }

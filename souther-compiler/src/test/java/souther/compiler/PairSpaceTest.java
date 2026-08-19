@@ -8,6 +8,8 @@ import souther.compiler.query.PartitionEvidence;
 
 import java.util.Map;
 
+import static souther.compiler.AxisClasses.names;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -125,7 +127,7 @@ class PairSpaceTest {
 
         assertEquals(0, evidence.pairs().total());
         assertEquals(1, evidence.axes().size());
-        assertEquals(java.util.List.of("No"), evidence.axes().get(0).uncovered(),
+        assertEquals(java.util.List.of("No"), names(evidence.axes().get(0).uncovered()),
                 "the untouched class is still reported");
     }
 

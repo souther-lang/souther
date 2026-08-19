@@ -210,9 +210,10 @@ class EveryGapTheBuildRefusesGetsAnAnswerTest {
     private static GenerationOutcome forCase(Compilation compilation, String module,
                                              String behavior, String missing, int at) {
         return filling(compilation, module, behavior).gaps().stream()
-                .filter(each -> each.gap().kind() == Adequacy.Kind.INPUT_CASE_UNSPECIFIED)
-                .filter(each -> each.gap().args().get(0).equals(missing)
-                        && ((Number) each.gap().args().get(1)).intValue() == at)
+                .filter(each -> each.gap().about()
+                        instanceof souther.compiler.query.About.ACaseNoRowAppliesItTo(
+                                var input, var case_)
+                        && case_.name().equals(missing) && input.at() + 1 == at)
                 .map(Adequacy.GapDisposition::outcome)
                 .findFirst().orElseThrow(() -> new AssertionError("no gap for " + missing));
     }

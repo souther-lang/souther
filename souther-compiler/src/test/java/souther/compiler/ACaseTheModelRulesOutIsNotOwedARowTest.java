@@ -15,6 +15,8 @@ import souther.compiler.report.GeneratedRows;
 import java.util.ArrayList;
 import java.util.List;
 
+import static souther.compiler.AxisClasses.names;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -530,7 +532,7 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
         PartitionEvidence.AxisCoverage axis = axis(RULED_OUT);
 
         assertEquals(List.of("On", "Pending"), axis.classes());
-        assertEquals(List.of("Pending"), axis.uncovered());
+        assertEquals(List.of("Pending"), names(axis.uncovered()));
         assertTrue(reportOn(RULED_OUT).contains("`Off` is declared unreachable"),
                 () -> "and what the body said about the case it took out:\n"
                         + reportOn(RULED_OUT));
@@ -826,7 +828,7 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
         assertEquals(2, input(higher, 0).coverable().size());
         assertEquals(List.of(), input(higher, 0).unspecified().stream().toList());
         assertEquals(List.of("On", "Off"), axis(higher).classes());
-        assertEquals(List.of(), axis(higher).uncovered());
+        assertEquals(List.of(), names(axis(higher).uncovered()));
     }
 
     /**

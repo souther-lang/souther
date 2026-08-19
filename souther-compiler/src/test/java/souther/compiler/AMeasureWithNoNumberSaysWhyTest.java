@@ -190,7 +190,7 @@ class AMeasureWithNoNumberSaysWhyTest {
                   classify                 implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   axes 1   equivalence partitions 1/2
-                      · no row is in `No`
+                      · no row is in `No` at q.flag
                     border      not measured (no line was derived at any position)
                     branch      0/0
                   sift                     implemented   rows 0    pending 0
@@ -235,7 +235,7 @@ class AMeasureWithNoNumberSaysWhyTest {
         String sift = behaviorBlock(human(), "sift");
         assertFalse(sift.contains("no row is in"), sift);
         String classify = behaviorBlock(human(), "classify");
-        assertTrue(classify.contains("no row is in `No`"),
+        assertTrue(classify.contains("no row is in `No` at q.flag"),
                 "the same line is still said where a row was written: " + classify);
     }
 
