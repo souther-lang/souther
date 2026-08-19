@@ -2104,13 +2104,20 @@ public final class Adequacy {
                         // against whichever file the reader has in mind. Where a fork of a body
                         // drew the line, the place is pointed at rather than said, and which
                         // construct it was is a phrase the catalog holds in every language.
+                        //
+                        // Which point of the border this is crosses that and does not replace it.
+                        // How the rule is named follows from whether it has a place; which of the
+                        // border's points went unmet is the measurement's own answer, and a
+                        // sentence deciding one of them from the other would be reading a rule off
+                        // a role.
                         case About.APointOfABorder(var point) -> againstTheLine(point).rule()
                                 .wasDrawnInABodyFork()
-                                ? new ExampleMessage.NoRowIsAtTheLineAConstructDrew(
-                                        point.border().axis(), point.against(), constructOf(point))
-                                : new ExampleMessage.NoRowIsAtThatBoundary(
-                                        point.border().axis(), point.against(),
-                                        point.border().rule().named());
+                                ? new ExampleMessage.NoRowIsAtThePointOfTheBorderAConstructDrew(
+                                        point.role().name(), point.border().axis(),
+                                        point.against(), constructOf(point))
+                                : new ExampleMessage.NoRowIsAtThePointOfTheBorderARuleDrew(
+                                        point.role().name(), point.border().axis(),
+                                        point.against(), point.border().rule().named());
                         case About.AnArmNoRowGoesThrough(var arm) ->
                                 new ExampleMessage.NoRowGoesThroughThatArm(
                                         phraseFor(arm), arm.behavior());
@@ -2129,7 +2136,22 @@ public final class Adequacy {
                 case About.ACaseNoRowExpects(var missing) ->
                         built.hint(new ExampleMessage.WriteARowExpectingThatCase(missing.name()));
                 case About.APointOfABorder(var point) -> {
-                    built.hint(new ExampleMessage.ARowOnTheLineTellsTwoRulesApart());
+                    // Asked of the point, and in the point's own vocabulary. A hint saying which
+                    // side of the line the value falls on would be keyed on the border being closed
+                    // or open rather than on the role — `n <= 100` is at its ON point on the line
+                    // and `n < 100` is at its OFF point there — so it would be a second reading of
+                    // one finding, sitting under a sentence that just named the role.
+                    switch (point.role()) {
+                        case ON -> built.hint(
+                                new ExampleMessage.ARowJustInsideShowsTheBorderIsNotFurtherIn());
+                        case OFF -> built.hint(
+                                new ExampleMessage.ARowJustOutsideShowsTheBorderIsNotFurtherOut());
+                        // Reported and warned about by nothing, which is where the two kinds part.
+                        // Reaching this is a finding built for a point no diagnostic is written
+                        // for, and answering it with a neighbour's hint is what that would cost.
+                        case IN, OUT -> throw new IllegalStateException(
+                                "only a point against the line is warned about: " + point.role());
+                    }
                     // Where the rule has a place rather than a name, the place is a second region
                     // and not words in the sentence: a renderer resolves what to call its file,
                     // and a body written out of sight says so off its own coordinate.
