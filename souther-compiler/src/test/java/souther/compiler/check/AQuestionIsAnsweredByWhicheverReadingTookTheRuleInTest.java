@@ -270,7 +270,7 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
     private static Set<String> unansweredOf(String source, String type) {
         return accountingOf(source, type).values().stream()
                 .flatMap(each -> each.unaccounted().stream())
-                .map(owed -> owed.subject().path())
+                .map(owed -> owed.subject().toString())
                 .collect(java.util.stream.Collectors.toSet());
     }
 
@@ -283,7 +283,7 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
                     invariant said = %s
                 """.formatted(clause), "Pair").values().stream()
                 .flatMap(each -> each.unaccounted().stream())
-                .map(owed -> owed.subject().path())
+                .map(owed -> owed.subject().toString())
                 .collect(java.util.stream.Collectors.toSet());
     }
 

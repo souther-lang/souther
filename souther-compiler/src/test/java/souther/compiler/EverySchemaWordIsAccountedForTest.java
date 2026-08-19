@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Every word the shipped schema allows is one somebody accounted for.
  *
- * <p>Every enumerated field of {@code adequacy-schema-2.json} is a second spelling of a Java enum.
+ * <p>Every enumerated field of {@code adequacy-schema-3.json} is a second spelling of a Java enum.
  * The two are edited in different files by different hands, and until this test nothing noticed when
  * one moved: `ROW_TIMED_OUT` became `ROW_UNDECIDED` when a row stopped being held to a clock, the
  * rename was right, and the schema went on promising a word that had not been emitted since.
@@ -59,7 +59,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class EverySchemaWordIsAccountedForTest {
 
-    private static final String SCHEMA = "/souther/adequacy-schema-2.json";
+    private static final String SCHEMA = "/souther/adequacy-schema-3.json";
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     /**
@@ -287,33 +287,28 @@ class EverySchemaWordIsAccountedForTest {
     }
 
     /**
-     * And the other field with no enum behind it: whether anything the rules raise about a position
-     * is left standing, which is derived from two things rather than enumerated.
+     * And the other field with no enum behind it: whether anything this measure reads about a
+     * position is left standing, which is derived from two things rather than enumerated.
      *
      * <p>Both of the things, since either alone leaves the other's word unwritten: a position can
-     * have a rule nothing accounted for, or a subtree the walk never entered, or both, and all
-     * three are the same word here.
+     * have a question about its values that nothing answered, or a subtree the walk never entered,
+     * or both, and all three are the same word here.
      */
     @Test
     void theOtherFieldWithNoEnumBehindItIsWrittenFromWhatAReadingLeavesStanding() {
-        PartitionEvidence.AxisCoverage.Unanswered one =
-                new PartitionEvidence.AxisCoverage.Unanswered("r",
-                        souther.compiler.check.CoverageObligation.ADMITTED_VALUES, "s");
-
         assertEquals(Set.copyOf(List.of(
                         AdequacyReport.readingWord(PartitionEvidence.AxisCoverage.ANSWERED),
                         AdequacyReport.readingWord(
                                 new PartitionEvidence.AxisCoverage.Reading(
-                                        PartitionEvidence.AxisCoverage.Reach.EVERY_RULE,
-                                        List.of(one))),
+                                        PartitionEvidence.AxisCoverage.Reach.EVERY_RULE, false)),
                         AdequacyReport.readingWord(
                                 new PartitionEvidence.AxisCoverage.Reading(
                                         PartitionEvidence.AxisCoverage.Reach.SOME_OUT_OF_SIGHT,
-                                        List.of())),
+                                        true)),
                         AdequacyReport.readingWord(
                                 new PartitionEvidence.AxisCoverage.Reading(
                                         PartitionEvidence.AxisCoverage.Reach.SOME_OUT_OF_SIGHT,
-                                        List.of(one))))),
+                                        false)))),
                 allowedAt(schema(), List.of("$defs", "partition", "properties", "axes", "items",
                         "properties", "read", "properties", "extent")));
     }
@@ -338,6 +333,52 @@ class EverySchemaWordIsAccountedForTest {
                 "and so is the identifier a resolver keys on: " + schema().get("$id"));
     }
 
+    /**
+     * And the third: which kind of thing a question is about, written from the arms of a sealed type
+     * rather than from an enum.
+     *
+     * <p>The arms are not interchangeable words for one thing — a position is named by where it is
+     * and a comparison by where it is written — so what a document says of each is asked of the
+     * writer rather than of a name.
+     */
+    @Test
+    void theThirdFieldWithNoEnumBehindItIsWrittenFromWhatAQuestionIsAbout() {
+        assertEquals(Set.of(
+                        AdequacyReport.subjectWord(souther.compiler.check.Owed.Subject.at("x")),
+                        AdequacyReport.subjectWord(new souther.compiler.check.Owed.Subject
+                                .OfComparison(souther.compiler.diag.Citation.of(
+                                        new souther.compiler.diag.SourcePos(1, 1))))),
+                allowedAt(schema(), List.of("$defs", "partition", "properties", "unanswered",
+                        "items", "properties", "subject", "properties", "kind")));
+    }
+
+    /**
+     * And the fourth: which kind of rule an identity is of, written from the arms of a sealed type.
+     *
+     * <p>The arms are told apart by different coordinates — a clause of an invariant by where it is
+     * written among its declaration's clauses, a comparison by the site it was numbered at — so
+     * which one a document is carrying decides which of its keys are written.
+     */
+    @Test
+    void theFourthFieldWithNoEnumBehindItIsWrittenFromWhichKindOfRuleItIs() {
+        souther.compiler.types.TypeSymbol on = souther.compiler.types.TypeSymbols.declared(
+                new souther.compiler.types.TypeKey("m", "L"));
+        assertEquals(Set.of(
+                        AdequacyReport.ruleWord(new souther.compiler.check.RuleRef.Invariant(
+                                new souther.compiler.check.Clause.Ref(
+                                        new souther.compiler.check.Clause.Id(on, 0),
+                                        java.util.Optional.empty()))),
+                        AdequacyReport.ruleWord(new souther.compiler.check.RuleRef.Ensures(
+                                new souther.compiler.check.BehaviorContract.RuleId(
+                                        new souther.compiler.types.ValueName.Behavior("m", "f"),
+                                        0, 0, on), "Found")),
+                        AdequacyReport.ruleWord(new souther.compiler.check.RuleRef.Guard(
+                                new souther.compiler.coverage.CoverageSites.ComparisonRef("f",
+                                        new souther.compiler.types.CoverageOrigin("m", 0, 0,
+                                                souther.compiler.types.CoverageConstruct.IF))))),
+                allowedAt(schema(), List.of("$defs", "ruleId", "properties", "kind")));
+    }
+
     /** Every enumerated field of the schema is either held above or named as the exception. */
     @Test
     void noEnumeratedFieldIsUnaccountedFor() {
@@ -349,6 +390,8 @@ class EverySchemaWordIsAccountedForTest {
         }
         held.add("/$defs/behavior/properties/implementation");
         held.add("/$defs/partition/properties/axes/items/properties/read/properties/extent");
+        held.add("/$defs/partition/properties/unanswered/items/properties/subject/properties/kind");
+        held.add("/$defs/ruleId/properties/kind");
 
         List<String> unaccounted = paths.stream().filter(p -> !held.contains(p)).toList();
         assertEquals(List.of(), unaccounted,
@@ -489,7 +532,7 @@ class EverySchemaWordIsAccountedForTest {
 
     private static JsonNode schema() {
         try (InputStream in = AdequacyReport.class.getResourceAsStream(SCHEMA)) {
-            assertNotNull(in, "adequacy-schema-2.json ships beside the compiler");
+            assertNotNull(in, "adequacy-schema-3.json ships beside the compiler");
             return JSON.readTree(new String(in.readAllBytes(), StandardCharsets.UTF_8));
         } catch (java.io.IOException e) {
             throw new AssertionError(e);

@@ -37,8 +37,44 @@ public enum CoverageObligation {
     /**
      * A line rows are owed at.
      *
-     * <p>Subject: the number the position is measured at. Raised by every rule that places an end,
-     * whether it divides the position or only stops it.
+     * <p>Subject: where the line falls. A rule bounding one position draws it on the number that
+     * position is measured at; a comparison of two things that both move with the row draws it where
+     * they hold one count, which is on neither of them and is named by that comparison. Raised by
+     * every rule that places an end, whether it divides the position, stops it, or holds two of them
+     * against each other.
      */
-    BOUNDARY
+    BOUNDARY,
+
+    /**
+     * The value a rule singles out, and a row at it.
+     *
+     * <p>Subject: the number the position is measured at, as {@link #BOUNDARY}'s is. Raised by a
+     * rule that tells one value from every other — {@code x == c} and {@code x /= c} place the same
+     * thing and differ in which of the two classes they select.
+     *
+     * <p>Its own question beside {@link #BOUNDARY} and not a use of it. A border has an order across
+     * it and rows either side named by their roles, which is what a document promises when it writes
+     * one (ADR-0090, and the technique's ON and OFF points); a singled value has values on both
+     * sides that are one class, so there is no side for a role to be about. Read as a border, the
+     * order the rule never drew arrives in the words a reader is given — which is what
+     * {@link ComparisonClaim.Singled} says of reading it as a place to cut.
+     */
+    SINGLETON,
+
+    /**
+     * Classes a row is owed in, one either side of a line.
+     *
+     * <p>Subject: the position. Raised by a rule that treats the two sides of a line differently
+     * and leaves values on both — which is what a class is. A {@code guard}'s comparison is one, and
+     * so is a clause of an {@code ensures} about an input; an invariant's bound is not, because
+     * everything outside it is refused at construction and there is no class on the far side
+     * (ADR-0090). That is a fact about the construct the rule is written in and not about the
+     * comparison, which is why the two are asked separately where a rule raises this.
+     *
+     * <p>Beside the geometric question and never instead of it. One comparison, two questions: which
+     * rows are owed where it falls — a border for an order, a value for a singling — and which rows
+     * are owed in the classes it makes. Both shapes raise this, and a measure counting one for the
+     * other reports a model divided where nothing said so.
+     */
+    PARTITION
 }

@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.FieldDomains;
+import souther.compiler.check.Owed;
 import souther.compiler.check.RuleAccounting;
 import souther.compiler.check.ProjectionEvidence;
 import souther.compiler.check.Rules;
@@ -90,7 +91,8 @@ record PlacedRules(TypeSymbol value, Rules rules) {
         List<RuleAccounting.Unanswered> out = new ArrayList<>();
         bounds().accounting().values().forEach(accounting ->
                 accounting.unansweredQuestions().stream()
-                        .filter(each -> each.owed().subject().path().equals(where))
+                        .filter(each -> each.owed().subject() instanceof Owed.Subject.OfAPosition at
+                                && at.path().equals(where))
                         .forEach(out::add));
         return List.copyOf(out);
     }

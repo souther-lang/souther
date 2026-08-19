@@ -34,6 +34,7 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
                                 PairSpace pairs,
                                 List<souther.compiler.partition.UndividedPosition> notDerivable,
                                 List<souther.compiler.inputs.UnreadRule> unread,
+                                List<Unanswered> unanswered,
                                 List<Partitions.OmittedAxis> omitted,
                                 List<Incompleteness> whyUnclassified) {
 
@@ -47,13 +48,72 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
      * in it open for a measurement that was never anybody's to make.
      */
     public static final PartitionEvidence NONE = new PartitionEvidence(Partitioned.absent(),
-            Bounded.absent(), PairSpace.NONE, List.of(), List.of(), List.of(), List.of());
+            Bounded.absent(), PairSpace.NONE, List.of(), List.of(), List.of(), List.of(),
+            List.of());
 
     public PartitionEvidence {
         notDerivable = List.copyOf(notDerivable);
         unread = List.copyOf(unread);
+        unanswered = List.copyOf(unanswered);
         omitted = List.copyOf(omitted);
         whyUnclassified = List.copyOf(whyUnclassified);
+    }
+
+    /**
+     * One question a rule of the model raised about a position that nothing answered.
+     *
+     * <p>Beside the measures rather than inside one of them. The questions are the model's and every
+     * measure here is one reader of them, so a position an axis could not be derived at is not a
+     * position whose rules went unwritten — read off the axes, {@code value <= 10 * 2} raised a
+     * question about its line, left it standing, and was reported as a model with nothing to answer
+     * for, because no axis survived to carry it.
+     *
+     * <p>The rule as words and not as whatever identifies it. Which rules there are is a question
+     * with more than one answer in it — an invariant's clause, a comparison in a body — and a reader
+     * downstream that took one of them apart would have to be taught the next; the words come from
+     * the one place that names a rule, and everything here is a string by the time it arrives.
+     *
+     * @param asked   the question as the accounting that raised it holds it: which rule, how a
+     *                reader finds that rule, and what is owed. Handed on whole rather than taken
+     *                apart — every round of this lost a part at a seam, and what is not taken apart
+     *                cannot lose one. Which rule it is tells one question from another; the handle
+     *                beside it is what a document shows and is not in step with that wherever a rule
+     *                has no name
+     * @param at      the position it is about, spelled the way a report names it. The walk's and not
+     *                the accounting's: which position of a behavior's inputs a rule was filed at is
+     *                what the walk that found it says, and the subject is relative to it
+     * @param measure the number the position is measured by, where a border falls on one. Beside the
+     *                subject because it is the reading's spelling of it and this document promises
+     *                both
+     */
+    public record Unanswered(souther.compiler.check.RuleAccounting.Unanswered asked, String at,
+                             String measure) {
+
+        /** Which rule of the model raised it, which is what tells one question from another. */
+        public souther.compiler.check.RuleRef rule() {
+            return asked.rule();
+        }
+
+        /** How a reader finds that rule, which is not what tells it from another. */
+        public souther.compiler.check.RuleCitation cited() {
+            return asked.cited();
+        }
+
+        /** What it asks. Which measure's section a reader meets it in follows from this. */
+        public souther.compiler.check.CoverageObligation question() {
+            return asked.owed().obligation();
+        }
+
+        /**
+         * And what it asks it about.
+         *
+         * <p>As the reading that raised it named it, and not as words for it: a position, a number
+         * taken of one, and the comparison that drew a border between two moving terms are three
+         * things, and two of them cannot be told apart once they are one string.
+         */
+        public souther.compiler.check.Owed.Subject subject() {
+            return asked.owed().subject();
+        }
     }
 
     /**
@@ -304,15 +364,19 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
          * <p>Each entry names the rule. A position was all a reader used to be given, which left
          * them looking for a rule the sentence never named.
          */
-        public record Reading(Reach reach, List<Unanswered> unanswered) {
+        public record Reading(Reach reach, boolean everyQuestionAboutItsValuesWasAnswered) {
 
-            public Reading {
-                unanswered = List.copyOf(unanswered);
-            }
-
-            /** Whether anything the rules raise about this position is left standing. */
+            /**
+             * Whether what this measure is short of is nothing.
+             *
+             * <p>Its own questions and not every question the position raises. Which values may
+             * stand somewhere is what classes are made of and is this measure's to be short of;
+             * where the line falls is the border measure's, and a position with a line nothing
+             * answered has classes that are all the model divides it into. Counted here, the two
+             * measures #869 told apart would go back to one number.
+             */
             public boolean answered() {
-                return reach == Reach.EVERY_RULE && unanswered.isEmpty();
+                return reach == Reach.EVERY_RULE && everyQuestionAboutItsValuesWasAnswered;
             }
         }
 
@@ -334,29 +398,8 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
             SOME_OUT_OF_SIGHT
         }
 
-        /**
-         * One question a rule raised that nothing answered.
-         *
-         * <p>The rule as words and not as whatever identifies it. Which rules there are is a
-         * question with more than one answer in it — an invariant's clause, a comparison in a body —
-         * and a reader downstream that took one of them apart would have to be taught the next; the
-         * words come from the one place that names a rule, and everything here is a string by the
-         * time it arrives.
-         *
-         * @param rule     the rule, as a report names it
-         * @param question what about the position it raised, in the words a document promises
-         * @param subject  what the question is about, spelled the way a report names it. Carried
-         *                 rather than worked out downstream from the axis: the questions do not
-         *                 share a subject — which values may stand somewhere is about a position,
-         *                 and a line is about a number taken of one — and a renderer choosing
-         *                 between the two is how a reading of a string's values came to be printed
-         *                 against its length
-         */
-        public record Unanswered(String rule, souther.compiler.check.CoverageObligation question,
-                                 String subject) {}
-
         /** Nothing standing, which is what a caller holding no account of its own says. */
-        public static final Reading ANSWERED = new Reading(Reach.EVERY_RULE, List.of());
+        public static final Reading ANSWERED = new Reading(Reach.EVERY_RULE, true);
 
         /** Why a position has no coverage numbers. */
         public enum Reason implements souther.compiler.observe.MeasureReason {

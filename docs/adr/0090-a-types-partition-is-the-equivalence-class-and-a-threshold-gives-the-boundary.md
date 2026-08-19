@@ -279,8 +279,18 @@ sides, so it gives a partition *and* boundaries — the value, and its neighbour
 one. That is a question about the rule and not about the term: a length bound is owed one row at its
 edge, and a guard on a length is owed the value and its neighbour, for the same reasons a number is.
 
-Only a comparison that is the whole of a `guard`'s condition is read. A condition built with `&&`,
-`||` or `!` contributes no threshold.
+A comparison is read wherever in a condition it is written. `cost >= 0 && cost <= 100000` draws both
+lines and `cost <= 100000 || cost >= 500000` draws both, and which arm stands as evidence for each is
+asked per comparison rather than per arm — a condition stops as soon as it is settled, so an arm says
+nothing about an operand that never ran. That instrument is `OriginRef.GuardOrigin.Witness`, and it
+is what lifted the restriction this said at first: only a comparison that was the whole of a
+condition was read.
+
+One shape is still lost, and it is not a restriction anybody stated. An equality against a case of a
+sum takes the whole condition's lines with it: `kind == Domestic && cost <= 100000` reads no
+threshold at all, and the position comes back not derivable exactly as it does for `kind ==
+Domestic` written alone. The `cost` comparison is not merely uncounted — it is unread because of what
+stands beside it, which is a defect rather than a line this declines to draw.
 
 A cut keeps every rule that drew it. One value can be an obligation several times over — but a rule
 that took a line in is not a second line. A relational clause and the bound it narrowed settled one
@@ -355,11 +365,15 @@ never warned about
 attached, and an author working through them would be writing rows against a specification that does
 not exist.
 
-The restriction to a whole-condition comparison loses real thresholds. `kind == Domestic && cost <=
-100000` has a threshold in it and this does not see it. The alternative is worse: the arm is reached
-without `cost` having been compared, so reaching it is not evidence about `cost`, and treating it as
-evidence would report a boundary as exercised that nothing ran against. Reading inside a compound
-condition needs a probe on each comparison rather than on each arm, which is a different instrument.
+Reading inside a compound condition took the instrument this said it would take: a probe on each
+comparison rather than on each arm. Without it the arm is reached without `cost` having been
+compared, so reaching it is not evidence about `cost`, and treating it as evidence would report a
+boundary as exercised that nothing ran against. With it, each comparison carries the site its own
+value is recorded at, and what the shape of the condition decides is which arm a row that reached the
+comparison can be in.
+
+What remains lost is the sum equality above, which the whole-condition restriction used to hide: a
+threshold beside `kind == Domestic` was one of the many this did not read, and is now the only one.
 
 Keeping a rule per cut means the same value can be owed three times. That is the point: an invariant
 and two guards that name 100000 are three rules, and a row that meets one of them has met one.
