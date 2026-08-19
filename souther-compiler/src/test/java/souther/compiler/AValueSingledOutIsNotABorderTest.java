@@ -32,8 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class AValueSingledOutIsNotABorderTest {
 
     /** The condition, with a bound this compiler cannot fold, so the questions survive. */
-    private static Set<CoverageObligation> raisedBy(String condition) {
-        Compilation compilation = Compilation.ofSource("""
+    private static final String SOURCE = """
                 module m
 
                 data R = { cost: Int, a: Int, other: Int }
@@ -46,7 +45,12 @@ class AValueSingledOutIsNotABorderTest {
 
                 example b
                     | "one" : (R { cost = 1, a = 1, other = 2 }) -> B
-                """.formatted(condition), "Main");
+                """;
+
+    /** The condition, with a bound this compiler cannot fold, so the questions survive. */
+    private static Set<CoverageObligation> raisedBy(String condition) {
+        Compilation compilation = Compilation.ofSource(
+                SOURCE.formatted(condition), "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
         PartitionEvidence partition = AdequacyReport.of(compilation)
@@ -54,6 +58,21 @@ class AValueSingledOutIsNotABorderTest {
         Set<CoverageObligation> out = new LinkedHashSet<>();
         partition.unanswered().forEach(each -> out.add(each.question()));
         return out;
+    }
+
+    /** The questions themselves, for a row that is about what they are about. */
+    private static java.util.List<PartitionEvidence.Unanswered> raisedWith(String condition) {
+        Compilation compilation = Compilation.ofSource(SOURCE.formatted(condition), "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+        return AdequacyReport.of(compilation)
+                .modules().get(0).behaviors().get(0).partition().unanswered();
+    }
+
+    /** What the questions of that condition are about, as a report names them. */
+    private static Set<String> subjectsOf(String condition) {
+        return raisedWith(condition).stream().map(PartitionEvidence.Unanswered::subject)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
 
     /** An order across the value it names: a border, and the classes either side of it. */
@@ -88,19 +107,39 @@ class AValueSingledOutIsNotABorderTest {
     }
 
     /**
-     * Both sides moving with the row is a relation, whatever names appear on them.
+     * Both sides moving with the row is a relation, and an order across it is still a line.
      *
-     * <p>What decides it is not how many positions are named. {@code a <= a + 1} names one, twice,
-     * and is a rule about how a position stands against itself; {@code a <= b + 1} names two and is
-     * not a line between them that anything here draws. Counted by distinct names, the first came
-     * back as a bound on {@code a} — a question about where {@code a} stops that no rule wrote.
+     * <p>What decides which it is is not how many positions are named: {@code a <= a + 1} names one,
+     * twice, and is a rule about how a position stands against itself. Counted by distinct names,
+     * that came back as a bound on {@code a} — a question about where {@code a} stops that no rule
+     * wrote.
+     *
+     * <p>The line is where the two sides hold one count, so it is on neither of them and divides
+     * neither: a border, and no classes. Raised whether or not this compiler can find that place —
+     * {@code a <= b} and {@code a <= b + 1} relate two positions alike (ADR-0090), and only one of
+     * them is a place this can name today. Which is the whole of the difference between a question
+     * and an answer.
      */
     @Test
-    void bothSidesMovingWithTheRowIsARelation() {
-        assertEquals(Set.of(), raisedBy("r.a <= r.other + 1"),
-                "two positions, and no bound on either");
-        assertEquals(Set.of(), raisedBy("r.a <= r.a + 1"),
+    void anOrderBetweenTwoThingsThatMoveIsABorderAndNoClasses() {
+        assertEquals(Set.of(CoverageObligation.BOUNDARY), raisedBy("r.a <= r.other + 1"));
+        assertEquals(Set.of(CoverageObligation.BOUNDARY), raisedBy("r.a <= r.a + 1"),
                 "one name twice is still both sides moving");
+    }
+
+    /**
+     * And the place it names is the comparison, not a spelling of where the two meet.
+     *
+     * <p>Writing the place out takes both sides in a vocabulary this compiler has, and it has none
+     * for {@code r.other + 1}: the best it could print was {@code r.a = r.other}, which is a place
+     * that rule never stopped, and {@code + 1} and {@code + 2} came out as one subject. What the
+     * question is about does not move when a printer learns another shape.
+     */
+    @Test
+    void theBorderOfARelationIsNamedByTheComparisonThatDrewIt() {
+        assertEquals(Set.of("where the relation changes"), subjectsOf("r.a <= r.other + 1"));
+        assertEquals(Set.of("where the relation changes"), subjectsOf("r.a <= r.a + 1"),
+                "and not `r.a = r.a`, which reads as a place every row is at");
     }
 
     /**

@@ -210,12 +210,22 @@ public sealed interface Required {
      * @param read  what that reading came to
      */
     public static Required ofComparison(ComparisonClaim claim, ComparisonSubject of) {
-        if (!(of instanceof ComparisonSubject.AnInput input)) {
-            // Where both sides move with the row. An order between two of them is a line rows are
-            // owed at and divides neither, so there is no class of one for a row to be owed in; an
-            // equality between them is not even that — it puts the whole of one arm on the place,
+        if (of instanceof ComparisonSubject.Relation between) {
+            // An order between two things that move with the row is a line rows are owed at — the
+            // place they hold one count — and divides neither of them, so there is no class of one
+            // for a row to be owed in. Raised whether or not this compiler can find that place: a
+            // question decided by a reading is what #851 is about, and `a <= b` and `a <= b + 1`
+            // relate two positions alike (ADR-0090).
+            //
+            // An equality between them is not a line: it puts the whole of one arm on the place,
             // and that arm is a row the branch measure already asks for (`ComparedTerms`).
-            return new Irrelevant(Set.of(Because.IT_RELATES_TWO_POSITIONS));
+            return claim instanceof ComparisonClaim.Cut
+                    ? new Some(new LinkedHashSet<>(java.util.List.of(
+                            new Owed(CoverageObligation.BOUNDARY, between.at()))))
+                    : new Irrelevant(Set.of(Because.IT_RELATES_TWO_POSITIONS));
+        }
+        if (!(of instanceof ComparisonSubject.AnInput input)) {
+            return new Irrelevant(Set.of(Because.IT_NAMES_NO_POSITION));
         }
         Set<Owed> owed = new LinkedHashSet<>();
         switch (claim) {
@@ -275,8 +285,22 @@ public sealed interface Required {
             }
         }
 
-        /** Both sides move with the row, so it is a rule about a pair. */
-        record Relation() implements ComparisonSubject {}
+        /**
+         * Both sides move with the row, so it is a rule about a pair.
+         *
+         * <p>Carries where the line it draws falls, which is on neither side: {@code r.a <= r.b + 1}
+         * stops where the two hold one count. A marker alone would have left the question with
+         * nowhere to be about; a subject picked from one side would name a place that rule never
+         * stopped; and one written out would be as much of the place as this compiler can print.
+         */
+        record Relation(Owed.Subject.OfComparison at) implements ComparisonSubject {
+
+            public Relation {
+                if (at == null) {
+                    throw new IllegalArgumentException("a rule about a pair is about both");
+                }
+            }
+        }
 
         /** Neither side is an input's, so it says nothing about one. */
         record NoInput() implements ComparisonSubject {}

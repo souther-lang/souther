@@ -355,7 +355,7 @@ public final class GuardThresholds {
     static Owed.Subject subjectOf(NumericTerm term) {
         // Null where neither side named a number this reads. The position is what the comparison is
         // about then, and nothing says a count was what the line was on.
-        return new Owed.Subject("", term instanceof NumericTerm.SizeOf);
+        return new Owed.Subject.OfAPosition("", term instanceof NumericTerm.SizeOf);
     }
 
     /**
@@ -372,7 +372,10 @@ public final class GuardThresholds {
         boolean right = movesWithTheRow(comparison.right(), reads, symbols, answer);
         if (left == right) {
             // Both, which is a rule about a pair; or neither, which says nothing about an input.
-            return left ? new Required.ComparisonSubject.Relation()
+            // The place a relation's line falls is between the two sides, spelled as they are
+            // written — a reader meets them beside each other on the row owed there.
+            return left ? new Required.ComparisonSubject.Relation(
+                    new Owed.Subject.OfComparison(Citation.of(comparison.pos())))
                     : new Required.ComparisonSubject.NoInput();
         }
         Core side = left ? comparison.left() : comparison.right();

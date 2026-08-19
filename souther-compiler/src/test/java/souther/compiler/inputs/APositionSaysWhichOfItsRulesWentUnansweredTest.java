@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.CoverageObligation;
+import souther.compiler.check.Owed;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.RuleAccounting;
 import souther.compiler.check.Sig;
@@ -111,7 +112,8 @@ class APositionSaysWhichOfItsRulesWentUnansweredTest {
                 "the clause the author wrote, as a report names it — and not the position it "
                         + "is about");
         assertEquals(CoverageObligation.ADMITTED_VALUES, open.get(0).owed().obligation());
-        assertTrue(open.get(0).owed().subject().path().isEmpty(),
+        assertTrue(open.get(0).owed().subject() instanceof Owed.Subject.OfAPosition at
+                        && at.path().isEmpty(),
                 () -> "about the value the newtype wraps: " + open.get(0).owed().subject());
     }
 }

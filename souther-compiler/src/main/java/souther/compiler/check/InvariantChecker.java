@@ -1175,7 +1175,7 @@ public final class InvariantChecker {
             // so that the arm cannot be reached with nothing to be about.
             positions.add(Owed.Subject.at(about.path()));
             shape = new ClauseStates.ABound(
-                    new Owed.Subject(about.path(), about.measured()), positions);
+                    new Owed.Subject.OfAPosition(about.path(), about.measured()), positions);
         }
         settle(bin, from, shape, end, at, byName, raised, took, typeAt, parts, raisedByPart);
         if (end instanceof InvariantBound.Read.NoEnd) {

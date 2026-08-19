@@ -144,8 +144,7 @@ final class Coverages {
                         // Spelled by the term itself, which is the one thing that spells a term. A
                         // second spelling here is a second key for one subject, and a document
                         // promises `String.length(code)` beside `code`.
-                        open.owed().subject().measured() && each.term() != null
-                                ? each.term().toString() : each.at().toString()));
+                        subjectSaid(open.owed().subject(), each)));
             }
         }
         return new PartitionEvidence(PartitionEvidence.Partitioned.of(axes),
@@ -316,6 +315,27 @@ final class Coverages {
                         each.owed().subject().measured()
                                 ? axis.term().toString() : axis.path().toString()))
                 .toList();
+    }
+
+    /**
+     * What a comparison's question is about, as a report names it.
+     *
+     * <p>A place between two things names itself: it is on neither position, so nothing about the
+     * position it was filed at spells it. A position's own subject is relative to where it is filed,
+     * and the term it was measured by spells the rest.
+     */
+    private static String subjectSaid(souther.compiler.check.Owed.Subject subject,
+                                      souther.compiler.partition.GuardThresholds.Guards.AtAPosition
+                                              filed) {
+        return switch (subject) {
+            // Named by the comparison that drew it, which a report writes as its place. The words
+            // beside it say what kind of place it is; writing the place out is what this subject
+            // exists not to do.
+            case souther.compiler.check.Owed.Subject.OfComparison it -> it.toString();
+            case souther.compiler.check.Owed.Subject.OfAPosition at ->
+                    at.measured() && filed.term() != null
+                            ? filed.term().toString() : filed.at().toString();
+        };
     }
 
     private static PartitionEvidence.AxisCoverage coverageOf(Axis axis, Readings readings) {

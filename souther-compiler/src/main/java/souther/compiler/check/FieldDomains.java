@@ -472,9 +472,16 @@ public final class FieldDomains {
 
     /** What answered one question of one rule. */
     private RuleAccounting.Outcome answered(RuleRef rule, Owed owed) {
+        // A clause of a `data` is written about a position of it, which is what the readings here
+        // answer about. A place between two numbers is a comparison's and reaches no accounting of
+        // one value's clauses.
+        if (!(owed.subject() instanceof Owed.Subject.OfAPosition where)) {
+            throw new IllegalStateException(
+                    "a clause of a value asks about a position of it: " + owed);
+        }
         return switch (owed.obligation()) {
-            case ADMITTED_VALUES -> admissionAnswered(rule, owed.subject());
-            case BOUNDARY -> boundaryAnswered(rule, owed.subject());
+            case ADMITTED_VALUES -> admissionAnswered(rule, where);
+            case BOUNDARY -> boundaryAnswered(rule, where);
             // A clause of a `data` raises none. Everything outside an invariant's bound is refused
             // at construction, so there is no class on the far side of the line for a row to be
             // owed in (ADR-0090) — and these are the questions of one value's clauses. Reached, the
@@ -503,7 +510,8 @@ public final class FieldDomains {
      * type and a clause of the record about the same field are two rules, and an end read for one
      * says nothing about the other.
      */
-    private RuleAccounting.Outcome boundaryAnswered(RuleRef rule, Owed.Subject where) {
+    private RuleAccounting.Outcome boundaryAnswered(RuleRef rule,
+                                                   Owed.Subject.OfAPosition where) {
         // Every conjunct that asked, and not whichever one happened to be read. A rule is read a
         // conjunct at a time and files one question about its line, so the two ways of reading the
         // record are both wrong: asked of what went unread alone, `value >= 1 && Int.abs(value) >= 2`
@@ -527,7 +535,8 @@ public final class FieldDomains {
     }
 
     /** What the reading of ends said about the rule at this position, where it said anything. */
-    private RuleAccounting.Outcome unreadAnswerFor(RuleRef rule, Owed.Subject where) {
+    private RuleAccounting.Outcome unreadAnswerFor(RuleRef rule,
+                                                   Owed.Subject.OfAPosition where) {
         for (Unread said : unread) {
             if (said.from().equals(rule) && said.path().equals(where.path())) {
                 return new RuleAccounting.Outcome.Unaccounted(
@@ -549,7 +558,8 @@ public final class FieldDomains {
      * clause beside it: {@code value >= 1} leaves the reading of values short at a position, and
      * {@code value == 7} written beside it was taken in whole.
      */
-    private RuleAccounting.Outcome admissionAnswered(RuleRef rule, Owed.Subject where) {
+    private RuleAccounting.Outcome admissionAnswered(RuleRef rule,
+                                                     Owed.Subject.OfAPosition where) {
         List<FactSubject> named = named(where.path());
         // A part of the rule nothing took in outranks everything else about it. An end placed by
         // one conjunct is not an account of the conjunct written beside it.
@@ -849,7 +859,11 @@ public final class FieldDomains {
                 Map<Core, Required> byPartRaised = raisedByPart.get(rule);
                 Required required = byPartRaised == null ? null : byPartRaised.get(part);
                 if (required != null) {
-                    required.obligations().forEach(owed -> said.add(owed.subject().path()));
+                    required.obligations().forEach(owed -> {
+                        if (owed.subject() instanceof Owed.Subject.OfAPosition at) {
+                            said.add(at.path());
+                        }
+                    });
                 }
                 // A part that raised no question is about the value it is written on, which is what
                 // the empty path is.
