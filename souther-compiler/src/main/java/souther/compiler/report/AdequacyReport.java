@@ -624,12 +624,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             int excluded = (int) measuredAxes.stream()
                     .flatMap(each -> behavior.claimed().at(each.path()).stream())
                     .filter(ClaimAnnotations.Said::settled).count();
-            out.append(String.format("    partition   axes %d   single-axis %d/%d%s%s%s%n",
+            out.append(String.format("    partition   axes %d   equivalence partitions %d/%d%s%s%n",
                     partition.axes().size(), covered, classes,
                     excluded == 0 ? "" : "   excluded " + excluded,
                     notes(partition.axes(), a -> !a.status().counted(),
-                            a -> whyNoAxis(a.reason())),
-                    pairs(partition.pairs())));
+                            a -> whyNoAxis(a.reason()))));
             for (Adequacy.Finding f : behavior.of(Adequacy.Kind.AXIS_CLASS_UNCOVERED)) {
                 out.append(String.format("      %s %s `%s`%n", mark(f),
                         f.status() == MeasurementStatus.PARTIAL
@@ -666,6 +665,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             unproven(said.why())));
         }
         undivided(out, behavior);
+        // On a line of its own, and this is the whole of why it has one. Counting combinations
+        // across two positions is the neighbouring technique rather than this one, and printed at
+        // the end of the partition line it sat beside the border counts where a reader could add
+        // them up into a total neither of them is part of.
+        //
+        // Under the same condition as before and not a new one: these counts used to be the tail of
+        // the partition line, which is written in the arm this tests for. Moving them out of that
+        // arm is what makes the condition something to spell rather than something to inherit.
+        if (partition.partitioned().status().counted()) {
+            String combinations = combinations(partition.pairs());
+            if (!combinations.isEmpty()) {
+                out.append(String.format("    combination %s%n", combinations));
+            }
+        }
         // Counted where both questions have an answer: the line was measured against the rows, and
         // something has shown a row can be written at it. The two are separate observations and are
         // filtered separately — a line nobody measured and a line nothing promises are not the same
@@ -683,10 +696,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // `0/0` said the rows were at every line there was. What it meant was that nobody found
             // a line to be at, which a model whose bounds sit one type away from the position the
             // behavior takes has, and which is the shape of every behavior that validates raw input.
-            out.append(String.format("    boundary    %s%n",
+            out.append(String.format("    border      %s%n",
                     whyNoBoundary(partition.bounded().reason())));
         } else {
-            out.append(String.format("    boundary    %d/%d%s%s%n", met, measured.size(),
+            out.append(String.format("    border      %d/%d%s%s%n", met, measured.size(),
                     notes(partition.boundaries(),
                             b -> b.coverage() instanceof BoundaryAssessment.Coverage.NotMeasured,
                             b -> whyNoBoundary(b.coverage())),
@@ -696,8 +709,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // The rule as this report writes it. The finding carries the rule and not words about
             // it, because what to say differs between here — where a file has a name — and the
             // warning built from the same finding, where nothing knows what to call one.
-            out.append(String.format("      %s no row is at %s = %s (%s)%n",
-                    mark(f), f.args().get(0), f.args().get(1),
+            out.append(String.format("      %s no row is at the %s point %s = %s (%s)%n",
+                    mark(f), f.args().get(3), f.args().get(0), f.args().get(1),
                     ((souther.compiler.partition.OriginRef) f.args().get(2))
                             .describe(names, declaredIn)));
         }
@@ -710,8 +723,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // counted turns on whether a concrete value was accepted at it, so a reader looking at
             // two models that differ here is looking at what the compiler could establish — and
             // without this line the difference reads as the tool being arbitrary.
-            out.append(String.format("      · not known to be writable: %s = %s (%s)%s%n",
-                    b.axis(), b.value(), b.origin(names, declaredIn),
+            out.append(String.format("      · not known to be writable: the %s point %s = %s (%s)%s%n",
+                    b.pointRole(), b.axis(), b.value(), b.origin(names, declaredIn),
                     whatWasTried(b.attempt())));
         }
     }
@@ -810,20 +823,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * has not been shown unreachable, only untried. Printing 3/8 would read as five gaps when it may
      * be five impossibilities.
      */
-    private static String pairs(PartitionEvidence.PairSpace pairs) {
+    private static String combinations(PartitionEvidence.PairSpace pairs) {
         if (pairs == null || pairs.total() == 0
                 || !pairs.status().counted()) {
             return "";
         }
         if (pairs.truncated()) {
-            return String.format("   pairs %d, too many to enumerate", pairs.total());
+            return String.format("pairs %d, too many to enumerate", pairs.total());
         }
         if (pairs.decided() && pairs.status() == MeasurementStatus.COMPLETE) {
-            return String.format("   pairs %d/%d", pairs.covered(), pairs.total());
+            return String.format("pairs %d/%d", pairs.covered(), pairs.total());
         }
         // Untried where every row was read, undecided where some were not: a combination an unread row
         // may sit in has not been left untried by anybody.
-        return String.format("   pairs %d reached / %d known reachable, %d %s",
+        return String.format("pairs %d reached / %d known reachable, %d %s",
                 pairs.covered(), pairs.witnessedFeasible(), pairs.unknown(),
                 pairs.status() == MeasurementStatus.COMPLETE ? "untried" : "undecided");
     }
@@ -1175,6 +1188,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // no other entry to guess from.
             b.put("origin", boundary.origin(sources::written, null));
             b.put("side", word(boundary.side()));
+            // Beside `side` and not in place of it. `side` is where the value sits around the cut,
+            // which is what says how to read `value`; this is what a row written there is for. The
+            // same `at` is the ON point of a closed border and the OFF point of an open one, so
+            // neither of the two produces the other, and a document carrying one of them would be
+            // asking its reader to work out the closed-border rule for themselves.
+            b.put("point", word(boundary.pointRole()));
             // What the line is a line at, said rather than left to be inferred from the text beside
             // it. A line between two positions writes the other position where a line at a count
             // writes the count, and the two read alike.

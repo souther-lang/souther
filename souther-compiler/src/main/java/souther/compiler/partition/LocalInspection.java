@@ -129,7 +129,7 @@ final class LocalInspection {
         // boundary's own answer about that rule — that a reading of it drew this cut, taken in by
         // these declarations — which is nothing the rule says about itself.
         for (RuleRef.Invariant from : end.from()) {
-            put(into, carrier, end.value(), new OriginRef.InvariantOrigin(from),
+            put(into, carrier, end.value(), new OriginRef.InvariantOrigin(from, end.at().inclusive()),
                     moved ? within : List.<TypeSymbol>of());
         }
     }

@@ -25,6 +25,70 @@ public record BoundaryObligation(BoundaryTarget target, OriginRef origin, Bounda
     }
 
     /**
+     * Which of the two points around a border this one is, in the words domain testing gives them.
+     *
+     * <p>Not a second spelling of {@link BoundarySide}. That says where the value sits around the cut
+     * and is what says how to read {@link BoundaryTarget#right()}; this says what a row written there
+     * is for. Which one a side is turns on whether the border is closed or open, so the same
+     * {@code AT} is the {@code ON} point of {@code <= 3000} and the {@code OFF} point of
+     * {@code < 3000} — two facts, and a report that kept one of them could not print the other.
+     */
+    public enum PointRole {
+        /** Inside the partition the border bounds, and closest to the border. */
+        ON,
+        /** Outside it, and closest to the border. */
+        OFF
+    }
+
+    /** Which point this obligation asks for. */
+    public PointRole pointRole() {
+        return pointRole(origin, side);
+    }
+
+    /**
+     * The same, of an origin and a side apart from an obligation.
+     *
+     * <p>One derivation and no other. What is printed for a person, what the JSON carries and what a
+     * row offered at the value is called are three readings of this — worked out three times they
+     * would agree until one of them was corrected.
+     *
+     * <p>{@code holdsAtTheValue} is the whole of the input beside the side: the cut is inside the
+     * partition exactly where the rule is satisfied there, which is what tells {@code <=} from
+     * {@code <}. Every origin carries it, an invariant's included — its end is read rather than
+     * assumed inclusive, and the ends that reach a report are inclusive because a strict bound on a
+     * continuous carrier is dropped further down and not because a bound is always closed.
+     *
+     * <p>Defined at the cut and at the one value beside it, which is every side an obligation is
+     * built with ({@link #besideTheCut}) and no other. Not every value around a border has one of
+     * these two roles: under {@code <= 100} the value below the cut is 99, which is inside the
+     * partition and not against its border — an {@code IN} point, and neither of the two answers
+     * here. Answering for it would have this say {@code OFF} of a value well inside the range, so a
+     * side the rule does not place a row on is refused rather than given the nearer of two words.
+     *
+     * @throws IllegalArgumentException where {@code side} is neither the cut nor the value the rule
+     *                                  places beside it
+     */
+    static PointRole pointRole(OriginRef origin, BoundarySide side) {
+        if (side != BoundarySide.AT && besideTheCut(origin).orElse(null) != side) {
+            throw new IllegalArgumentException(
+                    "no row is owed " + side + " of this line: " + origin);
+        }
+        // Inside at the cut exactly where the rule holds there, and beside it exactly where it does
+        // not — the two sides of one border, so the answers are opposite by construction.
+        return (side == BoundarySide.AT) == holdsAtTheValue(origin) ? PointRole.ON : PointRole.OFF;
+    }
+
+    /** Whether the cut value itself satisfies the rule that drew the line. */
+    private static boolean holdsAtTheValue(OriginRef origin) {
+        return switch (origin) {
+            case OriginRef.GuardOrigin g -> g.holdsAtTheValue();
+            case OriginRef.EnsuresOrigin e -> e.holdsAtTheValue();
+            case OriginRef.InvariantOrigin i -> i.holdsAtTheValue();
+            case OriginRef.NarrowedOrigin n -> holdsAtTheValue(n.bound());
+        };
+    }
+
+    /**
      * How a row at this boundary describes itself.
      *
      * <p>The generator writes these same words on the row it offers, so a row and a note about the

@@ -161,7 +161,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
         Run before = examples(WAITING_AND_UNCOVERED, "--generate", "--boundaries", "--strict");
 
         assertEquals(1, before.code(), before.out() + before.err());
-        assertTrue(before.out().contains("no row is at baseRate/score = 0"), before.out());
+        assertTrue(before.out().contains("no row is at the ON point baseRate/score = 0"), before.out());
         assertTrue(before.out().contains("1 row waiting for a `let`."), before.out());
         // The row the block proposes, which is what the pasted model below answers.
         assertTrue(before.out().contains("| (RiskScore(0)) -> <?>"), before.out());
@@ -272,7 +272,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
                         new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
                                 new Clause.Id(TypeSymbols.declared(
                                         new TypeKey("example.rate", "Amount")), 0),
-                                java.util.Optional.of(new ClauseName("cap"))))),
+                                java.util.Optional.of(new ClauseName("cap")))), true),
                         BoundaryObligation.BoundarySide.AT),
                 new BoundaryAssessment.Coverage.Hit(),
                 new BoundaryAssessment.Writability.WitnessedByRow(),
