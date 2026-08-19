@@ -39,6 +39,7 @@ public sealed interface Region {
      */
     record Beyond(Place from, Towards towards) implements Region {
 
+        @Override
         public boolean holds(Place at) {
             int order = at.compareTo(from);
             return towards == Towards.ABOVE ? order > 0 : order < 0;
@@ -79,10 +80,21 @@ public sealed interface Region {
      */
     record AdmittedOtherThan(Place excluded) implements Region {
 
+        @Override
         public boolean holds(Place at) {
             return !at.sameAs(excluded);
         }
     }
+
+    /**
+     * Whether a place is in this region.
+     *
+     * <p>On the interface because it is what a region is. A value stands for a region only where the
+     * region says it is in it, and every shape answers that question — asked of one shape and not
+     * another, a witness composed for a side stood for it on the strength of the arithmetic that
+     * composed it rather than on the region's own answer.
+     */
+    boolean holds(Place at);
 
     /**
      * Whether the rules leave this region no place at all, where that can be settled.
@@ -118,26 +130,32 @@ public sealed interface Region {
      * the pair's answer and not one term's, and it is worked out where the pair is.
      */
     default Place standingIn(Carrier carrier, NumericDomain.Bounds within) {
-        return switch (this) {
-            case Beyond beyond -> held(carrier,
-                    carrier.somethingInside(beyond.low(within), beyond.high(within)), beyond);
+        return held(carrier, switch (this) {
+            case Beyond beyond ->
+                    carrier.somethingInside(beyond.low(within), beyond.high(within));
             case AdmittedOtherThan other ->
                     carrier.somethingOtherThan(java.util.List.of(other.excluded()), within);
-        };
+        });
     }
 
     /**
      * What the carrier offered, once this region has agreed that it is inside.
      *
-     * <p>The carrier's spacing says what a value may be sharpened onto and does not promise that
-     * every number between two counts is one, so what it hands back is asked again here rather than
-     * taken. A region open at one end was offered the count at that very end this way.
+     * <p>Both shapes, and that is the point of doing it here. Which values a region holds is the
+     * region's own answer, and a search that composed one is offering a candidate rather than
+     * settling the question — so the offer is put back to the region whichever shape composed it. A
+     * region open at one end was offered the count at that very end this way, and a class of
+     * everything but one value was offered that value.
+     *
+     * <p>The grid is asked first and separately. The carrier's spacing says what a value may be
+     * sharpened onto and does not promise that every number between two counts is one, which is the
+     * carrier's question rather than the region's.
      */
-    private static Place held(Carrier carrier, Place offered, Beyond region) {
+    private Place held(Carrier carrier, Place offered) {
         if (offered == null) {
             return null;
         }
         Place onTheGrid = carrier.onTheGrid(offered);
-        return onTheGrid != null && region.holds(onTheGrid) ? onTheGrid : null;
+        return onTheGrid != null && holds(onTheGrid) ? onTheGrid : null;
     }
 }

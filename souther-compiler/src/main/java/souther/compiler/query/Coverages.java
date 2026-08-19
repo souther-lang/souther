@@ -685,38 +685,78 @@ final class Coverages {
     }
 
     /**
-     * How far apart a pair standing for one point of a line between two positions is.
+     * A pair standing at one point of a line between two positions, given a place its {@code
+     * against} term can hold, or nothing where this composes none.
      *
-     * <p>A point is that difference exactly; a side is one step further out than where it starts,
-     * which is the least of it and so the pair nearest the border that is still in it. Any pair in
-     * the side would do — what is offered is a candidate and not the item — and the nearest one is
-     * the one an author reads against the point beside it.
+     * <p>Composed and then asked. Which pair stands at a point and whether a pair is at that point
+     * are two answers, and the second already exists — worked out apart, the two came apart. So what
+     * is composed is handed to the predicate the rows are read by, and a pair that predicate does
+     * not accept stands for nothing: a row offered for a side that is really at the point against
+     * the line is a row an author pastes and re-measures to find the item still uncovered.
+     *
+     * <p>Which is the step a place already had. A region is asked whether it holds the value the
+     * carrier offered before that value stands for it ({@link Region#standingIn}), and this is the
+     * same question of a pair.
      */
-    private static int standingApartBy(Criterion criterion) {
+    private static java.util.Optional<Place> pairStandingAt(
+            Criterion criterion, Place against, souther.compiler.check.Carrier carrier,
+            souther.compiler.numeric.NumericDomain.Bounds on) {
+        souther.compiler.numeric.NumericDomain.Bounds within = on == null
+                ? new souther.compiler.numeric.NumericDomain.Bounds(null, null) : on;
+        return composed(criterion, against, carrier, within)
+                .filter(standing -> holdingBetween(criterion, carrier).test(standing, against));
+    }
+
+    /**
+     * Where the {@code on} term stands for one point of a line, before anything has asked whether it
+     * does.
+     *
+     * <p>Two questions and two answers, which is the whole of this. A point of the line asks for the
+     * place exactly so many steps from the other term, and only a carrier that names the value that
+     * far can give it. A side asks for any place in it — being in a side is not being anywhere in
+     * particular — so it is asked the way a side of a border at a place is asked, off the carrier's
+     * own reading of what lies between two ends.
+     *
+     * <p>Answered by stepping for both, a side over a carrier with no step had no candidate at all:
+     * {@code a < b} over decimals holds every pair where one is under the other, and the search came
+     * back saying nothing composes one because there is no value one step under anything. Stepping
+     * finds the nearest value; a witness of a side is not the nearest anything.
+     */
+    private static java.util.Optional<Place> composed(
+            Criterion criterion, Place against, souther.compiler.check.Carrier carrier,
+            souther.compiler.numeric.NumericDomain.Bounds within) {
         return switch (criterion) {
-            case Criterion.WhereTheTermsAreApartBy apart -> apart.steps();
-            case Criterion.WhereTheTermsAreFurtherApartThan apart -> apart.steps()
-                    + (apart.towards() == Region.Towards.ABOVE ? 1 : -1);
+            case Criterion.WhereTheTermsAreApartBy apart -> stepped(against, apart.steps(), carrier);
+            case Criterion.WhereTheTermsAreFurtherApartThan apart ->
+                    stepped(against, apart.steps(), carrier)
+                            .map(from -> new Region.Beyond(from, apart.towards()))
+                            .map(side -> side.standingIn(carrier, within))
+                            .filter(java.util.Objects::nonNull);
             case Criterion.AtThePlace _, Criterion.InTheRegion _ -> throw new IllegalStateException(
                     "a line between two positions was given a criterion about one place");
         };
     }
 
     /**
-     * A place {@code steps} from {@code at} on this carrier, or nothing where it names none.
+     * The place {@code steps} from {@code at} on this carrier, or nothing where it names none.
      *
-     * <p>Nothing rather than the place itself. A step off the end of what a carrier counts is not a
-     * pair anything stands in, and answering with {@code at} would put every row on the line into
-     * the point one step from it.
+     * <p>Every step, and not one however many were asked for. Read off the sign alone, a place two
+     * steps out came back one step out — which at a point of a line is the point beside it.
+     *
+     * <p>Nothing rather than the place itself where a step runs off what the carrier counts. A step
+     * off the end is not a pair anything stands in, and answering with {@code at} would put every
+     * row on the line into the point one step from it.
      */
     private static java.util.Optional<Place> stepped(Place at, int steps,
                                                      souther.compiler.check.Carrier carrier) {
-        if (steps == 0) {
-            return java.util.Optional.of(at);
-        }
         souther.compiler.inputs.BoundaryDomain domain =
                 souther.compiler.inputs.BoundaryDomain.on(carrier);
-        return steps > 0 ? domain.successor(at) : domain.predecessor(at);
+        java.util.Optional<Place> walked = java.util.Optional.of(at);
+        for (int taken = 0; taken < Math.abs(steps); taken++) {
+            walked = walked.flatMap(
+                    from -> steps > 0 ? domain.successor(from) : domain.predecessor(from));
+        }
+        return walked;
     }
 
     /**
@@ -744,7 +784,8 @@ final class Coverages {
             // candidate is built at, and what proves the line writable where the two are independent.
             Place at = Partitions.commonPlace(partitioning.domains(), line);
             out.merge(BoundaryLine.of(each),
-                    assessed(each, betweenTerms(each, line, at, where, probe), observed, armsAsked),
+                    assessed(each, betweenTerms(each, line, at, where, probe,
+                            partitioning.domains().get(line.on())), observed, armsAsked),
                     Coverages::whicheverSawMore);
         }
         return List.copyOf(out.values());
@@ -758,7 +799,8 @@ final class Coverages {
      * a line is settled by a witness or by nothing.
      */
     private static OneShapeOfBorder betweenTerms(Border border, BoundaryTarget.EqualTerms line,
-                                                 Place at, BehaviorInputs where, Probe probe) {
+                                                 Place at, BehaviorInputs where, Probe probe,
+                                                 souther.compiler.numeric.NumericDomain.Bounds on) {
         java.util.OptionalInt site = border.origin().comparisonSite();
         return new OneShapeOfBorder() {
 
@@ -778,14 +820,15 @@ final class Coverages {
                     return new ItemAssessment.Attempt.NotAttempted(
                             ItemAssessment.Attempt.Reason.NO_CLASSES);
                 }
-                // A pair, and every one of the four is one. What is fixed is the difference the two
-                // terms stand at: a point of the line is that difference exactly, and a side of it
-                // is one step further out — which is a pair as much as the row on the line is, and
-                // is why all four are composed rather than only the one where they meet.
-                java.util.Optional<Place> on =
-                        stepped(at, standingApartBy(criterion), line.carrier());
-                return on.isEmpty() ? nothingComposedOne(label)
-                        : whatCameOfIt(probe.attemptBetween(label, line, on.get(), at));
+                // A pair, and every one of the four is one. What is fixed is where the `on` term
+                // stands against the other: a point of the line is a place exactly so far from it,
+                // and a side is any place past that — which is a pair as much as the row on the
+                // line is, and is why all four are composed rather than only the one where they
+                // meet.
+                java.util.Optional<Place> standing =
+                        pairStandingAt(criterion, at, line.carrier(), on);
+                return standing.isEmpty() ? nothingComposedOne(label)
+                        : whatCameOfIt(probe.attemptBetween(label, line, standing.get(), at));
             }
 
             @Override

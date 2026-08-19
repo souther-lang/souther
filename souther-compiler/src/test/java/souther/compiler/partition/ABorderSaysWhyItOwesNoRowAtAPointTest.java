@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
+import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -169,6 +170,103 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
                 "a closed border is at its own ON point, with the OFF point one step outside it");
     }
 
+    /**
+     * A row offered for a point puts that point's own coverage where it was missing.
+     *
+     * <p>The invariant the four criteria above do not state. What a point asks of a row and what a
+     * search composes to stand for it are two answers, and holding only the first let a side be
+     * offered the pair against the line: the row was labelled for the side, carried the values of
+     * the point beside it, and an author who pasted it and measured again found the item still
+     * uncovered — and was offered the same row next time.
+     *
+     * <p>Written as pasting the row back, because that is what an author does with it. Read as the
+     * values the search settled on, this passes on any arithmetic that agrees with itself.
+     *
+     * <p>All four spellings, since the four points move together and each spelling puts a different
+     * one of them on the line.
+     */
+    @Test
+    void aRowOfferedForAPointCoversThatPointWhenItIsPastedBack() {
+        for (String op : List.of("<", "<=", ">", ">=")) {
+            String model = comparing(op);
+            // Every point that is owed and has no row is one a row is offered for. Held first,
+            // because what a wrong candidate becomes once it is checked is no candidate at all: a
+            // side offered the pair against the line composes nothing rather than composing that
+            // pair, and a check that walked only the rows it was given would see a point go quiet.
+            assertEquals(uncovered(model), offeredFor(model).keySet(),
+                    () -> "every uncovered point of `guard a " + op + " b` is offered a row");
+            for (Map.Entry<String, String> offered : offeredFor(model).entrySet()) {
+                String point = offered.getKey();
+                Map<String, BorderAssessment> after = bordersOf(withRow(model, offered.getValue()));
+                BorderAssessment line = after.get("p.a = p.b");
+                assertNotNull(line, after.keySet().toString());
+                PointRole role = java.util.stream.Stream.of(PointRole.values())
+                        .filter(each -> point.equals(line.label(each)))
+                        .findFirst().orElseThrow(() -> new AssertionError(
+                                "the row was offered for " + point + ", which this line has no"
+                                        + " point of: " + after.keySet()));
+                assertTrue(line.owedAt(role).coverage().hit(),
+                        () -> "a row offered for `" + point + "` of `guard a " + op + " b` does not"
+                                + " cover it: " + offered.getValue());
+            }
+        }
+    }
+
+    /**
+     * A side of such a line is offered a row over a carrier that names no next value.
+     *
+     * <p>The point against the line is not, and that is the difference. A `Decimal` names no value
+     * one step from anything, so the two points against the line are not named at all; the two sides
+     * are ordinary — every pair where one is under the other is in one of them — and asking the
+     * carrier for the nearest pair is asking it the wrong question. Answered that way, `a < b` over
+     * decimals had both of its sides owed and neither of them offered a row, and the block said
+     * nothing composes one about a pair anybody could write by hand.
+     */
+    @Test
+    void aSideOfALineOverACarrierWithNoNextValueIsStillOfferedARow() {
+        String model = comparing("<").replace("a: Int, b: Int", "a: Decimal, b: Decimal")
+                .replace("a = 3, b = 3", "a = 3m, b = 3m");
+        BorderAssessment line = bordersOf(model).get("p.a = p.b");
+        assertNotNull(line, bordersOf(model).keySet().toString());
+
+        assertEquals(new souther.compiler.query.ItemAssessment.NotOwed(
+                        NotOwedReason.THE_CARRIER_NAMES_NO_NEIGHBOUR), line.at(PointRole.ON),
+                "a decimal names no pair one step inside the line");
+        assertEquals(java.util.Set.of("p.a < p.b", "p.a > p.b"), offeredFor(model).keySet(),
+                "and both sides of it are pairs this composes, being sets rather than nearest"
+                        + " anything");
+    }
+
+    /** Each point of this model's line that is owed a row and has none, as the report labels it. */
+    private static java.util.Set<String> uncovered(String model) {
+        BorderAssessment line = bordersOf(model).get("p.a = p.b");
+        assertNotNull(line, bordersOf(model).keySet().toString());
+        return java.util.stream.Stream.of(PointRole.values())
+                .filter(role -> line.owedAt(role) != null)
+                .filter(role -> !line.owedAt(role).coverage().hit())
+                .map(line::label)
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+    }
+
+    /** Every row this model is offered for its line between two positions, by the point it is
+     *  offered for. */
+    private static Map<String, String> offeredFor(String model) {
+        Adequacy.Filling filling = compiled(model).db()
+                .ask(new Adequacy.Generated("example.owed")).value().get("cmp");
+        assertNotNull(filling, "the model under test compiles");
+        Map<String, String> out = new java.util.LinkedHashMap<>();
+        filling.boundaries().rows().forEach(row -> out.put(row.description(),
+                row.inputs().stream().map(FixtureTemplate::text)
+                        .collect(java.util.stream.Collectors.joining(", "))));
+        assertFalse(out.isEmpty(), "the model under test is offered rows at its line");
+        return out;
+    }
+
+    /** The same model with one more row written at {@code inputs}. */
+    private static String withRow(String model, String inputs) {
+        return model + "    | \"offered\" : (" + inputs + ") -> Ok\n";
+    }
+
     /** Each point of the model's one line, as {@code role: relation against}. */
     private static List<String> pointsOf(String model) {
         BorderAssessment line = bordersOf(model).get("p.a = p.b");
@@ -194,7 +292,7 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
                     No }
 
                 example cmp
-                    | "under" : (P { a = 1, b = 5 }) -> No
+                    | "on the line" : (P { a = 3, b = 3 }) -> Ok
                 """.formatted(op);
     }
 

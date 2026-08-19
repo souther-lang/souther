@@ -3,7 +3,7 @@ package souther.compiler.partition;
 /**
  * What a row has to do to be at one coverage item of a border.
  *
- * <p>Two kinds and not four. {@code ON} and {@code OFF} name a place and are met by writing it;
+ * <p>Two questions and four shapes. {@code ON} and {@code OFF} name a place and are met by writing it;
  * {@code IN} and {@code OUT} name a side and are met by landing anywhere in it. Which of the four
  * roles a criterion belongs to is the border's to say ({@link PointRole}) and is no part of this: the
  * same shape answers for two roles, and a criterion that carried the role would have every reader

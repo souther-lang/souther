@@ -33,9 +33,10 @@ public enum NotOwedReason {
     /**
      * The border is drawn and the carrier names no value one step from it.
      *
-     * <p>A {@code Decimal}, a {@code DateTime} and a {@code String} have no next value, at a place
-     * or at the difference two terms of a line between them stand at. The point the technique asks
-     * for cannot be written down in this language, which is a limit of the language and not a gap in
+     * <p>A {@code Decimal} and a {@code String} have no next value, at a place or at the difference
+     * two terms of a line between them stand at — the two carriers this language names no step for,
+     * a date-time and a time of day each stepping at the unit they are held to. The point the
+     * technique asks for cannot be written down, which is a limit of the language and not a gap in
      * the rows: an item that cannot exist is not one anybody is short of.
      */
     THE_CARRIER_NAMES_NO_NEIGHBOUR,
