@@ -95,9 +95,11 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
      *                rule in that alternative was about
      * @param guaranteed which values each position is guaranteed to admit — read through
      *                {@link #guaranteedAt} rather than off this map, which holds a position whose
-     *                guarantee is the default as well. Kept rather than dropped because the keys
-     *                are which positions the guarantee has been shaped by, and a choice asks how
-     *                many that is
+     *                guarantee is the default as well. Held that way on purpose: the keys are
+     *                {@link #promisedAt}, the positions a rule of this reading reached, and
+     *                dropping the ones that came to the default would make that set turn on which
+     *                rules happened to leave a position where it started. A choice reads it twice
+     *                over, and both readings would follow the brackets
      * @param defaultGuaranteed what a position this holds no guarantee for is guaranteed to admit.
      *                Not {@link #dropped} said another way: {@code value == 5} joined with a rule
      *                nothing could read has this at {@link ValueSet#ANY} and {@code dropped} set,
@@ -310,22 +312,30 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
         // the unread rule was about — a rule relating two other positions relates this one to
         // nothing, and lending its reason here would say that it did.
         if (other.dropped) {
-            spoiled = spoiling(spoiled, guaranteed.keySet());
+            spoiled = spoiling(spoiled, promisedAt());
         }
         if (dropped) {
-            spoiled = spoiling(spoiled, other.guaranteed.keySet());
+            spoiled = spoiling(spoiled, other.promisedAt());
         }
         // What each rule left standing is kept whole. Whether a position is answerable for it is
         // read off the two ends where the question is asked ({@link #speaksFor}) rather than
         // settled here: what covers a position is an alternative, and a rule stated beside the
         // choice may leave nothing of that alternative.
-        // The promise survives as one about whole values only where the alternatives are shaped by
-        // no more than one position between them. A union of two products alike everywhere but at
-        // one place is the product with that place widened; anywhere else it holds a value from one
-        // alternative at one position beside a value from the other at another, which is a
+        Set<A> shapedBy = new LinkedHashSet<>(promisedAt());
+        shapedBy.addAll(other.promisedAt());
+        // A union of two products alike everywhere but at one place is the product with that place
+        // widened, so the promise survives as one about whole values where the alternatives are
+        // written at no more than one position between them. Anywhere else the union holds a value
+        // from one alternative at one position beside a value from the other at another, which is a
         // combination neither of them stands for.
-        Set<A> shapedBy = new LinkedHashSet<>(guaranteed.keySet());
-        shapedBy.addAll(other.guaranteed.keySet());
+        //
+        // Sufficient and not necessary, and deliberately so. A union is also a product where one
+        // alternative promises everything the other does, and where the two differ at only one
+        // position however many they are written at — and both of those compare the two boxes a
+        // bracketing happened to put together, so a choice of three alternatives answers one way
+        // written to the left and another to the right. Measured: both were tried and both broke
+        // `AChoiceIsOneConnectiveAndNotATree`. Coarse and the same either way is the trade, and
+        // what it costs is a promise this could have kept rather than one it could not.
         return new AdmissibleValues<>(out, spoiled, dropped || other.dropped, false,
                 covered, coveredElsewhere,
                 guaranteedTogether && other.guaranteedTogether && shapedBy.size() <= 1);
@@ -342,6 +352,25 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
         named.forEach(each -> out.put(each, both.apply(these.getOrDefault(each, theseElse),
                 those.getOrDefault(each, thoseElse))));
         return out;
+    }
+
+    /**
+     * The positions an alternative beside this one may have widened.
+     *
+     * <p>Every position this reading's promise is written at, which is every position a rule of it
+     * reached — narrowed there or not. Not the positions it narrows: a branch that read two rules
+     * and came out admitting every value at a position narrows nothing there and had rules about it
+     * all the same, and which of the two a branch looks like turns on where the brackets of the
+     * choice fell. Asked of what a reading is about rather than of what it managed, the answer is
+     * the same either way.
+     *
+     * <p>These are candidates and not the answer. What is recorded against them is that an
+     * alternative went unread beside them; whether that is anything the position is answerable for
+     * is settled by {@link #speaksFor}, which reads it off the two ends where the question is asked.
+     * A position the alternatives cover between them carries a reason nobody is ever shown.
+     */
+    private Set<A> promisedAt() {
+        return guaranteed.keySet();
     }
 
     /** The same, with {@code these} left open by an alternative — where nothing has spoiled them
