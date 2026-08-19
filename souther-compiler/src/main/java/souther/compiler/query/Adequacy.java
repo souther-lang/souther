@@ -2109,11 +2109,19 @@ public final class Adequacy {
                         // against whichever file the reader has in mind. Where a fork of a body
                         // drew the line, the place is pointed at rather than said, and which
                         // construct it was is a phrase the catalog holds in every language.
+                        //
+                        // Which point of the border this is crosses that and does not replace it.
+                        // How the rule is named follows from whether it has a place; which of the
+                        // border's points went unmet is the measurement's own answer, and a
+                        // sentence deciding one of them from the other would be reading a rule off
+                        // a role.
                         case BOUNDARY_UNMET -> rule(said).wasDrawnInABodyFork()
-                                ? new ExampleMessage.NoRowIsAtTheLineAConstructDrew(
-                                        text(said, 0), text(said, 1), constructOf(said))
-                                : new ExampleMessage.NoRowIsAtThatBoundary(
-                                        text(said, 0), text(said, 1), rule(said).named());
+                                ? new ExampleMessage.NoRowIsAtThePointOfTheBorderAConstructDrew(
+                                        point(said).name(), text(said, 0), text(said, 1),
+                                        constructOf(said))
+                                : new ExampleMessage.NoRowIsAtThePointOfTheBorderARuleDrew(
+                                        point(said).name(), text(said, 0), text(said, 1),
+                                        rule(said).named());
                         case ARM_UNREACHED -> new ExampleMessage.NoRowGoesThroughThatArm(
                                 phraseFor(arm(said)), text(said, 1));
                         default -> throw new IllegalArgumentException(
@@ -2123,7 +2131,21 @@ public final class Adequacy {
                 case OUTPUT_CASE_UNSPECIFIED ->
                         built.hint(new ExampleMessage.WriteARowExpectingThatCase(text(said, 0)));
                 case BOUNDARY_UNMET -> {
-                    built.hint(new ExampleMessage.ARowOnTheLineTellsTwoRulesApart());
+                    // Asked of the point and not of the border. A row on the line is what tells a
+                    // rule written `<=` from one written `<`, which is true of the point inside the
+                    // partition and is not what the point one step outside it shows — said of both,
+                    // one of the two warnings was hinting at the other one's row.
+                    switch (point(said)) {
+                        case ON -> built.hint(
+                                new ExampleMessage.ARowOnTheLineTellsTwoRulesApart());
+                        case OFF -> built.hint(
+                                new ExampleMessage.ARowPastTheLineShowsWhereTheRuleStops());
+                        // Reported and warned about by nothing, which is where the two kinds part.
+                        // Reaching this is a finding built for a point no diagnostic is written
+                        // for, and answering it with a neighbour's hint is what that would cost.
+                        case IN, OUT -> throw new IllegalStateException(
+                                "only a point against the line is warned about: " + point(said));
+                    }
                     // Where the rule has a place rather than a name, the place is a second region
                     // and not words in the sentence: a renderer resolves what to call its file,
                     // and a body written out of sight says so off its own coordinate.
@@ -2192,6 +2214,17 @@ public final class Adequacy {
          *  which cannot. */
         private static souther.compiler.partition.OriginRef rule(List<Object> said) {
             return (souther.compiler.partition.OriginRef) said.get(2);
+        }
+
+        /**
+         * Which point of the border a boundary finding is about.
+         *
+         * <p>Carried by the finding, which is where the closed-border rule is read. A sentence
+         * working it out again from the rule and the value would be the second place that rule is
+         * written, and the report reads it from here already.
+         */
+        private static souther.compiler.partition.PointRole point(List<Object> said) {
+            return (souther.compiler.partition.PointRole) said.get(3);
         }
 
         /** The arm an arm finding is about, which it carries as itself for the same reason a
