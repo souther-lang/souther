@@ -220,7 +220,7 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
 
         assertTrue(report.contains("no row is at the OFF point cmp/a = b"), report);
         assertTrue(report.contains("no ON point is owed at a = b")
-                        && report.contains("name no neighbour"),
+                        && report.contains("names no value there"),
                 "a string has no next string, so the point one along is not owed:\n" + report);
         assertFalse(report.contains("no IN point is owed") || report.contains("no OUT point is owed"),
                 "and both sides of the line are still there, which is a different answer:\n"
@@ -259,30 +259,11 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
      */
     @Test
     void aLevelTheRulesLeaveNoRowAtIsSaidToBeOutOfReach() {
-        String report = report("""
-                module example.narrow
+        String report = report(guarded(
+                "Int.add(Int.multiply(3, a.value), Int.multiply(5, b.value)) <= 7"));
 
-                data Bound = Int
-                    invariant value >= 6
-                    invariant value <= 7
-
-                data No = { why: Int }
-                data Yes = { v: Int }
-                data Result = No | Yes
-
-                behavior f : (a: Bound) -> Result
-                    constructs No, Yes
-                let f (a) = {
-                    guard Int.multiply(2, a.value) <= 9 else No { why = 0 }
-                    Yes { v = 1 }
-                }
-
-                example f
-                    | "one" : (Bound(6)) -> No { why = 0 }
-                """);
-
-        assertTrue(report.contains("the ON point f/2 * a = 8 (guard@14:5)"
-                        + " — the rules leave no value at 2 * a = 8"), report);
+        assertTrue(report.contains("the ON point f/3 * a + 5 * b = 7 (guard@14:5)"
+                        + " — the rules leave no value at 3 * a + 5 * b = 7"), report);
         assertFalse(report.contains("nothing composed one: the rules leave no value"),
                 "a proof does not arrive under the opening a failed search gets:\n" + report);
     }
@@ -435,12 +416,12 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
     @Test
     void aFormWithMixedSignsIsTurnedRoundToo() {
         String written = report(guarded(
-                "Int.subtract(Int.multiply(3, a.value), Int.multiply(6, b.value)) <= 48"));
+                "Int.subtract(Int.multiply(3, a.value), Int.multiply(6, b.value)) <= 12"));
         String turned = report(guarded(
-                "48 >= Int.subtract(Int.multiply(3, a.value), Int.multiply(6, b.value))"));
+                "12 >= Int.subtract(Int.multiply(3, a.value), Int.multiply(6, b.value))"));
 
-        assertTrue(written.contains("point f/3 * a - 6 * b = 48"), written);
-        assertTrue(turned.contains("point f/3 * a - 6 * b = 48"), turned);
+        assertTrue(written.contains("point f/3 * a - 6 * b = 12"), written);
+        assertTrue(turned.contains("point f/3 * a - 6 * b = 12"), turned);
         assertFalse(turned.contains("-3 * a"), turned);
     }
 
@@ -524,21 +505,20 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
     /**
      * A level out of reach is proved out of reach, however wide the box is.
      *
-     * <p>What a proof takes is a walk of the whole box, and a wide one is not walked a step at a
-     * time: what the positions still to be chosen can add up to settles it without looking, and so
-     * does whether the residue is a multiple of what their coefficients can make. Without them the
-     * budget runs out first and a level the rules truly leave nothing at comes back as a search that
-     * stopped — which is the one answer a reader may not act on, standing where the one they may
-     * belongs.
+     * <p>A wide box is not walked a step at a time: what the positions still to be chosen can add up
+     * to bounds what this one may be, so an equation with one answer is one value tried. Used only
+     * to reject a choice after making it, the walk runs the width of the box and the budget runs out
+     * — here a million steps short of {@code a = b = 1000000}, which is the only pair that reaches
+     * the line.
      */
     @Test
-    void aLevelOutOfReachIsProvedOutOfReachHoweverWideTheBoxIs() {
+    void aBoxAMillionWideIsNotWalkedAStepAtATime() {
         String report = report("""
                 module example.wide
 
                 data Bound = Int
-                    invariant value >= 20
-                    invariant value <= 300000
+                    invariant value >= 0
+                    invariant value <= 1000000
 
                 data No = { why: Int }
                 data Yes = { v: Int }
@@ -547,18 +527,17 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
                 behavior f : (a: Bound, b: Bound) -> Result
                     constructs No, Yes
                 let f (a, b) = {
-                    guard Int.add(Int.multiply(300, a.value), Int.multiply(600, b.value)) <= 4800
-                        else No { why = 0 }
+                    guard Int.add(a.value, b.value) <= 2000000 else No { why = 0 }
                     Yes { v = 1 }
                 }
 
                 example f
-                    | "one" : (Bound(20), Bound(20)) -> No { why = 0 }
+                    | "one" : (Bound(1), Bound(1)) -> Yes { v = 1 }
                 """);
 
-        assertTrue(report.contains("the rules leave no value at 300 * a + 600 * b = 4800"), report);
-        assertFalse(report.contains("the search stopped before reaching 300 * a + 600 * b = 4800"),
-                report);
+        assertTrue(report.contains("no row is at the ON point f/a + b = 2000000"), report);
+        assertFalse(report.contains("the search stopped before reaching a + b = 2000000"),
+                "one equation with one answer, in a box a million wide:\n" + report);
     }
 
     /**
@@ -638,6 +617,68 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
                         "Int.add(Int.multiply(3, a.value), Int.multiply(6, b.value)) <= 48")),
                 report(written.formatted("a.value * 3 + b.value * 6 <= 48")),
                 "one rule, whichever way the arithmetic is spelled");
+    }
+
+    /**
+     * A dense order is not an order whose every value the quantity takes.
+     *
+     * <p>A decimal is a finite decimal, so {@code 3 * a} takes every {@code 3 * d} with {@code d}
+     * finite — dense, and not including one: no decimal a model writes is a third. Answered by the
+     * topology, the border of {@code 3 * a <= 1m} owed a row where the quantity comes arbitrarily
+     * close and never arrives, and no search could ever compose it. A coverage item nothing can meet
+     * is worse than one nobody has got to: it never goes away.
+     *
+     * <p>Two and five are not the same case. Ten is a unit among the finite decimals, so
+     * {@code 2 * a} does take nine — at {@code a = 4.5} — which is why a form whose coefficients are
+     * twos and fours cannot tell this apart.
+     */
+    @Test
+    void aDenseOrderIsNotAnOrderWhoseEveryValueTheQuantityTakes() {
+        String report = report("""
+                module example.third
+
+                data D = Decimal
+                    invariant value >= 0m
+                    invariant value <= 1m
+
+                data No = { why: Int }
+                data Yes = { v: Int }
+                data Result = No | Yes
+
+                behavior f : (a: D) -> Result
+                    constructs No, Yes
+                let f (a) = {
+                    guard a.value * 3m <= 1m else No { why = 0 }
+                    Yes { v = 1 }
+                }
+
+                example f
+                    | "one" : (D(0m)) -> Yes { v = 1 }
+                """);
+
+        assertTrue(report.contains("no ON point is owed at 3 * a = 1"), report);
+        assertTrue(report.contains("no OFF point is owed at 3 * a = 1"), report);
+        assertFalse(report.contains("no row is at the ON point f/3 * a = 1"),
+                "a third is no decimal, so no row is owed where the quantity never arrives:\n"
+                        + report);
+    }
+
+    /**
+     * A quantity is bounded by what it is made of, so a threshold outside it draws no line.
+     *
+     * <p>Three times a length is never negative, whatever a rule compares it against. Read as the
+     * lattice alone — every multiple of the coefficients' divisor, negative ones among them — such a
+     * threshold was a border whose points a search was sent looking for and never found. It is the
+     * same answer a bound outside what a position's own type leaves already gets: there is no border
+     * there, and there never was one for a point to be owed at.
+     */
+    @Test
+    void aThresholdOutsideWhatTheFormTakesDrawsNoLine() {
+        String report = report(guarded(
+                "Int.add(Int.multiply(3, a.value), Int.multiply(6, b.value)) <= -3"));
+
+        assertFalse(report.contains("3 * a + 6 * b"),
+                "the form runs from nought upward, so nothing is cut at minus three:\n" + report);
     }
 
     private static String report(String model) {

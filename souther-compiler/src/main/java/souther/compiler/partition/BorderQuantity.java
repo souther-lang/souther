@@ -287,19 +287,25 @@ public sealed interface BorderQuantity {
         }
 
         /**
-         * Every multiple of the greatest common divisor of the coefficients, where the positions
-         * count in steps; every number where they do not.
+         * What the form takes, which is what its coefficients generate over the values its positions
+         * take — and not what the order they sit on happens to be.
          *
-         * <p>Bézout's, and exact rather than a guess: the values {@code Σ cᵢxᵢ} takes over the whole
-         * numbers are exactly the multiples of {@code gcd(cᵢ)}. What the rules leave the positions
-         * does not enter here — a level this says the form takes may be one no row can be written
-         * at, and that is the search's answer rather than a reason to move the border.
+         * <p>Over positions that step, Bézout's: exactly the multiples of {@code gcd(cᵢ)}. Over
+         * positions whose values fill, every multiple of what is left of that divisor once the
+         * factors a finite decimal can be divided by are taken out — which is dense and is not every
+         * number. Read off the order alone, {@code 3 * a} was taken to reach one, and the border of
+         * {@code 3 * a <= 1} owed a row at a level the quantity never arrives at.
+         *
+         * <p>What the rules leave the positions does not enter here. A level this says the form takes
+         * may be one no row can be written at, and that is the search's answer rather than a reason
+         * to move the border.
          */
         @Override
         public LevelSpace levels() {
+            java.math.BigDecimal step = LevelSpace.stepOf(form.coefs().values());
             return of.spacing() == souther.compiler.numeric.Granularity.DISCRETE
-                    ? LevelSpace.steppingBy(LevelSpace.stepOf(form.coefs().values()))
-                    : LevelSpace.dense();
+                    ? LevelSpace.steppingBy(step)
+                    : LevelSpace.overFiniteDecimals(LevelSpace.generatorOverFiniteDecimals(step));
         }
 
         @Override

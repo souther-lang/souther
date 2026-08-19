@@ -806,7 +806,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return switch (reason) {
             case THE_RULES_REFUSE_IT -> "excluded — the rules leave no value there";
             case THE_CARRIER_NAMES_NO_NEIGHBOUR ->
-                    "these values name no neighbour, so the point cannot be written";
+                    "this order names no value there, so the point cannot be written";
             case THE_RULE_NAMES_A_VALUE_NOT_A_SIDE ->
                     "the rule names a value rather than a side, so neither neighbour is the nearer";
         };

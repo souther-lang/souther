@@ -200,7 +200,7 @@ public final class EnsuresThresholds {
             // guard — a guard's is met by getting the comparison to answer, because what it is about
             // is a place in a body.
             reportUnread(comparison, rule.value(), reads, symbols, out.unread());
-            Border made = Border.at(cutting.target(), origin, null);
+            Border made = Border.at(cutting.target(), origin, cutting.within());
             if (made != null && out.between().stream().noneMatch(had -> had.equals(made))) {
                 out.between().add(made);
             }

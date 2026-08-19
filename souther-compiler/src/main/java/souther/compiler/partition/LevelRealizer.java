@@ -130,8 +130,12 @@ public final class LevelRealizer {
      */
     private Realization ofAForm(Standing.OfAForm over) {
         LevelSpace levels = over.levels();
+        // In the form's own order and not the map's. A form is a map, so the order its coefficients
+        // were recorded in is a hash order — and which position is solved last decides whether the
+        // walk finds an answer inside its budget, so an answer that depended on it would depend on
+        // nothing a reader can see.
         List<Map.Entry<NumericTerm, java.math.BigDecimal>> terms =
-                List.copyOf(over.form().coefs().entrySet());
+                AffineReading.ordered(over.form());
         // A position whose values step takes whole numbers, and the level it is solved for has to be
         // one of them. Asked of the order the form's own values sit on, which is the one place that
         // says whether they step at all.
@@ -258,8 +262,11 @@ public final class LevelRealizer {
             }
             java.math.BigDecimal coef = terms.get(i).getValue();
             NumericDomain.Bounds within = bounds(terms.get(i).getKey());
-            java.math.BigDecimal low = endOf(within.min(), true);
-            java.math.BigDecimal high = endOf(within.max(), false);
+            // Narrowed by what the positions after this one can add up to. Used to reject a choice
+            // after making it, a box a million wide is walked a million times and the budget runs
+            // out on `a + b <= 2000000` — an equation with one answer. Used to bound the walk, that
+            // answer is the only value tried.
+            NumericDomain.Bounds left = leaving(i + 1, owed, coef, within);
             if (i == terms.size() - 1) {
                 // The last position is solved rather than tried. Where its values step, what is left
                 // over has to be its coefficient's multiple; where they fill, it is a division and
@@ -282,12 +289,17 @@ public final class LevelRealizer {
                         return false;
                     }
                 }
-                if (below(solved, low) || above(solved, high)) {
+                // Held against the ends themselves, which say whether they are their own values. A
+                // bound of `> 0` leaves one and not zero, and rounding the end to a number first
+                // loses which of the two it is.
+                if (!left.admits(new Count(solved))) {
                     return false;
                 }
                 at[i] = new Count(solved);
                 return true;
             }
+            java.math.BigDecimal low = endOf(left.min(), true);
+            java.math.BigDecimal high = endOf(left.max(), false);
             if (low == null || high == null || !whole) {
                 // Not a position this can walk. One nothing bounds has no ends to run between; one
                 // whose values fill has no next value to step to, so there is no enumeration of it
@@ -304,7 +316,7 @@ public final class LevelRealizer {
                 // its own range: the residue has to be something the positions after it arrive at,
                 // and a value picked without asking leaves a form over three or more filled
                 // positions unsolved wherever the first guess happens not to work out.
-                Place inside = somewhereThatLeavesTheRestReachable(i, owed, coef, within);
+                Place inside = carrier.somethingInside(left.min(), left.max());
                 if (inside == null || !(inside instanceof Count taken)) {
                     return false;
                 }
@@ -327,8 +339,9 @@ public final class LevelRealizer {
         /**
          * One end of what the rules leave a position, as a whole number this can start or stop at.
          *
-         * <p>Asked only where the position's values step, which is the only case an enumeration
-         * exists in. Where they fill, what a value inside the ends is is the carrier's answer.
+         * <p>Asked only to bound an enumeration, which only a position whose values step has. Where
+         * they fill, what a value inside the ends is is the carrier's answer and whether a solved one
+         * is inside them is the ends' own.
          *
          * <p>Rounded inwards and never outwards, and the excluded end excluded. A bound of
          * {@code > 0} leaves one, not zero; a bound of {@code >= 2.4} over whole numbers leaves
@@ -337,32 +350,30 @@ public final class LevelRealizer {
          * and reads as the model refusing an edge it admits.
          */
         /**
-         * A place this position admits that leaves the rest a residue they can reach, or null.
+         * What the rules leave this position, narrowed to the values that leave the rest a residue
+         * they can reach.
          *
          * <p>What the positions after this one can add up to is an interval; what this one has to
-         * contribute for the residue to land in it is another. The carrier is asked for a value in
-         * the two together, so a choice here is one the rest can still answer — and where the two do
-         * not meet there is nothing to choose and the walk says so.
+         * contribute for the residue to land in it is another. Both are proofs — a value outside
+         * either is one no assignment of the rest completes — so the walk runs between them rather
+         * than between the position's own ends.
          */
-        private Place somewhereThatLeavesTheRestReachable(int i, java.math.BigDecimal owed,
-                                                          java.math.BigDecimal coef,
-                                                          NumericDomain.Bounds within) {
-            java.math.BigDecimal[] rest = reach(i + 1);
-            Endpoint low = within.min();
-            Endpoint high = within.max();
-            if (rest != null && coef.signum() != 0) {
-                // owed - coef * x must lie in [rest0, rest1], so coef * x lies in
-                // [owed - rest1, owed - rest0].
-                java.math.BigDecimal one = owed.subtract(rest[1]).divide(coef,
-                        java.math.MathContext.DECIMAL64);
-                java.math.BigDecimal other = owed.subtract(rest[0]).divide(coef,
-                        java.math.MathContext.DECIMAL64);
-                Endpoint needLow = Endpoint.inclusive(new Count(one.min(other)));
-                Endpoint needHigh = Endpoint.inclusive(new Count(one.max(other)));
-                low = Endpoint.lower(low, needLow);
-                high = Endpoint.upper(high, needHigh);
+        private NumericDomain.Bounds leaving(int rest, java.math.BigDecimal owed,
+                                             java.math.BigDecimal coef,
+                                             NumericDomain.Bounds within) {
+            java.math.BigDecimal[] reach = reach(rest);
+            if (reach == null || coef.signum() == 0) {
+                return within;
             }
-            return carrier.somethingInside(low, high);
+            // owed - coef * x must lie in [reach0, reach1], so coef * x lies in
+            // [owed - reach1, owed - reach0].
+            java.math.BigDecimal one = owed.subtract(reach[1])
+                    .divide(coef, java.math.MathContext.DECIMAL64);
+            java.math.BigDecimal other = owed.subtract(reach[0])
+                    .divide(coef, java.math.MathContext.DECIMAL64);
+            return new NumericDomain.Bounds(
+                    Endpoint.lower(within.min(), Endpoint.inclusive(new Count(one.min(other)))),
+                    Endpoint.upper(within.max(), Endpoint.inclusive(new Count(one.max(other)))));
         }
 
         /**
@@ -429,13 +440,6 @@ public final class LevelRealizer {
                     : onTheGrid.add(java.math.BigDecimal.valueOf(low ? 1 : -1));
         }
 
-        private static boolean below(java.math.BigDecimal x, java.math.BigDecimal low) {
-            return low != null && x.compareTo(low) < 0;
-        }
-
-        private static boolean above(java.math.BigDecimal x, java.math.BigDecimal high) {
-            return high != null && x.compareTo(high) > 0;
-        }
     }
 
     /**

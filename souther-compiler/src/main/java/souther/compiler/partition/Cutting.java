@@ -26,11 +26,16 @@ import souther.compiler.numeric.Count;
  * earlier stops because the arithmetic has no numbers there rather than because of how the rule was
  * spelled.
  *
- * @param of    what the rule cuts
- * @param at    where on it
- * @param claim what the operator states about the threshold's own value
+ * @param of     what the rule cuts
+ * @param at     where on it
+ * @param claim  what the operator states about the threshold's own value
+ * @param within what the rules leave the quantity itself, or null where they leave it everything.
+ *               A form's own values are bounded by what its positions are bounded by — three times
+ *               a length is never negative — and a threshold outside them is one the rule draws no
+ *               border at
  */
-record Cutting(BorderQuantity of, Level at, ComparisonClaim claim) {
+record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
+               souther.compiler.numeric.NumericDomain.Bounds within) {
 
     /** The line {@code comparison} draws, or null where nothing here reads one. */
     static Cutting of(String behavior, Core.Binary comparison, InputReads reads, Symbols symbols) {
@@ -44,14 +49,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim) {
                     new BorderQuantity.OfACoordinate(AxisId.of(behavior, atAPosition.term()),
                             atAPosition.term(), atAPosition.carrier()),
                     new Level.OnACarrier(atAPosition.carrier(), atAPosition.value()),
-                    claimOf(atAPosition));
+                    claimOf(atAPosition), null);
         }
         ComparedTerms apart = ComparedTerms.of(comparison, read, reads, symbols);
         if (apart != null) {
             return new Cutting(
                     new BorderQuantity.Apart(behavior, apart.on(), apart.against(), apart.carrier()),
                     new Level.ACount(apart.stepsApart()),
-                    new ComparisonClaim.Cut(apart.valueBelongsBelow(), apart.holdsAtTheLine()));
+                    new ComparisonClaim.Cut(apart.valueBelongsBelow(), apart.holdsAtTheLine()),
+                    null);
         }
         return overAForm(behavior, read, reads, symbols);
     }
@@ -78,7 +84,55 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim) {
             return null;
         }
         return new Cutting(new BorderQuantity.OverAForm(behavior, read.form(), carrier),
-                new Level.ACount(new Count(read.cut())), read.claim());
+                new Level.ACount(new Count(read.cut())), read.claim(), reachOf(read, reads));
+    }
+
+    /**
+     * What the form's own values run between, from what its positions run between.
+     *
+     * <p>A quantity is bounded by what it is made of. Three times a length is never negative,
+     * whatever a rule happens to compare it against — and a threshold outside what the form takes is
+     * one no border is drawn at, rather than one whose points a search is sent looking for and never
+     * finds.
+     *
+     * <p>Null where a position is unbounded either way, which leaves the form unbounded that way and
+     * nothing to say.
+     */
+    private static souther.compiler.numeric.NumericDomain.Bounds reachOf(AffineReading read,
+                                                                        InputReads reads) {
+        java.math.BigDecimal least = java.math.BigDecimal.ZERO;
+        java.math.BigDecimal most = java.math.BigDecimal.ZERO;
+        for (java.util.Map.Entry<NumericTerm, java.math.BigDecimal> each
+                : read.form().coefs().entrySet()) {
+            souther.compiler.numeric.NumericDomain.Bounds bounds = boundsOf(each.getKey(), reads);
+            Count low = bounds == null || bounds.min() == null
+                    || !(bounds.min().at() instanceof Count at) ? null : at;
+            Count high = bounds == null || bounds.max() == null
+                    || !(bounds.max().at() instanceof Count at) ? null : at;
+            if (low == null || high == null) {
+                return null;
+            }
+            java.math.BigDecimal one = each.getValue().multiply(low.at());
+            java.math.BigDecimal other = each.getValue().multiply(high.at());
+            least = least.add(one.min(other));
+            most = most.add(one.max(other));
+        }
+        return new souther.compiler.numeric.NumericDomain.Bounds(
+                souther.compiler.numeric.Endpoint.inclusive(new Count(least)),
+                souther.compiler.numeric.Endpoint.inclusive(new Count(most)));
+    }
+
+    /** What every rule reaching one position leaves its numbers, or null where the reading has no
+     *  position for the term. */
+    private static souther.compiler.numeric.NumericDomain.Bounds boundsOf(NumericTerm term,
+                                                                          InputReads reads) {
+        for (souther.compiler.inputs.Position position : reads.read().positions()) {
+            if (position.term().equals(term)) {
+                return position.numericDomain() != null ? position.numericDomain()
+                        : term.ownBounds();
+            }
+        }
+        return null;
     }
 
     /** What the operator of a line at a position states, which the reading of it already answered

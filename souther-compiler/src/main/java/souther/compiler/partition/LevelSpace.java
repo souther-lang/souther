@@ -8,6 +8,7 @@ import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -217,6 +218,93 @@ public interface LevelSpace {
                         towards == Towards.ABOVE ? here.add(step) : here.subtract(step))));
             }
         };
+    }
+
+    /**
+     * The numbers a quantity takes where its positions' values fill: every multiple of
+     * {@code generator} by a number this language can write.
+     *
+     * <p><b>Dense is not the same as every number.</b> A decimal is a finite decimal, so what
+     * {@code 3 * a} takes is every {@code 3 * d} with {@code d} finite — which is dense, and does not
+     * include one: {@code 1 / 3} does not terminate and no decimal a model writes is a third.
+     * Answered by the topology, the border of {@code 3 * a <= 1} owed a row where the quantity comes
+     * arbitrarily close and never arrives, and the search that could not compose it was right.
+     *
+     * <p>The generator is what is left of the coefficients' greatest common divisor once the factors
+     * this language can divide by are taken out. Ten is a unit among the finite decimals, so two and
+     * five are too: {@code 2 * a} takes every decimal ({@code a = 4.5} makes nine) while
+     * {@code 3 * a} takes a third of them.
+     */
+    static LevelSpace overFiniteDecimals(BigDecimal generator) {
+        return new Counting() {
+
+            @Override
+            public boolean attainable(Level level) {
+                try {
+                    countOf(level).at().divide(generator);
+                    return true;
+                } catch (ArithmeticException noEnd) {
+                    // A quotient with no end is a value no model writes, so the quantity never
+                    // arrives at this level.
+                    return false;
+                }
+            }
+
+            /** No nearest one. The values this takes are dense, so past a level it does not take
+             *  there is no first one it does — every one of them has another between. */
+            @Override
+            public Optional<Level> nearestAtOrBeyond(Level from, Towards towards) {
+                return attainable(from) ? Optional.of(from) : Optional.empty();
+            }
+
+            @Override
+            public Optional<Level> neighbour(Level from, Towards towards) {
+                countOf(from);
+                return Optional.empty();
+            }
+
+            /**
+             * The nearest multiple of the generator that way, and one further where {@code from} is
+             * itself one.
+             *
+             * <p>A witness of the side and not the side itself, so it is a level the quantity takes
+             * that lies past this one. Stepping a whole generator from a level the quantity does not
+             * take walks past every value it does take between here and there —
+             * {@code 3 * a} past one is three, not four, and three is a row the box holds.
+             */
+            @Override
+            public Optional<Level> somethingBeyond(Level from, Towards towards) {
+                BigDecimal at = countOf(from).at();
+                BigDecimal whole = at.divide(generator, 0, towards == Towards.ABOVE
+                        ? java.math.RoundingMode.CEILING : java.math.RoundingMode.FLOOR);
+                BigDecimal past = whole.multiply(generator);
+                if (towards == Towards.ABOVE ? past.compareTo(at) <= 0 : past.compareTo(at) >= 0) {
+                    past = past.add(towards == Towards.ABOVE ? generator : generator.negate());
+                }
+                return Optional.of(new Level.ACount(new Count(past)));
+            }
+        };
+    }
+
+    /**
+     * What is left of {@code step} once the factors a finite decimal can be divided by are taken
+     * out, which is what generates the values a form takes over decimals.
+     *
+     * <p>Ten is a unit among the finite decimals, so two and five are: dividing by either lands on
+     * one again. What is left over is what a level has to be a multiple of.
+     */
+    static BigDecimal generatorOverFiniteDecimals(BigDecimal step) {
+        java.math.BigInteger left = step.stripTrailingZeros().unscaledValue().abs();
+        if (left.signum() == 0) {
+            return BigDecimal.ONE;
+        }
+        for (java.math.BigInteger unit : List.of(java.math.BigInteger.TWO,
+                java.math.BigInteger.valueOf(5))) {
+            while (left.mod(unit).signum() == 0) {
+                left = left.divide(unit);
+            }
+        }
+        return new BigDecimal(left);
     }
 
     /**

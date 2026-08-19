@@ -346,7 +346,7 @@ public final class GuardThresholds {
                 // A line on something that is not one position's own values. Not added to `made`:
                 // what the partition could not read here it still could not read, and a boundary
                 // answering does not answer for it (spec §example-partition).
-                Border drawn = Border.at(cutting.target(), origin, null);
+                Border drawn = Border.at(cutting.target(), origin, cutting.within());
                 if (drawn != null && between.stream().noneMatch(had -> had.equals(drawn))) {
                     between.add(drawn);
                 }
