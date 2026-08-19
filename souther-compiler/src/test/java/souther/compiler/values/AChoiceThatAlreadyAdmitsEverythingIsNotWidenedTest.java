@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AChoiceThatAlreadyAdmitsEverythingIsNotWidenedTest {
 
     private static final String VALUE = "value";
+    private static final String OTHER = "other";
     private static final Value FIVE = Value.text("5");
 
     /** {@code value == 5}. */
@@ -81,6 +82,48 @@ class AChoiceThatAlreadyAdmitsEverythingIsNotWidenedTest {
         assertEquals(ValueSet.just(FIVE), both.at(VALUE));
         assertTrue(both.speaksFor(VALUE),
                 "and the position is still spoken for: the unread rule names none");
+    }
+
+    /**
+     * An alternative that may itself admit nothing covers nothing, and cannot settle a position for
+     * the choice.
+     *
+     * <p>The boundary of the rule on the other side. {@code value == 5} read whole admits every
+     * value at {@code other} and settles it; the same rule stated beside one this could not read
+     * does not, because the rule beside it may be one nothing satisfies and then the choice is the
+     * alternative that was left. What an alternative guarantees is what it guarantees having read
+     * everything it was given, and a conjunct nothing could read is exactly what it was not given.
+     */
+    @Test
+    void anAlternativeThatMayAdmitNothingSettlesNothing() {
+        AdmissibleValues<String> either =
+                is5().meet(AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ))
+                        .join(AdmissibleValues.unreadable(Set.of(OTHER),
+                                UnreadReason.FORM_NOT_READ));
+
+        assertEquals(UnreadReason.FORM_NOT_READ, either.whyUnread(OTHER),
+                "the alternative beside the unread one may admit nothing, so it vouches for nothing");
+    }
+
+    /**
+     * A position a choice has settled stays settled under a further alternative.
+     *
+     * <p>The choice still knows a rule went unread somewhere in it, which is what the accounting of
+     * rules is owed and what a further alternative reads to spoil the positions beside it. What is
+     * carried past that is the cover: a position every value stands at is one no alternative can
+     * widen, so writing one more of them leaves it where it was. Whichever side the further
+     * alternative is written on.
+     */
+    @Test
+    void aPositionTheChoiceHasSettledStaysSettledUnderAFurtherAlternative() {
+        AdmissibleValues<String> covered = is5().join(not5()).join(unread());
+        AdmissibleValues<String> beside = AdmissibleValues.at(OTHER, ValueSet.just(Value.text("A")));
+
+        assertTrue(covered.dropped(), "a rule of it did go unread, and that is not taken back");
+        assertTrue(covered.join(beside).speaksFor(VALUE));
+        assertTrue(beside.join(covered).speaksFor(VALUE), "and either way round");
+        assertTrue(covered.join(beside).speaksFor(OTHER),
+                "and the position the further alternative names is covered by the settled one");
     }
 
     /** The alternative that could not be read covers nothing, so a position only it reaches is one
