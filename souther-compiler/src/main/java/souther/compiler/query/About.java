@@ -24,21 +24,44 @@ import souther.compiler.types.TypeSymbol;
  * kind and what it is about cannot disagree. This does not know its own kind: the classification and
  * the word a document publishes for it are downstream of what the finding is about, and a subject
  * that answered which public category it lands in would be the leak this type exists to close.
+ *
+ * <p>Every one of these holds what it names. A finding whose subject is absent is a finding about
+ * nothing, and the reader that would find out is whichever surface first asks the subject a
+ * question — a different one per surface, and none of them where the finding was made. The list
+ * this replaced refused a null element as a side effect of being copied, and a shape that says so
+ * itself keeps what the copy was doing by accident.
  */
 public sealed interface About {
 
     /** A case of the output no row expects. */
-    record ACaseNoRowExpects(TypeSymbol missing) implements About {}
+    record ACaseNoRowExpects(TypeSymbol missing) implements About {
+        public ACaseNoRowExpects {
+            java.util.Objects.requireNonNull(missing, "a finding is about something");
+        }
+    }
 
     /** A case some row expects and nothing was seen to produce. */
-    record ACaseNothingWasSeenToProduce(TypeSymbol missing) implements About {}
+    record ACaseNothingWasSeenToProduce(TypeSymbol missing) implements About {
+        public ACaseNothingWasSeenToProduce {
+            java.util.Objects.requireNonNull(missing, "a finding is about something");
+        }
+    }
 
     /** A case of an input no row applies the behavior to. The evidence names which input, so that a
      *  case and the position it is a case of arrive together. */
-    record ACaseNoRowAppliesItTo(InputCaseEvidence input, TypeSymbol missing) implements About {}
+    record ACaseNoRowAppliesItTo(InputCaseEvidence input, TypeSymbol missing) implements About {
+        public ACaseNoRowAppliesItTo {
+            java.util.Objects.requireNonNull(input, "a finding is about something");
+            java.util.Objects.requireNonNull(missing, "a finding is about something");
+        }
+    }
 
     /** A class of a derived position no row is in, which knows the position it is a class of. */
-    record AClassNoRowIsIn(PartitionEvidence.AxisClass axisClass) implements About {}
+    record AClassNoRowIsIn(PartitionEvidence.AxisClass axisClass) implements About {
+        public AClassNoRowIsIn {
+            java.util.Objects.requireNonNull(axisClass, "a finding is about something");
+        }
+    }
 
     /**
      * A point of a border no row is at.
@@ -48,18 +71,34 @@ public sealed interface About {
      * and the role, which is what those four fields were: a copy of it, made where the finding was
      * built, that a reader then matched back against the assessments to find the one it came from.
      */
-    record APointOfABorder(BorderAssessment.Point point) implements About {}
+    record APointOfABorder(BorderAssessment.Point point) implements About {
+        public APointOfABorder {
+            java.util.Objects.requireNonNull(point, "a finding is about something");
+        }
+    }
 
     /** A position the model draws no line through. */
     record APositionNoLineDivides(
-            souther.compiler.partition.UndividedPosition position) implements About {}
+            souther.compiler.partition.UndividedPosition position) implements About {
+        public APositionNoLineDivides {
+            java.util.Objects.requireNonNull(position, "a finding is about something");
+        }
+    }
 
     /** A position something is written about that this did not read, with what stopped it. */
-    record APositionThisCouldNotRead(PartitionEvidence.UnreadPosition position) implements About {}
+    record APositionThisCouldNotRead(PartitionEvidence.UnreadPosition position) implements About {
+        public APositionThisCouldNotRead {
+            java.util.Objects.requireNonNull(position, "a finding is about something");
+        }
+    }
 
     /** A position the axes measure whose rules the walk never reached. */
     record APositionWhoseRulesWereNotReached(
-            PartitionEvidence.AxisCoverage axis) implements About {}
+            PartitionEvidence.AxisCoverage axis) implements About {
+        public APositionWhoseRulesWereNotReached {
+            java.util.Objects.requireNonNull(axis, "a finding is about something");
+        }
+    }
 
     /**
      * A question a rule raised that nothing answered.
@@ -68,13 +107,25 @@ public sealed interface About {
      * taken apart. It was taken apart into six elements one seam later, which is the thing that
      * contract was written against.
      */
-    record AQuestionNothingAnswered(PartitionEvidence.Unanswered asked) implements About {}
+    record AQuestionNothingAnswered(PartitionEvidence.Unanswered asked) implements About {
+        public AQuestionNothingAnswered {
+            java.util.Objects.requireNonNull(asked, "a finding is about something");
+        }
+    }
 
     /** A position left out because the axis limit was reached. */
     record APositionPastTheAxisLimit(
-            souther.compiler.partition.Partitions.OmittedAxis omitted) implements About {}
+            souther.compiler.partition.Partitions.OmittedAxis omitted) implements About {
+        public APositionPastTheAxisLimit {
+            java.util.Objects.requireNonNull(omitted, "a finding is about something");
+        }
+    }
 
     /** An arm of the body no row goes through. */
     record AnArmNoRowGoesThrough(
-            souther.compiler.coverage.CoverageSites.Site arm) implements About {}
+            souther.compiler.coverage.CoverageSites.Site arm) implements About {
+        public AnArmNoRowGoesThrough {
+            java.util.Objects.requireNonNull(arm, "a finding is about something");
+        }
+    }
 }

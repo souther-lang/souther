@@ -255,63 +255,38 @@ class WhichFindingsABuildRefusesOverIsWrittenDownTest {
      */
     @Test
     void aDispositionIsTheKindAndTheMeasurementTogether() {
+        List<Adequacy.Finding> findings = report().findings();
+
         assertEquals(Adequacy.Finding.Disposition.REFUSED,
-                finding(Adequacy.Kind.BOUNDARY_UNMET, MeasurementStatus.COMPLETE).disposition());
-        assertEquals(Adequacy.Finding.Disposition.UNDECIDED,
-                finding(Adequacy.Kind.BOUNDARY_UNMET, MeasurementStatus.PARTIAL).disposition());
+                of(findings, Adequacy.Kind.INPUT_CASE_UNSPECIFIED).disposition());
         assertEquals(Adequacy.Finding.Disposition.REPORTED,
-                finding(Adequacy.Kind.AXIS_CLASS_UNCOVERED, MeasurementStatus.COMPLETE)
-                        .disposition());
-        assertEquals(Adequacy.Finding.Disposition.REPORTED,
-                finding(Adequacy.Kind.AXIS_CLASS_UNCOVERED, MeasurementStatus.PARTIAL)
-                        .disposition());
-    }
-
-    /** The one statement of what a build refuses over, with the older reading of it held to it. */
-    @Test
-    void theGapAnswerIsTheDispositionAndNotASecondReading() {
-        for (Adequacy.Kind kind : Adequacy.Kind.values()) {
-            for (MeasurementStatus status : MeasurementStatus.values()) {
-                Adequacy.Finding f = finding(kind, status);
-                assertEquals(f.disposition() == Adequacy.Finding.Disposition.REFUSED,
-                        f.isAdequacyGap(), kind + " at " + status);
-            }
-        }
-    }
-
-    private static Adequacy.Finding finding(Adequacy.Kind kind, MeasurementStatus status) {
-        return new Adequacy.Finding("b", status,
-                Citation.of(new SourcePos(1, 1, new SourceId("s"))), about(kind));
+                of(findings, Adequacy.Kind.AXIS_CLASS_UNCOVERED).disposition());
+        // The middle answer needs a measure that came to none, which this model does not have. It
+        // is held where the unfinished rows are, beside the warning that is not printed for it
+        // (`CompilePartialAdequacyTest#aGapFromAMeasureThatCameToNoAnswerIsUndecided`).
     }
 
     /**
-     * Something a finding of the wanted kind is about.
+     * The one statement of what a build refuses over, with the older reading of it held to it.
      *
-     * <p>What each one carries is left out, because {@link Adequacy.Finding#kind()} reads it for
-     * exactly one of them: which of the two border kinds a point is, is the role's answer, and every
-     * other kind follows from the shape alone. A fixture filling in values nothing reads would be
-     * inventing what a measure found in order to ask a question about the kind.
-     *
-     * <p>Total over the kinds, and a switch so that a kind added later does not compile until it has
-     * been said what a finding of it is about.
+     * <p>Over findings a compile made rather than findings assembled here. A fixture would have to
+     * put something in each shape for the kind to come out, and what a measure found is not
+     * something a test about dispositions knows — the last version of this filled every subject
+     * with nothing, which the type now refuses.
      */
-    private static About about(Adequacy.Kind kind) {
-        return switch (kind) {
-            case OUTPUT_CASE_UNSPECIFIED -> new About.ACaseNoRowExpects(null);
-            case OUTPUT_CASE_UNVERIFIED -> new About.ACaseNothingWasSeenToProduce(null);
-            case INPUT_CASE_UNSPECIFIED -> new About.ACaseNoRowAppliesItTo(null, null);
-            case AXIS_CLASS_UNCOVERED -> new About.AClassNoRowIsIn(null);
-            case BOUNDARY_UNMET -> new About.APointOfABorder(new BorderAssessment.Point(
-                    null, souther.compiler.partition.PointRole.ON, null));
-            case DOMAIN_POINT_UNCOVERED -> new About.APointOfABorder(new BorderAssessment.Point(
-                    null, souther.compiler.partition.PointRole.IN, null));
-            case PARTITION_NOT_DERIVABLE -> new About.APositionNoLineDivides(null);
-            case PARTITION_NOT_READ -> new About.APositionThisCouldNotRead(null);
-            case PARTITION_RULES_NOT_REACHED -> new About.APositionWhoseRulesWereNotReached(null);
-            case RULE_UNACCOUNTED -> new About.AQuestionNothingAnswered(null);
-            case PARTITION_OMITTED -> new About.APositionPastTheAxisLimit(null);
-            case ARM_UNREACHED -> new About.AnArmNoRowGoesThrough(null);
-        };
+    @Test
+    void theGapAnswerIsTheDispositionAndNotASecondReading() {
+        for (Adequacy.Finding f : report().findings()) {
+            assertEquals(f.disposition() == Adequacy.Finding.Disposition.REFUSED,
+                    f.isAdequacyGap(), f.kind() + " at " + f.status());
+        }
+    }
+
+    /** The one finding of a kind, which this model has at most one of. */
+    private static Adequacy.Finding of(List<Adequacy.Finding> findings, Adequacy.Kind kind) {
+        List<Adequacy.Finding> mine = findings.stream().filter(f -> f.kind() == kind).toList();
+        assertEquals(1, mine.size(), () -> "one " + kind + " in " + findings);
+        return mine.get(0);
     }
 
     private static AdequacyReport report() {

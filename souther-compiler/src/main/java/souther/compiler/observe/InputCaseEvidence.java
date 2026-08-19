@@ -41,6 +41,9 @@ public record InputCaseEvidence(int at, Set<TypeSymbol> declared, Set<TypeSymbol
                                 Set<TypeSymbol> excluded, int unclassifiedRows) {
 
     public InputCaseEvidence {
+        if (at < 0) {
+            throw new IllegalArgumentException("an input at no position: " + at);
+        }
         declared = Evidence.ordered(declared);
         specified = Evidence.ordered(specified);
         executed = Evidence.ordered(executed);

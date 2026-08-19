@@ -168,6 +168,22 @@ public final class Adequacy {
 
         public SignatureEvidence {
             inputs = List.copyOf(inputs);
+            // And each of them where it says it is. Two things say which input a piece of evidence
+            // is about — where it sits in this list, which is what the document publishes as the
+            // order of `signature.inputs`, and what the evidence answers, which is what a finding
+            // names a position by. They are read by different surfaces, so a list assembled out of
+            // step would publish an array whose first entry called itself the second, and each
+            // surface would go on being right about the one it reads.
+            //
+            // Held here because here is where both exist. The evidence carries the position so that
+            // one of them means something away from this list, and the price of that is that the
+            // two can be said to differ; this is where they are said to agree.
+            for (int i = 0; i < inputs.size(); i++) {
+                if (inputs.get(i).at() != i) {
+                    throw new IllegalArgumentException("the evidence at input " + i
+                            + " says it is input " + inputs.get(i).at());
+                }
+            }
             Unavailable.check(status, reason);
         }
     }
