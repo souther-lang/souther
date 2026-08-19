@@ -6,10 +6,21 @@ import java.util.Set;
 /**
  * Where one reading took a clause in, composed over the clause the way its state is.
  *
- * <p>The same algebra {@link souther.compiler.values.AdmissibleValues} composes its values by, and
- * it has to be: what a reading may say about a position and where it took the clause in are two
- * projections of one reading, and a rule that widens the first without widening the second is a
- * position reported as read on evidence the reading itself does not have.
+ * <p>The same connectives {@link souther.compiler.values.AdmissibleValues} composes its values by,
+ * over a different carrier and answering a different question. That one is about the values: which
+ * of them may stand at a position, and whether anything left unread is why the answer is as wide as
+ * it is. This one is about the rules: which reading took a clause in. A rule that could have
+ * narrowed a position and turned out not to be needed is no part of the first answer and is very
+ * much part of the second.
+ *
+ * <p><b>So this has no absorbing element and that one does.</b> A choice one of whose alternatives
+ * admits every value at a position admits every value at it, so an unread alternative beside it
+ * takes nothing back — which {@code AdmissibleValues.join} reads off the values it arrived at. Here
+ * there is nothing to read it off: what is held is where a clause was taken in, not what came of
+ * it, and a rule nothing had a word for was taken in by nothing however little the values needed
+ * it. Made to agree, this would report a rule as read on the evidence that it did not matter. The
+ * two answers are pinned together on one model by
+ * {@code ARuleNoAlternativeNeededIsStillOneNobodyReadTest}.
  *
  * <p>So the connectives are not one operation. Under a conjunction, a part nothing could read
  * leaves the parts beside it saying what they said — {@code value >= 1 && f(value)} still bounds the

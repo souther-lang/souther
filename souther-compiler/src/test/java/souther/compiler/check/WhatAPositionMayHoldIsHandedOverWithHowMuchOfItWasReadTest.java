@@ -159,6 +159,12 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
      * <p>{@code left /= right} relates two positions and {@code code} is neither of them, so the
      * reason the branch stopped is not a reason about {@code code}. Lent across, a report would
      * tell an author that a rule compares {@code code} with another position, and no rule does.
+     *
+     * <p>The two positions that rule does name are left whole. {@code code == "A"} says nothing
+     * about either of them, so a {@code Triple} with any {@code left} at all satisfies the choice
+     * by its second alternative — and what a position may hold is every value, which is the whole
+     * of what the rules leave it. That the relating rule went unread is a fact about the rules and
+     * is answered by the accounting, not by what a position may hold.
      */
     @Test
     void aPositionAnAlternativeTookBackIsNotToldWhatTheOtherBranchWasAbout() {
@@ -170,8 +176,97 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 """, "Triple");
 
         asFarAsRead(ValueSet.ANY, UnreadReason.ALTERNATIVE_NOT_READ, read, "code");
-        asFarAsRead(ValueSet.ANY, UnreadReason.RELATES_TWO_POSITIONS, read, "left");
-        asFarAsRead(ValueSet.ANY, UnreadReason.RELATES_TWO_POSITIONS, read, "right");
+        wholly(ValueSet.ANY, read, "left");
+        wholly(ValueSet.ANY, read, "right");
+    }
+
+    /**
+     * A clause nothing could read costs the whole value its cover, and not only the positions it
+     * names.
+     *
+     * <p>What a conjunction promises is what its parts promise together, and a part nothing could
+     * read promises nothing — it may be a rule nothing satisfies, and then the value has no values
+     * and no position is at anything. So a position covered inside one clause is reported short of
+     * its rules once any clause of the same value goes unread, whether or not that clause could
+     * have reached it.
+     *
+     * <p>Written down because it is a decision and not an accident. {@code n} below holds every
+     * value: {@code n == 5 || n /= 5} covers it and {@code Int.abs(m) >= 3} is about {@code m}. The
+     * reading answers that it is short of its rules all the same, and telling the two apart wants a
+     * reading that remembers why it promises nothing.
+     */
+    @Test
+    void aClauseNothingCouldReadCostsTheWholeValueItsCover() {
+        FieldDomains read = of("""
+                module demo
+
+                data R = { n: Int, m: Int }
+                    invariant said = (n == 5 || n /= 5) || Int.abs(n) >= 2
+                    invariant apart = Int.abs(m) >= 3
+                """, "R");
+
+        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, "n");
+        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, "m");
+
+        FieldDomains alone = of("""
+                module demo
+
+                data R = { n: Int, m: Int }
+                    invariant said = (n == 5 || n /= 5) || Int.abs(n) >= 2
+                """, "R");
+        wholly(ValueSet.ANY, alone, "n");
+    }
+
+    /**
+     * What covered a position is an alternative, and a rule beside the choice may leave none of it.
+     *
+     * <p>{@code a == 5} admits every {@code b}, so the choice does and nothing about {@code b} went
+     * unread — while that alternative stands. {@code a == 7} refuses every value it admits, and what
+     * is left is {@code a /= b} with {@code a} at 7, which is a rule this cannot read about a
+     * {@code b} that is now not every value. A reading that had struck the rule off where the
+     * choice was read would answer that the model leaves {@code b} every value and that this was
+     * read in full.
+     */
+    @Test
+    void whatCoveredAPositionCanBeRefusedByARuleBesideTheChoice() {
+        FieldDomains read = of("""
+                module demo
+
+                data R = { a: Int, b: Int }
+                    invariant one = a == 5 || a /= b
+                    invariant two = a == 7
+                """, "R");
+
+        asFarAsRead(ValueSet.just(Value.number(7)), UnreadReason.RELATES_TWO_POSITIONS, read, "a");
+        asFarAsRead(ValueSet.ANY, UnreadReason.RELATES_TWO_POSITIONS, read, "b");
+    }
+
+    /**
+     * A choice over two positions leaves nothing for an alternative beside it to rest on.
+     *
+     * <p>Read one position at a time, each of the two choices leaves {@code a} open, and so does
+     * what they leave together — but the pairs they agree on are only {@code a = 5, b = 0}, since
+     * an {@code a} of anything else is asked for with {@code b = 1} by one and with {@code b = 0}
+     * by the other. What the rules leave {@code a} is {@code 5} and whatever the third alternative
+     * admits, and no reading here can say the third alternative admits anything.
+     *
+     * <p>So the position is one this cannot speak for. A reading that read what each position holds
+     * on its own and offered that as cover would answer that the model divides {@code a} no way at
+     * all, on the strength of a pair no value of this type takes.
+     */
+    @Test
+    void aChoiceOverTwoPositionsCoversNothingForTheAlternativeBesideIt() {
+        FieldDomains read = of("""
+                module demo
+
+                data R = { a: Int, b: Int }
+                    invariant said =
+                        (((a == 5 && b == 0) || (a /= 5 && b == 1))
+                         && ((a == 5 && b == 0) || (a /= 5 && b == 0)))
+                        || Int.abs(a) >= 2
+                """, "R");
+
+        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, "a");
     }
 
     /**
