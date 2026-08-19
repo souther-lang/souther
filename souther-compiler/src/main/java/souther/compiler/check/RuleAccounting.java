@@ -72,9 +72,10 @@ public final class RuleAccounting {
      * answers it wrote itself.
      */
     public static RuleAccounting ofComparison(RuleRef rule, ComparisonClaim claim,
+                                              Required.ComparisonSubject of,
                                               Owed.Subject about, Required.LineRead read,
                                               RuleCitation cited) {
-        Required required = Required.ofComparison(claim, about, read);
+        Required required = Required.ofComparison(claim, of, about);
         return new RuleAccounting(rule, cited, required, answersOf(rule, required, read).answers);
     }
 

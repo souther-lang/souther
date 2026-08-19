@@ -311,6 +311,7 @@ public final class GuardThresholds {
                 made.add(each.comparison());
                 raises(accounting, plan, site, guard, iff, each.comparison(),
                         here.term().path(), here.term(), subjectOf(here.term()),
+                        subjectsOf(each.comparison(), reads, symbols),
                         new Required.LineRead.ALineOnThePosition());
                 continue;
             }
@@ -334,7 +335,7 @@ public final class GuardThresholds {
             // a count came back spelled as the string it counts.
             NumericTerm about = comparedTerm(each.comparison(), reads, symbols);
             raises(accounting, plan, site, guard, iff, each.comparison(), named.get(0),
-                    about, subjectOf(about),
+                    about, subjectOf(about), subjectsOf(each.comparison(), reads, symbols),
                     between.size() > drawn ? new Required.LineRead.ALineBetweenTwoPositions()
                             : new Required.LineRead.NoLine(
                                     why(each.comparison(), reads, symbols)));
@@ -354,6 +355,21 @@ public final class GuardThresholds {
         // Null where neither side named a number this reads. The position is what the comparison is
         // about then, and nothing says a count was what the line was on.
         return new Owed.Subject("", term instanceof NumericTerm.SizeOf);
+    }
+
+    /**
+     * Whether the comparison is about one of the behavior's positions or about two.
+     *
+     * <p>Off the source, by the walk that names positions however they are written. The operator
+     * says what a comparison places and this says what it places it about, and neither is the
+     * other's: {@code x == 10} singles a value out and {@code x == y} is a rule about a pair, under
+     * one operator.
+     */
+    static Required.ComparisonSubject subjectsOf(Core.Binary comparison, InputReads reads,
+                                                 Symbols symbols) {
+        return namedIn(comparison, reads, symbols).size() > 1
+                ? new Required.ComparisonSubject.BetweenPositions()
+                : new Required.ComparisonSubject.OnePosition();
     }
 
     /** The number a comparison is about, from whichever side names one. */
@@ -380,10 +396,10 @@ public final class GuardThresholds {
     private static void raises(List<Guards.AtAPosition> out, CoverageSites.Plan plan, int site,
                                CoverageSites.GuardRef guard, Core.If iff, Core.Binary comparison,
                                TermPath at, NumericTerm term, Owed.Subject about,
-                               Required.LineRead read) {
+                               Required.ComparisonSubject of, Required.LineRead read) {
         out.add(new Guards.AtAPosition(at, term, RuleAccounting.ofComparison(
                 new RuleRef.Guard(plan.site(site).comparison()),
-                souther.compiler.check.ComparisonClaim.of(comparison.op()),
+                souther.compiler.check.ComparisonClaim.of(comparison.op()), of,
                 about, read,
                 // A comparison is written rather than named, so a reader is sent where the author
                 // wrote it. The construct's own place and not the reading's: one comparison inside a

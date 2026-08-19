@@ -209,7 +209,18 @@ public sealed interface Required {
      * @param about the position the line is on, as the reading that found it names it
      * @param read  what that reading came to
      */
-    public static Required ofComparison(ComparisonClaim claim, Owed.Subject about, LineRead read) {
+    public static Required ofComparison(ComparisonClaim claim, ComparisonSubject of,
+                                        Owed.Subject about) {
+        if (of instanceof ComparisonSubject.BetweenPositions) {
+            // Where one position stands against another. An order between them is a line rows are
+            // owed at and divides neither, so there is no class of one for a row to be owed in; an
+            // equality between them is not even that — it puts the whole of one arm on the line, and
+            // that arm is a row the branch measure already asks for (`ComparedTerms`).
+            return claim instanceof ComparisonClaim.Cut
+                    ? new Some(new LinkedHashSet<>(java.util.List.of(
+                            new Owed(CoverageObligation.BOUNDARY, about))))
+                    : new Irrelevant(Set.of(Because.IT_RELATES_TWO_POSITIONS));
+        }
         Set<Owed> owed = new LinkedHashSet<>();
         switch (claim) {
             // An order across the place it names, so rows are owed either side of it and the two
@@ -223,13 +234,29 @@ public sealed interface Required {
             case ComparisonClaim.Nothing _ -> throw new IllegalArgumentException(
                     "a comparison that places nothing is not one this raises questions about");
         }
-        // A line between two positions divides neither: where one stands against another is not a
-        // set of one position's values, so there is no class of one for a row to be owed in. The
-        // line itself is still a line and rows are still owed at it.
-        if (!(read instanceof LineRead.ALineBetweenTwoPositions)) {
-            owed.add(new Owed(CoverageObligation.PARTITION, about));
-        }
+        owed.add(new Owed(CoverageObligation.PARTITION, about));
         return new Some(owed);
+    }
+
+    /**
+     * How many of the behavior's positions a comparison is written about.
+     *
+     * <p>The other half of what a comparison claims, and read off the source as the operator is.
+     * {@code x == 10} singles a value out and {@code x == y} says where one position stands against
+     * another; the operator is the same and the claims are not. Taken from the operator alone,
+     * {@code a == b} raised a question about a value singled out at {@code a}, which no rule wrote.
+     *
+     * <p>Not read off what a reading managed. Whether this compiler could turn the comparison into a
+     * line between two positions is an answer, and a question may not be decided by one (#851) — so
+     * {@code a == 10 * 2} is one position's however unreadable the bound is.
+     */
+    public sealed interface ComparisonSubject {
+
+        /** One position, and something on the other side that names none. */
+        record OnePosition() implements ComparisonSubject {}
+
+        /** Two of them, which is a rule about a pair. */
+        record BetweenPositions() implements ComparisonSubject {}
     }
 
     /**

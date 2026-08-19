@@ -36,7 +36,7 @@ class AValueSingledOutIsNotABorderTest {
         Compilation compilation = Compilation.ofSource("""
                 module m
 
-                data R = { cost: Int }
+                data R = { cost: Int, a: Int, other: Int }
                 data A
                 data B
 
@@ -45,7 +45,7 @@ class AValueSingledOutIsNotABorderTest {
                 let b (r) = if %s then A else B
 
                 example b
-                    | "one" : (R { cost = 1 }) -> B
+                    | "one" : (R { cost = 1, a = 1, other = 2 }) -> B
                 """.formatted(condition), "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
@@ -68,6 +68,23 @@ class AValueSingledOutIsNotABorderTest {
     void anEqualityAsksAboutTheValueItSinglesOut() {
         assertEquals(Set.of(CoverageObligation.SINGLETON, CoverageObligation.PARTITION),
                 raisedBy("r.cost == 10 * 2"));
+    }
+
+    /**
+     * Between two positions it singles nothing out, whatever the operator is.
+     *
+     * <p>What a comparison places is the operator's, and what it places it about is not: {@code x ==
+     * 10} tells one value from every other and {@code a == b} says where one position stands against
+     * another. Read off the operator alone, the second raised a question about a value singled out at
+     * {@code a} that no rule wrote — and an equality between two positions is not even a line, since
+     * it puts the whole of one arm on the place and that arm is a row the branch measure already
+     * asks for.
+     */
+    @Test
+    void anEqualityBetweenTwoPositionsSinglesNothingOut() {
+        assertEquals(Set.of(), raisedBy("r.a == r.other"),
+                "a rule about a pair, and no question about one of them");
+        assertEquals(Set.of(), raisedBy("r.a /= r.other"));
     }
 
     /**

@@ -705,9 +705,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             b -> whyNoBoundary(b.coverage())),
                     undecided == 0 ? "" : "   (" + undecided + " undecided: a value was not read)"));
         }
-        // A place the model named that nothing here answered for, said whether or not a row was
-        // asked at it. It is exactly where none was that the question stands, so this cannot be
-        // written by walking what came back.
+        // A border the model drew that nothing here answered for, said whether or not one came of
+        // it. It is exactly where none did that the question stands, so this cannot be written by
+        // walking the borders.
         unaccounted(out, behavior, names, declaredIn,
                 question -> !aboutTheClasses(question));
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.BOUNDARY_UNMET)) {
@@ -762,9 +762,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_RULES_NOT_REACHED)) {
             out.append(String.format("      %s rules not reached: %s%n", mark(f), f.args().get(0)));
         }
-        // The questions about which values may stand where and which classes hold them, which is
-        // what this section counts. The two that name a place — a border, and a value singled out —
-        // are printed where the rows for them are, which is the section below.
+        // The questions this measure answers: which values may stand where, which classes hold
+        // them, and which value a rule tells from every other. A border is the section below's.
         unaccounted(out, behavior, names, declaredIn, AdequacyReport::aboutTheClasses);
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_OMITTED)) {
             out.append(String.format("      %s omitted: %s (axis limit)%n",
@@ -970,8 +969,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     private static boolean aboutTheClasses(souther.compiler.check.CoverageObligation question) {
         return switch (question) {
-            case ADMITTED_VALUES, PARTITION -> true;
-            case BOUNDARY, SINGLETON -> false;
+            // A value singled out is one class of the position and everything else is the other,
+            // which is what this measure counts. Printed under the borders it would say a border is
+            // what the rule placed, in a section whose words are about an order across one and a
+            // role for each side — the order the rule never drew, arriving in the report after
+            // being kept out of the question.
+            case ADMITTED_VALUES, PARTITION, SINGLETON -> true;
+            case BOUNDARY -> false;
         };
     }
 

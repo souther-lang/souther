@@ -187,6 +187,7 @@ public final class EnsuresThresholds {
             raises(out, rule, clause, comparison, rule.value(),
                     named.isEmpty() ? null : named.get(0), about,
                     GuardThresholds.subjectOf(about),
+                    GuardThresholds.subjectsOf(comparison, reads, symbols),
                     out.between().size() > had
                             ? new Required.LineRead.ALineBetweenTwoPositions()
                             : new Required.LineRead.NoLine(
@@ -195,6 +196,7 @@ public final class EnsuresThresholds {
         }
         raises(out, rule, clause, comparison, rule.value(), drawn.term().path(), drawn.term(),
                 GuardThresholds.subjectOf(drawn.term()),
+                GuardThresholds.subjectsOf(comparison, reads, symbols),
                 new Required.LineRead.ALineOnThePosition());
         OriginRef.EnsuresOrigin origin = new OriginRef.EnsuresOrigin(
                 new RuleRef.Ensures(rule.id(), clause),
@@ -217,7 +219,8 @@ public final class EnsuresThresholds {
      */
     private static void raises(Drawn out, StatedContract.StatedRule rule, String clause,
                                Core.Binary comparison, BindingId answer, TermPath at,
-                               NumericTerm term, Owed.Subject about, Required.LineRead read) {
+                               NumericTerm term, Owed.Subject about,
+                               Required.ComparisonSubject of, Required.LineRead read) {
         if (at == null) {
             return;   // about no position of the input, so it raises nothing about one
         }
@@ -231,7 +234,7 @@ public final class EnsuresThresholds {
         }
         RuleRef.Ensures named = new RuleRef.Ensures(rule.id(), clause);
         out.accounting().add(new GuardThresholds.Guards.AtAPosition(at, term,
-                RuleAccounting.ofComparison(named, ComparisonClaim.of(comparison.op()),
+                RuleAccounting.ofComparison(named, ComparisonClaim.of(comparison.op()), of,
                         // A clause belongs to a behavior, so there is always something to call it.
                         about, read,
                         new souther.compiler.check.RuleCitation.Named(named.named()))));
