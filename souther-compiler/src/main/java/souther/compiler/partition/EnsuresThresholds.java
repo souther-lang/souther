@@ -199,7 +199,13 @@ public final class EnsuresThresholds {
             // which is this reader's own answer and not the one the same shape of line gets from a
             // guard — a guard's is met by getting the comparison to answer, because what it is about
             // is a place in a body.
+            // The positions are named as ones nothing divides, which is what a rule over a quantity
+            // that is not one position's own values leaves them — the same note the same shape gets
+            // from a body's conditions, said by the same reader.
             reportUnread(comparison, rule.value(), reads, symbols, out.unread());
+            // Null where the quantity does not reach the line, which is the line and not one of its
+            // points. What a clause raises is answered by what came of reading it and never by which
+            // reading was tried: read off the branch, a rule that drew nothing reported a line.
             Border made = Border.at(cutting.target(), origin, cutting.within());
             if (made != null && out.between().stream().noneMatch(had -> had.equals(made))) {
                 out.between().add(made);
@@ -209,7 +215,9 @@ public final class EnsuresThresholds {
                     named.isEmpty() ? null : named.get(0),
                     GuardThresholds.comparedTerm(comparison, reads, symbols),
                     GuardThresholds.subjectsOf(comparison, reads, symbols, rule.value()),
-                    new Required.LineRead.ALineBetweenTwoPositions());
+                    made != null ? new Required.LineRead.ALineBetweenTwoPositions()
+                            : new Required.LineRead.NoLine(
+                                    GuardThresholds.why(comparison, reads, symbols)));
             return;
         }
         raises(out, rule, clause, comparison, rule.value(), divided.path(), divided,

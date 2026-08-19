@@ -175,6 +175,16 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
 
         assertTrue(report.contains("no row is at the ON point f/3 * a + 6 * b = 48"), report);
         assertTrue(report.contains("no row is at the OFF point f/3 * a + 6 * b = 51"), report);
+        // And what it leaves the positions is said in the same words as well. A rule over a quantity
+        // that is not one position's own values divides none of them, whoever wrote it.
+        assertTrue(report.contains(
+                "not read: a (the comparison relates it to another position rather than"
+                        + " dividing it)"), report);
+        assertTrue(report(guarded(
+                        "Int.add(Int.multiply(3, a.value), Int.multiply(6, b.value)) <= 48"))
+                        .contains("not read: a (the comparison relates it to another position"
+                                + " rather than dividing it)"),
+                "a body's conditions say it the same way");
     }
 
     /** A form on both sides is one form. What the rule states is the difference, so the position
