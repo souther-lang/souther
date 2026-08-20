@@ -1776,16 +1776,26 @@ Some clauses are statically dischargeable and others are not, and the same `+inv
 
 | *derivable* | a relation the procedure reasons over. Any guard that *implies* it discharges the construction: `+guard amount >= 10+` discharges `+invariant value >= 0+`.
 | *exact match* | a term the procedure can name but not reason about. Only a guard establishing *the same* property discharges it, and nothing weaker: `+invariant List.allDistinctBy(.product, value)+` takes `+guard List.allDistinctBy(.product, lines)+`.
+| *always holds* | the clause settles on its own. `+invariant 1 >= 0+` holds of every value, so the obligation is met without a guard.
+| *never holds* | it settles the other way, so no guard establishes it and no value of the type can be built. The declaration is refused where the whole compiler runs (<<a-data-can-be-constructed>>); this says what the clause is, so an editor reading half-written source is not told that a guard would discharge it.
 | *runtime only* | not representable as a static obligation. No guard discharges it, and the run-time check on construction is the whole of its enforcement.
 |===
 
-The first two are the *statically dischargeable* ones, and they are separate because they admit different guards — which is what an author needs to know before writing one. The third carries a reason, because there is more than one way to be outside the fragment and which one it is decides what can be done about it.
+The first two are the *statically dischargeable* ones, and they are separate because they admit different guards — which is what an author needs to know before writing one. The last carries a reason, because there is more than one way to be outside the fragment and which one it is decides what can be done about it.
+
+A clause that settles on its own is not one outside the fragment. Both leave the construction with no guard to write, and only one of them is something the model says: `+invariant 1 >= 0+` was read to the end and asks nothing, while a clause outside the fragment is one the reading could not carry. They are told apart the way the report tells *not derivable* from *not read* (<<example-report-vocabulary>>), and for the same reason — one is about the model and the other about the compiler.
+
+And a reading that did not finish is *not determined* rather than any of these. Whether a clause is inside the fragment is exactly what such a reading did not find out, so answering it as `+runtime only+` would tell an author that no guard discharges their clause because this compiler fell over on it. Being a fact about the compiler on that run, it names nothing about the clause.
 
 The classification is the clause's own, read with the construction assumed to name what it is given. A construction that names nothing the procedure can name discharges nothing whatever its clauses say (<<invariant-discharge-terms>>); that is a fact about the construction and not about the clause.
 
 The answer carries the clause's name where it has one (<<invariant-clause-name>>), so what the LSP shows on a clause says both how it can be discharged and what an attempt departs by. The unit is the conjunct, as it is for the rest of the check, so a named clause written as `+a && b+` is classified twice under that one name — what discharges each half is what an author acts on, and the name is what a caller reads.
 
-One conjunct is answered as many times as it is read. What is written as one thing need not be read as one thing: a conjunct naming a helper is one thing to its author and is whatever that helper states to the checker, and the parts of it may be read differently. Each answer says what discharges the part it is about, and all of them are given at the one place the conjunct is written — the parts have no places of their own, having been written as one. A part the checker made nothing of is `+runtime only+` and is said beside the parts it read, since a clause is discharged only where every part of it is.
+One conjunct has one answer, and the answer has a shape. What is written as one thing need not be read as one thing — a conjunct naming a helper is one thing to its author and is whatever that helper states to the checker — so a reading may find the conjunct to have *several parts*, and *every* part of it has to be established for the conjunct to be. A part may in turn have *several routes*, and *any one* of them establishes that part: a relation the procedure reasons over is often a term it can name as well, and either guard will do.
+
+The two multiplicities are not the same and are not written as one. Read as a set of answers, a conjunct needing a bound in one part and a term in another said that either guard discharges it — so an author writes the one they prefer and finds the construction still refused. A part the checker made nothing of is `+runtime only+` and is a part like the others, since a conjunct is discharged only where every part of it is.
+
+All of them are given at the one place the conjunct is written; the parts have no places of their own, having been written as one.
 
 [#invariant-reify]
 ==== Reifying a cross-behavior relation
@@ -2473,11 +2483,11 @@ The answer has to be a value the checker can name, which a matched case's bindin
 [#ensures-discharge-capability]
 ==== A rule says how much of it the check reads
 
-A rule is classified as a data's clause is (<<invariant-discharge-capability>>), by the same three answers and for the same reason: what is written decides how much of it the checker can carry, and nothing in the source tells the two apart. The unit is the *rule* and, under a rule, the conjunct. A rule is already about one case — `+ensures Found | Missing -> value.id == id+` is a rule for `+Found+` and a rule for `+Missing+` — and what `+value+` is differs between them, so the same words can be read to different depths. One answer for the clause would be one of those readings shown as if it were the other's.
+A rule is classified as a data's clause is (<<invariant-discharge-capability>>), by the same answers and for the same reason: what is written decides how much of it the checker can carry, and nothing in the source tells the two apart. The unit is the *rule* and, under a rule, the conjunct. A rule is already about one case — `+ensures Found | Missing -> value.id == id+` is a rule for `+Found+` and a rule for `+Missing+` — and what `+value+` is differs between them, so the same words can be read to different depths. One answer for the clause would be one of those readings shown as if it were the other's.
 
-A rule is answered as many times as it is read, as a data's conjunct is (<<invariant-discharge-capability>>), at the one place it is written.
+A rule has one answer, shaped as a data's conjunct's is (<<invariant-discharge-capability>>) — every part of it to be established, any route of a part to establish that part — and it is given at the one place the rule is written.
 
-The classification says nothing about whether the rule is enforced. Every rule holds when the behavior answers, whatever this says of it; what it says is how much of the relation is written in a form the checker reads — `+derivable+` a relation the numeric domain reasons over, `+exact match+` a term it can name and compare and nothing weaker, `+runtime only+` nothing it can represent.
+The classification says nothing about whether the rule is enforced. Every rule holds when the behavior answers, whatever this says of it; what it says is how much of the relation is written in a form the checker reads — `+derivable+` a relation the numeric domain reasons over, `+exact match+` a term it can name and compare and nothing weaker, `+always holds+` and `+never holds+` a rule that settles without the answer, `+runtime only+` nothing it can represent.
 
 The rule is read as it is written. An operation whose meaning the language defines stands as that operation, as a data's clause is read (<<invariant-discharge-representation>>), so a rule naming one is classified by what the language says of it and not by the algorithm it is emitted as.
 

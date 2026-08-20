@@ -349,31 +349,129 @@ final class Predicates {
     }
 
     /**
-     * What a clause owes, and whether any part of it was outside what the check can read.
+     * What a clause owes: its parts in the order they were read, and what the clause itself folded
+     * to.
      *
-     * <p>The two are apart because a clause owing nothing has two reasons: it folded to what it is
-     * read with, or nothing in it could be asked here. A conjunction can be both at once — one
-     * conjunct discharged and the next unreadable — and reporting only the obligations would say the
-     * invariant was proven when half of it was never read.
+     * <p>One list, with what was carried and what was not as two shapes in it. A conjunction can be
+     * both at once — one conjunct discharged and the next unreadable — and a list of what was
+     * carried beside one node for what was not says the invariant was proven where half of it was
+     * never read, keeps only the first of two unreadable parts, and loses the order the author wrote
+     * them in. All three go away by making them variants of one sequence.
      *
-     * @param clauses what is owed, which the reading discharges or refutes
-     * @param unreadable whether a conjunct of it names something the check cannot read here, whose
-     *                   run-time check stands whatever the rest comes out as
+     * <p>{@code folded} is about the clause and not about a part of it. A conjunct folding the way
+     * it is read owes nothing and contributes no part; the clause folds only as all of it does
+     * ({@link Fold#and}), so this is beside the parts rather than one of them.
+     *
+     * @param parts  what the clause asks of a construction, each carried or not
+     * @param folded whether the clause came out one way on its own, before any construction was
+     *               looked at
      */
-    record Owed(List<Clause> clauses, boolean unreadable) {
+    record Owed(List<Part> parts, Fold folded) {
 
-        static final Owed NOTHING = new Owed(List.of(), false);
-        static final Owed UNREADABLE = new Owed(List.of(), true);
-
-        static Owed of(Clause clause) {
-            return new Owed(List.of(clause), false);
+        /** Nothing is owed because the clause came out one way or the other on its own. */
+        static Owed decided(boolean holds) {
+            return new Owed(List.of(), holds ? Fold.HOLDS : Fold.FAILS);
         }
 
-        /** Both conjuncts of one clause: everything either owes, unreadable if either was. */
+        /** One part of the clause this could make nothing of, which is {@code where}. */
+        static Owed unreadable(Core where) {
+            return new Owed(List.of(new Part.Unread(where)), Fold.NOT_DECIDED);
+        }
+
+        static Owed of(Clause clause) {
+            return new Owed(List.of(new Part.Carried(clause)), Fold.NOT_DECIDED);
+        }
+
+        /** Whether a part of it names something the check cannot read here. */
+        boolean unreadable() {
+            for (Part each : parts) {
+                if (each instanceof Part.Unread) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /** The same, having come out one way on its own as well. Said beside what it owes rather
+         *  than instead of it: which of the two a caller acts on is the caller's, and a reading that
+         *  answered only one of them decided that for every caller there will ever be. */
+        Owed alsoFolded(Fold fold) {
+            return fold == Fold.NOT_DECIDED ? this : new Owed(parts, fold);
+        }
+
+        /** Both conjuncts of one clause: every part either owes, in the order they were read, and
+         *  folded only as both of them together fold. */
         Owed and(Owed other) {
-            List<Clause> both = new ArrayList<>(clauses);
-            both.addAll(other.clauses);
-            return new Owed(List.copyOf(both), unreadable || other.unreadable);
+            List<Part> both = new ArrayList<>(parts);
+            both.addAll(other.parts);
+            return new Owed(List.copyOf(both), folded.and(other.folded));
+        }
+    }
+
+    /**
+     * One thing a clause asks of a construction.
+     *
+     * <p>Carried or not, and the difference is the shape rather than a field beside a list. Held as
+     * a list of what was carried with one node for what was not, a clause with two parts outside the
+     * fragment kept the first and dropped the second — so an author acting on what they were shown
+     * would fix one and find the construction still refused. The two also interleave, and a reader
+     * showing them in the order they were written needs them in one list to do it.
+     */
+    sealed interface Part {
+
+        /** The check carried it into a form a guard can be held against. */
+        record Carried(Clause clause) implements Part {
+
+            public Carried {
+                if (clause == null) {
+                    throw new IllegalArgumentException("a part that was carried has a form");
+                }
+            }
+        }
+
+        /**
+         * The check made nothing of it, and {@code at} is the part it stopped on.
+         *
+         * <p>The node and not a word for it. Whoever reads this wants to say what in the clause was
+         * not read, and working that out from the clause afterwards is a second walk that can come
+         * back with a different answer from the one that gave up — which is how a clause with
+         * nothing wrong in it came to be described as naming a term the check cannot name.
+         */
+        record Unread(Core at) implements Part {
+
+            public Unread {
+                if (at == null) {
+                    throw new IllegalArgumentException("a part nothing was made of is somewhere");
+                }
+            }
+        }
+    }
+
+    /**
+     * Whether a clause came out one way or the other before any construction was looked at.
+     *
+     * <p>Read here, off the expression this walk normalizes and reads, rather than off the one an
+     * author wrote. {@code Int.compare(1, 2) >= 0} is a call until {@link #asOrderComparison} makes
+     * it {@code 1 >= 2}, so a reader folding the written form first sees a call and the fold that
+     * matters happens in here.
+     */
+    enum Fold {
+
+        /** It reads something the construction decides. */
+        NOT_DECIDED,
+
+        /** It holds of every value, so no guard is asked for it. */
+        HOLDS,
+
+        /** It holds of none, so no guard establishes it. */
+        FAILS;
+
+        /** Both conjuncts: failing where either fails, holding only where both hold. */
+        Fold and(Fold other) {
+            if (this == FAILS || other == FAILS) {
+                return FAILS;
+            }
+            return this == HOLDS && other == HOLDS ? HOLDS : NOT_DECIDED;
         }
     }
 
@@ -480,12 +578,17 @@ final class Predicates {
             // saying so needs no term to be named. Read under a denial it is the other answer that
             // discharges, which is why the polarity is asked.
             if (folded == positive) {
-                return Owed.NOTHING;
+                return Owed.decided(true);
             }
             if (decidesFalse) {
-                return Owed.of(VIOLATED);
+                return Owed.decided(false).and(Owed.of(VIOLATED));
             }
         }
+        // Either it did not fold, or it folded the other way and this caller does not report that as
+        // a violation — folding the way it is read returned above. What it owes is read on,
+        // unchanged, and the fold is said beside it: a reader classifying the clause needs it, and
+        // taking the reading away here would change what this caller is answered.
+        Fold fold = folded == null ? Fold.NOT_DECIDED : Fold.FAILS;
         Constraint numeric = null;
         Piecewise piecewise = null;
         if (inv instanceof Core.Binary b && relOf(b.op()) != null) {
@@ -514,12 +617,12 @@ final class Predicates {
         boolean stated = polar.positive();
         Fact fact = keys.isEmpty() ? null : new Fact(stated ? keys : firstOnly(keys), stated);
         if (numeric == null && fact == null) {
-            return Owed.UNREADABLE;
+            return Owed.unreadable(inv).alsoFolded(fold);
         }
         List<Constraint> known = new ArrayList<>();
         sizeFacts(inv, at, known);
         resultFacts(inv, at, known);
-        return Owed.of(new Clause(numeric, fact, known, piecewise));
+        return Owed.of(new Clause(numeric, fact, known, piecewise)).alsoFolded(fold);
     }
 
     /**
@@ -761,7 +864,11 @@ final class Predicates {
      */
     static Set<FactSubject> subjectsIn(Owed owed) {
         Set<FactSubject> named = new LinkedHashSet<>();
-        for (Clause c : owed.clauses()) {
+        for (Part eachC : owed.parts()) {
+            if (!(eachC instanceof Part.Carried carriedC)) {
+                continue;
+            }
+            Clause c = carriedC.clause();
             for (Constraint known : c.known()) {
                 named.addAll(known.form().coefs().keySet());
             }
@@ -786,7 +893,11 @@ final class Predicates {
      */
     static Set<FactSubject> narrowableIn(Owed owed) {
         Set<FactSubject> named = new LinkedHashSet<>();
-        for (Clause c : owed.clauses()) {
+        for (Part eachC : owed.parts()) {
+            if (!(eachC instanceof Part.Carried carriedC)) {
+                continue;
+            }
+            Clause c = carriedC.clause();
             // What the clause states, and not what holds of the operations it names.
             // {@link Clause#known} is filled by {@link #sizeFacts} and {@link #resultFacts} with
             // relations that are true of every value — a size is never negative — so counting them
@@ -814,7 +925,11 @@ final class Predicates {
         out = out.speaking(subjectsIn(owed));
         // What could not be read says nothing here: a clause left to the run-time check is not one
         // the seeding may assume, and the flag saying so is the construction site's to act on.
-        for (Clause c : owed.clauses()) {
+        for (Part eachC : owed.parts()) {
+            if (!(eachC instanceof Part.Carried carriedC)) {
+                continue;
+            }
+            Clause c = carriedC.clause();
             for (Constraint known : c.known()) {
                 // What is known of a size holds of the container itself, whatever established the
                 // clause it was read out of.

@@ -53,11 +53,9 @@ public record StatedContract(ValueName.Behavior behavior, List<ContractParam> pa
     /**
      * One conjunct the author wrote: where they wrote it, and what it types to for the analysis.
      *
-     * @param stated null where this compiler could not type it in that representation, which is an
-     *               answer and not a failure — a rule the check cannot read is not a rule an author
-     *               wrote wrongly
+     * @param stated what it types to, or that typing it did not finish ({@link TypedClause})
      */
-    public record Conjunct(SourcePos at, Core stated) {}
+    public record Conjunct(SourcePos at, TypedClause stated) {}
 
     /**
      * The same contract with the places taken out of its terms — what a caller depends on, told
@@ -75,7 +73,9 @@ public record StatedContract(ValueName.Behavior behavior, List<ContractParam> pa
         for (StatedRule rule : rules) {
             List<Conjunct> conjuncts = new ArrayList<>();
             for (Conjunct each : rule.conjuncts()) {
-                conjuncts.add(new Conjunct(null, Core.withoutItsPlace(each.stated())));
+                Core form = each.stated().orNull();
+                conjuncts.add(new Conjunct(null, form == null ? each.stated()
+                        : new TypedClause.Typed(Core.withoutItsPlace(form))));
             }
             out.add(new StatedRule(rule.id(), rule.guard(), rule.value(), rule.clause(), conjuncts));
         }
@@ -113,17 +113,16 @@ public record StatedContract(ValueName.Behavior behavior, List<ContractParam> pa
         return new StatedContract(contract.behavior(), contract.params(), contract.output(), rules);
     }
 
-    /** {@code read} as the check holds it, or null where this compiler could not type it there. */
-    private static Core typed(souther.compiler.ast.Hir.Expr read, Scope scope, CheckContext ctx,
-                              ValueName.Behavior behavior) {
+    /** {@code read} as the check holds it, or that typing it did not finish there. */
+    private static TypedClause typed(souther.compiler.ast.Hir.Expr read, Scope scope,
+                                     CheckContext ctx, ValueName.Behavior behavior) {
         try {
-            return Elaborator.elaborate(read, scope, ctx, Type.BOOL);
+            return new TypedClause.Typed(Elaborator.elaborate(read, scope, ctx, Type.BOOL));
         } catch (RuntimeException why) {
-            // Fail-open, as every reading of a clause is, and recorded: a rule this compiler could
-            // not type and an analysis that fell over typing it come out alike, and only one of them
-            // is something the model says.
+            // Fail-open, as every reading of a clause is, and recorded — and said as what it is, so
+            // that a reader publishing a sentence about the rule is not handed this as one.
             InvariantChecker.gaveUp("typing " + behavior.name(), why);
-            return null;
+            return new TypedClause.Stopped();
         }
     }
 

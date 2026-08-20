@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
-import souther.compiler.check.ClauseDischarge;
+import souther.compiler.check.CapabilityResult;
+import souther.compiler.check.StaticRoute;
 import souther.compiler.check.ContractDischarge;
 import souther.compiler.check.ContractDischarge.RuleDischarge;
 import souther.compiler.meta.ModulePath;
@@ -74,7 +75,7 @@ class HowMuchOfARuleTheCheckReadsIsAskedPerCaseTest {
         assertEquals(List.of(named("Found"), named("Missing")),
                 casesOf(discharge), "one answer per rule, named by the case the rule is about");
         for (RuleDischarge rule : discharge.rules()) {
-            assertEquals("answersTheRequest", rule.capability().name().orElse(null),
+            assertEquals("answersTheRequest", rule.capability().owed().name().orElse(null),
                     "under the name a violation of it is reported by");
         }
     }
@@ -119,7 +120,8 @@ class HowMuchOfARuleTheCheckReadsIsAskedPerCaseTest {
                 """, "findIt");
 
         assertEquals(2, discharge.rules().size(), "one answer per conjunct");
-        assertEquals(ClauseDischarge.Kind.DERIVABLE, discharge.rules().get(1).capability().kind(),
+        assertEquals(CapabilityResult.Analyzed.routed(new StaticRoute.AsABound(), new StaticRoute.AsATerm()),
+                discharge.rules().get(1).capability().capability(),
                 "`value.rank >= 0` is a relation the numeric domain reasons over");
     }
 
@@ -146,9 +148,11 @@ class HowMuchOfARuleTheCheckReadsIsAskedPerCaseTest {
                 let findIt (id) = Rows { value = [] }
                 """, "findIt");
 
-        assertEquals(ClauseDischarge.Kind.EXACT_MATCH, discharge.rules().get(0).capability().kind(),
+        assertEquals(CapabilityResult.Analyzed.routed(new StaticRoute.AsATerm()),
+                discharge.rules().get(0).capability().capability(),
                 "a term the check can name and compare, and nothing weaker states it");
-        assertEquals(ClauseDischarge.Kind.DERIVABLE, discharge.rules().get(1).capability().kind());
+        assertEquals(CapabilityResult.Analyzed.routed(new StaticRoute.AsABound(), new StaticRoute.AsATerm()),
+                discharge.rules().get(1).capability().capability());
     }
 
     /**
@@ -178,7 +182,7 @@ class HowMuchOfARuleTheCheckReadsIsAskedPerCaseTest {
 
         assertEquals(1, discharge.rules().size(),
                 "one rule, because the author wrote one — the `&&` is the helper's, not theirs");
-        assertEquals(10, discharge.rules().get(0).capability().clause().line(),
+        assertEquals(10, discharge.rules().get(0).capability().owed().clause().line(),
                 "the `ensures` line, not the `let` on line 3");
     }
 

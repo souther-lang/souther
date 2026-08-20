@@ -355,10 +355,10 @@ final class PathEngine {
                 continue;
             }
             for (StatedContract.Conjunct conjunct : rule.conjuncts()) {
-                if (conjunct.stated() == null) {
+                if (conjunct.stated().orNull() == null) {
                     continue;
                 }
-                Core here = Clauses.substituted(conjunct.stated(), given);
+                Core here = Clauses.substituted(conjunct.stated().orNull(), given);
                 out = predicates.assume(predicates.obligations(here, out, in.at(), false), out,
                         Known.Held.OF_THE_VALUE);
             }

@@ -115,8 +115,8 @@ public final class EnsuresThresholds {
                 // A conjunct this compiler could not type is one it has not read. Nothing is
                 // concluded from it either way: it draws no line here, and that it drew none is not
                 // a statement that the model has none there.
-                if (conjunct.stated() != null) {
-                    stated(conjunct.stated(), rule, clause, reads, symbols, drawn);
+                if (conjunct.stated().orNull() != null) {
+                    stated(conjunct.stated().orNull(), rule, clause, reads, symbols, drawn);
                 }
             }
         }
