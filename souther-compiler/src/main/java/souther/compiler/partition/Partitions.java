@@ -438,7 +438,7 @@ public final class Partitions {
             keep(out, measured, refine(axis.measuredAt(axis.id(), term),
                     () -> Intervals.classesOf(
                             Intervals.of(reachable, within == null ? null : within.min(),
-                                    within == null ? null : within.max()),
+                                    within == null ? null : within.max(), carrier),
                             measuredAt, read.type(), symbols),
                     merged(axis.cuts(), reachable, carrier)),
                     reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), rules);

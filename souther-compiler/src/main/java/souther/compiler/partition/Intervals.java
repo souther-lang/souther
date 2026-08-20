@@ -83,17 +83,25 @@ final class Intervals {
      * dropped — they cut a range no row can reach — and the end itself is outside it as much as
      * anything past it is.
      */
-    static List<Interval> of(List<Threshold> thresholds, Endpoint min, Endpoint max) {
-        // Keyed by the number and not by the count's own equality: `0.00` and `0` are one line, and
-        // BigDecimal's equality says they are two, which would leave two ranges holding zero.
+    static List<Interval> of(List<Threshold> thresholds, Endpoint min, Endpoint max,
+                             Carrier carrier) {
+        // Keyed by where the values part, and not by the number a rule was written with. `x <= 4`
+        // and `x < 5` divide the whole numbers once; keyed by their thresholds they are two splits,
+        // and the range between them holds no value any row could be written at — a class a report
+        // counts, tells an author no row is in, and asks the generator for (issue #880).
+        //
+        // Which subsumes the reason this was keyed by the number rather than by the count's own
+        // equality: `0.00` and `0` are one number and part the values in one place.
+        LevelSpace space = LevelSpace.onACarrier(carrier);
         Map<String, Split> distinct = new LinkedHashMap<>();
         for (Threshold each : thresholds) {
             if (!Endpoint.someValueLiesBetween(min, Endpoint.inclusive(each.value()))
                     || !Endpoint.someValueLiesBetween(Endpoint.inclusive(each.value()), max)) {
                 continue;
             }
-            distinct.putIfAbsent(each.value().key(),
-                    new Split(each.value(), each.valueBelongsBelow()));
+            Seam parts = Seam.of(space, new Level.OnACarrier(carrier, each.value()),
+                    each.valueBelongsBelow() ? Towards.BELOW : Towards.ABOVE);
+            distinct.putIfAbsent(parts.key(), new Split(each.value(), each.valueBelongsBelow()));
         }
         List<Split> splits = new ArrayList<>(distinct.values());
         splits.sort(Comparator.comparing(Split::value));
