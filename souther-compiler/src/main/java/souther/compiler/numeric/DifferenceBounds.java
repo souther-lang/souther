@@ -72,10 +72,10 @@ public final class DifferenceBounds<A> {
     /**
      * The constraints of this shape among {@code constraints}, closed over each other.
      *
-     * <p>Everything else is left where it is. Which of them are of this shape is decided here and
-     * nowhere else ({@link #canHold}), so a caller sorting the rules into what this takes and what
-     * is left over asks rather than deciding a second time — the two decisions drifting apart is how
-     * a rule ends up held by nobody.
+     * <p>Everything else is left where it is, and nothing has to sort the rules first: what is not
+     * of this shape is skipped here and read by the reduction, and a rule of this shape is read by
+     * both — exactly, here, and again as a plain sum there, which costs a little and says nothing
+     * new. So there is one decision about the shape and it is made here.
      */
     public static <A> DifferenceBounds<A> over(Iterable<AffineConstraint<A>> constraints) {
         Map<Node<A>, Map<Node<A>, RationalCut>> edges = new LinkedHashMap<>();
@@ -88,8 +88,9 @@ public final class DifferenceBounds<A> {
         return closing(edges);
     }
 
-    /** Whether this can hold what {@code constraint} says, in full. */
-    public static <A> boolean canHold(AffineConstraint<A> constraint) {
+    /** Whether this can hold what {@code constraint} says, in full — which is what the shapes above
+     *  amount to, asked directly so that they can be pinned down. */
+    static <A> boolean canHold(AffineConstraint<A> constraint) {
         return !edgesOf(constraint).isEmpty();
     }
 

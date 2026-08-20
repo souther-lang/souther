@@ -100,6 +100,36 @@ class TwoWritingsOfOneRuleAreOneConstraintTest {
         assertNotEquals(whole(weighing(A, 1), -3, Rel.LE), whole(weighing(A, 1), -4, Rel.LE));
     }
 
+    /**
+     * An equality has no direction to turn, so the two ways of writing it have to be made one rule
+     * rather than turning into one.
+     *
+     * <p>A comparison says {@code a >= 3} and {@code -a <= -3} are one thing by reducing both to the
+     * same half-space. {@code a = 3} and {@code -a = -3} have no such reduction, and were two
+     * records — so the same rule said both ways was two rules in the set.
+     */
+    @Test
+    void anEqualityIsOneRuleWhicheverWayRoundItWasWritten() {
+        assertEquals(whole(weighing(A, 1), -3, Rel.EQ), whole(weighing(A, -1), 3, Rel.EQ));
+        assertEquals(whole(weighing(A, 1), -3, Rel.EQ).hashCode(),
+                whole(weighing(A, -1), 3, Rel.EQ).hashCode());
+        assertEquals(whole(weighing(A, 1, B, -1), 0, Rel.EQ),
+                whole(weighing(B, 1, A, -1), 0, Rel.EQ));
+    }
+
+    @Test
+    void aDisequalityIsOneRuleWhicheverWayRoundItWasWritten() {
+        assertEquals(whole(weighing(A, 1), -3, Rel.NE), whole(weighing(A, -1), 3, Rel.NE));
+        assertEquals(whole(weighing(A, 1), -3, Rel.NE).hashCode(),
+                whole(weighing(A, -1), 3, Rel.NE).hashCode());
+    }
+
+    @Test
+    void anEqualityAtOneValueIsNotAnEqualityAtAnother() {
+        assertNotEquals(whole(weighing(A, 1), -3, Rel.EQ), whole(weighing(A, 1), -4, Rel.EQ));
+        assertNotEquals(whole(weighing(A, 1), -3, Rel.EQ), whole(weighing(A, 1), -3, Rel.NE));
+    }
+
     // --- what the rule settles on its own ---------------------------------------------------------
 
     /** Over whole numbers the sum cannot sit between two of its values, so the bound comes down

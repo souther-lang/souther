@@ -41,7 +41,6 @@ class WhatAFormAddsUpToIsNotWhatItsOrderHoldsTest {
     void aFormOverWholeNumbersTakesTheMultiplesOfItsDivisor() {
         AdditiveImage image = over(form("s", 300, "c", 600), Granularity.DISCRETE);
         assertEquals(Rational.of(300), image.generator());
-        assertTrue(image.isExact());
         assertTrue(image.contains(Rational.of(4800)));
         assertTrue(image.contains(Rational.of(-900)));
         assertFalse(image.contains(Rational.of(4900)));
@@ -111,7 +110,6 @@ class WhatAFormAddsUpToIsNotWhatItsOrderHoldsTest {
     void aFormOverDecimalsDoesNotReachWhatItsDivisorDoesNotDivide() {
         AdditiveImage image = over(form("a", 3), Granularity.DENSE);
         assertEquals(Rational.of(3), image.generator());
-        assertTrue(image.isExact());
         assertFalse(image.contains(Rational.of(1)), "a third is not a decimal anybody writes");
         assertTrue(image.contains(Rational.of(3)));
         assertTrue(image.contains(ratio(3, 10)), "and it is still dense: a tenth of three is one");
@@ -157,8 +155,9 @@ class WhatAFormAddsUpToIsNotWhatItsOrderHoldsTest {
         kinds.put("x", Granularity.DISCRETE);
         kinds.put("y", Granularity.DENSE);
         AdditiveImage image = AdditiveImage.of(form("x", 1, "y", 3), kinds::get);
-        assertFalse(image.isExact(), "`x + 3y` reaches no tenth, though its divisor is one");
-        assertTrue(image.contains(ratio(1, 10)), "so this is the wider answer, which is the safe one");
+        assertTrue(image.contains(ratio(1, 10)),
+                "`x + 3y` reaches no tenth, and this says it might — the wider answer, which is the"
+                        + " safe one, since everything an image is asked gets safer as it grows");
         assertFalse(over(form("x", 1, "y", 3), Granularity.DISCRETE).contains(ratio(1, 10)),
                 "where the exact answer over whole numbers refuses it");
     }

@@ -129,7 +129,8 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
         Map<String, RationalCut> nothing = Map.of();
         Reduction.Tightened<String> found = reduce(List.of(rule),
                 new Box<>(nothing, nothing), Granularity.DISCRETE);
-        assertTrue(found.foundNothing(), "nothing bounds b below, so the sum bounds a at nothing");
+        assertTrue(found.atLeast().isEmpty() && found.atMost().isEmpty(),
+                "nothing bounds b below, so the sum bounds a at nothing");
     }
 
     @Test
@@ -172,7 +173,9 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
     void aHoleWithNothingToSideItBoundsNothing() {
         AffineConstraint<String> hole =
                 rule(weighing("a", 1, "b", 1), -10, Rel.NE, Granularity.DISCRETE);
-        assertTrue(reduce(List.of(hole), between("b", 0, 5), Granularity.DISCRETE).foundNothing(),
+        Reduction.Tightened<String> found =
+                reduce(List.of(hole), between("b", 0, 5), Granularity.DISCRETE);
+        assertTrue(found.atLeast().isEmpty() && found.atMost().isEmpty(),
                 "nothing bounds a, so the sum can fall either side of ten");
     }
 
@@ -255,7 +258,7 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
             }
             Reduction.Tightened<String> tightened = (Reduction.Tightened<String>) found;
             Box<String> after = from.meeting(tightened.atLeast(), tightened.atMost());
-            if (!tightened.foundNothing()) {
+            if (!tightened.atLeast().isEmpty() || !tightened.atMost().isEmpty()) {
                 narrowed++;
             }
             for (Map<String, Integer> point : admitted) {

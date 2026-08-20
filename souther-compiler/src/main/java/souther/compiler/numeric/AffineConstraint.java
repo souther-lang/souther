@@ -54,6 +54,29 @@ public sealed interface AffineConstraint<A> {
             }
         }
 
+        /**
+         * Held at a value, whichever way round it was written.
+         *
+         * <p>{@code a = 3} and {@code -a = -3} are one rule, and a comparison says so by turning
+         * around — {@code a >= 3} and {@code -a <= -3} come to the same half-space. An equality has
+         * no direction to turn, so the two writings would otherwise be two records and the same rule
+         * said twice would be two rules.
+         *
+         * <p>No reader depends on which of the two is held: what is built from an equality is built
+         * from both sides of it.
+         */
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Equality<?> it
+                    && (form.equals(it.form()) && at.equals(it.at())
+                            || form.equals(it.form().negated()) && at.equals(it.at().negated()));
+        }
+
+        @Override
+        public int hashCode() {
+            return sameEitherWayRound(form, at);
+        }
+
         @Override
         public String toString() {
             return form + " = " + at;
@@ -78,10 +101,29 @@ public sealed interface AffineConstraint<A> {
             }
         }
 
+        /** Held away from a value, whichever way round it was written; see {@link Equality}. */
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Disequality<?> it
+                    && (form.equals(it.form()) && at.equals(it.at())
+                            || form.equals(it.form().negated()) && at.equals(it.at().negated()));
+        }
+
+        @Override
+        public int hashCode() {
+            return sameEitherWayRound(form, at);
+        }
+
         @Override
         public String toString() {
             return form + " /= " + at;
         }
+    }
+
+    /** A number the same for a form and its negation, so the two writings hash alike. */
+    private static <A> int sameEitherWayRound(CanonicalForm<A> form, Rational at) {
+        return (form.hashCode() ^ form.negated().hashCode()) * 31
+                + (at.hashCode() ^ at.negated().hashCode());
     }
 
     /**

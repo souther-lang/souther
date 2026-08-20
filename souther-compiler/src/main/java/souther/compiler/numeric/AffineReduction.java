@@ -63,10 +63,6 @@ public final class AffineReduction {
                 atLeast = Map.copyOf(atLeast);
                 atMost = Map.copyOf(atMost);
             }
-
-            public boolean foundNothing() {
-                return atLeast.isEmpty() && atMost.isEmpty();
-            }
         }
 
         /**

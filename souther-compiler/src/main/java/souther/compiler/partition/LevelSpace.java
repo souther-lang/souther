@@ -244,11 +244,7 @@ public interface LevelSpace {
      * {@code 3 * a} takes a third of them.
      */
     static LevelSpace overFiniteDecimals(BigDecimal generator) {
-        // Exact, because a quantity's positions are all on the one carrier it names, so they are all
-        // decimals. A form whose positions are not all made of the same thing is something only the
-        // interval algebra is handed, and it is what the flag is there for.
-        AdditiveImage reaches = new AdditiveImage.OverFiniteDecimals(
-                Rational.of(generator), true);
+        AdditiveImage reaches = new AdditiveImage.OverFiniteDecimals(Rational.of(generator));
         return new Counting() {
 
             @Override
@@ -304,8 +300,7 @@ public interface LevelSpace {
         if (step.signum() == 0) {
             return BigDecimal.ONE;
         }
-        Rational left = new AdditiveImage.OverFiniteDecimals(
-                Rational.of(step.abs()), true).generator();
+        Rational left = new AdditiveImage.OverFiniteDecimals(Rational.of(step.abs())).generator();
         BigDecimal written = left.asWrittenDecimal();
         if (written == null) {
             throw new IllegalStateException(

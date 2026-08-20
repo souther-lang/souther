@@ -22,22 +22,12 @@ import java.util.function.Function;
  * can hold — get safer as the image gets bigger: a value outside a superset is outside the image, a
  * cut not moved is a cut that refuses nothing, and an equality refused because its value is outside
  * even the superset is an equality nothing satisfies. So a form whose positions are not all made of
- * the same thing answers with the coarser of the two and says {@link #isExact} is false, rather than
- * answering with a set it cannot stand behind.
+ * the same thing answers with the coarser of the two, and nothing has to be told that it did.
  */
 public sealed interface AdditiveImage {
 
     /** What the form's values are whole (or finite-decimal) multiples of. Always positive. */
     Rational generator();
-
-    /**
-     * Whether this is the values the form takes, rather than a set containing them.
-     *
-     * <p>Read by whatever has to certify that a projection states the whole of a rule. Everything
-     * else here is sound either way — see the class comment — so this is the one question that has
-     * to be asked before a claim of exactness is made, and never before a cut is moved.
-     */
-    boolean isExact();
 
     /** Whether the form can add up to this value. */
     boolean contains(Rational value);
@@ -90,8 +80,9 @@ public sealed interface AdditiveImage {
         }
         // Whole numbers are finite decimals, so a form with some of each adds up inside the finite
         // decimals the whole form's divisor generates. Not exactly that set — `x + 3y` with `x` whole
-        // and `y` a decimal reaches no tenth, though the divisor is one — so it says so.
-        return new OverFiniteDecimals(divisor, !anySteps);
+        // and `y` a decimal reaches no tenth, though the divisor is one — and wider is the safe way
+        // to be wrong here, so that is the answer rather than a narrower one it cannot stand behind.
+        return new OverFiniteDecimals(divisor);
     }
 
     /**
@@ -143,12 +134,6 @@ public sealed interface AdditiveImage {
             }
         }
 
-        /** Bézout's, so this is the values and not a set holding them. */
-        @Override
-        public boolean isExact() {
-            return true;
-        }
-
         @Override
         public boolean contains(Rational value) {
             return value.dividedBy(generator).isWhole();
@@ -174,13 +159,15 @@ public sealed interface AdditiveImage {
     }
 
     /**
-     * Every finite-decimal multiple of the generator, which is what a form over positions whose
-     * values fill takes.
+     * Every finite-decimal multiple of the generator.
      *
-     * @param isExact false where the form's positions are not all of them, in which case this holds
-     *                the values the form takes and others besides
+     * <p>What a form over positions whose values fill takes, and — for a form whose positions are
+     * not all of one kind — a set holding what it takes rather than exactly it. Which of the two it
+     * is nothing asks: all three things an image is used for get safer as it gets bigger, so the
+     * wider answer needs no announcing. A reader that had to certify exactness would need telling
+     * apart, and there is no such reader.
      */
-    record OverFiniteDecimals(Rational generator, boolean isExact) implements AdditiveImage {
+    record OverFiniteDecimals(Rational generator) implements AdditiveImage {
 
         /**
          * With the units taken out of the generator, so that two divisors generating one set are one

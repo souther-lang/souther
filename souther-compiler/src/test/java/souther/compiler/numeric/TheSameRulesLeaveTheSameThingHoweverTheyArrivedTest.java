@@ -159,6 +159,69 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
         assertTrue(d.isBottom());
     }
 
+    // --- and the same question, however it is asked ---------------------------------------------------
+
+    /**
+     * What a form is said to run up to and what is said to follow from it are one statement.
+     *
+     * <p>They had not been. Under {@code x, y in [0, 5]} with {@code x + y <= 5}, the proof showed
+     * the sum at five and the ranges said it ran to ten — the ranges reading the box alone while the
+     * proof read the box and the rules. Both sound, and not the same abstract state, which is the
+     * whole of what this is for: a reader placing a row where a quantity reaches ten is placing it
+     * where nothing can be built.
+     */
+    @Test
+    void whatAFormRunsUpToIsWhatFollowsFromIt() {
+        Map<String, Granularity> kinds = whole("x", "y");
+        NumericDomain<String> d = NumericDomain.<String>top()
+                .assume(atom("x"), Rel.GE, kinds)
+                .assume(atom("x").minus(num(5)), Rel.LE, kinds)
+                .assume(atom("y"), Rel.GE, kinds)
+                .assume(atom("y").minus(num(5)), Rel.LE, kinds)
+                .assume(atom("x").plus(atom("y")).minus(num(5)), Rel.LE, kinds);
+
+        assertTrue(d.entails(atom("x").plus(atom("y")).minus(num(5)), Rel.LE));
+        assertEquals(Endpoint.inclusive(new Count(BigDecimal.valueOf(5))),
+                d.boundsOf(atom("x").plus(atom("y"))).max(),
+                "and the range says the same five the proof does");
+    }
+
+    /**
+     * A question scaled by a positive number is the same question.
+     *
+     * <p>The rules were canonicalised on the way in and the questions were not, so a rule kept as
+     * {@code x + y <= 5} did not answer {@code 2x + 2y <= 10}: a rule is taken off a goal once, and
+     * the goal was left with a residual nothing could prove. The audit had it worse — a difference
+     * asked as {@code 2a - 2b <= 4} was not recognised as a difference at all, so a rule the ranges
+     * do state came back unstated, and the spelling decided the answer again.
+     */
+    @Test
+    void aQuestionScaledUpIsTheSameQuestion() {
+        Map<String, Granularity> kinds = whole("a", "b");
+        NumericDomain<String> d = NumericDomain.<String>top()
+                .assume(atom("a").minus(atom("b")).minus(num(2)), Rel.LE, kinds);
+
+        assertEquals(d.entails(atom("a").minus(atom("b")).minus(num(2)), Rel.LE),
+                d.entails(scaled("a", 2).minus(scaled("b", 2)).minus(num(4)), Rel.LE));
+        assertEquals(d.projectionEntails(atom("a").minus(atom("b")).minus(num(2)), Rel.LE),
+                d.projectionEntails(scaled("a", 2).minus(scaled("b", 2)).minus(num(4)), Rel.LE));
+        assertTrue(d.entails(scaled("a", 2).minus(scaled("b", 2)).minus(num(4)), Rel.LE));
+    }
+
+    /** And a bound asked about a form scaled up comes back scaled up: {@code 2a - 2b} runs twice as
+     *  far as {@code a - b}, so an answer about one handed back for the other is out by a factor. */
+    @Test
+    void aBoundOnAScaledFormIsScaledToMatch() {
+        Map<String, Granularity> kinds = whole("a", "b");
+        NumericDomain<String> d = NumericDomain.<String>top()
+                .assume(atom("a").minus(atom("b")).plus(num(2)), Rel.LE, kinds);
+
+        assertEquals(Endpoint.inclusive(new Count(BigDecimal.valueOf(-2))),
+                d.boundsOf(atom("a").minus(atom("b"))).max());
+        assertEquals(Endpoint.inclusive(new Count(BigDecimal.valueOf(-4))),
+                d.boundsOf(scaled("a", 2).minus(scaled("b", 2))).max());
+    }
+
     // --- and over rules drawn at random ---------------------------------------------------------------
 
     @Test
@@ -177,6 +240,19 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
             doubled.addAll(rules);
             NumericDomain<String> twice = given(doubled, kinds);
 
+            // The same questions, scaled up, are the same questions.
+            for (Written each : rules) {
+                LinearForm<String> doubledForm = each.form().times(BigDecimal.valueOf(3));
+                assertEquals(asWritten.entails(each.form(), each.rel()),
+                        asWritten.entails(doubledForm, each.rel()),
+                        () -> "scaling the question moved what is proven: " + rules);
+                assertEquals(asWritten.refutes(each.form(), each.rel()),
+                        asWritten.refutes(doubledForm, each.rel()),
+                        () -> "scaling the question moved what is refuted: " + rules);
+                assertEquals(asWritten.projectionEntails(each.form(), each.rel()),
+                        asWritten.projectionEntails(doubledForm, each.rel()),
+                        () -> "scaling the question moved what the ranges state: " + rules);
+            }
             for (NumericDomain<String> other : List.of(reordered, twice)) {
                 assertEquals(asWritten.isBottom(), other.isBottom(),
                         () -> "whether anything is left moved: " + rules);

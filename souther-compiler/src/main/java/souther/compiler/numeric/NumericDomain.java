@@ -259,7 +259,7 @@ public final class NumericDomain<A> {
         if (isBottom()) {
             return true;   // an infeasible path discharges anything
         }
-        Goal<A> goal = goalOf(f);
+        Goal<A> goal = goalOf(f).goal();
         return switch (rel) {
             case LE -> proves(goal, false, withRules);
             case LT -> proves(goal, true, withRules);
@@ -282,7 +282,7 @@ public final class NumericDomain<A> {
         if (rel == Rel.NE) {
             return entails(f, Rel.EQ);   // proving it equal is proving it not unequal
         }
-        Goal<A> goal = goalOf(f);
+        Goal<A> goal = goalOf(f).goal();
         return switch (rel) {
             case GE, GT -> proves(goal, rel == Rel.GE, true);
             default -> proves(goal.negated(), rel == Rel.LE, true);
@@ -299,10 +299,48 @@ public final class NumericDomain<A> {
         }
     }
 
-    private Goal<A> goalOf(LinearForm<A> f) {
+    /**
+     * A canonical question and what the form it was asked about was multiplied by.
+     *
+     * <p>The divisor is nothing to a question about which side of nought a form falls — scaling by a
+     * positive number leaves that alone, which is the whole reason the question can be canonicalised
+     * at all. It is everything to a question about where the form runs: {@code 2a - 2b} runs twice as
+     * far as {@code a - b}, and an answer about the second handed back for the first is out by a
+     * factor with nothing to say it is.
+     */
+    private record Asked<A>(Goal<A> goal, Rational by) {}
+
+    /**
+     * A question, in the one form every way of asking it comes to.
+     *
+     * <p>The rules were being canonicalised on the way in and the questions were not, so
+     * {@code 2x + 2y <= 10} and {@code x + y <= 5} — one question — were answered differently: the
+     * rule kept is the second, and a premise is taken off a goal once, so the first was left with a
+     * residual nothing could prove. The same thing reached the audit, where a difference asked as
+     * {@code 2a - 2b <= 4} was not recognised as a difference at all and a rule the ranges do state
+     * came back unstated.
+     *
+     * <p>Divided through by what the weights share, which is a positive number and so leaves which
+     * side of nought the question is about.
+     */
+    private Asked<A> goalOf(LinearForm<A> f) {
         Map<A, Rational> coefs = new LinkedHashMap<>();
-        f.coefs().forEach((atom, coef) -> coefs.put(atom, Rational.of(coef)));
-        return new Goal<>(coefs, Rational.of(f.constant()));
+        f.coefs().forEach((atom, coef) -> {
+            Rational weight = Rational.of(coef);
+            if (!weight.isZero()) {
+                coefs.put(atom, weight);
+            }
+        });
+        Rational constant = Rational.of(f.constant());
+        // Canonicalised by the one thing that canonicalises, so a question and a rule that say the
+        // same thing are put into the same words by the same code. Doing the division here instead
+        // would be a second account of what one rule is — which is the thing being removed.
+        CanonicalForm.Scaled<A> scaled = CanonicalForm.of(coefs);
+        if (scaled == null) {
+            return new Asked<>(new Goal<>(Map.of(), constant), Rational.ONE);
+        }
+        return new Asked<>(
+                new Goal<>(scaled.form().coefs(), constant.dividedBy(scaled.by())), scaled.by());
     }
 
     /**
@@ -319,24 +357,14 @@ public final class NumericDomain<A> {
      * step: the rules that narrow it have all been read into it, each on its own.
      */
     private boolean proves(Goal<A> goal, boolean strict, boolean withRules) {
-        if (provenByTheBox(goal, strict)) {
-            return true;
-        }
-        if (!withRules) {
+        RationalCut highest = highestProven(goal, withRules);
+        if (highest == null) {
             return false;
         }
-        for (AffineConstraint<A> rule : rules) {
-            for (AffineConstraint.HalfSpace<A> premise : asHalfSpaces(rule)) {
-                // `premise.form <= premise.bound` taken off the goal leaves a residual the box has
-                // to prove. The goal is strict where either the premise or the residual is, so what
-                // the residual is asked for is what the premise did not already give.
-                Goal<A> residual = subtracting(goal, premise);
-                if (provenByTheBox(residual, strict && premise.bound().inclusive())) {
-                    return true;
-                }
-            }
-        }
-        return false;
+        int sign = highest.at().signum();
+        // An end at nought the goal cannot reach proves the strict form: nothing the rules admit
+        // gets there, which is what `< 0` asks.
+        return sign < 0 || (sign == 0 && (!strict || !highest.inclusive()));
     }
 
     private static <A> List<AffineConstraint.HalfSpace<A>> asHalfSpaces(AffineConstraint<A> rule) {
@@ -360,26 +388,54 @@ public final class NumericDomain<A> {
         return new Goal<>(coefs, goal.constant().plus(premise.bound().at()));
     }
 
-    /** Whether what the rules leave the goal's positions already puts the goal below nought. */
-    private boolean provenByTheBox(Goal<A> goal, boolean strict) {
-        RationalCut highest = highestOf(goal);
-        if (highest == null) {
-            return false;
-        }
-        int sign = highest.at().signum();
-        // An end at nought the goal's own bounds do not reach proves the strict form: nothing the
-        // rules admit gets there, which is what `< 0` asks.
-        return sign < 0 || (sign == 0 && (!strict || !highest.inclusive()));
-    }
-
     /**
      * The highest the goal comes to, or null where nothing bounds it above.
      *
-     * <p>Its positions' own ends, and the relation on a difference of two of them where the goal has
-     * that shape. The end is the goal's own only where every end it was added from is: one term that
-     * cannot reach its edge is one the sum cannot reach either.
+     * <p><b>The one place a bound on a form is derived.</b> {@link #boundsOf(LinearForm)},
+     * {@link #entails} and {@link #refutes} all read this, so what a form is said to run up to and
+     * what is said to follow from it are one statement. They had not been: the ranges said
+     * {@code x + y} ran to ten while the proof beside them showed {@code x + y <= 5} — both sound,
+     * and not the same abstract state, which is the shape all of this exists to remove.
+     *
+     * <p>Three routes, met. What the box leaves the goal's own positions; the relation on a
+     * difference of two of them, where the goal has that shape; and a rule taken off the goal,
+     * leaving a residual the box bounds — {@code f <= u} with {@code g - f <= r} gives
+     * {@code g <= r + u}, which is what relates a guard over a computed value to what the type of
+     * the value it was compared against guarantees.
+     *
+     * <p>One rule, once. The residual is bounded by the box alone, so two rules are never added
+     * together through this. What the box already holds of them is not this step: the rules that
+     * narrow it have each been read into it on their own.
+     *
+     * <p>Nothing this adds is needed for a bound on a single position, and nothing it adds is wrong
+     * there. The reduction already reads every rule against the box at each position it names, and
+     * runs until the box stops moving — which is this step at one position, taken as far as it goes.
+     * So {@link #boundsOf(Object)} reads the box and agrees with this.
+     *
+     * @param withRules false to ask what the ranges say on their own, which is a different question
+     *                  from what the rules say, and is the one an audit of the ranges wants
      */
-    private RationalCut highestOf(Goal<A> goal) {
+    private RationalCut highestProven(Goal<A> goal, boolean withRules) {
+        RationalCut best = fromTheBox(goal);
+        if (!withRules) {
+            return best;
+        }
+        for (AffineConstraint<A> rule : rules) {
+            for (AffineConstraint.HalfSpace<A> premise : asHalfSpaces(rule)) {
+                RationalCut residual = fromTheBox(subtracting(goal, premise));
+                if (residual != null) {
+                    // The goal reaches the sum only where the residual reaches its own end and the
+                    // premise reaches its bound.
+                    best = RationalCut.tighterUpper(best, new RationalCut(residual.at(),
+                            residual.inclusive() && premise.bound().inclusive()));
+                }
+            }
+        }
+        return best;
+    }
+
+    /** What the box and the closed differences leave the goal, which is where every route starts. */
+    private RationalCut fromTheBox(Goal<A> goal) {
         if (goal.coefs().isEmpty()) {
             return RationalCut.inclusive(goal.constant());
         }
@@ -387,36 +443,42 @@ public final class NumericDomain<A> {
         Box<A> box = state.box();
         RationalCut best = Reach.of(goal.coefs(), goal.constant(),
                 atom -> Reach.between(box.leastOf(atom), box.mostOf(atom))).most();
-        List<A> apart = unitDifference(goal.coefs());
+        Apart<A> apart = difference(goal.coefs());
         if (apart != null) {
-            RationalCut difference =
-                    state.differences().differenceBound(apart.get(0), apart.get(1));
-            if (difference != null) {
+            RationalCut held = state.differences().differenceBound(apart.above(), apart.below());
+            if (held != null) {
                 best = RationalCut.tighterUpper(best, new RationalCut(
-                        difference.at().plus(goal.constant()), difference.inclusive()));
+                        held.at().times(apart.by()).plus(goal.constant()), held.inclusive()));
             }
         }
         return best;
     }
 
-    /** The two atoms of {@code a - b}, or null where the goal is not one. */
-    private static <A> List<A> unitDifference(Map<A, Rational> coefs) {
+    /**
+     * The two positions of {@code k·(a - b)} and the {@code k}, or null where the goal is not that.
+     *
+     * <p>Any {@code k} and not only one. A goal asked as {@code 2a - 2b} is the difference
+     * {@code a - b} twice over, and the closed differences bound it at twice what they bound that —
+     * so recognising the shape only when it is spelled with ones is the same trap this removed from
+     * the rules, one level down in the reading.
+     */
+    private static <A> Apart<A> difference(Map<A, Rational> coefs) {
         if (coefs.size() != 2) {
             return null;
         }
-        A up = null;
-        A down = null;
-        for (Map.Entry<A, Rational> each : coefs.entrySet()) {
-            if (each.getValue().equals(Rational.ONE)) {
-                up = each.getKey();
-            } else if (each.getValue().equals(Rational.ONE.negated())) {
-                down = each.getKey();
-            } else {
-                return null;
-            }
+        java.util.Iterator<Map.Entry<A, Rational>> both = coefs.entrySet().iterator();
+        Map.Entry<A, Rational> one = both.next();
+        Map.Entry<A, Rational> other = both.next();
+        if (!one.getValue().equals(other.getValue().negated())) {
+            return null;
         }
-        return up == null || down == null ? null : List.of(up, down);
+        return one.getValue().signum() > 0
+                ? new Apart<>(one.getKey(), other.getKey(), one.getValue())
+                : new Apart<>(other.getKey(), one.getKey(), other.getValue());
     }
+
+    /** {@code by · (above - below)}, with {@code by} positive. */
+    private record Apart<A>(A above, A below, Rational by) {}
 
     // --- reading the domain back --------------------------------------------------------------------
 
@@ -448,13 +510,16 @@ public final class NumericDomain<A> {
         if (isBottom()) {
             return new Bounds(null, null);
         }
-        Goal<A> goal = goalOf(f);
-        RationalCut highest = highestOf(goal);
-        RationalCut lowest = highestOf(goal.negated());
+        Asked<A> asked = goalOf(f);
+        RationalCut highest = highestProven(asked.goal(), true);
+        RationalCut lowest = highestProven(asked.goal().negated(), true);
+        // Back into the units the caller asked in. The question was answered about the form divided
+        // through by what its weights share, and the caller wants the form it wrote.
         return new Bounds(
-                lowest == null ? null
-                        : written(new RationalCut(lowest.at().negated(), lowest.inclusive()), false),
-                written(highest, true));
+                lowest == null ? null : written(new RationalCut(
+                        lowest.at().negated().times(asked.by()), lowest.inclusive()), false),
+                highest == null ? null : written(new RationalCut(
+                        highest.at().times(asked.by()), highest.inclusive()), true));
     }
 
     /**

@@ -44,8 +44,11 @@ public record RationalCut(Rational at, boolean inclusive) {
     /**
      * The tighter of two lower bounds, where {@code null} is no bound and so never the tighter.
      *
-     * <p>The mirror of {@link #tighterUpper}, and its own method for the reason that one is named
-     * for its side: at one value the inclusive cut is the tighter here and the looser there.
+     * <p>Its own method because which of two values is the tighter runs the other way here: above,
+     * the smaller value; below, the larger. Whether the value itself is admitted does not run the
+     * other way — an exclusive cut admits less on either side and is the tighter of the two on
+     * either side — so an order over cuts alone would be right about the strictness and wrong about
+     * the value, on one side or the other, however it was written.
      */
     public static RationalCut tighterLower(RationalCut a, RationalCut b) {
         if (a == null || b == null) {
@@ -64,10 +67,8 @@ public record RationalCut(Rational at, boolean inclusive) {
      * <p>At one value the two are one edge asked of two rules, and a conjunction admits only what
      * both admit — so the value survives only where neither excludes it.
      *
-     * <p>Named for the side it is about. At one value an inclusive cut is the looser of the two as
-     * an upper bound and the tighter as a lower one, so anything that ordered cuts without being
-     * told which side was meant would be wrong on one of them — which is why this type is not
-     * {@link Comparable} and why the lower side, when something needs it, is its own method.
+     * <p>Named for the side it is about, and this type is not {@link Comparable}: see
+     * {@link #tighterLower} for which half of the comparison depends on the side and which does not.
      */
     public static RationalCut tighterUpper(RationalCut a, RationalCut b) {
         if (a == null || b == null) {

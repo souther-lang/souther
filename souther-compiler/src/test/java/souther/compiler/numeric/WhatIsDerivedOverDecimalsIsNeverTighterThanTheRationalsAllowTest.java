@@ -237,13 +237,17 @@ class WhatIsDerivedOverDecimalsIsNeverTighterThanTheRationalsAllowTest {
                 checked++;
                 assertFalse(most.inclusive(),
                         () -> "ours admits a value the rationals refuse at " + position);
-                assertFalse(new AdditiveImage.OverFiniteDecimals(Rational.ONE, true)
+                assertFalse(new AdditiveImage.OverFiniteDecimals(Rational.ONE)
                                 .contains(most.at()),
                         () -> "ours refuses " + most.at() + " at " + position + ", which is a"
                                 + " decimal the position can take: " + written);
             }
         }
-        assertTrue(checked >= 0, "and where they never disagree there is nothing to say");
+        // No floor on `checked`: the two may simply never disagree, and a run in which they do not
+        // is a run with nothing to check rather than a run that checked too little. Counted and
+        // reported instead of asserted, since a counter is never below nought and an assertion that
+        // it is not would say nothing at all.
+        System.out.println("strictness differed at " + checked + " bounds of " + CASES + " systems");
     }
 
     /** The case the whole distinction is about, spelled out. */
