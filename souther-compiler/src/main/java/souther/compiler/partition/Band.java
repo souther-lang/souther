@@ -199,9 +199,16 @@ public record Band(Seam under, Seam over, Level from, Level to) {
      * run of distances until the other end of it is known.
      */
     Band mappedBy(java.util.function.UnaryOperator<Level> onto) {
-        return new Band(under == null ? null : under.mappedBy(onto),
-                over == null ? null : over.mappedBy(onto),
-                from == null ? null : onto.apply(from), to == null ? null : onto.apply(to));
+        Seam below = under == null ? null : under.mappedBy(onto);
+        Seam above = over == null ? null : over.mappedBy(onto);
+        // A line with no place on the other order leaves the run nothing to be read as: which side
+        // of it this run lies is the whole of what the run says. An end the carrier does not reach
+        // is a different answer and is kept as no end.
+        if (under != null && below == null || over != null && above == null) {
+            return null;
+        }
+        return new Band(below, above, from == null ? null : onto.apply(from),
+                to == null ? null : onto.apply(to));
     }
 
     /**

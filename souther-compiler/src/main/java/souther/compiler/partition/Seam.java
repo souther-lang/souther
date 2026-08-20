@@ -122,8 +122,21 @@ public record Seam(CutPosition at, Level below, Level above) {
      */
     Seam mappedBy(java.util.function.UnaryOperator<Level> onto) {
         Level line = at.asALevelOfTheQuantity();
-        return new Seam(CutPosition.at(line == null ? at.written() : onto.apply(line)),
-                below == null ? null : onto.apply(below),
+        if (line == null) {
+            // A line at a place the quantity has no value for has nothing to read on another order:
+            // what would move is the place, and the place is a fraction of what the rule wrote.
+            // Nothing asks for it — a rule between two positions writes the whole of what it cuts —
+            // and reaching here would be a scaled reading of one order let loose on another.
+            throw new IllegalStateException(
+                    "a line the quantity has no value at cannot be read on another order: " + at);
+        }
+        Level moved = onto.apply(line);
+        if (moved == null) {
+            return null;   // the line itself has no place here, so neither has the seam
+        }
+        // An end with no place is an end the carrier does not reach, which is a run with no end
+        // that way rather than a run that could not be read.
+        return new Seam(CutPosition.at(moved), below == null ? null : onto.apply(below),
                 above == null ? null : onto.apply(above));
     }
 

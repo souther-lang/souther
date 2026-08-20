@@ -143,8 +143,12 @@ public record CutPosition(Level written, BigDecimal per) {
 
     /** The same, asked of a place of the order this line falls on. */
     public int compare(souther.compiler.numeric.Place at) {
-        return at instanceof Count count
-                ? count.at().multiply(per).compareTo(numberOf(written))
+        BigDecimal line = numberOf(written);
+        // The same two answers as above, and the second for the same reason: an order with no
+        // numbers is never scaled, so its places compare as they stand — and two carriers' places
+        // brought together say so themselves rather than arriving here as a null.
+        return at instanceof Count count && line != null
+                ? count.at().multiply(per).compareTo(line)
                 : at.compareTo(placeOf(written));
     }
 

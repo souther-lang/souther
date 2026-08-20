@@ -79,8 +79,12 @@ public final class LevelRealizer {
         // it, and then whatever the item asks of that place. Arithmetic on the carrier's counts and
         // not a walk along it — a walk is an addition that only exists where the order has a
         // smallest step, so a rule over two decimals had no pair anything could compose.
-        Place at = placeMeeting(relativeTo(two.where(), common, two.of()), two.of(),
-                bounds(two.on()));
+        // Null where the carrier's arithmetic could not put the item's levels beside the place the
+        // other position stands at. Reported as a search that composed nothing, which is what it is
+        // — read on, an item with no level in it was handed to a reader that asks where its level
+        // falls.
+        Criterion here = relativeTo(two.where(), common, two.of());
+        Place at = here == null ? null : placeMeeting(here, two.of(), bounds(two.on()));
         if (at == null) {
             return new Realization.Unknown(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE);
         }
@@ -522,18 +526,30 @@ public final class LevelRealizer {
         // two ends and a line between them, and a mapping that gave them all the same place left a
         // run that said nothing about which side of the line it lay — so a search took whatever the
         // declared domain offered first and a row on the line came back for a point past it.
+        // Null where the carrier's arithmetic puts a level nowhere. Which end that happens at
+        // decides what it means: a line with no place is an item this order cannot be read as at
+        // all, and a run's far end with no place is a run that reaches as far as the carrier does.
         java.util.function.UnaryOperator<Level> onto = level -> {
             Place at = movedBy(common, level, of);
             return at == null ? null : new Level.OnACarrier(of, at);
         };
         return switch (where) {
-            case Criterion.AtTheLevel at -> new Criterion.AtTheLevel(onto.apply(at.at()));
-            case Criterion.Within within -> new Criterion.Within(
-                    within.band().mappedBy(onto),
-                    within.except() == null ? null : onto.apply(within.except()));
+            case Criterion.AtTheLevel at -> only(new Criterion.AtTheLevel(onto.apply(at.at())),
+                    onto.apply(at.at()));
+            case Criterion.Within within -> {
+                Band run = within.band().mappedBy(onto);
+                yield run == null ? null : new Criterion.Within(run,
+                        within.except() == null ? null : onto.apply(within.except()));
+            }
             case Criterion.AnythingBut other ->
-                    new Criterion.AnythingBut(onto.apply(other.excluded()));
+                    only(new Criterion.AnythingBut(onto.apply(other.excluded())),
+                            onto.apply(other.excluded()));
         };
+    }
+
+    /** An item, unless the level it is written against has no place on this order. */
+    private static Criterion only(Criterion made, Level against) {
+        return against == null ? null : made;
     }
 
     /**
