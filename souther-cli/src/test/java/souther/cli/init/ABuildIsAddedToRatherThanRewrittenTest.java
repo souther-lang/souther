@@ -1,0 +1,188 @@
+package souther.cli.init;
+
+import org.junit.jupiter.api.Test;
+import org.w3c.dom.Document;
+import org.w3c.dom.NodeList;
+import org.xml.sax.InputSource;
+
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.XMLConstants;
+import java.io.StringReader;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * A build file this command did not write comes back as its author left it, with a declaration in
+ * it.
+ *
+ * <p>What is asked of the result is that it still parses and says what it now has to say — not that
+ * it matches a text written here. A pom rendered out of a parsed tree would also parse, and would
+ * come back with the author's comments gone and their layout replaced.
+ */
+class ABuildIsAddedToRatherThanRewrittenTest {
+
+    private static final String POM = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <project xmlns="http://maven.apache.org/POM/4.0.0">
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>com.acme</groupId>
+              <artifactId>billing</artifactId>
+              <version>1.2.3</version>
+
+              <!-- pinned deliberately: see the incident on the 3rd -->
+              <dependencies>
+                <dependency>
+                  <groupId>org.junit.jupiter</groupId>
+                  <artifactId>junit-jupiter</artifactId>
+                  <version>6.1.2</version>
+                  <scope>test</scope>
+                </dependency>
+              </dependencies>
+            </project>
+            """;
+
+    @Test
+    void theDeclarationsGoIntoTheElementsThePomAlreadyHas() throws Exception {
+        String edited = MavenBuild.withSoutherDeclared(POM, "9.9.9");
+
+        assertTrue(edited.contains("<!-- pinned deliberately: see the incident on the 3rd -->"),
+                "the author's comment did not survive the edit");
+        assertEquals(2, elements(edited, "dependency"),
+                "the runtime did not land in the dependencies that were there");
+        assertTrue(edited.contains("<artifactId>souther-runtime</artifactId>"), edited);
+        assertEquals(1, elements(edited, "plugin"));
+        assertEquals("com.acme:billing", MavenBuild.coordinateOf(edited).toString());
+        assertTrue(edited.contains("<southerVersion>9.9.9</southerVersion>"));
+    }
+
+    /** A pom with a {@code <build>} of its own is added to rather than given a second one. */
+    @Test
+    void aPomThatHasABuildKeepsTheOneItHas() throws Exception {
+        String pom = POM.replace("</project>", """
+                  <build>
+                    <plugins>
+                      <plugin>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <version>3.5.6</version>
+                      </plugin>
+                    </plugins>
+                  </build>
+                </project>
+                """);
+
+        String edited = MavenBuild.withSoutherDeclared(pom, "9.9.9");
+
+        assertEquals(1, elements(edited, "build"));
+        assertEquals(1, elements(edited, "plugins"));
+        assertEquals(2, elements(edited, "plugin"));
+    }
+
+    /** A pom with neither element gets both, and still parses. */
+    @Test
+    void aPomWithNoDependenciesAndNoBuildGetsBoth() throws Exception {
+        String bare = """
+                <project>
+                  <groupId>com.acme</groupId>
+                  <artifactId>billing</artifactId>
+                </project>
+                """;
+
+        String edited = MavenBuild.withSoutherDeclared(bare, "9.9.9");
+
+        assertEquals(1, elements(edited, "dependencies"));
+        assertEquals(1, elements(edited, "plugins"));
+    }
+
+    /** Running it again writes nothing: the same text comes back, so nothing is written at all. */
+    @Test
+    void aPomThatAlreadyDeclaresSoutherComesBackUnchanged() {
+        String once = MavenBuild.withSoutherDeclared(POM, "9.9.9");
+
+        assertSame(once, MavenBuild.withSoutherDeclared(once, "9.9.9"));
+    }
+
+    /**
+     * A {@code plugins} inside a comment is not the element the declaration belongs in.
+     *
+     * <p>The reason the path is walked rather than the closing tag searched for. A pom whose comment
+     * shows the wiring it replaced is an ordinary pom.
+     */
+    @Test
+    void aCommentThatMentionsPluginsIsNotAPluginsElement() throws Exception {
+        String pom = POM.replace("<!-- pinned deliberately: see the incident on the 3rd -->",
+                "<!-- we used to have <build><plugins>...</plugins></build> here -->");
+
+        String edited = MavenBuild.withSoutherDeclared(pom, "9.9.9");
+
+        assertEquals(1, elements(edited, "build"), "a declaration went into a comment");
+    }
+
+    @Test
+    void theGradlePluginGoesIntoThePluginsBlockThatIsThere() {
+        String script = """
+                plugins {
+                    java
+                    id("com.diffplug.spotless") version "6.25.0"
+                }
+
+                group = "com.acme"
+                """;
+
+        String edited = GradleBuild.withThePluginApplied(script, true);
+
+        assertTrue(edited.contains("id(\"org.souther-lang.souther\") version"));
+        assertEquals(1, edited.split("plugins \\{", -1).length - 1,
+                "a second plugins block, which Gradle refuses:\n" + edited);
+        assertTrue(GradleBuild.declaresThePlugin(edited));
+        assertEquals("com.acme", GradleBuild.groupOf(edited));
+    }
+
+    /** A script with no {@code plugins} block gets one, at the top, where the only one may be. */
+    @Test
+    void aScriptWithNoPluginsBlockGetsOne() {
+        String edited = GradleBuild.withThePluginApplied("group = \"com.acme\"\n", true);
+
+        assertTrue(edited.startsWith("plugins {"), edited);
+        assertTrue(edited.endsWith("group = \"com.acme\"\n"), edited);
+    }
+
+    /** A brace inside a string is not the end of the block it sits in. */
+    @Test
+    void aBraceInsideAStringDoesNotCloseTheBlock() {
+        String script = """
+                plugins {
+                    java
+                    id("com.example.thing") version "1.0" // }
+                }
+                """;
+
+        String edited = GradleBuild.withThePluginApplied(script, true);
+
+        assertTrue(edited.indexOf("org.souther-lang.souther") > edited.indexOf("com.example.thing"),
+                "the line landed before the block it was meant to go inside:\n" + edited);
+    }
+
+    /** A Groovy build is written in Groovy, which is what its file name says. */
+    @Test
+    void aGroovyBuildGetsTheGroovySpelling() {
+        assertFalse(GradleBuild.isKotlin("build.gradle"));
+
+        String edited = GradleBuild.withThePluginApplied("plugins {\n    id 'java'\n}\n", false);
+
+        assertTrue(edited.contains("id 'org.souther-lang.souther' version"), edited);
+    }
+
+    /** How many elements of this name the document has, read as a document rather than as text. */
+    private static int elements(String xml, String name) throws Exception {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+        factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+        Document document = factory.newDocumentBuilder()
+                .parse(new InputSource(new StringReader(xml)));
+        NodeList found = document.getElementsByTagName(name);
+        return found.getLength();
+    }
+}
