@@ -41,7 +41,7 @@ sealed interface PendingPosition {
      * <p>Carried rather than reported: a rule a body writes may still draw a line on this same
      * position, and where one does the position is measured and this is never said.
      */
-    record Blocked(TermPath at, BlockReason why) implements PendingPosition {}
+    record Blocked(TermPath at, BlockReason.Stopped why) implements PendingPosition {}
 
     /**
      * What is still to be answered for at {@code axis}, or null where the axis has evidence.
@@ -97,13 +97,27 @@ sealed interface PendingPosition {
      * without the rule.
      *
      * <p>Null for a {@link Leaf} too: nothing stopped, so there is nothing to be waiting on.
+     *
+     * <p>Classified rather than filtered, and with no {@code default}. Asked as "is this about the
+     * position", a reason that is neither this nor about a rule answers no and is dropped here with
+     * nothing saying where it went instead — and only one of the two nulls above is proven, so the
+     * question the filter asked was not the question being answered. Each of what a reason may be
+     * answers for itself instead, and a stop added beside them stops the compile here.
+     *
+     * <p>What this is handed is a {@link BlockReason.Stopped}, so the reasons that are not stops
+     * cannot arrive to be classified at all. A reading that ran to the end of the rules and could
+     * not hold what they say together stopped nothing, has no rule to name, and is not a candidate
+     * this resolves: it is carried and reported on its own, and typing the channel is what says so.
      */
     default souther.compiler.inputs.PositionReadingBlocked reportable() {
         if (!(this instanceof Blocked blocked)) {
             return null;
         }
-        return blocked.why() instanceof BlockReason.AboutThePosition why
-                ? new souther.compiler.inputs.PositionReadingBlocked(at(), why) : null;
+        return switch (blocked.why()) {
+            case BlockReason.AboutARule _ -> null;
+            case BlockReason.AboutThePosition why ->
+                    new souther.compiler.inputs.PositionReadingBlocked(at(), why);
+        };
     }
 
     /**

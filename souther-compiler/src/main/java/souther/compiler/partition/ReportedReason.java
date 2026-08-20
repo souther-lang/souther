@@ -26,7 +26,7 @@ public final class ReportedReason {
      * where the collapses are visible together. No {@code default}, so a reason added and not said
      * stops the compile rather than arriving in a report as the nearest word that already existed.
      */
-    public static UndividedPosition.Reason of(BlockReason reason) {
+    public static UndividedPosition.Reason of(BlockReason.Stopped reason) {
         return switch (reason) {
             case BlockReason.TypeUnresolved _ -> UndividedPosition.Reason.TYPE_UNRESOLVED;
             case BlockReason.DepthLimit _ -> UndividedPosition.Reason.DEPTH_LIMIT;

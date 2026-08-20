@@ -66,7 +66,7 @@ final class Crossing {
      * are their own, because what would lift each is different work — one wants a reader for a form,
      * and one wants the gathering to reach further.
      */
-    static BlockReason stopped(souther.compiler.values.UnreadReason why) {
+    static BlockReason.Stopped stopped(souther.compiler.values.UnreadReason why) {
         return BlockReason.of(why);
     }
 

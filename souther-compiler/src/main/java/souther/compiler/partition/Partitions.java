@@ -716,7 +716,7 @@ public final class Partitions {
      *
      * <p>The first, as a comparison's is. What a reader has to lift is the first limit in the way.
      */
-    private static BlockReason leftUnread(Position position) {
+    private static BlockReason.Stopped leftUnread(Position position) {
         return position.unreadRules().isEmpty() ? position.valuesUnread()
                 : position.unreadRules().getFirst().why();
     }
