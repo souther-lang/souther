@@ -3376,7 +3376,7 @@ Which is a separate decision from what a build is told about. A row against the 
 
 *What the rows reach of the model's own distinctions.* A class of a position is an *equivalence partition* of it, and a line some rule drew between two of them is a *border*. `+axes+` is how many positions the model divides at all; `+equivalence partitions+` is how many of those positions' partitions some row is in. `+not derivable+` is a position the model draws no line through, which is a fact about the model and not a gap in the rows (<<example-partition>>).
 
-Named for what it counts, which is not what the syllabus calls an `+IN+` point. An `+IN+` point is a value inside a partition and away from *one border of it*, so it is keyed on a border and this count is keyed on a class — a model whose only row sits on the line has every partition here and no `+IN+` point anywhere. The two are different measures of different things and both are reported: this one is equivalence partitioning's item, one row per class, and the four keyed on a border are domain testing's.
+Named for what it counts, which is not what the syllabus calls an `+IN+` point. An `+IN+` point is a value inside a partition and away from *one border of it*, so it is keyed on a border and this count is keyed on a class. A row on a line is in one of the two partitions it parts and counts here; whether that partition also has a row away from the line is what the border's `+IN+` point says, and neither number answers for the other. The two are different measures of different things and both are reported: this one is equivalence partitioning's item, one row per class, and the four keyed on a border are domain testing's.
 
 *What a border owes.* `+borders+` is how many lines some rule drew, each named by the coordinate it was drawn on (<<boundary-coordinates>>), and `+coverage items+` is how many of the points those borders owe a row is at. A border is *closed* where the values on the line satisfy the rule that drew it and *open* where they do not, which is what tells a rule written `+<=+` from one written `+<+`.
 
@@ -3387,7 +3387,16 @@ guard n <= 100    ON  n = 100    OFF n = 101    IN  n < 100    OUT n > 101
 guard n <  100    ON  n =  99    OFF n = 100    IN  n <  99    OUT n > 100
 ....
 
-`+ON+` and `+OFF+` ask for a place and `+IN+` and `+OUT+` ask for a side, so a row anywhere in the side is at the point. What the report writes for a point is the relation and what it is against, whole — a value alone would name a witness of a side as though it were the side.
+[[a-point-away-from-a-line-lies-in-the-partition-that-line-bounds]]`+ON+` and `+OFF+` ask for a place. `+IN+` and `+OUT+` ask for a *partition* — the one the border bounds and the one it keeps out — less the value against the line, so a row anywhere in that partition other than at the line is at the point. Which is not the same as everywhere past the line, and the difference only shows where a position has more than one line through it:
+
+....
+guard n > 10                      IN  11 < n              OUT n < 10
+guard n > 10 ; guard n > 20       IN  11 < n <= 20        OUT n < 10
+....
+
+With the second line written, a row at thirty is in a third partition and answers for neither point of the border at ten. Read as everything past the line it answered for the `+IN+` point, and a model whose rows reach the middle partition only at its edge had nothing said about it: the count of equivalence partitions reports the partition as reached, which it is, and the point that tells a row inside from a row on the line was already discharged by a row that is in neither.
+
+What the report writes for a point is the relation and what it is against, whole — a value alone would name a witness of a partition as though it were the partition.
 
 * [[a-border-says-which-point-it-owes]]a point the report names MUST say which of the four it is. A border can owe a row at all of them, two of the values differ by one step, and a report naming neither role leaves an author to work the closed-border rule out for themselves — which is the reading this vocabulary exists to hand over rather than ask for.
 
