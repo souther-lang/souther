@@ -120,6 +120,11 @@
         "additionalProperties": false,
         "allOf": [
           {
+            "if": { "properties": { "kind": { "const": "partition_not_read" } }, "required": ["kind"] },
+            "then": { "required": ["reason"] },
+            "else": { "not": { "required": ["reason"] } }
+          },
+          {
             "if": { "properties": { "kind": { "const": "rule_unaccounted" } }, "required": ["kind"] },
             "then": { "required": ["ruleId"] },
             "else": {
@@ -131,7 +136,7 @@
         ],
         "properties": {
           "kind": {
-            "description": "What the measure established. `output_case_unspecified` is a case of the output no row expects and `output_case_unverified` is one some row expects and nothing was seen to produce; `input_case_unspecified` is a case of an input no row applies the behavior to and `axis_class_uncovered` is a class of a derived position no row is in — the two read alike about one class and only one of them is refused over. `boundary_unmet` is a line some rule draws that no row sits on, `arm_unreached` an arm of the body no row goes through. `partition_not_derivable`, `partition_not_read`, `partition_rules_not_reached` and `partition_omitted` are positions the model divides no way, positions some rule about which was not read, positions the axes did measure whose rules the walk never reached, and positions past the axis limit. `rule_unaccounted` is one question a rule raised that nothing answered — said whether or not an axis came back for the position it is about, since a rule this compiler could not read is exactly the one no axis is derived from, and named for the question rather than for a measure because which section a reader meets it under follows from what it asks.",
+            "description": "What the measure established. `output_case_unspecified` is a case of the output no row expects and `output_case_unverified` is one some row expects and nothing was seen to produce; `input_case_unspecified` is a case of an input no row applies the behavior to and `axis_class_uncovered` is a class of a derived position no row is in — the two read alike about one class and only one of them is refused over. `boundary_unmet` is a line some rule draws that no row sits on, `arm_unreached` an arm of the body no row goes through. `partition_not_derivable`, `partition_not_read`, `partition_rules_not_reached` and `partition_omitted` are positions the model divides no way, what a reading did not read, positions the axes did measure whose rules the walk never reached, and positions past the axis limit. A `partition_not_read` is one of two things and `ruleId` says which: with it, a rule this read and could not turn into a line, named because the reader that stopped knows which rule; without it, a position whose rules the reading never arrived at, where no rule is named because none was seen. `reason` is on both, and says which limit is in the way. `rule_unaccounted` is one question a rule raised that nothing answered — said whether or not an axis came back for the position it is about, since a rule this compiler could not read is exactly the one no axis is derived from, and named for the question rather than for a measure because which section a reader meets it under follows from what it asks.",
             "enum": ["output_case_unspecified", "input_case_unspecified", "boundary_unmet", "arm_unreached", "output_case_unverified", "axis_class_uncovered",
               "domain_point_uncovered", "partition_not_derivable", "partition_not_read", "rule_unaccounted", "partition_rules_not_reached", "partition_omitted"]
           },
@@ -140,6 +145,7 @@
             "enum": ["refused", "undecided", "reported"]
           },
           "ruleId": { "$ref": "#/$defs/ruleId", "description": "Which rule the finding is about, where it is about one. `subject` beside it is what a reader is shown, and two rules an author named alike are shown the same words — so this is what says they are two. It names the rule and not the question: one rule raises more than one, and `subject` beside it is what tells those apart. Written for `rule_unaccounted`, and for `partition_not_read` where that entry is about a rule rather than about a position the reading never arrived at — which is why it is required for the first and only allowed for the second. The other kinds are not about a rule and never carry it." },
+          "reason": { "$ref": "#/$defs/notReadReason", "description": "Which limit stopped the reading, present exactly on `partition_not_read`. The same word the `partition.notRead` entry this came from carries, and what a consumer joins the two by. Written because a rule can be stopped at one position by two limits at once — one conjunct of a clause relating two positions and the conjunct beside it in a form nothing reads — and the findings are then two, differing here and nowhere else." },
           "subject": {
             "type": "string",
             "description": "What the finding is about, written to name what is already in this document: a class name is one of an axis's `classes`, an arm's label one in `branch.unreached`, and `axis = value` names a `boundaries` entry. An input's case carries its position — `C (in #1)` — because two parameters of one type give two findings a class name alone cannot tell apart."

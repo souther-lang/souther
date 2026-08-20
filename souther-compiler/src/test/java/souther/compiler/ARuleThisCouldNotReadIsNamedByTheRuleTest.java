@@ -264,6 +264,49 @@ class ARuleThisCouldNotReadIsNamedByTheRuleTest {
         assertTrue(human.lines().anyMatch(line -> line.contains("not read: if@")), human);
     }
 
+    /**
+     * One rule stopped twice at one position is two findings, told apart by the limit.
+     *
+     * <p>A clause is read a conjunct at a time and each conjunct stops for its own reason: here one
+     * relates two positions and the one beside it is written in a form nothing reads. Both are the
+     * same rule about the same position, so the rule and the place say nothing about which is
+     * which — and a finding carrying only those came out as one object twice, with the entry beside
+     * it in `notRead` keyed on the very thing that was missing.
+     */
+    @Test
+    void oneRuleStoppedTwiceAtOnePositionIsTwoFindings() {
+        String model = """
+                module m
+
+                data Ok
+                data R = { a: Int, b: Int }
+                    invariant mixed = a < b && Int.multiply(a, a) < 10
+
+                behavior f : (r: R) -> Ok
+                    constructs Ok
+                let f (r) = Ok
+                """;
+
+        JsonNode findings = JSON.readTree(json(model))
+                .get("modules").get(0).get("behaviors").get(0).get("findings");
+
+        Set<String> whole = new LinkedHashSet<>();
+        Set<String> withoutTheReason = new LinkedHashSet<>();
+        for (JsonNode each : findings) {
+            if (!"partition_not_read".equals(each.get("kind").asString())
+                    || !"r.a".equals(each.get("subject").asString())) {
+                continue;
+            }
+            whole.add(each.toString());
+            withoutTheReason.add(each.get("subject").asString() + each.get("ruleId").toString());
+        }
+
+        assertEquals(2, whole.size(), findings::toString);
+        assertEquals(1, withoutTheReason.size(),
+                () -> "one rule and one position, so the reason is the whole of the difference: "
+                        + findings);
+    }
+
     /** Every rule of the behavior that this could not turn into a line. */
     private static List<PartitionEvidence.NotRead> rulesNotRead(String model) {
         List<PartitionEvidence.NotRead> out = new ArrayList<>();

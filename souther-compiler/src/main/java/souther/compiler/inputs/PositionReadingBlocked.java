@@ -9,10 +9,17 @@ package souther.compiler.inputs;
  * gathering that stopped â and what there is to say is the position and the limit. Carrying a rule
  * for one of these would be naming a rule nothing observed.
  *
- * <p>Not a verdict about the position. Whether it comes back divided is settled elsewhere and by
- * other evidence: a rule a body writes may divide a position whose own type this could not read
- * into. What is here is what this reading was short of, which is true either way and is what an
- * author is told so that a report does not print an absence it did not establish.
+ * <p>Made after the answer, and not by the reading that stopped. What a producer records is a
+ * candidate — {@link StructuralInspection.Blocked}, or the account the reading of values gave of
+ * itself — and a candidate becomes one of these exactly where neither the position's own
+ * declarations nor a body's rules answered for it. That is settled in one place
+ * ({@code PendingPosition.reportable}), which is why nothing outside constructs one: written where
+ * the producer records it, every position holding an {@code Option} said its values are held
+ * inside something this does not reach into, whether or not the reading of it came to anything.
+ *
+ * <p>Not a verdict either. Whether the position comes back divided is a separate answer from the
+ * same pair of readings, and neither is read off the other: this says what an author is waiting on,
+ * so that a report does not print an absence it did not establish.
  *
  * @param at  the position, spelled the way a report names it
  * @param why what would have to change before the reading could get there, in this compiler's own

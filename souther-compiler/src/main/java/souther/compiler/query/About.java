@@ -91,6 +91,20 @@ public sealed interface About {
         souther.compiler.check.RuleRef rule();
     }
 
+    /**
+     * A finding about something this reading did not read, whichever authority answered.
+     *
+     * <p>Both shapes carry a limit, and a reader acts on it: which one is in the way is the thing
+     * either finding was added to say. Asked here rather than matched against the kinds that have
+     * one, for the reason {@link OfARule} is: a shape added and not listed writes no limit, and one
+     * rule's findings at one position come out identical wherever it stopped for two of them.
+     */
+    sealed interface OfSomethingNotRead extends About {
+
+        /** The finding itself, whose reason is what a document promises its reader. */
+        PartitionEvidence.NotRead finding();
+    }
+
     /** A position the model draws no line through. */
     record APositionNoLineDivides(
             souther.compiler.partition.UndividedPosition position) implements About {
@@ -107,7 +121,8 @@ public sealed interface About {
      * unread and left them to work out which rule — which the accounting was made to say and this
      * measure beside it was not.
      */
-    record ARuleThisCouldNotRead(PartitionEvidence.NotRead.ARule finding) implements OfARule {
+    record ARuleThisCouldNotRead(PartitionEvidence.NotRead.ARule finding)
+            implements OfARule, OfSomethingNotRead {
         public ARuleThisCouldNotRead {
             java.util.Objects.requireNonNull(finding, "a finding is about something");
         }
@@ -127,7 +142,7 @@ public sealed interface About {
      * payload.
      */
     record APositionThisCouldNotRead(PartitionEvidence.NotRead.APosition finding)
-            implements About {
+            implements OfSomethingNotRead {
         public APositionThisCouldNotRead {
             java.util.Objects.requireNonNull(finding, "a finding is about something");
         }

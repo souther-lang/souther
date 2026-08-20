@@ -1673,6 +1673,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             if (finding.about() instanceof About.OfARule about) {
                 ruleId(f.putObject("ruleId"), about.rule());
             }
+            // And which limit stopped it, where the finding is about one being in the way. Two
+            // conjuncts of one clause about one position can stop for two different limits, so
+            // written without this a rule's findings there are one object twice — and the entry
+            // beside them in `notRead` is keyed on the reason, which leaves nothing to join by.
+            if (finding.about() instanceof About.OfSomethingNotRead about) {
+                f.put("reason", word(about.finding().reason()));
+            }
             // Present where the kind has one. A finding a build is not told about under any code is
             // not one with an empty code, and a consumer joining these to the diagnostics a build
             // printed reads the difference.
