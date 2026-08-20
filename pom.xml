@@ -71,6 +71,9 @@
              other outside dependency. -->
         <souther.build.api.version>1.0.0</souther.build.api.version>
         <junit.version>6.1.2</junit.version>
+        <!-- Named rather than written where it is used: `souther init` writes a project that runs
+             its tests, and what it hands that project is this number. -->
+        <surefire.version>3.5.6</surefire.version>
         <!-- A JVM per two cores. Named here so -DforkCount=N reaches it: a literal in the plugin's
              configuration outranks the property surefire declares, so the override the comment
              below offers was not one, and a fork count could not be measured until it was.
@@ -160,7 +163,7 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
-                    <version>3.5.6</version>
+                    <version>${surefire.version}</version>
                     <configuration>
                         <!-- Whole test classes run to completion in a fork. Forks
                              rather than threads: four classes capture `System.out` to read what the

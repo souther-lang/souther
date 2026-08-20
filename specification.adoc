@@ -4343,7 +4343,7 @@ public static Encoder<TravelRequest, Map<String,Object>> encoder()      // objec
 // newtype encodes to a bare scalar. e.g. MemberId.encoder() : Encoder<MemberId, String>
 ----
 
-The concrete implementation is generated directly as bytecode by the ClassFile backend from Raoh combinators (<<codec-generation>>). souther-runtime does not depend on Raoh; the Raoh dependency is on the generated code and the app side. `+jsonDecoder()+` / `+recordDecoder()+` are generated only when the data's shape supports it (<<codec-generation>>; JSON for a shape without temporal, `+Record+` for a flat shape). `+decoder()+` (bare values / Map) is always generated.
+The concrete implementation is generated directly as bytecode by the ClassFile backend from Raoh combinators (<<codec-generation>>). Nothing in souther-runtime calls Raoh — the dependency is the generated code's — and souther-runtime declares it, because that is where a project and everything downstream of it resolve it from without being asked to name a version. `+jsonDecoder()+` / `+recordDecoder()+` are generated only when the data's shape supports it (<<codec-generation>>; JSON for a shape without temporal, `+Record+` for a flat shape). `+decoder()+` (bare values / Map) is always generated.
 
 [#jvm-behavior]
 === behavior
@@ -6873,7 +6873,7 @@ The language core is implemented. The following are future extensions — distin
 * compile errors are rendered from structured data — a code, a source region, a message, and hints; the human form quotes the source with a caret, a JSON form (`+--format json+`) is available for tools, and messages are localized, the language being selected as <<compile-errors>> states
 * the generated `+.class+` passes standard verification and is usable straightforwardly from the Java version <<target-jdk>> names
 * each compiler stage is independently testable
-* souther-runtime does not depend on Raoh; where that dependency does sit is <<codec-generation>>
+* nothing in souther-runtime calls Raoh; the dependency is the generated code's, and souther-runtime declares it so that a project holding generated code resolves it without naming it (<<codec-generation>>)
 * the language core does not depend on the Java class model
 * the requirement set is tracked statically; how it is reconciled and inferred is <<requirement-propagation>>
 * generated code exposes no unvalidated value, on the terms <<jvm-construction-privacy>> states

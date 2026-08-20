@@ -31,6 +31,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 import souther.compiler.report.UnifiedDiff;
+import souther.cli.init.InitCommand;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -147,6 +148,7 @@ public final class Main {
      */
     private static java.util.function.IntSupplier work(CliCommand command, String[] rest) {
         return switch (command) {
+            case INIT -> () -> initSubcommand(rest);
             case RUN -> () -> runSubcommand(rest);
             case COMPILE -> () -> compileSubcommand(rest);
             case FMT -> () -> fmtSubcommand(rest);
@@ -205,7 +207,7 @@ public final class Main {
                     }
                     refuseWarnings = args[i].equals("error");
                 }
-                case "-d" -> outDir = Path.of(args[++i]);
+                case "-d", "--dir" -> outDir = Path.of(args[++i]);
                 case "-cp", "--class-path" -> {
                     for (String entry : args[++i].split(java.io.File.pathSeparator)) {
                         if (!entry.isBlank()) {
@@ -244,6 +246,23 @@ public final class Main {
             System.err.println("io error: " + e.getMessage());
             return 1;
         }
+    }
+
+    /**
+     * {@code souther init [<groupId>:<artifactId>]}: writes a project, or adds Souther to one.
+     *
+     * <p>Through the same flag extraction as every other command that answers a reader, so that what
+     * it writes is in the language the line asked for, and a language tag that names nothing is
+     * refused here the way it is everywhere else. No other rendering flag is one of this command's:
+     * what it writes is a list of files rather than a diagnostic.
+     */
+    private static int initSubcommand(String[] rawArgs) {
+        RenderOptions render = new RenderOptions();
+        String[] args = render.extract(rawArgs);
+        if (args == null) {
+            return 2;
+        }
+        return InitCommand.run(args, render.locale(), System.out, System.err);
     }
 
     /**

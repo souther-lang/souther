@@ -60,8 +60,22 @@ public final class ModuleMetadata {
      * and nothing decides anything by the value.
      */
     public static String compilerVersion() {
-        String version = ModuleMetadata.class.getPackage().getImplementationVersion();
+        String version = releasedVersion();
         return version == null ? "unreleased" : version;
+    }
+
+    /**
+     * The version this compiler was released as, or null where it is running from class files and
+     * there is no manifest to say.
+     *
+     * <p>Beside {@link #compilerVersion} rather than under it, because one caller has to tell the
+     * two apart. A version written into a project's build file resolves an artifact, and the word
+     * this compiler falls back to when it does not know resolves nothing — so {@code souther init}
+     * asks the question that can be answered with "there is no version here" and refuses, rather
+     * than writing a build file naming a release that was never cut.
+     */
+    public static String releasedVersion() {
+        return ModuleMetadata.class.getPackage().getImplementationVersion();
     }
 
     /**

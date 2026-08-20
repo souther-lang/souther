@@ -244,7 +244,7 @@ class AnOptionTheRunDoesNotReadIsNotPassedOverInSilenceTest {
             case "--module" -> "example.timesheet";
             case "--behavior" -> "classify";
             case "-cp", "--class-path" -> empty.toString();
-            case "-d" -> out.toString();
+            case "-d", "--dir" -> out.toString();
             default -> null;
         };
     }
