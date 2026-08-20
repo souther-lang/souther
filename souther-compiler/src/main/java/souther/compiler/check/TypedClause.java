@@ -33,20 +33,21 @@ public sealed interface TypedClause {
     }
 
     /**
-     * Typing it did not finish, and this is what stopped it.
+     * Typing it did not finish.
      *
-     * <p>The exception is kept rather than a word for it. Whoever is working out why wants the one
-     * that was thrown, and a reader deciding what to publish wants only that the reading stopped —
-     * so nothing about this reaches an author.
+     * <p>Nothing about which run it was, and that is the point. This travels inside a
+     * {@link StatedContract}, which is an answer a query keeps, and an answer is a value: what
+     * {@code equals} says of it is what stops work downstream ({@link souther.compiler.query.Db}).
+     * Carrying the exception, two runs over one unedited source answer with two objects that are
+     * never equal, so every unrelated edit re-runs everything that read the contract — for as long
+     * as the source is half-written, which is most of the time an editor is asking.
+     *
+     * <p>Which exception it was is worth having, and it goes where the rest of this check's giving
+     * up goes: {@link InvariantChecker#gaveUp}, a channel about the run rather than about the model.
+     * That is the same split one step out from the one this type makes — a failure and its
+     * classification are not one thing either.
      */
-    record Stopped(RuntimeException why) implements TypedClause {
-
-        public Stopped {
-            if (why == null) {
-                throw new IllegalArgumentException("a typing that stopped says what stopped it");
-            }
-        }
-    }
+    record Stopped() implements TypedClause {}
 
     /**
      * The form, or {@code null} where the typing stopped.

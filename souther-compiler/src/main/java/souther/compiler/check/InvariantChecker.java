@@ -295,7 +295,7 @@ public final class InvariantChecker {
             return typing.type(read);
         } catch (RuntimeException why) {
             gaveUp("typing " + describing, why);
-            return new TypedClause.Stopped(why);
+            return new TypedClause.Stopped();
         }
     }
 
@@ -878,7 +878,11 @@ public final class InvariantChecker {
     /** What one reading of one part came to, as the reading itself says it. */
     static PartRead partRead(Predicates.Owed said) {
         List<Predicates.Constraint> stated = new ArrayList<>();
-        for (Predicates.Clause c : said.clauses()) {
+        for (Predicates.Part eachC : said.parts()) {
+            if (!(eachC instanceof Predicates.Part.Carried carriedC)) {
+                continue;
+            }
+            Predicates.Clause c = carriedC.clause();
             if (c.numeric() != null) {
                 stated.add(c.numeric());
             }
@@ -1817,7 +1821,11 @@ public final class InvariantChecker {
         for (Clauses.Stated stated : clauses.statedAt(named, type, given).clauses()) {
             Predicates.Owed o = predicates.obligations(stated.expr(), k, at, unnamed, decidesFalse);
             unreadable |= o.unreadable();
-            for (Predicates.Clause one : o.clauses()) {
+            for (Predicates.Part eachOne : o.parts()) {
+            if (!(eachOne instanceof Predicates.Part.Carried carriedOne)) {
+                continue;
+            }
+            Predicates.Clause one = carriedOne.clause();
                 owed.add(new Owing(stated, one));
             }
         }

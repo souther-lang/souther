@@ -101,7 +101,11 @@ final class Clauses {
                                 CheckContext.of(symbols).forData(data).forDischarge(),
                                 Type.BOOL));
                     } catch (RuntimeException why) {
-                        return new TypedClause.Stopped(why);
+                        // Recorded rather than dropped. Measured over the whole suite, every null
+                        // this used to answer was one of these — the elaborator never answers null
+                        // of its own accord — so what was being lost was the whole of it.
+                        InvariantChecker.gaveUp("typing a clause of " + named, why);
+                        return new TypedClause.Stopped();
                     }
                 });
     }

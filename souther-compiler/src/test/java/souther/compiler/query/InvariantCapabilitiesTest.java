@@ -158,6 +158,29 @@ class InvariantCapabilitiesTest {
     }
 
     /**
+     * A conjunction a helper brings is one conjunct, and the half of it that settles does not settle
+     * the clause.
+     *
+     * <p>Conjuncts are split from what the author wrote, so {@code a && b} inside a helper is not two
+     * of them. The clause is the call, which the check names as a term — and what matters here is
+     * that {@code 1 >= 0} inside the helper does not come back as a clause holding of every value.
+     * A reading that took the settled half for the whole would say no guard is needed for a rule
+     * that plainly needs one.
+     */
+    @Test
+    void aConjunctionAHelperBringsDoesNotSettleFromOneHalf() {
+        List<ClauseDischarge> clauses = of("""
+                module m.a
+                let nonNegative (n: Int): Bool = 1 >= 0 && n >= 0
+                data Money = Int
+                    invariant nonNegative(value)
+                """, "Money");
+        assertEquals(1, clauses.size(), "one conjunct, because the author wrote one");
+        assertEquals(routed(new StaticRoute.AsATerm()), read(clauses, 0),
+                "the clause is the call, and a guard stating the same thing discharges it");
+    }
+
+    /**
      * A clause the reading could not type is not a conclusion about the clause.
      *
      * <p>This source names no type {@code Anything}, so the reading never began. Said as a shape the

@@ -360,49 +360,84 @@ final class Predicates {
      * @param unreadable whether a conjunct of it names something the check cannot read here, whose
      *                   run-time check stands whatever the rest comes out as
      */
-    record Owed(List<Clause> clauses, Core couldNotRead, Fold folded) {
+    record Owed(List<Part> parts, Fold folded) {
 
         /** Nothing is owed because the clause came out one way or the other on its own. */
         static Owed decided(boolean holds) {
-            return new Owed(List.of(), null, holds ? Fold.HOLDS : Fold.FAILS);
+            return new Owed(List.of(), holds ? Fold.HOLDS : Fold.FAILS);
         }
 
-        /**
-         * Nothing here can be asked of a guard, and {@code where} is the part of it this stopped on.
-         *
-         * <p>The node and not a word for it. Whoever reads this wants to say what in the clause was
-         * not read, and working that out from the clause afterwards is a second walk that can come
-         * back with a different answer from the one that gave up — which is how a clause with
-         * nothing wrong in it came to be described as naming a term the check cannot name.
-         */
+        /** One part of the clause this could make nothing of, which is {@code where}. */
         static Owed unreadable(Core where) {
-            return new Owed(List.of(), where, Fold.NOT_DECIDED);
+            return new Owed(List.of(new Part.Unread(where)), Fold.NOT_DECIDED);
         }
 
         static Owed of(Clause clause) {
-            return new Owed(List.of(clause), null, Fold.NOT_DECIDED);
+            return new Owed(List.of(new Part.Carried(clause)), Fold.NOT_DECIDED);
         }
 
-        /** Whether a conjunct of it names something the check cannot read here. */
+        /** Whether a part of it names something the check cannot read here. */
         boolean unreadable() {
-            return couldNotRead != null;
+            for (Part each : parts) {
+                if (each instanceof Part.Unread) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         /** The same, having come out one way on its own as well. Said beside what it owes rather
          *  than instead of it: which of the two a caller acts on is the caller's, and a reading that
          *  answered only one of them decided that for every caller there will ever be. */
         Owed alsoFolded(Fold fold) {
-            return fold == Fold.NOT_DECIDED ? this : new Owed(clauses, couldNotRead, fold);
+            return fold == Fold.NOT_DECIDED ? this : new Owed(parts, fold);
         }
 
-        /** Both conjuncts of one clause: everything either owes, unreadable if either was, and
+        /** Both conjuncts of one clause: every part either owes, in the order they were read, and
          *  folded only as both of them together fold. */
         Owed and(Owed other) {
-            List<Clause> both = new ArrayList<>(clauses);
-            both.addAll(other.clauses);
-            return new Owed(List.copyOf(both),
-                    couldNotRead != null ? couldNotRead : other.couldNotRead,
-                    folded.and(other.folded));
+            List<Part> both = new ArrayList<>(parts);
+            both.addAll(other.parts);
+            return new Owed(List.copyOf(both), folded.and(other.folded));
+        }
+    }
+
+    /**
+     * One thing a clause asks of a construction.
+     *
+     * <p>Carried or not, and the difference is the shape rather than a field beside a list. Held as
+     * a list of what was carried with one node for what was not, a clause with two parts outside the
+     * fragment kept the first and dropped the second — so an author acting on what they were shown
+     * would fix one and find the construction still refused. The two also interleave, and a reader
+     * showing them in the order they were written needs them in one list to do it.
+     */
+    sealed interface Part {
+
+        /** The check carried it into a form a guard can be held against. */
+        record Carried(Clause clause) implements Part {
+
+            public Carried {
+                if (clause == null) {
+                    throw new IllegalArgumentException("a part that was carried has a form");
+                }
+            }
+        }
+
+        /**
+         * The check made nothing of it, and {@code at} is the part it stopped on.
+         *
+         * <p>The node and not a word for it. Whoever reads this wants to say what in the clause was
+         * not read, and working that out from the clause afterwards is a second walk that can come
+         * back with a different answer from the one that gave up — which is how a clause with
+         * nothing wrong in it came to be described as naming a term the check cannot name.
+         */
+        record Unread(Core at) implements Part {
+
+            public Unread {
+                if (at == null) {
+                    throw new IllegalArgumentException("a part nothing was made of is somewhere");
+                }
+            }
         }
     }
 
@@ -823,7 +858,11 @@ final class Predicates {
      */
     static Set<FactSubject> subjectsIn(Owed owed) {
         Set<FactSubject> named = new LinkedHashSet<>();
-        for (Clause c : owed.clauses()) {
+        for (Part eachC : owed.parts()) {
+            if (!(eachC instanceof Part.Carried carriedC)) {
+                continue;
+            }
+            Clause c = carriedC.clause();
             for (Constraint known : c.known()) {
                 named.addAll(known.form().coefs().keySet());
             }
@@ -848,7 +887,11 @@ final class Predicates {
      */
     static Set<FactSubject> narrowableIn(Owed owed) {
         Set<FactSubject> named = new LinkedHashSet<>();
-        for (Clause c : owed.clauses()) {
+        for (Part eachC : owed.parts()) {
+            if (!(eachC instanceof Part.Carried carriedC)) {
+                continue;
+            }
+            Clause c = carriedC.clause();
             // What the clause states, and not what holds of the operations it names.
             // {@link Clause#known} is filled by {@link #sizeFacts} and {@link #resultFacts} with
             // relations that are true of every value — a size is never negative — so counting them
@@ -876,7 +919,11 @@ final class Predicates {
         out = out.speaking(subjectsIn(owed));
         // What could not be read says nothing here: a clause left to the run-time check is not one
         // the seeding may assume, and the flag saying so is the construction site's to act on.
-        for (Clause c : owed.clauses()) {
+        for (Part eachC : owed.parts()) {
+            if (!(eachC instanceof Part.Carried carriedC)) {
+                continue;
+            }
+            Clause c = carriedC.clause();
             for (Constraint known : c.known()) {
                 // What is known of a size holds of the container itself, whatever established the
                 // clause it was read out of.

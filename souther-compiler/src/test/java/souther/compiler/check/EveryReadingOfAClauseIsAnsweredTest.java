@@ -125,6 +125,11 @@ class EveryReadingOfAClauseIsAnsweredTest {
      * other does not, the clause is not decided and what the other owes is what there is to
      * establish. Taken from one conjunct, {@code 1 >= 0 && value >= 0} would have come back as a
      * clause that holds of every value, with the bound nobody was told about.
+     *
+     * <p>No program reaches this. A conjunction an author writes is split into conjuncts before the
+     * clause is read, and one a helper brings arrives as the call, which is read as a term — so the
+     * two halves are never folded together today. It is here because the walk composes this way and
+     * the composing is what would be wrong.
      */
     @Test
     void aConjunctionIsDecidedOnlyAsBothOfItsHalvesAre() {

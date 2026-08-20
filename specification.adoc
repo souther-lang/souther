@@ -1791,7 +1791,11 @@ The classification is the clause's own, read with the construction assumed to na
 
 The answer carries the clause's name where it has one (<<invariant-clause-name>>), so what the LSP shows on a clause says both how it can be discharged and what an attempt departs by. The unit is the conjunct, as it is for the rest of the check, so a named clause written as `+a && b+` is classified twice under that one name — what discharges each half is what an author acts on, and the name is what a caller reads.
 
-One conjunct is answered as many times as it is read. What is written as one thing need not be read as one thing: a conjunct naming a helper is one thing to its author and is whatever that helper states to the checker, and the parts of it may be read differently. Each answer says what discharges the part it is about, and all of them are given at the one place the conjunct is written — the parts have no places of their own, having been written as one. A part the checker made nothing of is `+runtime only+` and is said beside the parts it read, since a clause is discharged only where every part of it is.
+One conjunct has one answer, and the answer has a shape. What is written as one thing need not be read as one thing — a conjunct naming a helper is one thing to its author and is whatever that helper states to the checker — so a reading may find the conjunct to have *several parts*, and *every* part of it has to be established for the conjunct to be. A part may in turn have *several routes*, and *any one* of them establishes that part: a relation the procedure reasons over is often a term it can name as well, and either guard will do.
+
+The two multiplicities are not the same and are not written as one. Read as a set of answers, a conjunct needing a bound in one part and a term in another said that either guard discharges it — so an author writes the one they prefer and finds the construction still refused. A part the checker made nothing of is `+runtime only+` and is a part like the others, since a conjunct is discharged only where every part of it is.
+
+All of them are given at the one place the conjunct is written; the parts have no places of their own, having been written as one.
 
 [#invariant-reify]
 ==== Reifying a cross-behavior relation
@@ -2481,7 +2485,7 @@ The answer has to be a value the checker can name, which a matched case's bindin
 
 A rule is classified as a data's clause is (<<invariant-discharge-capability>>), by the same answers and for the same reason: what is written decides how much of it the checker can carry, and nothing in the source tells the two apart. The unit is the *rule* and, under a rule, the conjunct. A rule is already about one case — `+ensures Found | Missing -> value.id == id+` is a rule for `+Found+` and a rule for `+Missing+` — and what `+value+` is differs between them, so the same words can be read to different depths. One answer for the clause would be one of those readings shown as if it were the other's.
 
-A rule is answered as many times as it is read, as a data's conjunct is (<<invariant-discharge-capability>>), at the one place it is written.
+A rule has one answer, shaped as a data's conjunct's is (<<invariant-discharge-capability>>) — every part of it to be established, any route of a part to establish that part — and it is given at the one place the rule is written.
 
 The classification says nothing about whether the rule is enforced. Every rule holds when the behavior answers, whatever this says of it; what it says is how much of the relation is written in a form the checker reads — `+derivable+` a relation the numeric domain reasons over, `+exact match+` a term it can name and compare and nothing weaker, `+always holds+` and `+never holds+` a rule that settles without the answer, `+runtime only+` nothing it can represent.
 

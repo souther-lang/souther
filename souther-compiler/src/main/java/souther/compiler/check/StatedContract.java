@@ -122,7 +122,7 @@ public record StatedContract(ValueName.Behavior behavior, List<ContractParam> pa
             // Fail-open, as every reading of a clause is, and recorded — and said as what it is, so
             // that a reader publishing a sentence about the rule is not handed this as one.
             InvariantChecker.gaveUp("typing " + behavior.name(), why);
-            return new TypedClause.Stopped(why);
+            return new TypedClause.Stopped();
         }
     }
 

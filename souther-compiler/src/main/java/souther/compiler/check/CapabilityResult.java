@@ -105,15 +105,17 @@ public sealed interface CapabilityResult {
         if (owed.folded() != Predicates.Fold.NOT_DECIDED) {
             return new Decided(owed.folded() == Predicates.Fold.HOLDS);
         }
+        // One for one, in the order they were read. What was not read is a part like any other, so
+        // a clause half of which could not be read is not described entirely by the half that was —
+        // an author would write the guard that discharges that half and find the construction still
+        // refused — and two parts outside the fragment are two parts rather than the first of them.
         List<RequiredPart> parts = new ArrayList<>();
-        for (Predicates.Clause each : owed.clauses()) {
-            parts.add(new RequiredPart.Routed(routesOf(each)));
-        }
-        if (owed.couldNotRead() != null) {
-            // What was not read is said beside what was: a clause half of which could not be read
-            // would otherwise be described entirely by the half that was, and an author would write
-            // the guard that discharges that half and find the construction still refused.
-            parts.add(new RequiredPart.OutsideTheFragment(FragmentReason.of(owed.couldNotRead())));
+        for (Predicates.Part each : owed.parts()) {
+            parts.add(switch (each) {
+                case Predicates.Part.Carried it -> new RequiredPart.Routed(routesOf(it.clause()));
+                case Predicates.Part.Unread it ->
+                        new RequiredPart.OutsideTheFragment(FragmentReason.of(it.at()));
+            });
         }
         return new Analyzed(parts);
     }
