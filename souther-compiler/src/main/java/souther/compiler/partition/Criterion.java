@@ -72,7 +72,7 @@ public sealed interface Criterion {
         /**
          * A place of {@code carrier} this item accepts, or null where the search composed none.
          *
-         * <p>The run's own answer at every step: it says where to look and it says whether what
+         * <p>The run's own answer at every step: it says where to look, how closely, and whether what
          * came back is at it. Looked for at whole numbers alone, a run between two thirds of a
          * decimal was searched between one and nothing — the two lines rounded past each other —
          * and a class with a half in it was reported as one nothing can be written in.
@@ -85,7 +85,11 @@ public sealed interface Criterion {
                 souther.compiler.check.Carrier carrier,
                 souther.compiler.numeric.Endpoint min, souther.compiler.numeric.Endpoint max) {
             LevelSpace space = LevelSpace.onACarrier(carrier);
-            for (int digits : CutPosition.DIGITS_TO_TRY) {
+            // Whole numbers first, which is where a run wide enough to hold one has its plainest
+            // value, and then as many digits as its own two lines are apart. The second is worked
+            // out from the run and not guessed: a scale short of what it takes reports a run with a
+            // value in it as one nothing can be written in.
+            for (int digits : new int[] {0, band.digitsToLookIn()}) {
                 souther.compiler.numeric.NumericDomain.Bounds look = band.inside(min, max, digits);
                 souther.compiler.numeric.Place at =
                         carrier.somethingInside(look.min(), look.max());

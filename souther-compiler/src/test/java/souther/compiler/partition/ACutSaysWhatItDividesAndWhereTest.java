@@ -77,6 +77,43 @@ class ACutSaysWhatItDividesAndWhereTest {
     }
 
     /**
+     * A rule that singles a value out singles out a value, or none at all.
+     *
+     * <p>Two different questions, and one of them has been answering both. Where a rule orders the
+     * values around its line, what a row is owed against it is the value beside the line: {@code 2 *
+     * n <= 9} cuts between four and five and a row is written at four. Where a rule names a value,
+     * the value is the line itself — and {@code 2 * n == 9} names no whole number at all, because
+     * nine halved is not one.
+     *
+     * <p>Asked as "the value beside the line" for both, such a rule would single out four, and four
+     * does not satisfy it. What keeps that from happening today is that a rule naming a value is
+     * only ever read at a position it wrote the whole of, which is an invariant nothing states.
+     */
+    @Test
+    void aRuleThatSinglesAValueOutSinglesOutAValueOrNoneAtAll() {
+        Cutting names = new Cutting(
+                new BorderQuantity.OverAForm("f", form("n", "2"), WHOLE),
+                new Level.ACount(new Count(new BigDecimal("9"))),
+                new ComparisonClaim.Singled(true), null);
+
+        assertEquals(term("n"), names.dividedPosition(),
+                "twice a position is that position, whatever the rule says about it");
+        assertEquals(null, names.singledValue(),
+                "and no whole number is nine halved, so this names none of them");
+    }
+
+    /** And where the line is a value of the position, that value is the one it names. */
+    @Test
+    void andWhereTheLineIsAValueOfThePositionThatIsTheOneItNames() {
+        Cutting names = new Cutting(
+                new BorderQuantity.OverAForm("f", form("n", "2"), WHOLE),
+                new Level.ACount(new Count(new BigDecimal("8"))),
+                new ComparisonClaim.Singled(true), null);
+
+        assertEquals("4", names.singledValue().key(), "eight halved is four");
+    }
+
+    /**
      * A threshold the written form never reaches parts the values all the same.
      *
      * <p>{@code 2 * n <= 9} cuts a quantity whose values are the even numbers, and nine is not one

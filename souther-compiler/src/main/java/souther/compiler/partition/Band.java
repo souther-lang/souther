@@ -110,6 +110,22 @@ public record Band(Seam under, Seam over, Level from, Level to) {
     }
 
     /**
+     * How many digits a search has to look at to find a value of this run.
+     *
+     * <p>Nothing beyond whole numbers where a line names a value of the quantity — the value beside
+     * it is what the run starts at, and it has whatever digits it has. Where a line names none, the
+     * digits are what it takes to tell it from the line at the other end: a run between a third and
+     * a third and a hundred-billionth holds a decimal, and it is not one anybody would guess a
+     * scale for.
+     */
+    public int digitsToLookIn() {
+        if (under == null || over == null) {
+            return 0;
+        }
+        return under.at().digitsToTellApartFrom(over.at());
+    }
+
+    /**
      * A range of the position's counts that lies inside this run, for a search to look in.
      *
      * <p>An envelope and never the run itself: what is in the run is the run's to say

@@ -99,6 +99,39 @@ public record CutPosition(Level written, BigDecimal per) {
     }
 
     /**
+     * This line as a value of the position the quantity is a multiple of, or null where the
+     * position holds none there.
+     *
+     * <p>Apart from {@link #asALevelOfTheQuantity}, which asks about the order the rule wrote the
+     * line on. This asks about the position underneath it, and the two differ exactly where a rule
+     * wrote a multiple: {@code 2 * n == 8} names four and {@code 2 * n == 9} names nothing, and both
+     * are lines of an order whose values are the even numbers.
+     *
+     * <p>Divided here and nowhere else, because here is the one question that needs the quotient to
+     * be a value rather than a place: a rule that names a value names one the position holds or
+     * names none. A quotient that does not end is not one, and neither is one the carrier's own
+     * values step past.
+     */
+    public souther.compiler.numeric.Place asAValueOf(souther.compiler.check.Carrier carrier) {
+        BigDecimal at = numberOf(written);
+        if (carrier == null) {
+            return null;
+        }
+        // An order with no numbers is never scaled — a rule holding two strings apart writes the
+        // whole of what it cuts — so its line is its own value and there is nothing to divide.
+        if (at == null) {
+            return per.compareTo(BigDecimal.ONE) == 0 ? placeOf(written) : null;
+        }
+        BigDecimal quotient;
+        try {
+            quotient = at.divide(per);
+        } catch (ArithmeticException _) {
+            return null;   // a third is no value of anything this language writes
+        }
+        return carrier.onTheGrid(new Count(quotient));
+    }
+
+    /**
      * Whether a value of the quantity is below, at or above where this line falls.
      *
      * <p>Asked by multiplying rather than by dividing, which is what lets a line at a place no value
@@ -201,9 +234,39 @@ public record CutPosition(Level written, BigDecimal per) {
         return new Count(past);
     }
 
-    /** How many digits a search looks for a value of this line's run in, before and after the
-     *  point. A line at a third is between no two whole numbers, and is between two hundredths. */
-    public static final int[] DIGITS_TO_TRY = {0, 2, 6, 12};
+    /**
+     * How many digits it takes to name a number between this line and {@code other}.
+     *
+     * <p>Worked out from the two places and not guessed. Two lines are a definite distance apart —
+     * a third and a third and a hundred-billionth are — and a decimal lies between any two of them;
+     * how many digits it needs is what that distance says. Tried at a fixed handful of scales
+     * instead, a run narrower than the widest of them was reported as one no value of the position
+     * lies inside, which is a false answer rather than a search that gave up.
+     *
+     * <p>Exact, by comparing the two as fractions: the difference of {@code a/b} and {@code c/d} is
+     * {@code (ad - cb) / bd}, and the digits needed are what it takes for a tenth of that many to
+     * fit inside it. Zero where the two are the same place, which no run has.
+     */
+    public int digitsToTellApartFrom(CutPosition other) {
+        BigDecimal mine = numberOf(written);
+        BigDecimal theirs = numberOf(other.written);
+        if (mine == null || theirs == null) {
+            return 0;
+        }
+        int scale = Math.max(Math.max(mine.scale(), per.scale()),
+                Math.max(theirs.scale(), other.per.scale()));
+        scale = Math.max(scale, 0);
+        BigInteger a = mine.setScale(scale).unscaledValue();
+        BigInteger b = per.setScale(scale).unscaledValue();
+        BigInteger c = theirs.setScale(scale).unscaledValue();
+        BigInteger d = other.per.setScale(scale).unscaledValue();
+        BigInteger apart = a.multiply(d).subtract(c.multiply(b)).abs();
+        if (apart.signum() == 0) {
+            return 0;
+        }
+        BigInteger over = b.multiply(d).abs();
+        return over.divide(apart).toString().length() + 1;
+    }
 
     private static souther.compiler.numeric.Place placeOf(Level level) {
         return switch (level) {

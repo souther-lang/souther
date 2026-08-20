@@ -241,7 +241,12 @@ public final class EnsuresThresholds {
         // multiple of the position named a class at a number the position never holds.
         souther.compiler.numeric.Place value = cutting.dividedValue();
         if (cutting.singles()) {
-            out.singled().add(new GuardThresholds.Guards.Singled(divided, value, origin));
+            // The value the rule names, for the reason a body's rule gets: where its line falls and
+            // not the value beside it.
+            souther.compiler.numeric.Place names = cutting.singledValue();
+            if (names != null) {
+                out.singled().add(new GuardThresholds.Guards.Singled(divided, names, origin));
+            }
         } else {
             out.thresholds().add(
                     new Threshold(divided, cutting.seam(), cutting.valueBelongsBelow(), origin));

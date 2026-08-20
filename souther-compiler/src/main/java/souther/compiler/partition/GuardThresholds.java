@@ -102,7 +102,22 @@ public final class GuardThresholds {
          * value, and reading it as a place to cut would put a distinction between the two sides into
          * a partition the model never drew.
          */
-        public record Singled(NumericTerm term, Place value, OriginRef origin) {}
+        /**
+         * A value a rule names, and the position it names it at.
+         *
+         * <p>A value and never an absence. What such a rule does is put one value in a class of its
+         * own, so a rule that names none of the position's values singles nothing out and is not one
+         * of these — asked for the value beside the line instead, a rule that names no whole number
+         * would have put the number beside it in a class it does not satisfy.
+         */
+        public record Singled(NumericTerm term, Place value, OriginRef origin) {
+            public Singled {
+                if (value == null) {
+                    throw new IllegalArgumentException(
+                            "a rule that singles nothing out is not a value singled out: " + term);
+                }
+            }
+        }
 
         public Guards {
             thresholds = List.copyOf(thresholds);
@@ -426,7 +441,13 @@ public final class GuardThresholds {
             // multiple of the position named a class at a number the position never holds.
             Place value = cutting.dividedValue();
             if (cutting.singles()) {
-                singled.add(new Guards.Singled(divided, value, origin));
+                // The value the rule names, which is where its line falls and not the value beside
+                // it. A rule that names no value of the position singles nothing out here — the
+                // position is divided all the same, and what divides it is the line.
+                Place names = cutting.singledValue();
+                if (names != null) {
+                    singled.add(new Guards.Singled(divided, names, origin));
+                }
             } else {
                 out.add(new Threshold(divided, cutting.seam(), cutting.valueBelongsBelow(), origin));
             }

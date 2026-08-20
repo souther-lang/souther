@@ -217,6 +217,24 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
+     * The one value of the position this rule names, or null where the position has none there.
+     *
+     * <p>Apart from {@link #dividedValue}, and the two are different questions that one answer had
+     * been serving. A rule that orders the values around its line owes a row at the value beside the
+     * line — {@code 2 * n <= 9} cuts between four and five and the row is written at four. A rule
+     * that names a value names the line itself, and {@code 2 * n == 9} names no whole number at all
+     * because nine halved is not one. Answered as the value beside the line, such a rule would put
+     * four in a class of its own and four does not satisfy it.
+     *
+     * <p>Which is a fact about the position and not about the rule: that the canonical quantity is
+     * one coordinate says the rule cuts that position, and whether the position has a value where
+     * the line falls is asked of the order it sits on.
+     */
+    Place singledValue() {
+        return seam().at().asAValueOf(of.carrier());
+    }
+
+    /**
      * The value of that position the classes either side of this line meet at.
      *
      * <p>Read off the seam rather than off the threshold, so a rule that wrote a multiple of the

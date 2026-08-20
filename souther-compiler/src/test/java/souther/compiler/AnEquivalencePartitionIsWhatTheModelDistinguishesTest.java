@@ -202,6 +202,45 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
     }
 
     /**
+     * And a run narrower than any scale anybody would guess still gets a row.
+     *
+     * <p>A third and a third and a hundred-billionth are a definite distance apart, and every pair
+     * of decimals has a decimal between them. Looked for at a fixed handful of scales, the two lines
+     * rounded past each other at every one of them and the class between was reported as one no
+     * value of the position lies inside — which is a false answer and not a search that gave up.
+     */
+    @Test
+    void aRunNarrowerThanAnyScaleAnybodyWouldGuessStillGetsARow() {
+        Compilation compilation = Compilation.ofSource("""
+                module example.narrow
+
+                data No = { why: Int }
+                data Yes = { v: Int }
+                data Result = No | Yes
+
+                behavior f : (n: Decimal) -> Result
+                    constructs Yes, No
+
+                let f (n) = {
+                    guard 3m * n > 1m else No { why = 0 }
+                    guard 30000000000000m * n > 10000000000001m else No { why = 1 }
+                    Yes { v = 1 }
+                }
+
+                example f
+                    | "one" : (0.1m) -> No { why = 0 }
+                """, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+        String rows = souther.compiler.report.GeneratedRows.of(compilation, "example.narrow", "f",
+                true, souther.compiler.diag.SourceNameResolver.identity());
+
+        assertFalse(rows.contains("no row for `n=1 < 3 * x and"),
+                "a decimal lies between the two lines, so the class between them is not one nothing"
+                        + " can be written in:\n" + rows);
+    }
+
+    /**
      * And a line that does fall on a value of the position is still named by that value.
      *
      * <p>{@code 2 * n <= 9} cuts the whole numbers between four and five, and four is a value the
