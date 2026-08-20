@@ -1717,6 +1717,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
                     About.AQuestionNothingAnswered _,
                     About.APositionWhoseRulesWereNotReached _,
+                    About.APositionReadWiderThanItsRules _,
                     About.APositionPastTheAxisLimit _ -> null;
         };
     }
@@ -1750,6 +1751,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case About.APositionThisCouldNotRead(var it) -> it.at();
             case About.ARuleThisCouldNotRead(var it) -> it.at();
             case About.APositionWhoseRulesWereNotReached(var axis) -> axis.path();
+            // The position, as the two above write it. What is said of it is the kind's; there is
+            // no rule to name and no class this is about, so the position is the whole subject.
+            case About.APositionReadWiderThanItsRules(var it) -> it.at().toString();
             case About.APositionPastTheAxisLimit(var dropped) -> dropped.axis().toString();
             // The rule and what it was left saying. Named by the position alone, two rules nothing
             // took in at one position serialised as two identical objects, and the human line named

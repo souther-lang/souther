@@ -420,6 +420,7 @@ public final class GeneratedRows {
                     About.ARuleThisCouldNotRead _,
                     About.AQuestionNothingAnswered _,
                     About.APositionWhoseRulesWereNotReached _,
+                    About.APositionReadWiderThanItsRules _,
                     About.APositionPastTheAxisLimit _ ->
                     throw new IllegalStateException("not a gap a build refuses: " + gap);
         };

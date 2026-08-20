@@ -149,6 +149,21 @@ public sealed interface About {
     }
 
     /** A position the axes measure whose rules the walk never reached. */
+    /**
+     * A position whose values are read from a product this reading cannot show the rules admit.
+     *
+     * <p>Beside the two above and not among them. Every rule about the position arrived and every
+     * one was taken in, so there is no rule to name and nothing was left unreached — what a reader
+     * is owed is that the classes may hold one no value can be in, and that what would lift it is a
+     * reading that keeps the alternatives apart.
+     */
+    record APositionReadWiderThanItsRules(
+            souther.compiler.inputs.PositionValuesNotSeparated finding) implements About {
+        public APositionReadWiderThanItsRules {
+            java.util.Objects.requireNonNull(finding, "a finding is about something");
+        }
+    }
+
     record APositionWhoseRulesWereNotReached(
             PartitionEvidence.AxisCoverage axis) implements About {
         public APositionWhoseRulesWereNotReached {
