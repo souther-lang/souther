@@ -1,0 +1,2 @@
+# Highlight Souther sources on GitHub using F#'s grammar (closest ML-family match).
+*.sou linguist-language=FSharp
