@@ -246,6 +246,23 @@ public final class Generator {
     public static GenerationResult fill(Subject subject,
                                         List<Map<AxisId, Classification>> existing,
                                         CandidateCheck check) {
+        return fill(subject, existing, check, List.of());
+    }
+
+    /**
+     * The same, offering a row for each combination of the decisions that settle one value together
+     * before it fills what is left of the pairs.
+     *
+     * <p>Two questions and one set of rows. A cell is what the body says has to be varied together;
+     * a pair is what the types divide, which is what can still be asked of a behavior with no body
+     * to read. The cells go first because they fix the most and leave the least to choose, and what
+     * they leave free is what the pairs are spent on — so the rows a cell needs are rows the pair
+     * space was going to want anyway, rather than rows added beside them.
+     */
+    public static GenerationResult fill(Subject subject,
+                                        List<Map<AxisId, Classification>> existing,
+                                        CandidateCheck check,
+                                        List<souther.compiler.interaction.Interaction> groups) {
         List<Axis> ordered = ordered(subject);
         // A position where some row's value could not be read is a position nothing is known about.
         // A row generated for a class there may be a row that is already written, and telling an
@@ -275,6 +292,34 @@ public final class Generator {
         List<GeneratedRow> rows = new ArrayList<>();
         List<UnresolvedCombination> unresolved = new ArrayList<>();
         List<GenerationReason> reasons = new ArrayList<>(undecided);
+        List<int[]> written = new ArrayList<>();
+        for (Map<AxisId, Classification> row : existing) {
+            written.add(whereIn(row, axes));
+        }
+        // Built here and not handed in: a cell is one class per position of the axes this
+        // generation kept, and the caller's list is neither ordered the same nor filtered the same.
+        for (Cell cell : InteractionCells.of(groups, axes)) {
+            int[] fixed = cell.at();
+            if (fixed.length != axes.size() || sits(written, fixed)) {
+                // A cell a row already sits in is a cell nothing is owed for. The length is the
+                // other way one arrives answered: a cell built against positions this generation
+                // withheld is about a space that is not the one being filled.
+                continue;
+            }
+            int[] where = assign(axes, pairs, fixed);
+            Attempt built = build(subject, axes, where, check);
+            if (built.row() == null) {
+                unresolved.add(new UnresolvedCombination(labels(axes, fixed), built.reason(),
+                        built.detail(), built.said()));
+                continue;
+            }
+            // Named for the cell it was composed for, which is the positions the decisions read.
+            // What the pass below filled the rest of the row with is what this row turns out to
+            // settle beside that, and a name carrying it would move when nothing about the row had.
+            rows.add(new GeneratedRow(labels(axes, fixed), built.row().inputs()));
+            written.add(where);
+            cover(pairs, singles, axes, where);
+        }
         while (!pairs.isEmpty() || !singles.isEmpty()) {
             if (rows.size() >= MAX_ROWS) {
                 int left = pairs.size() + singles.size();
@@ -456,6 +501,29 @@ public final class Generator {
 
     // --- the pair space -------------------------------------------------------------------------
 
+    /**
+     * A combination of the decisions that settle one value together, as the classes a row filling it
+     * sits in.
+     *
+     * <p>However many positions those decisions read, which is not two and is not every position: an
+     * arm that never looks at a position leaves it free, and the pass that fills the rest of the row
+     * spends it on the pairs nothing covers. Fixing it here would name a combination the body has no
+     * path to.
+     *
+     * @param at one class per position, and {@code -1} where this cell's decisions do not read it
+     */
+    public record Cell(int[] at) {
+
+        public Cell {
+            at = at.clone();
+        }
+
+        @Override
+        public int[] at() {
+            return at.clone();
+        }
+    }
+
     /** One class of one position against one class of another. Positions are held as their order in
      * the ordered axes, so the natural order of these is the lexicographic order the search takes. */
     private record Pair(int left, int leftClass, int right, int rightClass)
@@ -566,15 +634,35 @@ public final class Generator {
         }
     }
 
+    /** Whether a row already written fixes every position {@code fixed} does, the same way. */
+    private static boolean sits(List<int[]> written, int[] fixed) {
+        for (int[] row : written) {
+            boolean all = true;
+            for (int i = 0; i < fixed.length && all; i++) {
+                all = fixed[i] < 0 || (i < row.length && row[i] == fixed[i]);
+            }
+            if (all) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Every position fixed: the seed's two as the seed says, and each of the rest at whichever class
      * brings in the most combinations nothing covers yet. */
     private static int[] assign(List<Axis> axes, Set<Pair> uncovered, Pair seed) {
-        int[] where = new int[axes.size()];
-        java.util.Arrays.fill(where, -1);
-        where[seed.left()] = seed.leftClass();
+        int[] fixed = new int[axes.size()];
+        java.util.Arrays.fill(fixed, -1);
+        fixed[seed.left()] = seed.leftClass();
         if (!seed.alone()) {
-            where[seed.right()] = seed.rightClass();
+            fixed[seed.right()] = seed.rightClass();
         }
+        return assign(axes, uncovered, fixed);
+    }
+
+    /** The same, from however many positions the seed fixes. */
+    private static int[] assign(List<Axis> axes, Set<Pair> uncovered, int[] fixed) {
+        int[] where = fixed.clone();
         for (int i = 0; i < axes.size(); i++) {
             if (where[i] >= 0) {
                 continue;

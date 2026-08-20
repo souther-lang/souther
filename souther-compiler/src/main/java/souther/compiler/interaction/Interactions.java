@@ -38,6 +38,12 @@ public final class Interactions {
     }
 
     private static void walk(Core node, CoverageSites.Plan plan, List<Interaction> found) {
+        if (node == null) {
+            // A body the checker refused a clause of has a hole where the clause was, and the hole
+            // reaches here as a part that is not there. Nothing is read of it and the walk goes on:
+            // what a decision beside it settles is still what it settles.
+            return;
+        }
         List<Core> meeting = meetingAt(node);
         if (meeting != null) {
             List<Factor> factors = new ArrayList<>();
@@ -58,10 +64,30 @@ public final class Interactions {
         }
     }
 
+    /**
+     * The parts of a node that are there.
+     *
+     * <p>A body the checker refused a clause of arrives with a hole where the clause was, and a
+     * reading that is not the checker has nothing to say about it: what is missing is missing, and
+     * the decisions either side of it are still decisions.
+     */
+    private static List<Core> some(Core... parts) {
+        List<Core> out = new ArrayList<>();
+        for (Core each : parts) {
+            if (each != null) {
+                out.add(each);
+            }
+        }
+        return out;
+    }
+
     /** The values consumed into one here, or null where this node consumes none. */
     private static List<Core> meetingAt(Core node) {
         return switch (node) {
-            case Core.Binary binary -> List.of(binary.left(), binary.right());
+            case Core.Binary binary -> {
+                List<Core> both = some(binary.left(), binary.right());
+                yield both.size() > 1 ? both : null;
+            }
             case Core.Call call -> call.args().size() > 1 ? call.args() : null;
             case Core.PreservedCall call -> call.args().size() > 1 ? call.args() : null;
             case Core.Apply apply -> apply.args().size() > 1 ? apply.args() : null;
@@ -78,6 +104,9 @@ public final class Interactions {
      * not cover is exactly what forks.
      */
     private static List<Outcome> outcomesOf(Core e, CoverageSites.Plan plan) {
+        if (e == null) {
+            return List.of(new Outcome(List.of()));
+        }
         if (e instanceof Core.Match match) {
             TermPath at = pathOf(match.scrutinee());
             List<Outcome> out = new ArrayList<>();
@@ -92,7 +121,7 @@ public final class Interactions {
         }
         if (e instanceof Core.If iff) {
             List<Outcome> out = new ArrayList<>();
-            List<Core> arms = List.of(iff.then(), iff.els());
+            List<Core> arms = some(iff.then(), iff.els());
             for (int part = 0; part < arms.size(); part++) {
                 Condition when = armCondition(iff, part, plan);
                 for (Outcome inner : outcomesOf(arms.get(part), plan)) {
@@ -231,11 +260,11 @@ public final class Interactions {
             case Core.UnitValue ignored -> List.of();
             case Core.OptionNone ignored -> List.of();
             case Core.Unreachable ignored -> List.of();
-            case Core.Neg neg -> List.of(neg.operand());
-            case Core.FieldAccess access -> List.of(access.target());
-            case Core.TupleGet get -> List.of(get.tuple());
-            case Core.OptionSome some -> List.of(some.value());
-            case Core.Binary binary -> List.of(binary.left(), binary.right());
+            case Core.Neg neg -> some(neg.operand());
+            case Core.FieldAccess access -> some(access.target());
+            case Core.TupleGet get -> some(get.tuple());
+            case Core.OptionSome option -> some(option.value());
+            case Core.Binary binary -> some(binary.left(), binary.right());
             case Core.Call call -> call.args();
             case Core.PreservedCall call -> call.args();
             case Core.Apply apply -> apply.args();
@@ -243,9 +272,9 @@ public final class Interactions {
             case Core.Tuple tuple -> tuple.elements();
             case Core.Construct construct ->
                     construct.values().stream().map(Core.FieldValue::value).toList();
-            case Core.If iff -> List.of(iff.cond(), iff.then(), iff.els());
-            case Core.LetIn let -> List.of(let.value(), let.body());
-            case Core.Block block -> List.of(block.body());
+            case Core.If iff -> some(iff.cond(), iff.then(), iff.els());
+            case Core.LetIn let -> some(let.value(), let.body());
+            case Core.Block block -> some(block.body());
             case Core.Match match -> {
                 List<Core> out = new ArrayList<>();
                 out.add(match.scrutinee());
