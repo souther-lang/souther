@@ -1,6 +1,7 @@
 package souther.compiler.numeric;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -93,7 +94,12 @@ public final class AffineReduction {
         Map<A, RationalCut> atLeast = new LinkedHashMap<>();
         Map<A, RationalCut> atMost = new LinkedHashMap<>();
         for (AffineConstraint<A> each : constraints) {
-            for (AffineConstraint.HalfSpace<A> half : asHalfSpaces(each)) {
+            List<AffineConstraint.HalfSpace<A>> halves = each instanceof
+                    AffineConstraint.Disequality<A> hole ? sidedBy(hole, from) : asHalfSpaces(each);
+            if (halves == null) {
+                return new Reduction.NothingIsLeft<>();
+            }
+            for (AffineConstraint.HalfSpace<A> half : halves) {
                 for (A atom : half.form().coefs().keySet()) {
                     if (!record(half, atom, from, spacing, atLeast, atMost)) {
                         return new Reduction.NothingIsLeft<>();
@@ -109,17 +115,89 @@ public final class AffineReduction {
      * side of a hole a sum lies is not something the rule says, and is answered where what else is
      * known can be read.
      */
-    private static <A> java.util.List<AffineConstraint.HalfSpace<A>> asHalfSpaces(
+    private static <A> List<AffineConstraint.HalfSpace<A>> asHalfSpaces(
             AffineConstraint<A> constraint) {
         return switch (constraint) {
-            case AffineConstraint.HalfSpace<A> half -> java.util.List.of(half);
-            case AffineConstraint.Equality<A> at -> java.util.List.of(
+            case AffineConstraint.HalfSpace<A> half -> List.of(half);
+            case AffineConstraint.Equality<A> at -> List.of(
                     new AffineConstraint.HalfSpace<>(at.form(), RationalCut.inclusive(at.at())),
                     new AffineConstraint.HalfSpace<>(at.form().negated(),
                             RationalCut.inclusive(at.at().negated())));
-            case AffineConstraint.Disequality<A> hole -> java.util.List.of();
+            case AffineConstraint.Disequality<A> hole -> List.of();
         };
     }
+
+    /**
+     * A hole turned into a bound, where what is known says which side of it the sum lies.
+     *
+     * <p>{@code f /= v} on its own bounds nothing: it says the sum is not one value, and a range
+     * cannot leave one value out of the middle of itself. What it does say is this — if the sum is
+     * already known not to go below {@code v}, then it goes above it, and if it is already known not
+     * to go above, then it goes below. And where it is known to be exactly {@code v}, nothing is
+     * left.
+     *
+     * <p>Asked of the box and so of everything known, rather than of what happened to be known when
+     * the rule was read. That is the whole difference: {@code x /= 0} beside {@code x >= 0} used to
+     * leave {@code x} at nought or above depending on which of the two was written first, because
+     * the answer was decided at the moment the disequality arrived and never revisited. Here it is
+     * decided against the same box every other rule is read against, and again next round if the
+     * box has moved.
+     *
+     * @return the half-spaces it comes to, empty where the sum can still fall either side, or null
+     *         where the sum is pinned at the very value it is held away from
+     */
+    private static <A> List<AffineConstraint.HalfSpace<A>> sidedBy(
+            AffineConstraint.Disequality<A> hole, Box<A> from) {
+        Reach reach = reachOf(hole.form(), from);
+        Rational away = hole.at();
+        boolean neverBelow = reach.least() != null && reach.least().at().compareTo(away) >= 0;
+        boolean neverAbove = reach.most() != null && reach.most().at().compareTo(away) <= 0;
+        if (neverBelow && neverAbove
+                && reach.least().at().equals(away) && reach.most().at().equals(away)
+                && reach.least().inclusive() && reach.most().inclusive()) {
+            return null;   // the sum is held at the one value it is held away from
+        }
+        if (neverBelow) {
+            return List.of(new AffineConstraint.HalfSpace<>(
+                    hole.form().negated(), RationalCut.exclusive(away.negated())));
+        }
+        if (neverAbove) {
+            return List.of(new AffineConstraint.HalfSpace<>(
+                    hole.form(), RationalCut.exclusive(away)));
+        }
+        return List.of();
+    }
+
+    /** What the box leaves a whole form, either end {@code null} where it leaves it unbounded. */
+    private static <A> Reach reachOf(CanonicalForm<A> form, Box<A> from) {
+        Rational least = Rational.ZERO;
+        Rational most = Rational.ZERO;
+        boolean leastReached = true;
+        boolean mostReached = true;
+        for (Map.Entry<A, Rational> each : form.coefs().entrySet()) {
+            Rational weight = each.getValue();
+            RationalCut low = weight.signum() > 0
+                    ? from.leastOf(each.getKey()) : from.mostOf(each.getKey());
+            RationalCut high = weight.signum() > 0
+                    ? from.mostOf(each.getKey()) : from.leastOf(each.getKey());
+            if (least != null && low != null) {
+                least = least.plus(weight.times(low.at()));
+                leastReached &= low.inclusive();
+            } else {
+                least = null;
+            }
+            if (most != null && high != null) {
+                most = most.plus(weight.times(high.at()));
+                mostReached &= high.inclusive();
+            } else {
+                most = null;
+            }
+        }
+        return new Reach(least == null ? null : new RationalCut(least, leastReached),
+                most == null ? null : new RationalCut(most, mostReached));
+    }
+
+    private record Reach(RationalCut least, RationalCut most) {}
 
     /**
      * What one rule leaves one of its positions, written into {@code atLeast} / {@code atMost}.

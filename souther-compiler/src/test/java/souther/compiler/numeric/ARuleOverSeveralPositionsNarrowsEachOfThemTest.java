@@ -163,11 +163,59 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
         assertEquals(RationalCut.inclusive(num(3)), found.atLeast().get("a"));
     }
 
+    /**
+     * A hole says which side of it the sum lies only where something else has already ruled out one
+     * side. With nothing to side it, it bounds nothing — a range cannot leave one value out of its
+     * own middle.
+     */
     @Test
-    void aHoleIsNotReadHere() {
+    void aHoleWithNothingToSideItBoundsNothing() {
         AffineConstraint<String> hole =
                 rule(weighing("a", 1, "b", 1), -10, Rel.NE, Granularity.DISCRETE);
-        assertTrue(reduce(List.of(hole), between("b", 0, 5), Granularity.DISCRETE).foundNothing());
+        assertTrue(reduce(List.of(hole), between("b", 0, 5), Granularity.DISCRETE).foundNothing(),
+                "nothing bounds a, so the sum can fall either side of ten");
+    }
+
+    /** Where the sum cannot go below the value, it goes above it. */
+    @Test
+    void aHoleAtTheFloorLiftsIt() {
+        AffineConstraint<String> hole =
+                rule(weighing("a", 1), 0, Rel.NE, Granularity.DISCRETE);
+        assertEquals(RationalCut.inclusive(num(1)),
+                reduce(List.of(hole), between("a", 0, 5), Granularity.DISCRETE)
+                        .atLeast().get("a"));
+    }
+
+    /** And where it cannot go above, it goes below. */
+    @Test
+    void aHoleAtTheCeilingLowersIt() {
+        AffineConstraint<String> hole =
+                rule(weighing("a", 1), -5, Rel.NE, Granularity.DISCRETE);
+        assertEquals(RationalCut.inclusive(num(4)),
+                reduce(List.of(hole), between("a", 0, 5), Granularity.DISCRETE)
+                        .atMost().get("a"));
+    }
+
+    /** A hole over several positions is sided by what the others are left, like any other rule. */
+    @Test
+    void aHoleOverSeveralPositionsIsSidedByWhatTheOthersLeave() {
+        AffineConstraint<String> hole =
+                rule(weighing("a", 1, "b", 1), -10, Rel.NE, Granularity.DISCRETE);
+        assertEquals(RationalCut.inclusive(num(9)),
+                reduce(List.of(hole), between("a", 0, 5, "b", 0, 5), Granularity.DISCRETE)
+                        .atMost().get("a"),
+                "a + b cannot exceed ten and is not ten, so it is under ten — and what that leaves"
+                        + " a is read with b at the least it can be, since a bound that held only"
+                        + " at b's greatest would not be a bound on a");
+    }
+
+    @Test
+    void aHoleAtTheOnlyValueLeftLeavesNothing() {
+        AffineConstraint<String> hole =
+                rule(weighing("a", 1), -3, Rel.NE, Granularity.DISCRETE);
+        assertInstanceOf(Reduction.NothingIsLeft.class,
+                AffineReduction.over(List.of(hole), between("a", 3, 3),
+                        atom -> Granularity.DISCRETE));
     }
 
     /** A rule over several positions can empty a system the difference bounds see nothing wrong
