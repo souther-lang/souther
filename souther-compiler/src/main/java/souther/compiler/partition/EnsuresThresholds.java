@@ -226,7 +226,10 @@ public final class EnsuresThresholds {
         raises(out, rule, clause, comparison, rule.value(), divided.path(), divided,
                 GuardThresholds.subjectsOf(comparison, reads, symbols, rule.value()),
                 new Required.LineRead.ALineOnThePosition());
-        souther.compiler.numeric.Place value = ((Level.OnACarrier) cutting.at()).at();
+        // The value the classes meet at, which the reading of the comparison already
+        // answered. Taken off the level the rule was written with, a rule that wrote a
+        // multiple of the position named a class at a number the position never holds.
+        souther.compiler.numeric.Place value = cutting.dividedValue();
         if (cutting.singles()) {
             out.singled().add(new GuardThresholds.Guards.Singled(divided, value, origin));
         } else {

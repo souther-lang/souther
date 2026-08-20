@@ -419,7 +419,10 @@ public final class GuardThresholds {
                 continue;
             }
             made.add(each.comparison());
-            Place value = ((Level.OnACarrier) cutting.at()).at();
+            // The value the classes meet at, which the reading of the comparison already
+            // answered. Taken off the level the rule was written with, a rule that wrote a
+            // multiple of the position named a class at a number the position never holds.
+            Place value = cutting.dividedValue();
             if (cutting.singles()) {
                 singled.add(new Guards.Singled(divided, value, origin));
             } else {

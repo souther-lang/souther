@@ -7,6 +7,7 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Place;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 
 /**
@@ -188,10 +189,39 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         };
     }
 
-    /** The position this cuts, where what it cuts is one position's own values. Null for every other
-     *  quantity, which is what tells a caller whether an axis is divided by this rule. */
+    /**
+     * The position this cuts, where what it cuts is one position's own values. Null for every other
+     * quantity, which is what tells a caller whether an axis is divided by this rule.
+     *
+     * <p><b>Asked of the canonical quantity and not of the shape the comparison arrived as.</b>
+     * {@code 2 * n > 40} reaches this as a form over twice a position and divides that position at
+     * twenty; read off the shape, it divided nothing, and a report counted two equivalence
+     * partitions where the model states three.
+     *
+     * <p>And null where the values part at a place the position holds no value on the threshold's
+     * own side. There is a division there and no number to name a class by — which is what a form
+     * over a carrier whose values fill leaves, since a third is no decimal this language writes.
+     */
     NumericTerm dividedPosition() {
-        return of instanceof BorderQuantity.OfACoordinate one ? one.term() : null;
+        java.util.Map<NumericTerm, java.math.BigDecimal> direction = quantity().direction();
+        if (direction.size() != 1 || dividedValue() == null) {
+            return null;
+        }
+        return direction.keySet().iterator().next();
+    }
+
+    /**
+     * The value of that position the classes either side of this line meet at.
+     *
+     * <p>Read off the seam rather than off the threshold, so a rule that wrote a multiple of the
+     * position names a value the position holds: {@code 2 * n <= 9} parts the whole numbers between
+     * four and five, and nine halved is not a whole number at all. Which of the two the classes meet
+     * at is which side the threshold's own value belongs to, and that is the rule's to say.
+     */
+    Place dividedValue() {
+        Seam seam = seam();
+        Level side = valueBelongsBelow() ? seam.below() : seam.above();
+        return side instanceof Level.OnACarrier on ? on.at() : null;
     }
 
     /** Whether the rule singles a value out rather than ordering the values around it. */
