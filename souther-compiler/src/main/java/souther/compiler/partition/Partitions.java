@@ -79,6 +79,7 @@ public final class Partitions {
                                List<UndividedPosition> undivided,
                                List<UnreadRule> unread,
                                List<souther.compiler.inputs.PositionReadingBlocked> blocked,
+                               List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                List<Border> between,
                                List<GuardThresholds.Guards.AtAPosition> compared) {
         public Partitioning {
@@ -90,6 +91,7 @@ public final class Partitions {
             undivided = List.copyOf(undivided);
             unread = List.copyOf(unread);
             blocked = List.copyOf(blocked);
+            notSeparated = List.copyOf(notSeparated);
             between = List.copyOf(between);
         }
 
@@ -138,7 +140,22 @@ public final class Partitions {
         Map<NumericTerm, NumericDomain.Bounds> domains = new LinkedHashMap<>();
         java.util.Set<NumericTerm> uncertain = new java.util.LinkedHashSet<>();
         List<UnreadRule> unread = new ArrayList<>();
+        // What the reading could not hold together, asked of every position it read rather than of
+        // the ones left pending. This qualifies the classes and does not stand in for them: a
+        // position with classes read from a product wider than the rules admit is exactly where it
+        // has something to say, and a position with none is no more affected than any other.
+        List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated = new ArrayList<>();
         for (Position position : inputs.positions()) {
+            // Not at a position made of positions. Such a one is given up in favour of what is
+            // under it and carries no classes of its own, so what this qualifies is not there —
+            // and the same reading is said at each of the positions that do carry them, which is
+            // where an author can act on it.
+            if (position.valuesNotSeparated()
+                    && !(position.structure()
+                            instanceof souther.compiler.inputs.StructuralInspection.Children)) {
+                notSeparated.add(
+                        new souther.compiler.inputs.PositionValuesNotSeparated(position.path()));
+            }
             axisOf(behavior, position, symbols, found, domains, uncertain, unread);
         }
         List<Axis> kept = new ArrayList<>();
@@ -168,7 +185,8 @@ public final class Partitions {
             keep(new ArrayList<>(), measured, axis, null, unread);
         }
         return new Partitioning(kept, omitted, domains, uncertain, undividedIn(measured),
-                List.copyOf(unread), blockedIn(measured), List.of(), List.of());
+                List.copyOf(unread), blockedIn(measured), List.copyOf(notSeparated),
+                List.of(), List.of());
     }
 
     /**
@@ -426,7 +444,11 @@ public final class Partitions {
                     reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), rules);
         }
         return new Partitioning(out, base.omitted(), domainsOf(base, out), base.uncertain(),
-                undividedIn(measured), List.copyOf(rules), blockedIn(measured), between, compared);
+                undividedIn(measured), List.copyOf(rules), blockedIn(measured),
+                // Carried across: what a reading could not hold together is a fact about the
+                // declarations, and a body drawing a line on a position does not make the product
+                // it was read from the relation the rules admit.
+                base.notSeparated(), between, compared);
     }
 
     /**
