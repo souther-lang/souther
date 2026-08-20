@@ -102,26 +102,48 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     private static souther.compiler.numeric.NumericDomain.Bounds reachOf(AffineReading read,
                                                                         InputReads reads) {
-        java.math.BigDecimal least = java.math.BigDecimal.ZERO;
-        java.math.BigDecimal most = java.math.BigDecimal.ZERO;
-        for (java.util.Map.Entry<NumericTerm, java.math.BigDecimal> each
-                : read.form().coefs().entrySet()) {
-            souther.compiler.numeric.NumericDomain.Bounds bounds = boundsOf(each.getKey(), reads);
-            Count low = bounds == null || bounds.min() == null
-                    || !(bounds.min().at() instanceof Count at) ? null : at;
-            Count high = bounds == null || bounds.max() == null
-                    || !(bounds.max().at() instanceof Count at) ? null : at;
-            if (low == null || high == null) {
-                return null;
-            }
-            java.math.BigDecimal one = each.getValue().multiply(low.at());
-            java.math.BigDecimal other = each.getValue().multiply(high.at());
-            least = least.add(one.min(other));
-            most = most.add(one.max(other));
+        java.util.Map<NumericTerm, souther.compiler.numeric.Rational> coefs =
+                new java.util.LinkedHashMap<>();
+        read.form().coefs().forEach((term, coef) ->
+                coefs.put(term, souther.compiler.numeric.Rational.of(coef)));
+        souther.compiler.numeric.Reach runs = souther.compiler.numeric.Reach.of(
+                coefs, souther.compiler.numeric.Rational.ZERO,
+                term -> runsBetween(term, reads));
+        if (runs.least() == null || runs.most() == null) {
+            return null;
         }
         return new souther.compiler.numeric.NumericDomain.Bounds(
-                souther.compiler.numeric.Endpoint.inclusive(new Count(least)),
-                souther.compiler.numeric.Endpoint.inclusive(new Count(most)));
+                written(runs.least()), written(runs.most()));
+    }
+
+    /** A cut as the end of a range. Every end that reaches here came from a written number, so what
+     *  it is written as is what it was. */
+    private static souther.compiler.numeric.Endpoint written(
+            souther.compiler.numeric.RationalCut cut) {
+        java.math.BigDecimal at = cut.at().asWrittenDecimal();
+        if (at == null) {
+            throw new IllegalStateException("a quantity's reach is written: " + cut);
+        }
+        return new souther.compiler.numeric.Endpoint(
+                new souther.compiler.numeric.Count(at), cut.inclusive());
+    }
+
+    /** What one position runs between, as the arithmetic wants it. */
+    private static souther.compiler.numeric.Reach runsBetween(NumericTerm term, InputReads reads) {
+        souther.compiler.numeric.NumericDomain.Bounds bounds = boundsOf(term, reads);
+        if (bounds == null) {
+            return souther.compiler.numeric.Reach.ANYWHERE;
+        }
+        return souther.compiler.numeric.Reach.between(asCut(bounds.min()), asCut(bounds.max()));
+    }
+
+    private static souther.compiler.numeric.RationalCut asCut(
+            souther.compiler.numeric.Endpoint end) {
+        if (end == null || !(end.at() instanceof souther.compiler.numeric.Count at)) {
+            return null;
+        }
+        return new souther.compiler.numeric.RationalCut(
+                souther.compiler.numeric.Rational.of(at.at()), end.inclusive());
     }
 
     /** What every rule reaching one position leaves its numbers, or null where the reading has no

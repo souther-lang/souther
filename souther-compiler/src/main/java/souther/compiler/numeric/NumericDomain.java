@@ -421,22 +421,8 @@ public final class NumericDomain<A> {
         }
         ClosedState<A> state = closed();
         Box<A> box = state.box();
-        Rational at = goal.constant();
-        boolean reached = true;
-        RationalCut summed = null;
-        for (Map.Entry<A, Rational> each : goal.coefs().entrySet()) {
-            Rational coef = each.getValue();
-            RationalCut end = coef.signum() > 0
-                    ? box.mostOf(each.getKey()) : box.leastOf(each.getKey());
-            if (end == null) {
-                summed = null;
-                break;
-            }
-            at = at.plus(coef.times(end.at()));
-            reached &= end.inclusive();
-            summed = new RationalCut(at, reached);
-        }
-        RationalCut best = summed;
+        RationalCut best = Reach.of(goal.coefs(), goal.constant(),
+                atom -> Reach.between(box.leastOf(atom), box.mostOf(atom))).most();
         List<A> apart = unitDifference(goal.coefs());
         if (apart != null) {
             RationalCut difference =

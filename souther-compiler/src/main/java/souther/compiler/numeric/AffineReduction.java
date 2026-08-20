@@ -168,36 +168,11 @@ public final class AffineReduction {
         return List.of();
     }
 
-    /** What the box leaves a whole form, either end {@code null} where it leaves it unbounded. */
+    /** What the box leaves a whole form, summed the one way this arithmetic is written. */
     private static <A> Reach reachOf(CanonicalForm<A> form, Box<A> from) {
-        Rational least = Rational.ZERO;
-        Rational most = Rational.ZERO;
-        boolean leastReached = true;
-        boolean mostReached = true;
-        for (Map.Entry<A, Rational> each : form.coefs().entrySet()) {
-            Rational weight = each.getValue();
-            RationalCut low = weight.signum() > 0
-                    ? from.leastOf(each.getKey()) : from.mostOf(each.getKey());
-            RationalCut high = weight.signum() > 0
-                    ? from.mostOf(each.getKey()) : from.leastOf(each.getKey());
-            if (least != null && low != null) {
-                least = least.plus(weight.times(low.at()));
-                leastReached &= low.inclusive();
-            } else {
-                least = null;
-            }
-            if (most != null && high != null) {
-                most = most.plus(weight.times(high.at()));
-                mostReached &= high.inclusive();
-            } else {
-                most = null;
-            }
-        }
-        return new Reach(least == null ? null : new RationalCut(least, leastReached),
-                most == null ? null : new RationalCut(most, mostReached));
+        return Reach.of(form.coefs(), Rational.ZERO,
+                atom -> Reach.between(from.leastOf(atom), from.mostOf(atom)));
     }
-
-    private record Reach(RationalCut least, RationalCut most) {}
 
     /**
      * What one rule leaves one of its positions, written into {@code atLeast} / {@code atMost}.
@@ -271,22 +246,11 @@ public final class AffineReduction {
      * @return null where some position of the rest has no end in the direction that matters
      */
     private static <A> Least leastOfTheRest(AffineConstraint.HalfSpace<A> half, A atom, Box<A> from) {
-        Rational total = Rational.ZERO;
-        boolean reached = true;
-        for (Map.Entry<A, Rational> each : half.form().coefs().entrySet()) {
-            if (each.getKey().equals(atom)) {
-                continue;
-            }
-            Rational weight = each.getValue();
-            RationalCut end = weight.signum() > 0
-                    ? from.leastOf(each.getKey()) : from.mostOf(each.getKey());
-            if (end == null) {
-                return null;
-            }
-            total = total.plus(weight.times(end.at()));
-            reached &= end.inclusive();
-        }
-        return new Least(total, reached);
+        Map<A, Rational> rest = new LinkedHashMap<>(half.form().coefs());
+        rest.remove(atom);
+        RationalCut least = Reach.of(rest, Rational.ZERO,
+                each -> Reach.between(from.leastOf(each), from.mostOf(each))).least();
+        return least == null ? null : new Least(least.at(), least.inclusive());
     }
 
     /** @param reached false where the sum comes arbitrarily close to {@code at} without arriving,
