@@ -196,7 +196,30 @@ public record Band(Seam under, Seam over, Level from, Level to) {
                 ? " < " + of.writtenAt(except)
                 : over != null ? said(of, over, Towards.BELOW)
                         : to == null ? "" : " <= " + of.writtenAt(to);
-        return low.isEmpty() && high.isEmpty() ? "any" : (low + of.left() + high).trim();
+        // An end only the rule that drew it can name relates a row to the quantity rather than to
+        // the position, so it is a condition of its own beside the rest. Dropped, the run read as
+        // reaching past the very line that ends it.
+        String ruleLow = low != null ? null
+                : under.asARuleAbout(of.left(), Towards.ABOVE);
+        String ruleHigh = high != null ? null
+                : over.asARuleAbout(of.left(), Towards.BELOW);
+        String plain = (nullToEmpty(low) + of.left() + nullToEmpty(high)).trim();
+        boolean anyPlain = low != null && !low.isEmpty() || high != null && !high.isEmpty();
+        java.util.List<String> said = new java.util.ArrayList<>();
+        if (ruleLow != null) {
+            said.add(ruleLow);
+        }
+        if (anyPlain) {
+            said.add(plain);
+        }
+        if (ruleHigh != null) {
+            said.add(ruleHigh);
+        }
+        return said.isEmpty() ? "any" : String.join(" and ", said);
+    }
+
+    private static String nullToEmpty(String said) {
+        return said == null ? "" : said;
     }
 
     /**
@@ -214,13 +237,17 @@ public record Band(Seam under, Seam over, Level from, Level to) {
                     : closes(parted) + of.writtenAt(line);
         }
         Level named = parted.below() != null ? parted.below() : parted.above();
-        if (named == null) {
-            return "";
+        if (named != null) {
+            boolean below = named == parted.below();
+            return side == Towards.ABOVE
+                    ? of.writtenAt(named) + (below ? " < " : " <= ")
+                    : (below ? " <= " : " < ") + of.writtenAt(named);
         }
-        boolean below = named == parted.below();
-        return side == Towards.ABOVE
-                ? of.writtenAt(named) + (below ? " < " : " <= ")
-                : (below ? " <= " : " < ") + of.writtenAt(named);
+        // Nothing names this end but the rule that drew it, which is the same sentence the class
+        // this run is gets. Marked so the caller writes it as a condition of its own: it names the
+        // quantity itself, and a run with one such end and one plain one relates a row to two
+        // things.
+        return null;
     }
 
     /** Whether this run has any value in it other than {@code except}, where that can be settled.

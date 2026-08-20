@@ -458,7 +458,11 @@ public final class Partitions {
                 // Turned into borders here and nowhere else, so that every rule about one
                 // quantity is arranged together however the rules were written — a body's
                 // condition and a clause cut one form as readily as two conditions do.
-                base.notSeparated(), Border.allOf(between), compared);
+                // Every rule about one quantity arranged together, whichever producer its border
+                // came from. A line that divides a position leaves its division on the axis and,
+                // where the position has no value beside it, its border over here — and the two
+                // sides of that border are runs of what all of them leave.
+                base.notSeparated(), Border.allOf(between, partedByQuantity(out)), compared);
     }
 
     /**
@@ -614,6 +618,25 @@ public final class Partitions {
 
     /** The cuts a position has, with a rule that drew one already there recorded rather than repeated:
      * an invariant and a guard that state the same bound are one cut and two obligations. */
+    /**
+     * Where the rules part each of this behavior's quantities, by the quantity they are on.
+     *
+     * <p>Read off the axes, which is where a division of a position is recorded whether or not the
+     * position has a value at it. A line over a form of several positions divides none of them and
+     * is on a quantity of its own, which no axis names — those arrive with the lines themselves.
+     */
+    private static Map<String, List<Seam>> partedByQuantity(List<Axis> axes) {
+        Map<String, List<Seam>> out = new LinkedHashMap<>();
+        for (Axis axis : axes) {
+            if (axis.parted().isEmpty()) {
+                continue;
+            }
+            out.computeIfAbsent(QuantityKey.of(NumericDomain.LinearForm.atom(axis.term())).key(),
+                    _ -> new ArrayList<>()).addAll(axis.parted());
+        }
+        return out;
+    }
+
     /** Whether the rules leave the quantity anything at the place a line falls. */
     private static boolean admits(NumericDomain.Bounds within, Seam parts) {
         return (within.min() == null || parts.at().compare(within.min().at()) <= 0)

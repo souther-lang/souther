@@ -110,12 +110,7 @@ final class Intervals {
 
         /** One end as the rule that drew it, or null where nothing parts the run there. */
         private static String ruleEnd(Seam parted, Towards side) {
-            java.math.BigDecimal[] rule = parted == null ? null : parted.at().asARule();
-            if (rule == null) {
-                return null;
-            }
-            return side == Towards.ABOVE ? plain(rule[1]) + " < " + times(rule[0])
-                    : times(rule[0]) + " <= " + plain(rule[1]);
+            return parted == null ? null : parted.asARuleAbout("x", side);
         }
 
         private static String times(java.math.BigDecimal by) {

@@ -208,6 +208,58 @@ class AnInPointLiesInsideThePartitionItsBorderBoundsTest {
     }
 
     /**
+     * And a line the position can name and one it cannot bound each other.
+     *
+     * <p>The two are read by different producers — a line with a value on the position leaves its
+     * border on the position, and one without leaves it on the quantity the rule wrote — and each
+     * producer arranged what it could see. So a border at two tenths ran past a line at a third,
+     * and the border at the third ran past two tenths in the other direction and asked for a row
+     * anywhere at all.
+     *
+     * <p>A quantity is arranged once. Which producer a border came from is a fact about how the
+     * rule was written, and the runs either side of it are a fact about the position.
+     */
+    @Test
+    void aLineThePositionCanNameAndOneItCannotBoundEachOther() {
+        Compilation compilation = Compilation.ofSource("""
+                module example.mixed
+
+                data No = { why: Int }
+                data Yes = { v: Int }
+                data Result = No | Yes
+
+                behavior f : (n: Decimal) -> Result
+                    constructs Yes, No
+
+                let f (n) = {
+                    guard n > 0.2m else No { why = 0 }
+                    guard 3m * n > 1m else No { why = 1 }
+                    Yes { v = 1 }
+                }
+
+                example f
+                    | "low" : (0.1m) -> No { why = 0 }
+                    | "high" : (0.5m) -> Yes { v = 1 }
+                """, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+        Map<String, PartitionEvidence> all = compilation.db()
+                .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
+        assertNotNull(all, "the model under test compiles");
+
+        assertEquals("0.2 < n and 3 * n <= 1", borderNamed(all, "n = 0.2").against(PointRole.IN),
+                "the run above two tenths stops at the third");
+        assertEquals("0.6 < 3 * n < 1", borderNamed(all, "3 * n = 1").against(PointRole.OUT),
+                "and the run below the third stops at two tenths, said in the rule's own units");
+        // A tenth is below two tenths, which is a partition further out. Read without the line at
+        // two tenths, the run below the third reached the end of the order and a tenth answered
+        // for a point that lies between the two lines.
+        assertInstanceOf(ItemAssessment.Coverage.Missed.class,
+                borderNamed(all, "3 * n = 1").owedAt(PointRole.OUT).coverage(),
+                "and a row two partitions out is not at it");
+    }
+
+    /**
      * The same on the other side: an {@code OUT} point is inside the partition the border keeps out.
      *
      * <p>The border at twenty keeps the second partition out. Five is in the first, two partitions

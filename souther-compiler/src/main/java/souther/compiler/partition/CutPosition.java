@@ -89,7 +89,13 @@ public record CutPosition(Level written, BigDecimal per) {
         if (at == null || k.compareTo(BigDecimal.ONE) == 0) {
             return this;
         }
-        return new CutPosition(new Level.ACount(new Count(at.multiply(k))), per);
+        // Scaled by exactly the share the rule wrote, the share divides out: the line is at the
+        // number the rule carried, in the units the rule carried it in. Left in, the position was
+        // right and the reading of it was not — a line the form does stand at went on answering
+        // that the quantity has no value there, and the run above it could not say where it starts.
+        return k.compareTo(per) == 0
+                ? new CutPosition(new Level.ACount(new Count(at)), BigDecimal.ONE)
+                : new CutPosition(new Level.ACount(new Count(at.multiply(k))), per);
     }
 
     /**

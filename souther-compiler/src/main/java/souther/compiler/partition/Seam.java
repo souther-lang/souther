@@ -127,9 +127,27 @@ public record Seam(CutPosition at, Level below, Level above) {
         return new Seam(at.times(k), scaled(below, k), scaled(above, k));
     }
 
+    /**
+     * One value of a quantity, as a value of the form that wrote {@code k} of it.
+     *
+     * <p>Which is a number of that form and no longer a value of anything the position holds: three
+     * times a decimal is not a decimal the position is written at. So what comes back is counted
+     * rather than carried on a carrier, whichever of the two went in.
+     */
     private static Level scaled(Level level, java.math.BigDecimal k) {
-        return level == null ? null : new Level.ACount(new souther.compiler.numeric.Count(
-                level.asACount().at().multiply(k)));
+        if (level == null) {
+            return null;
+        }
+        java.math.BigDecimal at = switch (level) {
+            case Level.ACount count -> count.at().at();
+            case Level.OnACarrier on -> on.at() instanceof souther.compiler.numeric.Count count
+                    ? count.at() : null;
+        };
+        if (at == null) {
+            throw new IllegalStateException(
+                    "an order with no numbers was asked for a multiple of one: " + level);
+        }
+        return new Level.ACount(new souther.compiler.numeric.Count(at.multiply(k)));
     }
 
     /**
@@ -158,6 +176,32 @@ public record Seam(CutPosition at, Level below, Level above) {
         // that way rather than a run that could not be read.
         return new Seam(CutPosition.at(moved), below == null ? null : onto.apply(below),
                 above == null ? null : onto.apply(above));
+    }
+
+    /**
+     * This line as the end of a run on one side of it, written as the rule that drew it.
+     *
+     * <p>For a line the quantity has no value at, which is the only case with nothing else to name
+     * it by. Written as the rule rather than as the place — {@code 3 * x <= 1} and not a third
+     * rounded to something it is not — and reduced, so the two rules that draw one line write it
+     * one way. Null where the quantity has no numbers, which is never scaled and so always has a
+     * value at its lines.
+     *
+     * @param subject what a row is called in the words the reader is being given
+     */
+    public String asARuleAbout(String subject, Towards side) {
+        java.math.BigDecimal[] rule = at.asARule();
+        if (rule == null) {
+            return null;
+        }
+        String much = rule[0].compareTo(java.math.BigDecimal.ONE) == 0 ? subject
+                : plain(rule[0]) + " * " + subject;
+        return side == Towards.ABOVE ? plain(rule[1]) + " < " + much
+                : much + " <= " + plain(rule[1]);
+    }
+
+    private static String plain(java.math.BigDecimal number) {
+        return number.stripTrailingZeros().toPlainString();
     }
 
     /**

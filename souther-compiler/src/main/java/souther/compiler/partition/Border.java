@@ -195,15 +195,40 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
      * rows the same way, so they are one quantity and their lines are one arrangement.
      */
     public static java.util.List<Border> allOf(java.util.List<LineDrawn> drawn) {
+        return allOf(drawn, java.util.Map.of());
+    }
+
+    /**
+     * The same, told where else the rules of this behavior part the quantities these lines are on.
+     *
+     * <p>Because a quantity is arranged once and not once per producer. A line that divides a
+     * position leaves its border on the position and its division on the axis; a line that divides
+     * one and has no value there leaves its border here. Read apart, the second knew only its own
+     * line — a rule cutting at a third beside a rule cutting at a fifth asked for a row anywhere at
+     * all, twice — and the first knew both only because the axis happened to carry them.
+     *
+     * @param alsoParted where the rules part each quantity, in the quantity's own units, by
+     *                   {@link QuantityKey#key}
+     */
+    public static java.util.List<Border> allOf(java.util.List<LineDrawn> drawn,
+                                               java.util.Map<String,
+                                                       java.util.List<Seam>> alsoParted) {
         // Collected in the quantity's own units, because that is the only order the lines of one
         // quantity are all on. Two rules can write one quantity at two scales — `3a + 6b > 48` and
         // `a + 2b > 20` run the same way — and the numbers they carry are not comparable until both
         // are read as what they are a multiple of.
         java.util.Map<String, java.util.List<Seam>> byQuantity = new java.util.LinkedHashMap<>();
+        alsoParted.forEach((key, parted) ->
+                byQuantity.computeIfAbsent(key, _ -> new java.util.ArrayList<>()).addAll(parted));
         for (LineDrawn each : drawn) {
-            if (ordersAroundTheCut(each.by())) {
-                byQuantity.computeIfAbsent(each.cuts().quantity().key(),
-                        key -> new java.util.ArrayList<>()).add(each.cuts().seam());
+            if (!ordersAroundTheCut(each.by())) {
+                continue;
+            }
+            Seam parts = each.cuts().seam();
+            java.util.List<Seam> already = byQuantity.computeIfAbsent(
+                    each.cuts().quantity().key(), _ -> new java.util.ArrayList<>());
+            if (already.stream().noneMatch(had -> had.key().equals(parts.key()))) {
+                already.add(parts);
             }
         }
         java.util.List<Border> out = new java.util.ArrayList<>();
