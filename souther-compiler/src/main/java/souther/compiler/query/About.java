@@ -77,6 +77,20 @@ public sealed interface About {
         }
     }
 
+    /**
+     * A finding about one rule of the model, which is what carries its identity.
+     *
+     * <p>Which findings these are is answered here and nowhere else. Read off a list of kinds, a
+     * writer had to be told again every time one was added â and a kind added and not told wrote no
+     * identity, which is one rule's findings coming out identical in every field with nothing to
+     * join them by. A shape that is about a rule says so by being one of these.
+     */
+    sealed interface OfARule extends About {
+
+        /** Which rule, as everything that names a rule names it. */
+        souther.compiler.check.RuleRef rule();
+    }
+
     /** A position the model draws no line through. */
     record APositionNoLineDivides(
             souther.compiler.partition.UndividedPosition position) implements About {
@@ -93,9 +107,14 @@ public sealed interface About {
      * unread and left them to work out which rule — which the accounting was made to say and this
      * measure beside it was not.
      */
-    record ARuleThisCouldNotRead(PartitionEvidence.NotRead.ARule finding) implements About {
+    record ARuleThisCouldNotRead(PartitionEvidence.NotRead.ARule finding) implements OfARule {
         public ARuleThisCouldNotRead {
             java.util.Objects.requireNonNull(finding, "a finding is about something");
+        }
+
+        @Override
+        public souther.compiler.check.RuleRef rule() {
+            return finding.rule();
         }
     }
 
@@ -129,7 +148,13 @@ public sealed interface About {
      * taken apart. It was taken apart into six elements one seam later, which is the thing that
      * contract was written against.
      */
-    record AQuestionNothingAnswered(PartitionEvidence.Unanswered asked) implements About {
+    record AQuestionNothingAnswered(PartitionEvidence.Unanswered asked) implements OfARule {
+
+        @Override
+        public souther.compiler.check.RuleRef rule() {
+            return asked.rule();
+        }
+
         public AQuestionNothingAnswered {
             java.util.Objects.requireNonNull(asked, "a finding is about something");
         }

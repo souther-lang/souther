@@ -39,8 +39,8 @@ class ARuleNoOtherReadingTakesInIsStillSaidHereTest {
      * is this compiler's own business and is not a second thing to tell an author: what they can
      * act on is that a rule of theirs raised a question about the values here and no reading of the
      * model answered it. It used to be said twice — once here without naming the rule, because a
-     * value reading files what it could not take in under the position rather than under the clause
-     *.
+     * value reading files what it could not take in under the position rather than under the
+     * clause.
      */
     @Test
     void aSizeBoundPastTheEndOfTheWholeNumbersIsNamedAsUnaccountedFor() {

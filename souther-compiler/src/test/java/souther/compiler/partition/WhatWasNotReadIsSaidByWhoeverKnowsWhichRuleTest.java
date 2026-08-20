@@ -24,9 +24,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * to read an absent field to know which of the two it was holding — and a report would name a rule
  * for some entries and not the rest with nothing saying why.
  *
- * <p>Which public word each is told under is read off the same answer. A reading that never reached
- * the rules is what {@code PARTITION_RULES_NOT_REACHED} exists for and is that whether or not the
- * axes went on to measure the position; the rest are {@code PARTITION_NOT_READ}.
+ * <p>Both are told under {@code PARTITION_NOT_READ}, and the reason beside each says which limit
+ * it is waiting on. {@code PARTITION_RULES_NOT_REACHED} belongs to the finding about a position the
+ * axes did measure, which is a different thing to act on and writes the same one field.
  */
 class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
 

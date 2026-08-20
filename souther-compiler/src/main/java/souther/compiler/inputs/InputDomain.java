@@ -396,8 +396,10 @@ public final class InputDomain {
      * rule about one of its fields was dropped in silence; and where both had something to say
      * about one clause, the report printed two causes for it.
      *
-     * <p>One line per reason, as a {@code guard}'s comparison is. Two clauses stopped by the same
-     * limit are one thing for a reader to lift; two stopped by different limits are two.
+     * <p>One finding per rule, as a {@code guard}'s comparison is. Two clauses stopped by the same
+     * limit at one position are two things for a reader to lift and are two findings: which clause
+     * to rewrite is what an author acts on, and a position is not it. Kept per reason, the second
+     * of them was dropped as a repeat of the first.
      */
     private static List<UnreadRule> unreadRulesAt(PlacedRules placed, TermPath path,
                                                   List<UnreadRule> competing) {

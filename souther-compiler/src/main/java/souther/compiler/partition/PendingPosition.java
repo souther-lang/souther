@@ -81,20 +81,6 @@ sealed interface PendingPosition {
     }
 
     /**
-     * What the position comes to, once what the rules said about it is known.
-     *
-     * <p>The phase's answer and not one producer's. A {@code guard}'s comparison and a newtype's
-     * invariant are two producers of one kind of evidence, and {@link BodyCutInspection} is what
-     * came of asking them — which is why this takes one of those rather than a list of lines and a
-     * reason beside it. What makes it the phase's answer is where it is produced, not this
-     * signature: a caller inside this package can still build one out of half a reading.
-     *
-     * <p>The structural reason outranks the rules'. Where the walk could not reach into what a
-     * position holds, a rule naming something inside it describes that same stop from the other end
-     * and the first is the cause (issue #626). So a {@link Blocked} completes as itself whatever
-     * the rules came to, and only a {@link Leaf} can reach an absence.
-     */
-    /**
      * The finding this comes to, or null where there is none to make.
      *
      * <p>The resolution, and the only place a structural stop becomes something a report says. What
@@ -120,6 +106,20 @@ sealed interface PendingPosition {
                 ? new souther.compiler.inputs.PositionReadingBlocked(at(), why) : null;
     }
 
+    /**
+     * What the position comes to, once what the rules said about it is known.
+     *
+     * <p>The phase's answer and not one producer's. A {@code guard}'s comparison and a newtype's
+     * invariant are two producers of one kind of evidence, and {@link BodyCutInspection} is what
+     * came of asking them — which is why this takes one of those rather than a list of lines and a
+     * reason beside it. What makes it the phase's answer is where it is produced, not this
+     * signature: a caller inside this package can still build one out of half a reading.
+     *
+     * <p>The structural reason outranks the rules'. Where the walk could not reach into what a
+     * position holds, a rule naming something inside it describes that same stop from the other end
+     * and the first is the cause (issue #626). So a {@link Blocked} completes as itself whatever
+     * the rules came to, and only a {@link Leaf} can reach an absence.
+     */
     default UndividedPosition complete(BodyCutInspection body) {
         if (body instanceof BodyCutInspection.Evidence) {
             // A line was drawn and the axis carrying it says it has none. Nothing a reader of a

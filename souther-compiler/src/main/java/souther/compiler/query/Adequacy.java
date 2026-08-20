@@ -8,7 +8,6 @@ import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.msg.DeadBranchMessage;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.Citation;
-import souther.compiler.inputs.BlockReason;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.examples.FixtureReader;
 import souther.compiler.ast.Hir;
@@ -1793,14 +1792,12 @@ public final class Adequacy {
                         ? Kind.BOUNDARY_UNMET : Kind.DOMAIN_POINT_UNCOVERED;
                 case About.APositionNoLineDivides _ -> Kind.PARTITION_NOT_DERIVABLE;
                 case About.ARuleThisCouldNotRead _ -> Kind.PARTITION_NOT_READ;
-                // Which of the two public words a position's stop is, read off what stopped it.
-                // A reading that never arrived at the rules of a position is the thing
-                // PARTITION_RULES_NOT_REACHED is for, and it is that whether the axes went on to
-                // measure the position or not — said as PARTITION_NOT_READ, a consumer would have
-                // to read the reason back to find the one word that already exists for it.
-                case About.APositionThisCouldNotRead(var it) ->
-                        it.finding().why() instanceof BlockReason.ValueRulesNotReached
-                                ? Kind.PARTITION_RULES_NOT_REACHED : Kind.PARTITION_NOT_READ;
+                // One word, whatever stopped the reading, and the reason beside it says which.
+                // PARTITION_RULES_NOT_REACHED belongs to the finding above — a position the axes
+                // did measure — and the two write nothing but the position, so sharing the word
+                // would put two findings a reader can tell apart in the report under one a
+                // consumer cannot.
+                case About.APositionThisCouldNotRead _ -> Kind.PARTITION_NOT_READ;
                 case About.APositionWhoseRulesWereNotReached _ ->
                         Kind.PARTITION_RULES_NOT_REACHED;
                 case About.AQuestionNothingAnswered _ -> Kind.RULE_UNACCOUNTED;
