@@ -543,11 +543,11 @@ final class Predicates {
                 return Owed.decided(false).and(Owed.of(VIOLATED));
             }
         }
-        // It folded the other way and this caller does not report that as a violation. What it owes
-        // is read on, unchanged, and the fold is said beside it — a reader classifying the clause
-        // needs it, and taking the reading away here would change what this caller is answered.
-        Fold fold = folded == null ? Fold.NOT_DECIDED
-                : folded == positive ? Fold.HOLDS : Fold.FAILS;
+        // Either it did not fold, or it folded the other way and this caller does not report that as
+        // a violation — folding the way it is read returned above. What it owes is read on,
+        // unchanged, and the fold is said beside it: a reader classifying the clause needs it, and
+        // taking the reading away here would change what this caller is answered.
+        Fold fold = folded == null ? Fold.NOT_DECIDED : Fold.FAILS;
         Constraint numeric = null;
         Piecewise piecewise = null;
         if (inv instanceof Core.Binary b && relOf(b.op()) != null) {
