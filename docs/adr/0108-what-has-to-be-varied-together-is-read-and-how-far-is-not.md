@@ -66,13 +66,28 @@ with it, and every one of its combinations is under that. Left out, a row offere
 may never reach the operator it was composed for, and a row already written on the other side of the
 fork reads as one that covers it.
 
-Every condition a group is made of has to place at a class of a position, or the group is not
-offered. A cell is a row that takes the path and settles each factor at the outcome the cell names,
+A condition is a constraint and not a choice of class. `n > 10` leaves every class above the line,
+and writing one of them down would answer for that condition alone and be wrong as soon as a second
+one arrives — under `if n > 10 { if n > 0 { … } }` the way in is both, and a reading that assigned
+would keep whichever it read last. So a cell carries which classes each position may hold, a
+condition narrows it, and a position left nothing is a combination the body has no path to. What is
+left over is room: a position a cell leaves several classes is chosen among them the same way a
+position it says nothing about is chosen among all of them, which is by what the pairs still want.
+
+Every condition a group is made of has to narrow something, or the group is not offered. A cell is a row that takes the path and settles each factor at the outcome the cell names,
 and a condition with no class to put a row at leaves both open — the row may go the other way round
 the fork above, or take another outcome of the factor. A factor whose outcomes place at the same
 classes goes for the second half of the same reason: no row can be steered from one to the other, so
 the cells over it are one row asked for several times. What is left in either case is the pair
 space, which is where such a behavior already was.
+
+What a part of a body is made of and what runs when it is evaluated are two questions, and the walk
+asks the second. Evaluating a block makes a function; its body runs where something calls it, under
+whatever it is called with, which is not a condition on this behavior's inputs. Which arm a
+construction that decides one takes is whether the values made the thing, which no class of an input
+names. Both are walked past rather than into, and the walk answers for every kind of node rather
+than falling back on the ones every part of which is evaluated under the same conditions — that
+fallback was the assumption, and it was wrong for those two.
 
 A run of one operator is one meeting of all its values. `a + b + c` is written as one operator
 applied twice and is three values making one number, and reading it as two meetings would ask for

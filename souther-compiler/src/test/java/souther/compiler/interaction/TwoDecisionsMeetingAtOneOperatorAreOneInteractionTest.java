@@ -370,4 +370,35 @@ class TwoDecisionsMeetingAtOneOperatorAreOneInteractionTest {
         assertEquals(List.of(List.of(3, 3)), shape(read(GATED, "fee")),
                 "each side is settled by the gate and then by its own decision");
     }
+
+    /** Two decisions inside a function the body makes and calls somewhere else. */
+    private static final String LAMBDA = """
+            module example.lambda
+
+            behavior fee : (gate: Bool, a: Bool, b: Bool) -> Int
+
+            let fee (gate, a, b) = {
+                let f: (Int) -> Int = (x) -> (if a then 1 else 0) + (if b then 10 else 20)
+
+                if gate then f(0) else 0
+            }
+            """;
+
+    /**
+     * A function a body names is read where it is called, under what it takes to get to the call.
+     *
+     * <p>Which is the whole of the question the fork above the call raises. The decisions are in a
+     * function made before the fork, and a reading that took them where the function was made would
+     * carry no way in at all — a row varying the two while the call never happens would be offered
+     * for the group. Read where the call is, the way in is the call's.
+     */
+    @Test
+    void aFunctionsDecisionsAreReadWhereItIsCalledFrom() {
+        List<Interaction> found = read(LAMBDA, "fee");
+
+        assertEquals(List.of(List.of(2, 2)), shape(found), "the two decisions meet once: " + found);
+        assertEquals(List.of("gate=true"),
+                found.get(0).reach().stream().map(Object::toString).toList(),
+                "under what it takes to reach the call: " + found);
+    }
 }

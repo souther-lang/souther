@@ -127,12 +127,18 @@ public final class Interactions {
     }
 
     /**
-     * Into each part, under what holds on the way into it.
+     * Into each part that runs when this is evaluated, under what holds on the way into it.
      *
-     * <p>Written out per shape rather than over one list of children, because what it takes to get
-     * to a part is different for each: an arm is reached by the fork coming out its way, a
-     * scrutinee is reached whenever the fork is, and the right of an operator that stops early is
-     * reached only where the left did not settle the answer.
+     * <p>Not the parts a node is built out of, which is {@link #childrenOf}'s answer and a
+     * different question. What it takes to get to a part differs per shape — an arm is reached by
+     * the fork coming out its way, a scrutinee whenever the fork is, the right of an operator that
+     * stops early only where the left did not settle the answer — and a part is not always reached
+     * at all: evaluating a block makes a function rather than running its body.
+     *
+     * <p>Exhaustive and with no fallback. A node kind added to the IR has to be decided about here
+     * rather than fall in with the ones every part of which is evaluated under the same conditions,
+     * because that is the assumption this walk was making about all of them and it was wrong for
+     * two.
      */
     private void descend(Core node, InputReads reads, Map<BindingId, List<Outcome>> bound,
                          Set<Core> absorbed, List<Condition> reach, List<Interaction> found) {
@@ -166,11 +172,59 @@ public final class Interactions {
                     walk(binary.right(), reads, bound, absorbed, and(reach, went), found);
                 }
             }
-            default -> {
-                for (Core child : childrenOf(node)) {
-                    walk(child, reads, bound, absorbed, reach, found);
+            case Core.IfConstructed constructed -> {
+                // The values are made, and which arm is taken is whether making the thing out of
+                // them held its rules. No class of an input names that, so what is inside the arms
+                // is not walked: a row cannot be steered to either of them, and one offered for a
+                // group in there would be offered for a combination it may not sit in.
+                for (Core.FieldValue given : constructed.construct().values()) {
+                    walk(given.value(), reads, bound, absorbed, reach, found);
                 }
             }
+            case Core.Block ignored -> {
+                // Evaluating this makes the function; the body runs where something calls it, under
+                // whatever it is called with. That is not a condition on the inputs of this
+                // behavior, so a group in there has no way in this can name.
+            }
+            case Core.LetIn let -> {
+                walk(let.value(), reads, bound, absorbed, reach, found);
+                walk(let.body(), reads.and(let.binder(), let.value()), bound, absorbed, reach,
+                        found);
+            }
+            case Core.Int ignored -> { }
+            case Core.Decimal ignored -> { }
+            case Core.Str ignored -> { }
+            case Core.Bool ignored -> { }
+            case Core.Temporal ignored -> { }
+            case Core.Read ignored -> { }
+            case Core.UnitValue ignored -> { }
+            case Core.OptionNone ignored -> { }
+            case Core.Unreachable ignored -> { }
+            // Everything the node is made of is evaluated, and under what the node itself was.
+            case Core.Neg neg -> walkAll(some(neg.operand()), reads, bound, absorbed, reach, found);
+            case Core.FieldAccess access ->
+                    walkAll(some(access.target()), reads, bound, absorbed, reach, found);
+            case Core.TupleGet get -> walkAll(some(get.tuple()), reads, bound, absorbed, reach, found);
+            case Core.OptionSome option ->
+                    walkAll(some(option.value()), reads, bound, absorbed, reach, found);
+            case Core.Binary binary ->
+                    walkAll(some(binary.left(), binary.right()), reads, bound, absorbed, reach, found);
+            case Core.Call call -> walkAll(call.args(), reads, bound, absorbed, reach, found);
+            case Core.PreservedCall call ->
+                    walkAll(call.args(), reads, bound, absorbed, reach, found);
+            case Core.Apply apply -> walkAll(apply.args(), reads, bound, absorbed, reach, found);
+            case Core.ListLit list -> walkAll(list.elements(), reads, bound, absorbed, reach, found);
+            case Core.Tuple tuple -> walkAll(tuple.elements(), reads, bound, absorbed, reach, found);
+            case Core.Construct construct -> walkAll(
+                    construct.values().stream().map(Core.FieldValue::value).toList(),
+                    reads, bound, absorbed, reach, found);
+        }
+    }
+
+    private void walkAll(List<Core> parts, InputReads reads, Map<BindingId, List<Outcome>> bound,
+                         Set<Core> absorbed, List<Condition> reach, List<Interaction> found) {
+        for (Core each : parts) {
+            walk(each, reads, bound, absorbed, reach, found);
         }
     }
 
@@ -355,6 +409,29 @@ public final class Interactions {
             }
             return out.isEmpty() ? oneWay() : out;
         }
+        if (e instanceof Core.IfConstructed constructed) {
+            // A fork, and not a value made of its arms — a product over them would say it is
+            // settled every way they are together. Which arm is taken is whether the values made
+            // the thing, which no position of the input names, so the ways it comes out are said
+            // of the fork and a group over them is not offered.
+            List<Core> arms = new ArrayList<>();
+            arms.add(constructed.then());
+            constructed.els().forEach(each -> arms.add(each.body()));
+            List<Outcome> out = new ArrayList<>();
+            for (int part = 0; part < arms.size(); part++) {
+                if (!answers(arms.get(part))) {
+                    continue;
+                }
+                Condition when = arm(constructed, part);
+                for (Outcome inner : outcomesOf(arms.get(part), reads, bound)) {
+                    out.add(prepend(when, inner));
+                }
+                if (out.size() > MOST_OUTCOMES) {
+                    return oneWay();
+                }
+            }
+            return out.isEmpty() ? oneWay() : out;
+        }
         if (e instanceof Core.Read read) {
             List<Outcome> named = bound.get(read.binding());
             return named != null ? named : oneWay();
@@ -511,7 +588,10 @@ public final class Interactions {
                     construct.values().stream().map(Core.FieldValue::value).toList();
             case Core.If iff -> some(iff.cond(), iff.then(), iff.els());
             case Core.LetIn let -> some(let.value(), let.body());
-            case Core.Block block -> some(block.body());
+            // Not the body. Evaluating this makes the function, and what the body comes to when
+            // something calls it is that call's business — the same stance the reading of whether a
+            // value arrives takes, and for the same reason.
+            case Core.Block ignored -> List.of();
             case Core.Match match -> {
                 List<Core> out = new ArrayList<>();
                 out.add(match.scrutinee());
