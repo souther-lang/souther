@@ -213,7 +213,7 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
     }
 
     /** Whether the product this holds can be guaranteed to be the whole of what the read rules
-     *  admit, which is so exactly where no choice has reached across positions. */
+     *  admit, which this reading guarantees where no choice has reached across positions. */
     public boolean relationExact() {
         return tangled.isEmpty();
     }

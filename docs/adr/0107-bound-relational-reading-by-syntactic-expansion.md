@@ -100,34 +100,48 @@ semantic equivalence in general.
 
 ### Treat exactness as a proof state
 
-`relationExact` and `projectionsExact` do not state semantic truth directly. They state what equality
-the implementation can guarantee.
+Exactness does not state semantic truth directly. It states what equality the implementation can
+guarantee, and it is held where the proposition is quantified:
 
-`relationExact` means:
+```text
+relationExact()       := tangled.isEmpty()
+projectionExactAt(p)  := !widened.contains(p)
+```
 
-> The implementation guarantees that the union of the represented boxes is equal to the true tuple
-> relation admitted by the rules that were read.
+`tangled` is the positions whose correlations the reading is no longer guaranteed to represent, and
+`widened` the positions whose `at(p)` it cannot guarantee is the true projection.
 
-`projectionsExact` means:
+`relationExact()` means:
 
-> The implementation guarantees that every `at(p)` is equal to the true projection of that relation
-> at position `p`.
+> The implementation guarantees that the represented relation is equal to the true tuple relation
+> admitted by the rules that were read.
+
+`projectionExactAt(p)` means:
+
+> The implementation guarantees that `at(p)` is equal to the true projection of that relation at
+> position `p`.
 
 Therefore:
 
 ```text
-relationExact      => the represented relation is actually exact
-!relationExact     => exactness is unknown
+relationExact()       => the represented relation is actually exact
+!relationExact()      => exactness is unknown
 
-projectionsExact   => the represented projections are actually exact
-!projectionsExact  => exactness is unknown
+projectionExactAt(p)  => the projection at p is actually exact
+!projectionExactAt(p) => exactness at p is unknown
 ```
 
 The converses do not hold.
 
+Relational precision is one proposition about a reading and projection precision is one per position,
+so only the first is a single answer. Read as a single answer, the second can say no more than that
+some position is not shown exact — and a caller asking about one of them is handed that sentence
+about each, which is the other quantifier and is false wherever a clause of its own answers for a
+position.
+
 For example, an inexact ProductHull relation can later be intersected with another relation so that
 the resulting relation happens to become exact again. A conservative transition rule may still leave
-`relationExact` false.
+`relationExact()` false.
 
 This is intentional. Future analyses may prove additional cases exact by changing `false` to `true`
 without changing the type or its contract.
@@ -148,8 +162,8 @@ Loss of relational correlation does not immediately imply loss of projection pre
 A ProductHull join across multiple positions can produce:
 
 ```text
-relationExact = false
-projectionsExact = true
+relationExact()      = false
+projectionExactAt(p) = true, at every p
 ```
 
 A later `meet` can make that lost correlation relevant to a projection, at which point projection
@@ -161,8 +175,11 @@ They must not be collapsed into a single set of widening reasons. Doing so would
 report `Wider` as soon as relational correlation is lost, even when all current projections are still
 guaranteed exact.
 
-Internally, two booleans are sufficient for the current representation because there is only one
-representation-level source of lost relational precision.
+Internally they are two sets of positions rather than two flags. A flag for the projections cannot
+express the answer at all — its negation is about the reading and the question is about a position —
+and carrying `relationExact` beside them rather than deriving it from `tangled` would let the two
+come apart. Only one representation-level source of lost relational precision exists today, so
+neither set needs to say which it was.
 
 The outward diagnostic remains:
 
