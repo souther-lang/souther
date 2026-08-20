@@ -246,6 +246,23 @@ public final class Generator {
     public static GenerationResult fill(Subject subject,
                                         List<Map<AxisId, Classification>> existing,
                                         CandidateCheck check) {
+        return fill(subject, existing, check, List.of());
+    }
+
+    /**
+     * The same, offering a row for each combination of the decisions that settle one value together
+     * before it fills what is left of the pairs.
+     *
+     * <p>Two questions and one set of rows. A cell is what the body says has to be varied together;
+     * a pair is what the types divide, which is what can still be asked of a behavior with no body
+     * to read. The cells go first because they fix the most and leave the least to choose, and what
+     * they leave free is what the pairs are spent on — so the rows a cell needs are rows the pair
+     * space was going to want anyway, rather than rows added beside them.
+     */
+    public static GenerationResult fill(Subject subject,
+                                        List<Map<AxisId, Classification>> existing,
+                                        CandidateCheck check,
+                                        List<souther.compiler.interaction.Interaction> groups) {
         List<Axis> ordered = ordered(subject);
         // A position where some row's value could not be read is a position nothing is known about.
         // A row generated for a class there may be a row that is already written, and telling an
@@ -275,12 +292,65 @@ public final class Generator {
         List<GeneratedRow> rows = new ArrayList<>();
         List<UnresolvedCombination> unresolved = new ArrayList<>();
         List<GenerationReason> reasons = new ArrayList<>(undecided);
+        List<int[]> written = new ArrayList<>();
+        for (Map<AxisId, Classification> row : existing) {
+            written.add(whereIn(row, axes));
+        }
+        // Built here and not handed in: a cell is one class per position of the axes this
+        // generation kept, and the caller's list is neither ordered the same nor filtered the same.
+        // No more of any one group than could be offered, since the rest would be built to be
+        // thrown away.
+        List<InteractionCells.Group> byGroup = InteractionCells.of(groups, axes);
+        int[] taken = new int[byGroup.size()];
+        // One from each group in turn, while there is budget for a row. A group met first would
+        // otherwise spend the whole budget and leave the rest of them nothing; and taken this way
+        // there is no count of how many of a group to prepare, so a combination a written row
+        // already sits in costs no row and does not stand in for one that would have.
+        boolean anyLeft = true;
+        while (anyLeft && rows.size() < MAX_ROWS) {
+            anyLeft = false;
+            for (int g = 0; g < byGroup.size() && rows.size() < MAX_ROWS; g++) {
+                InteractionCells.Group group = byGroup.get(g);
+                if (taken[g] >= group.size()) {
+                    continue;
+                }
+                InteractionCells.Cell cell = group.at(taken[g]++);
+                anyLeft = true;
+                if (cell == null) {
+                    // The factors this choice takes leave a position nothing, so it is not a
+                    // combination the body has a path to and there is nothing to ask for.
+                    continue;
+                }
+                if (sits(written, cell)) {
+                    // A cell a row already sits in is a cell nothing is owed for.
+                    continue;
+                }
+                int[] where = assign(axes, pairs, cell);
+                Attempt built = build(subject, axes, where, check);
+                if (built.row() == null) {
+                    unresolved.add(new UnresolvedCombination(labels(axes, cell, where),
+                            built.reason(), built.detail(), built.said()));
+                    continue;
+                }
+                // Named for the cell it was composed for, which is the positions the decisions
+                // read. What the pass below filled the rest of the row with is what this row turns
+                // out to settle beside that, and a name carrying it would move when nothing about
+                // the row had.
+                rows.add(new GeneratedRow(labels(axes, cell, where), built.row().inputs()));
+                written.add(where);
+                cover(pairs, singles, axes, where);
+            }
+        }
+        int cellsLeft = 0;
+        for (int g = 0; g < byGroup.size(); g++) {
+            cellsLeft += byGroup.get(g).left(taken[g]);
+        }
+        int pairsLeft = 0;
         while (!pairs.isEmpty() || !singles.isEmpty()) {
             if (rows.size() >= MAX_ROWS) {
-                int left = pairs.size() + singles.size();
-                reasons.add(new GenerationReason.SearchLimit(axes.get(0).id().behavior(), left));
-                // Both sets: the count above is of both, and reporting one of them would promise
-                // more than it names.
+                pairsLeft = pairs.size() + singles.size();
+                // Both sets: the count is of both, and reporting one of them would promise more
+                // than it names.
                 for (Set<Pair> remaining : List.of(pairs, singles)) {
                     for (Pair still : remaining) {
                         unresolved.add(new UnresolvedCombination(labels(axes, still),
@@ -303,6 +373,13 @@ public final class Generator {
                 unresolved.add(new UnresolvedCombination(labels(axes, seed), built.reason(),
                         built.detail(), built.said()));
             }
+        }
+        // Said once, at the end, and about both spaces. A search that ran out on the cells stopped
+        // whether or not the pairs had anything left to do, and two limits reported apart would be
+        // read as two searches.
+        if (cellsLeft + pairsLeft > 0) {
+            reasons.add(new GenerationReason.SearchLimit(axes.get(0).id().behavior(),
+                    cellsLeft + pairsLeft));
         }
         return new GenerationResult(rows, unresolved, reasons);
     }
@@ -566,14 +643,61 @@ public final class Generator {
         }
     }
 
+    /** Whether a row already written sits inside what {@code cell} leaves each position. */
+    private static boolean sits(List<int[]> written, InteractionCells.Cell cell) {
+        int positions = cell.allowed().length;
+        for (int[] row : written) {
+            boolean all = true;
+            for (int i = 0; i < positions && all; i++) {
+                all = !cell.narrows(i) || (i < row.length && cell.admits(i, row[i]));
+            }
+            if (all) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Every position fixed: the seed's two as the seed says, and each of the rest at whichever class
      * brings in the most combinations nothing covers yet. */
     private static int[] assign(List<Axis> axes, Set<Pair> uncovered, Pair seed) {
+        InteractionCells.Cell cell = InteractionCells.Cell.anything(axes);
+        pin(cell, seed.left(), seed.leftClass());
+        if (!seed.alone()) {
+            pin(cell, seed.right(), seed.rightClass());
+        }
+        return assign(axes, uncovered, cell);
+    }
+
+    /** Everything but {@code cls} taken away from the position, which is what fixing it is. */
+    private static void pin(InteractionCells.Cell cell, int axis, int cls) {
+        java.util.Arrays.fill(cell.allowed()[axis], false);
+        cell.allowed()[axis][cls] = true;
+    }
+
+    /**
+     * The same, from whatever {@code cell} leaves each position.
+     *
+     * <p>A position it leaves several classes is chosen among those the same way a position it says
+     * nothing about is chosen among all of them: what the cell does not settle is room the pairs are
+     * spent in, and there is no reason to spend less of it where the room is narrower.
+     */
+    private static int[] assign(List<Axis> axes, Set<Pair> uncovered, InteractionCells.Cell cell) {
         int[] where = new int[axes.size()];
         java.util.Arrays.fill(where, -1);
-        where[seed.left()] = seed.leftClass();
-        if (!seed.alone()) {
-            where[seed.right()] = seed.rightClass();
+        // The positions the cell leaves one class first, so the rest are chosen against them rather
+        // than against whatever the walk happened to reach earlier.
+        for (int i = 0; i < axes.size(); i++) {
+            int only = -1;
+            for (int c = 0; c < axes.get(i).classes().size(); c++) {
+                if (cell.admits(i, c)) {
+                    only = only < 0 ? c : -1;
+                    if (only < 0) {
+                        break;
+                    }
+                }
+            }
+            where[i] = only;
         }
         for (int i = 0; i < axes.size(); i++) {
             if (where[i] >= 0) {
@@ -585,6 +709,9 @@ public final class Generator {
             int best = -1;
             int bestGain = -1;
             for (int c = 0; c < axes.get(i).classes().size(); c++) {
+                if (!cell.admits(i, c)) {
+                    continue;
+                }
                 int gain = 0;
                 for (int j = 0; j < axes.size(); j++) {
                     if (j == i || where[j] < 0) {
@@ -616,6 +743,24 @@ public final class Generator {
         List<String> out = new ArrayList<>();
         for (int i = 0; i < axes.size(); i++) {
             if (where[i] >= 0) {
+                out.add(label(axes.get(i), where[i]));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The positions the cell is about, at the classes the row came to hold.
+     *
+     * <p>The cell says which classes a position may hold and the row holds one of them, so the name
+     * is read off the row: a name carrying the set would say what the cell allows rather than what
+     * this row is. Positions the cell says nothing about stay out — they are what the pass filling
+     * the rest of the row spent on the pairs, and this row is not for them.
+     */
+    private static List<String> labels(List<Axis> axes, InteractionCells.Cell cell, int[] where) {
+        List<String> out = new ArrayList<>();
+        for (int i = 0; i < axes.size(); i++) {
+            if (cell.narrows(i) && where[i] >= 0) {
                 out.add(label(axes.get(i), where[i]));
             }
         }
