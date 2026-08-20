@@ -75,7 +75,7 @@ public final class EnsuresThresholds {
      *                and the model says otherwise in its own declaration
      */
     public record Clauses(List<Threshold> thresholds, List<GuardThresholds.Guards.Singled> singled,
-                          List<Border> between, List<UnreadRule> unread,
+                          List<LineDrawn> between, List<UnreadRule> unread,
                           List<GuardThresholds.Guards.AtAPosition> accounting) {
 
         public static final Clauses NONE =
@@ -128,7 +128,7 @@ public final class EnsuresThresholds {
      *  after. Together because they are filled together and are one answer. */
     private record Drawn(String behavior, List<Threshold> thresholds,
                          List<GuardThresholds.Guards.Singled> singled,
-                         List<Border> between, List<UnreadRule> unread,
+                         List<LineDrawn> between, List<UnreadRule> unread,
                          List<GuardThresholds.Guards.AtAPosition> accounting) {}
 
     /**
@@ -209,16 +209,19 @@ public final class EnsuresThresholds {
             // Null where the quantity does not reach the line, which is the line and not one of its
             // points. What a clause raises is answered by what came of reading it and never by which
             // reading was tried: read off the branch, a rule that drew nothing reported a line.
-            Border made = Border.at(cutting.target(), origin, cutting.within());
-            if (made != null && out.between().stream().noneMatch(had -> had.equals(made))) {
-                out.between().add(made);
+            // Collected rather than turned into a border here, for the reason a body's lines are:
+            // what a border owes away from its line is a run of the arrangement every rule about
+            // that quantity makes together.
+            boolean made = Border.reaches(cutting.target(), cutting.within());
+            if (made) {
+                out.between().add(new LineDrawn(cutting, origin));
             }
             List<TermPath> named = GuardThresholds.mentionedIn(comparison, reads, symbols);
             raises(out, rule, clause, comparison, rule.value(),
                     named.isEmpty() ? null : named.get(0),
                     GuardThresholds.comparedTerm(comparison, reads, symbols),
                     GuardThresholds.subjectsOf(comparison, reads, symbols, rule.value()),
-                    made != null ? new Required.LineRead.ALineBetweenTwoPositions()
+                    made ? new Required.LineRead.ALineBetweenTwoPositions()
                             : new Required.LineRead.NoLine(
                                     GuardThresholds.why(comparison, reads, symbols)));
             return;
@@ -226,12 +229,27 @@ public final class EnsuresThresholds {
         raises(out, rule, clause, comparison, rule.value(), divided.path(), divided,
                 GuardThresholds.subjectsOf(comparison, reads, symbols, rule.value()),
                 new Required.LineRead.ALineOnThePosition());
-        souther.compiler.numeric.Place value = ((Level.OnACarrier) cutting.at()).at();
+        // And the line itself, where the position has no value beside it for a row to be owed at,
+        // for the reason a body's line is: the classes either side are what the model tells apart,
+        // and the border is drawn on the quantity the rule wrote, which can name where it falls.
+        if (cutting.dividedValue() == null
+                && Border.reaches(cutting.target(), cutting.within())) {
+            out.between().add(new LineDrawn(cutting, origin));
+        }
+        // The value the classes meet at, which the reading of the comparison already
+        // answered. Taken off the level the rule was written with, a rule that wrote a
+        // multiple of the position named a class at a number the position never holds.
+        souther.compiler.numeric.Place value = cutting.dividedValue();
         if (cutting.singles()) {
-            out.singled().add(new GuardThresholds.Guards.Singled(divided, value, origin));
+            // The value the rule names, for the reason a body's rule gets: where its line falls and
+            // not the value beside it.
+            souther.compiler.numeric.Place names = cutting.singledValue();
+            if (names != null) {
+                out.singled().add(new GuardThresholds.Guards.Singled(divided, names, origin));
+            }
         } else {
             out.thresholds().add(
-                    new Threshold(divided, value, cutting.valueBelongsBelow(), origin));
+                    new Threshold(divided, cutting.seam(), cutting.valueBelongsBelow(), origin));
         }
     }
 

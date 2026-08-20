@@ -84,7 +84,12 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
     /** The same of a criterion this border owes, for a caller that is holding one rather than a
      *  role. One spelling, so that what a search reports and what a report prints agree. */
     public String label(Criterion criterion) {
-        return cut.left() + " " + criterion.asked(cut.of());
+        // A run names the quantity itself, because that is how a range of it reads — `10 < n <= 20`
+        // and not `n in 10 < n <= 20`. The two shapes that name a level do not, so the quantity is
+        // written in front of them here.
+        return criterion instanceof Criterion.Within
+                ? criterion.written(cut.of())
+                : cut.left() + " " + criterion.asked(cut.of());
     }
 
     /**
@@ -105,12 +110,37 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
      *               leave it everything
      */
     public static Border at(BoundaryTarget target, OriginRef origin, NumericDomain.Bounds within) {
+        return at(target, origin, within, java.util.List.of());
+    }
+
+    /**
+     * The same, told where else the rules part this quantity's values.
+     *
+     * <p>Which is what the two points away from the line are read off. An {@code IN} point is inside
+     * the partition this border bounds; read as everything past the line, it runs to the end of the
+     * order, and a row past the next line along answers for it while the partition between them has
+     * nothing in it (issue #880). The two are the same only where the quantity has one line through
+     * it, which is why nothing noticed for as long as a border was built one rule at a time.
+     *
+     * @param parted every place the rules part this quantity's values, this border's own among them
+     *               or not
+     */
+    public static Border at(BoundaryTarget target, OriginRef origin, NumericDomain.Bounds within,
+                            java.util.List<Seam> parted) {
         NumericDomain.Bounds reach = within == null ? new NumericDomain.Bounds(null, null) : within;
         LevelSpace space = target.levels();
         Level cut = target.at();
         if (!reach.admits(placeOf(cut))) {
             return null;
         }
+        Seam mine = parts(target, origin);
+        java.util.List<Seam> all = new java.util.ArrayList<>(parted);
+        if (mine != null && all.stream().noneMatch(each -> each.key().equals(mine.key()))) {
+            all.add(mine);
+        }
+        QuantityArrangement arrangement = QuantityArrangement.of(space, all,
+                endOf(space, reach.min(), Towards.ABOVE, cut),
+                endOf(space, reach.max(), Towards.BELOW, cut));
         boolean holdsHere = holdsAtTheValue(origin);
         Map<PointRole, Demand> demands = new EnumMap<>(PointRole.class);
         if (!ordersAroundTheCut(origin)) {
@@ -120,7 +150,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
             demands.put(atTheCut, new Demand.Owed(new Criterion.AtTheLevel(cut)));
             demands.put(atTheCut == PointRole.ON ? PointRole.OFF : PointRole.ON,
                     new Demand.NotOwed(noSideOf(origin)));
-            sidesOfAOneSidedLine(demands, origin, cut, holdsHere, space, reach);
+            sidesOfAOneSidedLine(demands, origin, cut, holdsHere, space, reach, arrangement, mine);
             return new Border(target, origin, demands);
         }
         // Which way the rule is satisfied from the threshold, which is the one thing the two points
@@ -134,11 +164,141 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
         // Each side runs from the point against the line on that side, where there is one, and from
         // the line itself where there is not: the values one step away are not there to be left out,
         // and everything past the line is then as far from the border as anything gets.
-        demands.put(PointRole.IN,
-                sideOf(new Criterion.Beyond(levelOf(on, cut), satisfying), space, reach));
-        demands.put(PointRole.OUT,
-                sideOf(new Criterion.Beyond(levelOf(off, cut), satisfying.opposite()), space, reach));
+        // The partition this border bounds and the one it keeps out, each without the value against
+        // the line — which is that side's own ON or OFF point and is not this one. A side the rules
+        // leave nothing in is not a run of the arrangement at all, and that is the answer here too.
+        demands.put(PointRole.IN, runOf(satisfying == Towards.ABOVE
+                ? arrangement.above(mine) : arrangement.below(mine), against(on)));
+        demands.put(PointRole.OUT, runOf(satisfying == Towards.ABOVE
+                ? arrangement.below(mine) : arrangement.above(mine), against(off)));
         return new Border(target, origin, demands);
+    }
+
+    /**
+     * Whether the quantity reaches the line at all, which is the one thing about a border that does
+     * not depend on the lines beside it.
+     *
+     * <p>Asked before the lines of one quantity are collected, because a rule that draws nothing has
+     * to be reported as drawing nothing rather than joining the arrangement: three times a length is
+     * never negative, and a rule comparing one against a negative draws no line for anything to be
+     * beside.
+     */
+    public static boolean reaches(BoundaryTarget target, NumericDomain.Bounds within) {
+        return within == null || within.admits(placeOf(target.at()));
+    }
+
+    /**
+     * Every border the lines of one behavior draw, each told about the others on its own quantity.
+     *
+     * <p>One place, so that a quantity is arranged once however many rules cut it. Grouped by what
+     * the rule cuts and not by how it was written: a form and any positive multiple of it order the
+     * rows the same way, so they are one quantity and their lines are one arrangement.
+     */
+    public static java.util.List<Border> allOf(java.util.List<LineDrawn> drawn) {
+        return allOf(drawn, java.util.Map.of());
+    }
+
+    /**
+     * The same, told where else the rules of this behavior part the quantities these lines are on.
+     *
+     * <p>Because a quantity is arranged once and not once per producer. A line that divides a
+     * position leaves its border on the position and its division on the axis; a line that divides
+     * one and has no value there leaves its border here. Read apart, the second knew only its own
+     * line — a rule cutting at a third beside a rule cutting at a fifth asked for a row anywhere at
+     * all, twice — and the first knew both only because the axis happened to carry them.
+     *
+     * @param alsoParted where the rules part each quantity, in the quantity's own units, by
+     *                   {@link QuantityKey#key}
+     */
+    public static java.util.List<Border> allOf(java.util.List<LineDrawn> drawn,
+                                               java.util.Map<String,
+                                                       java.util.List<Seam>> alsoParted) {
+        // Collected in the quantity's own units, because that is the only order the lines of one
+        // quantity are all on. Two rules can write one quantity at two scales — `3a + 6b > 48` and
+        // `a + 2b > 20` run the same way — and the numbers they carry are not comparable until both
+        // are read as what they are a multiple of.
+        java.util.Map<String, java.util.List<Seam>> byQuantity = new java.util.LinkedHashMap<>();
+        alsoParted.forEach((key, parted) ->
+                byQuantity.computeIfAbsent(key, _ -> new java.util.ArrayList<>()).addAll(parted));
+        for (LineDrawn each : drawn) {
+            if (!ordersAroundTheCut(each.by())) {
+                continue;
+            }
+            Seam parts = each.cuts().seam();
+            java.util.List<Seam> already = byQuantity.computeIfAbsent(
+                    each.cuts().quantity().key(), _ -> new java.util.ArrayList<>());
+            if (already.stream().noneMatch(had -> had.key().equals(parts.key()))) {
+                already.add(parts);
+            }
+        }
+        java.util.List<Border> out = new java.util.ArrayList<>();
+        for (LineDrawn each : drawn) {
+            // And read back into the units this rule wrote, which is what its own quantity measures
+            // a row in. A border reads rows through the form it was written as, so a run handed to
+            // it in another scale would be held against numbers of a different size.
+            java.math.BigDecimal per = each.cuts().per();
+            java.util.List<Seam> beside =
+                    byQuantity.getOrDefault(each.cuts().quantity().key(), java.util.List.of())
+                            .stream().map(seam -> seam.scaledBy(per)).toList();
+            Border made = at(each.cuts().target(), each.by(), each.cuts().within(), beside);
+            if (made != null && out.stream().noneMatch(had -> had.equals(made))) {
+                out.add(made);
+            }
+        }
+        return java.util.List.copyOf(out);
+    }
+
+    /**
+     * Where the rule this reading met parts the quantity's values.
+     *
+     * <p>For a caller collecting every place one quantity is parted before any border is built. A
+     * border's two points away from the line are runs of the arrangement those places make, so a
+     * border built without them knows only its own line and reads each side to the end of the order.
+     */
+    public static Seam parts(BoundaryTarget target, OriginRef origin) {
+        // Null for a rule that orders nothing around its line. A bound is where the quantity stops
+        // and not a place its values part — nothing outside one can be constructed, so there is no
+        // run on the far side (ADR-0090) — and a rule that singles a value out puts every other
+        // value on one side of it, which is not a run of the order either.
+        if (!ordersAroundTheCut(origin)) {
+            return null;
+        }
+        return Seam.of(target.levels(), target.at(),
+                valueBelongsBelow(origin) ? Towards.BELOW : Towards.ABOVE);
+    }
+
+    /** A row anywhere in one run but at the value against the line, or the reason the rules leave
+     *  no run there. */
+    private static Demand runOf(Band run, Level except) {
+        // And a run whose one value is the value against the line has nothing away from it. The
+        // rules leave the side one value wide, that value is the border's own point, and asking for
+        // a second row there is asking for a row nobody can write.
+        return run == null || !run.holdsAnythingBut(except)
+                ? new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT)
+                : new Demand.Owed(new Criterion.Within(run, except));
+    }
+
+    /** The level a point against the line stands at, or null where no row is owed there. */
+    private static Level against(Demand point) {
+        return point.criterion() instanceof Criterion.AtTheLevel at ? at.at() : null;
+    }
+
+    /**
+     * The first or last value the rules leave the quantity, from the end they wrote.
+     *
+     * <p>A value the quantity takes rather than the number a bound carries: a bound the quantity
+     * does not stand at leaves the first value it does, and a bound it stands at but does not keep
+     * leaves the one beside it.
+     */
+    private static Level endOf(LevelSpace space, Endpoint end, Towards inward, Level like) {
+        if (end == null) {
+            return null;
+        }
+        Level at = like instanceof Level.OnACarrier on
+                ? new Level.OnACarrier(on.of(), end.at())
+                : new Level.ACount(souther.compiler.numeric.Count.number(end.at()));
+        return (end.inclusive() ? space.nearestAtOrBeyond(at, inward)
+                : beyond(space, at, inward)).orElse(null);
     }
 
     /**
@@ -193,7 +353,8 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
      */
     private static void sidesOfAOneSidedLine(Map<PointRole, Demand> demands, OriginRef origin,
                                              Level cut, boolean holdsHere, LevelSpace space,
-                                             NumericDomain.Bounds within) {
+                                             NumericDomain.Bounds within,
+                                             QuantityArrangement arrangement, Seam mine) {
         Criterion rest = new Criterion.AnythingBut(cut);
         switch (noSideOf(origin)) {
             case THE_RULES_REFUSE_IT -> {
@@ -205,7 +366,13 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
                             "a bound whose own value the position admits and the bound does not: "
                                     + origin.named());
                 }
-                demands.put(PointRole.IN, sideOf(rest, space, within));
+                // The partition the bound bounds, without the edge itself. Everything else was what
+                // this asked for before, which is every value the rules leave — including the ones
+                // past the next line along, in a partition this border does not bound.
+                // The run the bound's own value is in, which is the one it bounds. Asked of the
+                // value rather than worked out from which end of the rules the bound is: a bound
+                // orders nothing around itself, so there is no side to read off it.
+                demands.put(PointRole.IN, runOf(arrangement.holding(space, cut), cut));
                 demands.put(PointRole.OUT, new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT));
             }
             case THE_RULE_NAMES_A_VALUE_NOT_A_SIDE -> {
@@ -248,17 +415,9 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
     private static boolean provablyHoldsNothing(Criterion side, LevelSpace space,
                                                 NumericDomain.Bounds within) {
         return switch (side) {
-            case Criterion.Beyond beyond -> {
-                if (!space.anythingBeyond(beyond.from(), beyond.towards())) {
-                    yield true;
-                }
-                Endpoint past = Endpoint.exclusive(placeOf(beyond.from()));
-                Endpoint low = beyond.towards() == Towards.ABOVE
-                        ? Endpoint.lower(past, within.min()) : within.min();
-                Endpoint high = beyond.towards() == Towards.BELOW
-                        ? Endpoint.upper(past, within.max()) : within.max();
-                yield !Endpoint.someValueLiesBetween(low, high);
-            }
+            // A run the rules leave nothing in is not a run of the arrangement, so nothing that
+            // reaches here is one.
+            case Criterion.Within _ -> false;
             // Both ends known, at the one place, and holding it: the rules leave that level and
             // nothing else, so there is nothing else for a row to be written at.
             case Criterion.AnythingBut other -> within.min() != null && within.max() != null

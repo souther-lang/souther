@@ -82,7 +82,8 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
         assertNotNull(guard, borders.keySet().toString());
         assertEquals("101", guard.against(PointRole.OFF),
                 "a guard leaves values either side, so the step over is a row somebody is owed");
-        assertEquals("> 101", guard.operator(PointRole.OUT) + " " + guard.against(PointRole.OUT));
+        assertEquals("in 101 < h.a",
+                guard.operator(PointRole.OUT) + " " + guard.against(PointRole.OUT));
     }
 
     /**
@@ -129,6 +130,44 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
     }
 
     /**
+     * A row on the line is not a row at a point past it, whatever the search had to start from.
+     *
+     * <p>An order with no numbers has one level — where the two are equal — and every value past it
+     * is a run with no first value. So a search for a row in that run has nowhere to start but the
+     * line, and the line is the one place in reach the run does not hold. Read as a level the item
+     * accepts, a pair standing equal came back for a point that lies strictly past them, and the
+     * report went on saying no row was at it.
+     */
+    @Test
+    void aRowOnTheLineIsNotOfferedForAPointPastIt() {
+        String rows = souther.compiler.report.GeneratedRows.of(
+                compiled("""
+                        module example.strings
+
+                        data No = { why: Int }
+                        data Yes = { v: Int }
+                        data Result = No | Yes
+
+                        behavior cmp : (a: String, b: String) -> Result
+                            constructs Yes, No
+
+                        let cmp (a, b) = {
+                            guard a > b else No { why = 0 }
+                            Yes { v = 1 }
+                        }
+
+                        example cmp
+                            | "same" : ("b", "b") -> No { why = 0 }
+                        """),
+                "example.strings", "cmp", true, souther.compiler.diag.SourceNameResolver.identity());
+
+        assertFalse(rows.contains("cmp(\"\", \"\")"),
+                "a pair standing equal is the line itself and is at neither side of it:\n" + rows);
+        assertTrue(rows.contains("no row for `b < a`"),
+                "and what there is to say is that nothing could build one:\n" + rows);
+    }
+
+    /**
      * A side the rules leave one value wide has no point away from the border.
      *
      * <p>The same reason as a bound's far side, one arity up: every value an {@code IN} point could
@@ -141,7 +180,7 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
                         NotOwedReason.THE_RULES_REFUSE_IT),
                 bordersOf(model("Int", ">= 0", "<= 0", "0")).get("h.a = 0").at(PointRole.IN),
                 "nothing is inside `0 <= x <= 0` and away from its border");
-        assertEquals("< 3",
+        assertEquals("in 0 <= h.a < 3",
                 inside(bordersOf(model("Int", ">= 0", "<= 3", "1")).get("h.a = 3")),
                 "and three values further out the side holds values");
     }
@@ -161,10 +200,12 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
      */
     @Test
     void aLineBetweenTwoPositionsOwesFourPointsThatNoOnePairSatisfiesTwice() {
-        assertEquals(List.of("ON: = p.b - 1", "OFF: = p.b", "IN: < p.b - 1", "OUT: > p.b"),
+        assertEquals(List.of("ON: = p.b - 1", "OFF: = p.b", "IN: in p.a < p.b - 1",
+                        "OUT: in p.b < p.a"),
                 pointsOf(comparing("<")),
                 "an open border is at its own OFF point, with the ON point one step inside it");
-        assertEquals(List.of("ON: = p.b", "OFF: = p.b + 1", "IN: < p.b", "OUT: > p.b + 1"),
+        assertEquals(List.of("ON: = p.b", "OFF: = p.b + 1", "IN: in p.a < p.b",
+                        "OUT: in p.b + 1 < p.a"),
                 pointsOf(comparing("<=")),
                 "a closed border is at its own ON point, with the OFF point one step outside it");
     }
@@ -231,7 +272,7 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
         assertEquals(new souther.compiler.query.ItemAssessment.NotOwed(
                         NotOwedReason.THE_CARRIER_NAMES_NO_NEIGHBOUR), line.at(PointRole.ON),
                 "a decimal names no pair one step inside the line");
-        assertEquals(java.util.Set.of("p.a < p.b", "p.a > p.b"), offeredFor(model).keySet(),
+        assertEquals(java.util.Set.of("p.a < p.b", "p.b < p.a"), offeredFor(model).keySet(),
                 "and both sides of it are pairs this composes, being sets rather than nearest"
                         + " anything");
     }

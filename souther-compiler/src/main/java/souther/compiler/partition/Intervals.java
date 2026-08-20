@@ -8,11 +8,10 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -34,7 +33,11 @@ import java.util.Set;
 final class Intervals {
 
     /** One range of a position's counts. A null bound is the domain's own edge. */
-    record Interval(Place lo, boolean loInclusive, Place hi, boolean hiInclusive) {
+    record Interval(Place lo, boolean loInclusive, Place hi, boolean hiInclusive, Band of) {
+
+        Interval(Place lo, boolean loInclusive, Place hi, boolean hiInclusive) {
+            this(lo, loInclusive, hi, hiInclusive, null);
+        }
 
         boolean holds(Place v) {
             if (lo != null) {
@@ -59,20 +62,63 @@ final class Intervals {
             return c < 0 || (c == 0 && loInclusive && hiInclusive);
         }
 
+        /**
+         * The class this range is, as a report names it.
+         *
+         * <p>Both ends written, each in whatever names it exactly. A line the position has a value
+         * at is written as that value; one it has none at is written as the rule that drew it, in
+         * numbers this language has — {@code 3 * x <= 1} rather than a third rounded to something
+         * it is not. A run with one end of each kind says both and joins them, because an end left
+         * out is a class that reads as holding the values past the next line along.
+         */
         String label(Carrier carrier) {
-            String low = lo == null ? ""
-                    : (loInclusive ? carrier.written(lo) + " <= " : carrier.written(lo) + " < ");
-            String high = hi == null ? ""
-                    : (hiInclusive ? " <= " + carrier.written(hi) : " < " + carrier.written(hi));
-            if (lo == null && hi == null) {
+            String low = lo == null ? ruleEnd(of == null ? null : of.under(), Towards.ABOVE)
+                    : carrier.written(lo) + (loInclusive ? " <= x" : " < x");
+            String high = hi == null ? ruleEnd(of == null ? null : of.over(), Towards.BELOW)
+                    : (hiInclusive ? "x <= " : "x < ") + carrier.written(hi);
+            if (low == null && high == null) {
                 return "any";
             }
-            return (low + "x" + high).trim();
+            if (low == null) {
+                return high;
+            }
+            if (high == null) {
+                return low;
+            }
+            // One subject and two relations where both ends can name the same one, which is what
+            // an author reads a range as. Two subjects are two conditions and are said as two.
+            String subject = subjectOf(carrier);
+            return subject == null ? low + " and " + high
+                    : low.substring(0, low.length() - subject.length())
+                            + subject + high.substring(subject.length());
+        }
+
+        /** What both ends of this run relate a row to, where they relate it to the same thing.
+         *  Null where one end names the position and the other a multiple of it. */
+        private String subjectOf(Carrier carrier) {
+            if (lo != null && hi != null) {
+                return "x";
+            }
+            if (lo != null || hi != null || of == null) {
+                return null;
+            }
+            java.math.BigDecimal shared = of.sharedMultiple();
+            return shared == null ? null : times(shared);
+        }
+
+        /** One end as the rule that drew it, or null where nothing parts the run there. */
+        private static String ruleEnd(Seam parted, Towards side) {
+            return parted == null ? null : parted.asARuleAbout(Interval::times, side);
+        }
+
+        private static String times(java.math.BigDecimal by) {
+            return by.compareTo(java.math.BigDecimal.ONE) == 0 ? "x" : plain(by) + " * x";
+        }
+
+        private static String plain(java.math.BigDecimal number) {
+            return number.stripTrailingZeros().toPlainString();
         }
     }
-
-    /** A place a rule cuts the position, and which side the count itself falls on. */
-    private record Split(Place value, boolean valueBelongsBelow) {}
 
     /**
      * The ranges {@code thresholds} leave, inside what the position holds.
@@ -83,38 +129,50 @@ final class Intervals {
      * dropped — they cut a range no row can reach — and the end itself is outside it as much as
      * anything past it is.
      */
-    static List<Interval> of(List<Threshold> thresholds, Endpoint min, Endpoint max) {
-        // Keyed by the number and not by the count's own equality: `0.00` and `0` are one line, and
-        // BigDecimal's equality says they are two, which would leave two ranges holding zero.
-        Map<String, Split> distinct = new LinkedHashMap<>();
+    static List<Band> of(List<Threshold> thresholds, Endpoint min, Endpoint max,
+                         Carrier carrier) {
+        // Keyed by where the values part, and not by the number a rule was written with. `x <= 4`
+        // and `x < 5` divide the whole numbers once; keyed by their thresholds they are two splits,
+        // and the range between them holds no value any row could be written at — a class a report
+        // counts, tells an author no row is in, and asks the generator for (issue #880).
+        //
+        // Which subsumes the reason this was keyed by the number rather than by the count's own
+        // equality: `0.00` and `0` are one number and part the values in one place.
+        LevelSpace space = LevelSpace.onACarrier(carrier);
+        List<Seam> parted = new ArrayList<>();
         for (Threshold each : thresholds) {
-            if (!Endpoint.someValueLiesBetween(min, Endpoint.inclusive(each.value()))
-                    || !Endpoint.someValueLiesBetween(Endpoint.inclusive(each.value()), max)) {
-                continue;
-            }
-            distinct.putIfAbsent(each.value().key(),
-                    new Split(each.value(), each.valueBelongsBelow()));
+            // The division the rule made, taken as it was read rather than rebuilt from a number.
+            // A rule that wrote a multiple of the position parts its values where the position may
+            // hold none, and rebuilding the seam from a value of the position lost exactly those.
+            parted.add(each.parts());
         }
-        List<Split> splits = new ArrayList<>(distinct.values());
-        splits.sort(Comparator.comparing(Split::value));
-
-        List<Interval> out = new ArrayList<>();
-        Place lo = min == null ? null : min.at();
-        boolean loInclusive = min == null || min.inclusive();
-        for (Split split : splits) {
-            Interval range = new Interval(lo, loInclusive, split.value(), split.valueBelongsBelow());
-            if (range.inhabited()) {
-                out.add(range);
+        // The one arrangement, which the points of every border on this position are read off as
+        // well. Where the values part, in what order and with what left between them are questions
+        // about the position, and deriving them twice is two chances to answer them differently —
+        // which is how a border came to ask for a row inside a partition the classes had already
+        // divided further along.
+        List<Band> out = new ArrayList<>();
+        for (Band run : QuantityArrangement.of(space, parted).bands()) {
+            if (rangeOf(run, min, max).inhabited()) {
+                out.add(run);
             }
-            lo = split.value();
-            loInclusive = !split.valueBelongsBelow();
-        }
-        Interval last = new Interval(lo, loInclusive, max == null ? null : max.at(),
-                max == null || max.inclusive());
-        if (last.inhabited()) {
-            out.add(last);
         }
         return out.size() < 2 ? List.of() : List.copyOf(out);
+    }
+
+    /**
+     * One run of the arrangement as a range of the position's counts.
+     *
+     * <p>The ends the rules leave rather than the ones the seams do: a run with nothing parting it
+     * at one end stops where the position stops, and how far a bound reaches includes whether it
+     * keeps its own value. A run parted at an end stops at the line, on the side the rule that drew
+     * it keeps.
+     */
+    private static Interval rangeOf(Band run, Endpoint min, Endpoint max) {
+        Endpoint low = run.lineBelow(min);
+        Endpoint high = run.lineAbove(max);
+        return new Interval(low == null ? null : low.at(), low == null || low.inclusive(),
+                high == null ? null : high.at(), high == null || high.inclusive(), run);
     }
 
     /**
@@ -125,18 +183,23 @@ final class Intervals {
      * not the second: five is not what is written at the position, a string of five characters is,
      * and which values carry a count is asked of what builds them rather than settled here.
      */
-    static List<PartitionClass> classesOf(List<Interval> intervals, NumericTerm of, Type type,
-                                          Symbols symbols) {
+    static List<PartitionClass> classesOf(List<Band> runs, NumericTerm of, Type type,
+                                          Symbols symbols, Endpoint min, Endpoint max) {
         // What the counts in a label stand for. A day count is a carrier and never a name for the
         // line, so the class an author reads is spelled in dates where the position holds them.
         Carrier carrier = of.carrierAt(type, symbols);
+        LevelSpace space = LevelSpace.onACarrier(carrier);
         List<PartitionClass> classes = new ArrayList<>();
-        for (Interval range : intervals) {
-            String label = range.label(carrier);
+        for (Band run : runs) {
+            String label = rangeOf(run, min, max).label(carrier);
             String id = of + "/" + label;
-            Place inside = representative(range, carrier);
+            Place inside = representative(run, carrier, min, max);
+            // The run's own answer about what is in it. Read off a range of the position's counts,
+            // a class whose line falls at a place the position has no value for had no end to state
+            // — so it held every value, and two such classes each held everything the other did.
             Classifier is = v -> switch (of.read(v, carrier)) {
-                case NumericTerm.Reading.Number number -> Membership.of(range.holds(number.value()));
+                case NumericTerm.Reading.Number number -> Membership.of(
+                        run.holds(space, new Level.OnACarrier(carrier, number.value())));
                 case NumericTerm.Reading.Missing missing ->
                         new Membership.Incomplete(missing.code());
                 case NumericTerm.Reading.NotNumber _ -> Membership.NO_MATCH;
@@ -170,19 +233,8 @@ final class Intervals {
      * came back as one holding no value, which is what a whole step would leave and not what the
      * values do.
      */
-    private static Place representative(Interval range, Carrier carrier) {
-        Place between = carrier.somethingInside(
-                range.lo() == null ? null : new Endpoint(range.lo(), range.loInclusive()),
-                range.hi() == null ? null : new Endpoint(range.hi(), range.hiInclusive()));
-        if (between == null) {
-            return null;
-        }
-        // What the carrier can hold, and then whether the range still holds it. Spacing answers what
-        // a strict bound may be sharpened onto and is not a promise that every number between two
-        // counts is one — asking it for both is how a class open at both ends came to offer the
-        // count at one of its ends.
-        Place held = carrier.onTheGrid(between);
-        return held != null && range.holds(held) ? held : null;
+    private static Place representative(Band run, Carrier carrier, Endpoint min, Endpoint max) {
+        return new Criterion.Within(run, null).somewhereInside(carrier, min, max);
     }
 
     /**

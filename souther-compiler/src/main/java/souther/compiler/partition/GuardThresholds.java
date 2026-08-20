@@ -72,7 +72,7 @@ public final class GuardThresholds {
      */
     public record Guards(List<Threshold> thresholds,
                          List<UnreadRule> unread, List<Singled> singled,
-                         List<Border> between,
+                         List<LineDrawn> between,
                          List<AtAPosition> accounting) {
 
         public static final Guards NONE =
@@ -102,7 +102,22 @@ public final class GuardThresholds {
          * value, and reading it as a place to cut would put a distinction between the two sides into
          * a partition the model never drew.
          */
-        public record Singled(NumericTerm term, Place value, OriginRef origin) {}
+        /**
+         * A value a rule names, and the position it names it at.
+         *
+         * <p>A value and never an absence. What such a rule does is put one value in a class of its
+         * own, so a rule that names none of the position's values singles nothing out and is not one
+         * of these — asked for the value beside the line instead, a rule that names no whole number
+         * would have put the number beside it in a class it does not satisfy.
+         */
+        public record Singled(NumericTerm term, Place value, OriginRef origin) {
+            public Singled {
+                if (value == null) {
+                    throw new IllegalArgumentException(
+                            "a rule that singles nothing out is not a value singled out: " + term);
+                }
+            }
+        }
 
         public Guards {
             thresholds = List.copyOf(thresholds);
@@ -122,7 +137,7 @@ public final class GuardThresholds {
         List<UnreadRule> unread = new ArrayList<>();
         List<Guards.AtAPosition> accounting = new ArrayList<>();
         List<Guards.Singled> singled = new ArrayList<>();
-        List<Border> between = new ArrayList<>();
+        List<LineDrawn> between = new ArrayList<>();
         walk(behavior, body, plan, InputReads.of(inputs), symbols, found, unread,
                 singled, between, accounting);
         return new Guards(found, unread, singled, between, accounting);
@@ -131,7 +146,7 @@ public final class GuardThresholds {
     private static void walk(String behavior, Core e, CoverageSites.Plan plan,
                              InputReads reads, Symbols symbols, List<Threshold> out,
                              List<UnreadRule> unread,
-                             List<Guards.Singled> singled, List<Border> between,
+                             List<Guards.Singled> singled, List<LineDrawn> between,
                              List<Guards.AtAPosition> accounting) {
         if (e instanceof Core.If iff) {
             List<Core> read =
@@ -355,7 +370,7 @@ public final class GuardThresholds {
     private static List<Core> read(String behavior, Core.If iff, CoverageSites.Plan plan,
                                    InputReads reads, Symbols symbols,
                                    List<Threshold> out,
-                                   List<Guards.Singled> singled, List<Border> between,
+                                   List<Guards.Singled> singled, List<LineDrawn> between,
                                    List<Guards.AtAPosition> accounting) {
         // The comparisons a line came of, and not the positions they were about. A position carries
         // more than one statement and reading one of them settles nothing about the others.
@@ -395,15 +410,17 @@ public final class GuardThresholds {
                 // Null where the quantity does not reach the line, which is the line and not one of
                 // its points: three times a length is never negative, and a rule comparing one
                 // against a negative draws nothing.
-                Border drawn = Border.at(cutting.target(), origin, cutting.within());
-                if (drawn == null) {
+                // Collected rather than turned into a border here. What a border owes away from
+                // its line is a run of the arrangement every rule about that quantity makes
+                // together, and a border built where its comparison was read knows only its own
+                // line — so a second rule over one form left the first one's run going to the end
+                // of the order, past it.
+                if (!Border.reaches(cutting.target(), cutting.within())) {
                     raisesNoLine(accounting, behavior, iff, each.comparison(), reads,
                             symbols);
                     continue;
                 }
-                if (between.stream().noneMatch(had -> had.equals(drawn))) {
-                    between.add(drawn);
-                }
+                between.add(new LineDrawn(cutting, origin));
                 List<TermPath> named = new ArrayList<>();
                 mentioned(each.comparison().left(), reads, symbols, named);
                 mentioned(each.comparison().right(), reads, symbols, named);
@@ -419,11 +436,28 @@ public final class GuardThresholds {
                 continue;
             }
             made.add(each.comparison());
-            Place value = ((Level.OnACarrier) cutting.at()).at();
+            // The value a row is owed against this line, which the reading of the comparison
+            // already answered. Taken off the level the rule was written with, a rule that wrote a
+            // multiple of the position named a class at a number the position never holds.
+            Place value = cutting.dividedValue();
             if (cutting.singles()) {
-                singled.add(new Guards.Singled(divided, value, origin));
+                // The value the rule names, which is where its line falls and not the value beside
+                // it. A rule that names no value of the position singles nothing out here — the
+                // position is divided all the same, and what divides it is the line.
+                Place names = cutting.singledValue();
+                if (names != null) {
+                    singled.add(new Guards.Singled(divided, names, origin));
+                }
             } else {
-                out.add(new Threshold(divided, value, cutting.valueBelongsBelow(), origin));
+                out.add(new Threshold(divided, cutting.seam(), cutting.valueBelongsBelow(), origin));
+            }
+            // And the line itself, where the position has no value beside it for a row to be owed
+            // at. It divides the position — the classes either side are what the model tells apart
+            // — and the border is drawn on the quantity the rule wrote, which can name where the
+            // line falls. Left out, a rule that cuts at a third had its classes counted and nothing
+            // said about its line at all.
+            if (value == null && Border.reaches(cutting.target(), cutting.within())) {
+                between.add(new LineDrawn(cutting, origin));
             }
             raises(accounting, behavior, iff, each.comparison(), divided.path(), divided,
                     subjectsOf(each.comparison(), reads, symbols, null),

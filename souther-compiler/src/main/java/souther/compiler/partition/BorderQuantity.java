@@ -202,8 +202,11 @@ public sealed interface BorderQuantity {
         private static boolean holdsByOrder(Criterion where, int order) {
             return switch (where) {
                 case Criterion.AtTheLevel _ -> order == 0;
-                case Criterion.Beyond beyond ->
-                        beyond.towards() == Towards.ABOVE ? order > 0 : order < 0;
+                // The only level such a quantity takes is the one where they meet, so which run a
+                // pair is in is which way round they stand from it — said as that count, since the
+                // sign is the whole of what the order has.
+                case Criterion.Within within -> within.holds(LevelSpace.onlyWhereTheyMeet(),
+                        new Level.ACount(souther.compiler.numeric.Count.of(order)));
                 case Criterion.AnythingBut _ -> order != 0;
             };
         }
@@ -395,6 +398,25 @@ public sealed interface BorderQuantity {
 
     /** The same, as the bare term a generated row is labelled with. */
     String left();
+
+    /**
+     * How this quantity writes {@code times} of itself.
+     *
+     * <p>Asked of the quantity because only it knows what it is made of: twice a position is
+     * {@code 2 * n}, and twice {@code 3 * a + 6 * b} is {@code 6 * a + 12 * b} rather than
+     * {@code 2 * 3 * a + 6 * b} or anything else a reader outside this file would compose. Written
+     * by prefixing, a run over a form came back asking for a row against {@code 2 * 3 * n <= 5},
+     * which is the same rule the class beside it writes as {@code 6 * n <= 5}.
+     */
+    default String left(java.math.BigDecimal times) {
+        if (times.compareTo(java.math.BigDecimal.ONE) == 0) {
+            return left();
+        }
+        if (this instanceof OverAForm form) {
+            return new OverAForm(form.behavior(), form.form().times(times), form.of()).left();
+        }
+        return times.stripTrailingZeros().toPlainString() + " * " + left();
+    }
 
     /** One level of this quantity, as a report writes it. */
     String writtenAt(Level level);

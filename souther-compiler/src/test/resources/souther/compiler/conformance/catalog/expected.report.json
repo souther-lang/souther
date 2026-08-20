@@ -76,8 +76,8 @@
             "notOwed" : "the_rules_refuse_it"
           }, {
             "point" : "in",
-            "relation" : "/=",
-            "against" : "1",
+            "relation" : "in",
+            "against" : "1 < String.length(item.sku)",
             "hit" : true,
             "knownWritable" : true,
             "status" : "complete"
@@ -102,8 +102,8 @@
             "notOwed" : "the_rules_refuse_it"
           }, {
             "point" : "in",
-            "relation" : "/=",
-            "against" : "0",
+            "relation" : "in",
+            "against" : "0 < item.price",
             "hit" : true,
             "knownWritable" : true,
             "status" : "complete"
@@ -128,8 +128,8 @@
             "notOwed" : "the_rules_refuse_it"
           }, {
             "point" : "in",
-            "relation" : "/=",
-            "against" : "1",
+            "relation" : "in",
+            "against" : "1 < item.weight",
             "hit" : true,
             "knownWritable" : true,
             "status" : "complete"
@@ -225,8 +225,8 @@
             "notOwed" : "the_rules_refuse_it"
           }, {
             "point" : "in",
-            "relation" : "/=",
-            "against" : "1",
+            "relation" : "in",
+            "against" : "1 < String.length(指示.番号)",
             "hit" : true,
             "knownWritable" : true,
             "status" : "complete"
@@ -251,8 +251,8 @@
             "notOwed" : "the_rules_refuse_it"
           }, {
             "point" : "in",
-            "relation" : "/=",
-            "against" : "1",
+            "relation" : "in",
+            "against" : "1 < 指示.重量",
             "hit" : true,
             "knownWritable" : true,
             "status" : "complete"
@@ -380,8 +380,8 @@
             "notOwed" : "the_rules_refuse_it"
           }, {
             "point" : "in",
-            "relation" : "/=",
-            "against" : "1",
+            "relation" : "in",
+            "against" : "1 < String.length(指示.番号)",
             "hit" : true,
             "knownWritable" : true,
             "status" : "complete"
@@ -406,8 +406,8 @@
             "notOwed" : "the_rules_refuse_it"
           }, {
             "point" : "in",
-            "relation" : "/=",
-            "against" : "1",
+            "relation" : "in",
+            "against" : "1 < 指示.重量 <= 30000",
             "hit" : true,
             "knownWritable" : true,
             "status" : "complete"
@@ -436,15 +436,15 @@
             "status" : "complete"
           }, {
             "point" : "in",
-            "relation" : "<",
-            "against" : "30000",
+            "relation" : "in",
+            "against" : "1 <= 指示.重量 < 30000",
             "hit" : true,
             "knownWritable" : true,
             "status" : "complete"
           }, {
             "point" : "out",
-            "relation" : ">",
-            "against" : "30001",
+            "relation" : "in",
+            "against" : "30001 < 指示.重量",
             "hit" : false,
             "knownWritable" : true,
             "status" : "complete"
@@ -508,7 +508,7 @@
       "findings" : [ {
         "kind" : "domain_point_uncovered",
         "disposition" : "reported",
-        "subject" : "出荷する/指示.重量 > 30001"
+        "subject" : "出荷する/指示.重量 in 30001 < 指示.重量"
       }, {
         "kind" : "partition_not_derivable",
         "disposition" : "reported",

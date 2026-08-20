@@ -71,7 +71,7 @@ public final class LevelRealizer {
      */
     private Realization ofTwo(Standing.OfTwoOnOneCarrier two) {
         Place common = commonPlace(bounds(two.on()), bounds(two.against()), two.of(),
-                two.where().against().asACount());
+                two.where().anchor().asACount());
         if (common == null) {
             return new Realization.Unknown(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE);
         }
@@ -79,12 +79,13 @@ public final class LevelRealizer {
         // it, and then whatever the item asks of that place. Arithmetic on the carrier's counts and
         // not a walk along it — a walk is an addition that only exists where the order has a
         // smallest step, so a rule over two decimals had no pair anything could compose.
-        Place from = movedBy(common, two.where().against(), two.of());
-        if (from == null) {
-            return new Realization.Unknown(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE);
-        }
-        Place at = placeMeeting(relativeTo(two.where(), from, two.of()), two.of(), bounds(two.on()));
-        if (at == null || !meets(two.where(), at.compareTo(from))) {
+        // Null where the carrier's arithmetic could not put the item's levels beside the place the
+        // other position stands at. Reported as a search that composed nothing, which is what it is
+        // — read on, an item with no level in it was handed to a reader that asks where its level
+        // falls.
+        Criterion here = relativeTo(two.where(), common, two.of());
+        Place at = here == null ? null : placeMeeting(here, two.of(), bounds(two.on()));
+        if (at == null) {
             return new Realization.Unknown(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE);
         }
         Map<NumericTerm, Place> fixing = new LinkedHashMap<>();
@@ -167,16 +168,58 @@ public final class LevelRealizer {
      * out. Which is why a side that came back empty settles nothing while a point may.
      */
     private static List<Level> levelsToTry(LevelSpace levels, Criterion where) {
-        Level from = where.against();
+        Level from = where.anchor();
         return switch (where) {
             case Criterion.AtTheLevel _ -> List.of(from);
-            case Criterion.Beyond beyond -> outward(levels, from, beyond.towards());
+            // Inward from whichever end the run has, so the first level offered is one in the run
+            // rather than one past the next line along.
+            case Criterion.Within within -> inside(levels, within);
             case Criterion.AnythingBut _ -> {
                 List<Level> either = new java.util.ArrayList<>(outward(levels, from, Towards.ABOVE));
                 either.addAll(outward(levels, from, Towards.BELOW));
                 yield either;
             }
         };
+    }
+
+    /**
+     * The levels of a run a row could stand at, from the line inward.
+     *
+     * <p>A run is met anywhere in it, and the value against the line is the one level of it that
+     * will not do — so the search starts there and walks away from the line, which is the direction
+     * the point is named for. Walked from the run's far end instead, a row well inside a wide run
+     * was offered where one just inside it says the same thing and is the row an author would have
+     * written.
+     */
+    private static List<Level> inside(LevelSpace levels, Criterion.Within within) {
+        Level from = within.anchor();
+        if (from == null) {
+            return List.of();
+        }
+        List<Level> out = new java.util.ArrayList<>();
+        if (within.holds(levels, from)) {
+            out.add(from);
+        }
+        for (Level at : outward(levels, from, away(within))) {
+            if (within.holds(levels, at)) {
+                out.add(at);
+            }
+        }
+        return out;
+    }
+
+    /** Which way from the line this run lies, which is which end of it the line is at. */
+    private static Towards away(Criterion.Within within) {
+        Band band = within.band();
+        Level except = within.except();
+        if (except != null && band.first() != null
+                && except.key().equals(band.first().key())) {
+            return Towards.ABOVE;
+        }
+        if (except != null && band.last() != null && except.key().equals(band.last().key())) {
+            return Towards.BELOW;
+        }
+        return band.under() != null ? Towards.ABOVE : Towards.BELOW;
     }
 
     private static List<Level> outward(LevelSpace levels, Level from, Towards towards) {
@@ -477,22 +520,36 @@ public final class LevelRealizer {
      * known. Once it is, an item about the pair is an item about one place — which is why the two
      * are searched for by one procedure rather than by two that agreed by being written alike.
      */
-    private static Criterion relativeTo(Criterion where, Place from, Carrier of) {
-        Level here = new Level.OnACarrier(of, from);
+    private static Criterion relativeTo(Criterion where, Place common, Carrier of) {
+        // Every level of the item read as the place it lands on once the other end of the line is
+        // known. Mapped one level at a time and not by handing one place to all of them: a run has
+        // two ends and a line between them, and a mapping that gave them all the same place left a
+        // run that said nothing about which side of the line it lay — so a search took whatever the
+        // declared domain offered first and a row on the line came back for a point past it.
+        // Null where the carrier's arithmetic puts a level nowhere. Which end that happens at
+        // decides what it means: a line with no place is an item this order cannot be read as at
+        // all, and a run's far end with no place is a run that reaches as far as the carrier does.
+        java.util.function.UnaryOperator<Level> onto = level -> {
+            Place at = movedBy(common, level, of);
+            return at == null ? null : new Level.OnACarrier(of, at);
+        };
         return switch (where) {
-            case Criterion.AtTheLevel _ -> new Criterion.AtTheLevel(here);
-            case Criterion.Beyond beyond -> new Criterion.Beyond(here, beyond.towards());
-            case Criterion.AnythingBut _ -> new Criterion.AnythingBut(here);
+            case Criterion.AtTheLevel at -> only(new Criterion.AtTheLevel(onto.apply(at.at())),
+                    onto.apply(at.at()));
+            case Criterion.Within within -> {
+                Band run = within.band().mappedBy(onto);
+                yield run == null ? null : new Criterion.Within(run,
+                        within.except() == null ? null : onto.apply(within.except()));
+            }
+            case Criterion.AnythingBut other ->
+                    only(new Criterion.AnythingBut(onto.apply(other.excluded())),
+                            onto.apply(other.excluded()));
         };
     }
 
-    /** Whether a place standing {@code order} from where the item is against meets it. */
-    private static boolean meets(Criterion where, int order) {
-        return switch (where) {
-            case Criterion.AtTheLevel _ -> order == 0;
-            case Criterion.Beyond beyond -> beyond.towards() == Towards.ABOVE ? order > 0 : order < 0;
-            case Criterion.AnythingBut _ -> order != 0;
-        };
+    /** An item, unless the level it is written against has no place on this order. */
+    private static Criterion only(Criterion made, Level against) {
+        return against == null ? null : made;
     }
 
     /**
@@ -508,13 +565,18 @@ public final class LevelRealizer {
                                       NumericDomain.Bounds bounds) {
         Place offered = switch (where) {
             case Criterion.AtTheLevel at -> placeOf(at.at());
-            case Criterion.Beyond beyond -> {
-                Endpoint past = Endpoint.exclusive(placeOf(beyond.from()));
-                Endpoint low = beyond.towards() == Towards.ABOVE
-                        ? Endpoint.lower(past, bounds.min()) : bounds.min();
-                Endpoint high = beyond.towards() == Towards.BELOW
-                        ? Endpoint.upper(past, bounds.max()) : bounds.max();
-                yield carrier.somethingInside(low, high);
+            case Criterion.Within within -> {
+                // The value beside the line first, which is the row a reader would write, and
+                // otherwise whatever the run has. Both are asked of the run: a search for a value
+                // of it looked in whole numbers alone, and a run between two thirds of a decimal
+                // has none.
+                NumericDomain.Bounds run = new NumericDomain.Bounds(
+                        Endpoint.lower(within.band().low(), bounds.min()),
+                        Endpoint.upper(within.band().high(), bounds.max()));
+                Place beside = within.except() == null ? null
+                        : carrier.somethingOtherThan(List.of(placeOf(within.except())), run);
+                yield beside != null ? beside
+                        : within.somewhereInside(carrier, bounds.min(), bounds.max());
             }
             case Criterion.AnythingBut other ->
                     carrier.somethingOtherThan(List.of(placeOf(other.excluded())), bounds);
@@ -526,11 +588,19 @@ public final class LevelRealizer {
         // place may be sharpened onto and does not promise that every number between two counts is
         // one of them, which is the carrier's question rather than the item's.
         Place onTheGrid = carrier.onTheGrid(offered);
-        return onTheGrid != null && accepts(where, onTheGrid) ? onTheGrid : null;
+        return onTheGrid != null && accepts(where, carrier, onTheGrid) ? onTheGrid : null;
     }
 
-    private static boolean accepts(Criterion where, Place at) {
-        return meets(where, at.compareTo(placeOf(where.against())));
+    /**
+     * Whether a place of {@code carrier} is at this item.
+     *
+     * <p>The item's own answer and not a second reading of it. Whether a value stands at an item is
+     * one question with one answer ({@link Criterion#holds}); worked out again from an order and a
+     * level the item was written against, the two came apart wherever the item is a run — a run has
+     * two ends and a line, and one comparison cannot say all three.
+     */
+    private static boolean accepts(Criterion where, Carrier carrier, Place at) {
+        return where.holds(LevelSpace.onACarrier(carrier), new Level.OnACarrier(carrier, at));
     }
 
     /**

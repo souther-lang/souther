@@ -327,7 +327,7 @@ public final class Partitions {
                                               Symbols symbols,
                                               List<UnreadRule> unread,
                                               List<GuardThresholds.Guards.Singled> singled,
-                                              List<Border> between) {
+                                              List<LineDrawn> between) {
         return withThresholds(base, thresholds, symbols, unread, singled, between,
                 souther.compiler.check.PathReachability.Answers.NONE, List.of());
     }
@@ -350,7 +350,7 @@ public final class Partitions {
                                               Symbols symbols,
                                               List<UnreadRule> unread,
                                               List<GuardThresholds.Guards.Singled> singled,
-                                              List<Border> between,
+                                              List<LineDrawn> between,
                                               souther.compiler.check.PathReachability.Answers
                                                       arrives,
                                               List<GuardThresholds.Guards.AtAPosition> compared) {
@@ -381,7 +381,8 @@ public final class Partitions {
                 Axis here2 = axis;
                 keep(out, measured, refine(axis,
                         () -> singledClasses(points, at, here2.type(), only, symbols),
-                        mergedPoints(axis.cuts(), points, at.carrierAt(axis.type(), symbols))),
+                        mergedPoints(axis.cuts(), points, at.carrierAt(axis.type(), symbols)),
+                        axis.parted()),
                         new BodyCutInspection.Evidence(), rules);
                 continue;
             }
@@ -409,7 +410,10 @@ public final class Partitions {
             // which is the thing being fixed here happening again one field over. The end the
             // position stops short of is outside it as much as anything past it is.
             List<Threshold> reachable = here.stream()
-                    .filter(t -> domain == null || domain.admits(t.value()))
+                    // Asked of the place the line falls at, which the position need not hold a
+                    // value at. Read off the value, a line between two of the position's values was
+                    // dropped as one the rules leave nothing at.
+                    .filter(t -> domain == null || admits(domain, t.parts()))
                     // And what the guards above it left. Only a proof drops a line: a comparison
                     // this could not settle keeps its line and its rows, which is the direction that
                     // leaves an author with work rather than with a report about a model of theirs
@@ -438,9 +442,12 @@ public final class Partitions {
             keep(out, measured, refine(axis.measuredAt(axis.id(), term),
                     () -> Intervals.classesOf(
                             Intervals.of(reachable, within == null ? null : within.min(),
-                                    within == null ? null : within.max()),
-                            measuredAt, read.type(), symbols),
-                    merged(axis.cuts(), reachable, carrier)),
+                                    within == null ? null : within.max(), carrier),
+                            measuredAt, read.type(), symbols,
+                            within == null ? null : within.min(),
+                            within == null ? null : within.max()),
+                    merged(axis.cuts(), reachable, carrier),
+                    reachable.stream().map(Threshold::parts).toList()),
                     reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), rules);
         }
         return new Partitioning(out, base.omitted(), domainsOf(base, out), base.uncertain(),
@@ -448,7 +455,14 @@ public final class Partitions {
                 // Carried across: what a reading could not hold together is a fact about the
                 // declarations, and a body drawing a line on a position does not make the product
                 // it was read from the relation the rules admit.
-                base.notSeparated(), between, compared);
+                // Turned into borders here and nowhere else, so that every rule about one
+                // quantity is arranged together however the rules were written — a body's
+                // condition and a clause cut one form as readily as two conditions do.
+                // Every rule about one quantity arranged together, whichever producer its border
+                // came from. A line that divides a position leaves its division on the axis and,
+                // where the position has no value beside it, its border over here — and the two
+                // sides of that border are runs of what all of them leave.
+                base.notSeparated(), Border.allOf(between, partedByQuantity(out)), compared);
     }
 
     /**
@@ -480,8 +494,8 @@ public final class Partitions {
      *                  working them out would be a reading whose answer is thrown away
      */
     private static Axis refine(Axis axis, java.util.function.Supplier<List<PartitionClass>> otherwise,
-                               List<Cut> cuts) {
-        return axis.carrying(axis.derivable() ? axis.classes() : otherwise.get(), cuts);
+                               List<Cut> cuts, List<Seam> parted) {
+        return axis.carrying(axis.derivable() ? axis.classes() : otherwise.get(), cuts, parted);
     }
 
     /**
@@ -604,12 +618,44 @@ public final class Partitions {
 
     /** The cuts a position has, with a rule that drew one already there recorded rather than repeated:
      * an invariant and a guard that state the same bound are one cut and two obligations. */
+    /**
+     * Where the rules part each of this behavior's quantities, by the quantity they are on.
+     *
+     * <p>Read off the axes, which is where a division of a position is recorded whether or not the
+     * position has a value at it. A line over a form of several positions divides none of them and
+     * is on a quantity of its own, which no axis names — those arrive with the lines themselves.
+     */
+    private static Map<String, List<Seam>> partedByQuantity(List<Axis> axes) {
+        Map<String, List<Seam>> out = new LinkedHashMap<>();
+        for (Axis axis : axes) {
+            if (axis.parted().isEmpty()) {
+                continue;
+            }
+            out.computeIfAbsent(QuantityKey.of(NumericDomain.LinearForm.atom(axis.term())).key(),
+                    _ -> new ArrayList<>()).addAll(axis.parted());
+        }
+        return out;
+    }
+
+    /** Whether the rules leave the quantity anything at the place a line falls. */
+    private static boolean admits(NumericDomain.Bounds within, Seam parts) {
+        return (within.min() == null || parts.at().compare(within.min().at()) <= 0)
+                && (within.max() == null || parts.at().compare(within.max().at()) >= 0);
+    }
+
     private static List<Cut> merged(List<Cut> had, List<Threshold> thresholds, Carrier carrier) {
         Map<String, Cut> byValue = new LinkedHashMap<>();
         for (Cut cut : had) {
             byValue.put(cut.key(), cut);
         }
         for (Threshold each : thresholds) {
+            // A line the position has no value at is not a cut of it. It divides the position all
+            // the same — the classes either side are what the model distinguishes — and there is no
+            // value for a row to be written at, so there is no border here either. The rule's own
+            // border is on the quantity it wrote, which can name the line.
+            if (each.value() == null) {
+                continue;
+            }
             Cut cut = Cut.at(carrier, each.value(), each.origin());
             byValue.merge(cut.key(), cut, (there, _) -> there.and(each.origin()));
         }
@@ -631,6 +677,26 @@ public final class Partitions {
     public static List<Border> bordersOf(Axis axis, Symbols symbols,
                                          NumericDomain.Bounds within) {
         List<Border> out = new ArrayList<>();
+        // Every place the rules part this position's values, collected before any border is built.
+        // What each border owes away from its line is a run of the arrangement they make together,
+        // and a border built without them reads its two sides to the end of the order — so a row in
+        // the partition after next answered for a point inside the one this border bounds.
+        // Every place the rules part this position's values: the ones its cuts stand at, and the
+        // ones no cut stands at because the position holds no value there. A border built from the
+        // cuts alone read its two sides past exactly the lines that were left out.
+        List<Seam> parted = new ArrayList<>(axis.parted());
+        for (Cut cut : axis.cuts()) {
+            BoundaryTarget where = BoundaryTarget.at(
+                    new BorderQuantity.OfACoordinate(axis.id(), axis.term(), cut.carrier()),
+                    new Level.OnACarrier(cut.carrier(), cut.at()));
+            for (OriginRef origin : cut.origins()) {
+                Seam parts = Border.parts(where, origin);
+                if (parts != null && parted.stream()
+                        .noneMatch(had -> had.key().equals(parts.key()))) {
+                    parted.add(parts);
+                }
+            }
+        }
         for (Cut cut : axis.cuts()) {
             // The carrier is the cut's, which is the one the rule was read on. Asked of the axis
             // instead, a line drawn on a count taken of a position would be written back as a value
@@ -643,7 +709,7 @@ public final class Partitions {
                 // one of its points: the rule drew it about the type, and what is left of the type
                 // here may stop short of it — `low < high` under one `[0, 1]` leaves `low` every
                 // value up to 1 and not 1 itself.
-                Border border = Border.at(target, origin, within);
+                Border border = Border.at(target, origin, within, parted);
                 if (border != null) {
                     out.add(border);
                 }
@@ -698,8 +764,8 @@ public final class Partitions {
                     uncertain.add(term);
                 }
                 out.add(new Axis(id, term, position.type(), divided.classes(),
-                        divided.cuts().cuts(), divided.unanswered(), divided.rulesNotReached(),
-                        null, null));
+                        divided.cuts().cuts(), List.of(), divided.unanswered(),
+                        divided.rulesNotReached(), null, null));
             }
             // Nothing local divides the position, which is what licenses asking what it is made of.
             // Whether the reading got to the end of the rules is carried rather than acted on here:

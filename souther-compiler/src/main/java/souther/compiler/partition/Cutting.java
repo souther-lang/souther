@@ -7,6 +7,8 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Place;
+import souther.compiler.numeric.NumericDomain.LinearForm;
 
 /**
  * What one comparison cuts, and where — the one place that decides it.
@@ -142,10 +144,108 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 : new ComparisonClaim.Cut(drawn.valueBelongsBelow(), drawn.holdsAtTheValue());
     }
 
-    /** The position this cuts, where what it cuts is one position's own values. Null for every other
-     *  quantity, which is what tells a caller whether an axis is divided by this rule. */
+    /**
+     * What this cuts, as the direction it runs.
+     *
+     * <p>Asked of the quantity rather than of which variant of quantity it is. A rule written
+     * {@code 2 * n > 40} arrives as a form over twice a position and cuts the position, and a
+     * reading that told those apart by the shape it was holding reported the model as drawing one
+     * line through {@code n} where it draws two.
+     */
+    QuantityKey quantity() {
+        return QuantityKey.of(direction(of));
+    }
+
+    /** How much of the quantity this rule wrote, which is what a level of one reads as on the
+     *  other. */
+    java.math.BigDecimal per() {
+        return QuantityKey.per(direction(of));
+    }
+
+    /**
+     * Where it parts that quantity's values, in the quantity's own units.
+     *
+     * <p>Found on the order the rule was written on, which is the order that knows which levels the
+     * written form attains — {@code 2 * n <= 9} cuts the even numbers and nine is not one of them,
+     * so the two sides part between eight and ten. Read back afterwards, which is exact: a level the
+     * written form attains is a multiple of how much of the quantity it wrote.
+     */
+    Seam seam() {
+        LinearForm<NumericTerm> direction = direction(of);
+        java.math.BigDecimal per = QuantityKey.per(direction);
+        return Seam.of(of.levels(), at,
+                valueBelongsBelow() ? Towards.BELOW : Towards.ABOVE,
+                new Seam.Scale(per, direction.coefs().size() == 1 ? of.carrier() : null));
+    }
+
+    /**
+     * The form a quantity runs along, whichever of the three it is.
+     *
+     * <p>One position's own values are that position with a coefficient of one; how far two
+     * positions stand apart is their difference; and a form is itself. The three used to be told
+     * apart by every reader that wanted to know what a rule divided, and only one of them was
+     * treated as dividing anything.
+     */
+    private static LinearForm<NumericTerm> direction(BorderQuantity of) {
+        return switch (of) {
+            case BorderQuantity.OfACoordinate one -> LinearForm.atom(one.term());
+            case BorderQuantity.Apart two ->
+                    LinearForm.<NumericTerm>atom(two.on()).minus(LinearForm.atom(two.against()));
+            case BorderQuantity.OverAForm many -> many.form();
+        };
+    }
+
+    /**
+     * The position this cuts, where what it cuts is one position's own values. Null for every other
+     * quantity, which is what tells a caller whether an axis is divided by this rule.
+     *
+     * <p><b>Asked of the canonical quantity and not of the shape the comparison arrived as.</b>
+     * {@code 2 * n > 40} reaches this as a form over twice a position and divides that position at
+     * twenty; read off the shape, it divided nothing, and a report counted two equivalence
+     * partitions where the model states three.
+     *
+     * <p>Whether the line falls on a value of the position is a different question and not this
+     * one. {@code 3 * d <= 1} cuts at a third, which no decimal this language writes, and the
+     * behavior still answers one way below it and another way above — so the position has two
+     * classes and no number to name the line by. Asked here, that answer made an equivalence
+     * partition a thing this compiler can write a boundary for rather than a thing the model
+     * distinguishes (issue #880).
+     */
     NumericTerm dividedPosition() {
-        return of instanceof BorderQuantity.OfACoordinate one ? one.term() : null;
+        java.util.Map<NumericTerm, java.math.BigDecimal> direction = quantity().direction();
+        return direction.size() == 1 ? direction.keySet().iterator().next() : null;
+    }
+
+    /**
+     * The one value of the position this rule names, or null where the position has none there.
+     *
+     * <p>Apart from {@link #dividedValue}, and the two are different questions that one answer had
+     * been serving. A rule that orders the values around its line owes a row at the value beside the
+     * line — {@code 2 * n <= 9} cuts between four and five and the row is written at four. A rule
+     * that names a value names the line itself, and {@code 2 * n == 9} names no whole number at all
+     * because nine halved is not one. Answered as the value beside the line, such a rule would put
+     * four in a class of its own and four does not satisfy it.
+     *
+     * <p>Which is a fact about the position and not about the rule: that the canonical quantity is
+     * one coordinate says the rule cuts that position, and whether the position has a value where
+     * the line falls is asked of the order it sits on.
+     */
+    Place singledValue() {
+        return seam().at().asAValueOf(of.carrier());
+    }
+
+    /**
+     * The value of that position the classes either side of this line meet at.
+     *
+     * <p>Read off the seam rather than off the threshold, so a rule that wrote a multiple of the
+     * position names a value the position holds: {@code 2 * n <= 9} parts the whole numbers between
+     * four and five, and nine halved is not a whole number at all. Which of the two the classes meet
+     * at is which side the threshold's own value belongs to, and that is the rule's to say.
+     */
+    Place dividedValue() {
+        Seam seam = seam();
+        Level side = valueBelongsBelow() ? seam.below() : seam.above();
+        return side instanceof Level.OnACarrier on ? on.at() : null;
     }
 
     /** Whether the rule singles a value out rather than ordering the values around it. */

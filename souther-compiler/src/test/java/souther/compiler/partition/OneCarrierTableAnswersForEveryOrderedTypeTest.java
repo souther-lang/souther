@@ -426,17 +426,20 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
     }
 
     /**
-     * A class open at both ends offers a value of its own or none.
+     * A class open at both ends offers a value of its own, and is not a class where there is none.
      *
      * <p>The pair of the test above, and the half of it that spacing alone gets wrong. Between two
-     * decimals a whole apart there is a decimal; between two moments a second apart there is a
-     * number and no date-time, because what a date-time can be written as sits on a grid at the
-     * second. Half a second is a count and not a value the position holds.
+     * decimals a whole apart there is a decimal, so the class is there and has a row. Between two
+     * moments a second apart there is a number and no date-time — what a date-time can be written as
+     * sits on a grid at the second, and half a second is a count and not a value the position holds.
      *
-     * <p>Read at the row and not at the count. What went wrong was not an arithmetic error — the
-     * number offered was between the two ends — it was that writing it back landed on one of them,
-     * so the row was labelled for a class it is not in, which is a row whose failure would show up
-     * as the behavior answering with the wrong case.
+     * <p>Which makes the two rules one division of the moments. {@code x <= :01} and {@code x < :02}
+     * part them in the same place, so there is no class between them to offer a row for or to say
+     * there is none for; the position has the two classes either side of one line (issue #880).
+     *
+     * <p>Read at the row and not at the count, which is what the same defect looked like from the
+     * other end: the number offered was between the two ends, and writing it back landed on one of
+     * them, so a row was labelled for a class it is not in.
      */
     @Test
     void aClassOpenAtBothEndsOffersAValueOfItsOwnOrNone() {
@@ -454,12 +457,12 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         String moment = souther.compiler.report.GeneratedRows.of(
                 compilation, "example.matrix", "openOnBothSidesMoment", true,
                 SourceNameResolver.identity());
-        assertTrue(moment.contains("no row for `x=2026-08-01T00:00:01 < x <"
-                        + " 2026-08-01T00:00:02`"),
-                "nothing lies strictly between two adjacent moments: " + moment);
-        assertFalse(moment.contains(
-                        "< x < 2026-08-01T00:00:02 x x = 2026-08-01T00:00:02"),
-                "and no row is offered for that class carrying the value at its far end: " + moment);
+        assertFalse(moment.contains("2026-08-01T00:00:01 < x < 2026-08-01T00:00:02"),
+                "nothing lies strictly between two adjacent moments, so the two rules part them"
+                        + " in one place and there is no class between: " + moment);
+        assertTrue(moment.contains("\"x=x <= 2026-08-01T00:00:01\""), moment);
+        assertTrue(moment.contains("\"x=2026-08-01T00:00:01 < x\""),
+                "and the position has the two classes either side of that one line: " + moment);
     }
 
     /**

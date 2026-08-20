@@ -118,37 +118,47 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
     }
 
     /**
-     * A position scaled is a quantity of its own, and the border is on that.
+     * A position scaled is that position, and the border is on it.
      *
-     * <p>Not a line at {@code a}. What {@code 2 * a} takes is the even numbers, and the value past
-     * ten is twelve — {@code a = 5} and {@code a = 6} are the rows, and the point they stand at is a
-     * point of the form.
+     * <p>A form and any positive multiple of it order the rows the same way, so {@code 2 * a} is not
+     * a quantity beside {@code a} — it is {@code a}, said in twos. Held apart, this rule divided
+     * nothing and the position it cuts was reported as having one equivalence partition where the
+     * model states two (issue #880).
+     *
+     * <p>The rows are the same either way: what the form comes to at ten and at twelve is
+     * {@code a = 5} and {@code a = 6}. What changes is which of the two an author is asked for and
+     * what the class between them is called.
      */
     @Test
-    void aScaledPositionIsAQuantityOfItsOwn() {
+    void aScaledPositionIsThePositionItScales() {
         String report = report(guarded("Int.multiply(2, a.value) <= 10"));
 
-        assertTrue(report.contains("no row is at the ON point f/2 * a = 10"), report);
-        assertTrue(report.contains("no row is at the OFF point f/2 * a = 12"), report);
+        assertTrue(report.contains("no row is at the ON point f/a = 5"), report);
+        assertTrue(report.contains("no row is at the OFF point f/a = 6"), report);
+        assertTrue(report.contains("`a/5 < x <= 10`"),
+                "and the position is divided at five, not left undivided:\n" + report);
+        assertFalse(report.contains("2 * a"),
+                "twice a position is not a quantity beside it:\n" + report);
     }
 
     /**
-     * A threshold the quantity never takes still draws a border, either side of itself.
+     * A threshold the written form never takes parts the position's own values all the same.
      *
-     * <p>The design test. Nine is not a value {@code 2 * a} takes, and the rule cuts there all the
-     * same: the row inside is where the form comes to eight and the row outside is where it comes to
-     * ten. A reading that took the threshold for one of the quantity's own values would ask for a row
-     * at nine — which is {@code a = 4.5}, a value the position refuses — and a reading that stepped
-     * one from the threshold would ask for ten and eight in the wrong roles.
+     * <p>The design test. Nine is not a value {@code 2 * a} takes, and the rule cuts there: the row
+     * inside is where the form comes to eight and the row outside where it comes to ten, which are
+     * {@code a = 4} and {@code a = 5}. Neither is nine halved. A reading that took the threshold for
+     * one of the quantity's own values would ask for {@code a = 4.5}, a value the position refuses;
+     * one that stepped a whole step from the threshold would ask for the two in the wrong roles; and
+     * one that divided the threshold out would have to write four and a half into a class name.
      */
     @Test
-    void aThresholdTheQuantityNeverTakesStillDrawsABorder() {
+    void aThresholdTheWrittenFormNeverTakesPartsThePositionsOwnValues() {
         String report = report(guarded("Int.multiply(2, a.value) <= 9"));
 
-        assertTrue(report.contains("no row is at the ON point f/2 * a = 8"), report);
-        assertTrue(report.contains("no row is at the OFF point f/2 * a = 10"), report);
-        assertFalse(report.contains("f/2 * a = 9"),
-                "nine is not a value the quantity takes, so no row is asked for at it:\n" + report);
+        assertTrue(report.contains("no row is at the ON point f/a = 4"), report);
+        assertTrue(report.contains("no row is at the OFF point f/a = 5"), report);
+        assertFalse(report.contains("4.5"),
+                "nine halved is no value of the position, so nothing names one:\n" + report);
     }
 
     /** Both sides moving with the row, with a constant on one of them: a line on the distance, one
