@@ -324,18 +324,24 @@ public final class InvariantChecker {
         if (stated == null) {
             return new CapabilityResult.AnalysisStopped("typing " + describing);
         }
-        Boolean folded = predicates.decidedAt(stated);
-        if (folded != null) {
-            return CapabilityResult.Analyzed.of(new StaticReading.Decided(folded));
-        }
+        Boolean folded;
         Predicates.Owed owed;
+        // Both walks inside the one boundary. Asking whether the clause folds is a walk of it like
+        // any other — over a bridge to what was written and an evaluation of that — so a reading
+        // that falls over there has to come out as a stop, which is the arm it would otherwise be
+        // the one thing to escape.
         try {
-            owed = predicates.obligations(stated, Known.top(), locations, false);
+            folded = predicates.decidedAt(stated);
+            owed = folded != null ? null
+                    : predicates.obligations(stated, Known.top(), locations, false);
         } catch (RuntimeException why) {
             // Fail-open, as the walk is — and said as a stop rather than as a conclusion, because
             // what the clause is outside of is what this did not find out.
             gaveUp("capabilityOf " + describing, why);
             return new CapabilityResult.AnalysisStopped("capabilityOf " + describing);
+        }
+        if (folded != null) {
+            return CapabilityResult.Analyzed.of(new StaticReading.Decided(folded));
         }
         Set<StaticReading> readings = new LinkedHashSet<>();
         for (Predicates.Clause owe : owed.clauses()) {
@@ -345,17 +351,12 @@ public final class InvariantChecker {
             readings.add(owe.numeric() != null
                     ? new StaticReading.AsABound() : new StaticReading.AsATerm());
         }
-        if (owed.unreadable()) {
-            // What was not read is said even where something else was: a clause half of which could
-            // not be read would otherwise be described entirely by the half that was.
-            readings.add(new StaticReading.OutsideTheFragment(whyUnreadable(stated, locations)));
-        } else if (readings.isEmpty()) {
-            // A finished reading that owes nothing is one whose every part folded the way it was
-            // read — `Predicates` answers `NOTHING` there and nowhere else. Said as a clause nothing
-            // was made of, a rule that holds of every value was reported as one no guard discharges.
-            readings.add(new StaticReading.Decided(true));
-        }
-        return new CapabilityResult.Analyzed(readings);
+        // `Predicates` answers `NOTHING` where a clause folded the way it was read and nowhere else,
+        // so a walk owing nothing is a clause that holds. Reached for the ones the fold above cannot
+        // take whole: `Bool.not(1 < 0)` is a call to this and a negation to the reading under it,
+        // which folds what it negates and comes back owing nothing.
+        return CapabilityResult.analyzed(readings, owed.unreadable(),
+                () -> whyUnreadable(stated, locations));
     }
 
     /** What in {@code clause} a finished reading could not read. No arm for a clause that could

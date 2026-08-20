@@ -4,6 +4,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * What came of trying to read one clause statically: either the reading ran to the end and says what
@@ -21,6 +22,37 @@ import java.util.Set;
  * of them it had — which is a thing to get right once per reader instead of once.
  */
 public sealed interface CapabilityResult {
+
+    /**
+     * The readings a finished walk got, with what it could not read said beside them, and a walk
+     * that came back with nothing said as a clause that holds.
+     *
+     * <p>Held apart from the walk that produces the readings, so the rule can be held to for shapes
+     * no program takes today — a clause read in part and outside the fragment in the rest is one of
+     * them, and a mechanism whose data never takes a shape it is written for is a mechanism nothing
+     * has run.
+     *
+     * @param read       what the walk made of it, which may be nothing
+     * @param unreadable whether some part of it was outside what the walk reads
+     * @param why        what that part was, asked only where there is something to say: finding out
+     *                   what in a clause was not read costs a walk of it
+     */
+    static Analyzed analyzed(Set<StaticReading> read, boolean unreadable,
+                             Supplier<FragmentReason> why) {
+        Set<StaticReading> all = new LinkedHashSet<>(read);
+        if (unreadable) {
+            // What was not read is said even where something else was: a clause half of which could
+            // not be read would otherwise be described entirely by the half that was, and an author
+            // would write the guard that discharges that half and find the construction refused.
+            all.add(new StaticReading.OutsideTheFragment(why.get()));
+        } else if (all.isEmpty()) {
+            // A finished walk that owes nothing is one whose every part folded the way it was read.
+            // Said as a clause nothing was made of, a rule that holds of every value was reported as
+            // one the static checker cannot represent and no guard discharges.
+            all.add(new StaticReading.Decided(true));
+        }
+        return new Analyzed(all);
+    }
 
     /**
      * The reading ran to the end, and this is what it made of the clause.

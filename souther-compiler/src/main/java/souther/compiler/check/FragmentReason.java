@@ -39,8 +39,14 @@ public sealed interface FragmentReason {
      *
      * <p>Told apart from the two above, which name something in the clause. Here there is nothing to
      * name: the grammar took all of it, and what it came to is not something a guard can be held
-     * against. Said as one of the others, a clause with nothing wrong in it was described as naming
-     * a term the check cannot name.
+     * against.
+     *
+     * <p>No program is known to reach this, or either of the others. The reading that owes nothing
+     * because the clause folded is answered before any of them, and every clause tried that this
+     * compiler could not carry turned out to be one it could not type — which is a walk that never
+     * began and is answered as {@link CapabilityResult.AnalysisStopped}. The arm is here because
+     * {@link Predicates} can still answer that it read a clause and owes nothing that is not a fold,
+     * and an answer with nowhere to go is how one gets described by whatever is nearest.
      */
     record NothingAGuardCouldBeHeldAgainst() implements FragmentReason {}
 }

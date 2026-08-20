@@ -113,6 +113,24 @@ class InvariantCapabilitiesTest {
     }
 
     /**
+     * A clause that holds under a call the fold cannot take whole is answered the same way.
+     *
+     * <p>{@code Bool.not(1 < 0)} does not fold here — it is a call — and the reading under it does:
+     * it negates what it reads, folds that, and comes back owing nothing. So the answer comes from a
+     * walk that owed nothing rather than from the fold, and the two paths to {@code always holds}
+     * are both taken by programs.
+     */
+    @Test
+    void aClauseThatHoldsUnderACallIsSaidToHoldToo() {
+        List<ClauseDischarge> clauses = of("""
+                module m.a
+                data Money = Int
+                    invariant Bool.not(1 < 0)
+                """, "Money");
+        assertEquals(analyzed(new StaticReading.Decided(true)), read(clauses, 0));
+    }
+
+    /**
      * A clause the reading could not type is not a conclusion about the clause.
      *
      * <p>This source names no type {@code Anything}, so the reading never began. Said as a shape the

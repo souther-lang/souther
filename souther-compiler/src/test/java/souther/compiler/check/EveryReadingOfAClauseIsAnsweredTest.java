@@ -8,7 +8,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -25,6 +25,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class EveryReadingOfAClauseIsAnsweredTest {
 
     private static final SourcePos AT = new SourcePos(3, 5);
+
+    private static final FragmentReason WHY = new FragmentReason.ItsShapeIsNotRead();
+
+    /** Asked for it, and the asking is what the rule is careful about. */
+    private static final java.util.function.Supplier<FragmentReason> EXPENSIVE = () -> WHY;
 
     /**
      * A reading that ran to the end has an answer.
@@ -71,41 +76,52 @@ class EveryReadingOfAClauseIsAnsweredTest {
      */
     @Test
     void whatWasNotReadIsSaidBesideWhatWas() {
-        CapabilityResult.Analyzed both = CapabilityResult.Analyzed.of(new StaticReading.AsABound(),
-                new StaticReading.OutsideTheFragment(new FragmentReason.ItsShapeIsNotRead()));
+        CapabilityResult.Analyzed both = CapabilityResult.analyzed(
+                Set.of(new StaticReading.AsABound()), true, EXPENSIVE);
 
-        assertTrue(both.readings().contains(new StaticReading.AsABound()));
-        assertTrue(both.readings().contains(
-                new StaticReading.OutsideTheFragment(new FragmentReason.ItsShapeIsNotRead())));
+        assertEquals(Set.of(new StaticReading.AsABound(),
+                        new StaticReading.OutsideTheFragment(WHY)), both.readings());
+    }
+
+    /** And a walk that read nothing at all is said once, by what stopped it rather than by an
+     *  emptiness. */
+    @Test
+    void aClauseNothingWasReadOfIsSaidByWhatStoppedIt() {
+        assertEquals(Set.of(new StaticReading.OutsideTheFragment(WHY)),
+                CapabilityResult.analyzed(Set.of(), true, EXPENSIVE).readings());
     }
 
     /**
-     * The two ways a clause can settle on its own are two answers.
+     * A walk that finished owing nothing is a clause that holds.
      *
-     * <p>They come from one fold of one expression. Kept as one — or with only the true one written
-     * down — the other goes to whichever arm is nearest, which is how a clause no value satisfies
-     * came to be answered as a bound any guard implying it would discharge.
+     * <p>{@code Predicates} owes nothing exactly where every part of a clause folded the way it was
+     * read. Said as an emptiness instead, {@code invariant 1 >= 0} came back as a clause the static
+     * checker cannot represent and no guard discharges. {@code Bool.not(1 < 0)} is the shape that
+     * reaches this rather than the fold, and is held to it through a program in
+     * {@code InvariantCapabilitiesTest}.
      */
     @Test
-    void aClauseThatHoldsAndOneThatCannotAreNotOneAnswer() {
-        assertNotEquals(new StaticReading.Decided(true), new StaticReading.Decided(false));
+    void aWalkThatOwedNothingIsAClauseThatHolds() {
+        assertEquals(Set.of(new StaticReading.Decided(true)),
+                CapabilityResult.analyzed(Set.of(), false, EXPENSIVE).readings());
     }
 
-    /**
-     * A reading that stopped is not a reading that concluded.
-     *
-     * <p>Different arms of {@link CapabilityResult}, so no reader downstream can hold one for the
-     * other. Whether the clause is inside the fragment is exactly what a stopped reading did not find
-     * out, and a document saying it is outside would be publishing this compiler's failure as a fact
-     * about somebody's model.
-     */
+    /** What was not read is asked for only where there is something to say, since finding out what
+     *  in a clause stopped the walk costs a walk of it. */
     @Test
-    void aReadingThatStoppedIsNotOneThatConcluded() {
-        CapabilityResult stopped = new CapabilityResult.AnalysisStopped("typing a clause");
-        CapabilityResult concluded = CapabilityResult.Analyzed.of(
-                new StaticReading.OutsideTheFragment(new FragmentReason.ItsShapeIsNotRead()));
+    void whyIsAskedOnlyWhereSomethingWasNotRead() {
+        boolean[] asked = {false};
+        CapabilityResult.analyzed(Set.of(new StaticReading.AsABound()), false, () -> {
+            asked[0] = true;
+            return WHY;
+        });
+        assertFalse(asked[0], "nothing was left unread, so there is nothing to explain");
 
-        assertNotEquals(stopped, concluded);
+        CapabilityResult.analyzed(Set.of(new StaticReading.AsABound()), true, () -> {
+            asked[0] = true;
+            return WHY;
+        });
+        assertTrue(asked[0], "and it is asked where there is");
     }
 
     /** A reason is what a reading recorded, and there is no arm for one that could not be typed:
