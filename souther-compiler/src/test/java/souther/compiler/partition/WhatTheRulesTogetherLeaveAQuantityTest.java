@@ -53,6 +53,64 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
     }
 
     /**
+     * A run says which values are in it, and the ends it names are in it.
+     *
+     * <p>Both ends inclusive, because a run is named by the values at its ends rather than by the
+     * lines beside it: the first value above a seam is in the run above, and the last value below is
+     * in the run below. A reader that took the seam's own numbers for the ends would put the value
+     * against the line on the wrong side of it.
+     */
+    @Test
+    void aRunHoldsTheValuesFromItsFirstToItsLast() {
+        Band mid = QuantityArrangement.of(NUMBERS, List.of(upTo("10"), upTo("20"))).bands().get(1);
+
+        assertEquals(false, mid.holds(NUMBERS, at("10")), "ten is the last value below it");
+        assertEquals(true, mid.holds(NUMBERS, at("11")), "eleven is its first");
+        assertEquals(true, mid.holds(NUMBERS, at("20")), "twenty is its last");
+        assertEquals(false, mid.holds(NUMBERS, at("21")), "twenty-one is the first value above it");
+    }
+
+    /** And a run with no seam under it runs from wherever the rules start the quantity. */
+    @Test
+    void aRunWithNothingPartingItBelowRunsFromTheStart() {
+        Band first = QuantityArrangement.of(NUMBERS, List.of(upTo("10")), at("0"), null)
+                .bands().get(0);
+
+        assertEquals(false, first.holds(NUMBERS, at("-1")), "the rules leave nothing below zero");
+        assertEquals(true, first.holds(NUMBERS, at("0")));
+        assertEquals(true, first.holds(NUMBERS, at("10")));
+        assertEquals(false, first.holds(NUMBERS, at("11")));
+    }
+
+    /**
+     * A run open at a line the quantity names no value beside is read at the line, in its own units.
+     *
+     * <p>{@code 3 * d <= 1} parts the decimals at a third, which no finite decimal is — so neither
+     * run has a value against the line and both are read at the position itself. A third is what the
+     * rule wrote over how much of the quantity it wrote it in, and a reader comparing a value of
+     * {@code d} against the one the rule carried would put every decimal up to one below the line.
+     */
+    @Test
+    void aRunOpenAtItsLineIsReadInTheQuantitysOwnUnits() {
+        java.math.BigDecimal three = new java.math.BigDecimal("3");
+        souther.compiler.check.Carrier dense = new souther.compiler.check.Carrier.Dense();
+        LevelSpace decimals = LevelSpace.onACarrier(dense);
+        Seam third = Seam.of(
+                LevelSpace.overFiniteDecimals(LevelSpace.generatorOverFiniteDecimals(three)),
+                new Level.ACount(new Count(java.math.BigDecimal.ONE)), Towards.BELOW,
+                new Seam.Scale(three, dense));
+        Band below = QuantityArrangement.of(decimals, List.of(third)).bands().get(0);
+
+        assertEquals(true, below.holds(decimals, decimal(dense, "0.2")), "a fifth is under a third");
+        assertEquals(false, below.holds(decimals, decimal(dense, "0.5")),
+                "and a half is over it, however the rule wrote the line");
+    }
+
+    private static Level decimal(souther.compiler.check.Carrier of, String number) {
+        return new Level.OnACarrier(of, new Count(new java.math.BigDecimal(number)));
+    }
+
+    /**
      * The outermost runs stop where the rules stop the quantity.
      *
      * <p>A bound is not a cut: nothing outside it can be constructed, so there is no run on the far

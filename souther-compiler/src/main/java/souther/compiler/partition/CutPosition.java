@@ -62,6 +62,35 @@ public record CutPosition(Level written, BigDecimal per) {
         return top + "/" + bottom;
     }
 
+    /**
+     * Whether a value of the quantity is below, at or above where this line falls.
+     *
+     * <p>Asked by multiplying rather than by dividing, which is what lets a line at a place no value
+     * stands at be compared exactly: a fifth is under a third and a half is over it, and neither
+     * comparison needs a third to be written down.
+     *
+     * <p>The value is one of the quantity's own and the line was written in a multiple of it, so
+     * bringing them together is what this is for. A reader that compared the two as they stand put
+     * every decimal up to one below a line at a third.
+     */
+    public int compare(Level value) {
+        BigDecimal at = numberOf(written);
+        BigDecimal of = numberOf(value);
+        // An order with no numbers is never scaled — a rule holding two strings apart writes the
+        // whole of what it cuts — so the two are places of one order and compare as they stand.
+        if (at == null || of == null) {
+            return placeOf(value).compareTo(placeOf(written));
+        }
+        return of.multiply(per).compareTo(at);
+    }
+
+    private static souther.compiler.numeric.Place placeOf(Level level) {
+        return switch (level) {
+            case Level.ACount count -> count.at();
+            case Level.OnACarrier on -> on.at();
+        };
+    }
+
     private static BigDecimal numberOf(Level level) {
         return switch (level) {
             case Level.ACount count -> count.at().at();

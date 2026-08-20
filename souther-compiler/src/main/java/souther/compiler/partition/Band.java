@@ -36,6 +36,50 @@ public record Band(Seam under, Seam over, Level from, Level to) {
         return over == null ? to : over.below();
     }
 
+    /**
+     * Whether a value of the quantity lies in this run.
+     *
+     * <p>Both ends included, because a run is named by the values at its ends and not by the lines
+     * beside it: the first value above a seam is in the run above and the last value below is in the
+     * run below. An end the order supplies rather than a rule leaves that side open.
+     *
+     * <p>Where a seam names no value on the side facing this run — a carrier whose values fill has
+     * no first value above a line it keeps — the run is open at the line itself, which is where the
+     * seam's own position says the values part.
+     */
+    public boolean holds(LevelSpace space, Level value) {
+        return past(space, value, under, Towards.ABOVE) && past(space, value, over, Towards.BELOW)
+                && within(space, value, from, Towards.ABOVE) && within(space, value, to,
+                        Towards.BELOW);
+    }
+
+    /** Whether {@code value} is on this run's side of one of the seams that part it. */
+    private static boolean past(LevelSpace space, Level value, Seam seam, Towards side) {
+        if (seam == null) {
+            return true;
+        }
+        Level edge = side == Towards.ABOVE ? seam.above() : seam.below();
+        if (edge != null) {
+            return within(space, value, edge, side);
+        }
+        // No value on this side of the line, so the run is open at the line: what parts the values
+        // is the position itself, and every value of the quantity that way is in this run. Asked of
+        // the position, because the rule may have written a multiple of the quantity and the value
+        // is one of the quantity's own — compared as they stand, a line at a third kept every
+        // decimal up to one below it.
+        int order = seam.at().compare(value);
+        return side == Towards.ABOVE ? order > 0 : order < 0;
+    }
+
+    /** Whether {@code value} is at {@code edge} or on the {@code side} of it this run lies. */
+    private static boolean within(LevelSpace space, Level value, Level edge, Towards side) {
+        if (edge == null) {
+            return true;
+        }
+        int order = space.compare(value, edge);
+        return side == Towards.ABOVE ? order >= 0 : order <= 0;
+    }
+
     private static String where(Level at) {
         return at == null ? "" : at.key();
     }
