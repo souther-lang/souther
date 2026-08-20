@@ -160,11 +160,17 @@ final class GradleBuild {
      */
     static String withThePluginApplied(String script, boolean kotlin) {
         String line = kotlin ? KOTLIN_LINE : GROOVY_LINE;
-        Matcher found = PLUGINS.matcher(script);
+        // Found in the script with its comments taken out, and written into the script itself.
+        // Blanking a comment keeps every other character where it was, so an offset means the same
+        // thing in both — and a `plugins {` that is there only because somebody commented an old
+        // one out is not a block this writes into. It had written the line inside the comment and
+        // reported the build edited.
+        String said = withoutComments(script);
+        Matcher found = PLUGINS.matcher(said);
         if (!found.find()) {
             return "plugins {\n    " + line + "\n}\n\n" + script;
         }
-        int close = closingBrace(script, found.end() - 1);
+        int close = closingBrace(said, found.end() - 1);
         if (close < 0) {
             return "plugins {\n    " + line + "\n}\n\n" + script;
         }

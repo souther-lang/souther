@@ -141,6 +141,35 @@ class ABuildIsAddedToRatherThanRewrittenTest {
         assertEquals("com.acme", GradleBuild.groupOf(edited));
     }
 
+    /**
+     * A {@code plugins} block that is only there because it was commented out is not one.
+     *
+     * <p>The block is found in the script with its comments blanked, and written into the script
+     * itself — blanking keeps every other character where it was, so an offset means the same thing
+     * in both. Found in the raw text, the line went inside the comment and the run said the build
+     * had been edited.
+     */
+    @Test
+    void aCommentedOutPluginsBlockIsNotWrittenInto() {
+        String script = """
+                /*
+                plugins {
+                    java
+                }
+                */
+                plugins {
+                    java
+                }
+                """;
+
+        String edited = GradleBuild.withThePluginApplied(script, true);
+
+        assertTrue(edited.indexOf("org.souther-lang.souther") > edited.indexOf("*/"),
+                "the line landed inside the comment:\n" + edited);
+        assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn(edited),
+                "the script does not apply the plugin after being edited:\n" + edited);
+    }
+
     /** A script with no {@code plugins} block gets one, at the top, where the only one may be. */
     @Test
     void aScriptWithNoPluginsBlockGetsOne() {
