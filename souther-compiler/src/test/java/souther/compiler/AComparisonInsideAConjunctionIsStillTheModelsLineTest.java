@@ -83,7 +83,7 @@ class AComparisonInsideAConjunctionIsStillTheModelsLineTest {
     /** And the position is no longer one nothing was established about. */
     @Test
     void thePositionIsNoLongerReportedAsUnread() {
-        assertFalse(blockOf("inAConjunction").contains("not read: r.cost"),
+        assertFalse(notReadAbout(blockOf("inAConjunction"), "r.cost"),
                 blockOf("inAConjunction"));
     }
 
@@ -122,5 +122,19 @@ class AComparisonInsideAConjunctionIsStillTheModelsLineTest {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("no line at " + axis + " = " + value))
                 .owed().coverage();
+    }
+
+    /**
+     * Whether any {@code not read} line of {@code block} is about {@code position}.
+     *
+     * <p>Asked as a line rather than as a prefix. A finding about a rule names the rule first and
+     * the position after it, and one about a position names the position — so a test matching
+     * `+not read: <position>+` stopped meaning anything for the first kind rather than failing,
+     * which is a negative assertion that passes because the words moved.
+     */
+    private static boolean notReadAbout(String block, String position) {
+        return block.lines().anyMatch(line -> line.contains("not read:")
+                && (line.contains("not read: " + position + " ")
+                        || line.contains("about `" + position + "`")));
     }
 }

@@ -98,7 +98,7 @@ class AMeasuredPositionSaysHowFarItsRulesWereReadTest {
         assertTrue(human.contains("rules not reached: i.assignee"),
                 "a measured position says its rules were never reached, which a position with no"
                         + " axis does not: " + human);
-        assertFalse(human.contains("not read: i.assignee"),
+        assertFalse(notReadAbout(human, "i.assignee"),
                 "and is not said as one nothing divided: " + human);
     }
 
@@ -111,5 +111,19 @@ class AMeasuredPositionSaysHowFarItsRulesWereReadTest {
         assertEquals("complete", read.get("extent").asText());
         assertFalse(read.has("rulesNotReached"), "nothing was left standing: " + read);
         assertFalse(read.has("unanswered"), "nothing was left standing: " + read);
+    }
+
+    /**
+     * Whether any {@code not read} line of {@code block} is about {@code position}.
+     *
+     * <p>Asked as a line rather than as a prefix. A finding about a rule names the rule first and
+     * the position after it, and one about a position names the position — so a test matching
+     * `+not read: <position>+` stopped meaning anything for the first kind rather than failing,
+     * which is a negative assertion that passes because the words moved.
+     */
+    private static boolean notReadAbout(String block, String position) {
+        return block.lines().anyMatch(line -> line.contains("not read:")
+                && (line.contains("not read: " + position + " ")
+                        || line.contains("about `" + position + "`")));
     }
 }

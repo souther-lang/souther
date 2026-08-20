@@ -1308,7 +1308,7 @@ public final class InvariantChecker {
         if (!InvariantBound.ordering(comparison.op())) {
             return;
         }
-        BlockReason why = UnreadComparison.why(sideOf(comparison.left(), at, byName),
+        BlockReason.AboutARule why = UnreadComparison.why(sideOf(comparison.left(), at, byName),
                 sideOf(comparison.right(), at, byName), quantityOf(comparison, at, byName));
         for (Coordinate each : coordinatesIn(comparison, at, byName)) {
             FieldDomains.Unread said =

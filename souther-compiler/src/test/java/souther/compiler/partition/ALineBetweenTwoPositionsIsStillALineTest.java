@@ -370,7 +370,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
                 report);
         assertTrue(report.contains("no row is at the ON point benefitOf/charge = ceiling + 1001"),
                 report);
-        assertTrue(report.contains("not read: charge"), report);
+        assertTrue(notReadAbout(report, "charge"), report);
     }
 
     /**
@@ -401,14 +401,13 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         String report = report(TWO_NEWTYPES);
 
         int partition = report.indexOf("    partition ");
-        int note = report.indexOf("· not read: charge");
+        int note = report.indexOf("dividing one, about `charge`");
         int boundary = report.indexOf("    border ");
 
         assertTrue(note > partition && note < boundary,
                 "the note about the classes sits under the classes measure:\n" + report);
         assertTrue(report.contains(
-                "not read: charge (the comparison relates it to another position"
-                        + " rather than dividing it)"), report);
+                "it relates two positions rather than dividing one, about `charge`"), report);
     }
 
     /**
@@ -533,5 +532,19 @@ class ALineBetweenTwoPositionsIsStillALineTest {
 
         assertEquals(1, report.split("    border ", -1).length - 1, report);
         assertEquals(1, report.split("    partition ", -1).length - 1, report);
+    }
+
+    /**
+     * Whether any {@code not read} line of {@code block} is about {@code position}.
+     *
+     * <p>Asked as a line rather than as a prefix. A finding about a rule names the rule first and
+     * the position after it, and one about a position names the position — so a test matching
+     * `+not read: <position>+` stopped meaning anything for the first kind rather than failing,
+     * which is a negative assertion that passes because the words moved.
+     */
+    private static boolean notReadAbout(String block, String position) {
+        return block.lines().anyMatch(line -> line.contains("not read:")
+                && (line.contains("not read: " + position + " ")
+                        || line.contains("about `" + position + "`")));
     }
 }

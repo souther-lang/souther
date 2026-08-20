@@ -165,7 +165,8 @@ public final class EnsuresThresholds {
         // said, because a position left out of every answer is reported as one the model draws no
         // line through — and the model says otherwise in the rule this stopped on.
         if (!(e instanceof Core.Binary comparison) || !GuardThresholds.orders(comparison.op())) {
-            reportUnread(e, rule.value(), reads, symbols, out.unread());
+            reportUnread(new RuleRef.Ensures(rule.id(), clause), e, rule.value(),
+                    reads, symbols, out.unread());
             return;
         }
         // What the comparison cuts is read the same way wherever a comparison is written, which is
@@ -175,7 +176,8 @@ public final class EnsuresThresholds {
         if (cutting == null) {
             // The positions are named as unread, because what the partition could not read here it
             // still could not read.
-            reportUnread(comparison, rule.value(), reads, symbols, out.unread());
+            reportUnread(new RuleRef.Ensures(rule.id(), clause), comparison,
+                    rule.value(), reads, symbols, out.unread());
             // Every position the comparison names, by the walk a body's conditions use. Asked of the
             // narrower reading instead, a comparison this could not read had no position to be filed
             // at — which is exactly the comparison whose questions stand, so the clause that most
@@ -202,7 +204,8 @@ public final class EnsuresThresholds {
             // The positions are named as ones nothing divides, which is what a rule over a quantity
             // that is not one position's own values leaves them — the same note the same shape gets
             // from a body's conditions, said by the same reader.
-            reportUnread(comparison, rule.value(), reads, symbols, out.unread());
+            reportUnread(new RuleRef.Ensures(rule.id(), clause), comparison,
+                    rule.value(), reads, symbols, out.unread());
             // Null where the quantity does not reach the line, which is the line and not one of its
             // points. What a clause raises is answered by what came of reading it and never by which
             // reading was tried: read off the branch, a rule that drew nothing reported a line.
@@ -250,7 +253,7 @@ public final class EnsuresThresholds {
         out.accounting().add(new GuardThresholds.Guards.AtAPosition(at, term,
                 RuleAccounting.ofComparison(named, ComparisonClaim.of(comparison.op()), of, read,
                         // A clause belongs to a behavior, so there is always something to call it.
-                        new souther.compiler.check.RuleCitation.Named(named.named()))));
+                        souther.compiler.check.RuleCitation.named(named))));
     }
 
     /**
@@ -271,17 +274,19 @@ public final class EnsuresThresholds {
      * is not — a rule stated in some other form — what stopped this is the form, which is the one
      * of the three reasons that does not turn on what two sides name.
      */
-    private static void reportUnread(Core statement, BindingId answer, InputReads reads,
-                                     Symbols symbols, List<UnreadRule> unread) {
+    private static void reportUnread(RuleRef.Ensures rule, Core statement, BindingId answer,
+                                     InputReads reads, Symbols symbols, List<UnreadRule> unread) {
         if (readsTheAnswer(statement, answer)) {
             return;
         }
-        BlockReason why = statement instanceof Core.Binary comparison
+        BlockReason.AboutARule why = statement instanceof Core.Binary comparison
                 ? GuardThresholds.why(comparison, reads, symbols)
                 : new BlockReason.UnreadComparisonForm();
+        souther.compiler.check.RuleCitation cited =
+                souther.compiler.check.RuleCitation.named(rule);
         for (TermPath named : GuardThresholds.mentionedIn(statement, reads, symbols)) {
-            UnreadRule here = new UnreadRule(named, why);
-            if (unread.stream().noneMatch(had -> had.equals(here))) {
+            UnreadRule here = new UnreadRule(rule, cited, named, why);
+            if (unread.stream().noneMatch(had -> had.sameAs(here))) {
                 unread.add(here);
             }
         }

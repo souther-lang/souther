@@ -111,7 +111,7 @@ public final class UnreadComparison {
      * @param quantityIsOver the positions the canonical form's quantity is over, or null where the
      *                       arithmetic read no form at all
      */
-    public static <K> BlockReason why(Side<K> left, Side<K> right,
+    public static <K> BlockReason.AboutARule why(Side<K> left, Side<K> right,
                                       Set<K> quantityIsOver) {
         // What the rule cuts, where the arithmetic could be read at all. A quantity over
         // more than one position divides none of them — which values of one are on which
@@ -127,7 +127,7 @@ public final class UnreadComparison {
 
     /** The same, where the arithmetic named no quantity — which is every carrier whose
      *  values do not count, and every form outside the affine fragment. */
-    private static <K> BlockReason whatTheSidesSay(Side<K> left, Side<K> right) {
+    private static <K> BlockReason.AboutARule whatTheSidesSay(Side<K> left, Side<K> right) {
         Set<K> named = new LinkedHashSet<>(left.positions());
         named.addAll(right.positions());
         if (!left.positions().isEmpty() && !right.positions().isEmpty() && named.size() > 1) {

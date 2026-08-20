@@ -191,4 +191,5 @@ public sealed interface Position permits ReadPosition {
     /** Whether the position is made of positions, and what it is left with if nothing answers for
      *  it. */
     StructuralInspection structure();
+
 }

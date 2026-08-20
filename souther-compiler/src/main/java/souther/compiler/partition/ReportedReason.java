@@ -44,6 +44,8 @@ public final class ReportedReason {
                     UndividedPosition.Reason.RULES_NOT_READ_AT_ALL;
             case BlockReason.UnreadComparisonDomain _ ->
                     UndividedPosition.Reason.UNSUPPORTED_DOMAIN;
+            case BlockReason.CompetingCoordinates _ ->
+                    UndividedPosition.Reason.COMPETING_COORDINATES;
             case BlockReason.ComparisonBetweenPositions _ ->
                     UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE;
         };

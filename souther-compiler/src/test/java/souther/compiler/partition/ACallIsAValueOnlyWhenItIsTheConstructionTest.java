@@ -17,6 +17,7 @@ import souther.compiler.query.Shapes;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -81,10 +82,12 @@ class ACallIsAValueOnlyWhenItIsTheConstructionTest {
 
             assertEquals(List.of(), guards.thresholds(),
                     each[0] + ": an implementation nothing here has read draws no line");
-            assertEquals(List.of(new UnreadRule(TermPath.of("t"),
-                            new BlockReason.UnreadComparisonForm())),
-                    guards.unread(),
+            assertEquals(1, guards.unread().size(),
                     each[0] + ": and the position says a rule about it went unread");
+            UnreadRule said = guards.unread().getFirst();
+            assertEquals(TermPath.of("t"), said.at(), each[0] + ": at the position");
+            assertInstanceOf(BlockReason.UnreadComparisonForm.class, said.why(),
+                    each[0] + ": for the form it is written in");
         }
     }
 }

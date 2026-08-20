@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://souther-lang.org/schema/adequacy-3.json",
+  "$id": "https://souther-lang.org/schema/adequacy-4.json",
   "title": "Souther adequacy report",
   "description": "How well a model's `example`s cover it. Emitted by `souther examples --format json`. A reader keys on `schemaVersion`: a change that removes or renames anything here raises it, and something added since does not — a key added since is optional, and a word added to an enumerated field is one no earlier document carried, so a document written before either existed is still a document of this version. That is one direction: every object here is closed, so an older copy of this schema refuses a document carrying a key added since. A reader that has to accept newer documents wants the newer schema, not a higher number.",
   "type": "object",
@@ -9,7 +9,7 @@
   "properties": {
     "schemaVersion": {
       "type": "integer",
-      "const": 3
+      "const": 4
     },
     "compilerVersion": {
       "type": "string",
@@ -35,8 +35,8 @@
   },
   "$defs": {
     "notReadReason": {
-      "description": "Why a reading is short of the rules. `unsupported_syntax` is a rule that was read and could not be used — an expression the terms do not name; `rules_not_read_at_all` is a rule the reading never arrived at, with which limit stopped the walk neither recorded nor promised; `unsupported_domain` is a comparison against values no line can be drawn on; `unsupported_partition_shape` is a comparison relating two positions rather than dividing one; `depth_limit` is the walk stopping before it reached the position; `type_unresolved` is a type at the position that could not be worked out; `unsupported_traversal` is values held inside something the walk does not reach into. Every one of them is a fact about the compiler and none is a fact about the model.",
-      "enum": ["unsupported_syntax", "rules_not_read_at_all", "unsupported_domain", "unsupported_partition_shape", "depth_limit", "type_unresolved", "unsupported_traversal"]
+      "description": "Why a reading is short of the rules. `unsupported_syntax` is a rule that was read and could not be used — an expression the terms do not name; `rules_not_read_at_all` is a rule the reading never arrived at, with which limit stopped the walk neither recorded nor promised; `unsupported_domain` is a comparison against values no line can be drawn on; `unsupported_partition_shape` is a comparison relating two positions rather than dividing one; `competing_coordinates` is two rules of one position, each read and each about a different coordinate of it — its own order and a count taken of it — with the position's own type having chosen neither, so nothing here can say which one it is measured at; `depth_limit` is the walk stopping before it reached the position; `type_unresolved` is a type at the position that could not be worked out; `unsupported_traversal` is values held inside something the walk does not reach into. Every one of them is a fact about the compiler and none is a fact about the model.",
+      "enum": ["unsupported_syntax", "rules_not_read_at_all", "unsupported_domain", "unsupported_partition_shape", "competing_coordinates", "depth_limit", "type_unresolved", "unsupported_traversal"]
     },
     "ruleId": {
       "type": "object",
@@ -135,7 +135,7 @@
             "description": "What a build does about this one. `refused` is a gap `--strict` and a warned build refuse over; `reported` is a kind neither refuses over, whatever its measurement managed; `undecided` is a kind they would refuse over, from a measurement that came to no answer — telling an author to write a row they may already have written is worse than saying nothing, so it is named and not refused.",
             "enum": ["refused", "undecided", "reported"]
           },
-          "ruleId": { "$ref": "#/$defs/ruleId", "description": "Which rule the finding is about, where it is about one. `subject` beside it is what a reader is shown, and two rules an author named alike are shown the same words — so this is what says they are two. It names the rule and not the question: one rule raises more than one, and `subject` beside it is what tells those apart. Written for `rule_unaccounted` and for no other kind." },
+          "ruleId": { "$ref": "#/$defs/ruleId", "description": "Which rule the finding is about, where it is about one. `subject` beside it is what a reader is shown, and two rules an author named alike are shown the same words — so this is what says they are two. It names the rule and not the question: one rule raises more than one, and `subject` beside it is what tells those apart. Written for `rule_unaccounted` and for `partition_not_read` where that entry is about a rule; the other kinds are not about one." },
           "subject": {
             "type": "string",
             "description": "What the finding is about, written to name what is already in this document: a class name is one of an axis's `classes`, an arm's label one in `branch.unreached`, and `axis = value` names a `boundaries` entry. An input's case carries its position — `C (in #1)` — because two parameters of one type give two findings a class name alone cannot tell apart."
@@ -439,14 +439,17 @@
         },
         "notRead": {
           "type": "array",
-          "description": "Positions some rule about which this reading did not turn into a line, each with what stopped it. What separates them from `notDerivable` is that the model does state something here — which limit stopped each one is what says whose work it is to lift. Not a statement that the position was not measured: a position with an axis and classes can carry a rule nothing read, and whether the reading of a position ran to the end is what that axis's `read` says. Not in `required`: a document written before this field existed is still a document of this version.",
+          "description": "What this reading could not read, each entry with the position it is at and what stopped it. What separates them from `notDerivable` is that the model does state something here — which limit stopped each one is what says whose work it is to lift. Not a statement that the position was not measured: a position with an axis and classes can carry a rule nothing read, and whether the reading of a position ran to the end is what that axis's `read` says. Two shapes, told apart by whether `rule` is there: an entry with one is a rule this read and could not turn into a line, and an entry without one is a position whose rules the reading never arrived at, where there is no rule to name because none was observed. Not in `required`: a document written before this field existed is still a document of this version.",
           "items": {
             "type": "object",
             "required": ["position", "reason"],
             "additionalProperties": false,
+            "dependentRequired": { "rule": ["ruleId"], "ruleId": ["rule"] },
             "properties": {
               "position": { "type": "string" },
-              "reason": { "$ref": "#/$defs/notReadReason" }
+              "reason": { "$ref": "#/$defs/notReadReason" },
+              "rule": { "type": "string", "description": "How a reader finds the rule this could not turn into a line: the name the author gave it where there is one — `invariant Length (even)` — and where it is written where there is none, as `if@<source>:<line>:<column>`. The same handle an `unanswered` entry and a `boundaries` entry write for the same rule. Present exactly where the entry is about a rule; a position the reading never reached has none, and a placeholder here would say a rule had been looked at that nothing saw. Not what tells one rule from another: `ruleId` beside this is." },
+              "ruleId": { "$ref": "#/$defs/ruleId", "description": "Which rule the entry is about, present exactly with `rule`. A key within this document: a consumer groups by it and shows `rule`. Two rules stopped by one limit at one position are two entries and differ here — keyed on the position and the reason alone, they were one." }
             }
           }
         },

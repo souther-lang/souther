@@ -1,5 +1,5 @@
 {
-  "schemaVersion" : 3,
+  "schemaVersion" : 4,
   "compilerVersion" : "<version>",
   "status" : "complete",
   "adequacy" : "satisfied",
@@ -461,13 +461,37 @@
         "notDerivable" : [ "指示.記録時刻" ],
         "notRead" : [ {
           "position" : "指示.受付日",
-          "reason" : "unsupported_syntax"
+          "reason" : "unsupported_syntax",
+          "rule" : "guard@1:52:57",
+          "ruleId" : {
+            "kind" : "guard",
+            "declaredIn" : "conformance.shipping",
+            "behavior" : "出荷する",
+            "ordinal" : 4,
+            "lowered" : 0
+          }
         }, {
           "position" : "指示.締切",
-          "reason" : "unsupported_syntax"
+          "reason" : "unsupported_syntax",
+          "rule" : "guard@1:52:57",
+          "ruleId" : {
+            "kind" : "guard",
+            "declaredIn" : "conformance.shipping",
+            "behavior" : "出荷する",
+            "ordinal" : 4,
+            "lowered" : 0
+          }
         }, {
           "position" : "指示.集荷時刻",
-          "reason" : "unsupported_syntax"
+          "reason" : "unsupported_syntax",
+          "rule" : "guard@1:54:50",
+          "ruleId" : {
+            "kind" : "guard",
+            "declaredIn" : "conformance.shipping",
+            "behavior" : "出荷する",
+            "ordinal" : 5,
+            "lowered" : 0
+          }
         }, {
           "position" : "指示.品目",
           "reason" : "unsupported_traversal"

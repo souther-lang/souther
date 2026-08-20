@@ -417,6 +417,7 @@ public final class GeneratedRows {
             // defaulted so that a shape added later has to be given words here.
             case About.ACaseNothingWasSeenToProduce _, About.AClassNoRowIsIn _,
                     About.APositionNoLineDivides _, About.APositionThisCouldNotRead _,
+                    About.ARuleThisCouldNotRead _,
                     About.AQuestionNothingAnswered _,
                     About.APositionWhoseRulesWereNotReached _,
                     About.APositionPastTheAxisLimit _ ->

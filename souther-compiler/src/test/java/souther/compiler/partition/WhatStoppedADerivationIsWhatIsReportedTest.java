@@ -35,11 +35,27 @@ class WhatStoppedADerivationIsWhatIsReportedTest {
         return evidence;
     }
 
-    private static UndividedPosition.Why whyAt(PartitionEvidence evidence, String position) {
+    /**
+     * What a report is told stopped the reading at {@code position}.
+     *
+     * <p>Off the findings and not off the verdict. The verdict says whether anything divides the
+     * position; what stopped the reading is a finding, made by whichever reader stopped, and a test
+     * that read it back off the verdict would be asserting the reconstruction this arrangement
+     * removes.
+     */
+    private static List<UndividedPosition.Reason> whyAt(PartitionEvidence evidence,
+                                                       String position) {
+        return evidence.notRead().stream()
+                .filter(each -> each.at().equals(position))
+                .map(PartitionEvidence.NotRead::reason)
+                .toList();
+    }
+
+    /** And that the verdict says nothing was established, without saying what stopped it. */
+    private static boolean couldNotDerive(PartitionEvidence evidence, String position) {
         return evidence.notDerivable().stream()
-                .filter(each -> each.at().toString().equals(position))
-                .map(UndividedPosition::why)
-                .findFirst().orElse(null);
+                .anyMatch(each -> each.at().toString().equals(position)
+                        && each.why() instanceof UndividedPosition.Why.CannotDerive);
     }
 
     /**
@@ -49,16 +65,16 @@ class WhatStoppedADerivationIsWhatIsReportedTest {
      */
     @Test
     void aTypeThisCouldNotInterpretIsSaidToBeThatRatherThanAnAbsence() {
-        UndividedPosition.Why why = whyAt(measured("""
+        PartitionEvidence measured = measured("""
                 module demo
                 data Ok
                 data Cyclic = Cyclic
                 behavior run : (x: Cyclic) -> Ok
                 let run (x) = Ok
-                """, "run"), "x");
+                """, "run");
 
-        assertEquals(new UndividedPosition.Why.CannotDerive(
-                UndividedPosition.Reason.TYPE_UNRESOLVED), why);
+        assertEquals(List.of(UndividedPosition.Reason.TYPE_UNRESOLVED), whyAt(measured, "x"));
+        assertTrue(couldNotDerive(measured, "x"), "and nothing is established either way");
     }
 
     /**
@@ -68,7 +84,7 @@ class WhatStoppedADerivationIsWhatIsReportedTest {
      */
     @Test
     void aThresholdOnAnElementSaysTheElementsCouldNotBeReached() {
-        UndividedPosition.Why why = whyAt(measured("""
+        PartitionEvidence measured = measured("""
                 module demo
                 data Ok
                 data Item = { charge: Int }
@@ -76,10 +92,12 @@ class WhatStoppedADerivationIsWhatIsReportedTest {
                 let run (items) =
                     { guard List.length(List.filter((i) -> i.charge >= 21000, items)) < 1 else Ok
                       Ok }
-                """, "run"), "items");
+                """, "run");
 
-        assertEquals(new UndividedPosition.Why.CannotDerive(
-                UndividedPosition.Reason.UNSUPPORTED_TRAVERSAL), why);
+        assertTrue(whyAt(measured, "items")
+                        .contains(UndividedPosition.Reason.UNSUPPORTED_TRAVERSAL),
+                () -> "said " + whyAt(measured, "items"));
+        assertTrue(couldNotDerive(measured, "items"), "and nothing is established either way");
     }
 
     /**
@@ -97,17 +115,19 @@ class WhatStoppedADerivationIsWhatIsReportedTest {
      */
     @Test
     void aRuleThatDividedNothingLeavesThePositionWithWhatItHad() {
-        UndividedPosition.Why why = whyAt(measured("""
+        PartitionEvidence measured = measured("""
                 module demo
                 data Ok
                 data Item = { charge: Int }
                 behavior run : (items: List<Item>) -> Ok
                 let run (items) = { guard List.length(items) < -1 else Ok
                     Ok }
-                """, "run"), "items");
+                """, "run");
 
-        assertEquals(new UndividedPosition.Why.CannotDerive(
-                UndividedPosition.Reason.UNSUPPORTED_TRAVERSAL), why);
+        assertTrue(whyAt(measured, "items")
+                        .contains(UndividedPosition.Reason.UNSUPPORTED_TRAVERSAL),
+                () -> "said " + whyAt(measured, "items"));
+        assertTrue(couldNotDerive(measured, "items"), "and nothing is established either way");
     }
 
     /**

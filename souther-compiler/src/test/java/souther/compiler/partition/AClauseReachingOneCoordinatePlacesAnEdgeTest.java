@@ -314,8 +314,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                   onSpan                   implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not measured (no partition axis was derived at any position)
-                      · not read: v.startsAt (the comparison relates it to another position rather than dividing it)
-                      · not read: v.endsAt (the comparison relates it to another position rather than dividing it)
+                      · not read: invariant Span #1 — it relates two positions rather than dividing one, about `v.startsAt`
+                      · not read: invariant Span #1 — it relates two positions rather than dividing one, about `v.endsAt`
                     border      not measured (no line was derived at any position)
                 """), report);
     }
@@ -330,8 +330,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                   onFloor                  implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not measured (no partition axis was derived at any position)
-                      · not read: v.n (the comparison relates it to another position rather than dividing it)
-                      · not read: v.min (the comparison relates it to another position rather than dividing it)
+                      · not read: invariant Floor #1 — it relates two positions rather than dividing one, about `v.n`
+                      · not read: invariant Floor #1 — it relates two positions rather than dividing one, about `v.min`
                     border      not measured (no line was derived at any position)
                 """), report);
     }
@@ -455,6 +455,11 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      * a report says is that they were not read, which sends the author to a limit of this compiler
      * rather than to a distinction their model does not draw. Taking whichever was looked at first
      * would put a line the author can read beside one they cannot see.
+     *
+     * <p>Both clauses are named, since both are rules the author would have to rewrite. One line
+     * said the position was short of something and left them to find which two of their clauses
+     * were in the way — and said it in the words of a form this compiler cannot read, which is a
+     * cause it was never observed to have.
      */
     @Test
     void rulesAboutBothCoordinatesLeaveThePositionUndivided() {
@@ -464,7 +469,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                   onR                      implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not measured (no partition axis was derived at any position)
-                      · not read: v.s (a rule about it is one this compiler did not read)
+                      · not read: invariant R #1 — a rule beside it is about the position's other coordinate, so neither can be chosen, about `v.s`
+                      · not read: invariant R #2 — a rule beside it is about the position's other coordinate, so neither can be chosen, about `v.s`
                     border      not measured (no line was derived at any position)
                 """), report);
     }

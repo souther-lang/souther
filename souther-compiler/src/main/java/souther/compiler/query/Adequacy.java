@@ -8,6 +8,7 @@ import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.msg.DeadBranchMessage;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.Citation;
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.examples.FixtureReader;
 import souther.compiler.ast.Hir;
@@ -1375,7 +1376,7 @@ public final class Adequacy {
                     // that the switch stays exhaustive over what a finding can be about rather than
                     // over the ones thought of here.
                     case About.ACaseNothingWasSeenToProduce _, About.AClassNoRowIsIn _,
-                            About.APositionNoLineDivides _, About.APositionThisCouldNotRead _,
+                            About.APositionNoLineDivides _, About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
                             About.APositionWhoseRulesWereNotReached _,
                             About.AQuestionNothingAnswered _,
                             About.APositionPastTheAxisLimit _ ->
@@ -1791,7 +1792,15 @@ public final class Adequacy {
                 case About.APointOfABorder(var point) -> point.role().againstTheLine()
                         ? Kind.BOUNDARY_UNMET : Kind.DOMAIN_POINT_UNCOVERED;
                 case About.APositionNoLineDivides _ -> Kind.PARTITION_NOT_DERIVABLE;
-                case About.APositionThisCouldNotRead _ -> Kind.PARTITION_NOT_READ;
+                case About.ARuleThisCouldNotRead _ -> Kind.PARTITION_NOT_READ;
+                // Which of the two public words a position's stop is, read off what stopped it.
+                // A reading that never arrived at the rules of a position is the thing
+                // PARTITION_RULES_NOT_REACHED is for, and it is that whether the axes went on to
+                // measure the position or not — said as PARTITION_NOT_READ, a consumer would have
+                // to read the reason back to find the one word that already exists for it.
+                case About.APositionThisCouldNotRead(var it) ->
+                        it.finding().why() instanceof BlockReason.ValueRulesNotReached
+                                ? Kind.PARTITION_RULES_NOT_REACHED : Kind.PARTITION_NOT_READ;
                 case About.APositionWhoseRulesWereNotReached _ ->
                         Kind.PARTITION_RULES_NOT_REACHED;
                 case About.AQuestionNothingAnswered _ -> Kind.RULE_UNACCOUNTED;
@@ -1969,11 +1978,16 @@ public final class Adequacy {
             // And what this could not read, asked of the one reading that answers it. A position
             // with classes can still carry a statement nothing read, so this is not filtered by the
             // list above.
-            for (PartitionEvidence.UnreadPosition each : partition.notRead()) {
+            for (PartitionEvidence.NotRead each : partition.notRead()) {
                 // Not measured, because nothing here established anything either way about it.
                 out.add(new Finding(behavior.name(), MeasurementStatus.NOT_MEASURED,
                         Citation.of(behavior.pos()),
-                        new About.APositionThisCouldNotRead(each)));
+                        switch (each) {
+                            case PartitionEvidence.NotRead.ARule rule ->
+                                    new About.ARuleThisCouldNotRead(rule);
+                            case PartitionEvidence.NotRead.APosition position ->
+                                    new About.APositionThisCouldNotRead(position);
+                        }));
             }
             // A position the axes did measure, whose rules this reading is short of. A different
             // thing to act on from one nothing divided: the classes beside it are what the model
@@ -2119,7 +2133,7 @@ public final class Adequacy {
                         // defaulted, so that one added later has to be answered here rather than
                         // arriving as a warning with no sentence.
                         case About.ACaseNothingWasSeenToProduce _, About.AClassNoRowIsIn _,
-                                About.APositionNoLineDivides _, About.APositionThisCouldNotRead _,
+                                About.APositionNoLineDivides _, About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
                                 About.APositionWhoseRulesWereNotReached _,
                                 About.AQuestionNothingAnswered _,
                                 About.APositionPastTheAxisLimit _ ->
@@ -2184,7 +2198,7 @@ public final class Adequacy {
                 // reason the switch above gives.
                 case About.ACaseNoRowAppliesItTo _, About.ACaseNothingWasSeenToProduce _,
                         About.AClassNoRowIsIn _, About.APositionNoLineDivides _,
-                        About.APositionThisCouldNotRead _,
+                        About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
                         About.APositionWhoseRulesWereNotReached _,
                         About.AQuestionNothingAnswered _,
                         About.APositionPastTheAxisLimit _ -> { }

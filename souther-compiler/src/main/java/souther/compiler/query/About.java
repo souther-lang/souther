@@ -85,10 +85,32 @@ public sealed interface About {
         }
     }
 
-    /** A position something is written about that this did not read, with what stopped it. */
-    record APositionThisCouldNotRead(PartitionEvidence.UnreadPosition position) implements About {
+    /**
+     * A rule of the model this read and could not turn into a line, and what stopped it.
+     *
+     * <p>Named by the rule, because a position is not what an author edits. Carrying only the
+     * position, the sentence written from this told an author that a rule about somewhere went
+     * unread and left them to work out which rule — which the accounting was made to say and this
+     * measure beside it was not.
+     */
+    record ARuleThisCouldNotRead(PartitionEvidence.NotRead.ARule finding) implements About {
+        public ARuleThisCouldNotRead {
+            java.util.Objects.requireNonNull(finding, "a finding is about something");
+        }
+    }
+
+    /**
+     * A position whose rules this reading never arrived at, with what stopped it.
+     *
+     * <p>Its own shape beside the rule above, and not that one with the rule left out. There is no
+     * rule to name here and a reader is owed the position and the limit; a consumer told to read an
+     * absent field to know which of the two it holds is reconstructing the authority from the
+     * payload.
+     */
+    record APositionThisCouldNotRead(PartitionEvidence.NotRead.APosition finding)
+            implements About {
         public APositionThisCouldNotRead {
-            java.util.Objects.requireNonNull(position, "a finding is about something");
+            java.util.Objects.requireNonNull(finding, "a finding is about something");
         }
     }
 

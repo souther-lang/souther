@@ -22,21 +22,62 @@ package souther.compiler.inputs;
 public sealed interface BlockReason {
 
     /**
-     * What a value reading's account of what it left unread comes to here.
+     * A rule this read and could not use, which is a reason there is always a rule to name.
+     *
+     * <p>Whose rule it is, is the producer's to carry. What this says is that there is one: a
+     * comparison was written, a reader took it apart as far as it goes, and what stopped it is a
+     * fact about that rule and this compiler. So a finding built on one of these owes an identity
+     * for the rule, and the type is what makes owing it unavoidable.
+     */
+    sealed interface AboutARule extends BlockReason {}
+
+    /**
+     * The reading did not get to the rules of the position, so there is no rule to name.
+     *
+     * <p>Not a rule read and found wanting. A depth, a shape nothing reaches into, a type that
+     * could not be worked out, a gathering that stopped — none of them is about any one thing an
+     * author wrote, and a finding built on one names the position and nothing else. Told apart from
+     * the above by the type, because the two used to be one set and a report could name a rule for
+     * some of them and not the rest with nothing saying which was which.
+     */
+    sealed interface AboutThePosition extends BlockReason {}
+
+    /**
+     * What a value reading's account of a rule it could not use comes to here.
      *
      * <p>The one place the two vocabularies meet, so a reader holding a reading's completeness and
      * one holding a block reason cannot come to different words for one stop. A relation between
      * two positions is what {@link ComparisonBetweenPositions} already says, whichever rule wrote
      * it: a {@code guard} comparing two inputs and an {@code invariant} relating two fields leave a
-     * reader the same thing to know. The other two are their own, because what would lift each is
-     * different work — one wants a reader for a form, and one wants the gathering to reach further.
+     * reader the same thing to know. The other is its own, because what would lift it is different
+     * work — a reader for a form rather than a gathering that reaches further.
+     *
+     * <p>{@link souther.compiler.values.UnreadReason#NOT_REACHED} is refused rather than answered.
+     * A reading that never arrived at the rules of a position is holding no rule for this to be
+     * about, so a caller here would be naming one it does not have — which is the whole of what
+     * {@link AboutThePosition} is beside this for.
      */
-    static BlockReason of(souther.compiler.values.UnreadReason why) {
+    static AboutARule ofARuleTheValueReadingLeft(souther.compiler.values.UnreadReason why) {
         return switch (why) {
             case RELATES_TWO_POSITIONS -> new ComparisonBetweenPositions();
             case FORM_NOT_READ, ALTERNATIVE_NOT_READ -> new UnreadValueRule();
-            case NOT_REACHED -> new ValueRulesNotReached();
+            case NOT_REACHED -> throw new IllegalArgumentException(
+                    "a reading that did not reach the rules of a position holds no rule to say"
+                            + " this of");
         };
+    }
+
+    /**
+     * The same, for a caller that has to answer for every way a value reading can be short.
+     *
+     * <p>What a position is left with, and not a finding: both authorities are legitimate answers
+     * to "why is there nothing here", and which of them it is decides what a report may go on to
+     * say rather than whether the reading stopped. Written in terms of the one above, so the
+     * classification is stated once.
+     */
+    static BlockReason of(souther.compiler.values.UnreadReason why) {
+        return why == souther.compiler.values.UnreadReason.NOT_REACHED
+                ? new ValueRulesNotReached() : ofARuleTheValueReadingLeft(why);
     }
 
     /**
@@ -44,10 +85,10 @@ public sealed interface BlockReason {
      * declaration reachable from itself. Such a model compiles, so this is a position a report is
      * asked about and cannot be answered for.
      */
-    record TypeUnresolved() implements BlockReason {}
+    record TypeUnresolved() implements AboutThePosition {}
 
     /** The walk stopped before reaching what is under the position. */
-    record DepthLimit() implements BlockReason {}
+    record DepthLimit() implements AboutThePosition {}
 
     /**
      * The shape at the position holds values this cannot reach into, and which reaching is missing
@@ -58,7 +99,7 @@ public sealed interface BlockReason {
      * holds one, and deciding what part of a mapping a rule is even about. Reporting them alike
      * would let one of them being implemented read as all three.
      */
-    record UnsupportedTraversal(Traversal traversal) implements BlockReason {}
+    record UnsupportedTraversal(Traversal traversal) implements AboutThePosition {}
 
     /**
      * A comparison naming the position is written in a form no reader here takes apart: the
@@ -69,11 +110,11 @@ public sealed interface BlockReason {
      * producers of one kind of evidence (spec §example-partition), and what stopped each of them is
      * the same fact about this compiler.
      */
-    record UnreadComparisonForm() implements BlockReason {}
+    record UnreadComparisonForm() implements AboutARule {}
 
     /** A comparison naming the position is against values no line is drawn on here — the carrier,
      *  asked of the carrier. */
-    record UnreadComparisonDomain() implements BlockReason {}
+    record UnreadComparisonDomain() implements AboutARule {}
 
     /**
      * A rule naming which values the position may hold is written in a form no reader here takes
@@ -85,7 +126,7 @@ public sealed interface BlockReason {
      * different work — one wants a wider fragment of comparison forms, and one wants a reading of
      * values that follows a rule into a shape it does not enter today.
      */
-    record UnreadValueRule() implements BlockReason {}
+    record UnreadValueRule() implements AboutARule {}
 
     /**
      * The reading of what the position may hold never reached the rules about it.
@@ -96,7 +137,23 @@ public sealed interface BlockReason {
      * the rule, and all of them leave the same hole: what is written about this position is not
      * known to have been read.
      */
-    record ValueRulesNotReached() implements BlockReason {}
+    record ValueRulesNotReached() implements AboutThePosition {}
+
+    /**
+     * Each of two rules is read, and they are about different coordinates of one position, so
+     * neither can be the one it is measured at.
+     *
+     * <p>Nothing is wrong with either rule. A {@code String} is the one thing that can be measured
+     * two ways — its own order, and the length of it — and which of them a position is measured at
+     * is settled by whichever the model wrote about. Where the position's own type chose neither
+     * and the value it sits in states an end on each, choosing either would put a line the author
+     * can read beside one they cannot see, so both go unread and each says so.
+     *
+     * <p>Its own case and not {@link UnreadComparisonForm}. The forms were read: what is missing is
+     * not a reader for an expression but a rule for which coordinate wins, and an author told the
+     * first would go looking for a syntax this compiler handles perfectly well.
+     */
+    record CompetingCoordinates() implements AboutARule {}
 
     /**
      * The comparison relates two positions rather than dividing one.
@@ -106,7 +163,7 @@ public sealed interface BlockReason {
      * partition of one is not — so a line like this is settled beside the partition rather than in
      * it, and the position it names is left with no class of its own from this rule.
      */
-    record ComparisonBetweenPositions() implements BlockReason {}
+    record ComparisonBetweenPositions() implements AboutARule {}
 
     /** What a derivation would have to be able to reach into. */
     enum Traversal {
