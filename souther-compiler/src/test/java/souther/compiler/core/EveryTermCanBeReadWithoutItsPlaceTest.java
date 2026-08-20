@@ -142,8 +142,8 @@ class EveryTermCanBeReadWithoutItsPlaceTest {
                             : stated.get(behavior).rules()) {
                         for (souther.compiler.check.StatedContract.Conjunct each
                                 : rule.conjuncts()) {
-                            if (each.stated() != null) {
-                                out.add(each.stated());
+                            if (each.stated().orNull() != null) {
+                                out.add(each.stated().orNull());
                             }
                         }
                     }

@@ -271,7 +271,7 @@ public final class InvariantChecker {
      * say: a declaration's clause is typed over its fields and a behavior's rule over its signature. */
     @FunctionalInterface
     interface Typing {
-        Core type(Hir.Expr read);
+        TypedClause type(Hir.Expr read);
     }
 
     private ClauseDischarge capabilityOf(ClausesForDischarge.ClauseReading clause,
@@ -290,102 +290,44 @@ public final class InvariantChecker {
      * could not be typed is not a clause found to be outside the fragment: being inside it is what
      * was never asked.
      */
-    private Core typed(Typing typing, Hir.Expr read, String describing) {
+    private TypedClause typed(Typing typing, Hir.Expr read, String describing) {
         try {
             return typing.type(read);
         } catch (RuntimeException why) {
             gaveUp("typing " + describing, why);
-            return null;
+            return new TypedClause.Stopped(why);
         }
     }
 
     /** The obligation {@code at} raises, and what came of reading {@code stated} for it. */
-    private ClauseDischarge capabilityOf(Core stated, SourcePos at, Denotations locations,
+    private ClauseDischarge capabilityOf(TypedClause stated, SourcePos at, Denotations locations,
                                          String describing) {
         return new ClauseDischarge(new DischargeObligation(at),
                 readingOf(stated, locations, describing));
     }
 
     /**
-     * What the check made of {@code stated}: the readings it got, or that it never got to the end.
+     * What the check made of {@code stated}: what the walk that reads clauses answered of it, or
+     * that it never got to the end.
      *
-     * <p>Whether the clause folds is asked here and of {@link Predicates#decidedAt} directly, rather
-     * than read off what the obligations came to. A clause folding the way it is read owes nothing
-     * and one folding the other way is a violation, and which of those {@code obligations} says is
-     * governed by an argument it takes for the walk's sake — so a classification reading it off that
-     * answer would move the day the walk's option meant something else. Asked here, {@code 1 >= 0}
-     * and {@code 1 < 0} are the two answers of one fold, and neither of them can arrive as a bound
-     * or as a clause outside the fragment.
-     *
-     * <p>The conjuncts were split before this ({@link ClausesForDischarge#conjunctsOf}), so what is
-     * read here is one of them.
+     * <p>Nothing is worked out here. The fold, the parts and what the walk stopped on are that
+     * walk's own answers, taken from the expression it normalizes and reads. Asked before it — of
+     * the form an author wrote — {@code Int.compare(1, 2) >= 0} is a call and folds to nothing, and
+     * the clause came back as a bound any guard implying it would discharge.
      */
-    private CapabilityResult readingOf(Core stated, Denotations locations, String describing) {
-        if (stated == null) {
+    private CapabilityResult readingOf(TypedClause typed, Denotations locations, String describing) {
+        if (!(typed instanceof TypedClause.Typed it)) {
             return new CapabilityResult.AnalysisStopped("typing " + describing);
         }
-        Boolean folded;
-        Predicates.Owed owed;
-        // Both walks inside the one boundary. Asking whether the clause folds is a walk of it like
-        // any other — over a bridge to what was written and an evaluation of that — so a reading
-        // that falls over there has to come out as a stop, which is the arm it would otherwise be
-        // the one thing to escape.
         try {
-            folded = predicates.decidedAt(stated);
-            owed = folded != null ? null
-                    : predicates.obligations(stated, Known.top(), locations, false);
+            return CapabilityResult.of(
+                    predicates.obligations(it.value(), Known.top(), locations, false));
         } catch (RuntimeException why) {
             // Fail-open, as the walk is — and said as a stop rather than as a conclusion, because
             // what the clause is outside of is what this did not find out.
             gaveUp("capabilityOf " + describing, why);
             return new CapabilityResult.AnalysisStopped("capabilityOf " + describing);
         }
-        if (folded != null) {
-            return CapabilityResult.Analyzed.of(new StaticReading.Decided(folded));
-        }
-        Set<StaticReading> readings = new LinkedHashSet<>();
-        for (Predicates.Clause owe : owed.clauses()) {
-            // A clause read both ways is one obligation with two readings of it, not two
-            // obligations: the two admit different guards, and one of them being there says nothing
-            // about the other.
-            readings.add(owe.numeric() != null
-                    ? new StaticReading.AsABound() : new StaticReading.AsATerm());
-        }
-        // `Predicates` answers `NOTHING` where a clause folded the way it was read and nowhere else,
-        // so a walk owing nothing is a clause that holds. Reached for the ones the fold above cannot
-        // take whole: `Bool.not(1 < 0)` is a call to this and a negation to the reading under it,
-        // which folds what it negates and comes back owing nothing.
-        return CapabilityResult.analyzed(readings, owed.unreadable(),
-                () -> whyUnreadable(stated, locations));
-    }
-
-    /** What in {@code clause} a finished reading could not read. No arm for a clause that could
-     *  not be typed: that reading never began, and this answers only for ones that ran to the end. */
-    private FragmentReason whyUnreadable(Core clause, Denotations fields) {
-        Core blocked = unreadable(clause, fields);
-        if (blocked instanceof Core.PreservedCall call) {
-            return new FragmentReason.ItCallsAnOperation(call.operation().name());
-        }
-        if (blocked != null) {
-            return new FragmentReason.ItsShapeIsNotRead();
-        }
-        return new FragmentReason.NothingAGuardCouldBeHeldAgainst();
-    }
-
-    /** The innermost part of {@code e} the term grammar cannot read, or {@code null} if it reads all
-     * of it. Read under the same fields the clause was, so a field it names is a location and what
-     * is left is the shape. */
-    private Core unreadable(Core e, Denotations fields) {
-        Core[] found = {null};
-        Core.forEachChild(e, child -> {
-            if (found[0] == null) {
-                found[0] = unreadable(child, fields);
-            }
-        });
-        if (found[0] != null) {
-            return found[0];
-        }
-        return terms.bodyKey(e, fields) == null ? e : null;
     }
 
     /**
@@ -586,7 +528,7 @@ public final class InvariantChecker {
             }
             for (TypeOps.Declared declared :
                     own ? c.clauses.declared(named, data) : List.<TypeOps.Declared>of()) {
-                Core stated = c.clauses.typed(declared.clause().expr(), named, data);
+                Core stated = c.clauses.typed(declared.clause().expr(), named, data).orNull();
                 if (stated == null) {
                     read = false;
                     gathering.missed(FieldDomains.THE_VALUE, Borne.BY_EVERY_VALUE);

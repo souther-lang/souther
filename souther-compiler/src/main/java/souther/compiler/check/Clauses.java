@@ -37,7 +37,7 @@ final class Clauses {
     private final Map<TypeSymbol, Map<String, BindingId>> bindings = new HashMap<>();
     /** Remembered per declaration, not per clause: a clause an include brings in is one expression
      * reached under two names, and what it types to is read against the fields of the one asking. */
-    private final Map<TypeSymbol, Map<Hir.Expr, Optional<Core>>> typed = new HashMap<>();
+    private final Map<TypeSymbol, Map<Hir.Expr, TypedClause>> typed = new HashMap<>();
     private final Map<TypeSymbol, List<Hir.InvariantClause>> effective = new HashMap<>();
     /** Which of a declaration's own fields each typed clause reads — what a construction has to have
      * filled for the clause to be read at all. */
@@ -87,23 +87,23 @@ final class Clauses {
      * {@code clause} as the checker types it: over {@code named}'s own fields, each a binding, in
      * the representation this check reads. Asked once per clause, because typing one walks it.
      *
-     * <p>Null where the clause is not one this compiler could type there. That is the same answer as
-     * a clause naming something outside the fragment — the run-time check stands for it — and it is
-     * an answer rather than a failure because a declaration this check cannot read is not a
-     * declaration an author wrote wrongly.
+     * <p>{@link TypedClause.Stopped} where typing it did not finish. This used to answer null for
+     * that, saying it was the same answer as a clause naming something outside the fragment; it is
+     * not, and it never was — the elaborator does not answer null of its own accord, so every one of
+     * those was an exception caught here and dropped.
      */
-    Core typed(Hir.Expr clause, TypeSymbol named, Hir.Data data) {
+    TypedClause typed(Hir.Expr clause, TypeSymbol named, Hir.Data data) {
         return typed.computeIfAbsent(named, _ -> new IdentityHashMap<>())
                 .computeIfAbsent(clause, written -> {
                     try {
-                        return Optional.ofNullable(Elaborator.elaborate(written,
+                        return new TypedClause.Typed(Elaborator.elaborate(written,
                                 DataChecker.fieldScope(named, data, symbols),
                                 CheckContext.of(symbols).forData(data).forDischarge(),
                                 Type.BOOL));
-                    } catch (RuntimeException _) {
-                        return Optional.empty();
+                    } catch (RuntimeException why) {
+                        return new TypedClause.Stopped(why);
                     }
-                }).orElse(null);
+                });
     }
 
     /**
@@ -115,7 +115,10 @@ final class Clauses {
      * nothing.
      */
     Core statedAt(Hir.Expr clause, TypeSymbol named, Hir.Data data, Map<BindingId, Core> given) {
-        Core stated = typed(clause, named, data);
+        // Fail-open: a clause with no form leaves its run-time check standing, whichever way the
+        // form went missing. Which of the two it was matters to a reader that publishes a sentence
+        // about the clause, and this is not one.
+        Core stated = typed(clause, named, data).orNull();
         if (stated == null) {
             return null;
         }

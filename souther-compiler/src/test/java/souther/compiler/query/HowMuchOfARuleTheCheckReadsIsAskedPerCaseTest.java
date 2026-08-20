@@ -1,7 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.check.CapabilityResult;
-import souther.compiler.check.StaticReading;
+import souther.compiler.check.StaticRoute;
 import souther.compiler.check.ContractDischarge;
 import souther.compiler.check.ContractDischarge.RuleDischarge;
 import souther.compiler.meta.ModulePath;
@@ -120,7 +120,7 @@ class HowMuchOfARuleTheCheckReadsIsAskedPerCaseTest {
                 """, "findIt");
 
         assertEquals(2, discharge.rules().size(), "one answer per conjunct");
-        assertEquals(CapabilityResult.Analyzed.of(new StaticReading.AsABound()),
+        assertEquals(CapabilityResult.Analyzed.routed(new StaticRoute.AsABound(), new StaticRoute.AsATerm()),
                 discharge.rules().get(1).capability().capability(),
                 "`value.rank >= 0` is a relation the numeric domain reasons over");
     }
@@ -148,10 +148,10 @@ class HowMuchOfARuleTheCheckReadsIsAskedPerCaseTest {
                 let findIt (id) = Rows { value = [] }
                 """, "findIt");
 
-        assertEquals(CapabilityResult.Analyzed.of(new StaticReading.AsATerm()),
+        assertEquals(CapabilityResult.Analyzed.routed(new StaticRoute.AsATerm()),
                 discharge.rules().get(0).capability().capability(),
                 "a term the check can name and compare, and nothing weaker states it");
-        assertEquals(CapabilityResult.Analyzed.of(new StaticReading.AsABound()),
+        assertEquals(CapabilityResult.Analyzed.routed(new StaticRoute.AsABound(), new StaticRoute.AsATerm()),
                 discharge.rules().get(1).capability().capability());
     }
 

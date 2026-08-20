@@ -1,84 +1,77 @@
 package souther.compiler.check;
 
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.function.Supplier;
 
 /**
- * What came of trying to read one clause statically: either the reading ran to the end and says what
- * it made of it, or it stopped and says nothing.
+ * What came of trying to read one clause statically.
  *
- * <p>Two arms, because they are different kinds of sentence. "The reading finished, and this clause
- * is outside what it reads" is a conclusion about the clause. "The reading did not finish" is a fact
- * about this compiler on this run, and it settles nothing about the clause at all — whether the
- * clause is inside the fragment is exactly what was not found out. Held as one answer, an author is
- * told that no guard discharges their construction because an analysis fell over on it, and nothing
- * fails while that is happening, since a stop and a negative conclusion are both silent.
+ * <p>Three answers, and the first two are conclusions about the clause while the third is not. "The
+ * reading finished and these are the parts to establish" and "the clause came out one way on its
+ * own" are both things the model settles. "The reading did not finish" is a fact about this compiler
+ * on this run, and it settles nothing — whether the clause is inside the fragment is exactly what was
+ * not found out. Held as one answer, an author is told that no guard discharges their construction
+ * because an analysis fell over on it, and nothing fails while that is happening, since a stop and a
+ * negative conclusion are both silent.
  *
- * <p>The distinction has to be made here rather than remembered downstream. Every reader of a
- * classification reaches this type, and a reader handed one word for both would have to know which
- * of them it had — which is a thing to get right once per reader instead of once.
+ * <p>Read off what the walk that reads clauses answered, and not worked out beside it. The walk
+ * normalizes before it reads — {@code Int.compare(1, 2) >= 0} is a call until it becomes
+ * {@code 1 >= 2} — so a reader folding the written form first sees a call, and comes back with a
+ * relation any guard implying it would discharge for a clause no value satisfies.
  */
 public sealed interface CapabilityResult {
 
     /**
-     * The readings a finished walk got, with what it could not read said beside them, and a walk
-     * that came back with nothing said as a clause that holds.
+     * The reading finished, and the clause has these parts to establish.
      *
-     * <p>Held apart from the walk that produces the readings, so the rule can be held to for shapes
-     * no program takes today — a clause read in part and outside the fragment in the rest is one of
-     * them, and a mechanism whose data never takes a shape it is written for is a mechanism nothing
-     * has run.
+     * <p>All of them, which is what a list of parts says and a flat set of readings does not. A
+     * clause read as a bound in one part and as a term in another is not discharged by either guard
+     * alone. The alternatives are inside a part ({@link RequiredPart.Routed}), which is the shape
+     * {@link Predicates.Clause#dischargedBy} has.
      *
-     * @param read       what the walk made of it, which may be nothing
-     * @param unreadable whether some part of it was outside what the walk reads
-     * @param why        what that part was, asked only where there is something to say: finding out
-     *                   what in a clause was not read costs a walk of it
+     * <p>Never empty. A clause with no part to establish is one that came out on its own, which is
+     * {@link Decided}, and an empty list is what a reading that never ran would produce as well.
      */
-    static Analyzed analyzed(Set<StaticReading> read, boolean unreadable,
-                             Supplier<FragmentReason> why) {
-        Set<StaticReading> all = new LinkedHashSet<>(read);
-        if (unreadable) {
-            // What was not read is said even where something else was: a clause half of which could
-            // not be read would otherwise be described entirely by the half that was, and an author
-            // would write the guard that discharges that half and find the construction refused.
-            all.add(new StaticReading.OutsideTheFragment(why.get()));
-        } else if (all.isEmpty()) {
-            // A finished walk that owes nothing is one whose every part folded the way it was read.
-            // Said as a clause nothing was made of, a rule that holds of every value was reported as
-            // one the static checker cannot represent and no guard discharges.
-            all.add(new StaticReading.Decided(true));
+    record Analyzed(List<RequiredPart> parts) implements CapabilityResult {
+
+        public Analyzed {
+            if (parts == null || parts.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "a clause with nothing to establish came out on its own");
+            }
+            parts = List.copyOf(parts);
         }
-        return new Analyzed(all);
+
+        public static Analyzed of(RequiredPart... parts) {
+            return new Analyzed(List.of(parts));
+        }
+
+        /** One part carried by one or more routes, which is what most clauses come to. */
+        public static Analyzed routed(StaticRoute... routes) {
+            return new Analyzed(
+                    List.of(new RequiredPart.Routed(new LinkedHashSet<>(List.of(routes)))));
+        }
     }
 
     /**
-     * The reading ran to the end, and this is what it made of the clause.
+     * The clause came out one way before any construction was looked at.
      *
-     * <p>Never empty. A reading that finished has an answer, and an empty set is what a reading that
-     * never ran would produce as well — so the arm a clause falls into when nothing was carried has
-     * to be one somebody wrote down ({@link StaticReading.Decided},
-     * {@link StaticReading.OutsideTheFragment}) rather than the absence of one. An empty set here was
-     * how a clause that holds of every value came to be reported as one no guard discharges.
+     * <p>{@code invariant 1 >= 0} holds of every value, so nothing is asked of a guard;
+     * {@code invariant 1 < 0} holds of none, so no guard establishes it and no value of the type can
+     * be built. Both are answers a reading reached, and neither is a clause this compiler could not
+     * read — which is what both of them used to be reported as, in opposite directions.
+     *
+     * <p>Both signs here, and not the true one with the false one left to fall wherever it falls.
+     * They come from one fold of one expression. What an author should be told about
+     * {@code Decided(false)} — a line in an editor, a diagnostic at the declaration, or a type
+     * nothing inhabits — is a separate question, and one about the language rather than about this
+     * accounting.
+     *
+     * @param holds which way it folded
      */
-    record Analyzed(Set<StaticReading> readings) implements CapabilityResult {
-
-        public Analyzed {
-            if (readings == null || readings.isEmpty()) {
-                throw new IllegalArgumentException(
-                        "a reading that finished says what it made of the clause");
-            }
-            // Insertion order: `Set.of` and `Set.copyOf` iterate in an order salted once per JVM
-            // run, and these are shown to an author a line at a time.
-            readings = Collections.unmodifiableSet(new LinkedHashSet<>(readings));
-        }
-
-        public static Analyzed of(StaticReading... readings) {
-            return new Analyzed(new LinkedHashSet<>(List.of(readings)));
-        }
-    }
+    record Decided(boolean holds) implements CapabilityResult {}
 
     /**
      * The reading stopped, so there is no conclusion about the clause.
@@ -94,5 +87,47 @@ public sealed interface CapabilityResult {
                 throw new IllegalArgumentException("a reading that stopped says where it was");
             }
         }
+    }
+
+    /**
+     * What the reading of a clause came to, said as one of these.
+     *
+     * <p>The whole of the mapping, so that it is one thing to hold to rather than a shape assembled
+     * wherever a classification is wanted. What the walk owes, what it folded to, and what it stopped
+     * on are all that walk's own answers; nothing here asks the clause a second question.
+     *
+     * <p>A fold is the answer where there is one, and is not said beside the parts: a clause that
+     * holds of every value asks nothing of a guard whatever route the walk also found for it, and one
+     * that holds of none is discharged by nothing. Where a conjunction folds only in part the fold is
+     * not the clause's — {@link Predicates.Fold#and} keeps it undecided — and the parts are.
+     */
+    static CapabilityResult of(Predicates.Owed owed) {
+        if (owed.folded() != Predicates.Fold.NOT_DECIDED) {
+            return new Decided(owed.folded() == Predicates.Fold.HOLDS);
+        }
+        List<RequiredPart> parts = new ArrayList<>();
+        for (Predicates.Clause each : owed.clauses()) {
+            parts.add(new RequiredPart.Routed(routesOf(each)));
+        }
+        if (owed.couldNotRead() != null) {
+            // What was not read is said beside what was: a clause half of which could not be read
+            // would otherwise be described entirely by the half that was, and an author would write
+            // the guard that discharges that half and find the construction still refused.
+            parts.add(new RequiredPart.OutsideTheFragment(FragmentReason.of(owed.couldNotRead())));
+        }
+        return new Analyzed(parts);
+    }
+
+    /** The ways one part could be discharged, which is every one the walk built for it. A part with
+     *  neither is not one of these — the walk answers that it could not read it. */
+    private static Set<StaticRoute> routesOf(Predicates.Clause clause) {
+        Set<StaticRoute> routes = new LinkedHashSet<>();
+        if (clause.numeric() != null) {
+            routes.add(new StaticRoute.AsABound());
+        }
+        if (clause.fact() != null) {
+            routes.add(new StaticRoute.AsATerm());
+        }
+        return routes;
     }
 }

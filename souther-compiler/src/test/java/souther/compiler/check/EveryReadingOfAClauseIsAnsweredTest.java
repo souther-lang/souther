@@ -4,23 +4,22 @@ import souther.compiler.diag.SourcePos;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * What a clause owes and what came of reading it are held apart, and a reading that finished always
- * says something.
+ * What a clause owes and what came of reading it are held apart, and every answer that can be
+ * written down is one somebody wrote.
  *
  * <p>These are about the values rather than about a program, because what they hold is that certain
  * answers cannot be written down. A program cannot demonstrate the absence of a state; the
- * constructor is what keeps it absent, and this is what holds the constructor to it. What each
- * answer comes to for a given clause is asked of programs instead
- * ({@code InvariantCapabilitiesTest}).
+ * constructors are what keep it absent, and this is what holds them to it. What a given clause comes
+ * to is asked of programs instead ({@code InvariantCapabilitiesTest}).
  */
 class EveryReadingOfAClauseIsAnsweredTest {
 
@@ -28,118 +27,82 @@ class EveryReadingOfAClauseIsAnsweredTest {
 
     private static final FragmentReason WHY = new FragmentReason.ItsShapeIsNotRead();
 
-    /** Asked for it, and the asking is what the rule is careful about. */
-    private static final java.util.function.Supplier<FragmentReason> EXPENSIVE = () -> WHY;
-
     /**
-     * A reading that ran to the end has an answer.
+     * A reading that ran to the end has a part to point at.
      *
-     * <p>This is the one that decides a program. An empty answer is what a reading that never ran
-     * would produce as well, so a clause the reading owed nothing for came out as a clause nothing
-     * could be made of — and {@code invariant 1 >= 0}, which holds of every value, was reported to an
-     * author as one the static checker cannot represent and no guard discharges.
+     * <p>An empty answer is what a reading that never ran would produce as well, so a clause with
+     * nothing to establish has to be one somebody wrote down — {@link CapabilityResult.Decided} —
+     * rather than the absence of one. Read off an emptiness, {@code invariant 1 >= 0} came back as a
+     * clause the static checker cannot represent and no guard discharges.
      */
     @Test
-    void aReadingThatFinishedSaysWhatItMadeOfTheClause() {
-        assertThrows(IllegalArgumentException.class,
-                () -> new CapabilityResult.Analyzed(Set.of()));
+    void aReadingThatFinishedHasAPartToPointAt() {
+        assertThrows(IllegalArgumentException.class, () -> new CapabilityResult.Analyzed(List.of()));
+    }
+
+    /** And a part the check carried has somewhere to have carried it, for the same reason one step
+     *  down: a part with no route is the other arm, said with what stopped the reading. */
+    @Test
+    void aPartTheCheckCarriedHasARoute() {
+        assertThrows(IllegalArgumentException.class, () -> new RequiredPart.Routed(Set.of()));
     }
 
     /**
-     * A clause read more than one way is answered more than one way.
+     * The parts of a clause are everything it takes, and the routes of a part are alternatives.
      *
-     * <p>What is written as one thing need not be read as one thing: a clause naming a helper is one
-     * thing to its author and is whatever that helper states to the check, and its parts can be read
-     * differently. Answered with one of the readings, an author is told what discharges half of their
-     * clause and left to find out about the other half from a construction that is still refused.
-     *
-     * <p>Held here rather than through a program, because no program takes this shape today — a
-     * clause that names a helper is read as one term and states one thing to the check. It is the day
-     * the check reads further into what a clause names that a clause states two of these at once.
+     * <p>Which is the whole reason they are two levels. A clause read as a bound in one part and as
+     * a term in another is discharged by neither guard alone; flattened together, an author reading
+     * "derivable" writes the guard that implies the bound and finds the construction still refused.
+     * The alternatives belong inside a part, which is where the check treats them as alternatives
+     * ({@link Predicates.Clause#dischargedBy}).
      */
     @Test
-    void aClauseReadAsABoundAndAsATermIsAnsweredAsBoth() {
+    void everyPartIsOwedAndTheRoutesOfOneArePicked() {
+        CapabilityResult.Analyzed two = CapabilityResult.Analyzed.of(
+                new RequiredPart.Routed(Set.of(new StaticRoute.AsABound())),
+                new RequiredPart.Routed(Set.of(new StaticRoute.AsATerm())));
+        CapabilityResult.Analyzed one = CapabilityResult.Analyzed.routed(
+                new StaticRoute.AsABound(), new StaticRoute.AsATerm());
+
+        assertEquals(2, two.parts().size(), "two things to establish, not two ways to establish one");
+        assertEquals(1, one.parts().size());
+        assertTrue(one.parts().get(0) instanceof RequiredPart.Routed it && it.routes().size() == 2,
+                "one thing to establish, two ways to establish it");
+    }
+
+    /** What was not read is a part like any other, so it is said even where something else was
+     *  carried: a clause is discharged only where every part of it is. */
+    @Test
+    void whatWasNotReadIsAPartBesideWhatWas() {
         CapabilityResult.Analyzed both = CapabilityResult.Analyzed.of(
-                new StaticReading.AsABound(), new StaticReading.AsATerm());
+                new RequiredPart.Routed(Set.of(new StaticRoute.AsABound())),
+                new RequiredPart.OutsideTheFragment(WHY));
 
-        assertTrue(both.readings().contains(new StaticReading.AsABound()));
-        assertTrue(both.readings().contains(new StaticReading.AsATerm()),
-                "and the other half, which admits another guard entirely");
+        assertEquals(2, both.parts().size());
+        assertEquals(new RequiredPart.OutsideTheFragment(WHY), both.parts().get(1));
     }
 
     /**
-     * What was not read is said even where something else was.
+     * A reason comes from the part the reading stopped on, and there is no arm for a reading that
+     * did not begin.
      *
-     * <p>A clause part of which is outside the fragment is a clause no guard discharges, and
-     * answering it by the part that was read tells an author their construction can be judged safe
-     * when it cannot.
+     * <p>Worked out by asking the clause a second time, a walk can come back having read all of it
+     * while the first one gave up, and the answer then has to be some word for the two disagreeing.
+     * There was one, and this is the check that nobody adds it back.
      */
     @Test
-    void whatWasNotReadIsSaidBesideWhatWas() {
-        CapabilityResult.Analyzed both = CapabilityResult.analyzed(
-                Set.of(new StaticReading.AsABound()), true, EXPENSIVE);
-
-        assertEquals(Set.of(new StaticReading.AsABound(),
-                        new StaticReading.OutsideTheFragment(WHY)), both.readings());
-    }
-
-    /** And a walk that read nothing at all is said once, by what stopped it rather than by an
-     *  emptiness. */
-    @Test
-    void aClauseNothingWasReadOfIsSaidByWhatStoppedIt() {
-        assertEquals(Set.of(new StaticReading.OutsideTheFragment(WHY)),
-                CapabilityResult.analyzed(Set.of(), true, EXPENSIVE).readings());
-    }
-
-    /**
-     * A walk that finished owing nothing is a clause that holds.
-     *
-     * <p>{@code Predicates} owes nothing exactly where every part of a clause folded the way it was
-     * read. Said as an emptiness instead, {@code invariant 1 >= 0} came back as a clause the static
-     * checker cannot represent and no guard discharges. {@code Bool.not(1 < 0)} is the shape that
-     * reaches this rather than the fold, and is held to it through a program in
-     * {@code InvariantCapabilitiesTest}.
-     */
-    @Test
-    void aWalkThatOwedNothingIsAClauseThatHolds() {
-        assertEquals(Set.of(new StaticReading.Decided(true)),
-                CapabilityResult.analyzed(Set.of(), false, EXPENSIVE).readings());
-    }
-
-    /** What was not read is asked for only where there is something to say, since finding out what
-     *  in a clause stopped the walk costs a walk of it. */
-    @Test
-    void whyIsAskedOnlyWhereSomethingWasNotRead() {
-        boolean[] asked = {false};
-        CapabilityResult.analyzed(Set.of(new StaticReading.AsABound()), false, () -> {
-            asked[0] = true;
-            return WHY;
-        });
-        assertFalse(asked[0], "nothing was left unread, so there is nothing to explain");
-
-        CapabilityResult.analyzed(Set.of(new StaticReading.AsABound()), true, () -> {
-            asked[0] = true;
-            return WHY;
-        });
-        assertTrue(asked[0], "and it is asked where there is");
-    }
-
-    /** A reason is what a reading recorded, and there is no arm for one that could not be typed:
-     *  a reading that did not begin did not finish, so it has no reason of this kind to give. */
-    @Test
-    void aFragmentReasonIsOnlyWhatAFinishedReadingConcluded() {
-        assertEquals(Set.of("ItCallsAnOperation", "ItsShapeIsNotRead",
-                        "NothingAGuardCouldBeHeldAgainst"),
+    void aReasonIsWhatTheReadingStoppedOnAndNothingElse() {
+        assertEquals(Set.of("ItCallsAnOperation", "ItsShapeIsNotRead"),
                 Set.of(FragmentReason.class.getPermittedSubclasses()).stream()
                         .map(Class::getSimpleName).collect(java.util.stream.Collectors.toSet()));
     }
 
     /** The obligation is the clause's and does not move when a reading does, so the name a clause was
-     *  declared with is put on the obligation and the reading is left alone. */
+     *  declared with is put on the obligation and what was read of it is left alone. */
     @Test
     void namingAClauseLeavesWhatWasReadOfItAlone() {
         ClauseDischarge read = new ClauseDischarge(new DischargeObligation(AT),
-                CapabilityResult.Analyzed.of(new StaticReading.AsABound()));
+                CapabilityResult.Analyzed.routed(new StaticRoute.AsABound()));
 
         ClauseDischarge named = read.named(Optional.of("nonNegative"));
 
@@ -152,6 +115,23 @@ class EveryReadingOfAClauseIsAnsweredTest {
     @Test
     void aClauseAlwaysOwesEstablishment() {
         assertThrows(IllegalArgumentException.class, () -> new ClauseDischarge(null,
-                CapabilityResult.Analyzed.of(new StaticReading.AsABound())));
+                CapabilityResult.Analyzed.routed(new StaticRoute.AsABound())));
+    }
+
+    /**
+     * Both conjuncts decide a clause together, and either failing decides it.
+     *
+     * <p>{@code a && b} holds where both hold and fails where either fails; where one folds and the
+     * other does not, the clause is not decided and what the other owes is what there is to
+     * establish. Taken from one conjunct, {@code 1 >= 0 && value >= 0} would have come back as a
+     * clause that holds of every value, with the bound nobody was told about.
+     */
+    @Test
+    void aConjunctionIsDecidedOnlyAsBothOfItsHalvesAre() {
+        assertEquals(Predicates.Fold.HOLDS, Predicates.Fold.HOLDS.and(Predicates.Fold.HOLDS));
+        assertEquals(Predicates.Fold.FAILS, Predicates.Fold.HOLDS.and(Predicates.Fold.FAILS));
+        assertEquals(Predicates.Fold.FAILS, Predicates.Fold.FAILS.and(Predicates.Fold.NOT_DECIDED));
+        assertEquals(Predicates.Fold.NOT_DECIDED,
+                Predicates.Fold.HOLDS.and(Predicates.Fold.NOT_DECIDED));
     }
 }

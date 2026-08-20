@@ -18,7 +18,8 @@ import souther.compiler.query.Shapes;
 import souther.compiler.check.CapabilityResult;
 import souther.compiler.check.ClauseDischarge;
 import souther.compiler.check.FragmentReason;
-import souther.compiler.check.StaticReading;
+import souther.compiler.check.RequiredPart;
+import souther.compiler.check.StaticRoute;
 import souther.compiler.check.ContractDischarge;
 import souther.compiler.check.ContractDischarge.RuleDischarge;
 import souther.compiler.types.TypeSymbol;
@@ -1978,25 +1979,35 @@ public final class Analyzer {
         return switch (capability.capability()) {
             case CapabilityResult.AnalysisStopped _ -> "**not determined** — this analysis did not"
                     + " finish on it, so nothing here says what the check can make of it";
-            case CapabilityResult.Analyzed got -> got.readings().stream()
-                    .map(this::ruleReading).collect(java.util.stream.Collectors.joining("; and "));
+            case CapabilityResult.Decided it -> it.holds()
+                    ? "**always holds** — it settles on its own, so nothing the behavior answers is"
+                            + " asked for it"
+                    : "**never holds** — it settles the other way on its own, so nothing the behavior"
+                            + " answers satisfies it";
+            // Joined by "and", which is what the parts are: every one of them has to be established
+            // for the rule to be, and a reader given them as alternatives would take either as
+            // enough.
+            case CapabilityResult.Analyzed got -> got.parts().stream()
+                    .map(this::rulePart).collect(java.util.stream.Collectors.joining("; and "));
         };
     }
 
-    /** One reading of a rule, in the terms an author acts on. */
-    private String ruleReading(StaticReading reading) {
-        return switch (reading) {
-            case StaticReading.AsABound _ ->
-                    "**derivable** — read as a relation the numeric domain reasons over";
-            case StaticReading.AsATerm _ -> "**exact match** — read as a term the check can name and"
-                    + " compare, and nothing weaker states it";
-            case StaticReading.Decided it -> it.holds()
-                    ? "**always holds** — it folds on its own, so nothing the behavior answers is"
-                            + " asked for it"
-                    : "**never holds** — it folds the other way on its own, so nothing the behavior"
-                            + " answers satisfies it";
-            case StaticReading.OutsideTheFragment it -> "**runtime only** — not read, so the check"
+    /** One part of a rule, in the terms an author acts on. */
+    private String rulePart(RequiredPart part) {
+        return switch (part) {
+            case RequiredPart.Routed it -> ruleRoute(weakest(it));
+            case RequiredPart.OutsideTheFragment it -> "**runtime only** — not read, so the check"
                     + " the behavior runs on its answer is the whole of it; " + saidOf(it.why());
+        };
+    }
+
+    /** One way a guard could discharge a part. */
+    private String ruleRoute(StaticRoute route) {
+        return switch (route) {
+            case StaticRoute.AsABound _ ->
+                    "**derivable** — read as a relation the numeric domain reasons over";
+            case StaticRoute.AsATerm _ -> "**exact match** — read as a term the check can name and"
+                    + " compare, and nothing weaker states it";
         };
     }
 
@@ -2008,8 +2019,6 @@ public final class Analyzer {
                     + "`, which the check reads as a value and not as a term";
             case FragmentReason.ItsShapeIsNotRead _ ->
                     "it is not one of the shapes the check reads";
-            case FragmentReason.NothingAGuardCouldBeHeldAgainst _ -> "every part of it was read, and"
-                    + " neither a bound nor a term came of it";
         };
     }
 
@@ -2074,7 +2083,13 @@ public final class Analyzer {
             case CapabilityResult.AnalysisStopped _ -> "**Static discharge: not determined**\n\n"
                     + "This analysis did not finish on this clause, so nothing is known here about "
                     + "whether a guard discharges it. The check on construction stands either way.";
-            case CapabilityResult.Analyzed got -> got.readings().stream().map(this::clauseReading)
+            case CapabilityResult.Decided it -> it.holds()
+                    ? "**Static discharge: always holds**\n\nThis clause settles to true on its "
+                            + "own, so the obligation is met without a guard."
+                    : "**Static discharge: never holds**\n\nThis clause settles to false on its "
+                            + "own. No guard establishes it, so no construction of this type passes "
+                            + "it.";
+            case CapabilityResult.Analyzed got -> got.parts().stream().map(this::clausePart)
                     .collect(java.util.stream.Collectors.joining("\n\n"));
         };
         // What the clause is called is what an attempted construction's arm and a boundary issue read,
@@ -2084,23 +2099,51 @@ public final class Analyzer {
                 .orElse(body);
     }
 
-    /** One reading of an invariant clause. */
-    private String clauseReading(StaticReading reading) {
-        return switch (reading) {
-            case StaticReading.AsABound _ -> "**Static discharge: derivable**\n\n"
-                    + "The checker can prove this clause from numeric relations when the constructed "
-                    + "value is nameable, so any guard that implies it discharges the construction.";
-            case StaticReading.AsATerm _ -> "**Static discharge: exact match**\n\n"
-                    + "The checker can discharge this clause only from a guard establishing the same "
-                    + "canonical property. Nothing weaker discharges it.";
-            case StaticReading.Decided it -> it.holds()
-                    ? "**Static discharge: always holds**\n\nThis clause folds to true on its own, "
-                            + "so a construction owes nothing for it and no guard is needed."
-                    : "**Static discharge: never holds**\n\nThis clause folds to false on its own. "
-                            + "No guard establishes it, so no construction of this type passes it.";
-            case StaticReading.OutsideTheFragment it -> "**Static discharge: runtime only**\n\n"
-                    + "This clause cannot be represented by the static checker and is enforced only "
-                    + "at construction time. No guard discharges it.\n\n" + saidOf(it.why()) + ".";
+    /** One part of an invariant clause an author has to establish. Every part of them: a clause is
+     *  discharged only where all of them are. */
+    private String clausePart(RequiredPart part) {
+        return switch (part) {
+            case RequiredPart.Routed it -> "**Static discharge: " + routeName(weakest(it))
+                    + "**\n\n" + clauseRoute(weakest(it));
+            case RequiredPart.OutsideTheFragment it -> "**Static discharge: runtime only**\n\n"
+                    + "This part of the clause cannot be represented by the static checker and is "
+                    + "enforced only at construction time. No guard discharges it.\n\n"
+                    + saidOf(it.why()) + ".";
+        };
+    }
+
+    /**
+     * The least a guard has to do to discharge a part.
+     *
+     * <p>The routes are alternatives and any of them discharges it, so what an author is owed is the
+     * easiest of them rather than a list. A bound takes any guard that implies it and a term takes
+     * one stating the same thing, so where both are there the bound is the weaker ask and naming the
+     * other beside it offers a harder way to do something already done.
+     *
+     * <p>A projection, made here. Which routes there are is the check's answer and stays whole in
+     * {@link RequiredPart.Routed}; what a document says of them is the document's.
+     */
+    private StaticRoute weakest(RequiredPart.Routed part) {
+        return part.routes().stream().anyMatch(r -> r instanceof StaticRoute.AsABound)
+                ? new StaticRoute.AsABound() : new StaticRoute.AsATerm();
+    }
+
+    /** What one route is called. */
+    private String routeName(StaticRoute route) {
+        return switch (route) {
+            case StaticRoute.AsABound _ -> "derivable";
+            case StaticRoute.AsATerm _ -> "exact match";
+        };
+    }
+
+    /** What one route takes from a guard. */
+    private String clauseRoute(StaticRoute route) {
+        return switch (route) {
+            case StaticRoute.AsABound _ -> "The checker can prove this from numeric relations when "
+                    + "the constructed value is nameable, so any guard that implies it discharges "
+                    + "the construction.";
+            case StaticRoute.AsATerm _ -> "The checker can discharge this from a guard establishing "
+                    + "the same canonical property, and nothing weaker states it.";
         };
     }
 

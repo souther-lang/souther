@@ -2,7 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.check.CapabilityResult;
 import souther.compiler.check.ClauseDischarge;
-import souther.compiler.check.StaticReading;
+import souther.compiler.check.StaticRoute;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
@@ -33,8 +33,16 @@ class InvariantCapabilitiesTest {
         return clauses.get(nth).capability();
     }
 
-    private static CapabilityResult.Analyzed analyzed(StaticReading... readings) {
-        return CapabilityResult.Analyzed.of(readings);
+    /** One part of a clause, carried by these routes — which is what most clauses come to. */
+    private static CapabilityResult.Analyzed routed(StaticRoute... routes) {
+        return CapabilityResult.Analyzed.routed(routes);
+    }
+
+    /** A bound the domain reasons over, which the check also names as a term: two ways to discharge
+     *  one part, and an author needs only the weaker of them. Reported as the bound alone, the other
+     *  was dropped where a reader could have used it. */
+    private static CapabilityResult.Analyzed aBound() {
+        return routed(new StaticRoute.AsABound(), new StaticRoute.AsATerm());
     }
 
     private static List<ClauseDischarge> of(String source, String type) {
@@ -52,7 +60,7 @@ class InvariantCapabilitiesTest {
                     invariant value >= 0
                 """, "Money");
         assertEquals(1, clauses.size());
-        assertEquals(analyzed(new StaticReading.AsABound()), read(clauses, 0));
+        assertEquals(aBound(), read(clauses, 0));
     }
 
     @Test
@@ -62,7 +70,7 @@ class InvariantCapabilitiesTest {
                 data Lines = List<Int>
                     invariant List.length(value) >= 1
                 """, "Lines");
-        assertEquals(analyzed(new StaticReading.AsABound()), read(clauses, 0));
+        assertEquals(aBound(), read(clauses, 0));
     }
 
     @Test
@@ -72,7 +80,7 @@ class InvariantCapabilitiesTest {
                 data Code = String
                     invariant String.matches("[A-Z]{2}", value)
                 """, "Code");
-        assertEquals(analyzed(new StaticReading.AsATerm()), read(clauses, 0));
+        assertEquals(routed(new StaticRoute.AsATerm()), read(clauses, 0));
     }
 
     /**
@@ -90,7 +98,7 @@ class InvariantCapabilitiesTest {
                 data Money = Int
                     invariant 1 >= 0
                 """, "Money");
-        assertEquals(analyzed(new StaticReading.Decided(true)), read(clauses, 0));
+        assertEquals(new CapabilityResult.Decided(true), read(clauses, 0));
     }
 
     /**
@@ -109,7 +117,7 @@ class InvariantCapabilitiesTest {
                 data Money = Int
                     invariant 1 < 0
                 """, "Money");
-        assertEquals(analyzed(new StaticReading.Decided(false)), read(clauses, 0));
+        assertEquals(new CapabilityResult.Decided(false), read(clauses, 0));
     }
 
     /**
@@ -127,7 +135,26 @@ class InvariantCapabilitiesTest {
                 data Money = Int
                     invariant Bool.not(1 < 0)
                 """, "Money");
-        assertEquals(analyzed(new StaticReading.Decided(true)), read(clauses, 0));
+        assertEquals(new CapabilityResult.Decided(true), read(clauses, 0));
+    }
+
+    /**
+     * And one that settles only once the reading has normalized it.
+     *
+     * <p>{@code Int.compare(1, 2) >= 0} is a call to a reader folding what an author wrote, and is
+     * {@code 1 >= 2} to the walk that reads clauses, which rewrites comparisons before it reads them.
+     * Folded before that walk, the clause fell through to be read as a relation over two constants,
+     * and an author was told that any guard implying it discharges the construction — for a clause
+     * no guard implies and no value satisfies.
+     */
+    @Test
+    void aClauseThatSettlesOnlyOnceItIsNormalizedIsSaidToSettle() {
+        List<ClauseDischarge> clauses = of("""
+                module m.a
+                data Money = Int
+                    invariant Int.compare(1, 2) >= 0
+                """, "Money");
+        assertEquals(new CapabilityResult.Decided(false), read(clauses, 0));
     }
 
     /**
@@ -160,8 +187,8 @@ class InvariantCapabilitiesTest {
                     invariant List.length(value) >= 1 && List.allDistinctBy(.product, value)
                 """, "Lines");
         assertEquals(2, clauses.size(), "one answer per clause");
-        assertEquals(analyzed(new StaticReading.AsABound()), read(clauses, 0));
-        assertEquals(analyzed(new StaticReading.AsATerm()), read(clauses, 1));
+        assertEquals(aBound(), read(clauses, 0));
+        assertEquals(routed(new StaticRoute.AsATerm()), read(clauses, 1));
     }
 
     @Test
@@ -187,7 +214,7 @@ class InvariantCapabilitiesTest {
                 data Even = Int
                     invariant twice(value) >= 0
                 """, "Even");
-        assertEquals(analyzed(new StaticReading.AsABound()), read(clauses, 0));
+        assertEquals(aBound(), read(clauses, 0));
         assertEquals(4, clauses.get(0).owed().clause().line(), "reported where it is written, not where it expands");
     }
 }

@@ -360,20 +360,77 @@ final class Predicates {
      * @param unreadable whether a conjunct of it names something the check cannot read here, whose
      *                   run-time check stands whatever the rest comes out as
      */
-    record Owed(List<Clause> clauses, boolean unreadable) {
+    record Owed(List<Clause> clauses, Core couldNotRead, Fold folded) {
 
-        static final Owed NOTHING = new Owed(List.of(), false);
-        static final Owed UNREADABLE = new Owed(List.of(), true);
-
-        static Owed of(Clause clause) {
-            return new Owed(List.of(clause), false);
+        /** Nothing is owed because the clause came out one way or the other on its own. */
+        static Owed decided(boolean holds) {
+            return new Owed(List.of(), null, holds ? Fold.HOLDS : Fold.FAILS);
         }
 
-        /** Both conjuncts of one clause: everything either owes, unreadable if either was. */
+        /**
+         * Nothing here can be asked of a guard, and {@code where} is the part of it this stopped on.
+         *
+         * <p>The node and not a word for it. Whoever reads this wants to say what in the clause was
+         * not read, and working that out from the clause afterwards is a second walk that can come
+         * back with a different answer from the one that gave up — which is how a clause with
+         * nothing wrong in it came to be described as naming a term the check cannot name.
+         */
+        static Owed unreadable(Core where) {
+            return new Owed(List.of(), where, Fold.NOT_DECIDED);
+        }
+
+        static Owed of(Clause clause) {
+            return new Owed(List.of(clause), null, Fold.NOT_DECIDED);
+        }
+
+        /** Whether a conjunct of it names something the check cannot read here. */
+        boolean unreadable() {
+            return couldNotRead != null;
+        }
+
+        /** The same, having come out one way on its own as well. Said beside what it owes rather
+         *  than instead of it: which of the two a caller acts on is the caller's, and a reading that
+         *  answered only one of them decided that for every caller there will ever be. */
+        Owed alsoFolded(Fold fold) {
+            return fold == Fold.NOT_DECIDED ? this : new Owed(clauses, couldNotRead, fold);
+        }
+
+        /** Both conjuncts of one clause: everything either owes, unreadable if either was, and
+         *  folded only as both of them together fold. */
         Owed and(Owed other) {
             List<Clause> both = new ArrayList<>(clauses);
             both.addAll(other.clauses);
-            return new Owed(List.copyOf(both), unreadable || other.unreadable);
+            return new Owed(List.copyOf(both),
+                    couldNotRead != null ? couldNotRead : other.couldNotRead,
+                    folded.and(other.folded));
+        }
+    }
+
+    /**
+     * Whether a clause came out one way or the other before any construction was looked at.
+     *
+     * <p>Read here, off the expression this walk normalizes and reads, rather than off the one an
+     * author wrote. {@code Int.compare(1, 2) >= 0} is a call until {@link #asOrderComparison} makes
+     * it {@code 1 >= 2}, so a reader folding the written form first sees a call and the fold that
+     * matters happens in here.
+     */
+    enum Fold {
+
+        /** It reads something the construction decides. */
+        NOT_DECIDED,
+
+        /** It holds of every value, so no guard is asked for it. */
+        HOLDS,
+
+        /** It holds of none, so no guard establishes it. */
+        FAILS;
+
+        /** Both conjuncts: failing where either fails, holding only where both hold. */
+        Fold and(Fold other) {
+            if (this == FAILS || other == FAILS) {
+                return FAILS;
+            }
+            return this == HOLDS && other == HOLDS ? HOLDS : NOT_DECIDED;
         }
     }
 
@@ -480,12 +537,17 @@ final class Predicates {
             // saying so needs no term to be named. Read under a denial it is the other answer that
             // discharges, which is why the polarity is asked.
             if (folded == positive) {
-                return Owed.NOTHING;
+                return Owed.decided(true);
             }
             if (decidesFalse) {
-                return Owed.of(VIOLATED);
+                return Owed.decided(false).and(Owed.of(VIOLATED));
             }
         }
+        // It folded the other way and this caller does not report that as a violation. What it owes
+        // is read on, unchanged, and the fold is said beside it — a reader classifying the clause
+        // needs it, and taking the reading away here would change what this caller is answered.
+        Fold fold = folded == null ? Fold.NOT_DECIDED
+                : folded == positive ? Fold.HOLDS : Fold.FAILS;
         Constraint numeric = null;
         Piecewise piecewise = null;
         if (inv instanceof Core.Binary b && relOf(b.op()) != null) {
@@ -514,12 +576,12 @@ final class Predicates {
         boolean stated = polar.positive();
         Fact fact = keys.isEmpty() ? null : new Fact(stated ? keys : firstOnly(keys), stated);
         if (numeric == null && fact == null) {
-            return Owed.UNREADABLE;
+            return Owed.unreadable(inv).alsoFolded(fold);
         }
         List<Constraint> known = new ArrayList<>();
         sizeFacts(inv, at, known);
         resultFacts(inv, at, known);
-        return Owed.of(new Clause(numeric, fact, known, piecewise));
+        return Owed.of(new Clause(numeric, fact, known, piecewise)).alsoFolded(fold);
     }
 
     /**

@@ -1776,14 +1776,14 @@ Some clauses are statically dischargeable and others are not, and the same `+inv
 
 | *derivable* | a relation the procedure reasons over. Any guard that *implies* it discharges the construction: `+guard amount >= 10+` discharges `+invariant value >= 0+`.
 | *exact match* | a term the procedure can name but not reason about. Only a guard establishing *the same* property discharges it, and nothing weaker: `+invariant List.allDistinctBy(.product, value)+` takes `+guard List.allDistinctBy(.product, lines)+`.
-| *always holds* | the clause settles on its own. `+invariant 1 >= 0+` holds of every value, so a construction owes nothing for it and no guard is needed.
+| *always holds* | the clause settles on its own. `+invariant 1 >= 0+` holds of every value, so the obligation is met without a guard.
 | *never holds* | it settles the other way, so no guard establishes it and no value of the type can be built. The declaration is refused where the whole compiler runs (<<a-data-can-be-constructed>>); this says what the clause is, so an editor reading half-written source is not told that a guard would discharge it.
 | *runtime only* | not representable as a static obligation. No guard discharges it, and the run-time check on construction is the whole of its enforcement.
 |===
 
 The first two are the *statically dischargeable* ones, and they are separate because they admit different guards — which is what an author needs to know before writing one. The last carries a reason, because there is more than one way to be outside the fragment and which one it is decides what can be done about it.
 
-A clause that settles on its own is not one outside the fragment. Both come back with nothing owed, and only one of them is something the model says: `+invariant 1 >= 0+` was read to the end and asks nothing, while a clause outside the fragment is one the reading could not carry. They are told apart the way the report tells *not derivable* from *not read* (<<example-report-vocabulary>>), and for the same reason — one is about the model and the other about the compiler.
+A clause that settles on its own is not one outside the fragment. Both leave the construction with no guard to write, and only one of them is something the model says: `+invariant 1 >= 0+` was read to the end and asks nothing, while a clause outside the fragment is one the reading could not carry. They are told apart the way the report tells *not derivable* from *not read* (<<example-report-vocabulary>>), and for the same reason — one is about the model and the other about the compiler.
 
 And a reading that did not finish is *not determined* rather than any of these. Whether a clause is inside the fragment is exactly what such a reading did not find out, so answering it as `+runtime only+` would tell an author that no guard discharges their clause because this compiler fell over on it. Being a fact about the compiler on that run, it names nothing about the clause.
 
