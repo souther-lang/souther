@@ -133,7 +133,11 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
     /** What that point is against, or null where none is owed. */
     public String against(PointRole role) {
         souther.compiler.partition.Criterion criterion = border.demand(role).criterion();
-        return criterion == null ? null : border.cut().of().writtenAt(criterion.against());
+        // Asked of the criterion, which is what knows whether it is written against a level or
+        // against a run of them. Two of the four points name a level and two name a run, and a
+        // reader that took a level from every shape wrote a value inside a run as though it were
+        // the run.
+        return criterion == null ? null : criterion.written(border.cut().of());
     }
 
     /** The left of the {@code left = right} a report names this line by. */

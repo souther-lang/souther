@@ -202,8 +202,11 @@ public sealed interface BorderQuantity {
         private static boolean holdsByOrder(Criterion where, int order) {
             return switch (where) {
                 case Criterion.AtTheLevel _ -> order == 0;
-                case Criterion.Beyond beyond ->
-                        beyond.towards() == Towards.ABOVE ? order > 0 : order < 0;
+                // The only level such a quantity takes is the one where they meet, so which run a
+                // pair is in is which way round they stand from it — said as that count, since the
+                // sign is the whole of what the order has.
+                case Criterion.Within within -> within.holds(LevelSpace.onlyWhereTheyMeet(),
+                        new Level.ACount(souther.compiler.numeric.Count.of(order)));
                 case Criterion.AnythingBut _ -> order != 0;
             };
         }

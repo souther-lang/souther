@@ -767,10 +767,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             for (Adequacy.Finding f : behavior.findings()) {
                 if (f.about() instanceof About.APointOfABorder(var point)
                         && point.role().againstTheLine() == againstTheLine) {
-                    out.append(String.format("      %s no row is at the %s point %s %s (%s)%n",
-                            mark(f), point.role(), point.border().axis(),
-                            againstTheLine ? "= " + point.against() : point.asked(),
-                            point.border().origin(names, declaredIn)));
+                    // `the` for a point and `an` for a run. Two of the four are one value and the
+                    // other two are met anywhere in a run of them, so a reader told there is no row
+                    // at `the IN point` is being sent after a value that does not exist.
+                    out.append(againstTheLine
+                            ? String.format("      %s no row is at the %s point %s = %s (%s)%n",
+                                    mark(f), point.role(), point.border().axis(),
+                                    point.against(), point.border().origin(names, declaredIn))
+                            : String.format("      %s no row is at an %s point of %s, %s (%s)%n",
+                                    mark(f), point.role(), point.border().axis(),
+                                    point.against(), point.border().origin(names, declaredIn)));
                 }
             }
         }

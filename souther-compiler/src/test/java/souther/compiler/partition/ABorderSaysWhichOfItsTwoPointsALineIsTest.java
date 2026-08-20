@@ -121,9 +121,9 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
      */
     @Test
     void theJsonWritesEveryPointUnderItsBorder() {
-        assertEquals(List.of("on:= 100", "off:= 101", "in:< 100", "out:> 101"),
+        assertEquals(List.of("on:= 100", "off:= 101", "in:in n < 100", "out:in 101 < n"),
                 pointsAsked(CLOSED));
-        assertEquals(List.of("on:= 99", "off:= 100", "in:< 99", "out:> 100"),
+        assertEquals(List.of("on:= 99", "off:= 100", "in:in n < 99", "out:in 100 < n"),
                 pointsAsked(OPENED));
     }
 
@@ -233,9 +233,11 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
 
         assertEquals("= 100", border.demand(PointRole.ON).criterion().asked(border.cut().of()));
         assertEquals("= 101", border.demand(PointRole.OFF).criterion().asked(border.cut().of()));
-        assertEquals("< 100", border.demand(PointRole.IN).criterion().asked(border.cut().of()),
+        assertEquals("in n < 100",
+                border.demand(PointRole.IN).criterion().asked(border.cut().of()),
                 "99 is inside the partition and away from the border, which is the IN point");
-        assertEquals("> 101", border.demand(PointRole.OUT).criterion().asked(border.cut().of()));
+        assertEquals("in 101 < n",
+                border.demand(PointRole.OUT).criterion().asked(border.cut().of()));
 
         // A bound owes nothing outside itself, and says which of the three answers settled it.
         Border bound = borderOf(new OriginRef.InvariantOrigin(invariant(), true));
@@ -243,8 +245,8 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
                 bound.demand(PointRole.OFF));
         assertEquals(new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
                 bound.demand(PointRole.OUT));
-        assertEquals("/= 5", bound.demand(PointRole.IN).criterion().asked(bound.cut().of()),
-                "and everything else the position admits is inside the bound");
+        assertEquals("in 5 < h.a", bound.demand(PointRole.IN).criterion().asked(bound.cut().of()),
+                "and the run the bound bounds, without the edge itself, is inside it");
     }
 
     /** A line on one position's own values, at a place of its carrier. */

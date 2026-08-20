@@ -62,7 +62,7 @@ public record QuantityArrangement(List<Seam> seams, List<Band> bands) {
             // A place the rules leave nothing at divides nothing. The values it would tell apart are
             // values no row can be written at, so it is dropped rather than kept as a run holding
             // none — which is a class an author would be told to write a row for and could not.
-            if (outside(space, each.somewhere(), from, to)) {
+            if (outside(each, from, to)) {
                 continue;
             }
             distinct.putIfAbsent(each.key(), each);
@@ -80,6 +80,31 @@ public record QuantityArrangement(List<Seam> seams, List<Band> bands) {
         return new QuantityArrangement(ordered, bands);
     }
 
+    /**
+     * The run just above {@code seam}, or null where the rules leave none there.
+     *
+     * <p>What the {@code IN} point of a border on the upper side asks for. Null is a run the rules
+     * leave nothing in, which is a point nobody is owed a row at rather than one nothing has got
+     * to.
+     */
+    public Band above(Seam seam) {
+        return bands.stream().filter(each -> is(each.under(), seam)).findFirst().orElse(null);
+    }
+
+    /** The run just below it, on the same reading. */
+    public Band below(Seam seam) {
+        return bands.stream().filter(each -> is(each.over(), seam)).findFirst().orElse(null);
+    }
+
+    /** The run one value of the quantity is in, or null where the rules leave it in none. */
+    public Band holding(LevelSpace space, Level at) {
+        return bands.stream().filter(each -> each.holds(space, at)).findFirst().orElse(null);
+    }
+
+    private static boolean is(Seam one, Seam other) {
+        return one != null && other != null && one.key().equals(other.key());
+    }
+
     /** A run, unless what the rules leave has nothing in it. */
     private static void keep(LevelSpace space, List<Band> bands, Band band) {
         Level first = band.first();
@@ -90,8 +115,16 @@ public record QuantityArrangement(List<Seam> seams, List<Band> bands) {
         bands.add(band);
     }
 
-    private static boolean outside(LevelSpace space, Level at, Level from, Level to) {
-        return at != null && (from != null && space.compare(at, from) < 0
-                || to != null && space.compare(at, to) > 0);
+    /**
+     * Whether the rules leave nothing at the place this seam parts the values.
+     *
+     * <p>Asked of the place and not of the values either side of it. A line at the very edge of what
+     * the rules leave has one of its two values outside them and parts what is left all the same —
+     * read off that value, a bound's own line was dropped from the arrangement and the run it starts
+     * belonged to no seam at all.
+     */
+    private static boolean outside(Seam seam, Level from, Level to) {
+        return from != null && seam.at().compare(from) > 0
+                || to != null && seam.at().compare(to) < 0;
     }
 }

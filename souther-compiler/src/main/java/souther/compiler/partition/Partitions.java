@@ -631,6 +631,22 @@ public final class Partitions {
     public static List<Border> bordersOf(Axis axis, Symbols symbols,
                                          NumericDomain.Bounds within) {
         List<Border> out = new ArrayList<>();
+        // Every place the rules part this position's values, collected before any border is built.
+        // What each border owes away from its line is a run of the arrangement they make together,
+        // and a border built without them reads its two sides to the end of the order — so a row in
+        // the partition after next answered for a point inside the one this border bounds.
+        List<Seam> parted = new ArrayList<>();
+        for (Cut cut : axis.cuts()) {
+            BoundaryTarget where = BoundaryTarget.at(
+                    new BorderQuantity.OfACoordinate(axis.id(), axis.term(), cut.carrier()),
+                    new Level.OnACarrier(cut.carrier(), cut.at()));
+            for (OriginRef origin : cut.origins()) {
+                Seam parts = Border.parts(where, origin);
+                if (parts != null) {
+                    parted.add(parts);
+                }
+            }
+        }
         for (Cut cut : axis.cuts()) {
             // The carrier is the cut's, which is the one the rule was read on. Asked of the axis
             // instead, a line drawn on a count taken of a position would be written back as a value
@@ -643,7 +659,7 @@ public final class Partitions {
                 // one of its points: the rule drew it about the type, and what is left of the type
                 // here may stop short of it — `low < high` under one `[0, 1]` leaves `low` every
                 // value up to 1 and not 1 itself.
-                Border border = Border.at(target, origin, within);
+                Border border = Border.at(target, origin, within, parted);
                 if (border != null) {
                     out.add(border);
                 }

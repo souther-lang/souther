@@ -374,8 +374,11 @@ class WhatAClauseDrawsALineOnTest {
         // `<` is open at the line, so the pair one step under it is the ON point and the side
         // away from the border starts under that.
         assertEquals("= to - 1", line.demand(PointRole.ON).criterion().asked(line.cut().of()));
-        assertEquals("< to - 1", line.demand(PointRole.IN).criterion().asked(line.cut().of()));
-        assertEquals("> to", line.demand(PointRole.OUT).criterion().asked(line.cut().of()));
+        // The two away from the line are runs of the distance rather than sides of it, so what
+        // they ask for is written whole: how far apart the pair stands at each end of the run.
+        assertEquals("in from < to - 1",
+                line.demand(PointRole.IN).criterion().asked(line.cut().of()));
+        assertEquals("in to < from", line.demand(PointRole.OUT).criterion().asked(line.cut().of()));
         assertEquals(List.of("from", "to"),
                 clauses.unread().stream().map(each -> each.at().toString()).toList());
     }

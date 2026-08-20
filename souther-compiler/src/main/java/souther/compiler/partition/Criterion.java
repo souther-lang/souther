@@ -41,25 +41,32 @@ public sealed interface Criterion {
     }
 
     /**
-     * A row whose quantity is strictly past {@code from}, the way {@code towards} says.
+     * A row whose quantity lies in one run of the values, other than at one level of it.
      *
-     * <p>What both sides of a border are. The {@code IN} side starts at the {@code ON} point and runs
-     * inwards; the {@code OUT} side starts at the {@code OFF} point and runs outwards. Where the
-     * point it would start at is one the order names no value for, it starts at the line itself — the
-     * values one step away are not there to be excluded, and everything past the line on that side is
-     * as far from the border as anything gets.
+     * <p>What both sides of a border are. A border parts two runs, and the {@code IN} point is a row
+     * in the one it bounds while the {@code OUT} point is a row in the one it keeps out — in each
+     * case away from the line, which is what {@code except} takes out.
+     *
+     * <p><b>A run and not a side.</b> Read as everything past the line, the point runs to the end of
+     * the order, and a row past the next line along answers for it while the run this border bounds
+     * has nothing in it. The two are the same only where the quantity has one line through it
+     * (issue #880).
+     *
+     * @param except the value against the line, which is the border's own {@code ON} or {@code OFF}
+     *               point and is not this one. Null where the order names no value there, and then
+     *               the whole run is what is asked for
      */
-    record Beyond(Level from, Towards towards) implements Criterion {
+    record Within(Band band, Level except) implements Criterion {
 
         @Override
         public boolean holds(LevelSpace space, Level value) {
-            int order = space.compare(value, from);
-            return towards == Towards.ABOVE ? order > 0 : order < 0;
+            return band.holds(space, value)
+                    && (except == null || space.compare(value, except) != 0);
         }
 
         @Override
         public String operator() {
-            return towards == Towards.ABOVE ? ">" : "<";
+            return "in";
         }
     }
 
@@ -98,13 +105,46 @@ public sealed interface Criterion {
     /** How this relates a row's quantity to what it is against. */
     String operator();
 
-    /** The level this is written against, which is the one every shape has. */
+    /**
+     * The level this is written against, or null where what it is written against is a run rather
+     * than a level.
+     *
+     * <p>Two of the three shapes name a level and one names a region, so a reader that wanted one
+     * level from every shape was reading a witness of a run as though it were the run. What every
+     * shape does answer is {@link #asked}.
+     */
     default Level against() {
         return switch (this) {
             case AtTheLevel at -> at.at();
-            case Beyond beyond -> beyond.from();
+            case Within _ -> null;
             case AnythingBut other -> other.excluded();
         };
+    }
+
+    /**
+     * One level this is written around, which every shape has.
+     *
+     * <p>Apart from {@link #against}, which is what a report writes: a run is not written against a
+     * level and is still arranged around one — the value against the line it lies beside. What reads
+     * this is the search, which starts from a level and works outward whichever shape it is holding.
+     */
+    default Level anchor() {
+        if (!(this instanceof Within in)) {
+            return against();
+        }
+        if (in.except() != null) {
+            return in.except();
+        }
+        if (in.band().first() != null) {
+            return in.band().first();
+        }
+        if (in.band().last() != null) {
+            return in.band().last();
+        }
+        // A run with no value at either end is arranged around the place its line falls at, which
+        // is where the values part and is the only thing left that says where the run starts.
+        Seam edge = in.band().under() != null ? in.band().under() : in.band().over();
+        return edge == null ? null : edge.at().written();
     }
 
     /**
@@ -120,6 +160,20 @@ public sealed interface Criterion {
      * beside the position it is apart from rather than as the number it is.
      */
     default String asked(BorderQuantity of) {
-        return operator() + " " + of.writtenAt(against());
+        return operator() + " " + written(of);
+    }
+
+    /**
+     * What this is written against, as a report writes it: a level for the shapes that name one, and
+     * the run itself for the shape that names a run.
+     *
+     * <p>The run written whole. A run has two ends and a report that printed one of them would name
+     * a value inside it as though it were the run — which is the reading this shape exists to stop.
+     */
+    default String written(BorderQuantity of) {
+        if (!(this instanceof Within in)) {
+            return of.writtenAt(against());
+        }
+        return in.band().written(of, in.except());
     }
 }

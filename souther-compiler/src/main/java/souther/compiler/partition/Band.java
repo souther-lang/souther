@@ -37,6 +37,64 @@ public record Band(Seam under, Seam over, Level from, Level to) {
     }
 
     /**
+     * This run as a report writes it, in the same words the class of a position that is this run is
+     * named by.
+     *
+     * <p>Written from the lines either side rather than from the values at its ends, which is what
+     * lets one spelling answer for every carrier: a run above a line at ten is {@code 10 < x} on the
+     * whole numbers and on the decimals alike, while the value it starts at exists only on the
+     * first. One spelling, so that the class a report counts and the point a border owes inside it
+     * are visibly the same run.
+     */
+    public String written(BorderQuantity of) {
+        return written(of, null);
+    }
+
+    /**
+     * The same, without one value of it.
+     *
+     * <p>Which is what a point away from a border asks for: the run, less the value against the
+     * line. Said as the run alone, a reader is told to write a row anywhere up to a hundred when a
+     * hundred is the one value that will not do.
+     */
+    public String written(BorderQuantity of, Level except) {
+        String low = except != null && same(except, first())
+                ? of.writtenAt(except) + " < "
+                : under != null ? of.writtenAt(under.at().written()) + opens(under)
+                        : from == null ? "" : of.writtenAt(from) + " <= ";
+        String high = except != null && same(except, last())
+                ? " < " + of.writtenAt(except)
+                : over != null ? closes(over) + of.writtenAt(over.at().written())
+                        : to == null ? "" : " <= " + of.writtenAt(to);
+        return low.isEmpty() && high.isEmpty() ? "any" : (low + of.left() + high).trim();
+    }
+
+    /** Whether this run has any value in it other than {@code except}, where that can be settled.
+     *  A run one value wide whose one value is against the line has nothing away from the line. */
+    public boolean holdsAnythingBut(Level except) {
+        return except == null || first() == null || last() == null
+                || !first().key().equals(last().key()) || !same(except, first());
+    }
+
+    private static boolean same(Level one, Level other) {
+        return one != null && other != null && one.key().equals(other.key());
+    }
+
+    /** Whether the line below this run keeps its own value, which decides whether the run starts
+     *  past that value or at it. */
+    private static String opens(Seam under) {
+        return keepsItsOwnValueBelow(under) ? " < " : " <= ";
+    }
+
+    private static String closes(Seam over) {
+        return keepsItsOwnValueBelow(over) ? " <= " : " < ";
+    }
+
+    private static boolean keepsItsOwnValueBelow(Seam seam) {
+        return seam.below() != null && seam.below().key().equals(seam.at().written().key());
+    }
+
+    /**
      * Whether a value of the quantity lies in this run.
      *
      * <p>Both ends included, because a run is named by the values at its ends and not by the lines
