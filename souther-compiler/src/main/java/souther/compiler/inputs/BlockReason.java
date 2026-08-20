@@ -21,7 +21,6 @@ package souther.compiler.inputs;
  */
 public sealed interface BlockReason {
 
-
     /**
      * A rule this read and could not use, which is a reason there is always a rule to name.
      *
@@ -42,7 +41,6 @@ public sealed interface BlockReason {
      * some of them and not the rest with nothing saying which was which.
      */
     sealed interface AboutThePosition extends BlockReason {}
-
 
     /**
      * What a value reading's account of a rule it could not use comes to here.

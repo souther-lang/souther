@@ -31,6 +31,8 @@ public sealed interface Unsettlement {
      * <p>So nothing may be concluded from the distinction being counted: it is there because the
      * reading was set aside, and not because anything admits it.
      */
+    record RulesLeaveNothing() implements Unsettlement {}
+
     /**
      * Every rule about the position was read, and the reading could not hold what they say
      * together.
@@ -40,8 +42,6 @@ public sealed interface Unsettlement {
      * apart, and until then the values at the position hold a pair no value of the type takes.
      */
     record AlternativesNotSeparated() implements Unsettlement {}
-
-    record RulesLeaveNothing() implements Unsettlement {}
 
     /**
      * The reading of this position states no such distinction.

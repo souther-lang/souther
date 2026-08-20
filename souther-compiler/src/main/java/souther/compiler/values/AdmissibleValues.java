@@ -203,6 +203,10 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
      * Telling the two apart wants a reading that remembers why it promises nothing, which is more
      * than a promise and less than this holds.
      */
+    public ValueSet guaranteedAt(A atom) {
+        return guaranteed.getOrDefault(atom, defaultGuaranteed);
+    }
+
     /** Whether {@link #at} at {@code atom} can be guaranteed to be what the read rules leave it. */
     public boolean projectionExactAt(A atom) {
         return !widened.contains(atom);
@@ -212,10 +216,6 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
      *  admit, which is so exactly where no choice has reached across positions. */
     public boolean relationExact() {
         return tangled.isEmpty();
-    }
-
-    public ValueSet guaranteedAt(A atom) {
-        return guaranteed.getOrDefault(atom, defaultGuaranteed);
     }
 
     /** Nothing read and nothing missed, which is what a reading starts from. */
