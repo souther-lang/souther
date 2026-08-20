@@ -175,6 +175,51 @@ class ABuildIsAddedToRatherThanRewrittenTest {
         assertTrue(edited.contains("id 'org.souther-lang.souther' version"), edited);
     }
 
+    /**
+     * A document whose tags do not match is one this says it cannot follow.
+     *
+     * <p>The walk down a path is what decides where a declaration goes, and an end tag closing
+     * something other than what is open leaves it one element up from where it thinks it is. What
+     * that produced was both declarations written outside the {@code <project>}, the
+     * {@code <dependencies>} that was there ignored, and a pom that then parsed as nothing —
+     * reported as an ordinary edit.
+     */
+    @Test
+    void aPomWhoseTagsDoNotMatchIsNotAddedTo() {
+        String stray = """
+                <project>
+                  <groupId>com.acme</groupId>
+                  <artifactId>billing</artifactId>
+                  </oops>
+                  <dependencies>
+                  </dependencies>
+                </project>
+                """;
+
+        assertFalse(MavenBuild.canBeAddedTo(stray),
+                "a document this cannot walk down was taken for one it can");
+        assertTrue(MavenBuild.canBeAddedTo(POM), "and the control: an ordinary pom is one it can");
+    }
+
+    /**
+     * A block written on one line is added to inside its braces.
+     *
+     * <p>Inserted before the line rather than before the brace, the plugin was applied at the
+     * script's top level — where {@code id(...)} is not a function — and the build did not
+     * evaluate at all.
+     */
+    @Test
+    void aOneLinePluginsBlockIsAddedToInsideItsBraces() {
+        String edited = GradleBuild.withThePluginApplied("plugins { java }\n\ngroup = \"a\"\n", true);
+
+        int applied = edited.indexOf("id(\"org.souther-lang.souther\")");
+        assertTrue(applied > edited.indexOf("plugins {"),
+                "the line landed before the block it was meant to go inside:\n" + edited);
+        assertTrue(applied < edited.indexOf("}"),
+                "the line landed after the block closed:\n" + edited);
+        assertEquals(1, edited.split("plugins \\{", -1).length - 1, edited);
+    }
+
     /** How many elements of this name the document has, read as a document rather than as text. */
     private static int elements(String xml, String name) throws Exception {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();

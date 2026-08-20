@@ -72,9 +72,18 @@ final class GradleBuild {
             return "plugins {\n    " + line + "\n}\n\n" + script;
         }
         int lineStart = script.lastIndexOf('\n', close - 1) + 1;
-        String indent = script.substring(lineStart, close);
-        String inner = indent.isBlank() ? indent + "    " : "    ";
-        return script.substring(0, lineStart) + inner + line + "\n" + script.substring(lineStart);
+        String before = script.substring(lineStart, close);
+        if (before.isBlank()) {
+            return script.substring(0, lineStart) + before + "    " + line + "\n"
+                    + script.substring(lineStart);
+        }
+        // A block written on one line — `plugins { java }`. The line goes before the brace rather
+        // than before the line: written before the line it would land outside the block it was
+        // meant to go inside, and a script whose plugin is applied at the top level does not
+        // evaluate.
+        String outer = before.substring(0, before.length() - before.stripLeading().length());
+        return script.substring(0, close) + "\n" + outer + "    " + line + "\n" + outer
+                + script.substring(close);
     }
 
     /**

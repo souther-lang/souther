@@ -40,6 +40,17 @@ final class MavenBuild {
         return new Coordinate(group, artifact);
     }
 
+    /**
+     * Whether this pom is one this command can put a declaration into.
+     *
+     * <p>Asked before anything is written. What a pom this cannot walk down gets is a block
+     * inserted where no element ends, which is a file its author has to restore from the copy
+     * beside it — and they would be restoring it from a command that reported success.
+     */
+    static boolean canBeAddedTo(String pom) {
+        return Xml.has(pom, PROJECT);
+    }
+
     /** Whether this pom already declares the plugin, however it is configured. */
     static boolean declaresThePlugin(String pom) {
         return pom.contains("<artifactId>" + BuildPlugins.MAVEN_ARTIFACT + "</artifactId>");

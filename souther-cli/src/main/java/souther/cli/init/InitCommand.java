@@ -101,6 +101,13 @@ public final class InitCommand {
                 return refuse(err, locale, "cli.init.coordinate.unreadable",
                         display(here, existing.fileIn(at)), Coordinate.FORM);
             }
+            // Before a single file is written. A pom whose elements this cannot follow is one the
+            // declaration would land outside of, and the author would be restoring their own file
+            // from the copy beside it — told by a command that reported success.
+            if (!canBeAddedTo(existing, at)) {
+                return refuse(err, locale, "cli.init.pom.unreadable",
+                        display(here, existing.fileIn(at)));
+            }
             target = at;
             if (level == null) {
                 level = Model.NONE;
@@ -197,6 +204,23 @@ public final class InitCommand {
                 : List.of();
     }
 
+    /**
+     * Whether the build file here is one a declaration can be put into.
+     *
+     * <p>Only a pom is asked. A Gradle script is added to by matching braces, which answers for
+     * itself — a block it cannot find the end of gets a {@code plugins} block of its own.
+     */
+    private static boolean canBeAddedTo(BuildSystem build, Path at) {
+        if (build != BuildSystem.MAVEN) {
+            return true;
+        }
+        try {
+            return MavenBuild.canBeAddedTo(Files.readString(build.fileIn(at)));
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
     /** What the build that is already here calls the project, or null where it does not say. */
     private static Coordinate coordinateOf(BuildSystem build, Path at) {
         try {
@@ -214,7 +238,9 @@ public final class InitCommand {
             String name = null;
             for (String settings : List.of("settings.gradle.kts", "settings.gradle")) {
                 Path path = at.resolve(settings);
-                if (Files.isRegularFile(path)) {
+                if (name == null && Files.isRegularFile(path)) {
+                    // The first that names it, and not the last that was read. A project may hold
+                    // both files, and one of them saying nothing is not that project saying nothing.
                     name = GradleBuild.rootProjectNameOf(Files.readString(path));
                 }
             }

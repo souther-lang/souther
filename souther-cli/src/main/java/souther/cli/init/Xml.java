@@ -56,12 +56,15 @@ final class Xml {
             }
             String tag = xml.substring(lt + 1, gt).trim();
             if (tag.startsWith("/")) {
+                // Asked before the path is: an end tag that closes something else is not the end of
+                // the element being looked for, however deep the walk happens to be standing.
+                if (!closes(open, tag)) {
+                    return NOWHERE;   // not a document this can be walked down
+                }
                 if (open.equals(path)) {
                     return lt;
                 }
-                if (!open.isEmpty()) {
-                    open.remove(open.size() - 1);
-                }
+                open.remove(open.size() - 1);
             } else if (!tag.endsWith("/")) {
                 open.add(nameOf(tag));
             }
@@ -116,12 +119,13 @@ final class Xml {
             }
             String tag = xml.substring(lt + 1, gt).trim();
             if (tag.startsWith("/")) {
+                if (!closes(open, tag)) {
+                    return null;   // not a document this can be walked down
+                }
                 if (open.equals(path) && content >= 0) {
                     return xml.substring(content, lt).trim();
                 }
-                if (!open.isEmpty()) {
-                    open.remove(open.size() - 1);
-                }
+                open.remove(open.size() - 1);
             } else if (!tag.endsWith("/")) {
                 open.add(nameOf(tag));
                 if (open.equals(path) && content < 0) {
@@ -199,6 +203,19 @@ final class Xml {
             }
         }
         return "    ";
+    }
+
+    /**
+     * Whether this end tag closes the element that is open.
+     *
+     * <p>Asked rather than assumed. An end tag that closes something else — a stray one, a
+     * misspelt one — leaves the walk one element up from where it thinks it is, and every path
+     * asked about after it is answered about a different element. What that produced was a
+     * declaration written outside the {@code <project>} it was meant to go inside, into a pom that
+     * then parsed as nothing. A document this cannot follow is one this says it cannot follow.
+     */
+    private static boolean closes(List<String> open, String tag) {
+        return !open.isEmpty() && open.get(open.size() - 1).equals(nameOf(tag.substring(1).trim()));
     }
 
     /** The name a start tag opens, without its attributes. */

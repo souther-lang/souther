@@ -100,6 +100,60 @@ class WhatThisCommandCannotDecideItRefusesTest {
         assertEquals(0, written.code(), written.err());
     }
 
+    /**
+     * A pom whose tags do not match is refused before anything is written.
+     *
+     * <p>Read out of the same file the coordinate is read from, and asked before the first file is
+     * created: what the author would otherwise have is a source directory they did not ask for and
+     * a pom they have to restore from the copy beside it.
+     */
+    @Test
+    void aPomThisCannotFollowIsRefusedBeforeAnythingIsWritten(@TempDir Path directory)
+            throws IOException {
+        Files.writeString(directory.resolve("pom.xml"), """
+                <project>
+                  <groupId>com.acme</groupId>
+                  <artifactId>billing</artifactId>
+                  </oops>
+                  <dependencies>
+                  </dependencies>
+                </project>
+                """);
+
+        Run run = run(directory);
+
+        assertEquals(2, run.code());
+        assertTrue(run.err().contains("pom.xml"), run.err());
+        assertTrue(Files.notExists(directory.resolve("src")), "a refusal wrote a source directory");
+        assertTrue(Files.notExists(directory.resolve("pom.xml.orig")), "a refusal wrote a copy");
+    }
+
+    /**
+     * A settings file that names nothing does not unname what another one named.
+     *
+     * <p>A project may hold both spellings. Read as the last one that was looked at rather than the
+     * first that answered, the Groovy file saying nothing put the project back to being called
+     * after its directory.
+     */
+    @Test
+    void aSecondSettingsFileDoesNotUnnameTheProject(@TempDir Path directory) throws IOException {
+        Files.writeString(directory.resolve("build.gradle.kts"), """
+                plugins {
+                    java
+                }
+
+                group = "com.acme"
+                """);
+        Files.writeString(directory.resolve("settings.gradle.kts"), "rootProject.name = \"chosen\"\n");
+        Files.writeString(directory.resolve("settings.gradle"), "// names nothing\n");
+
+        Run run = run(directory);
+
+        assertEquals(0, run.code(), run.err());
+        assertTrue(run.out().contains("com.acme:chosen"),
+                "the project was renamed after its directory:\n" + run.out());
+    }
+
     @Test
     void aModuleInTheLanguagesOwnNamespaceIsRefused(@TempDir Path directory) {
         Run run = run(directory, "com.example:hello", "--module", "souther.hello");

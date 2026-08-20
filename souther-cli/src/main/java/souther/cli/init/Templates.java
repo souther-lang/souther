@@ -219,7 +219,7 @@ final class Templates {
                     }
                 }
                 """.formatted(project.moduleName(), TEST_CLASS, resultType(project),
-                behaviorType(project), behaviorType(project), behaviorType(project));
+                behaviorType(project), behaviorType(project));
     }
 
     /**
