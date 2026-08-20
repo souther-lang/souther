@@ -1,30 +1,43 @@
 package souther.compiler.numeric;
 
-import souther.compiler.numeric.Place;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
- * A small numeric abstract domain — a per-atom interval plus difference-bound constraints
- * ({@code a - b <= c}, the octagon-style relational part) — over named atoms. An atom is the
- * numeric content of a variable, a field chain, or a newtype's wrapped value; what names one is the
- * caller's, and {@code Terms} in the checker is where the names come from today. Constants are
- * {@link BigDecimal}; {@code null} bounds are ±infinity.
+ * What a path's rules leave the numbers in it, and what follows from them.
  *
- * <p>{@link #assume} tightens the domain along a {@code guard}/{@code if} guard or an input
- * newtype's invariant, and {@link #entails} / {@link #refutes} answer whether a construction's
- * invariant is discharged or is definitely violated on the current path — which is the
- * invariant-discharge check, the caller this was written for. What it derives is bounded to
- * interval + difference-bound; a form of neither shape is kept as it was written and nothing is
- * derived from it on its own, but it stands as a premise wherever the derived part proves the
- * difference between it and what is being asked (spec §invariant-discharge). Instances are
- * immutable — each operation returns a fresh domain, threaded functionally like
- * {@code TotalityChecker}'s scope map.
+ * <p>An atom is the numeric content of a variable, a field chain, or a newtype's wrapped value; what
+ * names one is the caller's, and {@code Terms} in the checker is where the names come from today.
+ * {@link #assume} takes in a {@code guard}/{@code if} guard or an input newtype's invariant, and
+ * {@link #entails} / {@link #refutes} answer whether a construction's invariant is discharged or is
+ * definitely violated on the current path — which is the invariant-discharge check, the caller this
+ * was written for.
+ *
+ * <p><b>What is held is the rules, and everything else is worked out from them.</b> A rule arrives,
+ * is read into the one form every writing of it comes to ({@link AffineConstraint}), and is kept.
+ * Nothing is decided at the moment it arrives that depends on what had arrived before it. What the
+ * rules leave is derived from all of them at once ({@link ClosedState}), once, when something asks.
+ *
+ * <p>That is not how this worked, and the difference is visible. A rule used to be sorted into a
+ * bound, a difference, or a bucket of forms nothing read back, and the sorting looked at the
+ * coefficients as they were typed — so {@code 2a - 2b <= 4} and {@code a - b <= 2} went to different
+ * places and only one of them bounded anything. A disequality was turned into a bound or dropped
+ * depending on what happened to be known at that moment, so {@code x /= 0} beside {@code x >= 0}
+ * left {@code x} at nought or above according to which was written first. And a rule over several
+ * positions was read only as something to subtract from a goal, never as something that narrows the
+ * positions it names, so every range handed downstream was short of what the rules said.
+ *
+ * <p>Instances are immutable — each operation returns a fresh domain, threaded functionally like
+ * {@code TotalityChecker}'s scope map. Constants are {@link BigDecimal} at the edges, because that is
+ * what a carrier counts in and what a model writes; inside, the arithmetic is exact
+ * ({@link Rational}), since dividing is what deriving a bound does and neither of those is closed
+ * under it.
  */
 public final class NumericDomain<A> {
 
@@ -69,63 +82,74 @@ public final class NumericDomain<A> {
         }
     }
 
-    /** A form asserted {@code f <= 0} (or {@code f < 0}) and kept as written, because its shape is
-     * neither an interval nor a difference. */
-    private record Asserted<A>(LinearForm<A> f, boolean strict) {}
+    /**
+     * How many digits a bound is written out to where it is not a decimal at all.
+     *
+     * <p>Almost never reached. A bound on a position whose values step lands on a whole number, and
+     * a bound on one whose values fill is usually a decimal too; what is left is a bound at a value
+     * like a third, which no decimal is. Rounded outward when it happens, so what is handed over
+     * still admits everything the rules admit.
+     */
+    private static final int DIGITS_WHEN_IT_IS_NOT_A_DECIMAL = 34;
 
-    private final boolean bottom;                              // an infeasible path (guards contradict)
-    private final Map<A, Endpoint> lo;                    // atom -> lower bound (absent = -inf)
-    private final Map<A, Endpoint> hi;                    // atom -> upper bound (absent = +inf)
-    private final Map<A, Map<A, Endpoint>> diff;     // diff[a][b] = tightest known (a - b)
-    private final List<Asserted<A>> kept;                         // forms outside both shapes, as written
-    private final Map<A, Granularity> kinds;              // atom -> how its values are spaced
-    private final Map<A, Set<Loss>> losses;               // atom -> what was not recorded of it
-    private Map<A, Map<A, Endpoint>> closed;         // diff closed transitively, on first ask
+    private final List<AffineConstraint<A>> rules;
+    private final Map<A, Granularity> kinds;
+    private final Map<A, Set<Loss>> losses;
+    private final boolean readARuleNothingSatisfies;
+    private ClosedState<A> closed;
 
-    private NumericDomain(boolean bottom, Map<A, Endpoint> lo, Map<A, Endpoint> hi,
-                          Map<A, Map<A, Endpoint>> diff, List<Asserted<A>> kept,
-                          Map<A, Granularity> kinds, Map<A, Set<Loss>> losses) {
-        this.bottom = bottom;
-        this.lo = lo;
-        this.hi = hi;
-        this.diff = diff;
-        this.kept = kept;
+    private NumericDomain(List<AffineConstraint<A>> rules, Map<A, Granularity> kinds,
+                          Map<A, Set<Loss>> losses, boolean readARuleNothingSatisfies) {
+        this.rules = rules;
         this.kinds = kinds;
         this.losses = losses;
+        this.readARuleNothingSatisfies = readARuleNothingSatisfies;
     }
 
     public static <A> NumericDomain<A> top() {
-        return new NumericDomain<>(false, Map.of(), Map.of(), Map.of(), List.of(), Map.of(), Map.of());
+        return new NumericDomain<>(List.of(), Map.of(), Map.of(), false);
     }
 
     /**
-     * A way an assertion arrived holding more than the domain kept of it.
+     * A way an assertion arrived holding more than a range can state.
      *
-     * <p>Recorded where it happens rather than read back afterwards. What the bounds say is sound
-     * either way — everything dropped here was a narrowing, and a wider bound proves less — but a
-     * caller turning a bound into a value somebody has to write needs to know the edge is where the
-     * rules stop and not merely where this stopped reading them.
+     * <p>What the bounds say is sound either way — a range that cannot state a rule is a range wider
+     * than the rule, and a wider bound proves less — but a caller turning a bound into a value
+     * somebody has to write needs to know the edge is where the rules stop and not merely where a
+     * range stops being able to say so.
      */
     public enum Loss {
 
-        /** A disequality. {@code x /= 0} is a hole in a range, and a range is all this holds. */
+        /** A disequality. {@code x /= 0} is a hole in a range, and a range is all this hands over. */
         DROPPED_DISEQUALITY,
 
-        /** A form that is neither an interval nor a difference, kept as written. It proves things
-         * ({@link #entails} reads it, as a premise as well as a match) and no bound is derived
-         * through it — {@link #boundsOf} does not read it, so a projection is short of what the
-         * rules said. */
+        /**
+         * A rule relating several positions, which a range at one of them cannot state.
+         *
+         * <p>Not that nothing is derived from it: what such a rule leaves each position it names is
+         * derived and is in the bounds ({@link AffineReduction}). What a range cannot carry is the
+         * relation — every point of the box is inside every position's range, and the rule refuses
+         * some of them. So a reader taking one position's range at a time is reading something true,
+         * and a reader taking a value from each and expecting the whole to satisfy the rules is not.
+         */
         KEPT_UNPROJECTABLE
     }
 
+    /**
+     * Whether the rules leave nothing at all, in which case the path is not reached.
+     *
+     * <p>True is a proof and false is not — see {@link ClosedState#holdsNothing}. Everything that
+     * narrows is implied by the rules, so an emptied box is one the rules emptied; the rounds can
+     * stop early, so a box that has not emptied is not a box with a value in it.
+     */
     public boolean isBottom() {
-        return bottom;
+        return readARuleNothingSatisfies || closed().holdsNothing();
     }
 
-    // --- assume: tighten along `f rel 0` -------------------------------------------------------
+    // --- assume: take in one more rule ------------------------------------------------------------
 
     /**
-     * The domain refined by asserting {@code f rel 0}.
+     * The domain with {@code f rel 0} taken in.
      *
      * @param atomKinds how the values of each atom of {@code f} are spaced. Required rather than
      *                  defaulted: an atom whose spacing is guessed is one a strict bound is either
@@ -133,34 +157,47 @@ public final class NumericDomain<A> {
      *                  failure anywhere near where the guess was made.
      */
     public NumericDomain<A> assume(LinearForm<A> f, Rel rel, Map<A, Granularity> atomKinds) {
-        NumericDomain<A> d = knowing(f.coefs().keySet(), atomKinds);
-        if (d.bottom) {
-            return d;
+        NumericDomain<A> knowing = knowing(f.coefs().keySet(), atomKinds);
+        if (knowing.readARuleNothingSatisfies) {
+            return knowing;
         }
-        if (rel == Rel.NE) {
-            // `f != 0` is a disjunction, and the domain holds conjunctions of bounds — except where
-            // one of the two sides is already out. A count is never below none, so `count != 0` is
-            // `count > 0` and there is no disjunction left to drop: the same rule the author wrote
-            // one way rather than the other. Asked of what is known here rather than of the shape of
-            // the form, so it holds wherever a side has been established, however it was.
-            if (!f.coefs().isEmpty()) {
-                if (d.proveLe(f.negate(), false)) {
-                    return d.addLe(f.negate(), true);       // `f >= 0` was known, so `f > 0`
-                }
-                if (d.proveLe(f, false)) {
-                    return d.addLe(f, true);                // `f <= 0` was known, so `f < 0`
-                }
-            }
-            // Otherwise nothing to record; what settles such a guard is the fact keyed on the
-            // comparison itself.
-            return f.coefs().isEmpty() ? d
-                    : d.losing(Loss.DROPPED_DISEQUALITY, f.coefs().keySet());
+        Map<A, Rational> coefs = new LinkedHashMap<>();
+        f.coefs().forEach((atom, coef) -> coefs.put(atom, Rational.of(coef)));
+        AffineConstraint.Read<A> read = AffineConstraint.of(
+                coefs, Rational.of(f.constant()), rel, knowing.kinds::get);
+        return switch (read) {
+            // Nothing satisfies it, so nothing satisfies it together with anything else.
+            case AffineConstraint.Read.HoldsNever<A> ignored -> new NumericDomain<>(
+                    List.of(), knowing.kinds, knowing.losses, true);
+            // Every value satisfies it, so there is nothing to keep.
+            case AffineConstraint.Read.HoldsAlways<A> ignored -> knowing;
+            case AffineConstraint.Read.Stated<A> stated -> knowing.keeping(stated.constraint());
+        };
+    }
+
+    /**
+     * The domain with one more rule kept.
+     *
+     * <p>Kept and not merged into anything. A rule said twice is the same rule and the same key, so
+     * the second saying adds nothing — which is what makes the answer a function of which rules were
+     * said rather than of how often each was.
+     */
+    private NumericDomain<A> keeping(AffineConstraint<A> rule) {
+        if (rules.contains(rule)) {
+            return losing(lossOf(rule), rule.form().coefs().keySet());
         }
-        if (rel == Rel.EQ) {
-            return d.addLe(f, false).addLe(f.negate(), false);
+        List<AffineConstraint<A>> next = new ArrayList<>(rules);
+        next.add(rule);
+        return new NumericDomain<>(List.copyOf(next), kinds,
+                with(lossOf(rule), rule.form().coefs().keySet()), false);
+    }
+
+    /** What a range cannot state about the rule, or null where it can state all of it. */
+    private Loss lossOf(AffineConstraint<A> rule) {
+        if (rule instanceof AffineConstraint.Disequality) {
+            return Loss.DROPPED_DISEQUALITY;
         }
-        // Reduce `f rel 0` to `g <= 0` (or `g < 0`): negate the form for >=/>, keep it for <=/<.
-        return d.addLe(negOf(rel) ? f.negate() : f, strictOf(rel));
+        return DifferenceBounds.canHold(rule) ? null : Loss.KEPT_UNPROJECTABLE;
     }
 
     /**
@@ -185,7 +222,6 @@ public final class NumericDomain<A> {
         return out;
     }
 
-
     /**
      * The domain with the spacing of each of {@code atoms} recorded.
      *
@@ -206,8 +242,7 @@ public final class NumericDomain<A> {
                 continue;
             }
             if (had != null) {
-                throw new IllegalStateException(
-                        "atom `" + atom + "` is " + had + " and " + given);
+                throw new IllegalStateException("atom `" + atom + "` is " + had + " and " + given);
             }
             if (next == null) {
                 next = new HashMap<>(kinds);
@@ -215,226 +250,124 @@ public final class NumericDomain<A> {
             next.put(atom, given);
         }
         return next == null ? this
-                : new NumericDomain<>(bottom, lo, hi, diff, kept, Map.copyOf(next), losses);
+                : new NumericDomain<>(rules, Map.copyOf(next), losses, readARuleNothingSatisfies);
     }
+
+    // --- what the rules leave, worked out once ----------------------------------------------------
 
     /**
-     * Assert {@code g <= 0} (or {@code g < 0} when strict), updating an interval or a difference, or
-     * keeping the form as written when it is neither.
+     * The rules worked out, derived on the first question asked of them and kept.
      *
-     * <p>What strictness is worth depends on what the atoms are made of. Over whole numbers there is
-     * a next value to step to, so {@code a < 3} is {@code a <= 2} and {@code a - b < 0} is
-     * {@code a - b <= -1}, and the end that lands there is one the rule admits. Over decimals there
-     * is no step, and the end stays where the constraint put it and says that the value is not its
-     * own. A form of neither shape keeps its strictness as written.
+     * <p>Not while they are arriving. What a rule leaves depends on the others, and half of them have
+     * not been said yet when it is said — a bound written down at that moment is a bound that depends
+     * on the order, which is the thing this arrangement exists to be rid of.
      */
-    private NumericDomain<A> addLe(LinearForm<A> g, boolean strict) {
-        if (bottom) {
-            // Nothing holds here, so nothing asserted of it holds either. Read again rather than
-            // built on: a bottom domain keeps no bounds, and the sisters below derive feasibility
-            // from the bounds they are handed, so one more assertion would come back a domain in
-            // which only that assertion is known. An equality is two of these in a row, which is
-            // where a contradicted one came back satisfiable.
-            return this;
+    private ClosedState<A> closed() {
+        if (closed == null) {
+            closed = ClosedState.of(rules, kinds::get);
         }
-        Map<A, BigDecimal> c = g.coefs();
-        if (c.isEmpty()) {
-            boolean ok = strict ? g.constant().signum() < 0 : g.constant().signum() <= 0;
-            return ok ? this : bottom();
-        }
-        if (c.size() == 1) {
-            Map.Entry<A, BigDecimal> e = c.entrySet().iterator().next();
-            A a = e.getKey();
-            BigDecimal k = e.getValue();
-            // k·a + const <= 0  =>  a <= -const/k (k>0, an upper bound)  or  a >= -const/k (k<0, a
-            // lower bound). Round an inexact quotient conservatively — toward +inf for an upper bound,
-            // toward -inf for a lower bound — so the recorded bound is never tighter than the true one.
-            // A tighter-than-true bound would make entails/refutes unsound (a false E2010).
-            boolean upper = k.signum() > 0;
-            java.math.MathContext mc = new java.math.MathContext(
-                    34, upper ? java.math.RoundingMode.CEILING : java.math.RoundingMode.FLOOR);
-            BigDecimal bound = g.constant().negate().divide(k, mc);
-            Endpoint end = kinds.get(a) == Granularity.DISCRETE
-                    ? Endpoint.inclusive(whole(bound, upper, strict))
-                    : new Endpoint(Count.of(bound), !strict);
-            return upper ? withHi(a, end) : withLo(a, end);
-        }
-        List<A> ab = unitDiffAtoms(c);
-        if (ab != null) {
-            // a - b <= -const. A difference of two whole numbers is a whole number, and only then:
-            // one dense atom on either side leaves the difference with no smallest step, so the
-            // bound stays where the constant put it and says the value is outside it.
-            BigDecimal bound = g.constant().negate();
-            Endpoint end = kinds.get(ab.get(0)) == Granularity.DISCRETE
-                    && kinds.get(ab.get(1)) == Granularity.DISCRETE
-                    ? Endpoint.inclusive(whole(bound, true, strict))
-                    : new Endpoint(Count.of(bound), !strict);
-            return withDiff(ab.get(0), ab.get(1), end);
-        }
-        // Neither shape holds it — a sum of two lengths, say. Keeping the form as written is what lets
-        // a guard restating an invariant discharge it, which is the promise the flagging rests on.
-        List<Asserted<A>> next = new ArrayList<>(kept);
-        next.add(new Asserted(g, strict));
-        return new NumericDomain<>(false, lo, hi, diff, List.copyOf(next), kinds,
-                with(Loss.KEPT_UNPROJECTABLE, c.keySet()));
+        return closed;
     }
 
-    /**
-     * A bound on a whole number, tightened to one.
-     *
-     * <p>Never past the true bound. An upper bound admits everything up to {@code q}, so the largest
-     * whole number it admits is {@code floor(q)}; a strict one stops short of {@code q}, so the
-     * largest is the whole number below it, {@code ceil(q) - 1} — which is {@code q - 1} where
-     * {@code q} is whole and {@code floor(q)} where it is not. Lower bounds are the mirror.
-     *
-     * @param q      the bound as the arithmetic left it, already rounded away from the constraint
-     * @param upper  whether {@code q} bounds the atom above
-     * @param strict whether the value {@code q} itself is outside what the constraint admits
-     */
-    private static Count whole(BigDecimal q, boolean upper, boolean strict) {
-        Count at = Count.of(q);
-        if (upper) {
-            return strict ? at.rounded(java.math.RoundingMode.CEILING).minus(1)
-                    : at.rounded(java.math.RoundingMode.FLOOR);
-        }
-        return strict ? at.rounded(java.math.RoundingMode.FLOOR).plus(1)
-                : at.rounded(java.math.RoundingMode.CEILING);
-    }
+    // --- entails / refutes --------------------------------------------------------------------------
 
-    /** The two atoms of a unit difference {@code {a:+1, b:-1}} as {@code {a, b}}, or {@code null} if
-     * {@code c} is not a two-atom form with coefficients +1 and -1. */
-    private static <A> List<A> unitDiffAtoms(Map<A, BigDecimal> c) {
-        if (c.size() != 2) {
-            return null;
-        }
-        A a = null;
-        A b = null;
-        for (Map.Entry<A, BigDecimal> e : c.entrySet()) {
-            if (e.getValue().compareTo(BigDecimal.ONE) == 0) {
-                a = e.getKey();
-            } else if (e.getValue().compareTo(BigDecimal.ONE.negate()) == 0) {
-                b = e.getKey();
-            } else {
-                return null;
-            }
-        }
-        return a != null && b != null ? List.of(a, b) : null;
-    }
-
-    /** True for {@code GT}/{@code LT} (a strict comparison). */
-    private static boolean strictOf(Rel rel) {
-        return rel == Rel.GT || rel == Rel.LT;
-    }
-
-    /** True for {@code GE}/{@code GT} — the form is negated to reduce the comparison to {@code <= 0}. */
-    private static boolean negOf(Rel rel) {
-        return rel == Rel.GE || rel == Rel.GT;
-    }
-
-    // --- entails / refutes ---------------------------------------------------------------------
-
-    /** Whether the domain proves {@code f rel 0} (the construction's invariant is discharged). */
+    /** Whether the rules prove {@code f rel 0} — the construction's invariant is discharged. */
     public boolean entails(LinearForm<A> f, Rel rel) {
         return entails(f, rel, true);
     }
 
     /**
-     * Whether what is <em>projected</em> out of this proves {@code f rel 0}.
+     * Whether what is <em>handed over</em> proves {@code f rel 0}.
      *
-     * <p>The bounds a reader downstream is handed, and not the relations kept beside them. A form
-     * neither an interval nor a difference holds is kept as written and marked
-     * {@link Loss#KEPT_UNPROJECTABLE} for exactly that reason — {@link #boundsOf} does not read it —
-     * so asking {@link #entails} whether the projection still holds such a form is asking the form
-     * to stand on itself, and everything the projection dropped comes back proven.
+     * <p>The bounds a reader downstream is given, and not the rules beside them. A rule relating
+     * several positions narrows each of them and is still not something a range states, so asking
+     * whether the ranges alone hold it is asking a different question from whether the rules do —
+     * and it is the question a caller deciding how much of the rules the bounds say wants.
      *
-     * <p>A caller deciding how much of the rules the bounds state wants this. A caller deciding
-     * whether a construction discharges its invariant wants the other one: what is known there is
-     * everything this holds, however it holds it.
+     * <p>A caller deciding whether a construction discharges its invariant wants the other one: what
+     * is known there is everything the rules say, however they say it.
      */
     public boolean projectionEntails(LinearForm<A> f, Rel rel) {
         return entails(f, rel, false);
     }
 
-    private boolean entails(LinearForm<A> f, Rel rel, boolean withKept) {
-        if (bottom) {
+    private boolean entails(LinearForm<A> f, Rel rel, boolean withRules) {
+        if (isBottom()) {
             return true;   // an infeasible path discharges anything
         }
-        if (rel == Rel.EQ) {
-            return prove(f, false, withKept) && prove(f.negate(), false, withKept);
-        }
-        if (rel == Rel.NE) {
-            // `f < 0`, or `f > 0`
-            return prove(f, true, withKept) || prove(f.negate(), true, withKept);
-        }
-        return prove(negOf(rel) ? f.negate() : f, strictOf(rel), withKept);
+        Goal<A> goal = goalOf(f);
+        return switch (rel) {
+            case LE -> proves(goal, false, withRules);
+            case LT -> proves(goal, true, withRules);
+            case GE -> proves(goal.negated(), false, withRules);
+            case GT -> proves(goal.negated(), true, withRules);
+            case EQ -> proves(goal, false, withRules) && proves(goal.negated(), false, withRules);
+            case NE -> proves(goal, true, withRules) || proves(goal.negated(), true, withRules);
+        };
     }
 
-    private boolean prove(LinearForm<A> g, boolean strict, boolean withKept) {
-        return withKept ? proveLe(g, strict) : proveBaseLe(g, strict);
-    }
-
-    /** Whether the domain proves {@code ¬(f rel 0)} — the invariant is <em>definitely</em> violated
-     * on this path (a compile error, the path-sensitive generalization of the constant check). The
-     * negation flips both bits of the comparison: {@code ¬(f >= 0)} is {@code f < 0}, etc. */
+    /**
+     * Whether the rules prove {@code ¬(f rel 0)} — the invariant is <em>definitely</em> violated on
+     * this path, which is a compile error rather than an undischarged obligation. The negation flips
+     * both bits of the comparison: {@code ¬(f >= 0)} is {@code f < 0}.
+     */
     public boolean refutes(LinearForm<A> f, Rel rel) {
-        if (bottom || rel == Rel.EQ) {
+        if (isBottom() || rel == Rel.EQ) {
             return false;   // an unreachable path violates nothing; equality is never refuted here
         }
         if (rel == Rel.NE) {
             return entails(f, Rel.EQ);   // proving it equal is proving it not unequal
         }
-        return proveLe(negOf(rel) ? f : f.negate(), !strictOf(rel));
+        Goal<A> goal = goalOf(f);
+        return switch (rel) {
+            case GE, GT -> proves(goal, rel == Rel.GE, true);
+            default -> proves(goal.negated(), rel == Rel.LE, true);
+        };
+    }
+
+    /** A goal as a weighted sum and a constant, which is what a comparison against nought is. */
+    private record Goal<A>(Map<A, Rational> coefs, Rational constant) {
+
+        Goal<A> negated() {
+            Map<A, Rational> out = new LinkedHashMap<>();
+            coefs.forEach((atom, coef) -> out.put(atom, coef.negated()));
+            return new Goal<>(out, constant.negated());
+        }
+    }
+
+    private Goal<A> goalOf(LinearForm<A> f) {
+        Map<A, Rational> coefs = new LinkedHashMap<>();
+        f.coefs().forEach((atom, coef) -> coefs.put(atom, Rational.of(coef)));
+        return new Goal<>(coefs, Rational.of(f.constant()));
     }
 
     /**
-     * Whether {@code g <= 0} (or {@code g < 0} when strict) follows from the domain.
+     * Whether {@code Σ c·x + k <= 0} (or {@code < 0}) follows.
      *
-     * <p>Two ways to reach it, and the second reads the first. A form kept as written is a premise
-     * and not only something a goal is matched against: {@code f <= 0} together with
-     * {@code g - f <= 0} gives {@code g <= 0}, so a relation of neither shape carries onward wherever
-     * the derived fragment proves the difference between it and the goal. That is what relates a
-     * guard over a computed value to what the type of the value it was compared against guarantees —
-     * the two land in different shapes, and neither is the other's to derive.
+     * <p>Two ways, and the second reads the first. What the box leaves the goal's own positions
+     * bounds it; and a rule kept as written carries a goal onward wherever the box proves the
+     * difference between the two — {@code f <= 0} together with {@code g - f <= 0} gives
+     * {@code g <= 0}. That is what relates a guard over a computed value to what the type of the
+     * value it was compared against guarantees.
      *
-     * <p>One premise, once. The residual is proven against the derived fragment alone
-     * ({@link #proveBaseLe}), so two kept relations are never added together. Closing the kept
-     * relations over each other is arbitrary linear reasoning and a different fragment to state; this
-     * one is what the domain already decides in, reached through one relation it does not.
+     * <p>One rule, once. The residual is proven against the box alone, so two rules are never added
+     * together through this. What the box already holds of them is another matter and is not this
+     * step: the rules that narrow it have all been read into it, each on its own.
      */
-    private boolean proveLe(LinearForm<A> g, boolean strict) {
-        if (proveBaseLe(g, strict)) {
+    private boolean proves(Goal<A> goal, boolean strict, boolean withRules) {
+        if (provenByTheBox(goal, strict)) {
             return true;
         }
-        for (Asserted a : kept) {
-            // The goal is strict where either the premise or the residual is, so what the residual is
-            // asked for is what the premise did not already give.
-            if (proveBaseLe(g.minus(a.f()), strict && !a.strict())) {
-                return true;
-            }
+        if (!withRules) {
+            return false;
         }
-        return false;
-    }
-
-    /** The same over what this derives in: an interval bound on the whole form, or a bound on a
-     * difference of two atoms read through the closure. The kept relations are not read here — this
-     * is what a residual is proven against, and reading them would let one stand on another. */
-    private boolean proveBaseLe(LinearForm<A> g, boolean strict) {
-        Endpoint hiG = upperBound(g);
-        if (hiG != null) {
-            int s = at(hiG).signum();
-            // An end at zero the form's own bounds do not reach proves the strict form: nothing the
-            // domain admits gets there, which is what `g < 0` asks.
-            if (s < 0 || (s == 0 && (!strict || !hiG.inclusive()))) {
-                return true;
-            }
-        }
-        List<A> ab = unitDiffAtoms(g.coefs());
-        if (ab != null) {
-            Endpoint diffBound = closedDiff(ab.get(0), ab.get(1));     // proven upper bound on (a - b)
-            if (diffBound != null) {
-                Count bound = Count.of(g.constant().negate());   // want a - b <= -const
-                int s = at(diffBound).compareTo(bound);
-                if (s < 0 || (s == 0 && (!strict || !diffBound.inclusive()))) {
+        for (AffineConstraint<A> rule : rules) {
+            for (AffineConstraint.HalfSpace<A> premise : asHalfSpaces(rule)) {
+                // `premise.form <= premise.bound` taken off the goal leaves a residual the box has
+                // to prove. The goal is strict where either the premise or the residual is, so what
+                // the residual is asked for is what the premise did not already give.
+                Goal<A> residual = subtracting(goal, premise);
+                if (provenByTheBox(residual, strict && premise.bound().inclusive())) {
                     return true;
                 }
             }
@@ -442,136 +375,169 @@ public final class NumericDomain<A> {
         return false;
     }
 
-    /**
-     * The interval upper bound of {@code f}, or {@code null} if unbounded above.
-     *
-     * <p>The end is the form's own only where every end it was added from is. One term that cannot
-     * reach its edge is one the sum cannot reach either, so a single exclusive contribution makes the
-     * total exclusive.
-     */
-    private Endpoint upperBound(LinearForm<A> f) {
-        Count acc = Count.of(f.constant());
-        boolean inclusive = true;
-        for (Map.Entry<A, BigDecimal> e : f.coefs().entrySet()) {
-            BigDecimal k = e.getValue();
-            Endpoint b = k.signum() > 0 ? bestHi(e.getKey()) : bestLo(e.getKey());
-            if (b == null) {
-                return null;   // unbounded in the contributing direction
-            }
-            acc = acc.plus(at(b).times(k));
-            inclusive &= b.inclusive();
-        }
-        return new Endpoint(acc, inclusive);
+    private static <A> List<AffineConstraint.HalfSpace<A>> asHalfSpaces(AffineConstraint<A> rule) {
+        return switch (rule) {
+            case AffineConstraint.HalfSpace<A> half -> List.of(half);
+            case AffineConstraint.Equality<A> at -> List.of(
+                    new AffineConstraint.HalfSpace<>(at.form(), RationalCut.inclusive(at.at())),
+                    new AffineConstraint.HalfSpace<>(at.form().negated(),
+                            RationalCut.inclusive(at.at().negated())));
+            case AffineConstraint.Disequality<A> hole -> List.of();
+        };
     }
 
-    /** The tightest upper bound on an atom: its own, or one reached through a difference —
-     * {@code a - b <= d} and {@code b <= c} give {@code a <= c + d}, which is what relates the size of
-     * a filtered list to a bound on the list it came from. A value at the end reached that way needs
-     * every end on the way to be reachable, so the derived end is its own only where both are. */
-    private Endpoint bestHi(A a) {
-        Endpoint best = hi.get(a);
-        for (Map.Entry<A, Endpoint> b : hi.entrySet()) {
-            if (b.getKey().equals(a)) {
-                continue;
+    /** {@code goal - (premise.form - premise.bound)}, which is what is left to prove once the
+     *  premise has been used. */
+    private Goal<A> subtracting(Goal<A> goal, AffineConstraint.HalfSpace<A> premise) {
+        Map<A, Rational> coefs = new LinkedHashMap<>(goal.coefs());
+        premise.form().coefs().forEach((atom, coef) ->
+                coefs.merge(atom, coef.negated(), Rational::plus));
+        coefs.values().removeIf(Rational::isZero);
+        return new Goal<>(coefs, goal.constant().plus(premise.bound().at()));
+    }
+
+    /** Whether what the rules leave the goal's positions already puts the goal below nought. */
+    private boolean provenByTheBox(Goal<A> goal, boolean strict) {
+        RationalCut highest = highestOf(goal);
+        if (highest == null) {
+            return false;
+        }
+        int sign = highest.at().signum();
+        // An end at nought the goal's own bounds do not reach proves the strict form: nothing the
+        // rules admit gets there, which is what `< 0` asks.
+        return sign < 0 || (sign == 0 && (!strict || !highest.inclusive()));
+    }
+
+    /**
+     * The highest the goal comes to, or null where nothing bounds it above.
+     *
+     * <p>Its positions' own ends, and the relation on a difference of two of them where the goal has
+     * that shape. The end is the goal's own only where every end it was added from is: one term that
+     * cannot reach its edge is one the sum cannot reach either.
+     */
+    private RationalCut highestOf(Goal<A> goal) {
+        if (goal.coefs().isEmpty()) {
+            return RationalCut.inclusive(goal.constant());
+        }
+        ClosedState<A> state = closed();
+        Box<A> box = state.box();
+        Rational at = goal.constant();
+        boolean reached = true;
+        RationalCut summed = null;
+        for (Map.Entry<A, Rational> each : goal.coefs().entrySet()) {
+            Rational coef = each.getValue();
+            RationalCut end = coef.signum() > 0
+                    ? box.mostOf(each.getKey()) : box.leastOf(each.getKey());
+            if (end == null) {
+                summed = null;
+                break;
             }
-            Endpoint d = closedDiff(a, b.getKey());
-            if (d == null) {
-                continue;
+            at = at.plus(coef.times(end.at()));
+            reached &= end.inclusive();
+            summed = new RationalCut(at, reached);
+        }
+        RationalCut best = summed;
+        List<A> apart = unitDifference(goal.coefs());
+        if (apart != null) {
+            RationalCut difference =
+                    state.differences().differenceBound(apart.get(0), apart.get(1));
+            if (difference != null) {
+                best = RationalCut.tighterUpper(best, new RationalCut(
+                        difference.at().plus(goal.constant()), difference.inclusive()));
             }
-            best = Endpoint.upper(best, new Endpoint(at(b.getValue()).plus(at(d)),
-                    b.getValue().inclusive() && d.inclusive()));
         }
         return best;
     }
 
-    /** The tightest lower bound on an atom, the same way: {@code b - a <= d} and {@code b >= c} give
-     * {@code a >= c - d}. */
-    private Endpoint bestLo(A a) {
-        Endpoint best = lo.get(a);
-        for (Map.Entry<A, Endpoint> b : lo.entrySet()) {
-            if (b.getKey().equals(a)) {
-                continue;
-            }
-            Endpoint d = closedDiff(b.getKey(), a);
-            if (d == null) {
-                continue;
-            }
-            best = Endpoint.lower(best, new Endpoint(at(b.getValue()).minus(at(d)),
-                    b.getValue().inclusive() && d.inclusive()));
+    /** The two atoms of {@code a - b}, or null where the goal is not one. */
+    private static <A> List<A> unitDifference(Map<A, Rational> coefs) {
+        if (coefs.size() != 2) {
+            return null;
         }
-        return best;
+        A up = null;
+        A down = null;
+        for (Map.Entry<A, Rational> each : coefs.entrySet()) {
+            if (each.getValue().equals(Rational.ONE)) {
+                up = each.getKey();
+            } else if (each.getValue().equals(Rational.ONE.negated())) {
+                down = each.getKey();
+            } else {
+                return null;
+            }
+        }
+        return up == null || down == null ? null : List.of(up, down);
     }
 
-    // --- reading the domain back ------------------------------------------------------------------
+    // --- reading the domain back --------------------------------------------------------------------
 
     /**
-     * The tightest bounds this proves on one atom, {@code null} at either end where it proves none.
-     *
-     * <p>Through the differences, not off the atom's own record: {@code a - b <= 0} with
-     * {@code b <= 1440} bounds {@code a} at 1440 though nothing was ever asserted about {@code a}
-     * alone. That is the whole point of asking here rather than reading what was put in.
-     */
-    public Bounds boundsOf(A atom) {
-        return bottom ? new Bounds(null, null) : new Bounds(bestLo(atom), bestHi(atom));
-    }
-
-    /**
-     * The tightest bounds this proves on a whole form, {@code null} at either end where it proves
+     * The tightest bounds the rules prove on one atom, {@code null} at either end where they prove
      * none.
      *
-     * <p>The same reading {@link #proveLe} decides a comparison by, asked for the end rather than
-     * for an answer about one: the atoms' own bounds through the differences, and the relation on a
-     * difference of two of them where that is the shape the form has. A caller adding up what is
-     * known atom by atom would be a second reading of this — and it would come back with nothing
-     * where the domain holds a relation between two atoms and no bound on either.
-     *
-     * <p>Read for a value the domain cannot carry: a product of two values and a truncating
-     * quotient are outside the fragment, and what they answer is bounded by what their parts are
-     * proven to lie between. The kept relations are not read here, for the reason they are not read
-     * in {@link #proveBaseLe}.
+     * <p>Everything the rules say and not what was written down about the atom alone: a difference
+     * carries a bound from another position, and a rule over several positions leaves each of them
+     * whatever the others cannot help taking. That is the whole point of asking here rather than
+     * reading back what was put in.
      */
-    public Bounds boundsOf(LinearForm<A> f) {
-        if (bottom) {
+    public Bounds boundsOf(A atom) {
+        if (isBottom()) {
             return new Bounds(null, null);
         }
-        return new Bounds(negated(highestOf(f.negate())), highestOf(f));
+        Box<A> box = closed().box();
+        return new Bounds(written(box.leastOf(atom), false), written(box.mostOf(atom), true));
     }
 
-    /** The tightest upper end this proves on {@code f}: its atoms' bounds, and the relation on a
-     * difference where the form is one. */
-    private Endpoint highestOf(LinearForm<A> f) {
-        Endpoint best = upperBound(f);
-        List<A> ab = unitDiffAtoms(f.coefs());
-        if (ab == null) {
-            return best;
+    /**
+     * The tightest bounds the rules prove on a whole form.
+     *
+     * <p>Read for a value the rules cannot carry directly: a product of two positions and a
+     * truncating quotient are outside what this reasons in, and what they answer is bounded by what
+     * their parts are proven to lie between.
+     */
+    public Bounds boundsOf(LinearForm<A> f) {
+        if (isBottom()) {
+            return new Bounds(null, null);
         }
-        Endpoint d = closedDiff(ab.get(0), ab.get(1));
-        // a - b <= d, so the form, which is that difference and a constant, is no higher than both.
-        return d == null ? best
-                : Endpoint.upper(best,
-                        new Endpoint(at(d).plus(Count.of(f.constant())), d.inclusive()));
+        Goal<A> goal = goalOf(f);
+        RationalCut highest = highestOf(goal);
+        RationalCut lowest = highestOf(goal.negated());
+        return new Bounds(
+                lowest == null ? null
+                        : written(new RationalCut(lowest.at().negated(), lowest.inclusive()), false),
+                written(highest, true));
     }
 
-    /** An end on the other side of zero, which is what an upper end of the negated form is. */
-    private static Endpoint negated(Endpoint end) {
-        return end == null ? null : new Endpoint(at(end).negate(), end.inclusive());
+    /**
+     * A cut as a number somebody can write.
+     *
+     * <p>The one place the exact arithmetic stops. Almost every bound is already a decimal — one on a
+     * position whose values step is a whole number — and a bound at a value like a third is not, so
+     * it is written out to as many digits as it takes and rounded the way that widens. What is handed
+     * over then admits everything the rules admit and a hair besides, which is the safe direction: a
+     * reader refusing a value the rules leave is the failure nothing downstream can see.
+     */
+    private Endpoint written(RationalCut cut, boolean upper) {
+        if (cut == null) {
+            return null;
+        }
+        BigDecimal exactly = cut.at().asWrittenDecimal();
+        if (exactly != null) {
+            return new Endpoint(new Count(exactly), cut.inclusive());
+        }
+        BigDecimal outward = cut.at().asDecimal(
+                upper ? RoundingMode.CEILING : RoundingMode.FLOOR,
+                DIGITS_WHEN_IT_IS_NOT_A_DECIMAL);
+        // Rounded outward, the number itself is past where the rules stop, so it is admitted.
+        return new Endpoint(new Count(outward), true);
     }
 
     /**
      * Every atom this domain says anything about.
      *
      * <p>What it is for is the other side of it: an atom outside this is one no question asked here
-     * can reach. A question is asked of a form, and the answer reads the form's own atoms' ends and
-     * then leaves them by two routes only — the differences, which {@link #closedDiff} carries a
-     * bound through, and the relations kept as written, which {@link #proveLe} subtracts from a
-     * goal. Every atom on either route arrived through {@link #assume} and so is here. So asserting
-     * something about an atom this does not speak of cannot change what it proves about anything
-     * else, which is what lets a caller deriving bounds decide whose bounds are worth deriving.
-     *
-     * <p>Generous where it is uncertain. An atom named in an assertion this could not record — a
-     * disequality, a form kept as written — is here, because what was dropped is a narrowing and the
-     * atom is still one a relation was written about. Answering with the atoms of the bounds alone
-     * would be reading back what was stored rather than saying what can be reached.
+     * can reach, so asserting something about it cannot change what is proven about anything else.
+     * Generous where it is uncertain — an atom named in a rule that narrows nothing is still here,
+     * because it is one a rule was written about.
      */
     public Set<A> atomsSpokenOf() {
         return kinds.keySet();
@@ -587,20 +553,6 @@ public final class NumericDomain<A> {
      */
     public Granularity spacingOf(A atom) {
         return kinds.get(atom);
-    }
-
-    /**
-     * The count an end is at.
-     *
-     * <p>Every end this holds was built from a number here, so this is a statement of that and not a
-     * check on a caller: an atom is a position the rules relate arithmetically, and a position whose
-     * values are not numbers has no atom to be related through.
-     */
-    private static Count at(Endpoint end) {
-        if (!(end.at() instanceof Count count)) {
-            throw new IllegalStateException("an atom's end is not a number: " + end);
-        }
-        return count;
     }
 
     /** What an atom's values are known to lie between. A {@code null} end is unbounded there. */
@@ -686,29 +638,21 @@ public final class NumericDomain<A> {
     }
 
     /**
-     * Whether everything this holds is held in a shape {@link #boundsOf} reads.
+     * Whether everything the rules say is held in a shape {@link #boundsOf} can state.
      *
-     * <p>False where anything asserted into it narrowed more than a bound could hold: see
-     * {@link Loss}. A caller turning a projection into a value somebody has to write has to know
-     * which of the two it has.
+     * <p>False where any rule says something a range cannot: see {@link Loss}. A caller turning a
+     * projection into a value somebody has to write has to know which of the two it has.
      */
     public boolean projectionIsLossless() {
         return losses.isEmpty();
     }
 
-    /**
-     * Whether the bounds on one atom are the whole of what the rules about it say.
-     *
-     * <p>Asked of the atom and not of the domain. A rule this could not hold is a rule about the
-     * positions it names, and a bound on some other atom is as good as it ever was — a pattern on a
-     * name says nothing about how many minutes a day has.
-     */
-    /** What was asserted about one atom and not recorded. */
+    /** What a range at one atom cannot state of the rules about it. */
     public Set<Loss> lossesAt(A atom) {
         return losses.getOrDefault(atom, Set.of());
     }
 
-    /** Every atom something was lost about. */
+    /** Every atom something is lost about. */
     public Set<A> lossyAtoms() {
         return losses.keySet();
     }
@@ -716,10 +660,13 @@ public final class NumericDomain<A> {
     private NumericDomain<A> losing(Loss loss, Set<A> atoms) {
         Map<A, Set<Loss>> next = with(loss, atoms);
         return next == losses ? this
-                : new NumericDomain<>(bottom, lo, hi, diff, kept, kinds, next);
+                : new NumericDomain<>(rules, kinds, next, readARuleNothingSatisfies);
     }
 
     private Map<A, Set<Loss>> with(Loss loss, Set<A> atoms) {
+        if (loss == null) {
+            return losses;
+        }
         Map<A, Set<Loss>> next = null;
         for (A atom : atoms) {
             if (losses.getOrDefault(atom, Set.of()).contains(loss)) {
@@ -734,120 +681,5 @@ public final class NumericDomain<A> {
             next.put(atom, java.util.Collections.unmodifiableSet(here));
         }
         return next == null ? losses : Map.copyOf(next);
-    }
-
-    // --- immutable updates ---------------------------------------------------------------------
-
-    private NumericDomain<A> bottom() {
-        return new NumericDomain<>(true, Map.of(), Map.of(), Map.of(), List.of(), kinds, losses);
-    }
-
-    private NumericDomain<A> withHi(A a, Endpoint bound) {
-        Map<A, Endpoint> nhi = new HashMap<>(hi);
-        nhi.merge(a, bound, Endpoint::upper);
-        NumericDomain<A> d = new NumericDomain<>(false, lo, nhi, diff, kept, kinds, losses);
-        return d.feasible() ? d : bottom();
-    }
-
-    private NumericDomain<A> withLo(A a, Endpoint bound) {
-        Map<A, Endpoint> nlo = new HashMap<>(lo);
-        nlo.merge(a, bound, Endpoint::lower);
-        NumericDomain<A> d = new NumericDomain<>(false, nlo, hi, diff, kept, kinds, losses);
-        return d.feasible() ? d : bottom();
-    }
-
-    private NumericDomain<A> withDiff(A a, A b, Endpoint bound) {
-        Map<A, Map<A, Endpoint>> nd = new HashMap<>();
-        diff.forEach((k, v) -> nd.put(k, new HashMap<>(v)));
-        nd.computeIfAbsent(a, k -> new HashMap<>()).merge(b, bound, Endpoint::upper);
-        NumericDomain<A> d = new NumericDomain<>(false, lo, hi, nd, kept, kinds, losses);
-        return d.feasible() ? d : bottom();
-    }
-
-    /**
-     * Whether the bounds and the differences can hold at once. Guards that contradict make the path
-     * infeasible, and the domain must say so: {@link #entails} then discharges everything and
-     * {@link #refutes} fires nothing, so nothing is reported at a construction that is not reached.
-     *
-     * <p>A bound is an edge to or from zero, so the two ways a contradiction shows up are one thing
-     * seen twice: a difference cycle whose sum is negative, and a lower bound above an upper one once
-     * the differences between them are closed. Deriving a bound through a difference is what made the
-     * second reachable — {@code a <= b} and {@code b <= 0} bound {@code a} without recording anything
-     * about {@code a} — so both are asked here rather than at the atom the assertion happened to name.
-     */
-    private boolean feasible() {
-        for (Map.Entry<A, Map<A, Endpoint>> row : closed().entrySet()) {
-            Endpoint cycle = row.getValue().get(row.getKey());
-            // `a - a` is zero, so a cycle bounding it below zero is a contradiction — and so is one
-            // bounding it at zero without admitting it.
-            if (cycle != null && (at(cycle).signum() < 0
-                    || (at(cycle).signum() == 0 && !cycle.inclusive()))) {
-                return false;
-            }
-        }
-        for (A a : lo.keySet()) {
-            if (!Endpoint.someValueLiesBetween(bestLo(a), bestHi(a))) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /** The tightest proven upper bound on {@code a - b}, or {@code null} if none is known. */
-    private Endpoint closedDiff(A a, A b) {
-        if (a.equals(b)) {
-            return Endpoint.inclusive(Count.ZERO);
-        }
-        Map<A, Endpoint> row = closed().get(a);
-        return row == null ? null : row.get(b);
-    }
-
-    /** The difference facts closed transitively — {@code a - b <= c} with {@code b - d <= e} gives
-     * {@code a - d <= c + e} — computed once for the domain and read by every query it answers, since
-     * a bound on one atom is derived through the differences to every other. */
-    private Map<A, Map<A, Endpoint>> closed() {
-        if (closed == null) {
-            closed = close(diff);
-        }
-        return closed;
-    }
-
-    private static <A> Map<A, Map<A, Endpoint>> close(Map<A, Map<A, Endpoint>> diff) {
-        Set<A> atoms = new HashSet<>(diff.keySet());
-        diff.values().forEach(r -> atoms.addAll(r.keySet()));
-        Map<A, Map<A, Endpoint>> d = new HashMap<>();
-        diff.forEach((a, row) -> d.put(a, new HashMap<>(row)));
-        for (A through : atoms) {
-            Map<A, Endpoint> from = d.get(through);
-            if (from == null) {
-                continue;
-            }
-            List<Map.Entry<A, Endpoint>> hops = List.copyOf(from.entrySet());
-            for (A a : atoms) {
-                if (a.equals(through)) {
-                    continue;   // a hop from an atom to itself only repeats a cycle already recorded
-                }
-                Endpoint toThrough = edge(d, a, through);
-                if (toThrough == null) {
-                    continue;
-                }
-                for (Map.Entry<A, Endpoint> hop : hops) {
-                    // A path reaches its end only where every hop on it does.
-                    Endpoint candidate = new Endpoint(
-                            at(toThrough).plus(at(hop.getValue())),
-                            toThrough.inclusive() && hop.getValue().inclusive());
-                    Endpoint known = edge(d, a, hop.getKey());
-                    if (known == null || Endpoint.upper(known, candidate) == candidate) {
-                        d.computeIfAbsent(a, k -> new HashMap<>()).put(hop.getKey(), candidate);
-                    }
-                }
-            }
-        }
-        return d;
-    }
-
-    private static <A> Endpoint edge(Map<A, Map<A, Endpoint>> d, A a, A b) {
-        Map<A, Endpoint> row = d.get(a);
-        return row == null ? null : row.get(b);
     }
 }

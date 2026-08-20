@@ -174,18 +174,27 @@ class NumericDomainTest {
         assertFalse(provesAtMost(d, A, 1438), "a = 1439 with b = 1440 satisfies it");
     }
 
-    /** One dense atom on either side and the difference has no smallest step again: {@code a} may be
-     * {@code 1439.5} when {@code b} is 1440. */
+    /**
+     * A dense {@code b} leaves the difference with no smallest step, and {@code a} is still a whole
+     * number, so its own bound steps through.
+     *
+     * <p>Two questions that had been answered as one. The difference {@code a - b} takes no step —
+     * nothing here says {@code b} is whole — so the relation cannot be sharpened as a relation. What
+     * can be sharpened is {@code a}: put {@code b} at the most it can be and {@code a} is under
+     * 1440, and the largest whole number under 1440 is 1439. Which of the two is being tightened is
+     * the whole of it, and asking the difference's spacing about a bound on a position answers the
+     * wrong question — conservatively, but wrongly: {@code a} could never be 1439.5.
+     */
     @Test
-    void aStrictDifferenceWithOneDenseSideTakesNoStep() {
+    void aWholePositionStepsThroughEvenWhereTheDifferenceCannot() {
         Map<String, Granularity> mixed = new LinkedHashMap<>(whole(A));
         mixed.putAll(dense(B));
         NumericDomain<String> d = NumericDomain.<String>top()
                 .assume(atom(A).minus(atom(B)), Rel.LT, mixed)
                 .assume(atom(B).minus(num(1440)), Rel.LE, dense(B));
 
-        assertTrue(provesAtMost(d, A, 1440));
-        assertFalse(provesAtMost(d, A, 1439), "nothing here says b is a whole number");
+        assertTrue(provesAtMost(d, A, 1439), "a is whole and under 1440");
+        assertFalse(provesAtMost(d, A, 1438), "and 1439 is a value it takes, with b just above it");
     }
 
     /** The same shape over decimals, where 1439 is not derivable and must not become so: {@code a =
