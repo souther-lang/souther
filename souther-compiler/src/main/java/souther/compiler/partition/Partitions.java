@@ -78,6 +78,7 @@ public final class Partitions {
                                java.util.Set<NumericTerm> uncertain,
                                List<UndividedPosition> undivided,
                                List<UnreadRule> unread,
+                               List<souther.compiler.inputs.PositionReadingBlocked> blocked,
                                List<Border> between,
                                List<GuardThresholds.Guards.AtAPosition> compared) {
         public Partitioning {
@@ -88,6 +89,7 @@ public final class Partitions {
             uncertain = java.util.Set.copyOf(uncertain);
             undivided = List.copyOf(undivided);
             unread = List.copyOf(unread);
+            blocked = List.copyOf(blocked);
             between = List.copyOf(between);
         }
 
@@ -166,7 +168,7 @@ public final class Partitions {
             keep(new ArrayList<>(), measured, axis, null, unread);
         }
         return new Partitioning(kept, omitted, domains, uncertain, undividedIn(measured),
-                List.copyOf(unread), List.of(), List.of());
+                List.copyOf(unread), blockedIn(measured), List.of(), List.of());
     }
 
     /**
@@ -197,10 +199,12 @@ public final class Partitions {
             measured.add(new Measured(axis, drew));
             return;
         }
-        BlockReason unread = rules.stream().filter(one -> one.at().equals(axis.path()))
-                .map(UnreadRule::why).findFirst().orElse(null);
-        measured.add(new Measured(axis, unread == null ? new BodyCutInspection.Exhausted()
-                : new BodyCutInspection.Blocked(unread)));
+        // Whether this phase left anything at the position unread, and not which limit it was.
+        // A limit belongs to the rule it stopped, and the findings carry it there; taken as the
+        // position's, the first rule of however many were stopped alike was the one a report named.
+        boolean anyUnread = rules.stream().anyMatch(one -> one.at().equals(axis.path()));
+        measured.add(new Measured(axis, anyUnread ? new BodyCutInspection.Blocked()
+                : new BodyCutInspection.Exhausted()));
     }
 
     /**
@@ -221,6 +225,30 @@ public final class Partitions {
             PendingPosition pending = PendingPosition.of(each.axis());
             if (pending != null) {
                 out.add(pending.complete(each.body()));
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * The positions this reading did not get to the rules of, resolved.
+     *
+     * <p>Off the same pairing the verdict is, and neither is read from the other. Both phases have
+     * spoken by the time a {@link Measured} exists — what the position's own declarations answered
+     * and what a body's rules drew — and a candidate that neither of them answered is what an
+     * author is waiting on. Written where the producer records it, every position holding an
+     * `+Option+` said so whether or not the reading of it came to anything, and `not read` would be
+     * a list of what this compiler cannot generally do rather than of what it did not read here.
+     */
+    private static List<souther.compiler.inputs.PositionReadingBlocked> blockedIn(
+            List<Measured> measured) {
+        List<souther.compiler.inputs.PositionReadingBlocked> out = new ArrayList<>();
+        for (Measured each : measured) {
+            PendingPosition pending = PendingPosition.of(each.axis());
+            souther.compiler.inputs.PositionReadingBlocked stopped =
+                    pending == null ? null : pending.reportable();
+            if (stopped != null && !out.contains(stopped)) {
+                out.add(stopped);
             }
         }
         return List.copyOf(out);
@@ -313,7 +341,7 @@ public final class Partitions {
         // them wrote about and neither could turn into a line is named once, whichever wrote it.
         List<UnreadRule> rules = new ArrayList<>(base.unread());
         for (UnreadRule each : unread) {
-            if (rules.stream().noneMatch(had -> had.equals(each))) {
+            if (rules.stream().noneMatch(had -> had.sameAs(each))) {
                 rules.add(each);
             }
         }
@@ -398,7 +426,7 @@ public final class Partitions {
                     reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), rules);
         }
         return new Partitioning(out, base.omitted(), domainsOf(base, out), base.uncertain(),
-                undividedIn(measured), List.copyOf(rules), between, compared);
+                undividedIn(measured), List.copyOf(rules), blockedIn(measured), between, compared);
     }
 
     /**
@@ -627,7 +655,7 @@ public final class Partitions {
                                List<Axis> out, Map<NumericTerm, NumericDomain.Bounds> domains,
                                java.util.Set<NumericTerm> uncertain, List<UnreadRule> unread) {
         for (UnreadRule each : position.unreadRules()) {
-            if (unread.stream().noneMatch(had -> had.equals(each))) {
+            if (unread.stream().noneMatch(had -> had.sameAs(each))) {
                 unread.add(each);
             }
         }

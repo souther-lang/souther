@@ -1375,7 +1375,7 @@ public final class Adequacy {
                     // that the switch stays exhaustive over what a finding can be about rather than
                     // over the ones thought of here.
                     case About.ACaseNothingWasSeenToProduce _, About.AClassNoRowIsIn _,
-                            About.APositionNoLineDivides _, About.APositionThisCouldNotRead _,
+                            About.APositionNoLineDivides _, About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
                             About.APositionWhoseRulesWereNotReached _,
                             About.AQuestionNothingAnswered _,
                             About.APositionPastTheAxisLimit _ ->
@@ -1791,6 +1791,12 @@ public final class Adequacy {
                 case About.APointOfABorder(var point) -> point.role().againstTheLine()
                         ? Kind.BOUNDARY_UNMET : Kind.DOMAIN_POINT_UNCOVERED;
                 case About.APositionNoLineDivides _ -> Kind.PARTITION_NOT_DERIVABLE;
+                case About.ARuleThisCouldNotRead _ -> Kind.PARTITION_NOT_READ;
+                // One word, whatever stopped the reading, and the reason beside it says which.
+                // PARTITION_RULES_NOT_REACHED belongs to the finding above — a position the axes
+                // did measure — and the two write nothing but the position, so sharing the word
+                // would put two findings a reader can tell apart in the report under one a
+                // consumer cannot.
                 case About.APositionThisCouldNotRead _ -> Kind.PARTITION_NOT_READ;
                 case About.APositionWhoseRulesWereNotReached _ ->
                         Kind.PARTITION_RULES_NOT_REACHED;
@@ -1969,11 +1975,16 @@ public final class Adequacy {
             // And what this could not read, asked of the one reading that answers it. A position
             // with classes can still carry a statement nothing read, so this is not filtered by the
             // list above.
-            for (PartitionEvidence.UnreadPosition each : partition.notRead()) {
+            for (PartitionEvidence.NotRead each : partition.notRead()) {
                 // Not measured, because nothing here established anything either way about it.
                 out.add(new Finding(behavior.name(), MeasurementStatus.NOT_MEASURED,
                         Citation.of(behavior.pos()),
-                        new About.APositionThisCouldNotRead(each)));
+                        switch (each) {
+                            case PartitionEvidence.NotRead.ARule rule ->
+                                    new About.ARuleThisCouldNotRead(rule);
+                            case PartitionEvidence.NotRead.APosition position ->
+                                    new About.APositionThisCouldNotRead(position);
+                        }));
             }
             // A position the axes did measure, whose rules this reading is short of. A different
             // thing to act on from one nothing divided: the classes beside it are what the model
@@ -2119,7 +2130,7 @@ public final class Adequacy {
                         // defaulted, so that one added later has to be answered here rather than
                         // arriving as a warning with no sentence.
                         case About.ACaseNothingWasSeenToProduce _, About.AClassNoRowIsIn _,
-                                About.APositionNoLineDivides _, About.APositionThisCouldNotRead _,
+                                About.APositionNoLineDivides _, About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
                                 About.APositionWhoseRulesWereNotReached _,
                                 About.AQuestionNothingAnswered _,
                                 About.APositionPastTheAxisLimit _ ->
@@ -2184,7 +2195,7 @@ public final class Adequacy {
                 // reason the switch above gives.
                 case About.ACaseNoRowAppliesItTo _, About.ACaseNothingWasSeenToProduce _,
                         About.AClassNoRowIsIn _, About.APositionNoLineDivides _,
-                        About.APositionThisCouldNotRead _,
+                        About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
                         About.APositionWhoseRulesWereNotReached _,
                         About.AQuestionNothingAnswered _,
                         About.APositionPastTheAxisLimit _ -> { }

@@ -25,6 +25,25 @@ import souther.compiler.types.CoverageConstruct;
  */
 public sealed interface RuleCitation {
 
+    /**
+     * How a reader finds a rule the author wrote a name beside.
+     *
+     * <p>Two overloads and no {@code RuleRef} one, which is the point. {@link RuleRef#named} answers
+     * for a comparison too — with what it is rather than what it is called — and a total factory
+     * over {@code RuleRef} would hand that back as a name, sending an author to look for a clause
+     * called {@code the comparison}. Nothing in {@link Named} would refuse it: the string is not
+     * empty. A comparison is found by {@link WrittenAt}, from the construct it stands in and the
+     * place it is written, which is two coordinates this could not invent.
+     */
+    static Named named(RuleRef.Invariant rule) {
+        return new Named(rule.named());
+    }
+
+    /** The same, of a clause of an {@code ensures}. */
+    static Named named(RuleRef.Ensures rule) {
+        return new Named(rule.named());
+    }
+
     /** The name the author gave it, as a report writes the rule. */
     record Named(String name) implements RuleCitation {
 

@@ -39,9 +39,15 @@ public sealed interface BodyCutInspection {
     /**
      * A rule was written about the position and nothing here turned it into a line.
      *
-     * <p>Not a verdict on the position. Something else may still answer for it — this is what it
-     * would be left with — and what {@code why} names is a capability, so a report saying it is
-     * telling an author what to wait for rather than what the model says.
+     * <p>Not a verdict on the position. Something else may still answer for it, and what this
+     * settles is only that this phase did not.
+     *
+     * <p>It carries no reason, and the reason is not lost. A rule this phase read and could not use
+     * is an {@link souther.compiler.inputs.UnreadRule} made by the reader that read it, naming
+     * which rule; carried through here as well, one limit at one position stood for however many
+     * rules were stopped by it, and the first of them was the one a report printed.
+     * What this phase owes the verdict is whether it drew anything, which is the whole of what
+     * three cases say.
      */
-    record Blocked(BlockReason why) implements BodyCutInspection {}
+    record Blocked() implements BodyCutInspection {}
 }

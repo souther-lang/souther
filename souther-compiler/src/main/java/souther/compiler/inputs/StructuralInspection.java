@@ -76,7 +76,7 @@ public sealed interface StructuralInspection {
      * reported. What it does not do is let a rule about what is <em>inside</em> stand in for
      * reaching inside.
      */
-    record Blocked(BlockReason why) implements Pending {}
+    record Blocked(BlockReason.AboutThePosition why) implements Pending {}
 
     /**
      * What is under {@code shape}, or why nothing can be.

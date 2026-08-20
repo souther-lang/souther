@@ -32,9 +32,18 @@ class ARuleNoOtherReadingTakesInIsStillSaidHereTest {
         return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
     }
 
-    /** A size bounded past the greatest whole number, which nothing else takes in. */
+    /**
+     * A size bounded past the greatest whole number, which nothing else takes in.
+     *
+     * <p>Said as a question nothing answered, and it names the rule. Which reading was short of it
+     * is this compiler's own business and is not a second thing to tell an author: what they can
+     * act on is that a rule of theirs raised a question about the values here and no reading of the
+     * model answered it. It used to be said twice — once here without naming the rule, because a
+     * value reading files what it could not take in under the position rather than under the
+     * clause.
+     */
     @Test
-    void aSizeBoundPastTheEndOfTheWholeNumbersIsNamedAsUnread() {
+    void aSizeBoundPastTheEndOfTheWholeNumbersIsNamedAsUnaccountedFor() {
         String human = reportOf("""
                 module example.sized
 
@@ -48,7 +57,8 @@ class ARuleNoOtherReadingTakesInIsStillSaidHereTest {
                 let weigh (t) = if String.length(t.value) > 3 then Long else Short
                 """);
 
-        assertTrue(human.contains("not read: t"), human);
+        assertTrue(human.contains("not accounted for: invariant Tag (long)"), human);
+        assertTrue(human.contains("which values may stand at t"), human);
     }
 
     /**
@@ -58,7 +68,7 @@ class ARuleNoOtherReadingTakesInIsStillSaidHereTest {
      * unread, which is the answer this is meant to tell apart.
      */
     @Test
-    void anOrdinarySizeBoundIsNotNamedAsUnread() {
+    void anOrdinarySizeBoundIsNotNamedAsUnaccountedFor() {
         String human = reportOf("""
                 module example.sized
 
@@ -72,6 +82,21 @@ class ARuleNoOtherReadingTakesInIsStillSaidHereTest {
                 let weigh (t) = if String.length(t.value) > 3 then Long else Short
                 """);
 
-        assertFalse(human.contains("not read: t"), human);
+        assertFalse(human.contains("not accounted for: invariant Tag (long)"), human);
+        assertFalse(notReadAbout(human, "t"), human);
+    }
+
+    /**
+     * Whether any {@code not read} line of {@code block} is about {@code position}.
+     *
+     * <p>Asked as a line rather than as a prefix. A finding about a rule names the rule first and
+     * the position after it, and one about a position names the position — so a test matching
+     * `+not read: <position>+` stopped meaning anything for the first kind rather than failing,
+     * which is a negative assertion that passes because the words moved.
+     */
+    private static boolean notReadAbout(String block, String position) {
+        return block.lines().anyMatch(line -> line.contains("not read:")
+                && (line.contains("not read: " + position + " ")
+                        || line.contains("about `" + position + "`")));
     }
 }

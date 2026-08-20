@@ -215,8 +215,14 @@ public final class InputDomain {
                 : DeclaredBounds.of(type, symbols, Carrier.WHOLE, taken);
         DeclaredBounds.Bounds valueOfType = carried == null ? null
                 : DeclaredBounds.of(type, symbols, carried, null);
+        // Rules about both coordinates and nothing here to choose between. Said before they are
+        // dropped and from the list that still holds them, because this is the one place that knows
+        // which rules they were — recovered afterwards from a position with no axis, the finding
+        // could name the position and nothing else, which is what it is for.
+        List<UnreadRule> competing = List.of();
         if (undecidable(ofType, valueOfType, stated, taken, carried)) {
-            stated = List.of();   // rules about both coordinates and nothing here to choose between
+            competing = competingCoordinates(stated, path);
+            stated = List.of();
         }
         boolean bySize = measuredHere(ofType, valueOfType, stated, taken);
         NumericTerm term = bySize ? new NumericTerm.SizeOf(taken, path) : new NumericTerm.ValueOf(path);
@@ -241,7 +247,7 @@ public final class InputDomain {
         // own type draws a line, because a clause relating two fields is not a partition of one.
         NumericDomain.Bounds admissible = nothingExists ? null
                 : TypeBounds.admissible(own, projected, term);
-        List<UnreadRule> unread = unreadRulesAt(placed, path);
+        List<UnreadRule> unread = unreadRulesAt(placed, path, competing);
 
         List<Case> declared = Distinctions.ofType(view, symbols);
         ReadingResult reading = crossed(declared, view, admissible, admitted, symbols, unread,
@@ -330,6 +336,29 @@ public final class InputDomain {
     }
 
     /**
+     * One finding per rule dropped because the position's two coordinates are both spoken for.
+     *
+     * <p>Per rule and not per position. Both of them were read, both place an end, and neither can
+     * be the one the position is measured at — so each is a rule an author would have to rewrite,
+     * and telling them the position was short of something leaves them to work out which two of
+     * their clauses are in the way. A rule placing two ends is one rule and one finding, which is
+     * what the key settles.
+     */
+    private static List<UnreadRule> competingCoordinates(List<FieldDomains.Placed> stated,
+                                                         TermPath path) {
+        List<UnreadRule> out = new ArrayList<>();
+        for (FieldDomains.Placed each : stated) {
+            UnreadRule said = new UnreadRule(each.from(),
+                    souther.compiler.check.RuleCitation.named(each.from()), path,
+                    new BlockReason.CompetingCoordinates());
+            if (out.stream().noneMatch(had -> had.sameAs(said))) {
+                out.add(said);
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
      * Whether the rules reaching this position say where both of its coordinates stop, with its own
      * type having said nothing about either.
      *
@@ -367,14 +396,20 @@ public final class InputDomain {
      * rule about one of its fields was dropped in silence; and where both had something to say
      * about one clause, the report printed two causes for it.
      *
-     * <p>One line per reason, as a {@code guard}'s comparison is. Two clauses stopped by the same
-     * limit are one thing for a reader to lift; two stopped by different limits are two.
+     * <p>One finding per rule, as a {@code guard}'s comparison is. Two clauses stopped by the same
+     * limit at one position are two things for a reader to lift and are two findings: which clause
+     * to rewrite is what an author acts on, and a position is not it. Kept per reason, the second
+     * of them was dropped as a repeat of the first.
      */
-    private static List<UnreadRule> unreadRulesAt(PlacedRules placed, TermPath path) {
-        List<UnreadRule> out = new ArrayList<>();
+    private static List<UnreadRule> unreadRulesAt(PlacedRules placed, TermPath path,
+                                                  List<UnreadRule> competing) {
+        List<UnreadRule> out = new ArrayList<>(competing);
         for (FieldDomains.Unread each : placed.unreadAt(path)) {
-            UnreadRule said = new UnreadRule(path, each.why());
-            if (!out.contains(said)) {
+            // The rule the reading of ends was holding when it gave up, carried rather than left
+            // behind. It is a clause of an invariant, so it has a name and the handle is that name.
+            UnreadRule said = new UnreadRule(each.from(),
+                    souther.compiler.check.RuleCitation.named(each.from()), path, each.why());
+            if (out.stream().noneMatch(had -> had.sameAs(said))) {
                 out.add(said);
             }
         }

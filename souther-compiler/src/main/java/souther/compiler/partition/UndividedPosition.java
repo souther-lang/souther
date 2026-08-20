@@ -58,8 +58,16 @@ public record UndividedPosition(TermPath at, Why why) {
             }
         }
 
-        /** Something is written here that this did not read, so nothing is established either way. */
-        record CannotDerive(Reason reason) implements Why {}
+        /**
+         * Something is written here that this did not read, so nothing is established either way.
+         *
+         * <p>What stopped it is not here. A verdict says whether anything divides the position; the
+         * findings beside it say what was not read and by whose account, and each of those is made
+         * by the reader that has the fact — with the rule where there is one. Carried here too, a
+         * report read the cause back off the verdict, which is where the rule had already been
+         * lost.
+         */
+        record CannotDerive() implements Why {}
     }
 
     /**
@@ -103,6 +111,15 @@ public record UndividedPosition(TermPath at, Why why) {
         /** The values the comparison is against are not ones a line can be drawn on here. */
         UNSUPPORTED_DOMAIN,
         /**
+         * Two rules of the position are about its two coordinates, and neither can be chosen.
+         *
+         * <p>Not {@link #UNSUPPORTED_SYNTAX}, which is where a rule was read and could not be
+         * used: here both were read and used perfectly well, and what is missing is a rule for
+         * which of a position's two coordinates it is measured at. Said as the first, an author was
+         * sent looking for a form this compiler reads.
+         */
+        COMPETING_COORDINATES,
+        /**
          * The comparison relates two positions rather than dividing one.
          *
          * <p>`+x < y+` says where one position stands against another, and a class here is a set of
@@ -141,8 +158,8 @@ public record UndividedPosition(TermPath at, Why why) {
         return new UndividedPosition(proven.at(), Why.Absent.PROVEN);
     }
 
-    static UndividedPosition cannotDerive(TermPath at, Reason reason) {
-        return new UndividedPosition(at, new Why.CannotDerive(reason));
+    static UndividedPosition cannotDerive(TermPath at) {
+        return new UndividedPosition(at, new Why.CannotDerive());
     }
 
     public boolean isAbsent() {

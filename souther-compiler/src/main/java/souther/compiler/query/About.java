@@ -77,6 +77,34 @@ public sealed interface About {
         }
     }
 
+    /**
+     * A finding about one rule of the model, which is what carries its identity.
+     *
+     * <p>Which findings these are is answered here and nowhere else. Read off a list of kinds, a
+     * writer had to be told again every time one was added â and a kind added and not told wrote no
+     * identity, which is one rule's findings coming out identical in every field with nothing to
+     * join them by. A shape that is about a rule says so by being one of these.
+     */
+    sealed interface OfARule extends About {
+
+        /** Which rule, as everything that names a rule names it. */
+        souther.compiler.check.RuleRef rule();
+    }
+
+    /**
+     * A finding about something this reading did not read, whichever authority answered.
+     *
+     * <p>Both shapes carry a limit, and a reader acts on it: which one is in the way is the thing
+     * either finding was added to say. Asked here rather than matched against the kinds that have
+     * one, for the reason {@link OfARule} is: a shape added and not listed writes no limit, and one
+     * rule's findings at one position come out identical wherever it stopped for two of them.
+     */
+    sealed interface OfSomethingNotRead extends About {
+
+        /** The finding itself, whose reason is what a document promises its reader. */
+        PartitionEvidence.NotRead finding();
+    }
+
     /** A position the model draws no line through. */
     record APositionNoLineDivides(
             souther.compiler.partition.UndividedPosition position) implements About {
@@ -85,10 +113,38 @@ public sealed interface About {
         }
     }
 
-    /** A position something is written about that this did not read, with what stopped it. */
-    record APositionThisCouldNotRead(PartitionEvidence.UnreadPosition position) implements About {
+    /**
+     * A rule of the model this read and could not turn into a line, and what stopped it.
+     *
+     * <p>Named by the rule, because a position is not what an author edits. Carrying only the
+     * position, the sentence written from this told an author that a rule about somewhere went
+     * unread and left them to work out which rule — which the accounting was made to say and this
+     * measure beside it was not.
+     */
+    record ARuleThisCouldNotRead(PartitionEvidence.NotRead.ARule finding)
+            implements OfARule, OfSomethingNotRead {
+        public ARuleThisCouldNotRead {
+            java.util.Objects.requireNonNull(finding, "a finding is about something");
+        }
+
+        @Override
+        public souther.compiler.check.RuleRef rule() {
+            return finding.rule();
+        }
+    }
+
+    /**
+     * A position whose rules this reading never arrived at, with what stopped it.
+     *
+     * <p>Its own shape beside the rule above, and not that one with the rule left out. There is no
+     * rule to name here and a reader is owed the position and the limit; a consumer told to read an
+     * absent field to know which of the two it holds is reconstructing the authority from the
+     * payload.
+     */
+    record APositionThisCouldNotRead(PartitionEvidence.NotRead.APosition finding)
+            implements OfSomethingNotRead {
         public APositionThisCouldNotRead {
-            java.util.Objects.requireNonNull(position, "a finding is about something");
+            java.util.Objects.requireNonNull(finding, "a finding is about something");
         }
     }
 
@@ -107,7 +163,13 @@ public sealed interface About {
      * taken apart. It was taken apart into six elements one seam later, which is the thing that
      * contract was written against.
      */
-    record AQuestionNothingAnswered(PartitionEvidence.Unanswered asked) implements About {
+    record AQuestionNothingAnswered(PartitionEvidence.Unanswered asked) implements OfARule {
+
+        @Override
+        public souther.compiler.check.RuleRef rule() {
+            return asked.rule();
+        }
+
         public AQuestionNothingAnswered {
             java.util.Objects.requireNonNull(asked, "a finding is about something");
         }

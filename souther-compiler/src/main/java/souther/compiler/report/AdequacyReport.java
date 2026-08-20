@@ -828,12 +828,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             }
         }
         // Said apart from the line above it, which is the whole of what this pair is for: one names
-        // a position the model divides no way, and this one a position nobody has established
-        // anything about.
+        // a position the model divides no way, and this one a rule nobody could turn into a line.
+        //
+        // Named by the rule, as the accounting's line is. A position was all a reader used to be
+        // given, which sent them looking for a rule the sentence never named — and two rules
+        // stopped by one limit at one position came out as one line.
         for (Adequacy.Finding f : behavior.findings()) {
-            if (f.about() instanceof About.APositionThisCouldNotRead(var position)) {
+            if (f.about() instanceof About.ARuleThisCouldNotRead(var it)) {
+                out.append(String.format("      %s not read: %s — %s, about `%s`%n",
+                        mark(f), cited(it.cited(), names, declaredIn),
+                        whyUnread(it.reason()), it.at()));
+            }
+        }
+        // And a position whose rules this reading never arrived at, which names no rule because
+        // nothing observed one. Its own line, so that a reader is not left reading an absent rule
+        // to work out which of the two they are being told.
+        for (Adequacy.Finding f : behavior.findings()) {
+            if (f.about() instanceof About.APositionThisCouldNotRead(var it)) {
                 out.append(String.format("      %s not read: %s (%s)%n",
-                        mark(f), position.at(), whyUnread(position.reason())));
+                        mark(f), it.at(), whyUnread(it.reason())));
             }
         }
         // And a third thing, said apart from both: a rule written about a position the axes did
@@ -868,12 +881,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     private static String whyUnread(souther.compiler.partition.UndividedPosition.Reason reason) {
         return switch (reason) {
-            case UNSUPPORTED_SYNTAX -> "a rule about it is one this compiler did not read";
-            case RULES_NOT_READ_AT_ALL -> "the rules written about it were not reached at all";
-            case UNSUPPORTED_DOMAIN ->
-                    "it is compared against values no line can be drawn on here";
+            // The three a rule reaches, written about the rule: the line these appear on names it,
+            // so a sentence saying "a rule about it" would name the rule and then not say so.
+            case UNSUPPORTED_SYNTAX -> "written in a form this compiler does not read";
+            case UNSUPPORTED_DOMAIN -> "compared against values no line can be drawn on here";
+            case COMPETING_COORDINATES ->
+                    "a rule beside it is about the position's other coordinate, so neither can be"
+                            + " chosen";
             case UNSUPPORTED_PARTITION_SHAPE ->
-                    "the comparison relates it to another position rather than dividing it";
+                    "it relates two positions rather than dividing one";
+            // And the four a position reaches, written about the position, because that is all
+            // there is: nothing observed a rule to name. Which reasons reach which of the two is
+            // settled by the authority a reason belongs to
+            // ({@link souther.compiler.inputs.BlockReason}), so no reason is written both ways.
+            case RULES_NOT_READ_AT_ALL -> "the rules written about it were not reached at all";
             case DEPTH_LIMIT -> "the walk stopped before reaching what is under it";
             case TYPE_UNRESOLVED -> "its type could not be worked out here";
             case UNSUPPORTED_TRAVERSAL ->
@@ -1189,10 +1210,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // The comparison, by the behavior it is written in and the construct it was numbered
             // as. The numbering starts at zero in each source, so the source is part of it.
             case souther.compiler.check.RuleRef.Guard it -> {
-                into.put("declaredIn", it.comparison().origin().module());
-                into.put("behavior", it.comparison().behavior());
-                into.put("ordinal", it.comparison().origin().ordinal());
-                into.put("lowered", it.comparison().origin().lowered());
+                into.put("declaredIn", it.origin().module());
+                into.put("behavior", it.behavior());
+                into.put("ordinal", it.origin().ordinal());
+                into.put("lowered", it.origin().lowered());
             }
         }
     }
@@ -1572,6 +1593,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             ObjectNode said = unread.addObject();
             said.put("position", each.at());
             said.put("reason", word(each.reason()));
+            // And which rule, where one was read and could not be used. Absent where the reading
+            // never arrived at the rules of the position: there is nothing to name, and a field
+            // holding a placeholder would say this compiler had looked at a rule it never saw.
+            // Present, the pair is this: `rule` is the handle an author acts on and `ruleId` is
+            // what tells one rule from another, and the two are not in step wherever a rule has no
+            // name of its own.
+            if (each instanceof PartitionEvidence.NotRead.ARule rule) {
+                said.put("rule", rule.cited().said(sources::written, null));
+                ruleId(said.putObject("ruleId"), rule.rule());
+            }
         });
         ArrayNode omitted = out.putArray("omitted");
         partition.omitted().forEach(o -> omitted.add(o.axis().toString()));
@@ -1635,8 +1666,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // Which rule this is about, where the finding is about one. The words in `subject` are
             // how a reader finds it, and two rules an author named alike have the same words — so a
             // consumer joining findings to the questions they came from wants this.
-            if (finding.about() instanceof About.AQuestionNothingAnswered(var asked)) {
-                ruleId(f.putObject("ruleId"), asked.rule());
+            //
+            // Asked of the subject rather than matched against the kinds that have one. Listed
+            // here, a kind added and not listed wrote no identity, and one rule's findings came out
+            // identical in every field with nothing to join them by.
+            if (finding.about() instanceof About.OfARule about) {
+                ruleId(f.putObject("ruleId"), about.rule());
+            }
+            // And which limit stopped it, where the finding is about one being in the way. Two
+            // conjuncts of one clause about one position can stop for two different limits, so
+            // written without this a rule's findings there are one object twice — and the entry
+            // beside them in `notRead` is keyed on the reason, which leaves nothing to join by.
+            if (finding.about() instanceof About.OfSomethingNotRead about) {
+                f.put("reason", word(about.finding().reason()));
             }
             // Present where the kind has one. A finding a build is not told about under any code is
             // not one with an empty code, and a consumer joining these to the diagnostics a build
@@ -1672,7 +1714,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
                     About.ACaseNoRowAppliesItTo _, About.AClassNoRowIsIn _,
                     About.APointOfABorder _, About.APositionNoLineDivides _,
-                    About.APositionThisCouldNotRead _, About.AQuestionNothingAnswered _,
+                    About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
+                    About.AQuestionNothingAnswered _,
                     About.APositionWhoseRulesWereNotReached _,
                     About.APositionPastTheAxisLimit _ -> null;
         };
@@ -1704,7 +1747,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case About.AClassNoRowIsIn(var missing) ->
                     missing.name() + " (at " + missing.axis().path() + ")";
             case About.APositionNoLineDivides(var position) -> position.at().toString();
-            case About.APositionThisCouldNotRead(var position) -> position.at();
+            case About.APositionThisCouldNotRead(var it) -> it.at();
+            case About.ARuleThisCouldNotRead(var it) -> it.at();
             case About.APositionWhoseRulesWereNotReached(var axis) -> axis.path();
             case About.APositionPastTheAxisLimit(var dropped) -> dropped.axis().toString();
             // The rule and what it was left saying. Named by the position alone, two rules nothing

@@ -372,10 +372,9 @@ class EverySchemaWordIsAccountedForTest {
                                 new souther.compiler.check.BehaviorContract.RuleId(
                                         new souther.compiler.types.ValueName.Behavior("m", "f"),
                                         0, 0, on), "Found")),
-                        AdequacyReport.ruleWord(new souther.compiler.check.RuleRef.Guard(
-                                new souther.compiler.coverage.CoverageSites.ComparisonRef("f",
-                                        new souther.compiler.types.CoverageOrigin("m", 0, 0,
-                                                souther.compiler.types.CoverageConstruct.IF))))),
+                        AdequacyReport.ruleWord(new souther.compiler.check.RuleRef.Guard("f",
+                                new souther.compiler.types.CoverageOrigin("m", 0, 0,
+                                        souther.compiler.types.CoverageConstruct.IF)))),
                 allowedAt(schema(), List.of("$defs", "ruleId", "properties", "kind")));
     }
 

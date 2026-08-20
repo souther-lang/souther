@@ -74,20 +74,6 @@ public final class CoverageSites {
      */
     public record Obligation(String behavior, CoverageOrigin origin, int part) {}
 
-    /**
-     * Which comparison of which behavior, as the rule it is.
-     *
-     * <p>An {@link Obligation} with no {@code part}, and its own type rather than that one used
-     * narrowly. A part says which arm of a fork, and a comparison has none — it is one construct,
-     * and what a fork holds several of is arms. Held as an obligation, a value carrying an arm's
-     * part reads as a comparison wherever a comparison is asked for, and nothing would say it is
-     * not one.
-     *
-     * <p>The comparison and not the fork testing it. A condition can be an application of a
-     * function parameter, so one predicate handed to two calls is one of these and two predicates
-     * written apart are two, neither of which the fork can say.
-     */
-    public record ComparisonRef(String behavior, CoverageOrigin origin) {}
 
     /**
      * One outcome of one construct, as it stands in the tree that runs.
@@ -126,24 +112,6 @@ public final class CoverageSites {
             return obligation.origin().kind();
         }
 
-        /**
-         * Which comparison this is a site of.
-         *
-         * <p>Asked here rather than assembled by the caller, so that what a comparison is called
-         * and what this walk numbered are one answer. Built outside, the two would be two
-         * derivations of one identity, and a comparison could be named after the fork testing it.
-         *
-         * @throws IllegalStateException where this site is not a comparison's. Which sites are
-         *                               comparisons is this walk's to say, and a caller working it
-         *                               out from the shape of a node is reading the tree again
-         */
-        public ComparisonRef comparison() {
-            if (!(outcome instanceof SourceOutcome.Compared)) {
-                throw new IllegalStateException(
-                        "site " + index + " is " + name() + " and not a comparison");
-            }
-            return new ComparisonRef(behavior, obligation.origin());
-        }
 
         /** What a reader is told this is, which the two halves settle together. */
         public OutcomeName name() {

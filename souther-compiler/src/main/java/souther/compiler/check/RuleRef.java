@@ -43,15 +43,26 @@ public sealed interface RuleRef {
      *
      * <p>The comparison and not the fork testing it. A condition can be an application of a
      * function parameter, so one predicate handed to two calls is one rule and two predicates
-     * written apart are two — neither of which the fork can say
-     * ({@link souther.compiler.coverage.CoverageSites.Plan#comparisonSiteOf}). Which fork this
-     * comparison was read under is where it was met, and belongs beside this.
+     * written apart are two — neither of which the fork can say. Which fork this comparison was
+     * read under is where it was met, and belongs beside this.
+     *
+     * <p><b>Read off the source and never off a measurement.</b> The two components are what the
+     * author wrote: which behavior, and which construct of which module. A run's numbering of
+     * comparisons is a fact about instrumentation — a condition both of whose arms can record
+     * nothing is not numbered at all — and taking an identity from it says a rule exists because
+     * something could be measured about it. A model states its rules whether or not this compiler
+     * arranged to watch them.
+     *
+     * @param behavior whose body it is written in. Two behaviors calling one helper each read its
+     *                 comparison, and the readings are what a coverage question is raised per
+     * @param origin   which construct of which module the author wrote, which is what tells one
+     *                 comparison from another wherever it is met
      */
-    record Guard(souther.compiler.coverage.CoverageSites.ComparisonRef comparison)
+    record Guard(String behavior, souther.compiler.types.CoverageOrigin origin)
             implements RuleRef {
 
         public Guard {
-            if (comparison == null) {
+            if (behavior == null || origin == null) {
                 throw new IllegalArgumentException("a guard's rule is one of its comparisons");
             }
         }

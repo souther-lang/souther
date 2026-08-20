@@ -90,8 +90,8 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
     void aGuardNamesBothPositionsItCompares() {
         String block = blockOf("mix");
 
-        assertTrue(block.contains("not read: order.straw"), block);
-        assertTrue(block.contains("not read: order.choco"), block);
+        assertTrue(notReadAbout(block, "order.straw"), block);
+        assertTrue(notReadAbout(block, "order.choco"), block);
     }
 
     /** And the {@code invariant} of the same shape, at both the positions it compares. */
@@ -99,8 +99,8 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
     void andSoDoesAnInvariantOfTheSameShape() {
         String block = blockOf("quote");
 
-        assertTrue(block.contains("not read: parcel.length"), block);
-        assertTrue(block.contains("not read: parcel.width"), block);
+        assertTrue(notReadAbout(block, "parcel.length"), block);
+        assertTrue(notReadAbout(block, "parcel.width"), block);
     }
 
     /** In the same words, since what stopped each of them is the same fact about this compiler. */
@@ -123,7 +123,7 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
     void andForAComparisonWithOnePositionOnEachSide() {
         assertEquals(saidAbout(blockOf("byGuard"), "b.x"),
                 saidAbout(blockOf("byRule"), "p.x"));
-        assertTrue(blockOf("byRule").contains("relates it to another position"), blockOf("byRule"));
+        assertTrue(blockOf("byRule").contains("relates two positions"), blockOf("byRule"));
     }
 
     /**
@@ -139,8 +139,8 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
         String rule = blockOf("byRuleAboutOne");
         String guard = blockOf("byGuardAboutOne");
 
-        assertFalse(rule.contains("another position"), rule);
-        assertFalse(guard.contains("another position"), guard);
+        assertFalse(rule.contains("relates two positions"), rule);
+        assertFalse(guard.contains("relates two positions"), guard);
         assertEquals(saidAbout(guard, "b.x"), saidAbout(rule, "s.x"));
     }
 
@@ -162,7 +162,7 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
     void andOnceEach() {
         String block = blockOf("quote");
 
-        assertEquals(1, block.lines().filter(line -> line.contains("not read: parcel.length")).count(),
+        assertEquals(1, block.lines().filter(line -> notReadAbout(line, "parcel.length")).count(),
                 block);
     }
 
@@ -196,14 +196,38 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
         compilation.answerEverything();
         String human = AdequacyReport.of(compilation).human(SourceNameResolver.identity());
 
-        assertEquals(1, human.lines().filter(line -> line.contains("not read: q ")).count(), human);
+        assertEquals(1, human.lines().filter(line -> notReadAbout(line, "q")).count(), human);
         assertTrue(human.contains("no line can be drawn on"), human);
     }
 
+    /**
+     * What the report says stopped the reading at {@code position}, without the rule that stopped
+     * there.
+     *
+     * <p>The words alone, which is what these rows compare: an invariant and a guard of one shape
+     * are owed the same sentence, and they are two rules with two handles. Taken with the handle,
+     * every row here would differ for the reason the rows exist to say does not matter.
+     */
     private static String saidAbout(String block, String position) {
-        return block.lines().filter(line -> line.contains("not read: " + position + " "))
-                .map(line -> line.substring(line.indexOf('(')))
+        return block.lines().filter(line -> notReadAbout(line, position))
+                .map(line -> line.contains(" — ")
+                        ? line.substring(line.indexOf(" — ") + 3, line.indexOf(", about `"))
+                        : line.substring(line.indexOf('(') + 1, line.lastIndexOf(')')))
                 .findFirst().orElseThrow(() -> new AssertionError(
                         "nothing said about `" + position + "`: " + block));
+    }
+
+    /**
+     * Whether any {@code not read} line of {@code block} is about {@code position}.
+     *
+     * <p>Asked as a line rather than as a prefix. A finding about a rule names the rule first and
+     * the position after it, and one about a position names the position — so a test matching
+     * `+not read: <position>+` stopped meaning anything for the first kind rather than failing,
+     * which is a negative assertion that passes because the words moved.
+     */
+    private static boolean notReadAbout(String block, String position) {
+        return block.lines().anyMatch(line -> line.contains("not read:")
+                && (line.contains("not read: " + position + " ")
+                        || line.contains("about `" + position + "`")));
     }
 }
