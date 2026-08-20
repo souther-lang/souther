@@ -149,7 +149,7 @@ class WhatBuildsATemporalIsWhatTheNameDenotesTest {
                 report(CONSTRUCTED));
         assertFalse(report(ANSWERS_ONE).contains("coverage items 0/0"), report(ANSWERS_ONE));
         assertTrue(report(ANSWERS_ONE).contains(
-                        "· not read: on (a rule about it is one this compiler did not read)"),
+                        "written in a form this compiler does not read, about `on`"),
                 report(ANSWERS_ONE));
     }
 

@@ -178,12 +178,10 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
         // And what it leaves the positions is said in the same words as well. A rule over a quantity
         // that is not one position's own values divides none of them, whoever wrote it.
         assertTrue(report.contains(
-                "not read: a (the comparison relates it to another position rather than"
-                        + " dividing it)"), report);
+                "it relates two positions rather than dividing one, about `a`"), report);
         assertTrue(report(guarded(
                         "Int.add(Int.multiply(3, a.value), Int.multiply(6, b.value)) <= 48"))
-                        .contains("not read: a (the comparison relates it to another position"
-                                + " rather than dividing it)"),
+                        .contains("it relates two positions rather than dividing one, about `a`"),
                 "a body's conditions say it the same way");
     }
 
@@ -623,9 +621,13 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
                     | "one" : (Bound(1), Bound(1)) -> Yes { v = 1 }
                 """;
 
-        assertEquals(report(written.formatted(
-                        "Int.add(Int.multiply(3, a.value), Int.multiply(6, b.value)) <= 48")),
-                report(written.formatted("a.value * 3 + b.value * 6 <= 48")),
+        // Apart from where the rule is written, which is a place and not the rule. The two
+        // spellings are two lengths of text and the handle a report prints points at each of them,
+        // so a comparison that kept the column would be asserting the two were written alike.
+        assertEquals(exceptWhereRulesAreWritten(report(written.formatted(
+                        "Int.add(Int.multiply(3, a.value), Int.multiply(6, b.value)) <= 48"))),
+                exceptWhereRulesAreWritten(
+                        report(written.formatted("a.value * 3 + b.value * 6 <= 48"))),
                 "one rule, whichever way the arithmetic is spelled");
     }
 
@@ -692,7 +694,7 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
         // And the question the comparison raises is answered by what came of reading it. Answered by
         // which reading was tried, a rule that drew nothing reported a line as read, and the
         // positions it names went unaccounted for.
-        assertTrue(report.contains("not read: a") && report.contains("not read: b"),
+        assertTrue(notReadAbout(report, "a") && notReadAbout(report, "b"),
                 "the positions are still named, and as positions nothing divided:\n" + report);
     }
 
@@ -752,5 +754,25 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
         return GeneratedRows.of(compilation, null, null, true, SourceNameResolver.identity());
+    }
+
+    /**
+     * Whether any {@code not read} line of {@code block} is about {@code position}.
+     *
+     * <p>Asked as a line rather than as a prefix. A finding about a rule names the rule first and
+     * the position after it, and one about a position names the position — so a test matching
+     * `+not read: <position>+` stopped meaning anything for the first kind rather than failing,
+     * which is a negative assertion that passes because the words moved.
+     */
+    private static boolean notReadAbout(String block, String position) {
+        return block.lines().anyMatch(line -> line.contains("not read:")
+                && (line.contains("not read: " + position + " ")
+                        || line.contains("about `" + position + "`")));
+    }
+
+    /** The same report with every citation of a rule with no name blanked, since where a rule is
+     *  written is a place and two spellings of one rule are at two of them. */
+    private static String exceptWhereRulesAreWritten(String report) {
+        return report.replaceAll("(guard|if|comprehension)@\\d+:\\d+", "$1@<written>");
     }
 }

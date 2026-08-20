@@ -51,6 +51,14 @@ public final class RuleAccounting {
      */
     static RuleAccounting of(RuleRef rule, Required required,
                              Function<Owed, Outcome> answered) {
+        return new RuleAccounting(rule, citedAsAClause(rule), required,
+                answers(rule, required, answered));
+    }
+
+    /** {@code answered} asked once for each question the rule raises, and nothing else. Apart from
+     *  the citation, which the two ways in do not find the same way. */
+    private static Map<Owed, Outcome> answers(RuleRef rule, Required required,
+                                              Function<Owed, Outcome> answered) {
         Map<Owed, Outcome> answers = new LinkedHashMap<>();
         for (Owed each : required.obligations()) {
             Outcome outcome = answered.apply(each);
@@ -60,7 +68,24 @@ public final class RuleAccounting {
             }
             answers.put(each, outcome);
         }
-        return new RuleAccounting(rule, new RuleCitation.Named(rule.named()), required, answers);
+        return answers;
+    }
+
+    /**
+     * How a reader finds a rule this way in can be about.
+     *
+     * <p>A clause, either kind, and never a comparison. What comes this way is a rule an author
+     * wrote a name beside; {@link #ofComparison} is the way in for one that is written rather than
+     * named, and it is handed the place because nothing here could work it out.
+     */
+    private static RuleCitation citedAsAClause(RuleRef rule) {
+        return switch (rule) {
+            case RuleRef.Invariant it -> RuleCitation.named(it);
+            case RuleRef.Ensures it -> RuleCitation.named(it);
+            case RuleRef.Guard _ -> throw new IllegalArgumentException(
+                    "a comparison is written rather than named, so it is cited by where it is"
+                            + " written and not through this");
+        };
     }
 
     /**
@@ -75,12 +100,12 @@ public final class RuleAccounting {
                                               Required.ComparisonSubject of,
                                               Required.LineRead read, RuleCitation cited) {
         Required required = Required.ofComparison(claim, of);
-        return new RuleAccounting(rule, cited, required, answersOf(rule, required, read).answers);
+        return new RuleAccounting(rule, cited, required, answersOf(rule, required, read));
     }
 
-    private static RuleAccounting answersOf(RuleRef rule, Required required,
-                                            Required.LineRead read) {
-        return of(rule, required, _ -> switch (read) {
+    private static Map<Owed, Outcome> answersOf(RuleRef rule, Required required,
+                                                Required.LineRead read) {
+        return answers(rule, required, _ -> switch (read) {
             // The reading that draws the line answers both of the questions the line raises: the
             // classes either side of it are what it divided the position into, and the values it
             // named are where the rows go.
@@ -204,7 +229,8 @@ public final class RuleAccounting {
         }
 
         /** The reading that turns a clause into an end a line can be drawn at. */
-        record TheEndReadingSays(souther.compiler.inputs.BlockReason why) implements Why {
+        record TheEndReadingSays(souther.compiler.inputs.BlockReason.AboutARule why)
+                implements Why {
 
             public TheEndReadingSays {
                 if (why == null) {

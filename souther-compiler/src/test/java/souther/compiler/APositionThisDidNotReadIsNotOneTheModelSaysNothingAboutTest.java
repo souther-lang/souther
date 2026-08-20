@@ -160,7 +160,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     void anEqualityIsRead() {
         String block = blockOf("byEquality");
 
-        assertFalse(block.contains("not read: r.cost"), block);
+        assertFalse(notReadAbout(block, "r.cost"), block);
         assertFalse(block.contains("not derivable: r.cost"), block);
     }
 
@@ -176,7 +176,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     void aCarrierNoLineIsDrawnOnSaysThat() {
         String block = blockOf("byCase");
 
-        assertTrue(block.contains("not read: s"), block);
+        assertTrue(notReadAbout(block, "s"), block);
         assertTrue(block.contains("no line can be drawn on"), block);
     }
 
@@ -185,7 +185,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     void aDateTimeIsReadAsADateIs() {
         String block = blockOf("byDateTime");
 
-        assertFalse(block.contains("not read: at"), block);
+        assertFalse(notReadAbout(block, "at"), block);
         assertFalse(block.contains("not derivable: at"), block);
     }
 
@@ -202,8 +202,8 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
         String block = blockOf("boundedByAnUnreadableEnd");
 
         assertFalse(block.contains("not derivable: m"), block);
-        assertTrue(block.contains("not read: m"), block);
-        assertTrue(block.contains("did not read"), block);
+        assertTrue(notReadAbout(block, "m"), block);
+        assertTrue(block.contains("this compiler does not read"), block);
     }
 
     /**
@@ -218,7 +218,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
         String block = blockOf("boundedByADate");
 
         assertFalse(block.contains("not derivable: c"), block);
-        assertFalse(block.contains("not read: c"), block);
+        assertFalse(notReadAbout(block, "c"), block);
         assertTrue(block.contains("border      borders 1   coverage items 0/0   excluded 2   (2 not measured"), block);
     }
 
@@ -269,7 +269,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
         String block = blockOf("boundedByANumber");
 
         assertFalse(block.contains("not derivable: a"), block);
-        assertFalse(block.contains("not read: a"), block);
+        assertFalse(notReadAbout(block, "a"), block);
     }
 
     /** The one that is read is not named either way. */
@@ -278,6 +278,20 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
         String block = blockOf("alone");
 
         assertFalse(block.contains("not derivable: r.cost"), block);
-        assertFalse(block.contains("not read: r.cost"), block);
+        assertFalse(notReadAbout(block, "r.cost"), block);
+    }
+
+    /**
+     * Whether any {@code not read} line of {@code block} is about {@code position}.
+     *
+     * <p>Asked as a line rather than as a prefix. A finding about a rule names the rule first and
+     * the position after it, and one about a position names the position — so a test matching
+     * `+not read: <position>+` stopped meaning anything for the first kind rather than failing,
+     * which is a negative assertion that passes because the words moved.
+     */
+    private static boolean notReadAbout(String block, String position) {
+        return block.lines().anyMatch(line -> line.contains("not read:")
+                && (line.contains("not read: " + position + " ")
+                        || line.contains("about `" + position + "`")));
     }
 }

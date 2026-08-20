@@ -72,16 +72,35 @@ class BothSurfacesSayWhatWasFoundAboutAPositionTest {
     private static List<String> documentSaysNotRead(String source) {
         List<String> said = new ArrayList<>();
         partitionOf(source).get("notRead").forEach(each ->
-                said.add(each.get("position").asText() + ":" + each.get("reason").asText()));
+                said.add(each.get("position").asText() + ":" + each.get("reason").asText()
+                        + ":" + (each.has("rule") ? each.get("rule").asText() : "-")));
         return said;
     }
 
     @Test
     void aPositionOnlyTheHumanLineNamedIsInTheDocumentToo() {
-        assertTrue(humanOf(MEASURED_AND_UNREAD).contains("not read: n"),
+        assertTrue(notReadAbout(humanOf(MEASURED_AND_UNREAD), "n"),
                 humanOf(MEASURED_AND_UNREAD));
 
-        assertEquals(List.of("n:unsupported_syntax"), documentSaysNotRead(MEASURED_AND_UNREAD),
+        // The handle too, because that is the half a person is shown. Keyed on the position and the
+        // reason alone, two rules stopped alike here were one entry and the document could not say
+        // which of them a reader was being told about.
+        assertEquals(List.of("n:unsupported_syntax:guard@0:11:32"),
+                documentSaysNotRead(MEASURED_AND_UNREAD),
                 "the document says what the report said");
+    }
+
+    /**
+     * Whether any {@code not read} line of {@code block} is about {@code position}.
+     *
+     * <p>Asked as a line rather than as a prefix. A finding about a rule names the rule first and
+     * the position after it, and one about a position names the position — so a test matching
+     * `+not read: <position>+` stopped meaning anything for the first kind rather than failing,
+     * which is a negative assertion that passes because the words moved.
+     */
+    private static boolean notReadAbout(String block, String position) {
+        return block.lines().anyMatch(line -> line.contains("not read:")
+                && (line.contains("not read: " + position + " ")
+                        || line.contains("about `" + position + "`")));
     }
 }

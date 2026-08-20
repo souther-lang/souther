@@ -364,7 +364,7 @@ public final class FieldDomains {
      *             own terms
      */
     public record Unread(String path, boolean measured, RuleRef.Invariant from,
-                         Core part, souther.compiler.inputs.BlockReason why) {}
+                         Core part, souther.compiler.inputs.BlockReason.AboutARule why) {}
 
     /**
      * The declaration whose clause could have moved where the coordinate at {@code path} stops, or

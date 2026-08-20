@@ -80,7 +80,11 @@ class AQuestionIsPrintedUnderTheMeasureThatAnswersItTest {
         assertTrue(section(report, "border").contains(
                         "not accounted for: invariant Length (max) — where the values stop on"),
                 section(report, "border"));
-        assertTrue(!section(report, "partition").contains("invariant Length (max)"),
+        // The question, and not every mention of the rule. The classes measure names the same rule
+        // where it could not turn it into a line, which is a different thing said about it: what
+        // this is about is where the question a rule raised is answered.
+        assertTrue(!section(report, "partition")
+                        .contains("not accounted for: invariant Length (max)"),
                 "and not beside the classes, which is a different measure with a count of its own:\n"
                         + section(report, "partition"));
     }

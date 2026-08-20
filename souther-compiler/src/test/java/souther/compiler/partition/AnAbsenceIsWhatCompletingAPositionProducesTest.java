@@ -81,30 +81,30 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
                 .complete(new BodyCutInspection.Exhausted());
 
         assertFalse(said.isAbsent(), said.toString());
-        assertEquals(UndividedPosition.Reason.UNSUPPORTED_SYNTAX,
-                ((UndividedPosition.Why.CannotDerive) said.why()).reason());
+        // And the verdict says only that: what stopped it is the rule's, said by the reader that
+        // read the rule and naming which rule it was.
+        assertNull(PendingPosition.of(pending(new StructuralInspection.Leaf(), unread))
+                        .reportable(),
+                "a rule this read and could not use is not a position nothing was reached at");
     }
 
     /**
-     * And it is what is said where a body's comparison also came to nothing.
+     * Neither of two rules becomes the position's account, where a body's comparison came to
+     * nothing as well.
      *
-     * <p>Both are true of the position and one line is written. The rule on the declaration is the
-     * one whose being read would give the position an axis; a comparison relating it to another
-     * position divides it no way however well it is read, so the reason that names a limit is the
-     * one a reader is sent to. Written the other way round, an author reading "the comparison
-     * relates it to another position" would take that for the whole account and never learn that a
-     * rule on their own type went unread.
+     * <p>Both are rules this read and could not use, and each is said by the reader that read it,
+     * naming which rule. There used to be one line here and a precedence deciding which of the two
+     * reasons it carried — which is the shape of it: an author was told one limit and never
+     * learnt that the other rule existed. What the position itself has to say is that nothing was
+     * established, and no more.
      */
     @Test
-    void aRuleOnTheDeclarationIsSaidAheadOfWhatABodyCameTo() {
-        UndividedPosition said =
-                PendingPosition.of(pending(new StructuralInspection.Leaf(),
-                                new BlockReason.UnreadValueRule()))
-                        .complete(new BodyCutInspection.Blocked(
-                                new BlockReason.ComparisonBetweenPositions()));
+    void twoRulesLeaveThePositionWithNoAccountOfItsOwn() {
+        PendingPosition pending = PendingPosition.of(pending(new StructuralInspection.Leaf(),
+                new BlockReason.UnreadValueRule()));
 
-        assertEquals(UndividedPosition.Reason.UNSUPPORTED_SYNTAX,
-                ((UndividedPosition.Why.CannotDerive) said.why()).reason());
+        assertFalse(pending.complete(new BodyCutInspection.Blocked()).isAbsent());
+        assertNull(pending.reportable(), "each rule is said with its rule, not as this position");
     }
 
     // --- what can be pending at all -------------------------------------------------------------
@@ -150,11 +150,10 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
     @Test
     void aLeafWhoseRuleWentUnreadSaysThat() {
         UndividedPosition done = new PendingPosition.Leaf(AT)
-                .complete(new BodyCutInspection.Blocked(new BlockReason.UnreadComparisonForm()));
+                .complete(new BodyCutInspection.Blocked());
 
         assertFalse(done.isAbsent());
-        assertEquals(new UndividedPosition.Why.CannotDerive(
-                UndividedPosition.Reason.UNSUPPORTED_SYNTAX), done.why());
+        assertEquals(new UndividedPosition.Why.CannotDerive(), done.why());
     }
 
     /**
@@ -169,12 +168,16 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
     void aReadingThatStoppedOutranksWhatTheRulesCameTo() {
         PendingPosition blocked = new PendingPosition.Blocked(AT,
                 new BlockReason.UnsupportedTraversal(BlockReason.Traversal.SEQUENCE_ELEMENT));
-        UndividedPosition.Why expected = new UndividedPosition.Why.CannotDerive(
-                UndividedPosition.Reason.UNSUPPORTED_TRAVERSAL);
+        UndividedPosition.Why expected = new UndividedPosition.Why.CannotDerive();
 
         assertEquals(expected, blocked.complete(new BodyCutInspection.Exhausted()).why());
-        assertEquals(expected, blocked.complete(
-                new BodyCutInspection.Blocked(new BlockReason.UnreadComparisonForm())).why());
+        assertEquals(expected, blocked.complete(new BodyCutInspection.Blocked()).why());
+        // And the finding is the stop, whatever the rules came to: a rule naming something inside a
+        // position the walk could not enter describes that same stop from the other end.
+        assertEquals(new souther.compiler.inputs.PositionReadingBlocked(AT,
+                        new BlockReason.UnsupportedTraversal(
+                                BlockReason.Traversal.SEQUENCE_ELEMENT)),
+                blocked.reportable());
     }
 
     /** A line drawn at a position whose axis says it has none is two readings disagreeing, and

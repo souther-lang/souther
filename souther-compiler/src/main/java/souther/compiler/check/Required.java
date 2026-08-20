@@ -338,7 +338,7 @@ public sealed interface Required {
          * an invariant's own gives — a {@code guard}'s comparison and a newtype's bound are two
          * producers of one kind of evidence (spec §example-partition).
          */
-        record NoLine(souther.compiler.inputs.BlockReason why) implements LineRead {
+        record NoLine(souther.compiler.inputs.BlockReason.AboutARule why) implements LineRead {
 
             public NoLine {
                 if (why == null) {

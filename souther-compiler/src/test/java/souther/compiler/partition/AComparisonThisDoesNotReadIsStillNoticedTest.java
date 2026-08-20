@@ -11,7 +11,10 @@ import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.check.RuleCitation;
+import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.UnreadRule;
+import souther.compiler.types.CoverageConstruct;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
@@ -19,6 +22,7 @@ import souther.compiler.query.Shapes;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -164,11 +168,43 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         assertEquals(1, guards.thresholds().size(), guards.thresholds().toString());
     }
 
-    /** One position said once, however many comparisons in the body name it. */
+    /**
+     * Two comparisons about one position are two findings, however alike they read.
+     *
+     * <p>Asked of the position, the second was dropped as a repeat of the first — and what an
+     * author is owed is one line per rule they would have to rewrite. The two here are stopped by
+     * the same limit at the same position and are two things to do, which is the whole of issue
+     * the same defect seen from inside one condition.
+     */
     @Test
-    void aPositionIsNamedOnceRatherThanPerComparison() {
-        assertEquals(1, read("at: Int",
-                "Int.multiply(at, at) < 4 || Int.multiply(at, at) > 9").unread().size());
+    void twoComparisonsAboutOnePositionAreTwoFindings() {
+        List<UnreadRule> unread = read("at: Int",
+                "Int.multiply(at, at) < 4 || Int.multiply(at, at) > 9").unread();
+
+        assertEquals(List.of(new Said(TermPath.of("at"), new BlockReason.UnreadComparisonForm()),
+                        new Said(TermPath.of("at"), new BlockReason.UnreadComparisonForm())),
+                said(unread));
+        assertEquals(2, unread.stream().map(UnreadRule::rule).distinct().count(),
+                () -> "two comparisons are two rules: " + unread);
+    }
+
+    /**
+     * And the rule is named, by what tells one from another and by what a reader looks for.
+     *
+     * <p>The position was all this used to carry, so a report could say a rule about `+p.x+` went
+     * unread and name no rule. What identifies a comparison is the behavior it is
+     * written in and the construct the author wrote; what finds it is the fork it stands in and the
+     * place. Neither is the plan\u0027s: a condition nothing can be measured about is numbered nowhere,
+     * and the model states the rule regardless.
+     */
+    @Test
+    void aFindingNamesTheComparisonThatWentUnread() {
+        UnreadRule said = read("p: Pair", "Int.multiply(p.x, p.x) < 10").unread().getFirst();
+
+        assertInstanceOf(RuleRef.Guard.class, said.rule());
+        RuleCitation.WrittenAt cited = assertInstanceOf(RuleCitation.WrittenAt.class, said.cited());
+        assertEquals(CoverageConstruct.IF, cited.construct(),
+                "a rule with no name is found by the construct it is written in");
     }
 
     /**
@@ -186,9 +222,9 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
      */
     @Test
     void aPositionNamedInsideAnExpressionIsStillNoticed() {
-        assertEquals(List.of(new UnreadRule(TermPath.of("p").then("x"),
+        assertEquals(List.of(new Said(TermPath.of("p").then("x"),
                         new BlockReason.UnreadComparisonForm())),
-                read("p: Pair", "Int.multiply(p.x, p.x) < 10").unread());
+                said(read("p: Pair", "Int.multiply(p.x, p.x) < 10").unread()));
     }
 
     /**
@@ -201,11 +237,11 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     @Test
     void twoPositionsComparedWithEachOtherSayWhichLimitThatIs() {
         assertEquals(List.of(
-                        new UnreadRule(TermPath.of("p").then("x"),
+                        new Said(TermPath.of("p").then("x"),
                                 new BlockReason.ComparisonBetweenPositions()),
-                        new UnreadRule(TermPath.of("p").then("y"),
+                        new Said(TermPath.of("p").then("y"),
                                 new BlockReason.ComparisonBetweenPositions())),
-                read("p: Pair", "p.x < p.y").unread());
+                said(read("p: Pair", "p.x < p.y").unread()));
     }
 
     /**
@@ -222,9 +258,9 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
                 read("p: Pair", "p.x <= 5 && Int.multiply(p.x, p.x) < 10");
 
         assertEquals(1, guards.thresholds().size(), guards.thresholds().toString());
-        assertEquals(List.of(new UnreadRule(TermPath.of("p").then("x"),
+        assertEquals(List.of(new Said(TermPath.of("p").then("x"),
                         new BlockReason.UnreadComparisonForm())),
-                guards.unread());
+                said(guards.unread()));
     }
 
     /**
@@ -242,11 +278,11 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     @Test
     void aRelationWithArithmeticOnOneSideIsStillARelation() {
         assertEquals(List.of(
-                        new UnreadRule(TermPath.of("p").then("x"),
+                        new Said(TermPath.of("p").then("x"),
                                 new BlockReason.ComparisonBetweenPositions()),
-                        new UnreadRule(TermPath.of("p").then("y"),
+                        new Said(TermPath.of("p").then("y"),
                                 new BlockReason.ComparisonBetweenPositions())),
-                read("p: Pair", "p.x < Int.multiply(p.y, p.y)").unread());
+                said(read("p: Pair", "p.x < Int.multiply(p.y, p.y)").unread()));
     }
 
     /**
@@ -259,8 +295,20 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
      */
     @Test
     void aReadableCarrierAgainstAnUnreadableSideIsNotACarrierProblem() {
-        assertEquals(List.of(new UnreadRule(TermPath.of("p").then("x"),
+        assertEquals(List.of(new Said(TermPath.of("p").then("x"),
                         new BlockReason.UnreadComparisonForm())),
-                read("p: Pair", "p.x < Int.min(1, 2)").unread());
+                said(read("p: Pair", "p.x < Int.min(1, 2)").unread()));
+    }
+
+    /**
+     * What a finding says about a position, apart from which rule said it.
+     *
+     * <p>Spelled out where every entry is about one rule and what is being read is the position and
+     * the limit. Which rule it was has its own test, because it is its own question.
+     */
+    private record Said(TermPath at, BlockReason why) {}
+
+    private static List<Said> said(List<UnreadRule> unread) {
+        return unread.stream().map(each -> new Said(each.at(), each.why())).toList();
     }
 }

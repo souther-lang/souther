@@ -1,0 +1,246 @@
+package souther.compiler;
+
+import org.junit.jupiter.api.Test;
+
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
+import souther.compiler.query.PartitionEvidence;
+import souther.compiler.report.AdequacyReport;
+
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * A rule this could not turn into a line is reported as the rule it is.
+ *
+ * <p>What the accounting was made to say, asked of the measure beside it. An author told that a
+ * rule about {@code r.cost} went unread, with nothing saying which rule, has to go and find it; and
+ * two rules stopped by one limit at one position came out as one line, because the finding was
+ * keyed on the position and the limit. What a finding of this kind is asked of is the rule, so it
+ * names one — by what tells it from its neighbours and by what a reader looks it up with, which
+ * are two questions and not one.
+ *
+ * <p>Three producers write these, and a reader of the list is told the same thing about any of them
+ * (spec §example-partition). All three are here, because what each of them had in hand was a
+ * different value and each dropped it at its own seam.
+ */
+class ARuleThisCouldNotReadIsNamedByTheRuleTest {
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    /** Two clauses of one declaration, stopped by one limit at one position. */
+    private static final String TWO_INVARIANTS = """
+            module m
+
+            data Ok
+            data R = { a: Int, b: Int }
+                invariant first  = a < b
+                invariant second = b < a
+
+            behavior f : (r: R) -> Ok
+                constructs Ok
+            let f (r) = Ok
+            """;
+
+    /** Two comparisons of one condition, about one position. */
+    private static final String TWO_COMPARISONS = """
+            module m
+
+            data Ok
+            data No
+
+            behavior f : (n: Int) -> Ok | No
+            let f (n) =
+                if Int.multiply(n, n) < 4 || Int.multiply(n, n) > 9 then Ok else No
+            """;
+
+    /** Two clauses of one {@code ensures}, about one position. */
+    private static final String TWO_ENSURES = """
+            module m
+
+            data Ok = { v: Int }
+
+            behavior f : (a: Int, b: Int) -> Ok
+                constructs Ok
+                ensures low  = a < b
+                ensures high = b < a
+            let f (a, b) = Ok { v = a }
+            """;
+
+    /**
+     * Two clauses of a declaration are two findings, and each says which clause.
+     *
+     * <p>The invariant producer had the rule all along: the reading of ends records which clause it
+     * gave up on, and the seam onto the position kept the position and the reason and dropped the
+     * rest. So the two clauses became one line and the line named neither.
+     */
+    @Test
+    void twoInvariantClausesStoppedAlikeAreTwoFindings() {
+        // Two rules about two positions, so four findings: a reader looking up either position is
+        // owed both rules. What was one line is the pair at one position.
+        assertEquals(4, rulesNotRead(TWO_INVARIANTS).size(), () -> unread(TWO_INVARIANTS));
+        assertEquals(2, ruleIdsNotRead(TWO_INVARIANTS).size(), () -> unread(TWO_INVARIANTS));
+        assertTrue(human(TWO_INVARIANTS).contains("not read: invariant R (first)"),
+                human(TWO_INVARIANTS));
+        assertTrue(human(TWO_INVARIANTS).contains("not read: invariant R (second)"),
+                human(TWO_INVARIANTS));
+    }
+
+    /** And two comparisons of one condition, which the guard producer kept one of. */
+    @Test
+    void twoComparisonsStoppedAlikeAreTwoFindings() {
+        assertEquals(2, rulesNotRead(TWO_COMPARISONS).size(), () -> unread(TWO_COMPARISONS));
+        assertEquals(2, ruleIdsNotRead(TWO_COMPARISONS).size(), () -> unread(TWO_COMPARISONS));
+    }
+
+    /** And two clauses of an {@code ensures}. */
+    @Test
+    void twoEnsuresClausesStoppedAlikeAreTwoFindings() {
+        assertEquals(2, ruleIdsNotRead(TWO_ENSURES).size(), () -> unread(TWO_ENSURES));
+        assertTrue(human(TWO_ENSURES).contains("not read: ensures f (low)"), human(TWO_ENSURES));
+        assertTrue(human(TWO_ENSURES).contains("not read: ensures f (high)"), human(TWO_ENSURES));
+    }
+
+    /**
+     * A rule about two positions is a finding at each of them.
+     *
+     * <p>{@code a < b} divides neither, and a reader looking up either is owed the same answer.
+     * Filed at the first position the reading names, which position was told about would turn on
+     * which side the author wrote it — so the same rule written the other way round would answer
+     * about the other one.
+     */
+    @Test
+    void aRuleAboutTwoPositionsIsAFindingAtEach() {
+        assertEquals(List.of("r.a", "r.b"),
+                rulesNotRead(TWO_INVARIANTS).stream()
+                        .map(PartitionEvidence.NotRead::at).distinct().sorted().toList(),
+                () -> unread(TWO_INVARIANTS));
+    }
+
+    /**
+     * A comparison written inside a helper is not one of these.
+     *
+     * <p>A helper is spliced into every body that calls it, so its comparisons stand in this tree
+     * and are not this behavior's rules to answer for. The author wrote {@code > 70} here and the
+     * comparisons inside {@code Int.clamp} nowhere near here, and a report naming the second sends
+     * them to edit a function they may not own.
+     *
+     * <p>Asked of the comparison and not of the fork it sits under: the one the author wrote is the
+     * operand of a call whose insides they did not write, so a subtree is the wrong unit. What
+     * tells the two apart is the citation, which already says whether code was written where the
+     * reader is standing or reached from somewhere else.
+     *
+     * <p>The accounting beside this still raises questions for the helper's own forks. That is
+     * where it stood before this issue and is not changed here; that the two ought to draw the line
+     * in one place is its own question.
+     */
+    @Test
+    void aComparisonInsideAnExpandedHelperIsNotOneOfThese() {
+        String model = """
+                module m
+
+                data Low
+                data Accepted = { at: Int }
+
+                behavior classify : (n: Int) -> Accepted | Low
+                    constructs Accepted
+
+                let classify (n) = {
+                    guard Int.clamp(0, 100, n) > 70 else Low
+                    Accepted { at = n }
+                }
+                """;
+
+        List<PartitionEvidence.NotRead> said = rulesNotRead(model);
+
+        assertEquals(1, said.size(), () -> unread(model));
+        assertTrue(human(model).contains("not read: guard@"), human(model));
+        assertTrue(human(model).lines()
+                        .filter(line -> line.contains("not read:"))
+                        .noneMatch(line -> line.contains("Int.clamp")),
+                human(model));
+    }
+
+    /**
+     * A rule can be both, and the two say different things about it.
+     *
+     * <p>This measure says the reading that draws lines could not adopt the rule; the accounting
+     * says no reading at all took it in. A rule can be either without the other — one the value
+     * reading took in whole is still one no line came of — and where both are true a reader is told
+     * both, under the same {@code ruleId} and in different words. Deduplicated, the two would be
+     * back to one answer for two questions, which is the pair this keeps apart.
+     */
+    @Test
+    void aRuleMayBeBothUnreadHereAndUnansweredBeside() {
+        String model = """
+                module m
+
+                data Ok
+                data No
+                data Tag = String
+                    invariant long = String.length(value) > 9223372036854775807
+
+                behavior f : (t: Tag) -> Ok | No
+                let f (t) = if String.length(t.value) > Int.add(1, 2) then Ok else No
+                """;
+
+        assertTrue(human(model).contains("not read: if@"), human(model));
+        assertTrue(human(model).contains("not accounted for: invariant Tag (long)"), human(model));
+    }
+
+    /** Every rule of the behavior that this could not turn into a line. */
+    private static List<PartitionEvidence.NotRead> rulesNotRead(String model) {
+        List<PartitionEvidence.NotRead> out = new ArrayList<>();
+        for (PartitionEvidence.NotRead each : measured(model).notRead()) {
+            if (each instanceof PartitionEvidence.NotRead.ARule) {
+                out.add(each);
+            }
+        }
+        return out;
+    }
+
+    /** And how many rules those are, which is what a document keys them by. */
+    private static Set<souther.compiler.check.RuleRef> ruleIdsNotRead(String model) {
+        Set<souther.compiler.check.RuleRef> out = new LinkedHashSet<>();
+        for (PartitionEvidence.NotRead each : rulesNotRead(model)) {
+            out.add(((PartitionEvidence.NotRead.ARule) each).rule());
+        }
+        return out;
+    }
+
+    private static PartitionEvidence measured(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+        return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0).partition();
+    }
+
+    private static String human(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+        return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
+    }
+
+    private static String unread(String model) {
+        JsonNode document = JSON.readTree(json(model));
+        return document.get("modules").get(0).get("behaviors").get(0)
+                .get("partition").get("notRead").toString();
+    }
+
+    private static String json(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+        return AdequacyReport.of(compilation).json(SourceNameResolver.identity());
+    }
+}

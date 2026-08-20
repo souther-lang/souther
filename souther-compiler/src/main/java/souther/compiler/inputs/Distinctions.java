@@ -71,7 +71,7 @@ public final class Distinctions {
 
     /** Whether this reading could be made at all, or what stopped it. A type nothing could be read
      *  off is not a position with no distinctions: nothing was read to say so. */
-    static BlockReason unreadableAt(TypeView view) {
+    static BlockReason.AboutThePosition unreadableAt(TypeView view) {
         return view.shape() instanceof Shape.Unresolved ? new BlockReason.TypeUnresolved() : null;
     }
 

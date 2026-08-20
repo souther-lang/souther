@@ -94,6 +94,32 @@ sealed interface PendingPosition {
      * and the first is the cause (issue #626). So a {@link Blocked} completes as itself whatever
      * the rules came to, and only a {@link Leaf} can reach an absence.
      */
+    /**
+     * The finding this comes to, or null where there is none to make.
+     *
+     * <p>The resolution, and the only place a structural stop becomes something a report says. What
+     * a producer records is a candidate: the walk could not reach into what a position holds, and
+     * that is worth telling an author exactly when nothing else answered for the position. Reported
+     * off the producer alone, {@code note: String?} said its values are held inside something this
+     * does not reach into — true of the compiler, and no account of this position, whose two cases
+     * the reading divided perfectly well. Reaching one of these is already the proof that nothing
+     * did: {@link #of} refuses an axis with evidence.
+     *
+     * <p>Null where the surviving reason is about a rule. Such a reason is a rule this read and
+     * could not use, which is an {@link souther.compiler.inputs.UnreadRule} made by the reader that
+     * read it and carrying which rule — said again here, it would be the same fact twice, once
+     * without the rule.
+     *
+     * <p>Null for a {@link Leaf} too: nothing stopped, so there is nothing to be waiting on.
+     */
+    default souther.compiler.inputs.PositionReadingBlocked reportable() {
+        if (!(this instanceof Blocked blocked)) {
+            return null;
+        }
+        return blocked.why() instanceof BlockReason.AboutThePosition why
+                ? new souther.compiler.inputs.PositionReadingBlocked(at(), why) : null;
+    }
+
     default UndividedPosition complete(BodyCutInspection body) {
         if (body instanceof BodyCutInspection.Evidence) {
             // A line was drawn and the axis carrying it says it has none. Nothing a reader of a
@@ -103,11 +129,9 @@ sealed interface PendingPosition {
                     "the rules drew a line at " + at() + " and its axis has no evidence");
         }
         return switch (this) {
-            case Blocked blocked ->
-                    UndividedPosition.cannotDerive(at(), ReportedReason.of(blocked.why()));
+            case Blocked _ -> UndividedPosition.cannotDerive(at());
             case Leaf _ -> switch (body) {
-                case BodyCutInspection.Blocked blocked ->
-                        UndividedPosition.cannotDerive(at(), ReportedReason.of(blocked.why()));
+                case BodyCutInspection.Blocked _ -> UndividedPosition.cannotDerive(at());
                 // The producers of both phases asked, none of them stopped, and none of them found
                 // anything. Which is the only way to an absence, and is what one means: what those
                 // readers read, rather than a claim about what could have been written.

@@ -34,6 +34,7 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
                                 PairSpace pairs,
                                 List<souther.compiler.partition.UndividedPosition> notDerivable,
                                 List<souther.compiler.inputs.UnreadRule> unread,
+                                List<souther.compiler.inputs.PositionReadingBlocked> blocked,
                                 List<Unanswered> unanswered,
                                 List<Partitions.OmittedAxis> omitted,
                                 List<Incompleteness> whyUnclassified) {
@@ -49,11 +50,12 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
      */
     public static final PartitionEvidence NONE = new PartitionEvidence(Partitioned.absent(),
             Bounded.absent(), PairSpace.NONE, List.of(), List.of(), List.of(), List.of(),
-            List.of());
+            List.of(), List.of());
 
     public PartitionEvidence {
         notDerivable = List.copyOf(notDerivable);
         unread = List.copyOf(unread);
+        blocked = List.copyOf(blocked);
         unanswered = List.copyOf(unanswered);
         omitted = List.copyOf(omitted);
         whyUnclassified = List.copyOf(whyUnclassified);
@@ -117,19 +119,69 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
     }
 
     /**
-     * A position something is written about that this reading did not turn into a line, and what
-     * stopped it.
+     * One entry of what this reading could not read, as a document writes it.
+     *
+     * <p>Two shapes because two authorities answer. A rule was read and could not be used, and the
+     * finding names which rule; or the reading never got to the rules of a position, and there is
+     * no rule to name. Written as one shape with the rule left out where there is none, a consumer
+     * would have to read an absent field to know which of the two it was holding â which is the
+     * reconstruction this pair exists to stop.
      *
      * <p>The reason in the vocabulary a document promises its reader, not the one this compiler
      * records for itself: which capability was missing is this compiler's own business, and which
      * kind of thing stopped the derivation is what a reader can act on.
      */
-    public record UnreadPosition(String at,
-                                 souther.compiler.partition.UndividedPosition.Reason reason) {}
+    public sealed interface NotRead {
+
+        /** The position it is about, spelled the way a report names it. */
+        String at();
+
+        /** What stopped it, in the words a document promises. */
+        souther.compiler.partition.UndividedPosition.Reason reason();
+
+        /** A rule of the model this read and could not turn into a line. */
+        record ARule(souther.compiler.inputs.UnreadRule finding) implements NotRead {
+
+            @Override
+            public String at() {
+                return finding.at().toString();
+            }
+
+            @Override
+            public souther.compiler.partition.UndividedPosition.Reason reason() {
+                return souther.compiler.partition.ReportedReason.of(finding.why());
+            }
+
+            /** Which rule, which is what tells this finding from the one beside it. */
+            public souther.compiler.check.RuleRef rule() {
+                return finding.rule();
+            }
+
+            /** And how a reader finds that rule, which is not what tells it from another. */
+            public souther.compiler.check.RuleCitation cited() {
+                return finding.cited();
+            }
+        }
+
+        /** A position whose rules this reading never arrived at. */
+        record APosition(souther.compiler.inputs.PositionReadingBlocked finding)
+                implements NotRead {
+
+            @Override
+            public String at() {
+                return finding.at().toString();
+            }
+
+            @Override
+            public souther.compiler.partition.UndividedPosition.Reason reason() {
+                return souther.compiler.partition.ReportedReason.of(finding.why());
+            }
+        }
+    }
 
     /**
-     * Every position this reading carries an unread finding about: a rule it did not turn into a
-     * line, and a position it divided no way and said why.
+     * Everything this reading could not read: the rules it did not turn into lines, and the
+     * positions it did not reach the rules of.
      *
      * <p>Not every position whose rules this reading is short of. How far the reading of a position
      * ran is what its axis carries ({@link AxisCoverage#read()}), and a position measured on a
@@ -138,35 +190,21 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
      * be the very thing it was written to stop: one question answered by a list that answers
      * another.
      *
-     * <p>One reading, and the two surfaces write from it. It used to be assembled twice — a person
-     * was shown the rules no line came from together with the positions divided no way, and the
-     * document was written from the second alone — so a rule left unread at a position the axes
-     * went on to measure reached one reader and stopped there. Nothing was wrong with either list;
-     * what was wrong is that one question was answered by reading two of them in one place and one
-     * of them in the other.
+     * <p><b>Both halves are canonical and neither is recovered from a verdict.</b> This used to add
+     * the positions {@link #notDerivable} could not derive, which is an account of whether anything
+     * divides a position and not of what was read — and a rule left unread reached that list only
+     * after being projected onto the position it was about, losing the rule on the way. So a rule
+     * and the position it is at came back as two entries of one list, one of which could name
+     * nothing. What is joined here are the two findings themselves, each from the
+     * reader that made it.
      *
-     * <p>The rules come first and the undivided positions after, deduplicated: a position can be
-     * in both, and it is one thing that was found about it either way.
+     * <p>The rules come first and the positions after, in the order each was read.
      */
-    public List<UnreadPosition> notRead() {
-        List<UnreadPosition> out = new java.util.ArrayList<>();
-        for (souther.compiler.inputs.UnreadRule each : unread) {
-            add(out, new UnreadPosition(each.at().toString(),
-                    souther.compiler.partition.ReportedReason.of(each.why())));
-        }
-        for (souther.compiler.partition.UndividedPosition position : notDerivable) {
-            if (position.why() instanceof souther.compiler.partition.UndividedPosition.Why
-                    .CannotDerive stopped) {
-                add(out, new UnreadPosition(position.at().toString(), stopped.reason()));
-            }
-        }
+    public List<NotRead> notRead() {
+        List<NotRead> out = new java.util.ArrayList<>();
+        unread.forEach(each -> out.add(new NotRead.ARule(each)));
+        blocked.forEach(each -> out.add(new NotRead.APosition(each)));
         return List.copyOf(out);
-    }
-
-    private static void add(List<UnreadPosition> out, UnreadPosition said) {
-        if (!out.contains(said)) {
-            out.add(said);
-        }
     }
 
     /** The positions, for a reader that wants them and not what the measure made of itself. */
