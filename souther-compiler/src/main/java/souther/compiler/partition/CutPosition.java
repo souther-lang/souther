@@ -84,6 +84,22 @@ public record CutPosition(Level written, BigDecimal per) {
         return of.multiply(per).compareTo(at);
     }
 
+    /**
+     * Whether this line falls below, at or above where {@code other} does.
+     *
+     * <p>Cross-multiplied rather than divided, for the reason the rest of this is: a line at a third
+     * and one at two sixths fall in one place, and neither of them is a number this language can
+     * write out to compare.
+     */
+    public int compareTo(CutPosition other) {
+        BigDecimal mine = numberOf(written);
+        BigDecimal theirs = numberOf(other.written);
+        if (mine == null || theirs == null) {
+            return placeOf(written).compareTo(placeOf(other.written));
+        }
+        return mine.multiply(other.per).compareTo(theirs.multiply(per));
+    }
+
     private static souther.compiler.numeric.Place placeOf(Level level) {
         return switch (level) {
             case Level.ACount count -> count.at();

@@ -68,7 +68,7 @@ public record QuantityArrangement(List<Seam> seams, List<Band> bands) {
             distinct.putIfAbsent(each.key(), each);
         }
         List<Seam> ordered = new ArrayList<>(distinct.values());
-        ordered.sort((l, r) -> space.compare(l.somewhere(), r.somewhere()));
+        ordered.sort(QuantityArrangement::inOrderOfTheValues);
 
         List<Band> bands = new ArrayList<>();
         Seam under = null;
@@ -78,6 +78,24 @@ public record QuantityArrangement(List<Seam> seams, List<Band> bands) {
         }
         keep(space, bands, new Band(under, null, from, to));
         return new QuantityArrangement(ordered, bands);
+    }
+
+    /**
+     * Which of two seams parts the values first.
+     *
+     * <p>Where the lines fall, and where two fall in one place, the one that gives that place away
+     * before the one that keeps it. Two rules can part a carrier whose values fill at one number —
+     * {@code <= 0.5} and {@code < 0.5} — and what they leave between them is that number and nothing
+     * else. Ordered by a value either of them names, both name it, and one of the two readings put
+     * the number in the runs on both sides of itself.
+     *
+     * <p>Asked of the line and not of the values beside it, because a line the quantity names no
+     * value beside has none to be asked about.
+     */
+    private static int inOrderOfTheValues(Seam one, Seam other) {
+        int where = one.at().compareTo(other.at());
+        return where != 0 ? where
+                : Boolean.compare(one.keepsItsOwnValueBelow(), other.keepsItsOwnValueBelow());
     }
 
     /**

@@ -111,6 +111,32 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
     }
 
     /**
+     * Two rules that part the values at one place, one keeping it and one giving it away.
+     *
+     * <p>Over a carrier whose values fill, {@code <= 0.5} and {@code < 0.5} are two divisions at one
+     * number, and together they leave three runs: everything under it, the number itself, and
+     * everything over it. Ordered by a value either of them names — both name 0.5 — the two come out
+     * in whichever order they were read, and one of the two orders leaves the middle run open at
+     * both ends. Read on, that run holds nothing and disappears, and the two runs either side both
+     * hold 0.5.
+     */
+    @Test
+    void twoRulesAtOnePlaceLeaveTheValueItselfBetweenThem() {
+        souther.compiler.check.Carrier of = new souther.compiler.check.Carrier.Dense();
+        LevelSpace decimals = LevelSpace.onACarrier(of);
+        Level half = new Level.OnACarrier(of, new Count(new java.math.BigDecimal("0.5")));
+        Seam keeps = Seam.of(decimals, half, Towards.BELOW);
+        Seam givesAway = Seam.of(decimals, half, Towards.ABOVE);
+
+        for (List<Seam> order : List.of(List.of(keeps, givesAway), List.of(givesAway, keeps))) {
+            assertEquals(List.of("|", "0.5|0.5", "|"),
+                    QuantityArrangement.of(decimals, order).bands().stream()
+                            .map(Band::key).toList(),
+                    "read in either order, the number itself is a run of its own: " + order);
+        }
+    }
+
+    /**
      * The outermost runs stop where the rules stop the quantity.
      *
      * <p>A bound is not a cut: nothing outside it can be constructed, so there is no run on the far

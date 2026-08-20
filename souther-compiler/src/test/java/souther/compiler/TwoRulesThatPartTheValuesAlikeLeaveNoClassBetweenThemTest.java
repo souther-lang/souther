@@ -28,6 +28,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 class TwoRulesThatPartTheValuesAlikeLeaveNoClassBetweenThemTest {
 
     private static List<String> classesOf(String clause, String body) {
+        return classesOf("Int", clause, body);
+    }
+
+    private static List<String> classesOf(String type, String clause, String body) {
         Compilation compilation = Compilation.ofSource("""
                 module example.parted
 
@@ -35,7 +39,7 @@ class TwoRulesThatPartTheValuesAlikeLeaveNoClassBetweenThemTest {
                 data Yes = { v: Int }
                 data Result = No | Yes
 
-                behavior f : (n: Int) -> Result
+                behavior f : (n: %s) -> Result
                     constructs Yes, No
                 %s
 
@@ -45,8 +49,9 @@ class TwoRulesThatPartTheValuesAlikeLeaveNoClassBetweenThemTest {
                 }
 
                 example f
-                    | "one" : (1) -> Yes { v = 1 }
-                """.formatted(clause, body), "Main");
+                    | "one" : (%s) -> Yes { v = 1 }
+                """.formatted(type, clause, body,
+                        type.equals("Decimal") ? "0.1m" : "1"), "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
         Map<String, PartitionEvidence> all = compilation.db()
@@ -62,6 +67,23 @@ class TwoRulesThatPartTheValuesAlikeLeaveNoClassBetweenThemTest {
     void oneClauseLeavesTheTwoClassesItParts() {
         assertEquals(List.of("n/x <= 4", "n/4 < x"),
                 classesOf("    ensures asked = Yes -> n <= 4", ""));
+    }
+
+    /**
+     * And where the two operators are two divisions, they leave the value between them.
+     *
+     * <p>Over a carrier whose values fill, {@code <= 0.5} keeps the number and {@code < 0.5} gives
+     * it away, so together they part the decimals twice and what lies between the two lines is that
+     * number and nothing else. Ordered by a value either of them names — both name it — the two
+     * came out in whichever order they were read, and one of the readings left the number in the
+     * class on each side of itself. A position's classes are exclusive, so that is not a partition
+     * at all and the classifier reading a row against it has no answer.
+     */
+    @Test
+    void twoDivisionsAtOneNumberLeaveThatNumberBetweenThem() {
+        assertEquals(List.of("n/x < 0.5", "n/0.5 <= x <= 0.5", "n/0.5 < x"),
+                classesOf("Decimal", "    ensures asked = Yes -> n <= 0.5m",
+                        "    guard n < 0.5m else No { why = 0 }"));
     }
 
     /**
