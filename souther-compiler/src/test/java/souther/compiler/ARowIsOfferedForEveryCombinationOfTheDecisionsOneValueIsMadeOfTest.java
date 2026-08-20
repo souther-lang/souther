@@ -239,4 +239,48 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
         assertTrue(!block.contains("generation stopped"),
                 "and nothing was left for a limit to cut off: " + block);
     }
+
+    /** Three decisions summed inside the arm of a fork above them. */
+    private static final String INSIDE_AN_ARM = """
+            module example.arm
+
+            data Choice = A | B
+
+            behavior fee : (choice: Choice, a: Bool, b: Bool, c: Bool) -> Int
+
+            let fee (choice, a, b, c) =
+                match choice with
+                    | A -> 0
+                    | B -> {
+                        let counted =
+                            (if a then 1 else 0)
+                            + (if b then 1 else 0)
+                            + (if c then 1 else 0)
+
+                        counted
+                    }
+            """;
+
+    /**
+     * Every row offered for the group takes the arm the group is in.
+     *
+     * <p>A row that goes the other way round the fork never reaches the operator, so varying the
+     * three decisions on that side exercises it not at all — and a row already written over there
+     * would read as one that covers the combination.
+     */
+    @Test
+    void everyRowOfferedForAGroupTakesThePathToIt() {
+        String block = block(INSIDE_AN_ARM);
+
+        for (String a : List.of("true", "false")) {
+            for (String b : List.of("true", "false")) {
+                for (String c : List.of("true", "false")) {
+                    String row = "(B, " + a + ", " + b + ", " + c + ")";
+                    assertTrue(block.contains(row),
+                            "the combination is offered on the side that reaches it: " + row
+                                    + " in " + block);
+                }
+            }
+        }
+    }
 }

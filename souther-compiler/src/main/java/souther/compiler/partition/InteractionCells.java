@@ -8,9 +8,7 @@ import souther.compiler.interaction.Outcome;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 
 /**
  * The combinations a group of decisions has, as the classes a row filling one sits in.
@@ -20,17 +18,17 @@ import java.util.Set;
  * two are about the same rules — the comparison a factor names is the comparison a cut was drawn
  * off — so this is a lookup rather than a second derivation of where the model divides.
  *
- * <p>A group whose factors cannot each be told apart in that vocabulary is not offered at all. A
- * factor whose outcomes place at the same classes is one no row can be steered around, so the cells
- * over it are the same row asked for several times; and one that places at nothing is a decision
- * this reading knows is there and cannot reach. Offering either would hand an author rows that
- * establish nothing, which is the defect the group was read to avoid — so the group goes, and what
- * is left is the pair space, which is where such a behavior already was.
+ * <p>A group is offered only where every condition it is made of places at a class. What a cell is
+ * for is a row that takes the path to the meeting and settles each factor at the outcome the cell
+ * names, and a condition with no class to put a row at leaves both open: the row may go the other
+ * way round the fork above, or take a different outcome of the factor, and either way it is offered
+ * for a combination it does not sit in. A row already written reads the same way — the cell would
+ * be taken for covered by a row that never reaches the operator. So the group goes, and what is
+ * left is the pair space, which is where such a behavior already was.
  *
- * <p>Nor is a group offered where two of its factors read one position. A row cannot put that
- * position at two classes, so the combinations of the two are not the product of them and there is
- * no count of the group that is not itself an enumeration. What such a group would ask about the
- * shared position is what covering that position's classes asks already.
+ * <p>A factor whose outcomes place at the same classes goes for the second half of the same reason:
+ * no row can be steered from one to the other, so the cells over it are one row asked for several
+ * times.
  */
 public final class InteractionCells {
 
@@ -56,20 +54,24 @@ public final class InteractionCells {
      * a combination a written row already sits in costs no row, so a caller that stopped enumerating
      * at the budget would leave the ones past that point untried while the budget still held.
      *
+     * @param reach     the classes the path to the meeting puts a row at, which every combination
+     *                  is under
      * @param byFactor  where each outcome of each factor puts a row, one list per factor
      * @param positions how many positions a cell is over
      */
-    public record Group(List<List<int[]>> byFactor, int positions) {
+    public record Group(int[] reach, List<List<int[]>> byFactor, int positions) {
 
         public Group {
+            reach = reach.clone();
             byFactor = List.copyOf(byFactor);
         }
 
         /**
-         * How many combinations the group has.
+         * How many ways there are to choose one outcome from each factor.
          *
-         * <p>Exact, and known without building any of them: the factors read no position in common,
-         * so every choice of one outcome from each is a cell.
+         * <p>Not how many combinations the group has: two factors reading one position have choices
+         * that put it at two classes, and no row is written at those. This is the space the choices
+         * are counted off, and {@link #at} says which of them are cells.
          */
         public int size() {
             long size = 1;
@@ -82,21 +84,40 @@ public final class InteractionCells {
             return (int) size;
         }
 
-        /** The {@code index}th combination, counting the factors off in the order they are read. */
+        /**
+         * The {@code index}th choice as a cell, or null where the factors it takes disagree.
+         *
+         * <p>Disagreeing is not a combination the body refuses. There is no path through the body
+         * that takes both, so there is nothing there to ask for.
+         */
         public int[] at(int index) {
-            int[] at = new int[positions];
-            Arrays.fill(at, -1);
+            int[] at = reach.clone();
             int left = index;
             for (List<int[]> factor : byFactor) {
                 int[] outcome = factor.get(left % factor.size());
                 left /= factor.size();
                 for (int i = 0; i < at.length; i++) {
-                    if (outcome[i] >= 0) {
-                        at[i] = outcome[i];
+                    if (outcome[i] < 0) {
+                        continue;
                     }
+                    if (at[i] >= 0 && at[i] != outcome[i]) {
+                        return null;
+                    }
+                    at[i] = outcome[i];
                 }
             }
             return at;
+        }
+
+        /** How many cells the group has from {@code from} on, which is what a stopped search left. */
+        public int left(int from) {
+            int left = 0;
+            for (int index = from; index < size(); index++) {
+                if (at(index) != null) {
+                    left++;
+                }
+            }
+            return left;
         }
     }
 
@@ -104,9 +125,17 @@ public final class InteractionCells {
     public static List<Group> of(List<Interaction> groups, List<Axis> axes) {
         List<Group> out = new ArrayList<>();
         for (Interaction group : groups) {
-            List<List<int[]>> placed = placedBy(group, axes);
-            if (placed != null && productOf(placed) < MOST_CELLS) {
-                out.add(new Group(placed, axes.size()));
+            int[] reach = placedBy(group.reach(), axes);
+            if (reach == null) {
+                continue;
+            }
+            List<List<int[]>> placed = factorsOf(group, axes);
+            if (placed == null || productOf(placed) >= MOST_CELLS) {
+                continue;
+            }
+            Group built = new Group(reach, placed, axes.size());
+            if (built.left(0) > 0) {
+                out.add(built);
             }
         }
         return List.copyOf(out);
@@ -124,48 +153,33 @@ public final class InteractionCells {
         return size;
     }
 
-    /**
-     * Where each outcome of each factor puts a row, or null where the group is not one to offer.
-     */
-    private static List<List<int[]>> placedBy(Interaction group, List<Axis> axes) {
+    /** Where each outcome of each factor puts a row, or null where the group is not one to offer. */
+    private static List<List<int[]>> factorsOf(Interaction group, List<Axis> axes) {
         List<List<int[]>> out = new ArrayList<>();
-        Set<Integer> taken = new LinkedHashSet<>();
         for (Factor factor : group.factors()) {
             List<int[]> placements = new ArrayList<>();
-            Set<Integer> reads = new LinkedHashSet<>();
             for (Outcome outcome : factor.outcomes()) {
-                int[] at = new int[axes.size()];
-                Arrays.fill(at, -1);
-                for (Condition each : outcome.holds()) {
-                    place(each, axes, at);
-                }
-                if (fixesNothing(at) || alreadyThere(placements, at)) {
+                int[] at = placedBy(outcome.holds(), axes);
+                if (at == null || alreadyThere(placements, at)) {
                     return null;
-                }
-                for (int i = 0; i < at.length; i++) {
-                    if (at[i] >= 0) {
-                        reads.add(i);
-                    }
                 }
                 placements.add(at);
-            }
-            for (int position : reads) {
-                if (!taken.add(position)) {
-                    return null;
-                }
             }
             out.add(placements);
         }
         return out;
     }
 
-    private static boolean fixesNothing(int[] at) {
-        for (int each : at) {
-            if (each >= 0) {
-                return false;
+    /** Where {@code holds} puts a row, or null where any of it places at no class. */
+    private static int[] placedBy(List<Condition> holds, List<Axis> axes) {
+        int[] at = new int[axes.size()];
+        Arrays.fill(at, -1);
+        for (Condition each : holds) {
+            if (!place(each, axes, at)) {
+                return null;
             }
         }
-        return true;
+        return at;
     }
 
     private static boolean alreadyThere(List<int[]> placements, int[] at) {
@@ -178,34 +192,35 @@ public final class InteractionCells {
     }
 
     /** The class {@code condition} settles its position at, where this can say which. */
-    private static void place(Condition condition, List<Axis> axes, int[] at) {
+    private static boolean place(Condition condition, List<Axis> axes, int[] at) {
         switch (condition) {
             case Condition.Case one -> {
                 int axis = axisAt(axes, one.at());
                 if (axis < 0) {
-                    return;
+                    return false;
                 }
                 List<PartitionClass> classes = axes.get(axis).classes();
                 for (int c = 0; c < classes.size(); c++) {
                     if (classes.get(c).label().equals(one.name())) {
                         at[axis] = c;
-                        return;
+                        return true;
                     }
                 }
+                return false;
             }
             case Condition.Side one -> {
                 int axis = axisAt(axes, one.at());
                 if (axis < 0) {
-                    return;
+                    return false;
                 }
                 Cut line = cutAt(axes.get(axis), one.site());
                 if (line == null) {
-                    return;
+                    return false;
                 }
                 OriginRef.GuardOrigin guard = guardOf(line, one.site());
                 int home = holding(axes.get(axis), line);
                 if (home < 0) {
-                    return;
+                    return false;
                 }
                 // Which side the comparison is true on, from the two facts the line carries: which
                 // side of it the cut value itself sits on, and whether the comparison holds there.
@@ -213,13 +228,16 @@ public final class InteractionCells {
                 boolean wantedIsHomeSide = guard.holdsAtTheValue() == one.held();
                 boolean wantedIsUp = wantedIsHomeSide == homeSideIsUp;
                 int nearest = wantedIsHomeSide ? home : (wantedIsUp ? home + 1 : home - 1);
-                if (nearest >= 0 && nearest < axes.get(axis).classes().size()) {
-                    at[axis] = nearest;
+                if (nearest < 0 || nearest >= axes.get(axis).classes().size()) {
+                    return false;
                 }
+                at[axis] = nearest;
+                return true;
             }
-            // A fork this reading could not name a position for steers nothing. The group it is a
-            // factor of goes, because a factor nothing can steer is one no row varies.
-            case Condition.Arm ignored -> { }
+            // A fork this reading could not name a position for puts a row nowhere.
+            case Condition.Arm ignored -> {
+                return false;
+            }
         }
     }
 

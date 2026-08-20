@@ -59,6 +59,21 @@ agree. A class the rules admit stays owed a row however the body describes it: a
 that a case cannot arise must not take away the row that would show the claim wrong. So the same
 `unreachable` arm is not an outcome of the value and is still a class a row is offered at.
 
+A group is a path to the meeting as much as it is the outcomes at it. An operator standing in an
+arm is reached only by a row that takes that arm, and a row that varies the factors while going the
+other way exercises the operator not at all — so what holds on the way to the meeting is carried
+with it, and every one of its combinations is under that. Left out, a row offered for a combination
+may never reach the operator it was composed for, and a row already written on the other side of the
+fork reads as one that covers it.
+
+Every condition a group is made of has to place at a class of a position, or the group is not
+offered. A cell is a row that takes the path and settles each factor at the outcome the cell names,
+and a condition with no class to put a row at leaves both open — the row may go the other way round
+the fork above, or take another outcome of the factor. A factor whose outcomes place at the same
+classes goes for the second half of the same reason: no row can be steered from one to the other, so
+the cells over it are one row asked for several times. What is left in either case is the pair
+space, which is where such a behavior already was.
+
 A run of one operator is one meeting of all its values. `a + b + c` is written as one operator
 applied twice and is three values making one number, and reading it as two meetings would ask for
 the product of the first two against the third and then for the product of the first two again —
@@ -95,11 +110,11 @@ by a row that establishes something.
 A cell is named for the classes it fixes, which is what it was composed for. What the row settles
 beside that is the generation's to change and is not in the name.
 
-The factors of a group read no position in common. Two that read one position have combinations a
-row cannot write — the position would have to hold two classes — so their combinations are not the
-product of them and there is no count of the group that is not itself an enumeration. Such a group
-is not offered, and what it would have asked about the shared position is what covering that
-position's classes asks already.
+Two factors may read one position, and the choices that would put it at two classes are not
+combinations. There is no path through the body that takes both, so there is nothing there to ask
+for — which is the same rule as everywhere else here, and it is what a gate written on both sides of
+an operator comes to: the choices inside the gate and the one outside it are cells, and the ones
+that open the gate for one side and not the other are not.
 
 The cells are held to the row budget the pairs are held to, and not to a second one. A group has as
 many combinations as the product of its factors, which grows with the body rather than with the
@@ -109,12 +124,6 @@ the rest of them nothing, and a search that stopped says so in the words it alre
 substituted: what a limit cuts off is the depth of the groups and never the strength a group is
 offered at.
 
-A factor no row can be steered around takes its group with it. Under a condition mixing `&&` and
-`||` the arm cannot say which comparison came out which way, so the decision places at no class —
-and cells over it are one row asked for several times under a name that fixes nothing. The same
-goes for two outcomes of one factor that place at the same classes. What is left in both cases is
-the pair space, which is where such a behavior already was.
-
 A value that can be settled more ways than the reading will tell apart is answered as settled one
 way. The bound is on the product as it is taken, which is measurable before the work rather than
 after it, and going over it asks for nothing rather than for a number of rows nobody would read.
@@ -122,9 +131,15 @@ after it, and going over it asks for nothing rather than for a number of rows no
 Nothing prepares a group's combinations beforehand; they are read off it one at a time as the budget
 is spent. A count decided in advance would have to guess how far the budget reaches, and it cannot:
 a combination a row already sits in costs no row, so a list cut to the budget leaves the ones past
-that point untried while the budget still holds. What a stopped search says is left is therefore
-exact — the product of the factors, which is known before any of them are built, less the ones the
-search reached — and it is said once, at the end, and about the cells and the pairs together,
-because one search stopped.
+that point untried while the budget still holds. What a stopped search says is left is counted over
+what the group has from where the search got to, which is exact and costs one pass over the choices;
+it is said once, at the end, and about the cells and the pairs together, because one search stopped.
+
+Two limits and they bound different things. One is the budget above, which says how many rows a
+generation writes and is shared with the pairs. The other is on how wide a group may be to be
+offered at all: a group is walked over past the combinations already answered and the ones nothing
+could be built for, so one whose choices run to the billions would stand between the author and
+every other group. That one is the group's own number, known before any of it is built, and a group
+over it is not offered rather than offered in part.
 
 Spec: `[#example-partition]`, `[#example-adequacy]`

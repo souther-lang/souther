@@ -316,6 +316,11 @@ public final class Generator {
                 }
                 int[] fixed = group.at(taken[g]++);
                 anyLeft = true;
+                if (fixed == null) {
+                    // The factors this choice takes disagree about a position, so it is not a
+                    // combination the body has a path to and there is nothing to ask for.
+                    continue;
+                }
                 if (sits(written, fixed)) {
                     // A cell a row already sits in is a cell nothing is owed for.
                     continue;
@@ -338,7 +343,7 @@ public final class Generator {
         }
         int cellsLeft = 0;
         for (int g = 0; g < byGroup.size(); g++) {
-            cellsLeft += byGroup.get(g).size() - taken[g];
+            cellsLeft += byGroup.get(g).left(taken[g]);
         }
         int pairsLeft = 0;
         while (!pairs.isEmpty() || !singles.isEmpty()) {

@@ -83,12 +83,12 @@ public final class Interactions {
                                        Symbols symbols) {
         List<Interaction> found = new ArrayList<>();
         new Interactions(plan, symbols).walk(body, InputReads.of(inputs), Map.of(),
-                java.util.Collections.newSetFromMap(new IdentityHashMap<>()), found);
+                java.util.Collections.newSetFromMap(new IdentityHashMap<>()), List.of(), found);
         return List.copyOf(found);
     }
 
     private void walk(Core node, InputReads reads, Map<BindingId, List<Outcome>> bound,
-                      Set<Core> absorbed, List<Interaction> found) {
+                      Set<Core> absorbed, List<Condition> reach, List<Interaction> found) {
         if (!answers(node)) {
             // The same invariant the outcomes are read under, and the walk is where it is decided
             // whether there is a group here at all. A subtree that arrives at no value is one no
@@ -101,11 +101,11 @@ public final class Interactions {
         if (node instanceof Core.LetIn let) {
             // A name given to a decision is still that decision, and a name given to a position is
             // still that position. Both environments widen here and neither answers the other's
-            // question.
-            walk(let.value(), reads, bound, absorbed, found);
+            // question. Nothing about getting here changes: a binding is not a fork.
+            walk(let.value(), reads, bound, absorbed, reach, found);
             Map<BindingId, List<Outcome>> inner = new HashMap<>(bound);
             inner.put(let.binder().binding(), outcomesOf(let.value(), reads, bound));
-            walk(let.body(), reads.and(let.binder(), let.value()), inner, absorbed, found);
+            walk(let.body(), reads.and(let.binder(), let.value()), inner, absorbed, reach, found);
             return;
         }
         List<Core> meeting = absorbed.contains(node) ? null : meetingAt(node, absorbed);
@@ -120,12 +120,65 @@ public final class Interactions {
                 }
             }
             if (factors.size() > 1) {
-                found.add(new Interaction(factors));
+                found.add(new Interaction(reach, factors));
             }
         }
-        for (Core child : childrenOf(node)) {
-            walk(child, reads, bound, absorbed, found);
+        descend(node, reads, bound, absorbed, reach, found);
+    }
+
+    /**
+     * Into each part, under what holds on the way into it.
+     *
+     * <p>Written out per shape rather than over one list of children, because what it takes to get
+     * to a part is different for each: an arm is reached by the fork coming out its way, a
+     * scrutinee is reached whenever the fork is, and the right of an operator that stops early is
+     * reached only where the left did not settle the answer.
+     */
+    private void descend(Core node, InputReads reads, Map<BindingId, List<Outcome>> bound,
+                         Set<Core> absorbed, List<Condition> reach, List<Interaction> found) {
+        switch (node) {
+            case Core.If iff -> {
+                walk(iff.cond(), reads, bound, absorbed, reach, found);
+                Core[] arms = {iff.then(), iff.els()};
+                for (int part = 0; part < arms.length; part++) {
+                    walk(arms[part], reads, bound, absorbed,
+                            and(reach, armCondition(iff, part, reads)), found);
+                }
+            }
+            case Core.Match match -> {
+                TermPath at = reads.pathOf(match.scrutinee(), symbols);
+                walk(match.scrutinee(), reads, bound, absorbed, reach, found);
+                for (int part = 0; part < match.cases().size(); part++) {
+                    Core.Case each = match.cases().get(part);
+                    walk(each.body(), reads, bound, absorbed,
+                            and(reach, caseCondition(at, each, match, part)), found);
+                }
+            }
+            case Core.Binary binary when shortCircuits(binary.op()) -> {
+                walk(binary.left(), reads, bound, absorbed, reach, found);
+                // The right runs only where the left did not settle the answer, and which of the
+                // left's outcomes that is takes reading a value rather than a condition. Where the
+                // left is one this can say a side of, that side is what getting here takes; where
+                // it is not, there is nothing to say and the walk does not go in — a group under a
+                // way in nobody can name is one whose rows may not arrive.
+                Condition went = settledBy(binary.left(), binary.op() == Hir.BinOp.AND, reads);
+                if (went != null) {
+                    walk(binary.right(), reads, bound, absorbed, and(reach, went), found);
+                }
+            }
+            default -> {
+                for (Core child : childrenOf(node)) {
+                    walk(child, reads, bound, absorbed, reach, found);
+                }
+            }
         }
+    }
+
+    /** The way in, and one more thing that holds along it. */
+    private static List<Condition> and(List<Condition> reach, Condition went) {
+        List<Condition> both = new ArrayList<>(reach);
+        both.add(went);
+        return both;
     }
 
     /**
@@ -340,20 +393,28 @@ public final class Interactions {
      * by getting the comparison to answer, which no arm records.
      */
     private Condition armCondition(Core.If iff, int part, InputReads reads) {
-        if (!(iff.cond() instanceof Core.Binary comparison)) {
+        Condition said = settledBy(iff.cond(), part == 0, reads);
+        return said != null ? said : arm(iff, part);
+    }
+
+    /**
+     * That {@code test} came out {@code held}, said of the position it is about, or null where this
+     * reading cannot say which position that is.
+     *
+     * <p>Asked of a fork's condition and of the left of an operator that stops early, which are the
+     * same question: both are a value whose coming out one way is what a row has to arrange.
+     */
+    private Condition settledBy(Core test, boolean held, InputReads reads) {
+        if (!(test instanceof Core.Binary comparison)) {
             // The condition is the value. A Bool the body branches on is a position of its own and
-            // the arms are its two classes, so the decision is said of it rather than of the fork.
-            TermPath read = reads.pathOf(iff.cond(), symbols);
-            return read == null ? arm(iff, part)
-                    : new Condition.Case(read, part == 0 ? "true" : "false");
+            // the two ways it comes out are its two classes, so this is said of it.
+            TermPath read = reads.pathOf(test, symbols);
+            return read == null ? null : new Condition.Case(read, held ? "true" : "false");
         }
         Integer site = plan.byComparison().get(comparison);
         TermPath at = firstOf(reads.pathOf(comparison.left(), symbols),
                 reads.pathOf(comparison.right(), symbols));
-        if (site == null || at == null) {
-            return arm(iff, part);
-        }
-        return new Condition.Side(at, site, part == 0);
+        return site == null || at == null ? null : new Condition.Side(at, site, held);
     }
 
     /** The fork itself, for a decision this reading cannot name a position for. */

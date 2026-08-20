@@ -327,4 +327,47 @@ class TwoDecisionsMeetingAtOneOperatorAreOneInteractionTest {
                 read(INSIDE_AN_ARM.replace("ANSWER", "unreachable \"an A is the only answer\""), "fee"),
                 "nothing arrives at a value down there");
     }
+
+    /** Two decisions each written under one gate, and summed. */
+    private static final String GATED = """
+            module example.gated
+
+            behavior fee : (gate: Bool, a: Bool, b: Bool) -> Int
+
+            let fee (gate, a, b) = {
+                let left = if gate then (if a then 10 else 20) else 0
+                let right = if gate then (if b then 100 else 200) else 0
+
+                left + right
+            }
+            """;
+
+    /**
+     * A meeting inside an arm is reached only by a row that takes that arm, and the group says so.
+     *
+     * <p>Without it a row offered for one of these combinations may go the other way round the fork
+     * and never reach the operator, and a row already written over there reads as one that covers
+     * the combination. What varies together is half of what a group is; the other half is what it
+     * takes to get to where they vary.
+     */
+    @Test
+    void aGroupCarriesWhatItTakesToReachIt() {
+        List<Interaction> found = read(INSIDE_AN_ARM.replace("ANSWER", "counted"), "fee");
+
+        assertEquals(1, found.size(), "the three decisions meet once: " + found);
+        assertEquals(List.of("choice=B"),
+                found.get(0).reach().stream().map(Object::toString).toList(),
+                "and are reached by the arm they are written in: " + found);
+    }
+
+    /**
+     * Two factors written under one gate are still two factors. The gate is in the outcomes of
+     * both, so the choices that put it two ways are not combinations, and the ones left are the
+     * four inside the gate and the one outside it.
+     */
+    @Test
+    void twoFactorsUnderOneGateAreStillAGroup() {
+        assertEquals(List.of(List.of(3, 3)), shape(read(GATED, "fee")),
+                "each side is settled by the gate and then by its own decision");
+    }
 }
