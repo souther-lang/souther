@@ -21,16 +21,6 @@ package souther.compiler.inputs;
  */
 public sealed interface BlockReason {
 
-    /**
-     * A reason a derivation stopped, which is what every one of these was until it was not.
-     *
-     * <p>The two below divide it, and what they divide is narrower than this file: a reading may
-     * also run to the end and be unable to hold what it read, which stops nothing and is
-     * {@link AlternativesNotSeparated}. Named so that the channels carrying a stop can say so — a
-     * position is left with a stop, a document writes a word for one — and so that a reason which
-     * is not one cannot arrive there to be classified as though it were.
-     */
-    sealed interface Stopped extends BlockReason {}
 
     /**
      * A rule this read and could not use, which is a reason there is always a rule to name.
@@ -40,7 +30,7 @@ public sealed interface BlockReason {
      * fact about that rule and this compiler. So a finding built on one of these owes an identity
      * for the rule, and the type is what makes owing it unavoidable.
      */
-    sealed interface AboutARule extends Stopped {}
+    sealed interface AboutARule extends BlockReason {}
 
     /**
      * The reading did not get to the rules of the position, so there is no rule to name.
@@ -51,21 +41,8 @@ public sealed interface BlockReason {
      * the above by the type, because the two used to be one set and a report could name a rule for
      * some of them and not the rest with nothing saying which was which.
      */
-    sealed interface AboutThePosition extends Stopped {}
+    sealed interface AboutThePosition extends BlockReason {}
 
-    /**
-     * Every rule about the position was read, and the reading could not hold what they say together.
-     *
-     * <p>Neither of the two above, which is the whole of why it is written beside them. There is no
-     * rule to name — a choice reaching across two positions is answered by the clauses of the
-     * declaration taken together, and by the limit this compiler reads them under, so no one clause
-     * is answerable for the width. And nothing went unreached: every rule arrived and every rule was
-     * taken in.
-     *
-     * <p>What it costs is that the values reported at the position may be wider than the rules
-     * leave it, so an absence of classes here is not the model dividing the position no way.
-     */
-    record AlternativesNotSeparated() implements BlockReason {}
 
     /**
      * What a value reading's account of a rule it could not use comes to here.
@@ -100,7 +77,7 @@ public sealed interface BlockReason {
      * say rather than whether the reading stopped. Written in terms of the one above, so the
      * classification is stated once.
      */
-    static Stopped of(souther.compiler.values.UnreadReason why) {
+    static BlockReason of(souther.compiler.values.UnreadReason why) {
         return why == souther.compiler.values.UnreadReason.NOT_REACHED
                 ? new ValueRulesNotReached() : ofARuleTheValueReadingLeft(why);
     }

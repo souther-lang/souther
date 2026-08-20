@@ -148,7 +148,6 @@ public sealed interface About {
         }
     }
 
-    /** A position the axes measure whose rules the walk never reached. */
     /**
      * A position whose values are read from a product this reading cannot show the rules admit.
      *
@@ -164,6 +163,7 @@ public sealed interface About {
         }
     }
 
+    /** A position the axes measure whose rules the walk never reached. */
     record APositionWhoseRulesWereNotReached(
             PartitionEvidence.AxisCoverage axis) implements About {
         public APositionWhoseRulesWereNotReached {

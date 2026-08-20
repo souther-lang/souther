@@ -139,6 +139,19 @@ public record AdmissibleSet(ValueSet approximation, Completeness completeness) {
     }
 
     /**
+     * Whether the reading ran to the end of the rules and could not hold what they say together.
+     *
+     * <p>Beside {@link #whyPartial()} and answering a different question. Both leave the values an
+     * upper bound this reading cannot show is what the rules leave, and what would lift them is
+     * different work — so a caller deciding what to do with the set reads whether it is
+     * {@link Completeness.Complete}, and one deciding what to say about it reads these.
+     */
+    public boolean alternativesNotSeparated() {
+        return completeness instanceof Completeness.Wider wider
+                && wider.why().contains(new Widening.AlternativesNotSeparated());
+    }
+
+    /**
      * Which rule of the position went unread, or null where none did.
      *
      * <p>Null is not {@link Completeness.Complete}. A reading may be unable to show the equality

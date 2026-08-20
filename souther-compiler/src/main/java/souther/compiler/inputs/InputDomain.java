@@ -307,8 +307,12 @@ public final class InputDomain {
                 : Distinctions.ofValues(admitted.approximation(), type, symbols);
         BlockReason why = admitted.whyPartial() != null ? Crossing.stopped(admitted.whyPartial())
                 : here;
-        return why == null ? new ReadingResult.Complete(named, List.of())
-                : new ReadingResult.Partial(named, List.of(), why);
+        if (why != null) {
+            return new ReadingResult.Partial(named, List.of(), why);
+        }
+        return admitted.alternativesNotSeparated()
+                ? new ReadingResult.NotSeparated(named, List.of())
+                : new ReadingResult.Complete(named, List.of());
     }
 
     /**

@@ -54,6 +54,23 @@ public sealed interface ReadingResult {
     }
 
     /**
+     * Every rule about the position was read, and the reading could not hold what they say
+     * together.
+     *
+     * <p>What {@link Partial} says about its lists holds here for a different reason: the refusals
+     * still hold and the admissions do not, since what is kept is a product standing for a relation
+     * two of its clauses cannot state. It carries no reason — no rule is answerable for it and what
+     * would lift it is one thing — which is also what tells it from {@link Partial} at a reader.
+     */
+    record NotSeparated(List<Case> kept, List<Case> refused) implements ReadingResult {
+
+        public NotSeparated {
+            kept = List.copyOf(kept);
+            refused = List.copyOf(refused);
+        }
+    }
+
+    /**
      * Nothing about the position was read: its type could not be interpreted, or the walk never
      * reached it.
      *

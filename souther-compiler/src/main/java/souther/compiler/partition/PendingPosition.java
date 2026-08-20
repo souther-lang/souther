@@ -41,7 +41,7 @@ sealed interface PendingPosition {
      * <p>Carried rather than reported: a rule a body writes may still draw a line on this same
      * position, and where one does the position is measured and this is never said.
      */
-    record Blocked(TermPath at, BlockReason.Stopped why) implements PendingPosition {}
+    record Blocked(TermPath at, BlockReason why) implements PendingPosition {}
 
     /**
      * What is still to be answered for at {@code axis}, or null where the axis has evidence.
@@ -104,10 +104,11 @@ sealed interface PendingPosition {
      * question the filter asked was not the question being answered. Each of what a reason may be
      * answers for itself instead, and a stop added beside them stops the compile here.
      *
-     * <p>What this is handed is a {@link BlockReason.Stopped}, so the reasons that are not stops
-     * cannot arrive to be classified at all. A reading that ran to the end of the rules and could
-     * not hold what they say together stopped nothing, has no rule to name, and is not a candidate
-     * this resolves: it is carried and reported on its own, and typing the channel is what says so.
+     * <p>What arrives here is why a derivation stopped, which is the whole of what a
+     * {@link BlockReason} is. A reading that ran to the end of the rules and could not hold what
+     * they say together stopped nothing and is not one of these at all: it is carried as a
+     * qualification of the classes and reported on its own, so it is not a candidate this resolves
+     * and there is nothing here for it to be misfiled as.
      */
     default souther.compiler.inputs.PositionReadingBlocked reportable() {
         if (!(this instanceof Blocked blocked)) {

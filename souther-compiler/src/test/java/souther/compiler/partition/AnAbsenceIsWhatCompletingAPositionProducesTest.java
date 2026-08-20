@@ -60,7 +60,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
 
     /** The same, with a rule about the position's own values that the local reading could not take
      *  in — which is a second way a position can be left unable to reach an absence. */
-    private static Axis pending(StructuralInspection.Pending found, BlockReason.Stopped unread) {
+    private static Axis pending(StructuralInspection.Pending found, BlockReason unread) {
         return Axis.pendingAt(ID, new NumericTerm.ValueOf(AT), Type.BOOL,
                 java.util.List.of(), false, found, unread);
     }
@@ -75,7 +75,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
      */
     @Test
     void aLeafCarryingAnUnreadRuleCompletesAsThatRule() {
-        BlockReason.Stopped unread = new BlockReason.UnreadValueRule();
+        BlockReason unread = new BlockReason.UnreadValueRule();
 
         UndividedPosition said = PendingPosition.of(pending(new StructuralInspection.Leaf(), unread))
                 .complete(new BodyCutInspection.Exhausted());

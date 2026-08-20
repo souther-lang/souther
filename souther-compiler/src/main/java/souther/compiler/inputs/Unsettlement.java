@@ -31,6 +31,16 @@ public sealed interface Unsettlement {
      * <p>So nothing may be concluded from the distinction being counted: it is there because the
      * reading was set aside, and not because anything admits it.
      */
+    /**
+     * Every rule about the position was read, and the reading could not hold what they say
+     * together.
+     *
+     * <p>Not {@link ReadingStopped}. Nothing went unread, so an author told this one has no clause
+     * to go and look at — what would lift it is a reading that keeps the alternatives of a choice
+     * apart, and until then the values at the position hold a pair no value of the type takes.
+     */
+    record AlternativesNotSeparated() implements Unsettlement {}
+
     record RulesLeaveNothing() implements Unsettlement {}
 
     /**

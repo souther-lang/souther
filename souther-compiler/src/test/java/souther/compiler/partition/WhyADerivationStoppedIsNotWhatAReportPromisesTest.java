@@ -60,7 +60,7 @@ class WhyADerivationStoppedIsNotWhatAReportPromisesTest {
      *  — and this says so where a reader looks for it. */
     @Test
     void everyReasonHasAWord() {
-        for (BlockReason.Stopped reason : new BlockReason.Stopped[] {
+        for (BlockReason reason : new BlockReason[] {
                 new BlockReason.TypeUnresolved(),
                 new BlockReason.DepthLimit(),
                 new BlockReason.UnsupportedTraversal(BlockReason.Traversal.SEQUENCE_ELEMENT)}) {

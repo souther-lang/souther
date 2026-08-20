@@ -57,7 +57,7 @@ class OneProjectionWritesTheWordADocumentReadsTest {
      *  switch is reached at all, over the cases a reader here can name. */
     @Test
     void everyInternalReasonHasAWordToBeSaidIn() {
-        List<BlockReason.Stopped> all = List.of(
+        List<BlockReason> all = List.of(
                 new BlockReason.TypeUnresolved(),
                 new BlockReason.DepthLimit(),
                 new BlockReason.UnsupportedTraversal(BlockReason.Traversal.SEQUENCE_ELEMENT),
@@ -67,7 +67,7 @@ class OneProjectionWritesTheWordADocumentReadsTest {
                 new BlockReason.UnreadComparisonDomain(),
                 new BlockReason.ComparisonBetweenPositions());
 
-        for (BlockReason.Stopped each : all) {
+        for (BlockReason each : all) {
             assertFalse(ReportedReason.of(each) == null, each + " has a word");
         }
         assertEquals(1, all.stream().map(ReportedReason::of).distinct().toList().stream()

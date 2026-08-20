@@ -604,6 +604,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case NOTHING_WAS_READ_ABOUT_THE_CASE -> "nothing was read about this case";
             case THE_FORK_IS_NOT_KNOWN_TO_BE_REACHED ->
                     "this arm is inside another, and what reaches it is not read here";
+            case THE_ALTERNATIVES_WERE_NOT_KEPT_APART ->
+                    "every rule here was read, and what they leave this position together is not"
+                            + " what is held of it";
         };
     }
 
