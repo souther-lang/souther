@@ -15,7 +15,10 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
 import souther.compiler.query.Shapes;
+import souther.compiler.check.CapabilityResult;
 import souther.compiler.check.ClauseDischarge;
+import souther.compiler.check.FragmentReason;
+import souther.compiler.check.StaticReading;
 import souther.compiler.check.ContractDischarge;
 import souther.compiler.check.ContractDischarge.RuleDischarge;
 import souther.compiler.types.TypeSymbol;
@@ -1921,8 +1924,8 @@ public final class Analyzer {
         // clauses, and each of them is classified on its own.
         List<RuleDischarge> here = new ArrayList<>();
         for (RuleDischarge rule : discharge.rules()) {
-            int at = lines.offsetOf(rule.capability().clause().line() - 1,
-                    rule.capability().clause().column() - 1);
+            SourcePos written = rule.capability().owed().clause();
+            int at = lines.offsetOf(written.line() - 1, written.column() - 1);
             if (at >= clause.start() && at < clause.end()) {
                 here.add(rule);
             }
@@ -1962,20 +1965,52 @@ public final class Analyzer {
     private String ruleContents(List<RuleDischarge> rules) {
         StringBuilder out = new StringBuilder("**What the check reads of this**\n");
         for (RuleDischarge rule : rules) {
-            ClauseDischarge capability = rule.capability();
-            String read = switch (capability.kind()) {
-                case DERIVABLE -> "**derivable** — read as a relation the numeric domain reasons over";
-                case EXACT_MATCH -> "**exact match** — read as a term the check can name and compare, "
-                        + "and nothing weaker states it";
-                case RUNTIME_ONLY -> "**runtime only** — not read at all, so the check the behavior "
-                        + "runs on its answer is the whole of it";
-            };
             String about = rule.rule().selector() == null ? ""
                     : "`" + rule.rule().selector().name() + "`: ";
-            out.append("\n- ").append(about).append(read)
-                    .append(capability.reason().map(why -> "; " + why).orElse("")).append(".");
+            out.append("\n- ").append(about).append(readOfARule(rule.capability())).append(".");
         }
         return out.toString();
+    }
+
+    /** What came of reading one rule, said as the readings it got — or as this analysis not having
+     *  finished, which says nothing about the rule. */
+    private String readOfARule(ClauseDischarge capability) {
+        return switch (capability.capability()) {
+            case CapabilityResult.AnalysisStopped _ -> "**not determined** — this analysis did not"
+                    + " finish on it, so nothing here says what the check can make of it";
+            case CapabilityResult.Analyzed got -> got.readings().stream()
+                    .map(this::ruleReading).collect(java.util.stream.Collectors.joining("; and "));
+        };
+    }
+
+    /** One reading of a rule, in the terms an author acts on. */
+    private String ruleReading(StaticReading reading) {
+        return switch (reading) {
+            case StaticReading.AsABound _ ->
+                    "**derivable** — read as a relation the numeric domain reasons over";
+            case StaticReading.AsATerm _ -> "**exact match** — read as a term the check can name and"
+                    + " compare, and nothing weaker states it";
+            case StaticReading.Decided it -> it.holds()
+                    ? "**always holds** — it folds on its own, so nothing the behavior answers is"
+                            + " asked for it"
+                    : "**never holds** — it folds the other way on its own, so nothing the behavior"
+                            + " answers satisfies it";
+            case StaticReading.OutsideTheFragment it -> "**runtime only** — not read, so the check"
+                    + " the behavior runs on its answer is the whole of it; " + saidOf(it.why());
+        };
+    }
+
+    /** What a finished reading could not read, in the terms an author acts on. The words are this
+     *  document's; what the reading records is a value, and the two do not have to be one. */
+    private String saidOf(FragmentReason why) {
+        return switch (why) {
+            case FragmentReason.ItCallsAnOperation it -> "it calls `" + it.operation()
+                    + "`, which the check reads as a value and not as a term";
+            case FragmentReason.ItsShapeIsNotRead _ ->
+                    "it is not one of the shapes the check reads";
+            case FragmentReason.NothingAGuardCouldBeHeldAgainst _ -> "every part of it was read, and"
+                    + " neither a bound nor a term came of it";
+        };
     }
 
     /** The discharge classification of the invariant clause the cursor is in, or empty when it is not
@@ -2012,8 +2047,9 @@ public final class Analyzer {
         // starts at or before it.
         SourcePos found = null;
         for (ClauseDischarge c : clauses) {
-            if (lines.offsetOf(c.clause().line() - 1, c.clause().column() - 1) <= offset) {
-                found = c.clause();
+            SourcePos at = c.owed().clause();
+            if (lines.offsetOf(at.line() - 1, at.column() - 1) <= offset) {
+                found = at;
             }
         }
         if (found == null) {
@@ -2023,7 +2059,7 @@ public final class Analyzer {
         // as a bound and as a term besides, and showing whichever came last would describe half of it.
         List<String> said = new ArrayList<>();
         for (ClauseDischarge c : clauses) {
-            if (c.clause().equals(found)) {
+            if (c.owed().clause().equals(found)) {
                 said.add(dischargeContents(c));
             }
         }
@@ -2032,23 +2068,40 @@ public final class Analyzer {
 
     /** What a clause's classification says, in the terms an author acts on. */
     private String dischargeContents(ClauseDischarge clause) {
-        String head = switch (clause.kind()) {
-            case DERIVABLE -> "**Static discharge: derivable**\n\n"
-                    + "The checker can prove this clause from numeric relations when the constructed "
-                    + "value is nameable, so any guard that implies it discharges the construction.";
-            case EXACT_MATCH -> "**Static discharge: exact match**\n\n"
-                    + "The checker can discharge this clause only from a guard establishing the same "
-                    + "canonical property. Nothing weaker discharges it.";
-            case RUNTIME_ONLY -> "**Static discharge: runtime only**\n\n"
-                    + "This clause cannot be represented by the static checker and is enforced only "
-                    + "at construction time. No guard discharges it.";
+        String body = switch (clause.capability()) {
+            // Nothing about the clause. What is said is that this compiler did not finish, because
+            // whether a guard discharges it is exactly what was not established.
+            case CapabilityResult.AnalysisStopped _ -> "**Static discharge: not determined**\n\n"
+                    + "This analysis did not finish on this clause, so nothing is known here about "
+                    + "whether a guard discharges it. The check on construction stands either way.";
+            case CapabilityResult.Analyzed got -> got.readings().stream().map(this::clauseReading)
+                    .collect(java.util.stream.Collectors.joining("\n\n"));
         };
-        String body = clause.reason().map(why -> head + "\n\n" + why + ".").orElse(head);
         // What the clause is called is what an attempted construction's arm and a boundary issue read,
         // so it belongs beside how the clause discharges.
-        return clause.name()
+        return clause.owed().name()
                 .map(n -> body + "\n\nDeparted from by name: `| " + n + " -> ...`.")
                 .orElse(body);
+    }
+
+    /** One reading of an invariant clause. */
+    private String clauseReading(StaticReading reading) {
+        return switch (reading) {
+            case StaticReading.AsABound _ -> "**Static discharge: derivable**\n\n"
+                    + "The checker can prove this clause from numeric relations when the constructed "
+                    + "value is nameable, so any guard that implies it discharges the construction.";
+            case StaticReading.AsATerm _ -> "**Static discharge: exact match**\n\n"
+                    + "The checker can discharge this clause only from a guard establishing the same "
+                    + "canonical property. Nothing weaker discharges it.";
+            case StaticReading.Decided it -> it.holds()
+                    ? "**Static discharge: always holds**\n\nThis clause folds to true on its own, "
+                            + "so a construction owes nothing for it and no guard is needed."
+                    : "**Static discharge: never holds**\n\nThis clause folds to false on its own. "
+                            + "No guard establishes it, so no construction of this type passes it.";
+            case StaticReading.OutsideTheFragment it -> "**Static discharge: runtime only**\n\n"
+                    + "This clause cannot be represented by the static checker and is enforced only "
+                    + "at construction time. No guard discharges it.\n\n" + saidOf(it.why()) + ".";
+        };
     }
 
     /** The innermost node of {@code kind} whose span contains {@code offset}, or null. */

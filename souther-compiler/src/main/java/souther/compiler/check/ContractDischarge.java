@@ -23,12 +23,11 @@ import java.util.Set;
  * cases nothing is said about.
  *
  * <p>The same classification a data's clause gets ({@link ClauseDischarge}), asked of the other kind
- * of clause. It is the same question: whether what is written is a relation the numeric domain
- * reasons over, a term the check can name and compare, or something it cannot represent at all. What
- * follows from the answer differs — an invariant's classification says what discharges a
- * construction, a rule's says how much of the relation is there to be read at a call — but what is
- * being asked of the expression is one thing, and asking it twice would be two answers to keep
- * agreeing.
+ * of clause. It is the same question: what the clause owes, and how much of it this compiler could
+ * carry into a form a guard can be held against ({@link StaticReading}). What follows from the answer
+ * differs — an invariant's classification says what discharges a construction, a rule's says how much
+ * of the relation is there to be read at a call — but what is being asked of the expression is one
+ * thing, and asking it twice would be two answers to keep agreeing.
  *
  * <p>The unit is the rule, and under it the conjunct. A rule is already specialized to one case, so
  * {@code ensures Todo | NotFound -> value.id == id} is classified once for {@code Todo} and once for
@@ -90,10 +89,9 @@ public record ContractDischarge(List<RuleDischarge> rules,
 
         List<RuleDischarge> out = new ArrayList<>();
         for (StatedContract.Conjunct conjunct : rule.conjuncts()) {
-            for (ClauseDischarge read : InvariantChecker.capabilitiesOf(conjunct, locations, symbols,
-                    contract.behavior().name())) {
-                out.add(new RuleDischarge(rule.id(), read.named(rule.clause())));
-            }
+            out.add(new RuleDischarge(rule.id(), InvariantChecker
+                    .capabilityOf(conjunct, locations, symbols, contract.behavior().name())
+                    .named(rule.clause())));
         }
         return out;
     }
