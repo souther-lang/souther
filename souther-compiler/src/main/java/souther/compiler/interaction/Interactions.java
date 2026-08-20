@@ -89,10 +89,13 @@ public final class Interactions {
 
     private void walk(Core node, InputReads reads, Map<BindingId, List<Outcome>> bound,
                       Set<Core> absorbed, List<Interaction> found) {
-        if (node == null) {
-            // A body the checker refused a clause of has a hole where the clause was, and the hole
-            // reaches here as a part that is not there. Nothing is read of it and the walk goes on:
-            // what a decision beside it settles is still what it settles.
+        if (!answers(node)) {
+            // The same invariant the outcomes are read under, and the walk is where it is decided
+            // whether there is a group here at all. A subtree that arrives at no value is one no
+            // row observes: the decisions inside an arm that aborts are made and then thrown away
+            // with the run, so a group found in there would be offered rows that settle nothing.
+            // A part that is not there — the hole a refused clause leaves — answers nothing either
+            // and stops the walk the same way.
             return;
         }
         if (node instanceof Core.LetIn let) {

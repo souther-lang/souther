@@ -286,4 +286,45 @@ class TwoDecisionsMeetingAtOneOperatorAreOneInteractionTest {
         assertEquals(List.of(), read(ABORTING, "fee"),
                 "one of the two arms answers a value, so the left charge is not a factor");
     }
+
+    /** Three decisions summed inside an arm, where the arm around them settles what it settles. */
+    private static final String INSIDE_AN_ARM = """
+            module example.arm
+
+            data Choice = A | B
+
+            behavior fee : (choice: Choice, a: Bool, b: Bool, c: Bool) -> Int
+
+            let fee (choice, a, b, c) =
+                match choice with
+                    | A -> 0
+                    | B -> {
+                        let counted =
+                            (if a then 1 else 0)
+                            + (if b then 1 else 0)
+                            + (if c then 1 else 0)
+
+                        ANSWER
+                    }
+            """;
+
+    /** The arm the decisions are in answers a value, so what is inside it is read. */
+    @Test
+    void whatIsInsideAnArmThatAnswersIsRead() {
+        assertEquals(List.of(List.of(2, 2, 2)),
+                shape(read(INSIDE_AN_ARM.replace("ANSWER", "counted"), "fee")),
+                "the three decisions make the value the arm answers with");
+    }
+
+    /**
+     * The same decisions in an arm that answers nothing are not read. They are made and thrown away
+     * with the run that aborts, so no row observes what they came to — and a group found in there
+     * would be offered rows that settle nothing, out of the budget the rest of them share.
+     */
+    @Test
+    void whatIsInsideAnArmThatAnswersNothingIsNotRead() {
+        assertEquals(List.of(),
+                read(INSIDE_AN_ARM.replace("ANSWER", "unreachable \"an A is the only answer\""), "fee"),
+                "nothing arrives at a value down there");
+    }
 }

@@ -8,7 +8,9 @@ import souther.compiler.interaction.Outcome;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * The combinations a group of decisions has, as the classes a row filling one sits in.
@@ -24,73 +26,113 @@ import java.util.List;
  * this reading knows is there and cannot reach. Offering either would hand an author rows that
  * establish nothing, which is the defect the group was read to avoid — so the group goes, and what
  * is left is the pair space, which is where such a behavior already was.
+ *
+ * <p>Nor is a group offered where two of its factors read one position. A row cannot put that
+ * position at two classes, so the combinations of the two are not the product of them and there is
+ * no count of the group that is not itself an enumeration. What such a group would ask about the
+ * shared position is what covering that position's classes asks already.
  */
 public final class InteractionCells {
+
+    /**
+     * How many combinations a group may have and still be offered.
+     *
+     * <p>A group is taken from while there is budget for a row and no further, so what this bounds
+     * is not how many rows come out of it. It bounds the walk over its combinations, which goes on
+     * past the ones already answered and the ones nothing could be built for — and a group whose
+     * product runs to the billions would have that walk stand between the author and every other
+     * group. Wide enough that a group the budget could work through is never cut, and the number is
+     * the group's own and known before any of it is built.
+     */
+    private static final int MOST_CELLS = 4096;
 
     private InteractionCells() {}
 
     /**
-     * One group's combinations, and how many of them there are.
+     * One group's combinations, as somewhere to read them from rather than as a list.
      *
-     * <p>The two are not the same number where the enumeration was cut short, which is why the size
-     * is carried rather than read off the list. A caller saying how much of a group it did not get
-     * to has to say it about the group and not about the part of it that was built.
+     * <p>Nothing is built until it is asked for. Which combinations get offered is the row budget's
+     * to decide, and a list built beforehand would have to guess how much of it the budget reaches:
+     * a combination a written row already sits in costs no row, so a caller that stopped enumerating
+     * at the budget would leave the ones past that point untried while the budget still held.
      *
-     * @param size  how many combinations the group has. What was enumerated where that finished,
-     *              and the product of the factors — an upper bound, since two factors reading one
-     *              position have combinations they disagree at — where it did not
-     * @param cells the ones that were built, in the order the factors are taken
+     * @param byFactor  where each outcome of each factor puts a row, one list per factor
+     * @param positions how many positions a cell is over
      */
-    public record Group(int size, List<Generator.Cell> cells) {
+    public record Group(List<List<int[]>> byFactor, int positions) {
 
         public Group {
-            cells = List.copyOf(cells);
+            byFactor = List.copyOf(byFactor);
+        }
+
+        /**
+         * How many combinations the group has.
+         *
+         * <p>Exact, and known without building any of them: the factors read no position in common,
+         * so every choice of one outcome from each is a cell.
+         */
+        public int size() {
+            long size = 1;
+            for (List<int[]> factor : byFactor) {
+                size *= factor.size();
+                if (size >= MOST_CELLS) {
+                    return MOST_CELLS;
+                }
+            }
+            return (int) size;
+        }
+
+        /** The {@code index}th combination, counting the factors off in the order they are read. */
+        public int[] at(int index) {
+            int[] at = new int[positions];
+            Arrays.fill(at, -1);
+            int left = index;
+            for (List<int[]> factor : byFactor) {
+                int[] outcome = factor.get(left % factor.size());
+                left /= factor.size();
+                for (int i = 0; i < at.length; i++) {
+                    if (outcome[i] >= 0) {
+                        at[i] = outcome[i];
+                    }
+                }
+            }
+            return at;
         }
     }
 
-    /**
-     * The cells of each group over the ordered {@code axes}.
-     *
-     * <p>Kept per group rather than run together so a caller with a row budget can spend it across
-     * the groups instead of on whichever the walk met first.
-     *
-     * @param most how many cells of one group are worth building. Beyond what a caller can offer,
-     *             enumerating is work whose answer is thrown away
-     */
-    public static List<Group> of(List<Interaction> groups, List<Axis> axes, int most) {
+    /** The groups worth offering, over the ordered {@code axes}. */
+    public static List<Group> of(List<Interaction> groups, List<Axis> axes) {
         List<Group> out = new ArrayList<>();
         for (Interaction group : groups) {
             List<List<int[]>> placed = placedBy(group, axes);
-            if (placed == null) {
-                continue;
-            }
-            Group built = cellsOf(placed, axes.size(), most);
-            if (!built.cells().isEmpty()) {
-                out.add(built);
+            if (placed != null && productOf(placed) < MOST_CELLS) {
+                out.add(new Group(placed, axes.size()));
             }
         }
         return List.copyOf(out);
     }
 
-    /** How many combinations the factors have between them, as far as an {@code int} says it. */
-    private static int productOf(List<List<int[]>> placed) {
+    /** How far the product runs, stopping where it is past anything that would be offered. */
+    private static long productOf(List<List<int[]>> placed) {
         long size = 1;
         for (List<int[]> factor : placed) {
             size *= factor.size();
-            if (size >= Integer.MAX_VALUE) {
-                return Integer.MAX_VALUE;
+            if (size >= MOST_CELLS) {
+                return MOST_CELLS;
             }
         }
-        return (int) size;
+        return size;
     }
 
     /**
-     * Where each outcome of each factor puts a row, or null where a factor cannot be told apart.
+     * Where each outcome of each factor puts a row, or null where the group is not one to offer.
      */
     private static List<List<int[]>> placedBy(Interaction group, List<Axis> axes) {
         List<List<int[]>> out = new ArrayList<>();
+        Set<Integer> taken = new LinkedHashSet<>();
         for (Factor factor : group.factors()) {
             List<int[]> placements = new ArrayList<>();
+            Set<Integer> reads = new LinkedHashSet<>();
             for (Outcome outcome : factor.outcomes()) {
                 int[] at = new int[axes.size()];
                 Arrays.fill(at, -1);
@@ -100,7 +142,17 @@ public final class InteractionCells {
                 if (fixesNothing(at) || alreadyThere(placements, at)) {
                     return null;
                 }
+                for (int i = 0; i < at.length; i++) {
+                    if (at[i] >= 0) {
+                        reads.add(i);
+                    }
+                }
                 placements.add(at);
+            }
+            for (int position : reads) {
+                if (!taken.add(position)) {
+                    return null;
+                }
             }
             out.add(placements);
         }
@@ -123,58 +175,6 @@ public final class InteractionCells {
             }
         }
         return false;
-    }
-
-    /** Every way one outcome of each factor can be taken together, where they agree. */
-    private static Group cellsOf(List<List<int[]>> placed, int positions, int most) {
-        boolean cut = false;
-        List<int[]> out = new ArrayList<>();
-        int[] nothing = new int[positions];
-        Arrays.fill(nothing, -1);
-        out.add(nothing);
-        for (List<int[]> factor : placed) {
-            List<int[]> next = new ArrayList<>();
-            // Per factor, because it says this factor's expansion stopped. Kept across them only as
-            // the answer to whether anything was left out at all.
-            boolean full = false;
-            for (int[] soFar : out) {
-                for (int[] outcome : factor) {
-                    int[] both = merged(soFar, outcome);
-                    // Two factors reading one position leave the combinations they disagree at
-                    // unbuilt. Such a combination is not one the body refuses; there is no path
-                    // through the body that takes both, so there is nothing there to ask for.
-                    if (both != null) {
-                        next.add(both);
-                    }
-                    if (next.size() >= most) {
-                        cut = true;
-                        full = true;
-                        break;
-                    }
-                }
-                if (full) {
-                    break;
-                }
-            }
-            out = next;
-        }
-        return new Group(cut ? productOf(placed) : out.size(),
-                out.stream().map(Generator.Cell::new).toList());
-    }
-
-    /** The two together, or null where they fix one position at two classes. */
-    private static int[] merged(int[] one, int[] other) {
-        int[] both = one.clone();
-        for (int i = 0; i < both.length; i++) {
-            if (other[i] < 0) {
-                continue;
-            }
-            if (both[i] >= 0 && both[i] != other[i]) {
-                return null;
-            }
-            both[i] = other[i];
-        }
-        return both;
     }
 
     /** The class {@code condition} settles its position at, where this can say which. */

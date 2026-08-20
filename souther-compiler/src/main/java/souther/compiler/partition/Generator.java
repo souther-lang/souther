@@ -300,47 +300,46 @@ public final class Generator {
         // generation kept, and the caller's list is neither ordered the same nor filtered the same.
         // No more of any one group than could be offered, since the rest would be built to be
         // thrown away.
-        List<InteractionCells.Group> byGroup = InteractionCells.of(groups, axes, MAX_ROWS);
-        int[] answered = new int[byGroup.size()];
-        for (Seeded seeded : inTurn(byGroup)) {
-            int[] fixed = seeded.cell().at();
-            if (sits(written, fixed)) {
-                // A cell a row already sits in is a cell nothing is owed for. Asked before the
-                // budget and not after it: whether a cell is still owed is a fact about the rows
-                // written, and a limit that turned an answered cell into an unresolved one would
-                // make what is owed depend on where the search stopped.
-                answered[seeded.group()]++;
-                continue;
+        List<InteractionCells.Group> byGroup = InteractionCells.of(groups, axes);
+        int[] taken = new int[byGroup.size()];
+        // One from each group in turn, while there is budget for a row. A group met first would
+        // otherwise spend the whole budget and leave the rest of them nothing; and taken this way
+        // there is no count of how many of a group to prepare, so a combination a written row
+        // already sits in costs no row and does not stand in for one that would have.
+        boolean anyLeft = true;
+        while (anyLeft && rows.size() < MAX_ROWS) {
+            anyLeft = false;
+            for (int g = 0; g < byGroup.size() && rows.size() < MAX_ROWS; g++) {
+                InteractionCells.Group group = byGroup.get(g);
+                if (taken[g] >= group.size()) {
+                    continue;
+                }
+                int[] fixed = group.at(taken[g]++);
+                anyLeft = true;
+                if (sits(written, fixed)) {
+                    // A cell a row already sits in is a cell nothing is owed for.
+                    continue;
+                }
+                int[] where = assign(axes, pairs, fixed);
+                Attempt built = build(subject, axes, where, check);
+                if (built.row() == null) {
+                    unresolved.add(new UnresolvedCombination(labels(axes, fixed), built.reason(),
+                            built.detail(), built.said()));
+                    continue;
+                }
+                // Named for the cell it was composed for, which is the positions the decisions
+                // read. What the pass below filled the rest of the row with is what this row turns
+                // out to settle beside that, and a name carrying it would move when nothing about
+                // the row had.
+                rows.add(new GeneratedRow(labels(axes, fixed), built.row().inputs()));
+                written.add(where);
+                cover(pairs, singles, axes, where);
             }
-            if (rows.size() >= MAX_ROWS) {
-                // The budget the pairs are held to, and not a second one. What is left is counted
-                // below and said once, rather than named here a combination at a time — the ones
-                // the enumeration never reached could not be named, and a list of the rest reads
-                // as the whole of what is left.
-                continue;
-            }
-            int[] where = assign(axes, pairs, fixed);
-            Attempt built = build(subject, axes, where, check);
-            // Answered either way: a cell that could not be built is reported as that, and counting
-            // it again as one the search never got to would say one thing twice.
-            answered[seeded.group()]++;
-            if (built.row() == null) {
-                unresolved.add(new UnresolvedCombination(labels(axes, fixed), built.reason(),
-                        built.detail(), built.said()));
-                continue;
-            }
-            // Named for the cell it was composed for, which is the positions the decisions read.
-            // What the pass below filled the rest of the row with is what this row turns out to
-            // settle beside that, and a name carrying it would move when nothing about the row had.
-            rows.add(new GeneratedRow(labels(axes, fixed), built.row().inputs()));
-            written.add(where);
-            cover(pairs, singles, axes, where);
         }
-        long unreached = 0;
+        int cellsLeft = 0;
         for (int g = 0; g < byGroup.size(); g++) {
-            unreached += Math.max(0, byGroup.get(g).size() - answered[g]);
+            cellsLeft += byGroup.get(g).size() - taken[g];
         }
-        int cellsLeft = (int) Math.min(unreached, Integer.MAX_VALUE);
         int pairsLeft = 0;
         while (!pairs.isEmpty() || !singles.isEmpty()) {
             if (rows.size() >= MAX_ROWS) {
@@ -529,29 +528,6 @@ public final class Generator {
 
     // --- the pair space -------------------------------------------------------------------------
 
-    /**
-     * A combination of the decisions that settle one value together, as the classes a row filling it
-     * sits in.
-     *
-     * <p>However many positions those decisions read, which is not two and is not every position: an
-     * arm that never looks at a position leaves it free, and the pass that fills the rest of the row
-     * spends it on the pairs nothing covers. Fixing it here would name a combination the body has no
-     * path to.
-     *
-     * @param at one class per position, and {@code -1} where this cell's decisions do not read it
-     */
-    public record Cell(int[] at) {
-
-        public Cell {
-            at = at.clone();
-        }
-
-        @Override
-        public int[] at() {
-            return at.clone();
-        }
-    }
-
     /** One class of one position against one class of another. Positions are held as their order in
      * the ordered axes, so the natural order of these is the lexicographic order the search takes. */
     private record Pair(int left, int leftClass, int right, int rightClass)
@@ -661,30 +637,6 @@ public final class Generator {
             }
         }
     }
-
-    /**
-     * The groups' cells, one from each in turn.
-     *
-     * <p>A group met first would otherwise spend the whole budget and leave the rest of them
-     * nothing. Taken in turn, every group is offered a cell before any is offered a second, so what
-     * a limit cuts off is the depth of the groups rather than all but one of them.
-     */
-    private static List<Seeded> inTurn(List<InteractionCells.Group> byGroup) {
-        List<Seeded> out = new ArrayList<>();
-        int deepest = byGroup.stream().mapToInt(each -> each.cells().size()).max().orElse(0);
-        for (int turn = 0; turn < deepest; turn++) {
-            for (int g = 0; g < byGroup.size(); g++) {
-                List<Cell> cells = byGroup.get(g).cells();
-                if (turn < cells.size()) {
-                    out.add(new Seeded(g, cells.get(turn)));
-                }
-            }
-        }
-        return out;
-    }
-
-    /** A cell and which group it is one of, which is what says how much of that group is left. */
-    private record Seeded(int group, Cell cell) {}
 
     /** Whether a row already written fixes every position {@code fixed} does, the same way. */
     private static boolean sits(List<int[]> written, int[] fixed) {

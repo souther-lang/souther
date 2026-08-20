@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -197,5 +198,45 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
 
         assertTrue(block.contains("(B, "),
                 "the class the body says cannot arise is still one a row is offered at: " + block);
+    }
+
+    /** Two decisions of three and four outcomes, whose group has twelve combinations. */
+    private static final String TWELVE = """
+            module example.twelve
+
+            data Tier = Bronze | Silver | Gold
+            data Speed = Slow | Mid | Fast | Warp
+
+            behavior fee : (tier: Tier, speed: Speed) -> Int
+
+            let rate (t: Tier): Int =
+                match t with
+                    | Bronze -> 0
+                    | Silver -> 1
+                    | Gold -> 2
+
+            let extra (s: Speed): Int =
+                match s with
+                    | Slow -> 0
+                    | Mid -> 1
+                    | Fast -> 2
+                    | Warp -> 3
+
+            let fee (tier, speed) = rate(tier) + extra(speed)
+            """;
+
+    /**
+     * Every combination of the group is offered, and how many there are is the product of its
+     * factors. Nothing prepares a list of them beforehand: which ones get offered is the row
+     * budget's to decide, and a list cut to the budget would leave the ones past that point untried
+     * while the budget still held — a combination a row already sits in costs no row.
+     */
+    @Test
+    void everyCombinationOfAGroupInsideTheBudgetIsOffered() {
+        String block = block(TWELVE);
+
+        assertEquals(12, rows(block), "three outcomes against four is twelve rows: " + block);
+        assertTrue(!block.contains("generation stopped"),
+                "and nothing was left for a limit to cut off: " + block);
     }
 }

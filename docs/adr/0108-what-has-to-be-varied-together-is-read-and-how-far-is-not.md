@@ -49,7 +49,10 @@ a combination whose left half never reaches the operator. An operator that stops
 answer is settled does not consume both its sides either — `&&` leaves the right unevaluated
 wherever the left settled it — so its two sides are not a meeting and the combinations of their
 decisions are combinations no path takes. `NormalReturn` is the reading that already tells a body's
-arms apart this way and is what answers it here.
+arms apart this way and is what answers it here — at the arms a value is enumerated over and at
+every node the walk that finds the groups stands on, which are the two places a branch could be
+taken for a path. A group found under an arm that aborts would be offered rows that settle nothing:
+the decisions in there are made and thrown away with the run.
 
 Which is a different question from what the pair space asks for, and the two answers do not have to
 agree. A class the rules admit stays owed a row however the body describes it: a model's own claim
@@ -92,6 +95,12 @@ by a row that establishes something.
 A cell is named for the classes it fixes, which is what it was composed for. What the row settles
 beside that is the generation's to change and is not in the name.
 
+The factors of a group read no position in common. Two that read one position have combinations a
+row cannot write — the position would have to hold two classes — so their combinations are not the
+product of them and there is no count of the group that is not itself an enumeration. Such a group
+is not offered, and what it would have asked about the shared position is what covering that
+position's classes asks already.
+
 The cells are held to the row budget the pairs are held to, and not to a second one. A group has as
 many combinations as the product of its factors, which grows with the body rather than with the
 number of inputs, so a run of five three-way decisions has two hundred and forty-three. They are
@@ -110,11 +119,12 @@ A value that can be settled more ways than the reading will tell apart is answer
 way. The bound is on the product as it is taken, which is measurable before the work rather than
 after it, and going over it asks for nothing rather than for a number of rows nobody would read.
 
-What a stopped search says is left is counted over the group and not over the part of it that was
-built. How many combinations a group has is the product of its factors, which is known before any of
-them are enumerated, so a limit on how many are worth building does not move the number the author
-is told. The count is exact where the enumeration finished and an upper bound where it did not,
-since two factors reading one position have combinations they disagree at; it is said once, at the
-end, and about the cells and the pairs together, because one search stopped.
+Nothing prepares a group's combinations beforehand; they are read off it one at a time as the budget
+is spent. A count decided in advance would have to guess how far the budget reaches, and it cannot:
+a combination a row already sits in costs no row, so a list cut to the budget leaves the ones past
+that point untried while the budget still holds. What a stopped search says is left is therefore
+exact — the product of the factors, which is known before any of them are built, less the ones the
+search reached — and it is said once, at the end, and about the cells and the pairs together,
+because one search stopped.
 
 Spec: `[#example-partition]`, `[#example-adequacy]`
