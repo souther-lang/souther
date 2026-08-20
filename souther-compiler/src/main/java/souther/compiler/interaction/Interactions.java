@@ -4,9 +4,12 @@ import souther.compiler.core.Core;
 import souther.compiler.coverage.ControlPointId;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Which decisions of a behavior's body determine one value together.
@@ -33,22 +36,33 @@ public final class Interactions {
     /** The groups of {@code body}, in the order the walk meets them. */
     public static List<Interaction> of(String behavior, Core body, CoverageSites.Plan plan) {
         List<Interaction> found = new ArrayList<>();
-        walk(body, plan, found);
+        walk(body, plan, Map.of(), found);
         return List.copyOf(found);
     }
 
-    private static void walk(Core node, CoverageSites.Plan plan, List<Interaction> found) {
+    private static void walk(Core node, CoverageSites.Plan plan,
+                             Map<BindingId, List<Outcome>> bound, List<Interaction> found) {
         if (node == null) {
             // A body the checker refused a clause of has a hole where the clause was, and the hole
             // reaches here as a part that is not there. Nothing is read of it and the walk goes on:
             // what a decision beside it settles is still what it settles.
             return;
         }
+        if (node instanceof Core.LetIn let) {
+            // A name given to a decision is still that decision. What the body reads at the name is
+            // what the value was settled by, so the outcomes travel with the binding rather than
+            // stopping at it — a decision named before it is used would otherwise meet nothing.
+            walk(let.value(), plan, bound, found);
+            Map<BindingId, List<Outcome>> inner = new HashMap<>(bound);
+            inner.put(let.binder().binding(), outcomesOf(let.value(), plan, bound));
+            walk(let.body(), plan, inner, found);
+            return;
+        }
         List<Core> meeting = meetingAt(node);
         if (meeting != null) {
             List<Factor> factors = new ArrayList<>();
             for (Core operand : meeting) {
-                List<Outcome> outcomes = outcomesOf(operand, plan);
+                List<Outcome> outcomes = outcomesOf(operand, plan, bound);
                 // One outcome is no decision: the operand answers the same way however the row is
                 // written, so nothing about it can be varied against the other operand.
                 if (outcomes.size() > 1) {
@@ -60,7 +74,7 @@ public final class Interactions {
             }
         }
         for (Core child : childrenOf(node)) {
-            walk(child, plan, found);
+            walk(child, plan, bound, found);
         }
     }
 
@@ -103,7 +117,8 @@ public final class Interactions {
      * product. That is a rule about every other node and not an arm nobody filled in — what it does
      * not cover is exactly what forks.
      */
-    private static List<Outcome> outcomesOf(Core e, CoverageSites.Plan plan) {
+    private static List<Outcome> outcomesOf(Core e, CoverageSites.Plan plan,
+                                            Map<BindingId, List<Outcome>> bound) {
         if (e == null) {
             return List.of(new Outcome(List.of()));
         }
@@ -113,7 +128,7 @@ public final class Interactions {
             for (int part = 0; part < match.cases().size(); part++) {
                 Core.Case each = match.cases().get(part);
                 Condition when = caseCondition(at, each, match, part, plan);
-                for (Outcome inner : outcomesOf(each.body(), plan)) {
+                for (Outcome inner : outcomesOf(each.body(), plan, bound)) {
                     out.add(prepend(when, inner));
                 }
             }
@@ -124,15 +139,24 @@ public final class Interactions {
             List<Core> arms = some(iff.then(), iff.els());
             for (int part = 0; part < arms.size(); part++) {
                 Condition when = armCondition(iff, part, plan);
-                for (Outcome inner : outcomesOf(arms.get(part), plan)) {
+                for (Outcome inner : outcomesOf(arms.get(part), plan, bound)) {
                     out.add(prepend(when, inner));
                 }
             }
             return out;
         }
+        if (e instanceof Core.Read read) {
+            List<Outcome> named = bound.get(read.binding());
+            return named != null ? named : List.of(new Outcome(List.of()));
+        }
+        if (e instanceof Core.LetIn let) {
+            Map<BindingId, List<Outcome>> inner = new HashMap<>(bound);
+            inner.put(let.binder().binding(), outcomesOf(let.value(), plan, bound));
+            return outcomesOf(let.body(), plan, inner);
+        }
         List<Outcome> out = List.of(new Outcome(List.of()));
         for (Core child : childrenOf(e)) {
-            out = product(out, outcomesOf(child, plan));
+            out = product(out, outcomesOf(child, plan, bound));
         }
         return out;
     }
@@ -157,9 +181,15 @@ public final class Interactions {
      * by getting the comparison to answer, which no arm records.
      */
     private static Condition armCondition(Core.If iff, int part, CoverageSites.Plan plan) {
+        if (!(iff.cond() instanceof Core.Binary comparison)) {
+            // The condition is the value. A Bool the body branches on is a position of its own and
+            // the arms are its two classes, so the decision is said of it rather than of the fork.
+            TermPath read = pathOf(iff.cond());
+            return read == null ? arm(iff, part, plan)
+                    : new Condition.Case(read, part == 0 ? "true" : "false");
+        }
         Integer site = plan.byComparison().get(iff.cond());
-        TermPath at = iff.cond() instanceof Core.Binary comparison
-                ? firstOf(pathOf(comparison.left()), pathOf(comparison.right())) : null;
+        TermPath at = firstOf(pathOf(comparison.left()), pathOf(comparison.right()));
         if (site == null || at == null) {
             return arm(iff, part, plan);
         }
