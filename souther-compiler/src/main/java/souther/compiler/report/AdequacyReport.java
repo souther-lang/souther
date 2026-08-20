@@ -1666,8 +1666,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // Which rule this is about, where the finding is about one. The words in `subject` are
             // how a reader finds it, and two rules an author named alike have the same words — so a
             // consumer joining findings to the questions they came from wants this.
-            if (finding.about() instanceof About.AQuestionNothingAnswered(var asked)) {
-                ruleId(f.putObject("ruleId"), asked.rule());
+            //
+            // Both kinds that are about a rule. Written for the question alone, two rules stopped
+            // by one limit at one position came out as two findings identical in every field, and
+            // a consumer had nothing to join them to the entries that do carry the rule.
+            switch (finding.about()) {
+                case About.AQuestionNothingAnswered(var asked) ->
+                        ruleId(f.putObject("ruleId"), asked.rule());
+                case About.ARuleThisCouldNotRead(var unread) ->
+                        ruleId(f.putObject("ruleId"), unread.rule());
+                default -> { }
             }
             // Present where the kind has one. A finding a build is not told about under any code is
             // not one with an empty code, and a consumer joining these to the diagnostics a build

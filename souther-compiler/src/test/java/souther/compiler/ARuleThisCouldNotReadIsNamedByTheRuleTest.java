@@ -171,30 +171,73 @@ class ARuleThisCouldNotReadIsNamedByTheRuleTest {
     }
 
     /**
-     * A rule can be both, and the two say different things about it.
+     * One rule under both measures, and the same identity under each.
      *
      * <p>This measure says the reading that draws lines could not adopt the rule; the accounting
-     * says no reading at all took it in. A rule can be either without the other — one the value
-     * reading took in whole is still one no line came of — and where both are true a reader is told
-     * both, under the same {@code ruleId} and in different words. Deduplicated, the two would be
-     * back to one answer for two questions, which is the pair this keeps apart.
+     * says no reading at all took it in. A rule can be either without the other, and where both are
+     * true a reader is told both — in different words, about the same rule. So the two entries
+     * carry one identity and a consumer can join them; deduplicated, they would be back to one
+     * answer for two questions.
+     *
+     * <p>Asked of the identities and not of the words. Two entries that happen to mention a rule
+     * apiece say nothing about whether it is the same rule, which is the whole of what a consumer
+     * wants here.
      */
     @Test
-    void aRuleMayBeBothUnreadHereAndUnansweredBeside() {
+    void oneRuleUnderBothMeasuresCarriesOneIdentity() {
+        // A bound this reads, and beside it a clause the reading of ends could not turn into a line
+        // and the reading of values has no word for. The second is the rule under both measures.
         String model = """
                 module m
 
-                data Ok
-                data No
-                data Tag = String
-                    invariant long = String.length(value) > 9223372036854775807
+                data Length = Int
+                    invariant min    = value >= 1
+                    invariant square = value * value >= 4
 
-                behavior f : (t: Tag) -> Ok | No
-                let f (t) = if String.length(t.value) > Int.add(1, 2) then Ok else No
+                behavior price : (length: Length) -> Int
+                let price (length) = if length.value >= 5 then 1 else 2
                 """;
 
-        assertTrue(human(model).contains("not read: if@"), human(model));
-        assertTrue(human(model).contains("not accounted for: invariant Tag (long)"), human(model));
+        JsonNode partition = JSON.readTree(json(model))
+                .get("modules").get(0).get("behaviors").get(0).get("partition");
+        Set<String> unread = ruleIdsOf(partition.get("notRead"));
+        Set<String> standing = ruleIdsOf(partition.get("unanswered"));
+
+        assertEquals(1, standing.size(), () -> partition.toString());
+        assertTrue(unread.containsAll(standing), () -> partition.toString());
+    }
+
+    /** And a finding carries it too, so the two surfaces join. */
+    @Test
+    void aFindingAboutARuleCarriesTheIdentityAsWell() {
+        JsonNode findings = JSON.readTree(json(TWO_INVARIANTS))
+                .get("modules").get(0).get("behaviors").get(0).get("findings");
+
+        Set<String> said = new LinkedHashSet<>();
+        int counted = 0;
+        for (JsonNode each : findings) {
+            if (!"partition_not_read".equals(each.get("kind").asString())) {
+                continue;
+            }
+            counted++;
+            said.add(each.get("ruleId").toString());
+        }
+        assertEquals(4, counted, findings::toString);
+        assertEquals(2, said.size(), findings::toString);
+    }
+
+    /** The rules named by every entry of {@code entries}, as the document identifies them. */
+    private static Set<String> ruleIdsOf(JsonNode entries) {
+        Set<String> out = new LinkedHashSet<>();
+        if (entries == null) {
+            return out;   // absent where the measure found none, which is not an empty array
+        }
+        entries.forEach(each -> {
+            if (each.has("ruleId")) {
+                out.add(each.get("ruleId").toString());
+            }
+        });
+        return out;
     }
 
     /** Every rule of the behavior that this could not turn into a line. */
