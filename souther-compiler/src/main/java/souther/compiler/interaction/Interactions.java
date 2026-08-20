@@ -1,15 +1,21 @@
 package souther.compiler.interaction;
 
+import souther.compiler.ast.Hir;
+import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ControlPointId;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Which decisions of a behavior's body determine one value together.
@@ -25,23 +31,60 @@ import java.util.Map;
  * of both. A group forms only where two values each settled by a decision are consumed into one:
  * an operand of an operator, or an argument of a call that answers one value.
  *
+ * <p>Which position a decision is about is {@link InputReads}'s answer and not this one's. A name is
+ * not a position — a helper spliced into a body binds the call's argument to the helper's own
+ * parameter and matches that, so a reading that took the word would say about one parameter what is
+ * true of another. Two environments are carried down for that reason and they answer different
+ * questions: {@code InputReads} says which position a name points at, and the bindings here say
+ * what the value at a name was settled by.
+ *
  * <p>Under-reading is the safe direction. A group nothing formed is an obligation nobody is asked
  * for, which is where a product over the input positions already leaves things; a group formed too
- * eagerly asks for rows that establish nothing.
+ * eagerly asks for rows that establish nothing. Both limits below take that direction: a value that
+ * can be settled more ways than the reading will tell apart is answered as settled one way.
  */
 public final class Interactions {
 
-    private Interactions() {}
+    /**
+     * How many ways one value may be settled before the reading stops telling them apart.
+     *
+     * <p>A value built out of several is settled every way its parts are settled together, so a
+     * record of fifteen independently forked fields has thirty-two thousand of them and every
+     * enclosing operator would fold over all of them again. What is measurable before the work is
+     * the size of the product as it is taken, so that is what is bounded — and a value over the
+     * bound is answered as settled one way, which asks for nothing rather than asking for a number
+     * of rows nobody would read.
+     */
+    private static final int MOST_OUTCOMES = 64;
+
+    private final CoverageSites.Plan plan;
+    private final Symbols symbols;
+
+    /**
+     * What each node was settled by, so an enclosing meeting does not fold over it again.
+     *
+     * <p>Keyed by identity and sound because a node occurs once: what is in scope at it is what the
+     * walk had when it got there, so the environments are a function of the position and not a
+     * second key.
+     */
+    private final IdentityHashMap<Core, List<Outcome>> settled = new IdentityHashMap<>();
+
+    private Interactions(CoverageSites.Plan plan, Symbols symbols) {
+        this.plan = plan;
+        this.symbols = symbols;
+    }
 
     /** The groups of {@code body}, in the order the walk meets them. */
-    public static List<Interaction> of(String behavior, Core body, CoverageSites.Plan plan) {
+    public static List<Interaction> of(Core body, CoverageSites.Plan plan, InputDomain inputs,
+                                       Symbols symbols) {
         List<Interaction> found = new ArrayList<>();
-        walk(body, plan, Map.of(), found);
+        new Interactions(plan, symbols).walk(body, InputReads.of(inputs), Map.of(),
+                java.util.Collections.newSetFromMap(new IdentityHashMap<>()), found);
         return List.copyOf(found);
     }
 
-    private static void walk(Core node, CoverageSites.Plan plan,
-                             Map<BindingId, List<Outcome>> bound, List<Interaction> found) {
+    private void walk(Core node, InputReads reads, Map<BindingId, List<Outcome>> bound,
+                      Set<Core> absorbed, List<Interaction> found) {
         if (node == null) {
             // A body the checker refused a clause of has a hole where the clause was, and the hole
             // reaches here as a part that is not there. Nothing is read of it and the walk goes on:
@@ -49,20 +92,20 @@ public final class Interactions {
             return;
         }
         if (node instanceof Core.LetIn let) {
-            // A name given to a decision is still that decision. What the body reads at the name is
-            // what the value was settled by, so the outcomes travel with the binding rather than
-            // stopping at it — a decision named before it is used would otherwise meet nothing.
-            walk(let.value(), plan, bound, found);
+            // A name given to a decision is still that decision, and a name given to a position is
+            // still that position. Both environments widen here and neither answers the other's
+            // question.
+            walk(let.value(), reads, bound, absorbed, found);
             Map<BindingId, List<Outcome>> inner = new HashMap<>(bound);
-            inner.put(let.binder().binding(), outcomesOf(let.value(), plan, bound));
-            walk(let.body(), plan, inner, found);
+            inner.put(let.binder().binding(), outcomesOf(let.value(), reads, bound));
+            walk(let.body(), reads.and(let.binder(), let.value()), inner, absorbed, found);
             return;
         }
-        List<Core> meeting = meetingAt(node);
+        List<Core> meeting = absorbed.contains(node) ? null : meetingAt(node, absorbed);
         if (meeting != null) {
             List<Factor> factors = new ArrayList<>();
             for (Core operand : meeting) {
-                List<Outcome> outcomes = outcomesOf(operand, plan, bound);
+                List<Outcome> outcomes = outcomesOf(operand, reads, bound);
                 // One outcome is no decision: the operand answers the same way however the row is
                 // written, so nothing about it can be varied against the other operand.
                 if (outcomes.size() > 1) {
@@ -74,7 +117,7 @@ public final class Interactions {
             }
         }
         for (Core child : childrenOf(node)) {
-            walk(child, plan, bound, found);
+            walk(child, reads, bound, absorbed, found);
         }
     }
 
@@ -83,7 +126,9 @@ public final class Interactions {
      *
      * <p>A body the checker refused a clause of arrives with a hole where the clause was, and a
      * reading that is not the checker has nothing to say about it: what is missing is missing, and
-     * the decisions either side of it are still decisions.
+     * the decisions either side of it are still decisions. Used where the parts are walked and not
+     * where they are numbered — an arm's place among the arms is what says which way the fork came
+     * out, and a list with the missing one taken out would call the second arm the first.
      */
     private static List<Core> some(Core... parts) {
         List<Core> out = new ArrayList<>();
@@ -95,12 +140,27 @@ public final class Interactions {
         return out;
     }
 
-    /** The values consumed into one here, or null where this node consumes none. */
-    private static List<Core> meetingAt(Core node) {
+    /**
+     * The values consumed into one here, or null where this node consumes none.
+     *
+     * <p>A run of one operator is one meeting. {@code a + b + c} is written as one operator applied
+     * twice and is three values making one, so reading it as two meetings would ask for the product
+     * of the left two against the third and then again for the product of the first two — the
+     * second being a projection of the first, and every row of it a row the first already wanted.
+     * The nodes taken into the run are recorded so the walk does not meet them again.
+     */
+    private static List<Core> meetingAt(Core node, Set<Core> absorbed) {
         return switch (node) {
             case Core.Binary binary -> {
-                List<Core> both = some(binary.left(), binary.right());
-                yield both.size() > 1 ? both : null;
+                List<Core> operands = new ArrayList<>();
+                List<Core> inner = new ArrayList<>();
+                run(binary.left(), binary.op(), operands, inner);
+                run(binary.right(), binary.op(), operands, inner);
+                if (operands.size() < 2) {
+                    yield null;
+                }
+                absorbed.addAll(inner);
+                yield operands;
             }
             case Core.Call call -> call.args().size() > 1 ? call.args() : null;
             case Core.PreservedCall call -> call.args().size() > 1 ? call.args() : null;
@@ -109,63 +169,101 @@ public final class Interactions {
         };
     }
 
+    /** The values one run of {@code op} is over, and the nodes the run is written as. */
+    private static void run(Core e, Hir.BinOp op, List<Core> operands, List<Core> inner) {
+        if (e instanceof Core.Binary binary && binary.op() == op) {
+            inner.add(binary);
+            run(binary.left(), op, operands, inner);
+            run(binary.right(), op, operands, inner);
+        } else if (e != null) {
+            operands.add(e);
+        }
+    }
+
+    /** What a value nothing forks is settled by, which is the same thing however it is written. */
+    private static List<Outcome> oneWay() {
+        return List.of(new Outcome(List.of()));
+    }
+
     /**
      * The ways {@code e} can be settled, as the conditions that hold when it is.
      *
-     * <p>Two shapes are read off the node and the rest is one rule rather than a case each: a value
-     * built out of several is settled every way its parts are settled together, which is their
-     * product. That is a rule about every other node and not an arm nobody filled in — what it does
-     * not cover is exactly what forks.
+     * <p>Three shapes are read off the node and the rest is one rule rather than a case each: a
+     * value built out of several is settled every way its parts are settled together, which is
+     * their product. That is a rule about every other node and not an arm nobody filled in — what
+     * it does not cover is exactly what forks and what names.
      */
-    private static List<Outcome> outcomesOf(Core e, CoverageSites.Plan plan,
-                                            Map<BindingId, List<Outcome>> bound) {
+    private List<Outcome> outcomesOf(Core e, InputReads reads, Map<BindingId, List<Outcome>> bound) {
         if (e == null) {
-            return List.of(new Outcome(List.of()));
+            return oneWay();
         }
+        List<Outcome> already = settled.get(e);
+        if (already != null) {
+            return already;
+        }
+        List<Outcome> answer = reading(e, reads, bound);
+        settled.put(e, answer);
+        return answer;
+    }
+
+    private List<Outcome> reading(Core e, InputReads reads, Map<BindingId, List<Outcome>> bound) {
         if (e instanceof Core.Match match) {
-            TermPath at = pathOf(match.scrutinee());
+            TermPath at = reads.pathOf(match.scrutinee(), symbols);
             List<Outcome> out = new ArrayList<>();
             for (int part = 0; part < match.cases().size(); part++) {
                 Core.Case each = match.cases().get(part);
-                Condition when = caseCondition(at, each, match, part, plan);
-                for (Outcome inner : outcomesOf(each.body(), plan, bound)) {
+                Condition when = caseCondition(at, each, match, part);
+                for (Outcome inner : outcomesOf(each.body(), reads, bound)) {
                     out.add(prepend(when, inner));
+                }
+                if (out.size() > MOST_OUTCOMES) {
+                    return oneWay();
                 }
             }
             return out;
         }
         if (e instanceof Core.If iff) {
+            // Numbered where they are written and not where they survive: the arm a fork answers on
+            // is its place among the arms, and a missing one is skipped rather than closing the gap.
+            Core[] arms = {iff.then(), iff.els()};
             List<Outcome> out = new ArrayList<>();
-            List<Core> arms = some(iff.then(), iff.els());
-            for (int part = 0; part < arms.size(); part++) {
-                Condition when = armCondition(iff, part, plan);
-                for (Outcome inner : outcomesOf(arms.get(part), plan, bound)) {
+            for (int part = 0; part < arms.length; part++) {
+                if (arms[part] == null) {
+                    continue;
+                }
+                Condition when = armCondition(iff, part, reads);
+                for (Outcome inner : outcomesOf(arms[part], reads, bound)) {
                     out.add(prepend(when, inner));
+                }
+                if (out.size() > MOST_OUTCOMES) {
+                    return oneWay();
                 }
             }
             return out;
         }
         if (e instanceof Core.Read read) {
             List<Outcome> named = bound.get(read.binding());
-            return named != null ? named : List.of(new Outcome(List.of()));
+            return named != null ? named : oneWay();
         }
         if (e instanceof Core.LetIn let) {
             Map<BindingId, List<Outcome>> inner = new HashMap<>(bound);
-            inner.put(let.binder().binding(), outcomesOf(let.value(), plan, bound));
-            return outcomesOf(let.body(), plan, inner);
+            inner.put(let.binder().binding(), outcomesOf(let.value(), reads, bound));
+            return outcomesOf(let.body(), reads.and(let.binder(), let.value()), inner);
         }
-        List<Outcome> out = List.of(new Outcome(List.of()));
+        List<Outcome> out = oneWay();
         for (Core child : childrenOf(e)) {
-            out = product(out, outcomesOf(child, plan, bound));
+            out = product(out, outcomesOf(child, reads, bound));
+            if (out.size() > MOST_OUTCOMES) {
+                return oneWay();
+            }
         }
         return out;
     }
 
     /** Which case of the union this arm is, said of the position matched on where there is one. */
-    private static Condition caseCondition(TermPath at, Core.Case arm, Core.Match match, int part,
-                                           CoverageSites.Plan plan) {
+    private Condition caseCondition(TermPath at, Core.Case arm, Core.Match match, int part) {
         if (at == null) {
-            return arm(match, part, plan);
+            return arm(match, part);
         }
         List<String> names = arm.pattern().selectors().stream()
                 .map(selector -> selector.name().name()).toList();
@@ -180,47 +278,31 @@ public final class Interactions {
      * value that made {@code B} false and by one that never evaluated {@code B}: a row is steered
      * by getting the comparison to answer, which no arm records.
      */
-    private static Condition armCondition(Core.If iff, int part, CoverageSites.Plan plan) {
+    private Condition armCondition(Core.If iff, int part, InputReads reads) {
         if (!(iff.cond() instanceof Core.Binary comparison)) {
             // The condition is the value. A Bool the body branches on is a position of its own and
             // the arms are its two classes, so the decision is said of it rather than of the fork.
-            TermPath read = pathOf(iff.cond());
-            return read == null ? arm(iff, part, plan)
+            TermPath read = reads.pathOf(iff.cond(), symbols);
+            return read == null ? arm(iff, part)
                     : new Condition.Case(read, part == 0 ? "true" : "false");
         }
-        Integer site = plan.byComparison().get(iff.cond());
-        TermPath at = firstOf(pathOf(comparison.left()), pathOf(comparison.right()));
+        Integer site = plan.byComparison().get(comparison);
+        TermPath at = firstOf(reads.pathOf(comparison.left(), symbols),
+                reads.pathOf(comparison.right(), symbols));
         if (site == null || at == null) {
-            return arm(iff, part, plan);
+            return arm(iff, part);
         }
         return new Condition.Side(at, site, part == 0);
     }
 
     /** The fork itself, for a decision this reading cannot name a position for. */
-    private static Condition arm(Core fork, int part, CoverageSites.Plan plan) {
+    private Condition arm(Core fork, int part) {
         ControlPointId.ArmOccurrence[] arms = plan.armsOf(fork);
         return new Condition.Arm(arms == null || arms.length == 0 ? -1 : arms[0].controlId(), part);
     }
 
     private static TermPath firstOf(TermPath left, TermPath right) {
         return left != null ? left : right;
-    }
-
-    /** Which input position {@code e} reads, or null where it is not one. */
-    private static TermPath pathOf(Core e) {
-        return switch (e) {
-            case Core.Read read -> new TermPath(read.name(), List.of());
-            case Core.FieldAccess access -> {
-                TermPath base = pathOf(access.target());
-                if (base == null) {
-                    yield null;
-                }
-                List<String> fields = new ArrayList<>(base.fields());
-                fields.add(access.field());
-                yield new TermPath(base.head(), fields);
-            }
-            default -> null;
-        };
     }
 
     private static Outcome prepend(Condition when, Outcome outcome) {
@@ -254,6 +336,9 @@ public final class Interactions {
                 }
                 if (agree) {
                     out.add(new Outcome(holds));
+                }
+                if (out.size() > MOST_OUTCOMES) {
+                    return out;
                 }
             }
         }

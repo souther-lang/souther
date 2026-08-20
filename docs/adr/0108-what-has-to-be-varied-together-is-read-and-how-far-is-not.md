@@ -42,6 +42,17 @@ so Premium against a total under the line is not an infeasible cell; it is not a
 tells this apart from a constraint written by hand to remove a combination a generator would
 otherwise offer.
 
+A run of one operator is one meeting of all its values. `a + b + c` is written as one operator
+applied twice and is three values making one number, and reading it as two meetings would ask for
+the product of the first two against the third and then for the product of the first two again —
+the second a projection of the first, wanting rows the first already wanted.
+
+Which position a decision is about is not this reading's question. A name is not a position: a
+helper spliced into a body binds the call's argument to the helper's own parameter and matches
+that, so a reading that took the word would say about one parameter what is true of another. The
+reading that owns the question answers it, and this carries two environments down for that reason —
+one saying which position a name points at, one saying what the value at a name was settled by.
+
 This is read for the generator and nothing else. No measure changes: the pairs are still counted and
 still reported the way ADR-0091 says, the two axes are allowed to disagree, and a behavior with no
 body still has the pairs and now has nothing else. What the reading changes is which rows
@@ -67,12 +78,22 @@ by a row that establishes something.
 A cell is named for the classes it fixes, which is what it was composed for. What the row settles
 beside that is the generation's to change and is not in the name.
 
-A group whose product is beyond what will be offered is offered fewer rows. That costs nothing that
-has to be said, because generation makes no claim: a measure cut short would have to say so rather
-than report a lower strength in place of a higher one, and there is no measure here to cut short.
+The cells are held to the row budget the pairs are held to, and not to a second one. A group has as
+many combinations as the product of its factors, which grows with the body rather than with the
+number of inputs, so a run of five three-way decisions has two hundred and forty-three. They are
+offered one from each group in turn, so a group met first cannot spend the whole budget and leave
+the rest of them nothing, and a search that stopped says so in the words it already had. Nothing is
+substituted: what a limit cuts off is the depth of the groups and never the strength a group is
+offered at.
 
-A decision the reading cannot name an input position for is still two outcomes and steers nothing.
-The cells are still two and the rows filling them are chosen as any other row is. That is the
-reading being honest about the half it has rather than dropping the group.
+A factor no row can be steered around takes its group with it. Under a condition mixing `&&` and
+`||` the arm cannot say which comparison came out which way, so the decision places at no class —
+and cells over it are one row asked for several times under a name that fixes nothing. The same
+goes for two outcomes of one factor that place at the same classes. What is left in both cases is
+the pair space, which is where such a behavior already was.
+
+A value that can be settled more ways than the reading will tell apart is answered as settled one
+way. The bound is on the product as it is taken, which is measurable before the work rather than
+after it, and going over it asks for nothing rather than for a number of rows nobody would read.
 
 Spec: `[#example-partition]`, `[#example-adequacy]`

@@ -298,12 +298,25 @@ public final class Generator {
         }
         // Built here and not handed in: a cell is one class per position of the axes this
         // generation kept, and the caller's list is neither ordered the same nor filtered the same.
-        for (Cell cell : InteractionCells.of(groups, axes)) {
-            int[] fixed = cell.at();
-            if (fixed.length != axes.size() || sits(written, fixed)) {
-                // A cell a row already sits in is a cell nothing is owed for. The length is the
-                // other way one arrives answered: a cell built against positions this generation
-                // withheld is about a space that is not the one being filled.
+        // No more of any one group than could be offered, since the rest would be built to be
+        // thrown away.
+        List<Cell> cells = inTurn(InteractionCells.of(groups, axes, MAX_ROWS));
+        int cellsLeft = 0;
+        for (int i = 0; i < cells.size(); i++) {
+            int[] fixed = cells.get(i).at();
+            if (rows.size() >= MAX_ROWS) {
+                // The budget the pairs are held to, and not a second one. What is left is carried
+                // to the count below rather than said again here: one search stopped, once.
+                for (int still = i; still < cells.size(); still++) {
+                    unresolved.add(new UnresolvedCombination(
+                            labels(axes, cells.get(still).at()),
+                            UnresolvedCombination.Reason.SEARCH_LIMIT));
+                }
+                cellsLeft = cells.size() - i;
+                break;
+            }
+            if (sits(written, fixed)) {
+                // A cell a row already sits in is a cell nothing is owed for.
                 continue;
             }
             int[] where = assign(axes, pairs, fixed);
@@ -320,9 +333,14 @@ public final class Generator {
             written.add(where);
             cover(pairs, singles, axes, where);
         }
+        if (cellsLeft > 0 && pairs.isEmpty() && singles.isEmpty()) {
+            // The pair pass says nothing where it has nothing left to do, and a search that stopped
+            // in the cells stopped all the same.
+            reasons.add(new GenerationReason.SearchLimit(axes.get(0).id().behavior(), cellsLeft));
+        }
         while (!pairs.isEmpty() || !singles.isEmpty()) {
             if (rows.size() >= MAX_ROWS) {
-                int left = pairs.size() + singles.size();
+                int left = pairs.size() + singles.size() + cellsLeft;
                 reasons.add(new GenerationReason.SearchLimit(axes.get(0).id().behavior(), left));
                 // Both sets: the count above is of both, and reporting one of them would promise
                 // more than it names.
@@ -632,6 +650,26 @@ public final class Generator {
                 }
             }
         }
+    }
+
+    /**
+     * The groups' cells, one from each in turn.
+     *
+     * <p>A group met first would otherwise spend the whole budget and leave the rest of them
+     * nothing. Taken in turn, every group is offered a cell before any is offered a second, so what
+     * a limit cuts off is the depth of the groups rather than all but one of them.
+     */
+    private static List<Cell> inTurn(List<List<Cell>> byGroup) {
+        List<Cell> out = new ArrayList<>();
+        int deepest = byGroup.stream().mapToInt(List::size).max().orElse(0);
+        for (int turn = 0; turn < deepest; turn++) {
+            for (List<Cell> group : byGroup) {
+                if (turn < group.size()) {
+                    out.add(group.get(turn));
+                }
+            }
+        }
+        return out;
     }
 
     /** Whether a row already written fixes every position {@code fixed} does, the same way. */

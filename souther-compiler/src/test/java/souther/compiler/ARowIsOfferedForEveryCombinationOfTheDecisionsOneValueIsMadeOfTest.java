@@ -8,6 +8,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.GeneratedRows;
 
 import java.util.Map;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -85,5 +86,78 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
                 "the only answer both decisions take part in is the one where a Standard member "
                         + "under the free-shipping line pays for express, and no row offered sits "
                         + "there: " + block);
+    }
+
+    /** Five three-way decisions summed, whose full product is 243 combinations. */
+    private static final String FIVE = """
+            module example.five
+
+            data Tier = Bronze | Silver | Gold
+
+            behavior fee : (a: Tier, b: Tier, c: Tier, d: Tier, e: Tier) -> Int
+
+            let rate (tier: Tier): Int =
+                match tier with
+                    | Bronze -> 0
+                    | Silver -> 1
+                    | Gold -> 2
+
+            let fee (a, b, c, d, e) = rate(a) + rate(b) + rate(c) + rate(d) + rate(e)
+            """;
+
+    /** Two decisions whose conditions the reading cannot say a position for. */
+    private static final String MIXED = """
+            module example.mixed
+
+            behavior fee : (a: Int, b: Int) -> Int
+
+            let fee (a, b) =
+                (if a > 1 && b > 2 then 1 else 0) + (if a > 3 || b > 4 then 1 else 0)
+            """;
+
+    /** How many rows the block writes, named or not. */
+    private static int rows(String block) {
+        return (int) block.lines().filter(line -> line.startsWith("//     | ")).count();
+    }
+
+    /** {@code | "name" : (inputs)} as the block writes it, over lines the formatter may have wrapped. */
+    private static final Pattern OFFERED = Pattern.compile("\\|\\s*\"((?:[^\"\\\\]|\\\\.)*)\"\\s*\\n?\\s*:");
+
+    /** The names the block offers, in the order it writes them. */
+    private static List<String> names(String block) {
+        List<String> found = new java.util.ArrayList<>();
+        Matcher m = OFFERED.matcher(block.replace("//", ""));
+        while (m.find()) {
+            found.add(m.group(1));
+        }
+        return found;
+    }
+
+    /**
+     * The cells share the budget the pairs are held to. A group has as many combinations as the
+     * product of its factors, which grows with the body rather than with the number of inputs, and
+     * a generation that offered all of them would hand an author a list nobody reads.
+     */
+    @Test
+    void agroupBiggerThanTheBudgetIsOfferedWhatTheBudgetHolds() {
+        String block = block(FIVE);
+
+        assertTrue(rows(block) <= 200, "the rows offered stay inside the row limit: " + rows(block));
+        assertTrue(block.contains("generation stopped"),
+                "and a search that stopped says so rather than reading as complete: " + block);
+    }
+
+    /**
+     * A factor no row can be steered around takes its group with it. Under a condition mixing
+     * {@code &&} and {@code ||} the arm cannot say which comparison came out which way, so the
+     * decision places at no class — and a cell over it is the same row asked for twice, offered
+     * under a name that says nothing.
+     */
+    @Test
+    void aGroupWithAFactorNothingCanSteerIsNotOffered() {
+        List<String> offered = names(block(MIXED));
+
+        assertTrue(offered.stream().noneMatch(String::isEmpty),
+                "no row is offered under an empty name: " + offered);
     }
 }

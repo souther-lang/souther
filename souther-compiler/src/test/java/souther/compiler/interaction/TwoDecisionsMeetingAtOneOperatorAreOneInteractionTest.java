@@ -2,8 +2,12 @@ package souther.compiler.interaction;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.query.Scopes;
+import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.inputs.InputDomain;
+import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 
@@ -21,6 +25,11 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * value — the operands of an arithmetic operator or a comparison, the arguments of a call that
  * answers one value — so the reading is over what a value is made of and not over the shape of
  * the tree above it.
+ *
+ * <p>The helpers below are written with parameter names of their own, on purpose. A helper is
+ * spliced into the body that calls it and binds the call's argument to its own parameter, so a
+ * reading that took the word rather than the position would say about one parameter of the behavior
+ * what is true of another — and would be right here only for as long as the two were spelled alike.
  */
 class TwoDecisionsMeetingAtOneOperatorAreOneInteractionTest {
 
@@ -41,13 +50,13 @@ class TwoDecisionsMeetingAtOneOperatorAreOneInteractionTest {
             behavior shippingFee : (total: Total, member: Membership, delivery: Delivery) -> Fee
                 constructs Fee
 
-            let baseFee (total: Total, member: Membership): Int =
-                match member with
+            let baseFee (spend: Total, tier: Membership): Int =
+                match tier with
                     | Premium -> 0
-                    | Standard -> if total.value >= 5000 then 0 else 500
+                    | Standard -> if spend.value >= 5000 then 0 else 500
 
-            let expressFee (delivery: Delivery): Int =
-                match delivery with
+            let expressFee (speed: Delivery): Int =
+                match speed with
                     | Express -> 500
                     | Regular -> 0
 
@@ -69,40 +78,6 @@ class TwoDecisionsMeetingAtOneOperatorAreOneInteractionTest {
                       , message = if urgent then "now" else "later"
                       }
             """;
-
-    private static List<Interaction> read(String source, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        String module = compilation.modules().get(0);
-        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
-        assertNotNull(checked, "the model under test compiles");
-        Core body = checked.behaviorBodies().get(behavior);
-        assertNotNull(body, "the behavior under test has a body");
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
-        return Interactions.of(behavior, body, plan);
-    }
-
-    /**
-     * The charge is the sum of two decisions, so the two are one group — and the base charge is one
-     * factor of three outcomes rather than two factors, because the comparison on the total is a
-     * decision only where the member is Standard.
-     */
-    @Test
-    void aSumOfTwoDecisionsIsOneGroupOfTwoFactors() {
-        List<Interaction> found = read(SHIPPING, "shippingFee");
-
-        assertEquals(1, found.size(), "the two charges meet once: " + found);
-        List<Integer> sizes = found.get(0).factors().stream().map(f -> f.outcomes().size()).toList();
-        assertEquals(List.of(3, 2), sizes,
-                "the base charge is settled three ways and the express charge two: " + found);
-    }
-
-    /** Two fields of one record are not a meeting, so nothing groups them. */
-    @Test
-    void twoDecisionsWritingTwoFieldsAreNotAGroup() {
-        assertEquals(List.of(), read(APART, "describe"),
-                "a constructor is where two values arrive, not where one is made of them");
-    }
 
     /** The same two charges, named by `let` rather than by a helper the inliner splices in. */
     private static final String BOUND = """
@@ -135,13 +110,72 @@ class TwoDecisionsMeetingAtOneOperatorAreOneInteractionTest {
                 (if member then 0 else 500) + (if express then 500 else 0)
             """;
 
+    /**
+     * Two helpers whose parameters are spelled as the behavior's, and handed the other one's
+     * argument. Whichever word a reading takes, it is the wrong position.
+     */
+    private static final String CROSSED = """
+            module example.crossed
+
+            data Membership = Premium | Standard
+
+            behavior fee : (member: Membership, other: Membership) -> Int
+
+            let base (member: Membership): Int =
+                match member with
+                    | Premium -> 0
+                    | Standard -> 500
+
+            let extra (other: Membership): Int =
+                match other with
+                    | Premium -> 10
+                    | Standard -> 20
+
+            let fee (member, other) = base(other) + extra(member)
+            """;
+
+    private static List<Interaction> read(String source, String behavior) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        String module = compilation.modules().get(0);
+        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
+        assertNotNull(checked, "the model under test compiles");
+        Core body = checked.behaviorBodies().get(behavior);
+        assertNotNull(body, "the behavior under test has a body");
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
+        return Interactions.of(body, CoverageSites.of(checked.behaviorBodies()), inputs, symbols);
+    }
+
+    /** The sizes of each group's factors, which is the shape of the space a row is owed for. */
+    private static List<List<Integer>> shape(List<Interaction> found) {
+        return found.stream()
+                .map(group -> group.factors().stream().map(f -> f.outcomes().size()).toList())
+                .toList();
+    }
+
+    /**
+     * The charge is the sum of two decisions, so the two are one group — and the base charge is one
+     * factor of three outcomes rather than two factors, because the comparison on the total is a
+     * decision only where the member is Standard.
+     */
+    @Test
+    void aSumOfTwoDecisionsIsOneGroupOfTwoFactors() {
+        assertEquals(List.of(List.of(3, 2)), shape(read(SHIPPING, "shippingFee")),
+                "the base charge is settled three ways and the express charge two");
+    }
+
+    /** Two fields of one record are not a meeting, so nothing groups them. */
+    @Test
+    void twoDecisionsWritingTwoFieldsAreNotAGroup() {
+        assertEquals(List.of(), read(APART, "describe"),
+                "a constructor is where two values arrive, not where one is made of them");
+    }
+
     @Test
     void twoDecisionsNamedByLetAreStillOneGroup() {
-        List<Interaction> found = read(BOUND, "fee");
-        assertEquals(List.of(List.of(2, 2)),
-                found.stream().map(g -> g.factors().stream().map(f -> f.outcomes().size()).toList())
-                        .toList(),
-                "naming a decision does not stop it being one: " + found);
+        assertEquals(List.of(List.of(2, 2)), shape(read(BOUND, "fee")),
+                "naming a decision does not stop it being one");
     }
 
     @Test
@@ -151,5 +185,49 @@ class TwoDecisionsMeetingAtOneOperatorAreOneInteractionTest {
         assertEquals("member=true",
                 found.get(0).factors().get(0).outcomes().get(0).holds().get(0).toString(),
                 "a condition that is the input says so: " + found);
+    }
+
+    /**
+     * A decision is about the position the argument names, not about the word the helper binds it
+     * under. Both helpers here match a parameter of their own called after a parameter of the
+     * behavior, and each is handed the other one's.
+     */
+    @Test
+    void aDecisionIsAboutThePositionAndNotTheNameItIsReachedUnder() {
+        List<Interaction> found = read(CROSSED, "fee");
+        assertEquals(1, found.size(), "the two charges meet once: " + found);
+        assertEquals(List.of("other=Premium", "member=Premium"),
+                found.get(0).factors().stream()
+                        .map(factor -> factor.outcomes().get(0).holds().get(0).toString())
+                        .toList(),
+                "the first charge is about `other` and the second about `member`: " + found);
+    }
+
+    /** Three decisions summed, which the tree holds as one operator applied twice. */
+    private static final String THREE = """
+            module example.three
+
+            data Tier = Bronze | Silver
+
+            behavior fee : (a: Tier, b: Tier, c: Tier) -> Int
+
+            let rate (tier: Tier): Int =
+                match tier with
+                    | Bronze -> 0
+                    | Silver -> 1
+
+            let fee (a, b, c) = rate(a) + rate(b) + rate(c)
+            """;
+
+    /**
+     * A run of one operator is one meeting of all its values. Read as two, the inner one asks for
+     * the product of the first two decisions and the outer asks for that product against the third
+     * — so every row the inner wants is a row the outer already wanted, offered again under a name
+     * that fixes less.
+     */
+    @Test
+    void aRunOfOneOperatorIsOneGroupOfAllItsValues() {
+        assertEquals(List.of(List.of(2, 2, 2)), shape(read(THREE, "fee")),
+                "three decisions making one number are three factors of one group");
     }
 }

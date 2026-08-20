@@ -1,11 +1,13 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.TermPath;
 import souther.compiler.interaction.Condition;
 import souther.compiler.interaction.Factor;
 import souther.compiler.interaction.Interaction;
 import souther.compiler.interaction.Outcome;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -16,46 +18,126 @@ import java.util.List;
  * two are about the same rules — the comparison a factor names is the comparison a cut was drawn
  * off — so this is a lookup rather than a second derivation of where the model divides.
  *
- * <p>A condition this cannot place leaves its position free rather than taking the cell away. A cell
- * that fixes fewer positions is a weaker request and still a real one; a cell dropped is a
- * combination nobody is asked for.
+ * <p>A group whose factors cannot each be told apart in that vocabulary is not offered at all. A
+ * factor whose outcomes place at the same classes is one no row can be steered around, so the cells
+ * over it are the same row asked for several times; and one that places at nothing is a decision
+ * this reading knows is there and cannot reach. Offering either would hand an author rows that
+ * establish nothing, which is the defect the group was read to avoid — so the group goes, and what
+ * is left is the pair space, which is where such a behavior already was.
  */
 public final class InteractionCells {
 
     private InteractionCells() {}
 
-    /** One cell per combination of the group's factors, over the ordered {@code axes}. */
-    public static List<Generator.Cell> of(List<Interaction> groups, List<Axis> axes) {
-        List<Generator.Cell> cells = new ArrayList<>();
+    /**
+     * The cells of each group, one list per group, over the ordered {@code axes}.
+     *
+     * <p>Kept per group rather than run together so a caller with a row budget can spend it across
+     * the groups instead of on whichever the walk met first.
+     *
+     * @param most how many cells of one group are worth building. Beyond what a caller can offer,
+     *             enumerating is work whose answer is thrown away
+     */
+    public static List<List<Generator.Cell>> of(List<Interaction> groups, List<Axis> axes,
+                                                int most) {
+        List<List<Generator.Cell>> out = new ArrayList<>();
         for (Interaction group : groups) {
-            for (List<Condition> holds : combinations(group.factors())) {
-                int[] at = new int[axes.size()];
-                java.util.Arrays.fill(at, -1);
-                for (Condition each : holds) {
-                    place(each, axes, at);
-                }
-                cells.add(new Generator.Cell(at));
+            List<List<int[]>> placed = placedBy(group, axes);
+            if (placed == null) {
+                continue;
+            }
+            List<Generator.Cell> cells = cellsOf(placed, axes.size(), most);
+            if (!cells.isEmpty()) {
+                out.add(cells);
             }
         }
-        return List.copyOf(cells);
+        return List.copyOf(out);
     }
 
-    /** Every way one outcome of each factor can be taken together. */
-    private static List<List<Condition>> combinations(List<Factor> factors) {
-        List<List<Condition>> out = new ArrayList<>();
-        out.add(List.of());
-        for (Factor factor : factors) {
-            List<List<Condition>> next = new ArrayList<>();
-            for (List<Condition> so_far : out) {
-                for (Outcome outcome : factor.outcomes()) {
-                    List<Condition> both = new ArrayList<>(so_far);
-                    both.addAll(outcome.holds());
-                    next.add(both);
+    /**
+     * Where each outcome of each factor puts a row, or null where a factor cannot be told apart.
+     */
+    private static List<List<int[]>> placedBy(Interaction group, List<Axis> axes) {
+        List<List<int[]>> out = new ArrayList<>();
+        for (Factor factor : group.factors()) {
+            List<int[]> placements = new ArrayList<>();
+            for (Outcome outcome : factor.outcomes()) {
+                int[] at = new int[axes.size()];
+                Arrays.fill(at, -1);
+                for (Condition each : outcome.holds()) {
+                    place(each, axes, at);
+                }
+                if (fixesNothing(at) || alreadyThere(placements, at)) {
+                    return null;
+                }
+                placements.add(at);
+            }
+            out.add(placements);
+        }
+        return out;
+    }
+
+    private static boolean fixesNothing(int[] at) {
+        for (int each : at) {
+            if (each >= 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean alreadyThere(List<int[]> placements, int[] at) {
+        for (int[] each : placements) {
+            if (Arrays.equals(each, at)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Every way one outcome of each factor can be taken together, where they agree. */
+    private static List<Generator.Cell> cellsOf(List<List<int[]>> placed, int positions, int most) {
+        List<int[]> out = new ArrayList<>();
+        int[] nothing = new int[positions];
+        Arrays.fill(nothing, -1);
+        out.add(nothing);
+        for (List<int[]> factor : placed) {
+            List<int[]> next = new ArrayList<>();
+            for (int[] soFar : out) {
+                for (int[] outcome : factor) {
+                    int[] both = merged(soFar, outcome);
+                    // Two factors reading one position leave the combinations they disagree at
+                    // unbuilt. Such a combination is not one the body refuses; there is no path
+                    // through the body that takes both, so there is nothing there to ask for.
+                    if (both != null) {
+                        next.add(both);
+                    }
+                    if (next.size() >= most) {
+                        break;
+                    }
+                }
+                if (next.size() >= most) {
+                    break;
                 }
             }
             out = next;
         }
-        return out;
+        return out.stream().map(Generator.Cell::new).toList();
+    }
+
+    /** The two together, or null where they fix one position at two classes. */
+    private static int[] merged(int[] one, int[] other) {
+        int[] both = one.clone();
+        for (int i = 0; i < both.length; i++) {
+            if (other[i] < 0) {
+                continue;
+            }
+            if (both[i] >= 0 && both[i] != other[i]) {
+                return null;
+            }
+            both[i] = other[i];
+        }
+        return both;
     }
 
     /** The class {@code condition} settles its position at, where this can say which. */
@@ -70,6 +152,7 @@ public final class InteractionCells {
                 for (int c = 0; c < classes.size(); c++) {
                     if (classes.get(c).label().equals(one.name())) {
                         at[axis] = c;
+                        return;
                     }
                 }
             }
@@ -97,8 +180,8 @@ public final class InteractionCells {
                     at[axis] = nearest;
                 }
             }
-            // A fork this reading could not name a position for steers nothing. The outcomes are
-            // still two, so the cells are still two; what they do not carry is where to put a row.
+            // A fork this reading could not name a position for steers nothing. The group it is a
+            // factor of goes, because a factor nothing can steer is one no row varies.
             case Condition.Arm ignored -> { }
         }
     }
@@ -111,11 +194,11 @@ public final class InteractionCells {
      * the name is at. The longest match wins, so a record whose own field is divided keeps its own
      * axis rather than being answered by the record's.
      */
-    private static int axisAt(List<Axis> axes, souther.compiler.inputs.TermPath path) {
+    private static int axisAt(List<Axis> axes, TermPath path) {
         int found = -1;
         int deepest = -1;
         for (int i = 0; i < axes.size(); i++) {
-            souther.compiler.inputs.TermPath at = axes.get(i).path();
+            TermPath at = axes.get(i).path();
             if (!at.head().equals(path.head()) || at.fields().size() > path.fields().size()) {
                 continue;
             }

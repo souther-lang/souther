@@ -1589,7 +1589,7 @@ public final class Adequacy {
             List<Map<AxisId, Classification>> existing = rows.stream()
                     .map(row -> RowClasses.of(row, inputs, partitioning.axes())).toList();
             return Generator.fill(subject, existing, check,
-                    souther.compiler.interaction.Interactions.of(spec.name(), body, plan));
+                    souther.compiler.interaction.Interactions.of(body, plan, domain, symbols));
         }
     }
 
