@@ -10,7 +10,9 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A partition of a position is what the model treats alike, and not what this compiler can name.
@@ -156,6 +158,47 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
         assertEquals(List.of("n/0.2 < x and 3 * x <= 1", "n/1 < 3 * x", "n/x <= 0.2"), covered,
                 "and the class between the two lines says where it stops, in the words each line"
                         + " can be said in");
+    }
+
+    /**
+     * And a row can be composed for a class between two such lines.
+     *
+     * <p>Which is what tells a class the rules leave nothing in from one this compiler was looking
+     * for values of in the wrong places. A third and two thirds have every decimal between them and
+     * no whole number, so a search that looked between the whole numbers either side of them looked
+     * between one and nothing — and reported a class with a half in it as one nothing can be
+     * written in.
+     */
+    @Test
+    void aRowIsComposedForAClassBetweenTwoSuchLines() {
+        Compilation compilation = Compilation.ofSource("""
+                module example.between
+
+                data No = { why: Int }
+                data Yes = { v: Int }
+                data Result = No | Yes
+
+                behavior f : (n: Decimal) -> Result
+                    constructs Yes, No
+
+                let f (n) = {
+                    guard 3m * n > 1m else No { why = 0 }
+                    guard 3m * n > 2m else No { why = 1 }
+                    Yes { v = 1 }
+                }
+
+                example f
+                    | "one" : (0.1m) -> No { why = 0 }
+                """, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+        String rows = souther.compiler.report.GeneratedRows.of(compilation, "example.between", "f",
+                true, souther.compiler.diag.SourceNameResolver.identity());
+
+        assertTrue(rows.contains("\"n=1 < 3 * x <= 2\""),
+                "the class between the two lines is offered a row:\n" + rows);
+        assertFalse(rows.contains("no row for `n=1 < 3 * x <= 2`"),
+                "and is not reported as one nothing can be written in:\n" + rows);
     }
 
     /**

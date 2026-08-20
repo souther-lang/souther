@@ -68,6 +68,41 @@ public sealed interface Criterion {
         public String operator() {
             return "in";
         }
+
+        /**
+         * A place of {@code carrier} this item accepts, or null where the search composed none.
+         *
+         * <p>The run's own answer at every step: it says where to look and it says whether what
+         * came back is at it. Looked for at whole numbers alone, a run between two thirds of a
+         * decimal was searched between one and nothing — the two lines rounded past each other —
+         * and a class with a half in it was reported as one nothing can be written in.
+         *
+         * <p>Which is the last place a line was read as a number of the position rather than as
+         * where the values part. Deciding what is in the run was already exact; only the looking
+         * was not.
+         */
+        public souther.compiler.numeric.Place somewhereInside(
+                souther.compiler.check.Carrier carrier,
+                souther.compiler.numeric.Endpoint min, souther.compiler.numeric.Endpoint max) {
+            LevelSpace space = LevelSpace.onACarrier(carrier);
+            for (int digits : CutPosition.DIGITS_TO_TRY) {
+                souther.compiler.numeric.NumericDomain.Bounds look = band.inside(min, max, digits);
+                souther.compiler.numeric.Place at =
+                        carrier.somethingInside(look.min(), look.max());
+                if (at == null) {
+                    continue;
+                }
+                // The grid is asked first and separately. What a carrier's values are spaced by
+                // says what a place may be sharpened onto and does not promise that every number
+                // between two counts is one of them.
+                souther.compiler.numeric.Place onTheGrid = carrier.onTheGrid(at);
+                if (onTheGrid != null
+                        && holds(space, new Level.OnACarrier(carrier, onTheGrid))) {
+                    return onTheGrid;
+                }
+            }
+            return null;
+        }
     }
 
     /**

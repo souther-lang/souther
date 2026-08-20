@@ -184,12 +184,26 @@ public record CutPosition(Level written, BigDecimal per) {
      *
      * <p>Null on an order with no numbers, which is never scaled and so never needs this.
      */
-    public souther.compiler.numeric.Place justBeyond(Towards towards) {
+    public souther.compiler.numeric.Place justBeyond(Towards towards, int digits) {
         BigDecimal at = numberOf(written);
-        return at == null ? null : new Count(at.divide(per, 0,
-                towards == Towards.ABOVE ? java.math.RoundingMode.CEILING
-                        : java.math.RoundingMode.FLOOR));
+        if (at == null) {
+            return null;
+        }
+        BigDecimal past = at.divide(per, digits, towards == Towards.ABOVE
+                ? java.math.RoundingMode.CEILING : java.math.RoundingMode.FLOOR);
+        // Strictly past, which rounding gives only where the line is not itself a number of that
+        // many digits. A line the quantity does stand at rounds to itself, and the run beyond it
+        // does not hold it.
+        if (past.multiply(per).compareTo(at) == 0) {
+            BigDecimal step = BigDecimal.ONE.movePointLeft(digits);
+            past = towards == Towards.ABOVE ? past.add(step) : past.subtract(step);
+        }
+        return new Count(past);
     }
+
+    /** How many digits a search looks for a value of this line's run in, before and after the
+     *  point. A line at a third is between no two whole numbers, and is between two hundredths. */
+    public static final int[] DIGITS_TO_TRY = {0, 2, 6, 12};
 
     private static souther.compiler.numeric.Place placeOf(Level level) {
         return switch (level) {

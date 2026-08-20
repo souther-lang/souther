@@ -566,17 +566,17 @@ public final class LevelRealizer {
         Place offered = switch (where) {
             case Criterion.AtTheLevel at -> placeOf(at.at());
             case Criterion.Within within -> {
-                // The run's own ends, narrowed by what the rules leave, and then a value in it other
-                // than the one against the line. Composed as "other than" rather than by moving an
-                // end in: the value beside the line is the one a reader would write first, and a
-                // point away from the line is asking for the next one out rather than for whatever
-                // the far end of the run happens to be.
+                // The value beside the line first, which is the row a reader would write, and
+                // otherwise whatever the run has. Both are asked of the run: a search for a value
+                // of it looked in whole numbers alone, and a run between two thirds of a decimal
+                // has none.
                 NumericDomain.Bounds run = new NumericDomain.Bounds(
                         Endpoint.lower(within.band().low(), bounds.min()),
                         Endpoint.upper(within.band().high(), bounds.max()));
-                yield within.except() == null
-                        ? carrier.somethingInside(run.min(), run.max())
+                Place beside = within.except() == null ? null
                         : carrier.somethingOtherThan(List.of(placeOf(within.except())), run);
+                yield beside != null ? beside
+                        : within.somewhereInside(carrier, bounds.min(), bounds.max());
             }
             case Criterion.AnythingBut other ->
                     carrier.somethingOtherThan(List.of(placeOf(other.excluded())), bounds);

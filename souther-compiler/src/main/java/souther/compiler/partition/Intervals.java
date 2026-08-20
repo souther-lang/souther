@@ -236,19 +236,7 @@ final class Intervals {
      * values do.
      */
     private static Place representative(Band run, Carrier carrier, Endpoint min, Endpoint max) {
-        NumericDomain.Bounds envelope = run.inside(min, max);
-        Place between = carrier.somethingInside(envelope.min(), envelope.max());
-        if (between == null) {
-            return null;
-        }
-        // What the carrier can hold, and then whether the range still holds it. Spacing answers what
-        // a strict bound may be sharpened onto and is not a promise that every number between two
-        // counts is one — asking it for both is how a class open at both ends came to offer the
-        // count at one of its ends.
-        Place held = carrier.onTheGrid(between);
-        return held != null
-                && run.holds(LevelSpace.onACarrier(carrier), new Level.OnACarrier(carrier, held))
-                ? held : null;
+        return new Criterion.Within(run, null).somewhereInside(carrier, min, max);
     }
 
     /**

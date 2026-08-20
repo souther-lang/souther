@@ -114,14 +114,16 @@ public record Band(Seam under, Seam over, Level from, Level to) {
      *
      * <p>An envelope and never the run itself: what is in the run is the run's to say
      * ({@link #holds}), and this only says where to look. Narrowed inward at a line the quantity
-     * has no value at — the whole number that way is inside the run, where the line is not a number
-     * at all — so a search for a value of the run is handed values of the run.
+     * has no value at, to a number of {@code digits} digits past it — two thirds is past no whole
+     * number below one and is past sixty-six hundredths, so a run between two thirds of a decimal
+     * is looked in at the digits it has values at rather than at none.
      */
     public souther.compiler.numeric.NumericDomain.Bounds inside(
-            souther.compiler.numeric.Endpoint min, souther.compiler.numeric.Endpoint max) {
+            souther.compiler.numeric.Endpoint min, souther.compiler.numeric.Endpoint max,
+            int digits) {
         return new souther.compiler.numeric.NumericDomain.Bounds(
-                under == null ? min : innerOf(under, low(), Towards.ABOVE),
-                over == null ? max : innerOf(over, high(), Towards.BELOW));
+                under == null ? min : innerOf(under, low(), Towards.ABOVE, digits),
+                over == null ? max : innerOf(over, high(), Towards.BELOW, digits));
     }
 
     /**
@@ -134,12 +136,12 @@ public record Band(Seam under, Seam over, Level from, Level to) {
      * offered was the one value it does not hold.
      */
     private static souther.compiler.numeric.Endpoint innerOf(
-            Seam parted, souther.compiler.numeric.Endpoint reaches, Towards into) {
+            Seam parted, souther.compiler.numeric.Endpoint reaches, Towards into, int digits) {
         if (reaches != null) {
             return reaches;
         }
-        souther.compiler.numeric.Place whole = parted.at().justBeyond(into);
-        return whole == null ? null : souther.compiler.numeric.Endpoint.inclusive(whole);
+        souther.compiler.numeric.Place inside = parted.at().justBeyond(into, digits);
+        return inside == null ? null : souther.compiler.numeric.Endpoint.inclusive(inside);
     }
 
     /** The line itself, which the run reaches up to and does not hold. Null where the line is at a
