@@ -138,6 +138,66 @@ final class Xml {
     }
 
     /**
+     * What each element at this path says, in the order the document writes them.
+     *
+     * <p>Every one, where {@link #textOf} answers with the first. A pom declares as many
+     * {@code <plugin>}s as it likes and the question asked of them is whether one of them is a
+     * particular plugin, which is a question about all of them.
+     *
+     * <p>Empty where the document cannot be walked down, which is the same answer as a document
+     * with no such element: a caller that cannot read a pom is told so by
+     * {@link MavenBuild#canBeAddedTo} before it asks anything else of it.
+     */
+    static List<String> everyIn(String xml, List<String> path) {
+        List<String> found = new ArrayList<>();
+        List<String> open = new ArrayList<>();
+        List<Integer> starts = new ArrayList<>();
+        int at = 0;
+        while (at < xml.length()) {
+            int lt = xml.indexOf('<', at);
+            if (lt < 0) {
+                return found;
+            }
+            if (xml.startsWith("<!--", lt)) {
+                at = skipTo(xml, lt, "-->");
+                continue;
+            }
+            if (xml.startsWith("<![CDATA[", lt)) {
+                at = skipTo(xml, lt, "]]>");
+                continue;
+            }
+            if (xml.startsWith("<?", lt)) {
+                at = skipTo(xml, lt, "?>");
+                continue;
+            }
+            if (xml.startsWith("<!", lt)) {
+                at = skipTo(xml, lt, ">");
+                continue;
+            }
+            int gt = endOfTag(xml, lt);
+            if (gt < 0) {
+                return found;
+            }
+            String tag = xml.substring(lt + 1, gt).trim();
+            if (tag.startsWith("/")) {
+                if (!closes(open, tag)) {
+                    return found;
+                }
+                if (open.equals(path)) {
+                    found.add(xml.substring(starts.get(starts.size() - 1), lt));
+                }
+                open.remove(open.size() - 1);
+                starts.remove(starts.size() - 1);
+            } else if (!tag.endsWith("/")) {
+                open.add(nameOf(tag));
+                starts.add(gt + 1);
+            }
+            at = gt + 1;
+        }
+        return found;
+    }
+
+    /**
      * The document with {@code block} written just inside the element at {@code path}, indented one
      * level under it.
      *

@@ -83,7 +83,12 @@ public final class InitCommand {
         }
 
         Path at = directory != null ? directory : here;
-        BuildSystem existing = Files.isDirectory(at) ? BuildSystem.of(at) : null;
+        List<BuildSystem> found = Files.isDirectory(at) ? BuildSystem.everyIn(at) : List.of();
+        if (found.size() > 1) {
+            return refuse(err, locale, "cli.init.build.ambiguous",
+                    found.get(0).fileIn(at).getFileName(), found.get(1).fileIn(at).getFileName());
+        }
+        BuildSystem existing = found.isEmpty() ? null : found.get(0);
         List<Line> report = new ArrayList<>();
         Coordinate coordinate;
         Path target;
@@ -101,12 +106,12 @@ public final class InitCommand {
                 return refuse(err, locale, "cli.init.coordinate.unreadable",
                         display(here, existing.fileIn(at)), Coordinate.FORM);
             }
-            // Before a single file is written. A pom whose elements this cannot follow is one the
+            // Before a single file is written. A build file this cannot follow is one the
             // declaration would land outside of, and the author would be restoring their own file
             // from the copy beside it — told by a command that reported success.
-            if (!canBeAddedTo(existing, at)) {
-                return refuse(err, locale, "cli.init.pom.unreadable",
-                        display(here, existing.fileIn(at)));
+            String unreadable = cannotBeAddedTo(existing, at);
+            if (unreadable != null) {
+                return refuse(err, locale, unreadable, display(here, existing.fileIn(at)));
             }
             target = at;
             if (level == null) {
@@ -205,19 +210,25 @@ public final class InitCommand {
     }
 
     /**
-     * Whether the build file here is one a declaration can be put into.
+     * Why the build file here is not one a declaration can be put into, or null where it is.
      *
-     * <p>Only a pom is asked. A Gradle script is added to by matching braces, which answers for
-     * itself — a block it cannot find the end of gets a {@code plugins} block of its own.
+     * <p>Two ways of not being one, and they are different things to say. A pom whose tags do not
+     * match is a document this cannot walk down. A Gradle script that names the plugin outside its
+     * {@code plugins} block, or asks for it with {@code apply false}, is a script whose author has
+     * already said something about the plugin that this command does not read as applying it —
+     * and adding a second request is what Gradle refuses outright.
      */
-    private static boolean canBeAddedTo(BuildSystem build, Path at) {
-        if (build != BuildSystem.MAVEN) {
-            return true;
-        }
+    private static String cannotBeAddedTo(BuildSystem build, Path at) {
         try {
-            return MavenBuild.canBeAddedTo(Files.readString(build.fileIn(at)));
+            String text = Files.readString(build.fileIn(at));
+            if (build == BuildSystem.MAVEN) {
+                return MavenBuild.canBeAddedTo(text) ? null : "cli.init.pom.unreadable";
+            }
+            return GradleBuild.appliedIn(text) == GradleBuild.Applied.SOMEWHERE_ELSE
+                    ? "cli.init.gradle.elsewhere" : null;
         } catch (IOException e) {
-            return false;
+            return build == BuildSystem.MAVEN ? "cli.init.pom.unreadable"
+                    : "cli.init.gradle.elsewhere";
         }
     }
 
@@ -287,7 +298,7 @@ public final class InitCommand {
         String was = Files.readString(file);
         String now = build == BuildSystem.MAVEN
                 ? MavenBuild.withSoutherDeclared(was, project.southerVersion())
-                : GradleBuild.declaresThePlugin(was) ? was
+                : GradleBuild.appliedIn(was) == GradleBuild.Applied.ALREADY ? was
                         : GradleBuild.withThePluginApplied(was,
                                 GradleBuild.isKotlin(file.getFileName().toString()));
         if (now.equals(was)) {

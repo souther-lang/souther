@@ -19,6 +19,10 @@ final class MavenBuild {
     private static final List<String> BUILD = List.of("project", "build");
     private static final List<String> PLUGINS = List.of("project", "build", "plugins");
     private static final List<String> DEPENDENCIES = List.of("project", "dependencies");
+    private static final List<String> DEPENDENCY =
+            List.of("project", "dependencies", "dependency");
+    private static final List<String> PLUGIN =
+            List.of("project", "build", "plugins", "plugin");
 
     /**
      * What this pom calls the project, or null where it does not say.
@@ -51,14 +55,48 @@ final class MavenBuild {
         return Xml.has(pom, PROJECT);
     }
 
-    /** Whether this pom already declares the plugin, however it is configured. */
+    /**
+     * Whether this pom declares the plugin where declaring it runs it.
+     *
+     * <p>Asked of {@code build/plugins}, and of nothing else. A name is not a declaration: an entry
+     * under {@code pluginManagement} says what version this plugin would have if it were used, a
+     * plugin of another group that happens to share the artifact name is another plugin, and a
+     * comment mentioning it is prose. Answered by a search of the text, each of those read as a
+     * project that was already set up — and what its author got was `kept`, and a build that
+     * compiles no Souther.
+     *
+     * <p>A profile's build is not read. A plugin declared only in one runs when that profile is
+     * active, and this would add a second declaration to the base build rather than leave a project
+     * with none.
+     */
     static boolean declaresThePlugin(String pom) {
-        return pom.contains("<artifactId>" + BuildPlugins.MAVEN_ARTIFACT + "</artifactId>");
+        return declares(Xml.everyIn(pom, PLUGIN), BuildPlugins.GROUP, BuildPlugins.MAVEN_ARTIFACT);
     }
 
-    /** Whether this pom already declares the runtime the generated code calls. */
+    /**
+     * Whether this pom declares the runtime the generated code calls, where declaring it puts it on
+     * the class path — {@code dependencies}, and not {@code dependencyManagement}.
+     */
     static boolean declaresTheRuntime(String pom) {
-        return pom.contains("<artifactId>" + BuildPlugins.RUNTIME_ARTIFACT + "</artifactId>");
+        return declares(Xml.everyIn(pom, DEPENDENCY), BuildPlugins.GROUP,
+                BuildPlugins.RUNTIME_ARTIFACT);
+    }
+
+    /**
+     * Whether one of these declarations is of that artifact.
+     *
+     * <p>Both halves of the coordinate. A pom naming {@code souther-runtime} under another group is
+     * naming somebody else's artifact, and the runtime the generated code calls would still not be
+     * there.
+     */
+    private static boolean declares(List<String> declarations, String group, String artifact) {
+        for (String declared : declarations) {
+            if (group.equals(Xml.textOf(declared, List.of("groupId")))
+                    && artifact.equals(Xml.textOf(declared, List.of("artifactId")))) {
+                return true;
+            }
+        }
+        return false;
     }
 
 

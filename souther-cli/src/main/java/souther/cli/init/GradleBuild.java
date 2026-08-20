@@ -49,9 +49,106 @@ final class GradleBuild {
         return found.find() ? found.group(1) : null;
     }
 
-    /** Whether the script already applies the Souther plugin. */
-    static boolean declaresThePlugin(String script) {
-        return script.contains(BuildPlugins.GRADLE_ID);
+    /** What a script says about the plugin, which is not always "yes" or "no". */
+    enum Applied {
+        /** It is requested in the `plugins` block and applied there. Nothing to add. */
+        ALREADY,
+        /** The script does not name it. A line goes into the `plugins` block. */
+        NOT_YET,
+        /**
+         * It is named somewhere this does not read it as applying: outside the {@code plugins}
+         * block, or inside it with {@code apply false}. Refused rather than added to — Gradle
+         * refuses a second request for a plugin already requested, so the line this would write is
+         * one that breaks the build, and answering "already" would leave a project that compiles no
+         * Souther and was told it was set up.
+         */
+        SOMEWHERE_ELSE
+    }
+
+    /**
+     * What this script says about the plugin.
+     *
+     * <p>Read off the {@code plugins} block with the comments taken out, rather than off the text.
+     * A search of the text called `id("…") apply false` an applied plugin, and a comment naming it
+     * one too.
+     */
+    static Applied appliedIn(String script) {
+        String said = withoutComments(script);
+        Matcher found = PLUGINS.matcher(said);
+        if (found.find()) {
+            int close = closingBrace(said, found.end() - 1);
+            if (close >= 0) {
+                String block = said.substring(found.end(), close);
+                String rest = said.substring(0, found.start()) + said.substring(close + 1);
+                if (requestsIt(block)) {
+                    return applies(block) ? Applied.ALREADY : Applied.SOMEWHERE_ELSE;
+                }
+                return rest.contains(BuildPlugins.GRADLE_ID) ? Applied.SOMEWHERE_ELSE
+                        : Applied.NOT_YET;
+            }
+        }
+        return said.contains(BuildPlugins.GRADLE_ID) ? Applied.SOMEWHERE_ELSE : Applied.NOT_YET;
+    }
+
+    /** Whether the block asks for the plugin at all. */
+    private static boolean requestsIt(String block) {
+        return block.contains(BuildPlugins.GRADLE_ID);
+    }
+
+    /**
+     * Whether the request in this block applies the plugin.
+     *
+     * <p>{@code apply false} asks for it on the class path without applying it, which is how a
+     * root project names a version for its subprojects. The line is read on its own: another
+     * plugin's {@code apply false} says nothing about this one.
+     */
+    private static boolean applies(String block) {
+        for (String line : block.split("\n")) {
+            if (line.contains(BuildPlugins.GRADLE_ID)) {
+                return !APPLY_FALSE.matcher(line).find();
+            }
+        }
+        return false;
+    }
+
+    /** Where a plugin is asked for without being applied. */
+    private static final Pattern APPLY_FALSE = Pattern.compile("apply\\s+false");
+
+    /**
+     * The script with its comments taken out, so that what is read is what the build runs.
+     *
+     * <p>Replaced with spaces rather than removed, so nothing that was on two lines becomes one.
+     */
+    private static String withoutComments(String script) {
+        StringBuilder out = new StringBuilder(script.length());
+        for (int i = 0; i < script.length(); i++) {
+            char c = script.charAt(i);
+            if (c == '/' && i + 1 < script.length() && script.charAt(i + 1) == '/') {
+                int end = script.indexOf('\n', i);
+                end = end < 0 ? script.length() : end;
+                blank(out, script, i, end);
+                i = end - 1;
+            } else if (c == '/' && i + 1 < script.length() && script.charAt(i + 1) == '*') {
+                int end = script.indexOf("*/", i);
+                end = end < 0 ? script.length() : end + 2;
+                blank(out, script, i, end);
+                i = end - 1;
+            } else if (c == '"' || c == '\'') {
+                int end = endOfString(script, i);
+                out.append(script, i, Math.min(end + 1, script.length()));
+                i = end;
+            } else {
+                out.append(c);
+            }
+        }
+        return out.toString();
+    }
+
+    /** {@code from}..{@code to} as spaces, keeping the line breaks that were in it. */
+    private static void blank(StringBuilder out, String script, int from, int to) {
+        for (int i = from; i < to; i++) {
+            out.append(script.charAt(i) == '\n' ? '\n' : ' ');
+        }
     }
 
     /**

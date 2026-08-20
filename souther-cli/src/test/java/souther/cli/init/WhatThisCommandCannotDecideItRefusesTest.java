@@ -154,6 +154,51 @@ class WhatThisCommandCannotDecideItRefusesTest {
                 "the project was renamed after its directory:\n" + run.out());
     }
 
+    /**
+     * Which build a model belongs to, where a directory holds two of them.
+     *
+     * <p>Decided by the order this compiler happens to look in, the pom won and the Gradle build
+     * was never told. It is a question, and this command does not answer questions of that kind on
+     * the author's behalf.
+     */
+    @Test
+    void aDirectoryHoldingTwoBuildsIsRefused(@TempDir Path directory) throws IOException {
+        Files.writeString(directory.resolve("pom.xml"), POM);
+        Files.writeString(directory.resolve("build.gradle.kts"), "group = \"com.acme\"\n");
+
+        Run run = run(directory);
+
+        assertEquals(2, run.code());
+        assertTrue(run.err().contains("pom.xml") && run.err().contains("build.gradle.kts"),
+                run.err());
+        assertTrue(Files.notExists(directory.resolve("src")), "a refusal wrote a source directory");
+    }
+
+    /**
+     * A script that names the plugin where this does not read it as applied.
+     *
+     * <p>Neither answer is available: reported as applied it leaves a project that compiles no
+     * Souther, and added to it writes a second request into a block that already has one, which
+     * Gradle refuses.
+     */
+    @Test
+    void aGradleScriptThatOnlyNamesThePluginIsRefused(@TempDir Path directory) throws IOException {
+        Files.writeString(directory.resolve("build.gradle.kts"), """
+                plugins {
+                    java
+                    id("org.souther-lang.souther") version "0.1.0" apply false
+                }
+
+                group = "com.acme"
+                """);
+
+        Run run = run(directory);
+
+        assertEquals(2, run.code());
+        assertTrue(run.err().contains("apply false"), run.err());
+        assertTrue(Files.notExists(directory.resolve("src")), "a refusal wrote a source directory");
+    }
+
     @Test
     void aModuleInTheLanguagesOwnNamespaceIsRefused(@TempDir Path directory) {
         Run run = run(directory, "com.example:hello", "--module", "souther.hello");

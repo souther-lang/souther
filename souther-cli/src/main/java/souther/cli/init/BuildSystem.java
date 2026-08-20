@@ -2,6 +2,7 @@ package souther.cli.init;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -66,13 +67,20 @@ public enum BuildSystem {
         return null;
     }
 
-    /** The build the directory already holds, or null where it holds none. */
-    static BuildSystem of(Path directory) {
+    /**
+     * Every build the directory holds, in the order this table writes them.
+     *
+     * <p>All of them, and not the first. A directory holding both a pom and a Gradle script is a
+     * directory where which build a model belongs to is a question, and answering it by which of
+     * the two this enum happens to write first is deciding it by an iteration order.
+     */
+    static List<BuildSystem> everyIn(Path directory) {
+        List<BuildSystem> found = new ArrayList<>();
         for (BuildSystem build : values()) {
             if (build.fileIn(directory) != null) {
-                return build;
+                found.add(build);
             }
         }
-        return null;
+        return found;
     }
 }

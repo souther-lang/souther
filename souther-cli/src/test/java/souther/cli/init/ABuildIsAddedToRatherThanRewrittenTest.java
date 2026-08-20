@@ -8,6 +8,7 @@ import org.xml.sax.InputSource;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.XMLConstants;
 import java.io.StringReader;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -136,7 +137,7 @@ class ABuildIsAddedToRatherThanRewrittenTest {
         assertTrue(edited.contains("id(\"org.souther-lang.souther\") version"));
         assertEquals(1, edited.split("plugins \\{", -1).length - 1,
                 "a second plugins block, which Gradle refuses:\n" + edited);
-        assertTrue(GradleBuild.declaresThePlugin(edited));
+        assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn(edited));
         assertEquals("com.acme", GradleBuild.groupOf(edited));
     }
 
@@ -173,6 +174,92 @@ class ABuildIsAddedToRatherThanRewrittenTest {
         String edited = GradleBuild.withThePluginApplied("plugins {\n    id 'java'\n}\n", false);
 
         assertTrue(edited.contains("id 'org.souther-lang.souther' version"), edited);
+    }
+
+    /**
+     * Naming the plugin is not declaring it where declaring it runs it.
+     *
+     * <p>Each of these poms was read as a project already set up, and each of them compiles no
+     * Souther: an entry under {@code pluginManagement} says what version the plugin would have if
+     * it were used, one under {@code dependencyManagement} puts nothing on a class path, an
+     * artifact of another group is somebody else's artifact, and a comment is prose.
+     */
+    @Test
+    void namingTheArtifactSomewhereElseIsNotDeclaringIt() {
+        String managed = """
+                <project>
+                  <groupId>com.acme</groupId>
+                  <artifactId>billing</artifactId>
+                  <dependencyManagement><dependencies><dependency>
+                    <groupId>org.souther-lang</groupId>
+                    <artifactId>souther-runtime</artifactId>
+                    <version>1</version>
+                  </dependency></dependencies></dependencyManagement>
+                  <build><pluginManagement><plugins><plugin>
+                    <groupId>org.souther-lang</groupId>
+                    <artifactId>souther-maven-plugin</artifactId>
+                    <version>1</version>
+                  </plugin></plugins></pluginManagement></build>
+                </project>
+                """;
+        String elsewhere = POM.replace("<groupId>org.junit.jupiter</groupId>", "<groupId>com.elsewhere</groupId>")
+                .replace("<artifactId>junit-jupiter</artifactId>",
+                        "<artifactId>souther-runtime</artifactId>");
+        String mentioned = POM.replace("<!-- pinned deliberately: see the incident on the 3rd -->",
+                "<!-- we may add <artifactId>souther-maven-plugin</artifactId> later -->");
+
+        for (String pom : List.of(managed, elsewhere, mentioned)) {
+            assertFalse(MavenBuild.declaresThePlugin(pom), pom);
+            assertFalse(MavenBuild.declaresTheRuntime(pom), pom);
+        }
+    }
+
+    /** The control: a pom that declares both where they run is left alone. */
+    @Test
+    void aPomThatDeclaresThemWhereTheyRunIsLeftAlone() {
+        String declared = MavenBuild.withSoutherDeclared(POM, "9.9.9");
+
+        assertTrue(MavenBuild.declaresThePlugin(declared));
+        assertTrue(MavenBuild.declaresTheRuntime(declared));
+    }
+
+    /**
+     * A Gradle script says three things about the plugin, not two.
+     *
+     * <p>{@code apply false} asks for it without applying it, and a comment naming it says nothing
+     * at all. Read as applied, both left a project reported as set up and compiling no Souther;
+     * read as absent, the first would have a second request written into a block that already has
+     * one, which Gradle refuses outright.
+     */
+    @Test
+    void aGradleScriptSaysWhetherThePluginIsAppliedOrOnlyNamed() {
+        assertEquals(GradleBuild.Applied.NOT_YET,
+                GradleBuild.appliedIn("plugins {\n    java\n}\n"));
+        assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn("""
+                plugins {
+                    id("org.souther-lang.souther") version "0.1.0"
+                }
+                """));
+        assertEquals(GradleBuild.Applied.SOMEWHERE_ELSE, GradleBuild.appliedIn("""
+                plugins {
+                    id("org.souther-lang.souther") version "0.1.0" apply false
+                }
+                """));
+        assertEquals(GradleBuild.Applied.NOT_YET, GradleBuild.appliedIn("""
+                // id("org.souther-lang.souther") is what we would write
+                plugins {
+                    java
+                }
+                """));
+        assertEquals(GradleBuild.Applied.SOMEWHERE_ELSE, GradleBuild.appliedIn("""
+                plugins {
+                    java
+                }
+
+                subprojects {
+                    apply(plugin = "org.souther-lang.souther")
+                }
+                """));
     }
 
     /**
