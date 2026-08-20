@@ -39,7 +39,7 @@ class CompileDateLiteralTest {
 
         Object in = Codecs.decoded(loader, "demo.In", Map.of("n", 1L));
         Object out = Codecs.apply(
-                loader.loadClass("demo.Run$Impl").getConstructor().newInstance(), in);
+                Emitted.behavior(loader, "demo", "run").getConstructor().newInstance(), in);
 
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", out);
         assertEquals("2026-07-01", m.get("start"));
@@ -61,7 +61,7 @@ class CompileDateLiteralTest {
                 data OnTime
 
                 behavior check : (due: Due, today: Date) -> Overdue | OnTime
-                    constructs Overdue, OnTime
+                    constructs Overdue
 
                 let check (due, today) = {
                     let late = daysBetween(due.on, today)
@@ -118,7 +118,9 @@ class CompileDateLiteralTest {
                         (Loan { on = 貸出日("2026-07-01") }) -> Echo { on = 貸出日(Date("2026-07-01")) }
                 """));
 
-        assertTrue(e.getMessage().contains("E1903"), e.getMessage());
+        assertTrue(e.getMessage().contains("E1317"), e.getMessage());
+        assertTrue(e.getMessage().contains("Date") && e.getMessage().contains("String"),
+                e.getMessage());
     }
 
     @Test
@@ -164,7 +166,7 @@ class CompileDateLiteralTest {
 
         Object in = Codecs.decoded(loader, "demo.In", Map.of("d", LocalDate.parse("2026-07-11")));
         Object out = Codecs.apply(
-                loader.loadClass("demo.Run$Impl").getConstructor().newInstance(), in);
+                Emitted.behavior(loader, "demo", "run").getConstructor().newInstance(), in);
         assertEquals(10L, ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("gap"));
     }
 }

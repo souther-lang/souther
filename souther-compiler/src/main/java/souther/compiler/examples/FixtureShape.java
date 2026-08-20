@@ -6,7 +6,7 @@ import souther.compiler.check.BoundaryOutput;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -54,7 +54,7 @@ public sealed interface FixtureShape {
     }
 
     /** A type whose codec was derived, built by its own generated {@code decoder()}. */
-    record Nominal(TypeName name) implements FixtureShape {
+    record Nominal(TypeSymbol name) implements FixtureShape {
         @Override
         public Type type() {
             return Type.ref(name);
@@ -90,6 +90,13 @@ public sealed interface FixtureShape {
      * The shape a fixture may supply at a position of type {@code t}, refusing what no decoder
      * reads. {@link FixtureException} rather than a diagnostic: a fixture's failures are reported
      * against the row that wrote it.
+     *
+     * <p>{@code t} is a type something settled, and there are three of those: a name a row wrote
+     * ({@code Type.ref}), a parameter of a call a fixture settled, and a position inside one of
+     * those, which this walk takes from the type it was handed. A behavior's boundary does not come
+     * through here at all — {@link #of(BoundaryInput)} projects what was admitted where it was
+     * established. So none of them can carry a type variable, and the case below says what it means
+     * that one did.
      */
     static FixtureShape of(Type t, Symbols symbols) {
         return switch (t) {
@@ -108,9 +115,14 @@ public sealed interface FixtureShape {
             case Type.Union u -> throw new FixtureException(
                     "`" + Type.show(u) + "` names several types, and a fixture supplies a value of"
                             + " one; write the case it is");
-            case Type.Var _, Type.MetaVar _ -> throw new FixtureException(
-                    "`" + Type.show(t) + "` is decided by each call, and a fixture is built before a"
-                            + " call can decide it");
+            // Not a refusal, and not a sentence to give an author. A row's operand is elaborated
+            // as any body is, so a variable reaching here would mean that elaboration left one open
+            // and emitted anyway — the compiler disagreeing with itself. A diagnostic here would
+            // state a rule the language no longer has: that a fixture cannot apply what a
+            // declaration wrote a variable in. It can, at the instance the row settled. Turning this
+            // back into a `FixtureException` would put that rule back.
+            case Type.Var _, Type.MetaVar _ -> throw new IllegalStateException(
+                    Type.show(t) + " reached a fixture, which is built at settled types only");
             case Type.Nothing _, Type.Never _, Type.Erroneous _ -> throw new FixtureException(
                     "`" + Type.show(t) + "` is not a type a fixture can be built against");
         };
@@ -167,7 +179,7 @@ public sealed interface FixtureShape {
     }
 
     /** A key a boundary map carries, as the position a fixture writes it at. */
-    private static FixtureShape key(souther.compiler.check.BoundaryMapKey key) {
+    private static FixtureShape key(souther.compiler.check.CrossingMapKey key) {
         return switch (key.representation()) {
             case MapKeyRepresentation.Lexical l -> new Scalar(l.leaf());
             case MapKeyRepresentation.NamedKey n -> new Nominal(n.name());
@@ -209,11 +221,11 @@ public sealed interface FixtureShape {
      * the reader's {@code Raw} arm never ran — it fell through to reflection and failed there
      * instead. It is refused as the reserved name it is.
      */
-    private static FixtureShape nominal(TypeName name, Symbols symbols) {
+    private static FixtureShape nominal(TypeSymbol name, Symbols symbols) {
         if (name.isPrimitive()) {
             return scalar(primitive(name));
         }
-        if (!symbols.declaredByCompilation(name)) {
+        if (!symbols.declarations().declaredByCompilation(name.key())) {
             throw new FixtureException("`" + name.name() + "` is declared by the language rather"
                     + " than by a module here, so no codec was derived for it and a fixture has"
                     + " nothing to build one through");
@@ -224,7 +236,7 @@ public sealed interface FixtureShape {
     /** The primitive a primitive-spelled name denotes, read through the inverse of the mint one is
      *  made by. {@code Raw} answers a primitive and is refused as the reserved name it is; a
      *  primitive-module name that denotes none — {@code Some}, {@code None} — answers nothing. */
-    private static Type.Prim primitive(TypeName name) {
+    private static Type.Prim primitive(TypeSymbol name) {
         Type.Prim prim = name.primitiveKind();
         if (prim == null) {
             throw new FixtureException("`" + name.name() + "` is not a type this example can read");

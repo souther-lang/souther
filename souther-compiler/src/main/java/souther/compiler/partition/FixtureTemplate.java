@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.Carrier;
 import souther.compiler.diag.Region;
@@ -8,8 +8,8 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ConstructionOrigin;
-import souther.compiler.types.TypeName;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.TypeReachName;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
@@ -31,8 +31,15 @@ import java.util.Map;
  * <p>The tree carries what its names denote, because that is what a fixture is read by. A construction
  * is reached by the type it names, not by the spelling — so the type is put there when the value is
  * made, where it is known, rather than looked up again from the text.
+ *
+ * <p>Every name a value here wears arrives as a {@link TypeReachName}, so that the two forms are
+ * written from one answer. What the tree denotes and what the text spells are the two halves of one
+ * reference, and nothing here decides either: a type declared as {@code Amount} is written
+ * {@code up.Amount} by a module that reached it through an alias, and a generator that spelled the
+ * declaration's own name offered a row nobody could paste while handing the reader a name it
+ * resolved to something else (issue #696).
  */
-public record FixtureTemplate(String text, Ast.Expr value) {
+public record FixtureTemplate(String text, Hir.Expr value) {
 
     /** Nothing generated is anywhere, and a fixture built here is never quoted back at a source. */
     private static final SourcePos NOWHERE = new SourcePos(0, 0);
@@ -48,17 +55,17 @@ public record FixtureTemplate(String text, Ast.Expr value) {
     }
 
     public static FixtureTemplate integer(long value) {
-        Ast.Expr magnitude = new Ast.IntLit(Math.abs(value), NOWHERE, NO_SOURCE);
+        Hir.Expr magnitude = new Hir.IntLit(Math.abs(value), NOWHERE, NO_SOURCE);
         return new FixtureTemplate(Long.toString(value),
-                value < 0 ? new Ast.Neg(magnitude, NOWHERE, NO_SOURCE) : magnitude);
+                value < 0 ? new Hir.Neg(magnitude, NOWHERE, NO_SOURCE) : magnitude);
     }
 
     public static FixtureTemplate decimal(BigDecimal value) {
         String written = value.stripTrailingZeros().toPlainString();
         BigDecimal magnitude = value.abs();
-        Ast.Expr literal = new Ast.DecimalLit(magnitude, NOWHERE, NO_SOURCE);
+        Hir.Expr literal = new Hir.DecimalLit(magnitude, NOWHERE, NO_SOURCE);
         return new FixtureTemplate(written + "m",
-                value.signum() < 0 ? new Ast.Neg(literal, NOWHERE, NO_SOURCE) : literal);
+                value.signum() < 0 ? new Hir.Neg(literal, NOWHERE, NO_SOURCE) : literal);
     }
 
     /**
@@ -81,11 +88,11 @@ public record FixtureTemplate(String text, Ast.Expr value) {
                 default -> written.append(c);
             }
         }
-        return new FixtureTemplate(written.append('"').toString(), new Ast.StringLit(value, NOWHERE, NO_SOURCE));
+        return new FixtureTemplate(written.append('"').toString(), new Hir.StringLit(value, NOWHERE, NO_SOURCE));
     }
 
     public static FixtureTemplate bool(boolean value) {
-        return new FixtureTemplate(Boolean.toString(value), new Ast.BoolLit(value, NOWHERE, NO_SOURCE));
+        return new FixtureTemplate(Boolean.toString(value), new Hir.BoolLit(value, NOWHERE, NO_SOURCE));
     }
 
     /** A date, written the way a row writes one: the constructor applied to an ISO 8601 string. */
@@ -105,27 +112,37 @@ public record FixtureTemplate(String text, Ast.Expr value) {
         return temporal("Instant", iso);
     }
 
-    /** Every temporal is written the same way — the type's name applied to its ISO 8601 text — so the
-     *  four share this rather than repeating it and letting one of them drift. */
+    /**
+     * Every temporal is written the same way — the type's name applied to its ISO 8601 text — so the
+     * four share this rather than repeating it and letting one of them drift.
+     *
+     * <p>A temporal is the language's own vocabulary rather than any module's declaration, so the
+     * name is the library namespace applied, which is what the same call written in a source reaches
+     * ({@link ValueName.Stdlib#namespace}). No module renames it and none has to be asked how it
+     * writes it.
+     */
     private static FixtureTemplate temporal(String type, String iso) {
+        ValueName.Stdlib namespace = ValueName.Stdlib.namespace(type);
         return new FixtureTemplate(type + "(\"" + iso + "\")",
-                new Ast.Apply(type, List.of(new Ast.StringLit(iso, NOWHERE, NO_SOURCE)),
-                        NOWHERE, NO_SOURCE));
+                new Hir.Apply(type, namespace, new ReachName.OfLibrary(namespace),
+                        List.of(new Hir.StringLit(iso, NOWHERE, NO_SOURCE)),
+                        ConstructionOrigin.own(), NOWHERE, NO_SOURCE));
     }
 
     /** The absent optional, which the language names rather than any module. */
     public static FixtureTemplate none() {
         return new FixtureTemplate("None",
-                new Ast.Var(WrittenName.synthetic("None", NOWHERE),
+                Hir.Var.denoting(WrittenName.synthetic("None", NOWHERE),
                         new ValueName.Builtin("None"), new ReachName.Bare("None")));
     }
 
     /** A case that carries nothing: naming it is constructing it. */
-    public static FixtureTemplate unitCase(TypeName type) {
-        return new FixtureTemplate(type.name(),
-                new Ast.Var(WrittenName.synthetic(type.name(), NOWHERE),
-                        new ValueName.OfType(type.name(), type, ConstructionOrigin.own()),
-                        new ReachName.Bare(type.name())));
+    public static FixtureTemplate unitCase(TypeReachName.Written type) {
+        String written = type.rendered();
+        return new FixtureTemplate(written,
+                Hir.Var.denoting(WrittenName.synthetic(written, NOWHERE),
+                        new ValueName.OfType(written, type.denotes(), ConstructionOrigin.own()),
+                        new ReachName.Bare(written)));
     }
 
     /**
@@ -136,12 +153,16 @@ public record FixtureTemplate(String text, Ast.Expr value) {
      * second count reached a row as an {@code Int}, and the decoder turned it down with nothing said
      * about why.
      *
+     * <p>Null where the case at {@code at} is one this module cannot name — a case the module
+     * declaring it does not expose, which a value can be of and no author can write down. Every
+     * other carrier writes a literal, which needs no name from anyone.
+     *
      * <p>Bare. How many names the value wears at the position it is going to is a different question
      * with its own answer ({@link Witnesses#wrapped}), which walks every layer; answered here as
      * well, it was answered one layer deep, and a value of a newtype over a newtype came back
      * missing the name in the middle.
      */
-    public static FixtureTemplate on(Carrier carrier, Place at) {
+    public static FixtureTemplate on(Carrier carrier, Place at, TypeReachName.Naming naming) {
         return switch (carrier) {
             case Carrier.Whole _ -> integer(Count.number(at).at().longValueExact());
             case Carrier.Dense _ -> decimal(Count.number(at).at());
@@ -149,19 +170,32 @@ public record FixtureTemplate(String text, Ast.Expr value) {
             // text. Spelled here as well, the two could differ at midnight and nowhere else.
             case Carrier.Days _ -> date(carrier.written(at));
             case Carrier.Seconds _ -> dateTime(carrier.written(at));
+            case Carrier.SecondsOfDay _ -> time(carrier.written(at));
+            case Carrier.Nanos _ -> instant(carrier.written(at));
             // Naming a case builds it, which is what a row writes at such a position — never the
             // place the case takes in its declaration.
-            case Carrier.Ordinal ordinal -> unitCase(ordinal.caseAt(at));
+            case Carrier.Ordinal ordinal ->
+                    naming.of(ordinal.caseAt(at)) instanceof TypeReachName.Written written
+                            ? unitCase(written) : null;
             // A string stands for itself, so what a row carries is the string, escaped the way the
             // language reads one back.
             case Carrier.Text _ -> string(at.key());
         };
     }
 
-    /** A newtype around one value, written in the call form a row writes it in (ADR-0032). */
-    public static FixtureTemplate newtype(TypeName type, FixtureTemplate inner) {
-        return new FixtureTemplate(type.name() + "(" + inner.text() + ")",
-                new Ast.Apply(type.name(), List.of(inner.value()), NOWHERE, NO_SOURCE));
+    /**
+     * A newtype around one value, written in the call form a row writes it in (ADR-0032).
+     *
+     * <p>The construction says where it came from and the name says what it is, which is how the
+     * same call reads when a source wrote it: applying a type is the newtype taking what it wraps,
+     * so the origin is the application's and the name carries none of its own.
+     */
+    public static FixtureTemplate newtype(TypeReachName.Written type, FixtureTemplate inner) {
+        String written = type.rendered();
+        return new FixtureTemplate(written + "(" + inner.text() + ")",
+                new Hir.Apply(written, new ValueName.OfType(written, type.denotes(), null),
+                        new ReachName.Bare(written), List.of(inner.value()),
+                        ConstructionOrigin.own(), NOWHERE, NO_SOURCE));
     }
 
     /** No elements. A list, a set and a map are all written this way in a fixture: what the position
@@ -178,32 +212,32 @@ public record FixtureTemplate(String text, Ast.Expr value) {
      * the position declares rather than anything spelled here.
      */
     public static FixtureTemplate collection(List<FixtureTemplate> elements) {
-        List<Ast.Expr> values = new ArrayList<>();
+        List<Hir.Expr> values = new ArrayList<>();
         List<String> written = new ArrayList<>();
         for (FixtureTemplate each : elements) {
             values.add(each.value());
             written.add(each.text());
         }
         return new FixtureTemplate("[" + String.join(", ", written) + "]",
-                new Ast.ListLit(List.copyOf(values), NOWHERE, NO_SOURCE));
+                new Hir.ListLit(List.copyOf(values), NOWHERE, NO_SOURCE));
     }
 
     /** One entry of a map: the pair a fixture writes a key and its value as. */
     public static FixtureTemplate entry(FixtureTemplate key, FixtureTemplate value) {
         return new FixtureTemplate("(" + key.text() + ", " + value.text() + ")",
-                new Ast.Tuple(List.of(key.value(), value.value()), NOWHERE, NO_SOURCE));
+                new Hir.Tuple(List.of(key.value(), value.value()), NOWHERE, NO_SOURCE));
     }
 
     /** A record, field by field, in the order the fields were declared. */
-    public static FixtureTemplate record(TypeName type, Map<String, FixtureTemplate> fields) {
+    public static FixtureTemplate record(TypeReachName.Written type, Map<String, FixtureTemplate> fields) {
         List<String> written = new ArrayList<>();
-        List<Ast.FieldInit> inits = new ArrayList<>();
+        List<Hir.FieldInit> inits = new ArrayList<>();
         for (Map.Entry<String, FixtureTemplate> field : fields.entrySet()) {
             written.add(field.getKey() + " = " + field.getValue().text());
-            inits.add(new Ast.FieldInit(field.getKey(), field.getValue().value(), NOWHERE));
+            inits.add(new Hir.FieldInit(field.getKey(), field.getValue().value(), NOWHERE));
         }
-        return new FixtureTemplate(type.name() + " { " + String.join(", ", written) + " }",
-                new Ast.NewData(Ast.Name.resolved(type, NOWHERE), inits, List.of(),
+        return new FixtureTemplate(type.rendered() + " { " + String.join(", ", written) + " }",
+                new Hir.NewData(Hir.Name.reached(type, NOWHERE), inits, List.of(),
                         ConstructionOrigin.own(), NOWHERE, NO_SOURCE));
     }
 }

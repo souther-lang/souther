@@ -36,7 +36,6 @@ class AnEqualityDividesTheValuesInTwoTest {
             data Again
 
             behavior verdict : (retries: Int) -> GiveUp | Again
-                constructs GiveUp, Again
             let verdict (retries) = if retries == 3 then GiveUp else Again
 
             example verdict
@@ -52,7 +51,6 @@ class AnEqualityDividesTheValuesInTwoTest {
             data Never
 
             behavior verdict : (retries: Int) -> GiveUp | Again | Never
-                constructs GiveUp, Again, Never
             let verdict (retries) =
                 if retries == 3 then GiveUp
                 else if retries <= 0 then Never
@@ -73,7 +71,6 @@ class AnEqualityDividesTheValuesInTwoTest {
                 invariant hi = value <= 1m
 
             behavior pick : (x: Ratio) -> A | B
-                constructs A, B
 
             let pick (x) = if x.value == 0.5m then A else B
 
@@ -102,7 +99,7 @@ class AnEqualityDividesTheValuesInTwoTest {
     void rowsOnEitherSideCoverIt() {
         String human = reportOf(MODEL);
 
-        assertTrue(human.contains("single-axis 2/2"), human);
+        assertTrue(human.contains("equivalence partitions 2/2"), human);
         assertFalse(human.contains("no row is in"), human);
     }
 
@@ -117,7 +114,7 @@ class AnEqualityDividesTheValuesInTwoTest {
     void theValueIsOwedAndItsNeighbourIsNot() {
         String human = reportOf(MODEL);
 
-        assertTrue(human.contains("boundary    1/1"), human);
+        assertTrue(human.contains("border      borders 1   coverage items 2/2   excluded 1"), human);
     }
 
     /**
@@ -142,7 +139,8 @@ class AnEqualityDividesTheValuesInTwoTest {
         Map<String, Adequacy.Filling> all = compilation.db()
                 .ask(new Adequacy.Generated(compilation.modules().get(0))).value();
         assertNotNull(all, "the model under test compiles");
-        return GeneratedRows.of("example.ratio", all, false, SourceNameResolver.identity());
+        return GeneratedRows.of("example.ratio", all, Map.of(), false,
+                SourceNameResolver.identity());
     }
 
     /** An ordering comparison beside it is a distinction the model does draw, and is kept. */

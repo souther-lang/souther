@@ -1,25 +1,32 @@
 package souther.compiler.codegen;
 
+import souther.compiler.query.Bodies;
+
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.ModuleMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.ReqSig;
 import souther.compiler.check.Requirements;
+import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.Sig;
+import souther.compiler.check.EnsuresEnforcement;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 
+import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.jvm.JvmClassName;
+import souther.compiler.jvm.SoutherJvmAbi;
+import souther.compiler.types.ValueName;
 import java.lang.classfile.Annotation;
 import java.lang.classfile.ClassBuilder;
 import java.lang.classfile.ClassFile;
@@ -61,7 +68,8 @@ public final class Backend {
     private final CodecGen codec;
     private final ValueClassGen value;
     /** The checker's elaborated bodies: what this emits from (issue #81). */
-    private final TypeChecker.Checked checked;
+    private final Bodies.Elaborated checked;
+    private final EnsuresGen ensures;
 
     /**
      * Every fn {@code module} emits a method for: what its source declared, and what it took on to
@@ -72,19 +80,32 @@ public final class Backend {
      * reads the component the fn is in; a class being written is about neither, because a method is a
      * method.
      */
-    private static List<Ast.FnDef> emitted(Ast.Module module) {
-        List<Ast.FnDef> all = new ArrayList<>(module.fns());
+    private static List<Hir.FnDef> emitted(Hir.Module module) {
+        List<Hir.FnDef> all = new ArrayList<>(module.fns());
         all.addAll(module.takenOn());
         return all;
     }
 
-    private Backend(CodegenContext ctx, TypeChecker.Checked checked) {
+    private Backend(CodegenContext ctx, Bodies.Elaborated checked) {
         this.ctx = ctx;
         this.pkg = ctx.pkg;
         this.symbols = ctx.symbols;
         this.codec = new CodecGen(ctx);
         this.value = new ValueClassGen(ctx, codec);
         this.checked = checked;
+        this.ensures = new EnsuresGen(ctx);
+    }
+
+    /**
+     * Where {@code behavior}'s declared relation is checked.
+     *
+     * <p>Asked of the context, which is where the decision was put for the emitters to read. Kept
+     * here as well it would be one decision in two fields filled from one argument, and the whole
+     * point of there being one value is that there is one reading of it — a later change setting one
+     * and not the other is a check emitted in a place the other half disagrees with.
+     */
+    private EnsuresEnforcement checkOf(ValueName.Behavior behavior) {
+        return ctx.ensuresCheckOf(behavior);
     }
 
     /** The body the checker elaborated for {@code name}. Codegen runs only on a module that type
@@ -114,17 +135,18 @@ public final class Backend {
      * the emitter reads instead of inferring types again (issue #81); {@code dischargeInvariants} carries
      * this module's invariant clauses in the representation the language's own operations survive in, which
      * is what a derived decoder's constraint mapping reads (spec §decoder-error). */
-    public static Map<String, byte[]> generate(Ast.Module module, Symbols symbols,
+    public static Emissions generate(Hir.Module module, Symbols symbols,
                                                Map<String, String> typePackage,
-                                               Map<String, Sig> sigs,
-                                               Map<String, Sig> importedSigs,
-                                               Set<String> importedInjected,
-                                               Map<String, ReqSig> calleeSigs,
+                                               Map<ValueName.Behavior, Sig> sigs,
+                                               Map<ValueName.Behavior, Sig> importedSigs,
+                                               Set<ValueName.Behavior> importedInjected,
+                                               Map<ValueName.Behavior, ReqSig> calleeSigs,
                                                Map<String, List<BehaviorRequirement>> requirements,
-                                               TypeChecker.Checked checked,
-                                               Map<TypeName, List<Ast.InvariantClause>> dischargeInvariants) {
+                                               Bodies.Elaborated checked,
+                                               Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+                                               Map<ValueName.Behavior, EnsuresEnforcement> checks) {
         return generate(module, symbols, typePackage, sigs, importedSigs, importedInjected, calleeSigs,
-                requirements, checked, dischargeInvariants, Instrumentation.NONE);
+                requirements, checked, dischargeInvariants, checks, Instrumentation.NONE);
     }
 
     /**
@@ -140,19 +162,20 @@ public final class Backend {
      * and refuses to emit a body it cannot find an arm for, rather than emit one arm short and report
      * the arm that ran as one nothing reaches.
      */
-    public static Map<String, byte[]> generate(Ast.Module module, Symbols symbols,
+    public static Emissions generate(Hir.Module module, Symbols symbols,
                                                Map<String, String> typePackage,
-                                               Map<String, Sig> sigs,
-                                               Map<String, Sig> importedSigs,
-                                               Set<String> importedInjected,
-                                               Map<String, ReqSig> calleeSigs,
+                                               Map<ValueName.Behavior, Sig> sigs,
+                                               Map<ValueName.Behavior, Sig> importedSigs,
+                                               Set<ValueName.Behavior> importedInjected,
+                                               Map<ValueName.Behavior, ReqSig> calleeSigs,
                                                Map<String, List<BehaviorRequirement>> requirements,
-                                               TypeChecker.Checked checked,
-                                               Map<TypeName, List<Ast.InvariantClause>> dischargeInvariants,
+                                               Bodies.Elaborated checked,
+                                               Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+                                               Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                Instrumentation instrumentation) {
         try {
             return generating(module, symbols, typePackage, sigs, importedSigs, importedInjected,
-                    calleeSigs, requirements, checked, dischargeInvariants, instrumentation);
+                    calleeSigs, requirements, checked, dischargeInvariants, checks, instrumentation);
         } catch (IllegalArgumentException e) {
             // Something the writer would not hold, from a member no definition here claimed — a
             // synthesised class, a shared one. It belongs to the module, which is as near as anything
@@ -161,22 +184,23 @@ public final class Backend {
         }
     }
 
-    private static Map<String, byte[]> generating(Ast.Module module, Symbols symbols,
+    private static Emissions generating(Hir.Module module, Symbols symbols,
                                                   Map<String, String> typePackage,
-                                                  Map<String, Sig> sigs,
-                                                  Map<String, Sig> importedSigs,
-                                                  Set<String> importedInjected,
-                                                  Map<String, ReqSig> calleeSigs,
+                                                  Map<ValueName.Behavior, Sig> sigs,
+                                                  Map<ValueName.Behavior, Sig> importedSigs,
+                                                  Set<ValueName.Behavior> importedInjected,
+                                                  Map<ValueName.Behavior, ReqSig> calleeSigs,
                                                   Map<String, List<BehaviorRequirement>> requirements,
-                                                  TypeChecker.Checked checked,
-                                                  Map<TypeName, List<Ast.InvariantClause>> dischargeInvariants,
+                                                  Bodies.Elaborated checked,
+                                                  Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+                                                  Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                   Instrumentation instrumentation) {
-        Map<String, List<String>> caseToSums = new HashMap<>();
-        for (Ast.Def def : module.defs()) {
-            if (def instanceof Ast.SumData sum) {
-                for (Ast.Name caseName : sum.cases()) {
-                    caseToSums.computeIfAbsent(caseName.denotes().name(), k -> new ArrayList<>())
-                            .add(sum.name());
+        Map<String, List<GeneratedClass>> caseToSums = new HashMap<>();
+        for (Hir.Def def : module.defs()) {
+            if (def instanceof Hir.SumData sum) {
+                for (Hir.Name caseName : sum.cases()) {
+                    caseToSums.computeIfAbsent(names(caseName).name(), k -> new ArrayList<>())
+                            .add(new GeneratedClass.Value(sum.declares()));
                 }
             }
         }
@@ -186,13 +210,13 @@ public final class Backend {
         // After the Lower stage the only non-behavior fns left are recursive helpers (spec §fn-declaration);
         // each is lowered to a static method on the module's `$Fns` class rather than inlined.
         Set<String> behaviorNames = new HashSet<>();
-        for (Ast.BehaviorDef bd : module.behaviors()) {
+        for (Hir.BehaviorDef bd : module.behaviors()) {
             behaviorNames.add(bd.name());
         }
         // Both components: a method is emitted for what the module declared and for what it took on
         // to emit, and by the time a class is written there is no difference between them.
-        Map<String, Ast.FnDef> recHelpers = new LinkedHashMap<>();
-        for (Ast.FnDef fn : emitted(module)) {
+        Map<String, Hir.FnDef> recHelpers = new LinkedHashMap<>();
+        for (Hir.FnDef fn : emitted(module)) {
             if (!behaviorNames.contains(fn.name())) {
                 recHelpers.put(fn.name(), fn);
             }
@@ -200,6 +224,7 @@ public final class Backend {
         CodegenContext ctx = new CodegenContext(module.name(), symbols, caseToSums, typePackage,
                 module.exposing().isEmpty(), exposed, recHelpers);
         ctx.setDischargeInvariants(dischargeInvariants);
+        ctx.setEnsuresChecks(checks);
         ctx.setCoveragePlan(instrumentation.coverage());
         ctx.setCounting(instrumentation.counting());
         Backend b = new Backend(ctx, checked);
@@ -209,28 +234,35 @@ public final class Backend {
         // A behavior's class capitalizes its first letter (spec §jvm-behavior). Data names are already
         // capitalized, so `behavior quote` producing `data Quote` would generate two classes named
         // `Quote`. Reject the collision here rather than let one silently overwrite the other.
-        Set<String> localTypes = new HashSet<>();
-        for (Ast.Def d : module.defs()) {
-            localTypes.add(d.name());
+        // Every one of these checks asks the same question — does the ABI spell two of this module's
+        // identities the same — so each compares what the ABI answers rather than a spelling worked
+        // out here. What collides is decided on the JVM name; what the report names is the Souther
+        // declarations that landed on it.
+        Map<JvmClassName, Hir.Def> localTypes = new LinkedHashMap<>();
+        for (Hir.Def d : module.defs()) {
+            localTypes.put(SoutherJvmAbi.nameOf(new GeneratedClass.Value(d.declares())), d);
         }
-        Map<String, String> behaviorClassOwner = new HashMap<>();
-        for (Ast.BehaviorDef bd : module.behaviors()) {
-            String cls = behaviorClass(bd.name());
-            if (localTypes.contains(cls)) {
+        Map<JvmClassName, String> behaviorClassOwner = new LinkedHashMap<>();
+        for (Hir.BehaviorDef bd : module.behaviors()) {
+            JvmClassName cls = SoutherJvmAbi.nameOf(
+                    new GeneratedClass.BehaviorInterface(module.name(), bd.name()));
+            Hir.Def data = localTypes.get(cls);
+            if (data != null) {
                 throw CompileException.of(Diagnostic
-                                .at(bd.pos()).say(new BehaviorMessage.ABehaviorCapitalizesOntoAData(bd.name(), cls)).build());
+                                .at(bd.pos()).say(new BehaviorMessage.ABehaviorCapitalizesOntoAData(bd.name(), data.name())).build());
             }
             String prev = behaviorClassOwner.put(cls, bd.name());
             if (prev != null) {
                 throw CompileException.of(Diagnostic
-                                .at(bd.pos()).say(new BehaviorMessage.TwoBehaviorsCapitalizeToOneClass(prev, bd.name(), cls)).build());
+                                .at(bd.pos()).say(new BehaviorMessage.TwoBehaviorsCapitalizeToOneClass(prev, bd.name(), cls.classDesc().displayName())).build());
             }
         }
         // A behavior whose output is an anonymous union gets a generated sealed interface
         // <behavior名>Result that its cases implement (spec §jvm-anonymous-union). Register those case->interface links
         // in caseToSums before the data classes are generated, so each case class picks the interface
         // up in withInterfaceSymbols. The interface classes themselves are emitted below.
-        Map<String, List<TypeName>> behaviorResults = b.behaviorResultInterfaces(module, sigs);
+        Map<GeneratedClass.BehaviorResult, List<TypeSymbol>> behaviorResults =
+                b.behaviorResultInterfaces(module, sigs);
         b.rejectResultUnionCollisions(module, behaviorResults, localTypes, behaviorClassOwner);
         // A case class carries the result unions it belongs to as interfaces it implements, and that
         // list is settled when its own module is generated. A member this module declared takes the
@@ -238,94 +270,90 @@ public final class Backend {
         // is the JDK's, and giving an imported class an interface from here would make a module's
         // bytecode depend on which modules import it — the mirror of what ADR-0024 refuses. Such a
         // member reaches the union through a bridge case this module emits instead (ADR-0057).
-        Map<TypeName, List<String>> bridgeCases = new LinkedHashMap<>();
-        behaviorResults.forEach((resultName, members) -> {
-            for (TypeName member : members) {
+        Map<TypeSymbol, List<GeneratedClass.BehaviorResult>> bridgeCases = new LinkedHashMap<>();
+        behaviorResults.forEach((union, members) -> {
+            for (TypeSymbol member : members) {
                 if (b.ctx.isLocalMember(member)) {
-                    caseToSums.computeIfAbsent(member.name(), k -> new ArrayList<>()).add(resultName);
+                    caseToSums.computeIfAbsent(member.name(), k -> new ArrayList<>()).add(union);
                 } else {
-                    bridgeCases.computeIfAbsent(member, k -> new ArrayList<>()).add(resultName);
+                    bridgeCases.computeIfAbsent(member, k -> new ArrayList<>()).add(union);
                 }
             }
         });
-        b.rejectBridgeCaseCollisions(module, bridgeCases, behaviorResults, localTypes, behaviorClassOwner);
-        Map<String, byte[]> out = new OneClassPerName();
-        behaviorResults.forEach((resultName, members) -> {
+        b.rejectBridgeCaseCollisions(module, bridgeCases, localTypes, behaviorClassOwner);
+        Emissions out = new Emissions(module.name());
+        behaviorResults.forEach((union, members) -> {
             // the union and its encoder belong to the behavior whose output they are, not to the
             // module, though the behavior did not write them
-            Ast.BehaviorDef owner = b.behaviorOf(module, resultName);
-            // A module's own name is the one name the tree does not carry an occurrence for, so
-            // where a result belongs to no behavior the report is anchored at the module and is as
-            // wide as its name rather than as the characters that spell it.
-            emitting(owner == null
-                    ? WrittenName.synthetic(module.name(), module.pos()) : owner.written(), () -> {
-                        out.put(module.name() + "." + resultName,
-                                b.generateBehaviorResult(resultName, members));
-                        out.put(module.name() + "." + resultName + "$Enc",
-                                b.codec.generateResultUnionEncoder(resultName, members));
-                    });
+            Hir.BehaviorDef owner = b.behaviorNamed(module, union.behavior());
+            emitting(owner.written(), () -> {
+                out.put(union, b.generateBehaviorResult(union, members));
+                out.put(new GeneratedClass.Encoder(union),
+                        b.codec.generateResultUnionEncoder(union, members));
+            });
         });
         // A bridge case is shared by every union that reaches its member, so no one behavior owns it;
         // it is left to the module, which the outermost boundary answers for.
         bridgeCases.forEach((member, unions) ->
-                out.put(module.name() + "." + CodegenContext.bridgeCaseName(member),
-                        b.value.generateBridgeCase(member, unions, out)));
-        for (Ast.Def def : module.defs()) {
+                out.put(new GeneratedClass.BridgeCase(module.name(), member),
+                        b.value.generateBridgeCase(member, unions)));
+        for (Hir.Def def : module.defs()) {
             emitting(def.written(), () -> {
                 switch (def) {
-                    case Ast.Data data -> b.value.generateData(data, out);
-                    case Ast.SumData sum -> b.value.generateSum(sum, out);
-                    case Ast.UnitData unit -> b.value.generateUnit(unit, out);
+                    case Hir.Data data -> b.value.generateData(data, out);
+                    case Hir.SumData sum -> b.value.generateSum(sum, out);
+                    case Hir.UnitData unit -> b.value.generateUnit(unit, out);
                 }
             });
         }
         // Behavior fn bodies arrive with their helper calls already inlined (the Lower stage,
         // ADR-0021); the backend emits them as-is and never lowers a helper on its own.
-        Map<String, Ast.FnDef> fns = new HashMap<>();
-        for (Ast.FnDef fn : emitted(module)) {
+        Map<String, Hir.FnDef> fns = new HashMap<>();
+        for (Hir.FnDef fn : emitted(module)) {
             fns.put(fn.name(), fn);
         }
         // Injection targets (spec §injected-behavior): a SpecBehavior with no matching fn. Each becomes an
         // abstract base class a Java implementation extends (§java-base-class). Imported injection targets
         // (their base lives in the declaring module) are requirements too, so a composition here
         // injects and binds them (spec §composition-with-requirements) — but no base is generated for them here.
-        Set<String> requiredNames = Requirements.injectedNames(module, importedInjected);
-        Map<String, Type> requiredSuccess = new HashMap<>();
-        Map<String, List<Type>> requiredParam = new HashMap<>();
-        for (Ast.BehaviorDef bd : module.behaviors()) {
-            if (bd instanceof Ast.SpecBehavior spec && requiredNames.contains(spec.name())) {
-                requiredSuccess.put(spec.name(), b.successType(spec.ret()));
+        Set<ValueName.Behavior> requiredNames = Requirements.injectedNames(module, importedInjected);
+        Map<ValueName.Behavior, Type> requiredSuccess = new HashMap<>();
+        Map<ValueName.Behavior, List<Type>> requiredParam = new HashMap<>();
+        for (Hir.BehaviorDef bd : module.behaviors()) {
+            ValueName.Behavior declared = new ValueName.Behavior(module.name(), bd.name());
+            if (bd instanceof Hir.SpecBehavior spec && requiredNames.contains(declared)) {
+                requiredSuccess.put(declared, b.successType(spec.ret()));
                 List<Type> reqParams = new ArrayList<>();
-                for (Ast.Param p : spec.params()) {
+                for (Hir.Param p : spec.params()) {
                     reqParams.add(b.successType(p.type()));
                 }
-                requiredParam.put(spec.name(), reqParams);
+                requiredParam.put(declared, reqParams);
                 // Unit output cases get a no-arg factory (a unit has nothing to validate, so it is
                 // built directly). A field-bearing constructed type gets a typed factory, but only
                 // when the behavior declares it in `constructs` — that declaration is the authority
                 // to build it (spec §asymmetric-interop), and unlike a unit it cannot be told apart from a decoded
                 // pass-through output (会員) by shape alone.
-                List<String> unitCases = new ArrayList<>();
-                for (Ast.TypeTerm term : spec.ret().cases()) {
-                    if (term instanceof Ast.TypeRef t && t.denotes() instanceof Type.Ref r
-                            && b.symbols.get(r.name()) instanceof Ast.UnitData) {
-                        unitCases.add(r.name().name());
+                List<TypeSymbol> unitCases = new ArrayList<>();
+                for (Hir.TypeTerm term : spec.ret().cases()) {
+                    if (term instanceof Hir.TypeRef t && t.denotes() instanceof Type.Ref r
+                            && b.symbols.declarations().declaration(r.name().key()) instanceof Hir.UnitData) {
+                        unitCases.add(r.name());
                     }
                 }
-                List<Ast.Data> dataConstructs = new ArrayList<>();
-                Set<TypeName> seenConstruct = new HashSet<>();
+                List<TypeSymbol> dataConstructs = new ArrayList<>();
+                Set<TypeSymbol> seenConstruct = new HashSet<>();
                 if (spec.constructs() != null) {
-                    for (Ast.Name tn : spec.constructs()) {
+                    for (Hir.Name tn : spec.constructs()) {
                         // a field-bearing data or newtype; de-duplicated so a repeated `constructs`
                         // entry does not emit the factory method twice (a duplicate-method class file)
-                        if (b.symbols.get(tn.denotes()) instanceof Ast.Data data
-                                && seenConstruct.add(tn.denotes())) {
-                            dataConstructs.add(data);
+                        if (b.symbols.declarations().declaration(names(tn).key()) instanceof Hir.Data
+                                && seenConstruct.add(names(tn))) {
+                            dataConstructs.add(names(tn));
                         }
                     }
                 }
                 emitting(spec.written(), () ->
-                        out.put(module.name() + "." + behaviorClass(spec.name()),
+                        out.put(new GeneratedClass.BehaviorInterface(module.name(), spec.name()),
                                 b.generateRequiredBase(spec.name(), unitCases, dataConstructs,
                                         reqParams, b.successType(spec.ret()))));
             }
@@ -337,25 +365,25 @@ public final class Backend {
         // `depends on` (spec [#depends-on]). Nothing is generated for it here — it has its own $Impl —
         // but the module that named it holds it as a field, so its arity and output belong in the
         // same maps the unary-vs-multi dispatch reads.
-        Map<String, Ast.SpecBehavior> ownSpecs = new HashMap<>();
-        for (Ast.BehaviorDef bd : module.behaviors()) {
-            if (bd instanceof Ast.SpecBehavior spec) {
-                ownSpecs.put(spec.name(), spec);
+        Map<ValueName.Behavior, Hir.SpecBehavior> ownSpecs = new HashMap<>();
+        for (Hir.BehaviorDef bd : module.behaviors()) {
+            if (bd instanceof Hir.SpecBehavior spec) {
+                ownSpecs.put(new ValueName.Behavior(module.name(), spec.name()), spec);
             }
         }
-        for (Ast.BehaviorDef bd : module.behaviors()) {
-            if (!(bd instanceof Ast.SpecBehavior spec)) {
+        for (Hir.BehaviorDef bd : module.behaviors()) {
+            if (!(bd instanceof Hir.SpecBehavior spec)) {
                 continue;
             }
-            for (Ast.Var req : spec.dependsOn()) {
-                String name = req.bare();
-                if (requiredNames.contains(name)) {
+            for (Hir.Var req : spec.dependsOn()) {
+                ValueName.Behavior name = reachedBy(req);
+                if (name == null || requiredNames.contains(name)) {
                     continue;
                 }
-                Ast.SpecBehavior own = ownSpecs.get(name);
+                Hir.SpecBehavior own = ownSpecs.get(name);
                 if (own != null) {
                     List<Type> ins = new ArrayList<>();
-                    for (Ast.Param p : own.params()) {
+                    for (Hir.Param p : own.params()) {
                         ins.add(b.successType(p.type()));
                     }
                     requiredNames.add(name);
@@ -371,7 +399,7 @@ public final class Backend {
                 }
             }
         }
-        for (String name : importedInjected) {
+        for (ValueName.Behavior name : importedInjected) {
             Sig sig = importedSigs.get(name);
             if (sig != null) {
                 requiredParam.put(name, sig.inputTypes());
@@ -386,38 +414,52 @@ public final class Backend {
         b.ctx.setCalleeSignatures(calleeSigs);
         // What each behavior takes injected, worked out once and read here and at an example
         // (Bodies.Requirements): the order is this constructor's parameter order.
-        Map<String, List<String>> behaviorDeps = new LinkedHashMap<>();
+        Map<ValueName.Behavior, List<ValueName.Behavior>> behaviorDeps = new LinkedHashMap<>();
         for (Map.Entry<String, List<BehaviorRequirement>> e : requirements.entrySet()) {
-            behaviorDeps.put(e.getKey(), Requirements.names(e.getValue()));
+            behaviorDeps.put(new ValueName.Behavior(module.name(), e.getKey()),
+                    Requirements.names(e.getValue()));
         }
-        Map<String, List<Ast.Var>> pipeStages = PipelineSigs.pipelineStages(module);
-        for (Ast.BehaviorDef bd : module.behaviors()) {
+        Map<ValueName.Behavior, List<Hir.Var>> pipeStages = PipelineSigs.pipelineStages(module);
+        for (Hir.BehaviorDef bd : module.behaviors()) {
             emitting(bd.written(), () -> {
+                // The class a declared relation is checked by, emitted by the module that declares
+                // it whichever of the two places the check is called from. A crossing is in the
+                // caller's bytecode and calls this one, so the rule has one home and a caller has
+                // nothing of it to restate.
+                ValueName.Behavior named = new ValueName.Behavior(module.name(), bd.name());
+                BehaviorContract contract = b.checkOf(named).contract();
+                if (contract != null) {
+                    out.put(new GeneratedClass.Ensures(
+                                    new GeneratedClass.BehaviorInterface(module.name(), bd.name())),
+                            b.ensures.generate(contract));
+                }
                 switch (bd) {
-                    case Ast.SpecBehavior spec -> {
-                        Ast.FnDef fn = fns.get(spec.name());
+                    case Hir.SpecBehavior spec -> {
+                        Hir.FnDef fn = fns.get(spec.name());
                         if (fn != null) {
                             // a fn-implemented behavior: the $Impl holds the logic, the public interface
                             // (behaviorClass) is what Java code declares (spec §jvm-anonymous-union).
-                            out.put(module.name() + "." + CodegenContext.behaviorImplClass(spec.name()),
+                            out.put(new GeneratedClass.BehaviorImpl(module.name(), spec.name()),
                                     b.generateSpecFn(spec, fn, requiredNames, requiredSuccess, requiredParam));
                             List<Type> pts = new ArrayList<>();
-                            for (Ast.Param p : spec.params()) {
+                            for (Hir.Param p : spec.params()) {
                                 pts.add(b.successType(p.type()));
                             }
-                            out.put(module.name() + "." + behaviorClass(spec.name()),
+                            out.put(new GeneratedClass.BehaviorInterface(module.name(), spec.name()),
                                     b.generateBehaviorInterface(spec.name(), pts, b.successType(spec.ret()),
                                             requiredBy(spec)));
                         }
                         // else: injection target — its abstract base was generated above (spec §java-base-class)
                     }
-                    case Ast.PipeBehavior pipe -> {
-                        out.put(module.name() + "." + CodegenContext.behaviorImplClass(pipe.name()),
+                    case Hir.PipeBehavior pipe -> {
+                        out.put(new GeneratedClass.BehaviorImpl(module.name(), pipe.name()),
                                 b.generatePipe(pipe, requiredNames, sigs, behaviorDeps, pipeStages));
-                        Sig sig = declaredSig(pipe, sigs);
-                        out.put(module.name() + "." + behaviorClass(pipe.name()),
+                        Sig sig = declaredSig(module.name(), pipe, sigs);
+                        out.put(new GeneratedClass.BehaviorInterface(module.name(), pipe.name()),
                                 b.generateBehaviorInterface(pipe.name(), sig.inputTypes(), sig.outputType(),
-                                        behaviorDeps.getOrDefault(pipe.name(), List.of())));
+                                        behaviorDeps.getOrDefault(
+                                                new ValueName.Behavior(module.name(), pipe.name()),
+                                                List.of())));
                     }
                 }
             });
@@ -427,10 +469,10 @@ public final class Backend {
             // method it would not write is the helper whose name it is, and a pool it would not hold
             // belongs to all of them and so to the module.
             try {
-                out.put(module.name() + ".$Fns", b.generateRecursiveHelpers(recHelpers));
+                out.put(new GeneratedClass.Helpers(module.name()), b.generateRecursiveHelpers(recHelpers));
             } catch (IllegalArgumentException e) {
                 JvmLimits.Exceeded exceeded = JvmLimits.exceeded(e);
-                Ast.FnDef helper = exceeded == null ? null : helperNamed(recHelpers, exceeded.method());
+                Hir.FnDef helper = exceeded == null ? null : helperNamed(recHelpers, exceeded.method());
                 throw helper == null
                         ? asLimit(e, WrittenName.synthetic(module.name(), module.pos()))
                         : asLimit(e, helper.written());
@@ -449,36 +491,6 @@ public final class Backend {
                     + "; a body was walked without counting what it holds");
         }
         return out;
-    }
-
-    /**
-     * What a module emits, holding one class under one binary name.
-     *
-     * <p>The names a module declares and the names the compiler generates beside them are spelled
-     * into one namespace, and a map takes the second write of a name as the value of it — so two
-     * classes wanting one name left the artifact set short of a class, with the compile reporting
-     * nothing and the loss arriving as a linkage error against whichever class went missing. The
-     * language keeps the two apart by refusing {@code $} in a name (spec §identifier), and a
-     * declaration that would emit a class another declaration already has is refused where it is
-     * declared (spec §no-two-declarations-become-one-class). This says the same thing at the one
-     * place both are true of, so a naming scheme changed later cannot bring the silence back.
-     */
-    static final class OneClassPerName extends LinkedHashMap<String, byte[]> {
-
-        @Override
-        public byte[] put(String name, byte[] bytes) {
-            if (containsKey(name)) {
-                throw new IllegalStateException("two classes were emitted as " + name
-                        + "; a module's declared and generated names are one namespace and this one"
-                        + " is written twice");
-            }
-            return super.put(name, bytes);
-        }
-
-        @Override
-        public void putAll(Map<? extends String, ? extends byte[]> classes) {
-            classes.forEach(this::put);
-        }
     }
 
     /**
@@ -507,11 +519,11 @@ public final class Backend {
 
     /** The helper emitted as {@code method} on {@code $Fns}, or null if the name is not one of
      *  theirs. */
-    private static Ast.FnDef helperNamed(Map<String, Ast.FnDef> helpers, String method) {
+    private static Hir.FnDef helperNamed(Map<String, Hir.FnDef> helpers, String method) {
         if (method == null) {
             return null;
         }
-        for (Ast.FnDef helper : helpers.values()) {
+        for (Hir.FnDef helper : helpers.values()) {
             if (CodegenContext.helperMethod(helper.name()).equals(method)) {
                 return helper;
             }
@@ -519,9 +531,9 @@ public final class Backend {
         return null;
     }
 
-    /** The {@code $Fns} method a helper is emitted as, for a caller outside this package: an
-     * {@code example} that applies a helper looks the method up by name (ADR-0077), and the name is
-     * decided in one place. */
+    /** The {@code $Fns} method a definition is emitted as, for a caller outside this package: an
+     * {@code example} run looks its operand's method up by name, and the name is decided in one
+     * place. */
     public static String helperMethod(String helper) {
         return CodegenContext.helperMethod(helper);
     }
@@ -540,11 +552,11 @@ public final class Backend {
      * plain {@code invokestatic} — the recursion the inliner cannot express. The body is emitted through
      * the same {@code emitBodyTail} path a behavior uses; a helper is pure, so it has no injected fields.
      */
-    private byte[] generateRecursiveHelpers(Map<String, Ast.FnDef> helpers) {
-        ClassDesc cdFns = ClassDesc.of(pkg + ".$Fns");
+    private byte[] generateRecursiveHelpers(Map<String, Hir.FnDef> helpers) {
+        ClassDesc cdFns = ctx.cd(new GeneratedClass.Helpers(pkg));
         return build(cdFns, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);   // package-private, not exposed
-            for (Ast.FnDef h : helpers.values()) {
+            for (Hir.FnDef h : helpers.values()) {
                 int n = h.params().size();
                 ClassDesc[] params = new ClassDesc[n];
                 java.util.Arrays.fill(params, CD_Object);
@@ -566,7 +578,7 @@ public final class Backend {
                     for (int i = 0; i < n; i++) {
                         // a function parameter arrives as an Fn value (a closure); every other parameter
                         // as its boxed value. resolveParamType handles both shapes.
-                        Type pt = TypeOps.resolveParamType(h.params().get(i).type(), symbols);
+                        Type pt = TypeOps.resolveParamType(h.params().get(i).type());
                         code.aload(i);
                         int slot = gen.slot(pt);
                         unbox(code, pt, slot);
@@ -624,28 +636,29 @@ public final class Backend {
     /** Emits injected required-behavior fields plus the matching constructor (or a no-arg ctor) on a
      * behavior's {@code $Impl}. The {@code of()}/{@code bind()} factories live on the public interface
      * ({@link #emitBehaviorFactory}), not here. */
-    private void emitInjection(ClassBuilder cb, ClassDesc cdX, List<String> requireds) {
-        if (requireds.isEmpty()) {
+    private void emitInjection(ClassBuilder cb, ClassDesc cdX, InjectionSlots held) {
+        if (held.isEmpty()) {
             emitPublicCtor(cb);
             return;
         }
-        for (String req : requireds) {
+        for (InjectionSlots.Slot slot : held.all()) {
             // a multi-input required behavior is stored as its own base class (invokevirtual), not the
             // unary Behavior — see CodegenContext.requiredFieldType (issue #57)
-            cb.withField(req, ctx.requiredFieldType(req), ClassFile.ACC_FINAL);
+            cb.withField(slot.fieldName(), slot.type(), ClassFile.ACC_FINAL);
         }
-        ClassDesc[] params = new ClassDesc[requireds.size()];
-        for (int i = 0; i < requireds.size(); i++) {
-            params[i] = ctx.requiredFieldType(requireds.get(i));
+        ClassDesc[] params = new ClassDesc[held.all().size()];
+        for (int i = 0; i < params.length; i++) {
+            params[i] = held.all().get(i).type();
         }
         MethodTypeDesc ctorDesc = MethodTypeDesc.of(ConstantDescs.CD_void, params);
         cb.withMethodBody("<init>", ctorDesc, ClassFile.ACC_PUBLIC, code -> {
             code.aload(0);
             code.invokespecial(CD_Object, "<init>", MTD_void);
-            for (int i = 0; i < requireds.size(); i++) {
+            for (int i = 0; i < held.all().size(); i++) {
+                InjectionSlots.Slot slot = held.all().get(i);
                 code.aload(0);
                 code.aload(i + 1);
-                code.putfield(cdX, requireds.get(i), ctx.requiredFieldType(requireds.get(i)));
+                code.putfield(cdX, slot.fieldName(), slot.type());
             }
             code.return_();
         });
@@ -658,7 +671,7 @@ public final class Backend {
      * construct the {@code $Impl}, so the caller never names the implementation class.
      */
     private void emitBehaviorFactory(ClassBuilder cb, ClassDesc cdI, ClassDesc cdImpl,
-                                     List<String> requireds) {
+                                     List<ValueName.Behavior> requireds) {
         if (requireds.isEmpty()) {
             cb.withMethodBody("of", MethodTypeDesc.of(cdI),
                     ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC, code -> {
@@ -708,7 +721,7 @@ public final class Backend {
      * rather than {@code Object}. If either side is a list/option/map (no single reference class), the
      * signature is omitted and the raw interface stands.
      */
-    private byte[] generateRequiredBase(String name, List<String> unitCases, List<Ast.Data> dataConstructs,
+    private byte[] generateRequiredBase(String name, List<TypeSymbol> unitCases, List<TypeSymbol> dataConstructs,
                                         List<Type> paramTypes, Type retType) {
         ClassDesc cdR = cdBehavior(name);
         // Injected-vs-unary is orthogonal to composition: one input is the unary Behavior<In,Out> (so
@@ -731,19 +744,19 @@ public final class Backend {
                 code.invokespecial(CD_Object, "<init>", MTD_void);
                 code.return_();
             });
-            for (String caseName : unitCases) {
+            for (TypeSymbol caseName : unitCases) {
                 emitUnitFactory(cb, caseName);
             }
-            for (Ast.Data data : dataConstructs) {   // a field-bearing data or a newtype
-                emitDataFactory(cb, data);
+            for (TypeSymbol construct : dataConstructs) {   // a field-bearing data or a newtype
+                emitDataFactory(cb, construct);
             }
         });
     }
 
     /** A no-arg factory for a unit case: the type has exactly one value, so it hands that out. */
-    private void emitUnitFactory(ClassBuilder cb, String typeName) {
-        ClassDesc caseCd = cd(typeName);
-        cb.withMethodBody(typeName, MethodTypeDesc.of(caseCd),
+    private void emitUnitFactory(ClassBuilder cb, TypeSymbol typeName) {
+        ClassDesc caseCd = ctx.cd(typeName);
+        cb.withMethodBody(typeName.name(), MethodTypeDesc.of(caseCd),
                 ClassFile.ACC_PROTECTED | ClassFile.ACC_FINAL, code -> {
                     loadSharedInstance(code, caseCd);
                     code.areturn();
@@ -753,8 +766,11 @@ public final class Backend {
     /** A factory taking the data's fields (in declaration order) and building it through
      * {@code __construct}, so the invariant is checked and a violation aborts (spec §algebraic-types) — the same
      * path an in-domain construction takes, not a decode of an external representation. */
-    private void emitDataFactory(ClassBuilder cb, Ast.Data data) {
-        ClassDesc cdType = cd(data.name());
+    private void emitDataFactory(ClassBuilder cb, TypeSymbol construct) {
+        // The type as the `constructs` clause resolved it: an entry there may name a type another
+        // module declares, and the class of one is that module's.
+        Hir.Data data = (Hir.Data) symbols.declarations().declaration(construct.key());
+        ClassDesc cdType = ctx.cd(construct);
         Map<String, Type> fields = ctx.fieldTypes(data);
         ClassDesc[] fieldDs = fieldDescs(fields, ctx);
         String sig = factorySignature(fields, cdType);
@@ -803,8 +819,8 @@ public final class Backend {
     private void withBehaviorSignature(ClassBuilder cb, Type input, Type output, String behaviorName) {
         // A collection In/Out keeps its element type (sigRefOrNull), so it no longer suppresses the
         // whole Behavior<In,Out> signature — only a truly erased type (var/tuple/fn) does (issue #57).
-        String inSig = ctx.sigRefOrNull(input, behaviorName);
-        String outSig = ctx.sigRefOrNull(output, behaviorName);
+        String inSig = ctx.sigRefOrNull(input, own(behaviorName));
+        String outSig = ctx.sigRefOrNull(output, own(behaviorName));
         if (inSig == null || outSig == null) {
             return;
         }
@@ -818,8 +834,8 @@ public final class Backend {
      * (a fn interface or an injected base), with a generic {@code Signature} when a param/return is a
      * collection (issue #57). */
     private void emitAbstractApply(ClassBuilder cb, String name, List<Type> paramTypes, Type retType) {
-        String sig = ctx.applySignatureOrNull(name, paramTypes, retType);
-        cb.withMethod("apply", ctx.typedApplyDesc(name, paramTypes, retType),
+        String sig = ctx.applySignatureOrNull(own(name), paramTypes, retType);
+        cb.withMethod("apply", ctx.typedApplyDesc(own(name), paramTypes, retType),
                 ClassFile.ACC_PUBLIC | ClassFile.ACC_ABSTRACT, mb -> {
                     if (sig != null) {
                         mb.with(SignatureAttribute.of(MethodSignature.parseFrom(sig)));
@@ -836,7 +852,7 @@ public final class Backend {
      * static {@code of()}/{@code bind(...)} factory that builds the {@code $Impl}.
      */
     private byte[] generateBehaviorInterface(String name, List<Type> paramTypes, Type retType,
-                                             List<String> dependsOn) {
+                                             List<ValueName.Behavior> dependsOn) {
         ClassDesc cdI = cdBehavior(name);
         ClassDesc cdImpl = cdBehaviorImpl(name);
         boolean single = paramTypes.size() == 1;
@@ -854,7 +870,7 @@ public final class Backend {
     }
 
     private MethodTypeDesc typedApplyDesc(String name, List<Type> paramTypes, Type retType) {
-        return ctx.typedApplyDesc(name, paramTypes, retType);
+        return ctx.typedApplyDesc(own(name), paramTypes, retType);
     }
 
     /** Emits the covariant bridge that satisfies a multi-input interface's typed apply by delegating
@@ -902,28 +918,30 @@ public final class Backend {
      * spelling from two modules — refused within a union by the member-name rule, and reaching here
      * when they are members of two different unions of this module.
      */
-    private void rejectBridgeCaseCollisions(Ast.Module module, Map<TypeName, List<String>> bridgeCases,
-                                            Map<String, List<TypeName>> behaviorResults,
-                                            Set<String> localTypes, Map<String, String> behaviorClassOwner) {
-        Map<String, TypeName> byBridgeName = new LinkedHashMap<>();
-        for (Map.Entry<TypeName, List<String>> e : bridgeCases.entrySet()) {
-            TypeName member = e.getKey();
-            String bridge = CodegenContext.bridgeCaseName(member);
-            Ast.BehaviorDef owner = behaviorOf(module, e.getValue().get(0));
-            SourcePos pos = owner != null ? owner.pos() : module.pos();
-            String what = owner != null ? owner.name() : e.getValue().get(0);
-            TypeName sameName = byBridgeName.put(bridge, member);
+    private void rejectBridgeCaseCollisions(Hir.Module module,
+                                            Map<TypeSymbol, List<GeneratedClass.BehaviorResult>> bridgeCases,
+                                            Map<JvmClassName, Hir.Def> localTypes,
+                                            Map<JvmClassName, String> behaviorClassOwner) {
+        Map<JvmClassName, TypeSymbol> byBridgeName = new LinkedHashMap<>();
+        for (Map.Entry<TypeSymbol, List<GeneratedClass.BehaviorResult>> e : bridgeCases.entrySet()) {
+            TypeSymbol member = e.getKey();
+            JvmClassName cls = SoutherJvmAbi.nameOf(new GeneratedClass.BridgeCase(module.name(), member));
+            String bridge = cls.classDesc().displayName();
+            Hir.BehaviorDef owner = behaviorNamed(module, e.getValue().get(0).behavior());
+            SourcePos pos = owner.pos();
+            String what = owner.name();
+            TypeSymbol sameName = byBridgeName.put(cls, member);
             if (sameName != null) {
                 throw CompileException.of(Diagnostic.say(new ModuleMessage.TwoMembersJoinThroughOneCaseClass(sameName.qualified(), member.qualified(), bridge))
                                 .at(pos)
                                 .hint(new ModuleMessage.AMemberGoesByItsOwnNameWithCaseAfterIt()).build());
             }
-            boolean aData = localTypes.contains(bridge);
-            boolean aBehavior = behaviorClassOwner.containsKey(bridge);
-            if (aData || aBehavior) {
-                String other = aData ? bridge : behaviorClassOwner.get(bridge);
+            Hir.Def aData = localTypes.get(cls);
+            String aBehavior = behaviorClassOwner.get(cls);
+            if (aData != null || aBehavior != null) {
+                String other = aData != null ? aData.name() : aBehavior;
                 throw CompileException.of(Diagnostic.at(pos)
-                                .say(aData
+                                .say(aData != null
                                         ? new ModuleMessage.AMemberReachesTheUnionThroughAData(what,
                                                 member.name(), bridge, other)
                                         : new ModuleMessage
@@ -941,18 +959,22 @@ public final class Backend {
      * behavior capitalizes into. Two result unions cannot collide with each other, their behaviors
      * having already been rejected for capitalizing into one class.
      */
-    private void rejectResultUnionCollisions(Ast.Module module, Map<String, List<TypeName>> behaviorResults,
-                                             Set<String> localTypes, Map<String, String> behaviorClassOwner) {
-        for (String resultName : behaviorResults.keySet()) {
-            Ast.BehaviorDef owner = behaviorOf(module, resultName);
-            SourcePos pos = owner != null ? owner.pos() : module.pos();
-            String what = owner != null ? owner.name() : resultName;
-            if (localTypes.contains(resultName)) {
+    private void rejectResultUnionCollisions(Hir.Module module,
+                                             Map<GeneratedClass.BehaviorResult, List<TypeSymbol>> behaviorResults,
+                                             Map<JvmClassName, Hir.Def> localTypes,
+                                             Map<JvmClassName, String> behaviorClassOwner) {
+        for (GeneratedClass.BehaviorResult union : behaviorResults.keySet()) {
+            JvmClassName cls = SoutherJvmAbi.nameOf(union);
+            String resultName = cls.classDesc().displayName();
+            Hir.BehaviorDef owner = behaviorNamed(module, union.behavior());
+            SourcePos pos = owner.pos();
+            String what = owner.name();
+            if (localTypes.containsKey(cls)) {
                 throw CompileException.of(Diagnostic
                                 .at(pos)
                                 .hint(new BehaviorMessage.AUnionOutputReachesJavaThroughThatName(resultName)).say(new BehaviorMessage.AUnionOutputsInterfaceCollidesWithAData(what, resultName)).build());
             }
-            String behavior = behaviorClassOwner.get(resultName);
+            String behavior = behaviorClassOwner.get(cls);
             if (behavior != null) {
                 throw CompileException.of(Diagnostic
                                 .at(pos)
@@ -961,27 +983,31 @@ public final class Backend {
         }
     }
 
-    /** The behavior whose generated result union is {@code resultName}, or null when none is. */
-    private Ast.BehaviorDef behaviorOf(Ast.Module module, String resultName) {
-        for (Ast.BehaviorDef bd : module.behaviors()) {
-            if (CodegenContext.behaviorResultClass(bd.name()).equals(resultName)) {
+    /** The behavior of this module written under {@code name}. Every result union and every bridge
+     *  case reaching here was built from one of these, so there is always one. */
+    private Hir.BehaviorDef behaviorNamed(Hir.Module module, String name) {
+        for (Hir.BehaviorDef bd : module.behaviors()) {
+            if (bd.name().equals(name)) {
                 return bd;
             }
         }
-        return null;
+        throw new IllegalStateException("no behavior named " + name + " in " + module.name());
     }
 
-    private Map<String, List<TypeName>> behaviorResultInterfaces(Ast.Module module,
-                                                                 Map<String, Sig> sigs) {
-        Map<String, List<TypeName>> results = new LinkedHashMap<>();
-        for (Ast.BehaviorDef bd : module.behaviors()) {
-            Sig sig = sigs.get(bd.name());
+    /** The result union of each behavior that has one, keyed by the behavior — which is what a result
+     *  union is identified by. Keying by what the union is called would mean reading the behavior back
+     *  out of the spelling to find whose it is. */
+    private Map<GeneratedClass.BehaviorResult, List<TypeSymbol>> behaviorResultInterfaces(Hir.Module module,
+                                                                 Map<ValueName.Behavior, Sig> sigs) {
+        Map<GeneratedClass.BehaviorResult, List<TypeSymbol>> results = new LinkedHashMap<>();
+        for (Hir.BehaviorDef bd : module.behaviors()) {
+            Sig sig = sigs.get(new ValueName.Behavior(module.name(), bd.name()));
             if (sig == null || !(sig.outputType() instanceof Type.Union)) {
                 continue;
             }
-            List<TypeName> members = new ArrayList<>(TypeOps.leafCases(sig.outputType(), symbols));
+            List<TypeSymbol> members = new ArrayList<>(TypeOps.leafCases(sig.outputType(), symbols));
             Collections.sort(members);
-            results.put(CodegenContext.behaviorResultClass(bd.name()), members);
+            results.put(new GeneratedClass.BehaviorResult(module.name(), bd.name()), members);
         }
         return results;
     }
@@ -993,46 +1019,22 @@ public final class Backend {
      * and uses that case's own codec, and one that wants the answer as it crosses a boundary asks
      * the union, which writes the discriminator no member writes on itself.
      */
-    private byte[] generateBehaviorResult(String resultName, List<TypeName> members) {
-        ClassDesc cdR = cd(resultName);
+    private byte[] generateBehaviorResult(GeneratedClass.BehaviorResult union, List<TypeSymbol> members) {
+        ClassDesc cdR = ctx.cd(union);
         List<ClassDesc> caseCds = new ArrayList<>();
-        for (TypeName member : members) {
+        for (TypeSymbol member : members) {
             caseCds.add(ctx.resultMemberClass(member));
         }
         return build(cdR, cb -> {
             cb.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_INTERFACE | ClassFile.ACC_ABSTRACT);
             cb.with(PermittedSubclassesAttribute.ofSymbols(caseCds));
-            codec.emitResultUnionEncoderFactory(cb, resultName, members);
+            codec.emitResultUnionEncoderFactory(cb, union, members);
         });
     }
 
 
-    private Type successType(Ast.RetType ret) {
+    private Type successType(Hir.RetType ret) {
         return ctx.successType(ret);
-    }
-
-    private ClassDesc cd(String typeName) {
-        return ctx.cd(typeName);
-    }
-
-    /** The class a behavior is emitted under (spec §jvm-behavior). Anything that has to name that class from
-     * outside codegen — publishing a module's declarations onto it, say — asks here rather than
-     * repeating the rule, so the name a reader is sent to is the name that was emitted. */
-    public static String behaviorClass(String name) {
-        return CodegenContext.behaviorClass(name);
-    }
-
-    /** The class carrying a behavior's no-argument constructor and its erased {@code apply} — what a
-     * caller entering a compiled behavior loads (spec §jvm-behavior). Public for the same reason
-     * {@link #behaviorClass} is: the name is decided here. */
-    public static String behaviorImplClass(String name) {
-        return CodegenContext.behaviorImplClass(name);
-    }
-
-    /** The class a behavior's anonymous union output is emitted under (spec §jvm-anonymous-union), for the same
-     * reason {@link #behaviorClass} is public: the name is decided here. */
-    public static String behaviorResultClass(String name) {
-        return CodegenContext.behaviorResultClass(name);
     }
 
     /**
@@ -1050,7 +1052,7 @@ public final class Backend {
      * module, so what the front end makes of them is a promise the jar carries too — a change to how
      * one of those bodies is read moves this number as surely as a change to a descriptor does, and
      * it is the front end's change rather than this package's. {@link
-     * souther.compiler.meta.PublishedModule} refuses a jar that disagrees, so the disagreement is
+     * souther.compiler.meta.ModuleReadback} refuses a jar that disagrees, so the disagreement is
      * reported as what it is instead of surfacing as an unresolved name inside a body nobody wrote.
      *
      * <p>A third thing arrived with version 6: what a published helper's declaration promises. A helper
@@ -1123,33 +1125,69 @@ public final class Backend {
      * (spec §collections). A signature is admitted again when it is read back out of a jar, and an
      * older compiler asked about {@code Map<LoanDate, Int>} would refuse a declaration this one
      * publishes.
+     *
+     * <p>Version 16 widens what a behavior's published declaration may say: it may carry an
+     * {@code ensures}, relating what the behavior is given to what it answers. A signature is read
+     * back out of a jar as the text that was written, so a declaration this compiler publishes is
+     * one an older compiler's reader has no production for and refuses.
+     *
+     * <p>Version 17 changes what a published class calls the runtime with. A violated {@code ensures}
+     * now records two things where it recorded one — the case the broken rule was declared for, and
+     * the case the answer turned out to be — so a class emitted before this builds its abort with a
+     * constructor that is no longer there. It would reach it only where a clause is already broken,
+     * which is the worst place to find a jar and a runtime that were not built together. What a jar
+     * declares is unchanged; what moved is what its own classes call.
+     *
+     * <p>What that number does not cover, and does not need to: where such a clause is checked.
+     * Enforcement is not read back — a caller reaches an imported behavior through its signature and
+     * its class, and nothing it reads says which of the two places the check was emitted in. A jar
+     * published earlier in this same version carries clauses nothing runs, and one published now
+     * carries clauses its own module runs, and a reader of either reads the same declaration. It
+     * becomes a question the day a caller may assume a clause it did not check itself, and what has
+     * to be decided then is which jars an assumption may rest on — the version being one way to
+     * answer that, and this note being where the question was left.
+     *
+     * <p>That a check is emitted is one question and what the emitted code calls is another. The
+     * first is not read back and needs no number. The second is not read back either and needs one
+     * all the same: a class in a jar runs, and what it calls has to be there when it does.
      */
-    public static final int BOUNDARY_VERSION = 15;
+    public static final int BOUNDARY_VERSION = 17;
 
-    /** The class a module's own declarations are published on. It carries nothing but them. */
-    public static String moduleClassName(String moduleName) {
-        return moduleName + ".$Module";
-    }
-
-    /** Emits {@link #moduleClassName}, carrying {@code declarations}. What it says is the caller's;
-     * that it is built like every other generated class — the same Java floor, the same
-     * {@code SourceFile} — is this package's. */
+    /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
+     * What it says is the caller's; that it is built like every other generated class — the same Java
+     * floor, the same {@code SourceFile} — is this package's. */
     public static byte[] moduleClass(String moduleName, Annotation declarations) {
-        return Descriptors.build(ClassDesc.of(moduleClassName(moduleName)), cb -> cb
+        return Descriptors.build(SoutherJvmAbi.nameOf(
+                new GeneratedClass.ModuleDeclarations(moduleName)).classDesc(), cb -> cb
                 .withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SYNTHETIC)
                 .with(RuntimeInvisibleAnnotationsAttribute.of(declarations)));
     }
 
+    /**
+     * A behavior this module declares, as the declaration it is.
+     *
+     * <p>The emitter is generating one module, so a bare name it reads off a declaration here is
+     * that module's. A name that arrived from somewhere else is carried as a declaration already
+     * and is not made into one here.
+     */
+    private ValueName.Behavior own(String behavior) {
+        return new ValueName.Behavior(ctx.pkg, behavior);
+    }
+
     private ClassDesc cdBehavior(String name) {
+        return ctx.cdBehavior(own(name));
+    }
+
+    private ClassDesc cdBehavior(ValueName.Behavior name) {
         return ctx.cdBehavior(name);
     }
 
     private ClassDesc cdBehaviorImpl(String name) {
-        return ctx.cdBehaviorImpl(name);
+        return ctx.cdBehaviorImpl(own(name));
     }
 
 
-    private ClassDesc caseClass(TypeName typeName) {
+    private ClassDesc caseClass(TypeSymbol typeName) {
         return ctx.caseClass(typeName);
     }
 
@@ -1164,29 +1202,42 @@ public final class Backend {
      * leading parameters name the inputs (their types come from the behavior); the trailing ones
      * name the injected behaviors and are resolved as inline calls, not bound as locals.
      */
-    private byte[] generateSpecFn(Ast.SpecBehavior spec, Ast.FnDef fn, Set<String> requiredNames,
-                                  Map<String, Type> requiredSuccess, Map<String, List<Type>> requiredParam) {
+    private byte[] generateSpecFn(Hir.SpecBehavior spec, Hir.FnDef fn,
+                                  Set<ValueName.Behavior> requiredNames,
+                                  Map<ValueName.Behavior, Type> requiredSuccess,
+                                  Map<ValueName.Behavior, List<Type>> requiredParam) {
         ClassDesc cdB = cdBehaviorImpl(spec.name());   // the $Impl behind the public interface
         int n = spec.params().size();
         // declared dependencies, validated to equal what the fn calls (E1602/E1603); the same order is
         // used by pipeline callers (requirementSets), so the injected fields line up.
-        List<String> injected = requiredBy(spec);
+        InjectionSlots injected = InjectionSlots.of(requiredBy(spec), ctx);
         ClassDesc[] applyParams = new ClassDesc[n];
         for (int i = 0; i < n; i++) {
             applyParams[i] = CD_Object;
         }
         MethodTypeDesc mtdApply = MethodTypeDesc.of(CD_Object, applyParams);
+        // Where this behavior's declared relation is checked, decided before the emitter ran. Where
+        // it is checked here, the body moves under a name of its own and `apply` becomes the wrapper
+        // that runs it and then holds its answer to the contract — so every way in goes through the
+        // check, including the typed bridge a multi-input interface is satisfied by.
+        EnsuresEnforcement where = checkOf(new ValueName.Behavior(ctx.pkg, spec.name()));
+        String bodyMethod = where instanceof EnsuresEnforcement.AtTheCallee ? "apply$body" : "apply";
+        int bodyFlags = where instanceof EnsuresEnforcement.AtTheCallee
+                ? ClassFile.ACC_PRIVATE : ClassFile.ACC_PUBLIC;
         return build(cdB, cb -> {
             cb.withFlags(pub(spec.name()) | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             // implements its public interface (which itself extends Behavior for a single-input one)
             cb.withInterfaceSymbols(cdBehavior(spec.name()));
             emitInjection(cb, cdB, injected);
-            cb.withMethodBody("apply", mtdApply, ClassFile.ACC_PUBLIC, code -> {
+            if (where instanceof EnsuresEnforcement.AtTheCallee(BehaviorContract contract)) {
+                emitCheckingApply(cb, cdB, spec, contract, mtdApply, n);
+            }
+            cb.withMethodBody(bodyMethod, mtdApply, bodyFlags, code -> {
                 BodyGen gen = new BodyGen(ctx, code, null, cdB, n + 1);
                 // The one body a coverage plan is made from, so the one body whose arms are counted.
                 gen.armsAreCounted();
                 gen.injectsInto(successType(spec.ret()));
-                gen.requireds(requiredNames, requiredSuccess, requiredParam);
+                gen.requireds(requiredNames, requiredSuccess, requiredParam, injected);
                 for (int i = 0; i < n; i++) {
                     // the fn's leading param names the input; its type comes from the behavior
                     Type pt = successType(spec.params().get(i).type());
@@ -1202,7 +1253,7 @@ public final class Backend {
             });
             if (n != 1) {
                 List<Type> pts = new ArrayList<>();
-                for (Ast.Param p : spec.params()) {
+                for (Hir.Param p : spec.params()) {
                     pts.add(successType(p.type()));
                 }
                 emitTypedApplyBridge(cb, cdB, typedApplyDesc(spec.name(), pts, successType(spec.ret())));
@@ -1212,14 +1263,70 @@ public final class Backend {
 
 
     /**
+     * {@code apply}, where the behavior's own body is what has to be held to its declaration.
+     *
+     * <p>The body keeps its own method and this one calls it. Woven into the body instead, the check
+     * would go at each of the places a body returns by — and a body returns from inside a
+     * {@code match} arm, from either side of a guard, from a departure — so the one that was missed
+     * would be a path that answers without being held to anything, and nothing would say so.
+     *
+     * <p>What runs is the body, then the check, then the same value the body produced. The answer is
+     * saved as it came, and what the check is handed is a copy read back through
+     * {@link ResultBoundary#project}: the value the body produced is a member of the behavior's
+     * declared union, and a member this module did not declare is carried in a bridge case. A rule
+     * is written about the answer and not about how the boundary carries it, so it is read out of the
+     * carrier first and the saved value — the one the caller is owed — is what is returned.
+     *
+     * <p>Nothing about how the body runs changes. It is still an instance method of this class, so
+     * the injected dependencies it reads are the same fields it read before; it runs to completion
+     * before anything here looks at its answer, so nothing is reordered around it; and a behavior
+     * cannot call itself ({@link SpecChecker#checkBehaviorsDoNotRecurse}), so there is no path where
+     * this wrapper stands between a behavior and its own recursion.
+     */
+    private void emitCheckingApply(ClassBuilder cb, ClassDesc cdB, Hir.SpecBehavior spec,
+                                   BehaviorContract contract, MethodTypeDesc mtdApply, int n) {
+        ClassDesc cdEnsures = ctx.cd(new GeneratedClass.Ensures(
+                new GeneratedClass.BehaviorInterface(ctx.pkg, spec.name())));
+        List<TypeSymbol> bridged = ctx.bridgedMembers(successType(spec.ret()));
+        List<ClassDesc> checkParams = new ArrayList<>();
+        for (int i = 0; i <= n; i++) {
+            checkParams.add(CD_Object);
+        }
+        MethodTypeDesc mtdCheck =
+                MethodTypeDesc.of(ConstantDescs.CD_void, checkParams.toArray(new ClassDesc[0]));
+        cb.withMethodBody("apply", mtdApply, ClassFile.ACC_PUBLIC, code -> {
+            int answered = n + 1;    // this=0, the arguments are 1..n
+            int carrier = n + 2;
+            code.aload(0);
+            for (int i = 0; i < n; i++) {
+                code.aload(i + 1);
+            }
+            code.invokespecial(cdB, "apply$body", mtdApply);
+            code.astore(answered);
+            code.aload(answered);
+            ResultBoundary.project(code, ctx, new ValueName.Behavior(ctx.pkg, spec.name()),
+                    bridged, carrier);
+            code.astore(carrier);
+            for (int i = 0; i < n; i++) {
+                code.aload(i + 1);
+            }
+            code.aload(carrier);
+            code.invokestatic(cdEnsures, "check", mtdCheck);
+            code.aload(answered);
+            code.areturn();
+        });
+    }
+
+    /**
      * A composition's own signature, worked out when the module's signatures were.
      *
      * <p>A composition resting on a stage that names nothing has none — it was abandoned there. A
      * module holding one is not emitted, so reaching this with no signature means the gate that
      * decides let something through that has no meaning, and there is nothing to emit for it.
      */
-    private static Sig declaredSig(Ast.PipeBehavior pipe, Map<String, Sig> sigs) {
-        Sig sig = sigs.get(pipe.name());
+    private static Sig declaredSig(String module, Hir.PipeBehavior pipe,
+                                   Map<ValueName.Behavior, Sig> sigs) {
+        Sig sig = sigs.get(new ValueName.Behavior(module, pipe.name()));
         if (sig == null) {
             throw new IllegalStateException("`" + pipe.name() + "` reached codegen with no signature,"
                     + " at " + pipe.pos());
@@ -1228,25 +1335,62 @@ public final class Backend {
     }
 
     /** The behaviors a spec declares it depends on, by the name each is reached by. */
-    private static List<String> requiredBy(Ast.SpecBehavior spec) {
-        List<String> names = new ArrayList<>();
-        for (Ast.Var req : spec.dependsOn()) {
-            names.add(req.bare());
+    private static List<ValueName.Behavior> requiredBy(Hir.SpecBehavior spec) {
+        List<ValueName.Behavior> names = new ArrayList<>();
+        for (Hir.Var req : spec.dependsOn()) {
+            ValueName.Behavior reached = reachedBy(req);
+            if (reached != null) {
+                names.add(reached);
+            }
         }
         return names;
     }
 
-    private byte[] generatePipe(Ast.PipeBehavior pipe, Set<String> requiredNames,
-                                Map<String, Sig> sigs, Map<String, List<String>> behaviorDeps,
-                                Map<String, List<Ast.Var>> pipeStages) {
+    /**
+     * The name a dependency or a pipeline stage is reached by.
+     *
+     * <p>Every name in a module reaching the backend was answered. {@code Bodies.Checked} hands over
+     * an elaboration only where {@code Names.Sound} holds of the module, and that is false as soon
+     * as resolution reports a name denoting nothing; {@code Output.Classes} builds what it generates
+     * from that answer and from nothing else. So one arriving here is not a mistake in the source —
+     * it is this module being emitted with a hole in it, which is the thing that gate is for.
+     */
+    /**
+     * The declaration a type name written in a module being generated names.
+     *
+     * <p>Answered for the same reason {@link #reachedBy} is: what reaches the backend is an
+     * elaboration {@code Bodies.Checked} handed over, and it hands one over only where
+     * {@code Names.Sound} holds of the module — which resolution makes false as soon as it reports
+     * a name denoting nothing.
+     */
+    static TypeSymbol names(Hir.Name name) {
+        return switch (name) {
+            case Hir.Name.Denoting d -> d.type();
+            case Hir.Name.Unanswered u -> throw u.unexpectedHere();
+        };
+    }
+
+    private static ValueName.Behavior reachedBy(Hir.Var named) {
+        return switch (named) {
+            case Hir.Var.Denoting d -> d.denotes() instanceof ValueName.Behavior behavior
+                    ? behavior : null;
+            case Hir.Var.Unanswered u -> throw u.unexpectedHere();
+        };
+    }
+
+    private byte[] generatePipe(Hir.PipeBehavior pipe, Set<ValueName.Behavior> requiredNames,
+                                Map<ValueName.Behavior, Sig> sigs,
+                                Map<ValueName.Behavior, List<ValueName.Behavior>> behaviorDeps,
+                                Map<ValueName.Behavior, List<Hir.Var>> pipeStages) {
         ClassDesc cdP = cdBehaviorImpl(pipe.name());   // the $Impl behind the public interface
         // Flatten nested pipeline stages so the routing is over leaf behaviors (spec §type-routing): a named
         // intermediate `half = split >-> work` inlines to `split, work`, which keeps a retired case
         // retired across the composition, making `>->` associative.
-        List<Ast.Var> flat = PipelineSigs.flattenStages(pipe.stages(), pipeStages, pipe.pos());
+        List<Hir.Var> flat = PipelineSigs.flattenStages(pipe.stages(), pipeStages, pipe.pos());
         // the pipeline's injected fields are the union of its stages' requirements (spec
         // §composition-with-requirements)
-        List<String> reqStages = behaviorDeps.getOrDefault(pipe.name(), List.of());
+        InjectionSlots reqStages =
+                InjectionSlots.of(behaviorDeps.getOrDefault(own(pipe.name()), List.of()), ctx);
         // the pipeline takes whatever its first stage takes (spec §sequential-composition)
         int arity = PipelineSigs.stageSig(flat.get(0), sigs, symbols, pipe.pos()).inputTypes().size();
         ClassDesc[] applyParams = new ClassDesc[arity];
@@ -1261,14 +1405,14 @@ public final class Backend {
 
             cb.withMethodBody("apply", mtdApply, ClassFile.ACC_PUBLIC, code -> {
                 // slot 1 always holds the running value (an output case, as an Object).
-                List<Ast.Var> stages = flat;
+                List<Hir.Var> stages = flat;
                 // stage 0 consumes the pipeline's arguments unconditionally
                 Type mainline = PipelineSigs.stageSig(stages.get(0), sigs, symbols, pipe.pos()).outputType();
-                applyFirstStage(code, cdP, stages.get(0).bare(), arity, requiredNames, behaviorDeps,
-                        mainline, arity + 1);
+                applyFirstStage(code, cdP, reachedBy(stages.get(0)), arity, requiredNames,
+                        reqStages, behaviorDeps, mainline, arity + 1);
                 Label end = code.newLabel();
                 for (int i = 1; i < stages.size(); i++) {
-                    String stage = stages.get(i).bare();
+                    ValueName.Behavior stage = reachedBy(stages.get(i));
                     Sig g = PipelineSigs.stageSig(stages.get(i), sigs, symbols, pipe.pos());
                     if (TypeOps.isDataLike(mainline)) {
                         // Apply g only when the running value is one of the main-line cases it
@@ -1276,18 +1420,20 @@ public final class Backend {
                         // than offering it to the stages after this one (spec §type-routing). Branching to
                         // the end is what makes a retired case unreachable without tagging it — the
                         // same case type may legitimately reappear on the main line downstream.
-                        List<TypeName> accepted = PipelineSigs.mainlineCases(mainline, g, symbols);
+                        List<TypeSymbol> accepted = PipelineSigs.mainlineCases(mainline, g, symbols);
                         Label doApply = code.newLabel();
-                        for (TypeName caseName : accepted) {
+                        for (TypeSymbol caseName : accepted) {
                             code.aload(1);
                             code.instanceOf(caseClass(caseName));
                             code.ifne(doApply);
                         }
                         code.goto_(end);
                         code.labelBinding(doApply);
-                        applyStage(code, cdP, stage, requiredNames, behaviorDeps, g.outputType(), arity + 1);
+                        applyStage(code, cdP, stage, requiredNames, reqStages, behaviorDeps,
+                                g.outputType(), arity + 1);
                     } else {
-                        applyStage(code, cdP, stage, requiredNames, behaviorDeps, g.outputType(), arity + 1);
+                        applyStage(code, cdP, stage, requiredNames, reqStages, behaviorDeps,
+                                g.outputType(), arity + 1);
                     }
                     mainline = PipelineSigs.stageOut(mainline, g, symbols, pipe.pos());
                 }
@@ -1295,11 +1441,11 @@ public final class Backend {
                 code.aload(1);
                 // The composition's own return: the running value is a Souther value, and this is
                 // where it becomes a member of the union this composition answers with.
-                ResultBoundary.inject(code, ctx, ctx.bridgedMembers(declaredSig(pipe, sigs).outputType()),
+                ResultBoundary.inject(code, ctx, ctx.bridgedMembers(declaredSig(ctx.pkg, pipe, sigs).outputType()),
                         arity + 1);
             });
             if (arity != 1) {
-                Sig sig = declaredSig(pipe, sigs);
+                Sig sig = declaredSig(ctx.pkg, pipe, sigs);
                 emitTypedApplyBridge(cb, cdP, typedApplyDesc(pipe.name(), sig.inputTypes(), sig.outputType()));
             }
         });
@@ -1315,14 +1461,16 @@ public final class Backend {
      * so the arguments are cast from the erased {@code apply(Object,…)} this body lives on. A
      * zero-input stage takes that same path with nothing to cast.
      */
-    private void applyFirstStage(CodeBuilder code, ClassDesc cdP, String stage, int arity,
-                                 Set<String> requiredNames, Map<String, List<String>> behaviorDeps,
+    private void applyFirstStage(CodeBuilder code, ClassDesc cdP, ValueName.Behavior stage,
+                                 int arity, Set<ValueName.Behavior> requiredNames,
+                                 InjectionSlots held,
+                                 Map<ValueName.Behavior, List<ValueName.Behavior>> behaviorDeps,
                                  Type stageOut, int slot) {
         if (arity == 1) {
-            applyStage(code, cdP, stage, requiredNames, behaviorDeps, stageOut, slot);
+            applyStage(code, cdP, stage, requiredNames, held, behaviorDeps, stageOut, slot);
             return;
         }
-        pushStage(code, cdP, stage, requiredNames, behaviorDeps);
+        pushStage(code, cdP, stage, requiredNames, held, behaviorDeps);
         if (ctx.isStandaloneRequired(stage)) {
             MethodTypeDesc desc = ctx.requiredApplyDesc(stage);
             for (int i = 0; i < arity; i++) {
@@ -1334,6 +1482,7 @@ public final class Backend {
             }
             code.invokevirtual(cdBehavior(stage), "apply", desc);
             projectStage(code, stage, stageOut, slot);
+            checkStageAtCrossing(code, stage, arity, slot + 1);
             code.astore(1);
             return;
         }
@@ -1343,52 +1492,93 @@ public final class Backend {
         ClassDesc[] params = new ClassDesc[arity];
         java.util.Arrays.fill(params, CD_Object);
         // a multi-input first stage with a `let` is a fn/pipe behavior; call the erased apply on its $Impl
-        code.invokevirtual(cdBehaviorImpl(stage), "apply", MethodTypeDesc.of(CD_Object, params));
+        code.invokevirtual(ctx.cdBehaviorImpl(stage), "apply",
+                MethodTypeDesc.of(CD_Object, params));
         projectStage(code, stage, stageOut, slot);
+        checkStageAtCrossing(code, stage, arity, slot + 1);
         code.astore(1);
     }
 
     /** Applies one pipeline stage to the running value in slot 1, storing the result back. A stage
      * is a behavior, or a {@code Type.decoder}/{@code Type.encoder} boundary codec (spec §sequential-composition). */
-    private void applyStage(CodeBuilder code, ClassDesc cdP, String stage, Set<String> requiredNames,
-                            Map<String, List<String>> behaviorDeps, Type stageOut, int slot) {
+    private void applyStage(CodeBuilder code, ClassDesc cdP, ValueName.Behavior stage,
+                            Set<ValueName.Behavior> requiredNames, InjectionSlots held,
+                            Map<ValueName.Behavior, List<ValueName.Behavior>> behaviorDeps,
+                            Type stageOut, int slot) {
         // decode/encode are boundary edges, not pipeline stages (spec §sequential-composition): `>->` composes
         // behaviors only.
-        pushStage(code, cdP, stage, requiredNames, behaviorDeps);
+        pushStage(code, cdP, stage, requiredNames, held, behaviorDeps);
         code.aload(1);
         code.invokeinterface(CD_Behavior, "apply", MTD_apply);
         projectStage(code, stage, stageOut, slot);
+        checkStageAtCrossing(code, stage, 1, slot + 1);
         code.astore(1);
+    }
+
+    /**
+     * Holds an injected stage's answer to what it declared, with the answer on the stack as the
+     * boxed carrier {@code projectStage} left it and its arguments still in the slots they came in.
+     *
+     * <p>A stage whose body this compiler emits holds itself where it answers, so nothing is emitted
+     * for it here — this is the same crossing a call from a body makes, at the place a pipeline
+     * makes it. Read before the running value is stored back, because storing it is what overwrites
+     * the argument a single-input stage was given.
+     */
+    private void checkStageAtCrossing(CodeBuilder code, ValueName.Behavior stage, int arity,
+                                      int carrier) {
+        if (!(ctx.ensuresCheckOf(stage) instanceof EnsuresEnforcement.AtEachCrossing)) {
+            return;
+        }
+        code.astore(carrier);
+        for (int i = 0; i < arity; i++) {
+            code.aload(i + 1);
+        }
+        code.aload(carrier);
+        ClassDesc[] params = new ClassDesc[arity + 1];
+        java.util.Arrays.fill(params, CD_Object);
+        code.invokestatic(ctx.cd(new GeneratedClass.Ensures(
+                        new GeneratedClass.BehaviorInterface(stage.module(), stage.name()))),
+                "check", MethodTypeDesc.of(ConstantDescs.CD_void, params));
+        code.aload(carrier);
     }
 
     /** A stage answered with a member of its own result union; the running value the next stage sees
      * is a Souther value again (spec §jvm-anonymous-union). The same conversion a body does after a call. */
-    private void projectStage(CodeBuilder code, String stage, Type stageOut, int slot) {
+    private void projectStage(CodeBuilder code, ValueName.Behavior stage, Type stageOut,
+                              int slot) {
         ResultBoundary.project(code, ctx, stage, ctx.bridgedMembersOf(stage, stageOut), slot);
     }
 
     /** Pushes the behavior object for a pipeline stage: an injected required field, or a fresh
      * body-behavior instance constructed with the required dependencies it declares (spec
      * §composition-with-requirements). */
-    private void pushStage(CodeBuilder code, ClassDesc cdP, String stage, Set<String> requiredNames,
-                           Map<String, List<String>> behaviorDeps) {
+    private void pushStage(CodeBuilder code, ClassDesc cdP, ValueName.Behavior stage,
+                           Set<ValueName.Behavior> requiredNames, InjectionSlots held,
+                           Map<ValueName.Behavior, List<ValueName.Behavior>> behaviorDeps) {
         if (requiredNames.contains(stage)) {
+            InjectionSlots.Slot slot = held.of(stage);
             code.aload(0);
-            code.getfield(cdP, stage, ctx.requiredFieldType(stage));
+            code.getfield(cdP, slot.fieldName(), slot.type());
             return;
         }
-        ClassDesc cdStage = cdBehaviorImpl(stage);   // instantiate the $Impl, not the interface
+        ClassDesc cdStage = ctx.cdBehaviorImpl(stage);   // the $Impl, not the interface
         code.new_(cdStage);
         code.dup();
-        List<String> deps = behaviorDeps.getOrDefault(stage, List.of());
+        List<ValueName.Behavior> deps = behaviorDeps.getOrDefault(stage, List.of());
         ClassDesc[] ctorParams = new ClassDesc[deps.size()];
         for (int i = 0; i < deps.size(); i++) {
-            // a multi-arg injected dependency is stored/wired by its base class, not the unary
-            // Behavior (issue #57) — the field descriptor and the stage $Impl ctor param must match
-            ClassDesc depType = ctx.requiredFieldType(deps.get(i));
+            // Reuse the composition's own field: it holds the dependency and hands it to the stage
+            // it builds. Which field that is is the composition's to say — the stage keeps the same
+            // dependency in a field of its own, at whatever position its own list puts it — so the
+            // read is asked of the slots this class was emitted with.
+            //
+            // A multi-arg injected dependency is stored and wired by its base class rather than the
+            // unary Behavior (issue #57), and the field descriptor and the stage's constructor
+            // parameter are the same type because both come from the dependency.
+            InjectionSlots.Slot slot = held.of(deps.get(i));
             code.aload(0);
-            code.getfield(cdP, deps.get(i), depType);   // reuse the pipeline's injected field
-            ctorParams[i] = depType;
+            code.getfield(cdP, slot.fieldName(), slot.type());
+            ctorParams[i] = slot.type();
         }
         code.invokespecial(cdStage, "<init>", MethodTypeDesc.of(ConstantDescs.CD_void, ctorParams));
     }

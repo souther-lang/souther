@@ -9,7 +9,7 @@ package souther.compiler.types;
  * be established by a behavior's boundary, by a data's field, or by a fixture, and each decides for
  * itself what it will take — so the question "what would this key convert through" is answered here,
  * and the question "is this key allowed here" is answered by the position. The second is what a
- * {@link souther.compiler.check.BoundaryMapKey} says, and it is made from one of these rather than
+ * {@link souther.compiler.check.CrossingMapKey} says, and it is made from one of these rather than
  * instead of it.
  *
  * <p>Two cases, because a reader has two things to do. A {@link Lexical} key is a primitive, written
@@ -104,7 +104,7 @@ public sealed interface MapKeyRepresentation {
      * what its derived {@code encoder()} does, and each read back by the {@code decoder()} that
      * inverts it.
      */
-    record NamedKey(TypeName name) implements MapKeyRepresentation {
+    record NamedKey(TypeSymbol name) implements MapKeyRepresentation {
         @Override
         public Type type() {
             return Type.ref(name);

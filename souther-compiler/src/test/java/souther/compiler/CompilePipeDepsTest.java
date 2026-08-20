@@ -40,8 +40,8 @@ class CompilePipeDepsTest {
             """;
 
     private static String impl(String cls, String param, String inType, String midValue) {
-        // the generated behavior base class capitalizes its first letter (spec §jvm-behavior)
-        String base = Character.toUpperCase(param.charAt(0)) + param.substring(1);
+        // what a Java implementation of an injected behavior extends — the class the compiler
+        // emitted, asked for rather than spelled
         return """
                 package demo;
                 import net.unit8.raoh.Ok;
@@ -53,7 +53,7 @@ class CompilePipeDepsTest {
                         return (Mid) ((Ok) d.decode("%s", Path.ROOT)).value();
                     }
                 }
-                """.formatted(cls, base, inType, midValue);
+                """.formatted(cls, Emitted.behaviorInterface("demo", param), inType, midValue);
     }
 
     @Test

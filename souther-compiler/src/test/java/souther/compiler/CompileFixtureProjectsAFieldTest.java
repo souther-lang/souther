@@ -303,8 +303,8 @@ class CompileFixtureProjectsAFieldTest {
                     | "a newtype value field is its declared base" : (AmountN(100).value) -> true
                 """));
         // The reason and not the code: a fixture that could not be read at all is E1903 too.
-        assertTrue(e.getMessage().contains("declaring `Int`")
-                && e.getMessage().contains("`AmountN`"), e.getMessage());
+        assertTrue(e.getMessage().contains("takes AmountN")
+                && e.getMessage().contains("Int"), e.getMessage());
     }
 
     /** The chain that crosses both kinds of evidence: a helper's answer, a field, and the base. */
@@ -343,7 +343,7 @@ class CompileFixtureProjectsAFieldTest {
                 example isHundred
                     | "a number has no field" : (listed.total) -> true
                 """));
-        assertTrue(e.getMessage().contains("is not a record"), e.getMessage());
+        assertTrue(e.getMessage().contains("cannot read a field `total`"), e.getMessage());
     }
 
     @Test
@@ -361,7 +361,7 @@ class CompileFixtureProjectsAFieldTest {
                 example isHundred
                     | "no such field" : (one.missing) -> true
                 """));
-        assertTrue(e.getMessage().contains("declares no field `missing`"), e.getMessage());
+        assertTrue(e.getMessage().contains("cannot read a field `missing`"), e.getMessage());
     }
 
     /**
@@ -382,7 +382,7 @@ class CompileFixtureProjectsAFieldTest {
                 example isSo
                     | "a java method is not a field" : (makeString("").isEmpty) -> true
                 """));
-        assertTrue(e.getMessage().contains("declares no field `isEmpty`"), e.getMessage());
+        assertTrue(e.getMessage().contains("cannot read a field `isEmpty`"), e.getMessage());
     }
 
     /** An optional takes a value of itself as well as what it holds. Unwrapping the position before
@@ -544,8 +544,8 @@ class CompileFixtureProjectsAFieldTest {
                 example isHundred
                     | "a let-bound target" : (basket.total) -> true
                 """));
-        assertTrue(e.getMessage().contains("declaring `AmountN`")
-                && e.getMessage().contains("`Int`"), e.getMessage());
+        assertTrue(e.getMessage().contains("takes Int")
+                && e.getMessage().contains("AmountN"), e.getMessage());
     }
 
     /** The control: an implementation that refused every let-bound target would satisfy the row
@@ -631,7 +631,7 @@ class CompileFixtureProjectsAFieldTest {
                 """;
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compileModules(List.of(lib, app)));
-        assertTrue(e.getMessage().contains("declares no field `other`"), e.getMessage());
+        assertTrue(e.getMessage().contains("cannot read a field `other`"), e.getMessage());
     }
 
     /**

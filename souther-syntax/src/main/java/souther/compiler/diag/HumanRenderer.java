@@ -1,5 +1,7 @@
 package souther.compiler.diag;
 
+import souther.compiler.source.SourceId;
+
 
 import souther.compiler.text.DisplayColumns;
 
@@ -35,24 +37,39 @@ public final class HumanRenderer implements DiagnosticRenderer {
     @Override
     public String render(Located located, SourceContextResolver sources, Locale locale) {
         Diagnostic d = located.diagnostic();
-        String own = located.primarySourceId();
-        DiagnosticView view = DiagnosticView.of(d, own, own);
-        SourceContext anchorSource = sources.sourceOf(view.anchor().sourceId());
+        SourceId own = located.context().filedUnder().orElse(null);
+        DiagnosticView view = DiagnosticView.of(d, located.context());
+        // The file the header names: the one the anchor is quoted from, or — where nothing is
+        // anchored here — the one this report is listed under, which is the whole of what a reader
+        // is told about where to look for it.
+        SourceContext anchorSource = view.anchor()
+                .map(shown -> sources.quotedFrom(shown.spot()))
+                .orElseGet(() -> sources.sourceOf(own));
         StringBuilder out = new StringBuilder();
-        header(out, d, anchorSource, locale);
+        header(out, d, anchorSource, view.anchor().map(Shown::spot).orElse(null), locale);
         out.append('\n');
-        snippet(out, view.anchor().region(), anchorSource,
-                d.severity() == Severity.WARNING ? YELLOW : RED);
-        for (Spot other : view.others()) {
+        view.anchor().ifPresent(shown -> snippet(out, shown.spot().region(), anchorSource,
+                d.severity() == Severity.WARNING ? YELLOW : RED));
+        for (Shown other : view.others()) {
             out.append('\n');
-            SourceContext src = sources.sourceOf(other.sourceId());
-            if (!Objects.equals(other.sourceId(), view.anchor().sourceId())) {
-                out.append(color(DIM, location(startOf(other.region()), src))).append('\n');
+            SourceContext src = sources.quotedFrom(other.spot());
+            if (view.anchor().isEmpty()
+                    || !Spot.knownToBeOneText(other.spot(), view.anchor().get().spot())) {
+                out.append(color(DIM, location(startOf(other.spot().region()), src))).append('\n');
             }
-            snippet(out, other.region(), src, CYAN);
-            if (other.labelled()) {
-                out.append(color(DIM, Messages.render(other.said(), locale))).append('\n');
+            snippet(out, other.spot().region(), src, CYAN);
+            if (other instanceof Shown.ALabel(Spot _, souther.compiler.diag.msg.Message said)) {
+                out.append(color(DIM, DiagnosticRenderer.qualified(
+                        Messages.render(said, locale),
+                        startOf(other.spot().region()), locale))).append('\n');
             }
+        }
+        // A label with nothing to quote, said after the places there are and before the message.
+        // It is not a block with no snippet in it: there is no line, no file name and no caret, so
+        // what would be left of the block is the sentence, written where the sentences are.
+        for (DiagnosticView.Unquotable said : view.unquotable()) {
+            out.append('\n').append(color(DIM, DiagnosticRenderer.saidAbout(said, locale)))
+                    .append('\n');
         }
         out.append('\n').append(DiagnosticRenderer.body(d, locale)).append('\n');
         if (d.diff() != null) {
@@ -73,11 +90,20 @@ public final class HumanRenderer implements DiagnosticRenderer {
         return out.toString();
     }
 
-    private void header(StringBuilder out, Diagnostic d, SourceContext src, Locale locale) {
+    /**
+     * The bar over a report: what it is, and where to look.
+     *
+     * <p>Where to look is the anchor's, not the diagnostic's own place. A report anchored nowhere
+     * has a file to be listed under and no line of it to quote, and one whose numbers are of a text
+     * the caller did not name has neither — writing its line and column would put them against
+     * whichever file the reader had in mind, which is the reading this whole change removes.
+     */
+    private void header(StringBuilder out, Diagnostic d, SourceContext src, Spot anchor,
+                        Locale locale) {
         String title = title(d, locale);
         String code = d.code() == null ? "" : "  " + d.code();
         String left = "-- " + title + code + " ";
-        String loc = location(d.pos(), src);
+        String loc = location(anchor == null ? null : anchor.region().start(), src);
         int dashes = WIDTH - DisplayColumns.width(left) - DisplayColumns.width(loc);
         StringBuilder bar = new StringBuilder(left);
         for (int i = 0; i < dashes; i++) {

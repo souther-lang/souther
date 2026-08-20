@@ -1,7 +1,7 @@
 package souther.compiler.observe;
 
-import souther.compiler.diag.SourceRef;
-import souther.compiler.types.TypeName;
+import souther.compiler.diag.SourcePos;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 import java.util.Set;
@@ -31,6 +31,7 @@ import java.util.Set;
  * an input fixture failed    NONE                FAILED        INPUT_FIXTURE
  * the expectation failed     NONE                FAILED        EXPECTED_FIXTURE
  * the expected arm is wrong  NONE                FAILED        EXPECTED_FIXTURE
+ * the values broke a clause  FIXTURES_VALIDATED  FAILED        ENSURES
  * a dependency had no fake   FIXTURES_VALIDATED  FAILED        FAKE_RESOLUTION
  * a fake had no answer       INVOKED             FAILED        FAKE_RESOLUTION
  * an `unreachable` reached   INVOKED             FAILED        INVOCATION
@@ -39,12 +40,36 @@ import java.util.Set;
  * it held                    COMPARED            HELD          NONE
  * a fixture's helper hung    NONE                INCOMPLETE    TIMEOUT
  * the behavior hung          INVOKED             INCOMPLETE    TIMEOUT
- * no runtime to run against  (as reached)        INCOMPLETE    INFRASTRUCTURE
+ * it could not be handed on  FIXTURES_VALIDATED  INCOMPLETE    VALUE_CROSSING
+ * the answer was not this
+ *   model's to hand it to    FIXTURES_VALIDATED  INCOMPLETE    ANSWERER_ESTABLISHMENT
  * </pre>
+ *
+ * <p>The last two share a stage and a disposition and are not the same thing, which is what the
+ * phase is for. {@link FailurePhase#VALUE_CROSSING} is a row that could not be handed on: the value
+ * it built could not be put in the form an answerer of other classes reads, and whether the answer
+ * is of this model was never in question. {@link FailurePhase#ANSWERER_ESTABLISHMENT} is that
+ * question answered badly: nothing could establish that what answers the behavior was built against
+ * the module the row is written for, so the row was not handed on at all. Both are
+ * {@code FIXTURES_VALIDATED}/{@code INCOMPLETE}, because in both nothing about the model was
+ * established and nothing applied the row.
+ *
+ * <p>What a host was supposed to provide and did not — the runtime off the classpath, so the
+ * generated classes will not link — is still said of the module rather than of a row
+ * ({@link Incompleteness}).
+ *
+ * <p>Whether the behavior was applied is the {@link Stage} column: everything at {@code INVOKED} or
+ * past it says what applied it ({@link Run#applied()}), and everything before it says nothing did.
+ * What the row counted is a different question and is not read off this table — a row that stopped
+ * at {@code NONE} spent whatever its fixtures spent, and a row given up on was never read at all
+ * ({@link Counting}).
  *
  * @param at             where the row is written
  * @param target         the behavior the row is about
- * @param description    the row's business-case name, or null
+ * @param identity       what the row names itself. A {@link RowIdentity.Named} is unique among the
+ *                       rows this module writes for {@link #target}, so something outside the file
+ *                       can say which row it means; a {@link RowIdentity.Unnamed} can be shown and
+ *                       not addressed
  * @param stage          how far it got
  * @param disposition    how it ended
  * @param failurePhase   where it stopped, when it did
@@ -54,26 +79,25 @@ import java.util.Set;
  * @param inputCases     the case each input fixture constructs, in order; an entry is null where the
  *                       text does not say
  * @param inputs         each input as the compiler owns it, in order
- * @param hits           the branch sites this row passed through; empty until branches are measured
- * @param stepsSpent     how many counted points the evaluation passed. What the row cost, in the unit
- *                       it is actually held to — so a build can see how much of the budget its rows
- *                       use before one of them reaches it, which is the only way to set the budget
- *                       from evidence rather than by guessing. Zero says the row passed no counted
- *                       point, which a row that ran a body with no loop in it does as much as one
- *                       that never ran — {@link #disposition} is what tells those apart.
+ * @param run            what applied the behavior, and what this compile counted while the row ran.
+ *                       A row that reached {@link Stage#INVOKED} says what applied it and a row that
+ *                       did not says nothing did, which is held to at construction: the two are
+ *                       different cuts of one evaluation and cannot be recorded disagreeing. What
+ *                       the counting says is not held to the stage, because a row's evaluation is
+ *                       not only its application — a fixture applies the helpers it names first, so
+ *                       a row that applied nothing can still have spent counted points
  */
-public record RowOutcome(SourceRef at,
+public record RowOutcome(SourcePos at,
                          String target,
-                         String description,
+                         RowIdentity identity,
                          Stage stage,
                          Disposition disposition,
                          FailurePhase failurePhase,
-                         TypeName expectedArm,
-                         TypeName resultArm,
-                         List<TypeName> inputCases,
+                         TypeSymbol expectedArm,
+                         TypeSymbol resultArm,
+                         List<TypeSymbol> inputCases,
                          List<ObservedValue> inputs,
-                         Set<Integer> hits,
-                         long stepsSpent) {
+                         Run run) {
 
     public RowOutcome {
         // A list that keeps a null in it cannot be List.copyOf'd, and an input whose case the text does
@@ -81,12 +105,30 @@ public record RowOutcome(SourceRef at,
         inputCases = inputCases == null ? List.of()
                 : java.util.Collections.unmodifiableList(new java.util.ArrayList<>(inputCases));
         inputs = inputs == null ? List.of() : List.copyOf(inputs);
-        hits = hits == null ? Set.of() : Set.copyOf(hits);
+        java.util.Objects.requireNonNull(run, "a row says what became of its evaluation");
+        if (stage.reached(Stage.INVOKED) == run.applied() instanceof Applied.Nothing) {
+            // Held here because the two are written from one evaluation and read apart: a stage that
+            // says the behavior was applied and a run that says nothing applied it is a state no
+            // evaluation produces, and a reader that met it would have to decide which half to trust.
+            // What the row counted is not held to the stage — a fixture spends counted points before
+            // the behavior is reached, and a row that never reached it spent what it spent.
+            throw new IllegalArgumentException(
+                    "a row that applied the behavior says what applied it, and one that did not says "
+                            + "nothing did: " + stage + " with " + run.applied());
+        }
+    }
+
+    /** Whether the behavior answered for this row — it was applied and a value came back, which is
+     * what {@link Stage#COMPARED} is reached by. Whether that answer can be named as a case is
+     * {@link #observed}: a value of a type no declaration of the module's names is an answer all the
+     * same, and a run that got one is not a run that produced nothing. */
+    public boolean answered() {
+        return stage.reached(Stage.COMPARED);
     }
 
     /** Whether this row is evidence that the behavior can answer with {@link #resultArm}. A row that
      * disagreed still saw what it saw. */
     public boolean observed() {
-        return stage.reached(Stage.INVOKED) && resultArm != null;
+        return answered() && resultArm != null;
     }
 }

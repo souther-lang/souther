@@ -7,6 +7,7 @@ import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.GenerationReason;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.Generator;
+import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
@@ -67,7 +68,8 @@ public final class GeneratedRows {
                 }
                 filling = only;
             }
-            out.append(of(name, filling, boundaries, names));
+            out.append(of(name, filling, WrittenEnsures.of(compilation.db(), name),
+                    boundaries, names));
         }
         return out.toString();
     }
@@ -77,19 +79,21 @@ public final class GeneratedRows {
      *
      * @param module     the module the rows are about, which an attached file names in its header
      * @param generated  one filling per behavior, keyed the way a report keys them
+     * @param ensures    what each behavior has written in its {@code ensures}, in the author's own
+     *                   words and keyed as {@code generated} is. Read before this is called and
+     *                   handed over: what the source says is not something a renderer works out, and
+     *                   a form of this that could be called without it would be a way of dropping it
      * @param boundaries whether to add the rows that sit on an edge nothing has been written at
      * @param names      what the caller calls its sources, for the notes that name one
      */
     public static String of(String module, Map<String, Adequacy.Filling> generated,
+                            Map<String, List<String>> ensures,
                             boolean boundaries, SourceNameResolver names) {
-        List<Map.Entry<String, List<Generator.GeneratedRow>>> asked = new ArrayList<>();
+        List<Map.Entry<String, Composed>> asked = new ArrayList<>();
         for (Map.Entry<String, Adequacy.Filling> behavior : generated.entrySet()) {
-            List<Generator.GeneratedRow> here =
-                    new ArrayList<>(behavior.getValue().pairs().rows());
-            if (boundaries) {
-                here.addAll(behavior.getValue().boundaries().rows());
-            }
-            asked.add(Map.entry(behavior.getKey(), here));
+            asked.add(Map.entry(behavior.getKey(),
+                    new Composed(behavior.getValue().pairs().rows(),
+                            boundaries ? behavior.getValue().boundaries().rows() : List.of())));
         }
         // Written once and then read three times — printed, counted, and asked whether there is
         // anything to answer. Counting the candidates instead gives a number about work a reader
@@ -105,7 +109,7 @@ public final class GeneratedRows {
             out.append(String.format(
                     "// Replace each `%s` with what the system actually answers, then uncomment.%n",
                     UNANSWERED));
-            out.append(commented(blocks(module, offered)));
+            out.append(commented(stated(blocks(module, offered), ensures)));
         }
         for (Map.Entry<String, Adequacy.Filling> behavior : generated.entrySet()) {
             notes(out, behavior.getKey(), behavior.getValue(), boundaries, names);
@@ -136,18 +140,28 @@ public final class GeneratedRows {
      *
      * <p>A candidate is composed once per obligation, and the positions an obligation does not name
      * are filled without reference to the others, so two obligations can be answered by one row. What
-     * is offered is the row: a reader is handed one piece of work and told everything it settles.
+     * is offered is the row: a reader is handed one piece of work rather than the same values twice.
+     * What that one row settles is a fact about this run and is not what it is named for
+     * ({@link #offered}).
      *
-     * @param inputs  the row's values, in the form they are written in
-     * @param stands  what the row meets, in the order the obligations were composed
+     * @param inputs the row's values, in the form they are written in
+     * @param name   what the row is offered under, or null where nothing here can name it
      */
-    private record Offered(String inputs, List<String> stands) {
+    private record Offered(String inputs, String name) {
 
-        /** What the row is about, in the form a row's description is written in. */
-        String description() {
-            return String.join(" x ", stands);
+        /** The row as it is written: named where this has a name for it, and not otherwise. A row
+         * nobody can name from one thing is written without a name, which the language allows and
+         * which says what is true — the author names it when they answer it. */
+        String written() {
+            return name == null
+                    ? "    | (" + inputs + ") -> " + PLACEHOLDER
+                    : "    | \"" + name + "\" : (" + inputs + ") -> " + PLACEHOLDER;
         }
     }
+
+    /** What one behavior's rows were composed for: the cells of its partition, and the lines a rule
+     * draws. Kept apart because a row's name comes from what it was composed for. */
+    private record Composed(List<Generator.GeneratedRow> cells, List<Generator.GeneratedRow> lines) {}
 
     /**
      * The candidates as rows, one per row rather than one per obligation.
@@ -157,31 +171,46 @@ public final class GeneratedRows {
      * each naming its own obligation, and that is the direction to be wrong in. A grouping on values
      * would need an identity for them that nothing here has — a fixture carries the position it was
      * parsed at and the path it was constructed through — and the row a person reads is the row.
+     *
+     * <p>A row is named for what it was composed for and not for everything it turned out to settle.
+     * The two are different questions: which row this is, and what this run of the generator is
+     * handing it. The second changes with the rest of the model — a row written elsewhere can meet a
+     * line this row also sits on, and the line stops being offered — and a name that moved with it
+     * would be a name for the state of the generation rather than for the row.
+     *
+     * <p>A cell can name a row: two cells never compose one row, since a candidate's values follow
+     * from the classes it was composed for, so the cell a row is named by is the row's own and is
+     * there whatever else this run offers. A line cannot. Lines coincide — each probe fills the
+     * positions its own edge does not name from the bottom of their domains, so two minimum edges
+     * compose one row — and which of them is offered is exactly what changes when something else is
+     * written: a row meeting one of the two leaves the other, and a row named for whichever line
+     * happened to be offered would be renamed by an edit that did not touch it. That is the same
+     * fault as naming a row for everything it settles, with the joining written as a choice.
+     *
+     * <p>So a row composed only for lines is offered without a name. Nothing here can name it from
+     * one thing, and the language lets a row be written without one — an unnamed row cannot be
+     * addressed from outside, which is exactly the state of a row nobody has named yet. The author
+     * names it when they answer it. What a row sits on is in the report, where what this run owes is
+     * said.
      */
-    private static Map<String, List<Offered>> offered(
-            List<Map.Entry<String, List<Generator.GeneratedRow>>> asked) {
+    private static Map<String, List<Offered>> offered(List<Map.Entry<String, Composed>> asked) {
         // One block per behavior, however many kinds of row it holds. Rows of one behavior written
         // under two headings are legal and read as two lists of something, which they are not.
-        Map<String, Map<String, List<String>>> byBehavior = new LinkedHashMap<>();
-        for (Map.Entry<String, List<Generator.GeneratedRow>> behavior : asked) {
-            Map<String, List<String>> here =
+        Map<String, Map<String, Offered>> byBehavior = new LinkedHashMap<>();
+        for (Map.Entry<String, Composed> behavior : asked) {
+            Map<String, Offered> here =
                     byBehavior.computeIfAbsent(behavior.getKey(), _ -> new LinkedHashMap<>());
-            for (Generator.GeneratedRow row : behavior.getValue()) {
-                List<String> stands = here.computeIfAbsent(String.join(", ", textsOf(row.inputs())),
-                        _ -> new ArrayList<>());
-                for (String each : row.classes()) {
-                    if (!stands.contains(each)) {
-                        stands.add(each);
-                    }
-                }
+            for (Generator.GeneratedRow row : behavior.getValue().cells()) {
+                String inputs = String.join(", ", textsOf(row.inputs()));
+                here.putIfAbsent(inputs, new Offered(inputs, row.description()));
+            }
+            for (Generator.GeneratedRow row : behavior.getValue().lines()) {
+                String inputs = String.join(", ", textsOf(row.inputs()));
+                here.putIfAbsent(inputs, new Offered(inputs, null));
             }
         }
         Map<String, List<Offered>> out = new LinkedHashMap<>();
-        byBehavior.forEach((behavior, rows) -> {
-            List<Offered> here = new ArrayList<>();
-            rows.forEach((inputs, stands) -> here.add(new Offered(inputs, stands)));
-            out.put(behavior, here);
-        });
+        byBehavior.forEach((behavior, rows) -> out.put(behavior, List.copyOf(rows.values())));
         return out;
     }
 
@@ -201,9 +230,7 @@ public final class GeneratedRows {
             }
             source.append("\n").append("example ").append(behavior.getKey()).append("\n");
             for (Offered row : behavior.getValue()) {
-                source.append("    | \"").append(row.description()).append("\" : (")
-                        .append(row.inputs())
-                        .append(") -> ").append(PLACEHOLDER).append("\n");
+                source.append(row.written()).append("\n");
             }
         }
         String written = source.toString();
@@ -217,6 +244,46 @@ public final class GeneratedRows {
         // author's choice — the module's own file or an attached one — and only one of those wants it.
         return formatted.replaceFirst("^examples for \\S+\\R+", "")
                 .replace(PLACEHOLDER, UNANSWERED);
+    }
+
+    /** What the heading over a behavior's clauses says. A source-level fact and not a reading of one:
+     * these are the words the author put in the declaration, quoted here whether or not the checker
+     * could make a rule of them, so what is claimed is that they are written and nothing further. */
+    private static final String WRITTEN_FOR = "`ensures` written for `%s`:%n";
+
+    /**
+     * The clauses each behavior carries, put over the rows they are about.
+     *
+     * <p>Over the rows and not beside each one. A clause is written on the behavior, so it says the
+     * same thing about every row of it, and a copy per row would be the same words as many times as
+     * the generator happened to offer questions.
+     *
+     * <p>Put in after {@link #blocks} and not inside it, because these lines are not rows. What that
+     * builds is source, written so that {@code souther fmt} would leave it alone; a heading is prose
+     * the whole block is commented behind, and the formatter parses what it is handed.
+     */
+    private static String stated(String source, Map<String, List<String>> ensures) {
+        StringBuilder out = new StringBuilder();
+        for (String line : source.lines().toList()) {
+            // The heading a behavior's rows are written under, which is the one line of the block
+            // that names a behavior. A row is written indented and under it, so nothing else here
+            // can be read for one.
+            String behavior =
+                    line.startsWith("example ") ? line.substring("example ".length()) : null;
+            List<String> clauses =
+                    behavior == null ? List.of() : ensures.getOrDefault(behavior, List.of());
+            if (!clauses.isEmpty()) {
+                out.append(String.format(WRITTEN_FOR, behavior));
+                for (String clause : clauses) {
+                    for (String each : clause.lines().toList()) {
+                        out.append("    ").append(each).append(System.lineSeparator());
+                    }
+                }
+                out.append(System.lineSeparator());
+            }
+            out.append(line).append(System.lineSeparator());
+        }
+        return out.toString();
     }
 
     private static String commented(String source) {
@@ -326,18 +393,33 @@ public final class GeneratedRows {
     /**
      * What a gap is about, in the words its own finding carries.
      *
-     * <p>Read off the arguments the finding was established with, so that a subject printed here and
+     * <p>Read off the value the finding was established with, so that a subject printed here and
      * a subject printed in the report are the same words about the same thing.
      */
     private static String about(Adequacy.Finding gap) {
-        return switch (gap.kind()) {
-            case BOUNDARY_UNMET -> gap.args().get(0) + " = " + gap.args().get(1);
-            case ARM_UNREACHED, INPUT_CASE_UNSPECIFIED, OUTPUT_CASE_UNSPECIFIED ->
-                    String.valueOf(gap.args().get(0));
+        return switch (gap.about()) {
+            case About.APointOfABorder(var point) -> {
+                if (!point.role().againstTheLine()) {
+                    // Reported under no code, so no build refuses over it and no disposition is
+                    // held for one.
+                    throw new IllegalStateException("not a gap a build refuses: " + gap);
+                }
+                yield point.border().axis() + " = " + point.against();
+            }
+            // The arm's own short name, which is what the report writes and what the document's
+            // `subject` joins on. The finding carries the arm rather than words about it, so that
+            // the sentence a diagnostic says in the reader's language and the words written here
+            // are two readings of one arm rather than one of them being handed the other's.
+            case About.AnArmNoRowGoesThrough(var arm) -> ArmVocabulary.label(arm);
+            case About.ACaseNoRowAppliesItTo(var input, var missing) -> missing.name();
+            case About.ACaseNoRowExpects(var missing) -> missing.name();
             // Not gaps a build refuses, and a disposition is not held for one. Listed rather than
-            // defaulted so that a kind added later has to be given words here.
-            case OUTPUT_CASE_UNVERIFIED, AXIS_CLASS_UNCOVERED, PARTITION_NOT_DERIVABLE,
-                    PARTITION_NOT_READ, PARTITION_OMITTED ->
+            // defaulted so that a shape added later has to be given words here.
+            case About.ACaseNothingWasSeenToProduce _, About.AClassNoRowIsIn _,
+                    About.APositionNoLineDivides _, About.APositionThisCouldNotRead _,
+                    About.AQuestionNothingAnswered _,
+                    About.APositionWhoseRulesWereNotReached _,
+                    About.APositionPastTheAxisLimit _ ->
                     throw new IllegalStateException("not a gap a build refuses: " + gap);
         };
     }
@@ -356,8 +438,6 @@ public final class GeneratedRows {
 
     private static String why(Generator.UnresolvedCombination.Reason reason) {
         return switch (reason) {
-            case NO_CLASS_OPEN_AT_POSITION ->
-                    "the body leaves no class open at another position, so no row reaches this one";
             case NOTHING_COMPOSES_ONE ->
                     "nothing here could build a representative for it, which does not make one"
                             + " unwritable";
@@ -365,6 +445,8 @@ public final class GeneratedRows {
                     "every value tried was refused at construction, which does not make the"
                             + " combination impossible";
             case SEARCH_LIMIT -> "the search stopped before reaching it";
+            case THE_RULES_LEAVE_NOTHING_THERE ->
+                    "the rules leave no value here, and every combination they do leave was tried";
             case NOTHING_TO_BUILD_AGAINST ->
                     "the module's classes were not there to build a candidate against";
             case LINKAGE_FAILED ->

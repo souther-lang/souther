@@ -86,7 +86,6 @@ class AnOptionTheRunDoesNotReadIsNotPassedOverInSilenceTest {
             data Long
 
             behavior classify : (shift: Shift) -> Short | Long
-                constructs Short, Long
 
             let classify (shift) =
                 if shift.endsAt.value - shift.startsAt.value >= 480 then Long else Short
@@ -245,7 +244,7 @@ class AnOptionTheRunDoesNotReadIsNotPassedOverInSilenceTest {
             case "--module" -> "example.timesheet";
             case "--behavior" -> "classify";
             case "-cp", "--class-path" -> empty.toString();
-            case "-d" -> out.toString();
+            case "-d", "--dir" -> out.toString();
             default -> null;
         };
     }

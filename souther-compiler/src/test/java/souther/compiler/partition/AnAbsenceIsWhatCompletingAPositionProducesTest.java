@@ -3,6 +3,10 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.EveryShippedMessageCatalogIsCompleteAndValidTest;
+import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.StructuralInspection;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.types.Type;
 
 import java.io.IOException;
@@ -51,7 +55,56 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
     }
 
     private static Axis pending(StructuralInspection.Pending found) {
-        return Axis.pendingAt(ID, new NumericTerm.ValueOf(AT), Type.BOOL, found);
+        return pending(found, null);
+    }
+
+    /** The same, with a rule about the position's own values that the local reading could not take
+     *  in — which is a second way a position can be left unable to reach an absence. */
+    private static Axis pending(StructuralInspection.Pending found, BlockReason unread) {
+        return Axis.pendingAt(ID, new NumericTerm.ValueOf(AT), Type.BOOL,
+                java.util.List.of(), false, found, unread);
+    }
+
+    /**
+     * A leaf carrying a rule the local reading could not take in cannot reach an absence either.
+     *
+     * <p>The other way a position is left unable to say the model divides it no way. Nothing under
+     * it stopped the walk — it is a leaf — and a rule about its own values was written and not
+     * read, so what a body says next decides whether it is measured, and never that the model
+     * states nothing here.
+     */
+    @Test
+    void aLeafCarryingAnUnreadRuleCompletesAsThatRule() {
+        BlockReason unread = new BlockReason.UnreadValueRule();
+
+        UndividedPosition said = PendingPosition.of(pending(new StructuralInspection.Leaf(), unread))
+                .complete(new BodyCutInspection.Exhausted());
+
+        assertFalse(said.isAbsent(), said.toString());
+        assertEquals(UndividedPosition.Reason.UNSUPPORTED_SYNTAX,
+                ((UndividedPosition.Why.CannotDerive) said.why()).reason());
+    }
+
+    /**
+     * And it is what is said where a body's comparison also came to nothing.
+     *
+     * <p>Both are true of the position and one line is written. The rule on the declaration is the
+     * one whose being read would give the position an axis; a comparison relating it to another
+     * position divides it no way however well it is read, so the reason that names a limit is the
+     * one a reader is sent to. Written the other way round, an author reading "the comparison
+     * relates it to another position" would take that for the whole account and never learn that a
+     * rule on their own type went unread.
+     */
+    @Test
+    void aRuleOnTheDeclarationIsSaidAheadOfWhatABodyCameTo() {
+        UndividedPosition said =
+                PendingPosition.of(pending(new StructuralInspection.Leaf(),
+                                new BlockReason.UnreadValueRule()))
+                        .complete(new BodyCutInspection.Blocked(
+                                new BlockReason.ComparisonBetweenPositions()));
+
+        assertEquals(UndividedPosition.Reason.UNSUPPORTED_SYNTAX,
+                ((UndividedPosition.Why.CannotDerive) said.why()).reason());
     }
 
     // --- what can be pending at all -------------------------------------------------------------

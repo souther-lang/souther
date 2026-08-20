@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.CompileException;
 
@@ -29,7 +31,7 @@ class HighValueDiagnosticTest {
         assertEquals("Int", Type.show(Type.INT));
         assertEquals("Bool", Type.show(Type.BOOL));
         assertEquals("List<Int>", Type.show(Type.list(Type.INT)));
-        assertEquals("N", Type.show(Type.ref(new souther.compiler.types.TypeName("demo", "N"))));
+        assertEquals("N", Type.show(Type.ref(souther.compiler.types.TypeSymbols.declared(new souther.compiler.types.TypeKey("demo", "N")))));
         assertEquals("Int?", Type.show(Type.option(Type.INT)));
     }
 
@@ -92,7 +94,7 @@ class HighValueDiagnosticTest {
                 """);
         assertEquals("check.fold.seed.title", d.titleKey());
         // the primary caret is on the Map.empty seed (line 7), not the `+` inside upsert
-        assertEquals(7, d.pos().line());
+        assertEquals(7, ((Primary.InSource) d.primary()).place().region().start().line());
     }
 
     @Test
@@ -170,7 +172,7 @@ class HighValueDiagnosticTest {
                 data B
                 data C
                 data S = A | B | C
-                behavior pick : (s: S) -> A | B | C constructs A
+                behavior pick : (s: S) -> A | B | C
                 let pick (s) = match s with
                     | A as a -> a
                 """);

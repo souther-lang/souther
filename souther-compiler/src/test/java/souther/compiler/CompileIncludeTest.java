@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
 import net.unit8.raoh.Result;
@@ -80,7 +82,7 @@ class CompileIncludeTest {
         assertTrue(r instanceof Ok);
         Object draft = ((Ok<?>) r).value();
 
-        Object submit = loader.loadClass("demo.Submit" + "$Impl").getConstructor().newInstance();
+        Object submit = Emitted.behavior(loader, "demo", "submit").getConstructor().newInstance();
         Object submitted = submit.getClass()
                 .getMethod("apply", Object.class, Object.class)
                 .invoke(submit, draft, "2026");
@@ -119,9 +121,9 @@ class CompileIncludeTest {
                 """));
 
         assertTrue(e.getMessage().contains("cannot find a type named `Common`"), e.getMessage());
-        assertEquals(2, e.diagnostic().region().start().line());
-        assertEquals(21, e.diagnostic().region().start().column(), "the caret is on the spread's name");
-        assertEquals(27, e.diagnostic().region().end().column());
+        assertEquals(2, ((Primary.InSource) e.diagnostic().primary()).place().region().start().line());
+        assertEquals(21, ((Primary.InSource) e.diagnostic().primary()).place().region().start().column(), "the caret is on the spread's name");
+        assertEquals(27, ((Primary.InSource) e.diagnostic().primary()).place().region().end().column());
     }
 
     // The same miss written as a field's type reports the same thing at the same kind of position —
@@ -134,7 +136,7 @@ class CompileIncludeTest {
                 """));
 
         assertTrue(e.getMessage().contains("cannot find a type named `Common`"), e.getMessage());
-        assertEquals(21, e.diagnostic().region().start().column());
+        assertEquals(21, ((Primary.InSource) e.diagnostic().primary()).place().region().start().column());
     }
 
     @Test
@@ -146,8 +148,8 @@ class CompileIncludeTest {
                 """));
 
         assertTrue(e.getMessage().contains("not a product data"), e.getMessage());
-        assertEquals(3, e.diagnostic().region().start().line());
-        assertEquals(21, e.diagnostic().region().start().column());
+        assertEquals(3, ((Primary.InSource) e.diagnostic().primary()).place().region().start().line());
+        assertEquals(21, ((Primary.InSource) e.diagnostic().primary()).place().region().start().column());
     }
 
     // Every reader of a spread goes through the same resolution, so none of them may reach a null

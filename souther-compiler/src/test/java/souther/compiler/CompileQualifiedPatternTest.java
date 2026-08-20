@@ -34,7 +34,7 @@ class CompileQualifiedPatternTest {
                         data In = { a: Int? }
                         data Out = { n: Int }
                         data Missing
-                        behavior go : (i: In) -> Out | Missing constructs Out, Missing
+                        behavior go : (i: In) -> Out | Missing constructs Out
                         let go (i) = match i.a with
                             | Option.Some v -> Out { n = v }
                             | None -> Missing
@@ -53,7 +53,7 @@ class CompileQualifiedPatternTest {
     private static Object run(String down, Map<String, Object> input) throws Exception {
         BytesClassLoader loader = new BytesClassLoader(
                 Compiler.compileModules(List.of(UP, down)), CompileQualifiedPatternTest.class.getClassLoader());
-        Object b = loader.loadClass("down.Run$Impl").getConstructor().newInstance();
+        Object b = Emitted.behavior(loader, "down", "run").getConstructor().newInstance();
         return Codecs.apply(b, Codecs.decoded(loader, "down.In", input));
     }
 

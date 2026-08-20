@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -53,10 +53,10 @@ final class Combinators {
 
     /** What a call hands its closure: the argument that takes the function, the block that argument
      * is, the parameter the element arrives on, and the container it comes from. */
-    record Handed(Core closure, Core.Block step, Ast.Binder element, Core container) {}
+    record Handed(Core closure, Core.Block step, Hir.Binder element, Core container) {}
 
     /** The same, off the tree an author wrote, where a closure is the block as written. */
-    record Written(Ast.Block step, Ast.Binder element, Ast.Expr container) {}
+    record Written(Hir.Block step, Hir.Binder element, Hir.Expr container) {}
 
     /**
      * What {@code call} hands its closure, or null where it hands one nothing a container holds — or
@@ -95,11 +95,14 @@ final class Combinators {
      * built only where the signature it was applied to accepted the arguments and typed the block it
      * was handed, so one that exists has both.
      */
-    static Written handedTo(Ast.Apply call) {
-        Combinator rule = of(call.denotes());
+    static Written handedTo(Hir.Apply call) {
+        // A call applying a name nothing declares hands its closure to no operation this table
+        // has: there is no declaration to find a rule under, and what is wrong with it is reported
+        // where the name is written.
+        Combinator rule = call.answered() == null ? null : of(call.answered().denotes());
         if (rule == null || rule.closureArg() >= call.args().size()
                 || rule.containerArg() >= call.args().size()
-                || !(call.args().get(rule.closureArg()) instanceof Ast.Block step)) {
+                || !(call.args().get(rule.closureArg()) instanceof Hir.Block step)) {
             return null;
         }
         if (rule.elementParam() >= step.params().size()) {

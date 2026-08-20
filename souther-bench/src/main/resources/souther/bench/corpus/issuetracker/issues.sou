@@ -63,7 +63,6 @@ data Board = { issues: List<Issue> }
 // implementation builds it through the protected factory it inherits. A platform failure (database
 // down) is not this — it is an exception the boundary throws and Souther passes through (ADR-0029).
 behavior findIssue : (id: IssueId) -> Issue | IssueNotFound
-    constructs IssueNotFound
 
 // Inserts a new issue and returns it as stored.
 behavior createIssue : (issue: Issue) -> Issue
@@ -199,7 +198,7 @@ example sharedLabels
 data Assigned = { name: String }
 
 behavior assigneeOf : (issue: Issue) -> Assigned | Unassigned
-    constructs Assigned, Unassigned
+    constructs Assigned
 let assigneeOf (issue) =
     match issue.assignee with
         | Some(Assignee(name)) -> Assigned { name = name }

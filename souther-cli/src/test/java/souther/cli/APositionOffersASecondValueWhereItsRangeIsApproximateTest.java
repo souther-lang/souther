@@ -36,7 +36,6 @@ class APositionOffersASecondValueWhereItsRangeIsApproximateTest {
                 data Ok
 
                 behavior f : (r: R, flag: Bool) -> Ok
-                    constructs Ok
 
                 let f (r, flag) = Ok
                 """.replace("CLAUSE", clause);
@@ -113,7 +112,6 @@ class APositionOffersASecondValueWhereItsRangeIsApproximateTest {
                 data Ok
 
                 behavior f : (r: R, flag: Bool) -> Ok
-                    constructs Ok
 
                 let f (r, flag) = Ok
                 """;
@@ -158,7 +156,6 @@ class APositionOffersASecondValueWhereItsRangeIsApproximateTest {
                 data Ok
 
                 behavior f : (pair: Pair, flag: Bool) -> Ok
-                    constructs Ok
 
                 let f (pair, flag) = Ok
                 """;

@@ -82,6 +82,8 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
             data DayN    = Date
             data MomentN = DateTime
             data TextN   = String
+            data TimeN   = Time
+            data NanoN   = Instant
             data StageN  = Stage
 
             data WholeI  = Int      invariant value >= 100
@@ -89,110 +91,163 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
             data DayI    = Date     invariant value >= Date("2026-01-01")
             data MomentI = DateTime invariant value >= DateTime("2026-01-01T00:00:00")
             data TextI   = String   invariant value >= "2020-01"
+            data TimeI   = Time     invariant value >= Time("09:00:00")
+            data NanoI   = Instant  invariant value >= Instant("2026-01-01T00:00:00Z")
             data StageI  = Stage    invariant value >= Qualified
 
             behavior guardWholeBare : (x: Int) -> Verdict
-                constructs Ok, No
             let guardWholeBare (x) = { guard x < 5000 else Ok
                 No }
 
             behavior guardDenseBare : (x: Decimal) -> Verdict
-                constructs Ok, No
             let guardDenseBare (x) = { guard x < 0.5m else Ok
                 No }
 
             behavior guardDayBare : (x: Date) -> Verdict
-                constructs Ok, No
             let guardDayBare (x) = { guard x < Date("2026-08-01") else Ok
                 No }
 
             behavior guardMomentBare : (x: DateTime) -> Verdict
-                constructs Ok, No
             let guardMomentBare (x) = { guard x < DateTime("2026-08-01T00:00:00") else Ok
                 No }
 
             behavior guardTextBare : (x: String) -> Verdict
-                constructs Ok, No
             let guardTextBare (x) = { guard x < "2026-08" else Ok
                 No }
 
+            behavior guardTimeBare : (x: Time) -> Verdict
+            let guardTimeBare (x) = { guard x < Time("16:00:00") else Ok
+                No }
+
+            behavior guardNanoBare : (x: Instant) -> Verdict
+            let guardNanoBare (x) = { guard x < Instant("2026-08-01T00:00:00Z") else Ok
+                No }
+
             behavior guardStageBare : (x: Stage) -> Verdict
-                constructs Ok, No, Qualified
             let guardStageBare (x) = { guard x < Qualified else Ok
                 No }
 
             behavior guardWholeWrapped : (x: WholeN) -> Verdict
-                constructs Ok, No
             let guardWholeWrapped (x) = { guard x.value < 5000 else Ok
                 No }
 
             behavior guardDenseWrapped : (x: DenseN) -> Verdict
-                constructs Ok, No
             let guardDenseWrapped (x) = { guard x.value < 0.5m else Ok
                 No }
 
             behavior guardDayWrapped : (x: DayN) -> Verdict
-                constructs Ok, No
             let guardDayWrapped (x) = { guard x.value < Date("2026-08-01") else Ok
                 No }
 
             behavior guardMomentWrapped : (x: MomentN) -> Verdict
-                constructs Ok, No
             let guardMomentWrapped (x) = {
                 guard x.value < DateTime("2026-08-01T00:00:00") else Ok
                 No }
 
             behavior guardTextWrapped : (x: TextN) -> Verdict
-                constructs Ok, No
             let guardTextWrapped (x) = { guard x.value < "2026-08" else Ok
                 No }
 
+            behavior guardTimeWrapped : (x: TimeN) -> Verdict
+            let guardTimeWrapped (x) = { guard x.value < Time("16:00:00") else Ok
+                No }
+
+            behavior guardNanoWrapped : (x: NanoN) -> Verdict
+            let guardNanoWrapped (x) = {
+                guard x.value < Instant("2026-08-01T00:00:00Z") else Ok
+                No }
+
             behavior guardStageWrapped : (x: StageN) -> Verdict
-                constructs Ok, No, Qualified
             let guardStageWrapped (x) = { guard x.value < Qualified else Ok
                 No }
 
+            // The same line, written as the position's own type rather than as what it wraps. A
+            // newtype is the value it carries, so `x < WholeN(5000)` compares two of them and the
+            // line is the one `x < 5000` draws at the value inside.
+            behavior guardWholeBuilt : (x: WholeN) -> Verdict
+                constructs WholeN
+            let guardWholeBuilt (x) = { guard x < WholeN(5000) else Ok
+                No }
+
+            behavior guardDenseBuilt : (x: DenseN) -> Verdict
+                constructs DenseN
+            let guardDenseBuilt (x) = { guard x < DenseN(0.5m) else Ok
+                No }
+
+            behavior guardDayBuilt : (x: DayN) -> Verdict
+                constructs DayN
+            let guardDayBuilt (x) = { guard x < DayN(Date("2026-08-01")) else Ok
+                No }
+
+            behavior guardMomentBuilt : (x: MomentN) -> Verdict
+                constructs MomentN
+            let guardMomentBuilt (x) = {
+                guard x < MomentN(DateTime("2026-08-01T00:00:00")) else Ok
+                No }
+
+            behavior guardTimeBuilt : (x: TimeN) -> Verdict
+                constructs TimeN
+            let guardTimeBuilt (x) = { guard x < TimeN(Time("16:00:00")) else Ok
+                No }
+
+            behavior guardNanoBuilt : (x: NanoN) -> Verdict
+                constructs NanoN
+            let guardNanoBuilt (x) = {
+                guard x < NanoN(Instant("2026-08-01T00:00:00Z")) else Ok
+                No }
+
+            behavior guardTextBuilt : (x: TextN) -> Verdict
+                constructs TextN
+            let guardTextBuilt (x) = { guard x < TextN("2026-08") else Ok
+                No }
+
+            behavior guardStageBuilt : (x: StageN) -> Verdict
+                constructs StageN
+            let guardStageBuilt (x) = { guard x < StageN(Qualified) else Ok
+                No }
+
             behavior boundWhole  : (x: WholeI)  -> Ok
-                constructs Ok
             let boundWhole (x) = Ok
 
             behavior boundDense  : (x: DenseI)  -> Ok
-                constructs Ok
             let boundDense (x) = Ok
 
             behavior boundDay    : (x: DayI)    -> Ok
-                constructs Ok
             let boundDay (x) = Ok
 
             behavior boundMoment : (x: MomentI) -> Ok
-                constructs Ok
             let boundMoment (x) = Ok
 
             behavior boundText   : (x: TextI)   -> Ok
-                constructs Ok
             let boundText (x) = Ok
 
+            behavior boundTime   : (x: TimeI)   -> Ok
+            let boundTime (x) = Ok
+
+            behavior boundNano   : (x: NanoI)   -> Ok
+            let boundNano (x) = Ok
+
             behavior boundStage  : (x: StageI)  -> Ok
-                constructs Ok
             let boundStage (x) = Ok
 
+            // The wider line is guarded first, so both departures are ones values reach. Written
+            // the other way round the second guard departs at two while everything past the first
+            // is under one, and the line at two divides nothing — which is a model with a dead
+            // branch in it and not a position with three classes.
             behavior twoLinesDense : (x: Decimal) -> Verdict
-                constructs Ok, No
-            let twoLinesDense (x) = { guard x < 1.0m else Ok
-                guard x < 2.0m else No
+            let twoLinesDense (x) = { guard x < 2.0m else No
+                guard x < 1.0m else Ok
                 Ok }
 
             behavior twoLinesMoment : (x: DateTime) -> Verdict
-                constructs Ok, No
             let twoLinesMoment (x) = {
-                guard x < DateTime("2026-08-01T00:00:01") else Ok
                 guard x < DateTime("2026-08-01T00:00:02") else No
+                guard x < DateTime("2026-08-01T00:00:01") else Ok
                 Ok }
 
             behavior openOnBothSidesDense : (x: Decimal) -> Verdict
-                constructs Ok, No
-            let openOnBothSidesDense (x) = { guard x <= 1.0m else Ok
-                guard x < 2.0m else No
+            let openOnBothSidesDense (x) = { guard x < 2.0m else No
+                guard x <= 1.0m else Ok
                 Ok }
 
             data TwoDecimals = Decimal
@@ -202,20 +257,17 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
                     && value <= DateTime("2026-08-01T00:00:01")
 
             behavior singledDense : (x: TwoDecimals) -> Verdict
-                constructs Ok, No
             let singledDense (x) = { guard x.value == 0.0m else Ok
                 guard x.value == 1.0m else No
                 Ok }
 
             behavior singledMoment : (x: TwoMoments) -> Verdict
-                constructs Ok, No
             let singledMoment (x) = {
                 guard x.value == DateTime("2026-08-01T00:00:00") else Ok
                 guard x.value == DateTime("2026-08-01T00:00:01") else No
                 Ok }
 
             behavior openOnBothSidesMoment : (x: DateTime) -> Verdict
-                constructs Ok, No
             let openOnBothSidesMoment (x) = {
                 guard x <= DateTime("2026-08-01T00:00:01") else Ok
                 guard x < DateTime("2026-08-01T00:00:02") else No
@@ -243,6 +295,10 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         // decimal gets and for the same reason — so it is one obligation short of the carriers whose
         // values step, rather than unread.
         expected.put("guardTextBare", read(1));
+        // Both step, each at its own unit: a time of day at the second and a moment at the
+        // nanosecond, so each is owed the line and the value beside it.
+        expected.put("guardTimeBare", read(2));
+        expected.put("guardNanoBare", read(2));
         // The line and the case beside it, written as case names. The classes are still the three
         // cases: `read(2)` would say the cut replaced them, and it does not.
         expected.put("guardStageBare", readBesideItsClasses(2));
@@ -251,10 +307,27 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         expected.put("guardDayWrapped", read(2));
         expected.put("guardMomentWrapped", read(2));
         expected.put("guardTextWrapped", read(1));
+        expected.put("guardTimeWrapped", read(2));
+        expected.put("guardNanoWrapped", read(2));
         // What the bare position answers. The classes reader reads through the name now, as the
         // carrier always did, so the cell that was a name changing what a rule means is a cell that
         // says the two forms are one.
         expected.put("guardStageWrapped", readBesideItsClasses(2));
+        // And the same line written as the position's own type. A newtype's construction around a
+        // value is that value here, for the reason the carrier reads through the name to begin
+        // with — so a cell differing from the bare one is a value the model wrote that this could
+        // not read back.
+        expected.put("guardWholeBuilt", read(2));
+        expected.put("guardDenseBuilt", read(1));
+        expected.put("guardDayBuilt", read(2));
+        expected.put("guardMomentBuilt", read(2));
+        expected.put("guardTimeBuilt", read(2));
+        expected.put("guardNanoBuilt", read(2));
+        // The eighth built row. It could not be written while a newtype over an enumeration was
+        // measured here and refused by `<`, and the gap was the last cell where a name changed what
+        // a rule means (issue #856). It answers what the bare and the wrapped rows answer.
+        expected.put("guardStageBuilt", readBesideItsClasses(2));
+        expected.put("guardTextBuilt", read(1));
 
         assertEquals(expected, measured(expected.keySet()));
     }
@@ -281,6 +354,8 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         expected.put("boundDay", new Measured(0, 1, null));
         expected.put("boundMoment", new Measured(0, 1, null));
         expected.put("boundText", new Measured(0, 1, null));
+        expected.put("boundTime", new Measured(0, 1, null));
+        expected.put("boundNano", new Measured(0, 1, null));
         expected.put("boundStage", new Measured(1, 1, null));
 
         assertEquals(expected, measured(expected.keySet()));
@@ -298,13 +373,15 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
     void aCarrierIsReadOrNotWhicheverRuleWroteIt() {
         Map<String, Measured> all = measured(List.of(
                 "guardWholeBare", "guardDenseBare", "guardDayBare", "guardMomentBare",
-                "guardTextBare", "guardStageBare",
-                "boundWhole", "boundDense", "boundDay", "boundMoment", "boundText", "boundStage"));
+                "guardTextBare", "guardTimeBare", "guardNanoBare", "guardStageBare",
+                "boundWhole", "boundDense", "boundDay", "boundMoment", "boundText", "boundTime",
+                "boundNano", "boundStage"));
 
         for (String[] pair : new String[][] {
                 {"guardWholeBare", "boundWhole"}, {"guardDenseBare", "boundDense"},
                 {"guardDayBare", "boundDay"}, {"guardMomentBare", "boundMoment"},
-                {"guardTextBare", "boundText"}, {"guardStageBare", "boundStage"}}) {
+                {"guardTextBare", "boundText"}, {"guardTimeBare", "boundTime"},
+                {"guardNanoBare", "boundNano"}, {"guardStageBare", "boundStage"}}) {
             assertEquals(all.get(pair[0]).unread(), all.get(pair[1]).unread(),
                     "a carrier a guard's line is drawn on is one an invariant's bound is drawn on: "
                             + pair[0] + " against " + pair[1]);
@@ -322,15 +399,29 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
      */
     @Test
     void aNameWrappedRoundTheValuesDoesNotChangeWhatIsMeasured() {
-        Map<String, Measured> all = measured(List.of(
-                "guardWholeBare", "guardDenseBare", "guardDayBare", "guardMomentBare",
-                "guardTextBare", "guardStageBare",
-                "guardWholeWrapped", "guardDenseWrapped", "guardDayWrapped", "guardMomentWrapped",
-                "guardTextWrapped", "guardStageWrapped"));
+        List<String> carriers = List.of("Whole", "Dense", "Day", "Moment", "Text", "Time", "Nano",
+                "Stage");
+        List<String> asked = new java.util.ArrayList<>();
+        for (String carrier : carriers) {
+            asked.add("guard" + carrier + "Bare");
+            asked.add("guard" + carrier + "Wrapped");
+            if (!carrier.equals("Stage")) {
+                asked.add("guard" + carrier + "Built");
+            }
+        }
+        Map<String, Measured> all = measured(asked);
 
-        for (String carrier : List.of("Whole", "Dense", "Day", "Moment", "Text", "Stage")) {
+        for (String carrier : carriers) {
             assertEquals(all.get("guard" + carrier + "Bare"), all.get("guard" + carrier + "Wrapped"),
                     carrier + ": a newtype is the value it carries");
+            // And the value written as the newtype rather than as what it wraps. The reading that
+            // sends a position to a carrier walks through the names; a reading of the values that
+            // stops at one leaves a position whose own literals it cannot read.
+            if (!carrier.equals("Stage")) {
+                assertEquals(all.get("guard" + carrier + "Bare"),
+                        all.get("guard" + carrier + "Built"),
+                        carrier + ": and a value written as the newtype is that value");
+            }
         }
     }
 
@@ -421,8 +512,14 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
             // this compiler could not do is recorded in its own words and said in the document's.
             UndividedPosition.Reason unread = evidence.unread().isEmpty() ? null
                     : ReportedReason.of(evidence.unread().get(0).why());
+            // The points a row is owed at against a line, and not the borders. Which carriers name a
+            // value one step over is what this table is about, and a border is one whether or not
+            // its second point exists — counted as borders, every carrier answers alike.
             out.put(behavior, new Measured(evidence.axes().size(),
-                    evidence.boundaries().size(), unread));
+                    (int) souther.compiler.query.BorderAssessment.pointsOf(evidence.boundaries())
+                            .stream().filter(point -> point.role().againstTheLine())
+                            .filter(point -> point.owed() != null).count(),
+                    unread));
         }
         return out;
     }

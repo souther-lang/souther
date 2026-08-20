@@ -73,6 +73,24 @@ class AnalyzerTest {
         assertTrue(diags.get(0).message().contains("type variable"), diags.get(0).message());
     }
 
+    /**
+     * And it is marked where it is written, not at the head of the document.
+     *
+     * <p>The compile behind this route reads the document without a name for it, so what it reports
+     * points into a text this compilation cannot name — real numbers, no file. Which document that
+     * is, is what this route knows and nothing else does; left unsaid, the marker has nowhere to go
+     * and falls to the first character.
+     */
+    @Test
+    void aSemanticErrorIsMarkedWhereItIsWritten() {
+        String src = "module demo\ndata X = { v: Int }\nlet f (x: 'a) = x\n";
+
+        List<LspDiagnostic> diags = analyzer.diagnostics(src);
+
+        assertEquals(2, diags.get(0).range().start().line(),
+                "the third line, which is where the type variable is written: " + diags.get(0));
+    }
+
     @Test
     void formatReturnsCanonicalTextForACleanDocument() {
         // a one-line product def is reflowed into the multi-line leading-comma block
@@ -617,7 +635,8 @@ class AnalyzerTest {
                 + "behavior f : (x: Thing) -> Thing\n"
                 + "let f (x) = x\n";
         // cursor in the body of `let f (x) = x` (line 4, on the trailing `x`)
-        List<CompletionItem> items = analyzer.completions(text, new Position(4, 12));
+        List<CompletionItem> items = analyzer.completions("file:///demo.sou", new Position(4, 12),
+                ModuleGraph.of(java.util.Map.of("file:///demo.sou", text)));
 
         java.util.Set<String> labels = new java.util.HashSet<>();
         for (CompletionItem i : items) {

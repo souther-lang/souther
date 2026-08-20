@@ -41,7 +41,7 @@ class CompileLambdaNamesItselfTest {
                     Result { n = twice(o.v) }
                 }
                 """), getClass().getClassLoader());
-        Object check = loader.loadClass("demo.Check" + "$Impl").getDeclaredConstructor().newInstance();
+        Object check = Emitted.behavior(loader, "demo", "check").getDeclaredConstructor().newInstance();
         Object order = Codecs.decoded(loader, "demo.Order", Map.of("v", 5L));
         Map<?, ?> result = (Map<?, ?>) Codecs.encode(loader, "demo.Result",
                 Codecs.apply(check, order));

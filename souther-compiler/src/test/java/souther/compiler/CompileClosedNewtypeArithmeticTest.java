@@ -24,7 +24,7 @@ class CompileClosedNewtypeArithmeticTest {
     private Object run(String module, String type, Object input) throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(module), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo." + type, input);
-        Object b = loader.loadClass("demo.Calc$Impl").getDeclaredConstructor().newInstance();
+        Object b = Emitted.behavior(loader, "demo", "calc").getDeclaredConstructor().newInstance();
         Object out = Codecs.apply(b, in);
         return Codecs.encode(loader, "demo." + type, out);
     }

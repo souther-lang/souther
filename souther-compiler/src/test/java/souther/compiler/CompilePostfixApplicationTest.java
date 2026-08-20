@@ -1,6 +1,6 @@
 package souther.compiler;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -16,10 +16,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * An argument list applies to the expression before it, not only to a name. What is applied is
- * decided by that expression, which is what {@code Ast.Apply} holds.
+ * decided by that expression, which is what {@code Hir.Apply} holds.
  *
  * <p>Souther's grammar is not newline sensitive — a leading `.` or operator continues the line above
  * — but an argument list is the one thing that cannot follow a line break. A block whose statement
@@ -52,7 +53,7 @@ class CompilePostfixApplicationTest {
     private static Map<?, ?> run(String source, Map<String, Object> in) throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(source),
                 CompilePostfixApplicationTest.class.getClassLoader());
-        Object behavior = loader.loadClass("demo.Go$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "go").getConstructor().newInstance();
         return (Map<?, ?>) Codecs.encode(loader, "demo.Out",
                 Codecs.apply(behavior, Codecs.decoded(loader, "demo.In", in)));
     }
@@ -140,15 +141,16 @@ class CompilePostfixApplicationTest {
                 behavior go : (i: In) -> Out constructs Out
                 let go (i) = Out { m = pick(i.n + 1)(i.n + 2) }
                 """);
-        Ast.FnDef def = souther.compiler.query.Compilation
+        Hir.FnDef def = souther.compiler.query.Compilation
                 .ofDocuments(byId, java.util.Set.of(), souther.compiler.meta.ModulePath.EMPTY)
                 .db().ask(new souther.compiler.query.Bodies.SettledFn("demo", "go")).value();
         assertEquals(1, occurrences(def.writtenBody(), "pick"), "the callee was worked out more than once");
     }
 
-    private static int occurrences(Ast.Expr e, String callee) {
-        int[] n = {e instanceof Ast.Apply a && callee.equals(a.reaches()) ? 1 : 0};
-        Ast.forEachChild(e, c -> n[0] += occurrences(c, callee));
+    private static int occurrences(Hir.Expr e, String callee) {
+        int[] n = {e instanceof Hir.Apply a && a.answered() != null
+                && callee.equals(a.answered().reaches()) ? 1 : 0};
+        Hir.forEachChild(e, c -> n[0] += occurrences(c, callee));
         return n[0];
     }
 
@@ -307,18 +309,22 @@ class CompilePostfixApplicationTest {
     @Test
     void anApplicationSaysWhetherItAppliesAName() {
         SourcePos at = new SourcePos(1, 1);
-        Ast.Apply named = new Ast.Apply("List.map", java.util.List.of(), at, null);
-        Ast.Apply nameless = new Ast.Apply(new Ast.Block(java.util.List.of(),
-                new Ast.IntLit(1, at, null), at, null), java.util.List.of(),
+        souther.compiler.types.ValueName.Stdlib map =
+                new souther.compiler.types.ValueName.Stdlib("List", "map");
+        Hir.Apply named = new Hir.Apply("List.map", map,
+                new ReachName.OfLibrary(map), java.util.List.of(),
+                souther.compiler.types.ConstructionOrigin.own(), at, null);
+        Hir.Apply nameless = new Hir.Apply(new Hir.Block(java.util.List.of(),
+                new Hir.IntLit(1, at, null), at, null), java.util.List.of(),
                 souther.compiler.types.ConstructionOrigin.own(), at, null);
 
         assertTrue(named.appliesAName());
         assertEquals("List.map", named.written());
-        assertEquals("List.map", named.reaches());
+        assertEquals("List.map", named.answered().reaches());
 
         assertFalse(nameless.appliesAName());
         assertEquals("", nameless.written(), "there is no spelling to quote");
-        assertEquals("", nameless.reaches(), "and no declaration to look up");
+        assertNull(nameless.answered(), "and no declaration to look up");
     }
 
     /**
@@ -331,11 +337,13 @@ class CompilePostfixApplicationTest {
     void whatAnApplicationReachesIsNeverTheSpellingAReportQuotes() {
         SourcePos at = new SourcePos(1, 1);
         BindingId id = new BindingId(new BindingOwner.OfValue("demo", "go"), 0);
-        Ast.Apply lowered = new Ast.Apply(
-                new Ast.Var("$fn0", new ValueName.Local("$fn0", id), new ReachName.Bare("$fn0"), at),
+        Hir.Apply lowered = new Hir.Apply(
+                Hir.Var.denoting("$fn0", new ValueName.Local("$fn0", id),
+                        new ReachName.Bare("$fn0"), at),
                 java.util.List.of(), souther.compiler.types.ConstructionOrigin.own(), "d.count", at, null);
 
         assertEquals("d.count", lowered.written(), "a report quotes what the author wrote");
-        assertEquals("$fn0", lowered.reaches(), "a table is looked up with the binding");
+        assertEquals("$fn0", lowered.answered().reaches(),
+                "a table is looked up with the binding");
     }
 }

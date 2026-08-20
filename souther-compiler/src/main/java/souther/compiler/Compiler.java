@@ -1,9 +1,11 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
+import souther.compiler.jvm.JvmClassName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Located;
 import souther.compiler.examples.Deadline;
 import souther.compiler.examples.EvaluationPolicy;
@@ -12,6 +14,7 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
+import souther.compiler.query.Front;
 import souther.compiler.query.Report;
 import souther.compiler.query.Output;
 
@@ -116,7 +119,7 @@ public final class Compiler {
      * <p>No position is claimed: where the stack ended is not a fact about the source.
      */
     private static CompileException tooDeep() {
-        return CompileException.of(Diagnostic.say(new DeclarationMessage.TheCompilerRanOutOfRoom()).build());
+        return CompileException.of(Diagnostic.say(new DeclarationMessage.TheCompilerRanOutOfRoom()).nowhere().build());
     }
 
     /**
@@ -220,25 +223,31 @@ public final class Compiler {
         compilation.measure(measure);
         Db db = compilation.db();
 
-        CompileException structural = compilation.failure(compilation.structuralReports());
+        CompileException structural = compilation.structuralFailure();
         if (structural != null) {
             throw structural;
         }
 
         db.ask(new Output.All());
-        CompileException failed = compilation.failure(db.allReports());
+        CompileException failed = compilation.failure();
         if (failed != null) {
             throw failed;
         }
         for (String module : compilation.modules()) {
             if (!db.ask(new Output.ConstConstructions(module)).present()) {
-                CompileException bad = compilation.failure(db.allReports());
+                CompileException bad = compilation.failure();
                 if (bad != null) {
                     throw bad;
                 }
             }
             List<Diagnostic> failures = new ArrayList<>();
-            for (String id : compilation.exampleSourcesOf(module)) {
+            for (SourceId id : compilation.exampleSourcesOf(module)) {
+                // What the rows name themselves, before what they state: a name says which row is
+                // meant, and two rows sharing one leave every later report about either of them
+                // saying it of both.
+                for (Report failure : Report.errorsIn(db.ask(new Front.RowNames(id)).reports())) {
+                    failures.add(failure.diagnostic());
+                }
                 // Only the errors: this key also carries what a clean run wants to say about how well
                 // the rows cover the model, and a warning is not a reason to fail the build.
                 for (Report failure : Report.errorsIn(db.ask(Output.Examples.asked(db, module, id)).reports())) {
@@ -258,7 +267,7 @@ public final class Compiler {
         for (String module : compilation.modules()) {
             compilation.answerWarnings(module);
         }
-        warningsOut.addAll(compilation.warnings(db.allReports()));
+        warningsOut.addAll(compilation.warnings());
         return compilation;
     }
 
@@ -302,7 +311,7 @@ public final class Compiler {
         return driven(() -> {
             compilation.measure(measure);
             compilation.answerEverything();
-            warningsOut.addAll(compilation.warnings(compilation.db().allReports()));
+            warningsOut.addAll(compilation.warnings());
             return compilation;
         });
     }
@@ -429,13 +438,13 @@ public final class Compiler {
         compilation.measure(measure);
         Db db = compilation.db();
 
-        CompileException structural = compilation.failure(compilation.structuralReports());
+        CompileException structural = compilation.structuralFailure();
         if (structural != null) {
             throw structural;
         }
 
         db.ask(new Output.All());
-        CompileException failed = compilation.failure(db.allReports());
+        CompileException failed = compilation.failure();
         if (failed != null) {
             throw failed;
         }
@@ -443,21 +452,21 @@ public final class Compiler {
         // Every module's classes are now present, so a constant construction and an example can
         // resolve a cross-module reference — including into a dependency, whose classes come off the
         // same path its declarations were read from.
-        List<Diagnostic> exampleFailures = new ArrayList<>();
-        List<String> exampleSources = new ArrayList<>();
+        // Each failing row with the file it is listed under: a row from an `examples for` file is
+        // written in that file, not in the module it contributes to.
+        List<Located> exampleFailures = new ArrayList<>();
         for (String module : compilation.modules()) {
             if (!db.ask(new Output.ConstConstructions(module)).present()) {
-                CompileException bad = compilation.failure(db.allReports());
+                CompileException bad = compilation.failure();
                 if (bad != null) {
                     throw bad;
                 }
                 continue;
             }
-            for (String id : compilation.exampleSourcesOf(module)) {
+            for (SourceId id : compilation.exampleSourcesOf(module)) {
                 for (Report failure : Report.errorsIn(db.ask(Output.Examples.asked(db, module, id)).reports())) {
-                    exampleFailures.add(failure.diagnostic());
-                    // a row from an `examples for` file is positioned in that file, not this one
-                    exampleSources.add(id);
+                    exampleFailures.add(new Located(failure.diagnostic(),
+                            souther.compiler.diag.ReportContext.inFile(id)));
                 }
             }
             db.ask(new Output.SaidDisagreements(module));
@@ -465,10 +474,10 @@ public final class Compiler {
         for (String module : compilation.modules()) {
             compilation.answerWarnings(module);
         }
-        warningsOut.addAll(compilation.warnings(db.allReports()));
+        warningsOut.addAll(compilation.warnings());
         if (!exampleFailures.isEmpty()) {
-            throw CompileException.ofAllInSources(exampleFailures, exampleSources,
-                    ExampleVerifier.legacySummary(exampleFailures));
+            throw CompileException.ofAllReported(exampleFailures,
+                    ExampleVerifier.legacySummary(Located.diagnosticsOf(exampleFailures)));
         }
         return compilation;
     }
@@ -483,7 +492,7 @@ public final class Compiler {
      * examples land on that module's id, and an {@code examples for X} file's examples land on that
      * file's id — never on the target module. A source with no problem maps to an empty list.
      */
-    public static Map<String, List<Located>> diagnoseModules(Map<String, String> sourcesById) {
+    public static Map<SourceId, List<Located>> diagnoseModules(Map<String, String> sourcesById) {
         return diagnoseModules(sourcesById, Set.of());
     }
 
@@ -493,8 +502,8 @@ public final class Compiler {
      * errors). Their importers are skipped rather than told the module is unknown — the error belongs
      * to the broken file, which reports it separately, not to the importer.
      */
-    public static Map<String, List<Located>> diagnoseModules(Map<String, String> sourcesById,
-                                                             Set<String> brokenModuleNames) {
+    public static Map<SourceId, List<Located>> diagnoseModules(Map<String, String> sourcesById,
+                                                               Set<String> brokenModuleNames) {
         return diagnoseModules(sourcesById, brokenModuleNames, ModulePath.EMPTY);
     }
 
@@ -506,9 +515,9 @@ public final class Compiler {
      * <p>A path that is itself wrong — a module missing behind a module — is not reported here. The
      * editor's job is the source in front of the author, and a broken path is the build's to say.
      */
-    public static Map<String, List<Located>> diagnoseModules(Map<String, String> sourcesById,
-                                                             Set<String> brokenModuleNames,
-                                                             ModulePath path) {
+    public static Map<SourceId, List<Located>> diagnoseModules(Map<String, String> sourcesById,
+                                                               Set<String> brokenModuleNames,
+                                                               ModulePath path) {
         return Compilation.ofDocuments(sourcesById, brokenModuleNames, path).diagnostics();
     }
     /**
@@ -529,7 +538,7 @@ public final class Compiler {
     /** Compiles source and writes each generated class under {@code outDir}. */
     public static void compileToDir(String source, Path outDir) throws IOException {
         for (Map.Entry<String, byte[]> entry : compile(source).entrySet()) {
-            Path file = outDir.resolve(entry.getKey().replace('.', '/') + ".class");
+            Path file = outDir.resolve(JvmClassName.classFile(entry.getKey()));
             Files.createDirectories(file.getParent());
             Files.write(file, entry.getValue());
         }

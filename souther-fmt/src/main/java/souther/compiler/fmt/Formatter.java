@@ -8,7 +8,6 @@ import souther.compiler.cst.SyntaxToken;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.DiagnosticCode;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -446,7 +445,7 @@ public final class Formatter {
      * it was reached wherever the stack happened to end, which is not a fact about the source.
      */
     private static CompileException tooDeep() {
-        return CompileException.of(Diagnostic.say(new DeclarationMessage.TheCompilerRanOutOfRoom()).build());
+        return CompileException.of(Diagnostic.say(new DeclarationMessage.TheCompilerRanOutOfRoom()).nowhere().build());
     }
 
     // --- layout ---
@@ -1116,19 +1115,25 @@ public final class Formatter {
             List<TokenDoc> clauses = new ArrayList<>();
             for (SyntaxNode c : s.childNodes()) {
                 if (c.kind() != SyntaxKind.CONSTRUCTS_CLAUSE
-                        && c.kind() != SyntaxKind.DEPENDS_CLAUSE) {
+                        && c.kind() != SyntaxKind.DEPENDS_CLAUSE
+                        && c.kind() != SyntaxKind.ENSURES_CLAUSE) {
                     continue;
                 }
                 Place clause = places.under(ofTheSig, c.kind(),
                         Opening.forced(Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN),
                         Written.of(c));
-                TokenDoc listed = c.kind() == SyntaxKind.CONSTRUCTS_CLAUSE
-                        ? TokenDoc.node(c.kind(),
-                                concat(TokenDoc.token(SyntaxKind.CONSTRUCTS_KW, "constructs"), GAP,
-                                        nameList(c, 0, clause)))
-                        : TokenDoc.node(c.kind(),
-                                concat(TokenDoc.token(SyntaxKind.DEPENDS_KW, "depends"), GAP,
-                                        ident("on"), GAP, nameList(c, 1, clause)));
+                TokenDoc listed;
+                if (c.kind() == SyntaxKind.CONSTRUCTS_CLAUSE) {
+                    listed = TokenDoc.node(c.kind(),
+                            concat(TokenDoc.token(SyntaxKind.CONSTRUCTS_KW, "constructs"), GAP,
+                                    nameList(c, 0, clause)));
+                } else if (c.kind() == SyntaxKind.DEPENDS_CLAUSE) {
+                    listed = TokenDoc.node(c.kind(),
+                            concat(TokenDoc.token(SyntaxKind.DEPENDS_KW, "depends"), GAP,
+                                    ident("on"), GAP, nameList(c, 1, clause)));
+                } else {
+                    listed = ensuresClause(c, clause);
+                }
                 clauses.add(TokenDoc.at(clause, concat(listed, TokenDoc.endsTheLineOf(clause))));
             }
             return TokenDoc.node(n.kind(),
@@ -1164,6 +1169,36 @@ public final class Formatter {
         return TokenDoc.node(n.kind(), concat(TokenDoc.token(SyntaxKind.BEHAVIOR_KW, "behavior"), GAP, ident(name), GAP, ASSIGN,
                 TokenDoc.at(ofThePipe,
                         TokenDoc.node(pipe.kind(), group(nest(INDENT, concat(parts)))))));
+    }
+
+    private TokenDoc ensuresClause(SyntaxNode clause, Place at) {
+        TokenDoc label = clause.token(SyntaxKind.ASSIGN).isPresent()
+                ? concat(ident(firstIdent(clause)), GAP, ASSIGN, GAP) : TokenDoc.NIL;
+        List<SyntaxNode> arms = childNodes(clause, SyntaxKind.ENSURES_ARM);
+        if (arms.isEmpty()) {
+            return TokenDoc.node(clause.kind(), concat(
+                    TokenDoc.token(SyntaxKind.ENSURES_KW, "ensures"), GAP, label,
+                    childAt(at, onlyExpr(clause), Opening.NONE)));
+        }
+        List<TokenDoc> written = new ArrayList<>();
+        for (int i = 0; i < arms.size(); i++) {
+            SyntaxNode arm = arms.get(i);
+            Place armPlace = places.under(at, arm.kind(), Opening.NONE, Written.of(arm));
+            List<TokenDoc> cases = new ArrayList<>();
+            for (SyntaxNode name : childNodes(arm, SyntaxKind.QUALIFIED_NAME)) {
+                if (!cases.isEmpty()) {
+                    cases.add(concat(GAP, PIPE, GAP));
+                }
+                cases.add(qualifiedName(name, armPlace));
+            }
+            TokenDoc prefix = i == 0
+                    ? concat(TokenDoc.token(SyntaxKind.ENSURES_KW, "ensures"), GAP, label)
+                    : concat(GAP, PIPE, GAP);
+            written.add(concat(prefix, TokenDoc.at(armPlace, TokenDoc.node(arm.kind(),
+                    concat(concat(cases), GAP, ARROW, GAP,
+                            childAt(armPlace, onlyExpr(arm), Opening.NONE))))));
+        }
+        return TokenDoc.node(clause.kind(), concat(written));
     }
 
     /**

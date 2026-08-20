@@ -1,6 +1,6 @@
 package souther.compiler.observe;
 
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 import java.util.Set;
@@ -21,18 +21,29 @@ import java.util.Set;
  * <p>Covering every case of an input is the mechanised half of asking whether a behavior is total:
  * every case the input can be, tried, and a result defined for it.
  *
- * @param excluded         cases the body says it does not answer for. Declared and not coverable: the
- *                         type has them, and a row naming one would reach an {@code unreachable} and
- *                         be E1911. They stay in {@link #declared} because what the type can be is
- *                         part of what the model says, and they are out of {@link #coverable} because
- *                         no row can be written at them
+ * @param at               which of the behavior's inputs this is, counted from zero. Held rather
+ *                         than left to the index of the list these arrive in: a type that says it
+ *                         is the evidence of <em>one</em> input and cannot answer which one is a
+ *                         value that only means something beside the list it came from, and every
+ *                         reader wanting the position had to be handed it a second time. How it is
+ *                         written to a person — {@code #1} for the first — is the reader's, and a
+ *                         one-based number here would be this measure spelling a report's word
+ * @param excluded         cases the position's own rules refuse. Declared and not coverable: the
+ *                         type has them and no value of one can be constructed (E1903), so they stay
+ *                         in {@link #declared} because what the type can be is part of what the model
+ *                         says, and they are out of {@link #coverable} because no row can be written
+ *                         at them. Nothing a body declares reaches this: what leaves a denominator
+ *                         is what the rules refuse
  * @param unclassifiedRows rows whose input case could not be read
  */
-public record InputCaseEvidence(Set<TypeName> declared, Set<TypeName> specified,
-                                Set<TypeName> executed, Set<TypeName> verified,
-                                Set<TypeName> excluded, int unclassifiedRows) {
+public record InputCaseEvidence(int at, Set<TypeSymbol> declared, Set<TypeSymbol> specified,
+                                Set<TypeSymbol> executed, Set<TypeSymbol> verified,
+                                Set<TypeSymbol> excluded, int unclassifiedRows) {
 
     public InputCaseEvidence {
+        if (at < 0) {
+            throw new IllegalArgumentException("an input at no position: " + at);
+        }
         declared = Evidence.ordered(declared);
         specified = Evidence.ordered(specified);
         executed = Evidence.ordered(executed);
@@ -40,17 +51,18 @@ public record InputCaseEvidence(Set<TypeName> declared, Set<TypeName> specified,
         excluded = Evidence.ordered(excluded);
     }
 
-    public static InputCaseEvidence none() {
-        return new InputCaseEvidence(Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), 0);
+    /** No cases at the given input, which is what a position that is not a sum has. */
+    public static InputCaseEvidence none(int at) {
+        return new InputCaseEvidence(at, Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), 0);
     }
 
-    /** The cases a row can be written at: what the type declares, less what the body rules out. */
-    public List<TypeName> coverable() {
+    /** The cases a row can be written at: what the type declares, less what its rules refuse. */
+    public List<TypeSymbol> coverable() {
         return declared.stream().filter(each -> !excluded.contains(each)).toList();
     }
 
     /** Cases this input can be that no row uses, and that a row could have been written for. */
-    public List<TypeName> unspecified() {
+    public List<TypeSymbol> unspecified() {
         return Evidence.missingFrom(declared, specified).stream()
                 .filter(each -> !excluded.contains(each)).toList();
     }

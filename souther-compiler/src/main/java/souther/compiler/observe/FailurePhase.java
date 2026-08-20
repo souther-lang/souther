@@ -22,6 +22,33 @@ public enum FailurePhase {
     /** A dependency had no fake, or a fake had no answer for the input it was given. */
     FAKE_RESOLUTION,
 
+    /**
+     * The values the row states do not keep what the behavior declares of what it answers.
+     *
+     * <p>Not {@link #EXPECTED_FIXTURE}, which is an expectation that could not be built. Here it was
+     * built, and what it states and what the row was given are related in a way the model declares
+     * cannot arise. Nor {@link #COMPARISON}, which is the answer disagreeing with the row: nothing
+     * needs to have answered for this, and a row waiting for a body is held to it like any other.
+     */
+    ENSURES,
+
+    /**
+     * What was to apply the behavior could not be established as being of the module the row is
+     * written for.
+     *
+     * <p>An implementation supplied from outside a compile reads a row's values by the declarations
+     * it was built against, and those are of whatever build that was. Where they say something else
+     * about what a value is — an invariant narrowed, a case added, a field renamed — a row handed over
+     * is decided by the two builds disagreeing rather than by the model.
+     *
+     * <p>So the row is not handed over, and this is where it stopped. Not {@link #NONE}: the row was
+     * to be run and something stopped it, and a row that said nothing went wrong while ending
+     * undecided would be a state nothing produced. Not the model's failure either — {@link
+     * Disposition#INCOMPLETE} is what it ends as, because what the row would have decided is exactly
+     * what was not found out.
+     */
+    ANSWERER_ESTABLISHMENT,
+
     /** Applying the behavior did not produce an answer. */
     INVOCATION,
 
@@ -45,6 +72,17 @@ public enum FailurePhase {
      * the model — how many frames a stack holds is decided by how large they are. */
     STACK_EXHAUSTED,
 
-    /** Something the host was supposed to provide was not there. */
-    INFRASTRUCTURE
+    /**
+     * A value this compile built could not be put in the form the answer reads it by.
+     *
+     * <p>A row is handed to what applies it in two faces — the value as this compile built it, and
+     * the same value as a derived decoder reads it — and this is the second one not coming to be.
+     * Nothing about the row was established, so it is recorded as undecided and not as a failure —
+     * the model may be right, and nothing here saw enough to say.
+     *
+     * <p>About one value of one row, which is what tells it from
+     * {@link #ANSWERER_ESTABLISHMENT}: that is decided once for a behavior, before any row of it is
+     * handed over, and this can happen after it agreed.
+     */
+    VALUE_CROSSING
 }

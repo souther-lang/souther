@@ -1,5 +1,9 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.Primary;
+
+import souther.compiler.source.SourceId;
+
 import souther.compiler.Compiler;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -28,27 +32,30 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ACompileAnswersWithEveryErrorItFoundTest {
 
-    /** Three behaviors, each short of exactly one `constructs` entry — the unit case its line
-     *  holds. One name each, so what is counted here is the behaviors and not the names within one:
+    /** Three behaviors, each short of exactly one `constructs` entry — the case its line holds.
+     *  One name each, so what is counted here is the behaviors and not the names within one:
      *  a clause short of several is its own question (E1002 reports each of them). */
     private static final String THREE_UNDER_DECLARED = """
             module m.a exposing ( Ticket, CookLine, ItemCookState, Pending, InProgress, Done, start, finish, reopen )
 
+            data Pending = { at: Int }
+            data InProgress = { since: Int }
+            data Done = { at: Int }
             data ItemCookState = Pending | InProgress | Done
             data CookLine = { state: ItemCookState }
             data Ticket = { lines: List<CookLine> }
 
             behavior start : (t: Ticket) -> Ticket
                 constructs Ticket, CookLine
-            let start (t) = Ticket { lines = [ CookLine { state = InProgress } ] }
+            let start (t) = Ticket { lines = [ CookLine { state = InProgress { since = 0 } } ] }
 
             behavior finish : (t: Ticket) -> Ticket
                 constructs Ticket, CookLine
-            let finish (t) = Ticket { lines = [ CookLine { state = Done } ] }
+            let finish (t) = Ticket { lines = [ CookLine { state = Done { at = 0 } } ] }
 
             behavior reopen : (t: Ticket) -> Ticket
                 constructs Ticket, CookLine
-            let reopen (t) = Ticket { lines = [ CookLine { state = Pending } ] }
+            let reopen (t) = Ticket { lines = [ CookLine { state = Pending { at = 0 } } ] }
             """;
 
     private static CompileException failure(String source) {
@@ -92,7 +99,7 @@ class ACompileAnswersWithEveryErrorItFoundTest {
 
         List<Integer> lines = new ArrayList<>();
         for (Diagnostic d : e.diagnostics()) {
-            lines.add(d.pos().line());
+            lines.add(((Primary.InSource) d.primary()).place().region().start().line());
         }
         List<Integer> ascending = new ArrayList<>(lines);
         ascending.sort(Integer::compareTo);
@@ -120,19 +127,19 @@ class ACompileAnswersWithEveryErrorItFoundTest {
             """;
 
     private static Db.Found errorAt(int line, int column, String says) {
-        return errorIn("a.sou", line, column, says);
+        return errorIn(new SourceId("a.sou"), line, column, says);
     }
 
-    private static Db.Found errorIn(String sourceId, int line, int column, String says) {
+    private static Db.Found errorIn(SourceId sourceId, int line, int column, String says) {
         return new Db.Found("m.c", sourceId,
                 Report.of(Diagnostic.literal(new SourcePos(line, column, sourceId), says)));
     }
 
     /** A warning, which is not what a compile fails with however many of them there are. */
     private static Db.Found warningAt(int line, String says) {
-        return new Db.Found("m.c", "a.sou", Report.of(Diagnostic
+        return new Db.Found("m.c", new SourceId("a.sou"), Report.of(Diagnostic
                 .say(new InvariantMessage.TheGuardsDoNotEstablishTheInvariant(says))
-                .at(new SourcePos(line, 1, "a.sou")).build()));
+                .at(new SourcePos(line, 1, new SourceId("a.sou"))).build()));
     }
 
     private static Compilation ofOneSource() {
@@ -203,7 +210,7 @@ class ACompileAnswersWithEveryErrorItFoundTest {
                 data Ticket = { lines: List<CookLine> }
 
                 behavior start : (t: Ticket) -> Ticket
-                    constructs Ticket, CookLine, InProgress
+                    constructs Ticket, CookLine
                 let start (t) = Ticket { lines = [ CookLine { state = InProgress } ] }
                 """);
     }

@@ -225,13 +225,13 @@ class AnExpressionIsUnderlinedOverWhatWasWrittenTest {
 
     /** The primary region of the one report compiling {@code source} produces. */
     private static Region primary(String source) {
-        return only(source).region();
+        return ((Primary.InSource) only(source).primary()).place().region();
     }
 
     /** The {@code n}th secondary region of the one report compiling {@code source} produces. */
     private static Region secondary(String source, int n) {
         List<LabeledRegion> labels = only(source).secondary();
-        return labels.get(n).region();
+        return ((souther.compiler.diag.DiagnosticPlace.InSource) labels.get(n).place()).region();
     }
 
     private static Diagnostic only(String source) {

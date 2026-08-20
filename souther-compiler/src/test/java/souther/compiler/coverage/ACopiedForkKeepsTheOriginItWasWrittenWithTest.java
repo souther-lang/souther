@@ -97,7 +97,7 @@ class ACopiedForkKeepsTheOriginItWasWrittenWithTest {
                     invariant value >= 0
 
                 behavior twoFilters : (items: List<Item>) -> Count
-                    constructs Count, Kept, Dropped
+                    constructs Count
                 let twoFilters (items) =
                     Count(List.length(List.filter(i -> i.mark == Kept, items))
                         + List.length(List.filter(i -> i.mark == Dropped, items)))
@@ -155,7 +155,7 @@ class ACopiedForkKeepsTheOriginItWasWrittenWithTest {
     private static Core bodyOf(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
-        TypeChecker.Checked checked = compilation.db()
+        Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
         assertNotNull(checked, "the model under test compiles");
         Map<String, Core> bodies = checked.behaviorBodies();

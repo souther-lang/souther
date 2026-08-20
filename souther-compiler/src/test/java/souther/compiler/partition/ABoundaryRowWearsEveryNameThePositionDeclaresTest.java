@@ -2,12 +2,15 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.query.Scopes;
+import souther.compiler.ast.Hir;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
@@ -35,8 +38,8 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
 
     @Test
     void aTemporalBoundaryUnderTwoNamesWearsBoth() {
-        assertEquals(List.of("AT -> ShippingDay(Day(Date(\"2026-08-01\")))",
-                        "BELOW -> ShippingDay(Day(Date(\"2026-07-31\")))"),
+        assertEquals(List.of("ON -> ShippingDay(Day(Date(\"2026-07-31\")))",
+                        "OFF -> ShippingDay(Day(Date(\"2026-08-01\")))"),
                 rowsAtBoundaries("""
                         module example.nesteddate
 
@@ -48,7 +51,6 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
                         data Verdict = Ok | No
 
                         behavior f : (d: ShippingDay) -> Verdict
-                            constructs Ok, No
                         let f (d) = { guard d.value.value < Date("2026-08-01") else Ok
                             No }
                         """));
@@ -57,8 +59,8 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
     /** The same of a number, which was one layer deep before any of this and is not any more. */
     @Test
     void aNumericBoundaryUnderTwoNamesWearsBoth() {
-        assertEquals(List.of("AT -> ShippingAmount(Amount(500))",
-                        "BELOW -> ShippingAmount(Amount(499))"),
+        assertEquals(List.of("ON -> ShippingAmount(Amount(499))",
+                        "OFF -> ShippingAmount(Amount(500))"),
                 rowsAtBoundaries("""
                         module example.nestedint
 
@@ -70,7 +72,6 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
                         data Verdict = Ok | No
 
                         behavior f : (a: ShippingAmount) -> Verdict
-                            constructs Ok, No
                         let f (a) = { guard a.value.value < 500 else Ok
                             No }
                         """));
@@ -81,19 +82,19 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Ast.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        TypeChecker.Checked checked = compilation.db().ask(new Bodies.Checked(module)).value();
+        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
 
-        Ast.SpecBehavior spec = (Ast.SpecBehavior) prepared.behaviors().get(0);
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().get(0);
         Core body = checked.behaviorBodies().get(spec.name());
-        CoverageSites.Plan plan = CoverageSites.of("m.sou", checked.behaviorBodies());
+        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
         GuardThresholds.Guards guards = GuardThresholds.of(spec.name(), body, plan,
-                spec.params().stream().map(Ast.Param::name).toList(), symbols);
+                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get(spec.name()), symbols);
         Partitions.Partitioning p = Partitions.withThresholds(
-                Partitions.of(spec, sigs.get(spec.name()), symbols, Exclusions.NONE),
+                Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(spec.name()), symbols), symbols),
                 guards.thresholds(), symbols);
 
         List<String> names = new ArrayList<>();
@@ -103,14 +104,24 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
 
         List<String> out = new ArrayList<>();
         for (Axis axis : p.axes()) {
-            for (BoundaryObligation each
-                    : Partitions.obligationsOf(axis, symbols, p.domains().get(axis.term()))) {
-                out.add(each.side() + " -> "
-                        + (Generator.probe(subject, each, Generator.CandidateCheck.ANY)
+            for (Border border
+                    : Partitions.bordersOf(axis, symbols, p.domains().get(axis.term()))) {
+              for (PointRole role : List.of(PointRole.ON, PointRole.OFF)) {
+                if (!(border.demand(role).criterion()
+                        instanceof Criterion.AtTheLevel each)) {
+                    continue;   // no row is owed there, so there is none to write
+                }
+                out.add(role + " -> "
+                        + (Generator.probeFixing(subject, border.label(role), axis.term()
+                                        .carrierAt(axis.type(), symbols),
+                                java.util.Map.of(axis.term(),
+                                        ((Level.OnACarrier) each.at()).at()),
+                                Generator.CandidateCheck.ANY)
                                 instanceof Generator.BoundaryAttempt.Built built
                                         ? String.join(", ", built.row().inputs().stream()
                                                 .map(FixtureTemplate::text).toList())
                                         : "no row"));
+              }
             }
         }
         return out;

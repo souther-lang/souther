@@ -39,7 +39,6 @@ class AnEdgeNothingPromisesSaysWhatWasTriedTest {
                 invariant together = low.value /= high.value
 
             behavior check : (p: Pair) -> Ok
-                constructs Ok
 
             let check (p) = Ok
 
@@ -59,7 +58,7 @@ class AnEdgeNothingPromisesSaysWhatWasTriedTest {
     void theEdgeIsStillNamed() {
         String human = report();
 
-        assertTrue(human.contains("not known to be writable: check/p.low = 0"), human);
+        assertTrue(human.contains("not known to be writable: the ON point check/p.low = 0"), human);
     }
 
     /** And it says what the search came to, so the verdict is legible rather than surprising. */
@@ -68,7 +67,7 @@ class AnEdgeNothingPromisesSaysWhatWasTriedTest {
         String human = report();
 
         String line = human.lines()
-                .filter(each -> each.contains("not known to be writable: check/p.low = 0"))
+                .filter(each -> each.contains("not known to be writable: the ON point check/p.low = 0"))
                 .findFirst().orElseThrow(() -> new AssertionError(human));
 
         assertTrue(line.contains("nothing composed one"), line);

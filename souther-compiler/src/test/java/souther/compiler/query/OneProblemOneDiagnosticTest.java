@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.Compiler;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.ModuleMessage;
@@ -27,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class OneProblemOneDiagnosticTest {
 
-    private static Map<String, List<Diagnostic>> diagnose(String source) {
+    private static Map<SourceId, List<Diagnostic>> diagnose(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("a.sou", source);
         return Located.diagnosticsOf(Compiler.diagnoseModules(byId, Set.of()));
@@ -39,7 +41,7 @@ class OneProblemOneDiagnosticTest {
                 module m.a
                 import m.nope ( X )
                 data A = { x: X }
-                """).get("a.sou");
+                """).get(new SourceId("a.sou"));
 
         assertEquals(1, found.size(), "one unknown import, one diagnostic: " + found);
         assertInstanceOf(ModuleMessage.UnknownModule.class, found.get(0).said());
@@ -50,7 +52,7 @@ class OneProblemOneDiagnosticTest {
         List<Diagnostic> found = diagnose("""
                 module souther.evil
                 data A = Int
-                """).get("a.sou");
+                """).get(new SourceId("a.sou"));
 
         assertEquals(1, found.size(), "one reserved name, one diagnostic: " + found);
     }
@@ -73,13 +75,13 @@ class OneProblemOneDiagnosticTest {
                 behavior twice : (a: A) -> A
                     constructs A
                 let twice (a) = A(doubled(a.value))
-                """).get("a.sou");
+                """).get(new SourceId("a.sou"));
 
         assertEquals(1, found.size(),
                 "one mistake in `doubled`, one diagnostic: " + found);
     }
 
-    private static Map<String, List<Diagnostic>> diagnoseAs(String id, String source) {
+    private static Map<SourceId, List<Diagnostic>> diagnoseAs(String id, String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put(id, source);
         return Located.diagnosticsOf(Compiler.diagnoseModules(byId, Set.of()));
@@ -90,7 +92,7 @@ class OneProblemOneDiagnosticTest {
         List<Diagnostic> found = diagnoseAs("bad.sou", """
                 module app.bad
                 data = = =
-                """).get("bad.sou");
+                """).get(new SourceId("bad.sou"));
 
         assertEquals(1, found.size(),
                 "the parse error belongs to the source it was found in: " + found);
@@ -106,7 +108,7 @@ class OneProblemOneDiagnosticTest {
                 data A = String
 
                 data B = { a: A, n: Nowhere }
-                """).get("a.sou");
+                """).get(new SourceId("a.sou"));
 
         // The duplicate, and the name that denotes nothing. Not "unknown type A" as well: the first
         // A is still a declaration, so B's field still means something.

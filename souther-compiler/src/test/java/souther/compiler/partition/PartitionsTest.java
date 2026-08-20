@@ -2,13 +2,20 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.query.Scopes;
+import souther.compiler.ast.Hir;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
+import souther.compiler.check.Symbols;
+import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.Membership;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 import java.util.Map;
@@ -31,14 +38,15 @@ class PartitionsTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Ast.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         assertNotNull(prepared);
         assertNotNull(sigs);
-        Ast.SpecBehavior spec = (Ast.SpecBehavior) prepared.behaviors().stream()
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
-        return Partitions.of(spec, sigs.get(behavior),
-                compilation.db().ask(new Shapes.Scope(module)).value(), Exclusions.NONE);
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        return Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(behavior), symbols),
+                symbols);
     }
 
     private static Axis axis(Partitions.Partitioning partitioning, String path) {
@@ -141,9 +149,9 @@ class PartitionsTest {
                 axis(span, "span.from").cuts().stream().map(Cut::value).toList());
         assertEquals(List.of(new ObservedValue.Integer(1L), new ObservedValue.Integer(1440L)),
                 axis(span, "span.to").cuts().stream().map(Cut::value).toList());
-        assertEquals(List.of("invariant Minute (min)", "invariant Minute (max) within Span"),
+        assertEquals(List.of("invariant Minute (withinDay)", "invariant Minute (withinDay) within Span"),
                 axis(span, "span.from").cuts().stream()
-                        .map(c -> c.origins().get(0).describe()).toList(),
+                        .map(c -> c.origins().get(0).named()).toList(),
                 "the rule that drew each end is the one that wrote it, not the outermost name");
     }
 
@@ -178,11 +186,11 @@ class PartitionsTest {
 
         assertEquals(List.of(new ObservedValue.Integer(0L), new ObservedValue.Integer(10L)),
                 o.cuts().stream().map(Cut::value).toList());
-        assertEquals(List.of("invariant Outer (min)", "invariant Inner (min)"),
-                o.cuts().get(0).origins().stream().map(OriginRef::describe).toList(),
+        assertEquals(List.of("invariant Outer (outerMin)", "invariant Inner (innerMin)"),
+                o.cuts().get(0).origins().stream().map(OriginRef::named).toList(),
                 "one value, two rules, and a row is owed to each");
-        assertEquals(List.of("invariant Outer (max)"),
-                o.cuts().get(1).origins().stream().map(OriginRef::describe).toList());
+        assertEquals(List.of("invariant Outer (outerMax)"),
+                o.cuts().get(1).origins().stream().map(OriginRef::named).toList());
     }
 
     /** A `Decimal` under two names reads the same way. */
@@ -226,7 +234,7 @@ class PartitionsTest {
         OriginRef.InvariantOrigin invariant =
                 org.junit.jupiter.api.Assertions.assertInstanceOf(OriginRef.InvariantOrigin.class,
                         origin);
-        assertEquals("Amount", invariant.type().name());
+        assertEquals("Amount", invariant.rule().clause().id().declaredOn().name());
     }
 
     /** A record is taken apart, and only so far: two levels reach a field of a record a parameter
@@ -245,7 +253,7 @@ class PartitionsTest {
         Partitions.Partitioning partitioning = partitioningOf(KINDS, "submit");
         Axis kind = axis(partitioning, "request.kind");
         assertEquals(Membership.MATCH, kind.classes().get(0).classifier().membershipOf(
-                        new ObservedValue.Unit(new TypeName("example.trip", "Domestic"))),
+                        new ObservedValue.Unit(TypeSymbols.declared(new TypeKey("example.trip", "Domestic")))),
                 "a unit case is recognised by the type it names");
 
         Axis urgent = axis(partitioning, "request.urgent");

@@ -26,7 +26,7 @@ class CompileGrowingFoldTest {
                 """.formatted(element, element, body);
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object bag = Codecs.decoded(loader, "demo.Bag", Map.of("xs", xs));
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, bag);
         return ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("ys");
     }
@@ -91,7 +91,7 @@ class CompileGrowingFoldTest {
                 data Empty
                 data Out = Doubled | Empty
 
-                behavior run : (b: Bag) -> Out constructs Doubled, Empty
+                behavior run : (b: Bag) -> Out constructs Doubled
                 let run (b) =
                     if Doubled { ys = List.map(x -> x * 2, b.xs) } as d then d else Empty
                 """, "builder"));
@@ -224,7 +224,7 @@ class CompileGrowingFoldTest {
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object bag = Codecs.decoded(loader, "demo.Bag", Map.of("xs", List.of(1L, 2L, 3L)));
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         assertEquals(6L, (long) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, bag)));
     }
 

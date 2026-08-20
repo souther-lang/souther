@@ -1,12 +1,21 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.check.Prelude;
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
+import souther.compiler.check.DeclarationRefusals;
+import souther.compiler.check.Denoting;
+import souther.compiler.check.DeclaredNames;
+import souther.compiler.check.ModuleUniverse;
+import souther.compiler.check.Scoping;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Registry;
 import souther.compiler.check.Resolve;
 import souther.compiler.check.Suggest;
+import souther.compiler.check.SyntaxSymbols;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.diag.CompileException;
@@ -17,12 +26,15 @@ import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.ImportMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
+import souther.compiler.diag.QuotedFrom;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.Denotation;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
@@ -49,30 +61,33 @@ public final class Names {
 
     private Names() {}
 
-    /** Which stage of a module's declarations a registry reads. The names a module declares are the
-     * same at every stage; what changes is what each declaration holds. */
-    public enum Stage { AVAILABLE, RESOLVED, DERIVED }
-
-    /** A registry over this compilation, reading each module's declarations at {@code stage}. */
-    public static Registry registry(Db db, Stage stage) {
-        return new Registry() {
+    /** Which stage of a module's resolved declarations a registry reads. The names a module declares
+     * are the same at every stage; what changes is what each declaration holds.
+     *
+     * <p>There is no entry here for the declarations as they were written. Those are a different
+     * representation rather than an earlier stage of this one, and {@link #writtenRegistry} is what
+     * answers with them — so a reader holding one of these cannot be handed a declaration nothing
+     * has resolved. */
+    /**
+     * A registry over this compilation, reading each module's declarations as resolution left them.
+     *
+     * <p>One of the two declaration worlds a module can be read against, and which one a reader gets
+     * is which question it asked: this one answers {@link #resolvedSymbols}, and the derived one
+     * answers {@link #derivedSymbols}. Neither is chosen by a value handed in — a reader that could
+     * pass which world it wanted is a reader that could pass the wrong one, and nothing in what it
+     * was holding would say so.
+     */
+    static Registry<Hir.Def> resolvedRegistry(Db db) {
+        return new Registry<Hir.Def>() {
             @Override
-            public Ast.Def declaration(TypeName named) {
-                Answer<Ast.Def> def = switch (stage) {
-                    case AVAILABLE -> db.ask(new Declaration(named));
-                    case RESOLVED -> db.ask(new ResolvedDeclaration(named));
-                    case DERIVED -> db.ask(new Shapes.DerivedDef(named));
-                };
+            public Hir.Def declaration(TypeKey address) {
+                Answer<Hir.Def> def = db.ask(new ResolvedDeclaration(address));
                 return def.present() ? def.value() : null;
             }
 
             @Override
-            public Map<String, Ast.Def> declaredIn(String moduleName) {
-                Answer<Map<String, Ast.Def>> defs = switch (stage) {
-                    case AVAILABLE -> db.ask(new Declarations(moduleName));
-                    case RESOLVED -> db.ask(new ResolvedDeclarations(moduleName));
-                    case DERIVED -> db.ask(new Shapes.DerivedDeclarations(moduleName));
-                };
+            public Map<String, Hir.Def> declaredIn(String moduleName) {
+                Answer<Map<String, Hir.Def>> defs = db.ask(new ResolvedDeclarations(moduleName));
                 return defs.present() ? defs.value() : Map.of();
             }
 
@@ -93,277 +108,105 @@ public final class Names {
     }
 
     /**
-     * A source module with every name in the value namespace — a {@code >->} stage, a
-     * {@code depends on} — resolved to the behavior it denotes, and the module a qualified one came
-     * from recorded as an import.
+     * A registry over this compilation, reading each module's declarations as they were written.
      *
-     * <p>A behavior's name is a member name in the generated class, so the bare form is what the
-     * rest of the compiler reaches it by; the qualifier only says which module to take it from, which
-     * is exactly what an import says. Both are in the answer: the resolved name says what the stage
-     * means, and the synthesized import is how the borrowed signature and the injected field are
-     * found.
-     *
-     * <p>A name that denotes no behavior is reported here, once, and denotes nothing from here on.
-     * The answer is still present — a stage nobody declares is one definition's mistake, and the
-     * definitions around it are checked as they would be without it. What must not happen, emitting
-     * a module with a hole in it, is stopped by {@link Sound}.
+     * <p>What {@code Resolve} reads other modules by. A name written there is that module's to
+     * resolve, and asking for its resolved form here would be this module waiting on its own.
      */
-    public record Bound(String name) implements Key<Ast.Module> {
-        @Override
-        public String module() {
-            return name;
-        }
+    public static Registry<Ast.Def> writtenRegistry(Db db) {
+        return new Registry<Ast.Def>() {
+            @Override
+            public Ast.Def declaration(TypeKey address) {
+                Answer<Ast.Def> def = db.ask(new Declaration(address));
+                return def.present() ? def.value() : null;
+            }
 
-        @Override
-        public Answer<Ast.Module> compute(Db db) {
-            Answer<Ast.Module> exposed = db.ask(new Front.Exposed(name));
-            if (!exposed.present()) {
-                return Answer.absent();
+            @Override
+            public Map<String, Ast.Def> declaredIn(String moduleName) {
+                Answer<Map<String, Ast.Def>> defs = db.ask(new Declarations(moduleName));
+                return defs.present() ? defs.value() : Map.of();
             }
-            Ast.Module m = exposed.value();
-            Binding binding = new Binding(db, m);
-            List<Ast.BehaviorDef> behaviors = new ArrayList<>();
-            for (Ast.BehaviorDef b : m.behaviors()) {
-                switch (b) {
-                    case Ast.PipeBehavior pipe -> {
-                        List<Ast.Var> stages = new ArrayList<>();
-                        for (Ast.Var stage : pipe.stages()) {
-                            stages.add(binding.stage(stage));
-                        }
-                        behaviors.add(new Ast.PipeBehavior(pipe.written(), stages, pipe.declaredOut(),
-                                pipe.pos()));
-                    }
-                    case Ast.SpecBehavior spec -> {
-                        List<Ast.Var> dependsOn = new ArrayList<>();
-                        for (Ast.Var req : spec.dependsOn()) {
-                            dependsOn.add(binding.required(req, spec.name()));
-                        }
-                        behaviors.add(new Ast.SpecBehavior(spec.written(), spec.params(), spec.ret(),
-                                spec.constructs(), dependsOn, spec.pos()));
-                    }
-                }
+
+            @Override
+            public Set<String> exposedBy(String moduleName) {
+                Set<String> exposed = db.ask(new Front.Exposes(moduleName)).value();
+                return exposed == null ? Set.of() : exposed;
             }
-            Ast.Module bound = new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(),
-                    binding.imports(), m.defs(), behaviors, m.fns(), m.takenOn(), m.examples(),
-                    m.fakes(), m.exampleFileTarget(), m.pos());
-            return Answer.of(bound, binding.reports());
-        }
+
+            @Override
+            public Set<String> moduleNames() {
+                Set<String> names = db.ask(new Front.ModuleNames()).value();
+                return names == null ? Set.of() : names;
+            }
+        };
     }
 
     /**
-     * The behaviors a module can name without a qualifier: its own, and the ones its imports bring
-     * in, each under the bare name it is reached by.
+     * A registry over this compilation, reading each module's declarations as they were derived.
      *
-     * <p>{@code whole} is false when an import could not be followed, so a name that is not here may
-     * still have come from somewhere — the difference between "nothing declares this" and "this
-     * compilation cannot say".
+     * <p>Where a derived declaration becomes a node, and the only place it does. What the derived
+     * stage answers with says that the constructions in what a declaration says are constructions;
+     * this hands over {@link Hir.Def}, and what settles that is the other source a reader is
+     * answered from rather than a step nobody has taken. {@link souther.compiler.check.Declarations}
+     * answers an identity from this registry and from the language's own vocabulary, and the
+     * prelude's declarations are loaded resolved and kept out of derivation — so there is no derived
+     * declaration for the second source to hand over, and the representation both can be in is the
+     * node. What says a reader is at the derived world is which of the two it asked for:
+     * {@link #derivedSymbols} is built over this one and {@link #resolvedSymbols} over the
+     * resolved one.
      */
-    public record BehaviorsInScope(String name) implements Key<BehaviorsInScope.Of> {
-
-        public record Of(Map<String, ValueName.Behavior> byName, boolean whole) {}
-
-        @Override
-        public String module() {
-            return name;
-        }
-
-        @Override
-        public Answer<Of> compute(Db db) {
-            Ast.Module m = db.ask(new Front.Exposed(name)).value();
-            if (m == null) {
-                return Answer.absent();
+    static Registry<Hir.Def> derivedRegistry(Db db) {
+        return new Registry<Hir.Def>() {
+            @Override
+            public Hir.Def declaration(TypeKey address) {
+                Answer<souther.compiler.check.Derived.Def> def =
+                        db.ask(new Shapes.DerivedDef(address));
+                return def.present() ? def.value().read() : null;
             }
-            Map<String, ValueName.Behavior> byName = new LinkedHashMap<>();
-            for (String own : behaviorNames(m)) {
-                byName.put(own, new ValueName.Behavior(name, own));
-            }
-            boolean whole = true;
-            for (Ast.Import imp : m.imports()) {
-                Answer<Set<String>> declared = db.ask(new Front.Behaviors(imp.module()));
-                if (!declared.present()) {
-                    whole = false;
-                    continue;
+
+            @Override
+            public Map<String, Hir.Def> declaredIn(String moduleName) {
+                Answer<Map<String, souther.compiler.check.Derived.Def>> defs =
+                        db.ask(new Shapes.DerivedDeclarations(moduleName));
+                if (!defs.present()) {
+                    return Map.of();
                 }
-                for (String imported : imp.names()) {
-                    if (declared.value().contains(imported)) {
-                        // a name this module declares itself is the one it means
-                        byName.putIfAbsent(imported,
-                                new ValueName.Behavior(imp.module(), imported));
-                    }
-                }
+                Map<String, Hir.Def> out = new LinkedHashMap<>();
+                defs.value().forEach((name, def) -> out.put(name, def.read()));
+                return Map.copyOf(out);
             }
-            return Answer.of(new Of(Ordered.map(byName), whole));
-        }
+
+            @Override
+            public Set<String> exposedBy(String moduleName) {
+                Set<String> exposed = db.ask(new Front.Exposes(moduleName)).value();
+                return exposed == null ? Set.of() : exposed;
+            }
+
+            @Override
+            public Set<String> moduleNames() {
+                Set<String> names = db.ask(new Front.ModuleNames()).value();
+                return names == null ? Set.of() : names;
+            }
+        };
     }
 
     /**
-     * Resolving one module's behavior names: which behavior each stage and each {@code depends on}
-     * denotes, and which imports naming them through a module asks for.
+     * What a module declares, by the name written there — asked once, here, because the names are
+     * the same at every stage and every later registry reads them through this.
+     *
+     * <p>Where the answer is worked out depends on where the module came from, and nothing above
+     * has to know which: a source of this compilation is indexed here and a declaration it may not
+     * have is reported against the file its author holds; a module off the class path was indexed
+     * where it was read back, and one whose declarations could not be indexed never became a module
+     * this compilation has. So the two are one question with one answer, and a caller holding the
+     * answer cannot tell — which is the point, since a caller that could would be a second place the
+     * rule is written.
+     *
+     * <p>Indexing an artifact here is what this replaces. The declarations came back as source, so
+     * they were indexed like source, and a name a published module declared twice was reported to
+     * the author of the project importing it — {@code E1011}, under the caret of their own
+     * {@code import} line, about a file they do not have and did not write.
      */
-    private static final class Binding {
-
-        private final Db db;
-        private final Ast.Module m;
-        private final Map<String, String> qualifiers = new HashMap<>();
-        private final Map<String, Set<String>> taken = new LinkedHashMap<>();  // module → its names
-        private final Map<String, Set<String>> added = new LinkedHashMap<>();
-        private final Map<String, SourcePos> at = new LinkedHashMap<>();
-        private final List<Report> reports = new ArrayList<>();
-
-        Binding(Db db, Ast.Module m) {
-            this.db = db;
-            this.m = m;
-            for (Ast.Import imp : m.imports()) {
-                if (imp.alias() != null) {
-                    qualifiers.put(imp.alias(), imp.module());
-                }
-                taken.computeIfAbsent(imp.module(), k -> new LinkedHashSet<>()).addAll(imp.names());
-            }
-        }
-
-        List<Report> reports() {
-            return reports;
-        }
-
-        /** The module's imports, plus one for each module a qualified reference named. */
-        List<Ast.Import> imports() {
-            if (added.isEmpty()) {
-                return m.imports();
-            }
-            List<Ast.Import> imports = new ArrayList<>(m.imports());
-            for (Map.Entry<String, Set<String>> e : added.entrySet()) {
-                // No position on a synthesized name: nobody wrote it on an import list. The
-                // qualified reference that asked for it is where it came from, and that is already
-                // the position of the import as a whole.
-                List<Ast.ImportedName> names = new ArrayList<>();
-                for (String bare : e.getValue()) {
-                    names.add(new Ast.ImportedName(bare, null));
-                }
-                imports.add(new Ast.Import(e.getKey(), null, names, at.get(e.getKey())));
-            }
-            return imports;
-        }
-
-        /**
-         * A {@code >->} stage. {@code X.decoder} / {@code X.encoder} name a codec, which is a
-         * boundary edge rather than a behavior (spec §sequential-composition) — said here, where the question is what
-         * the name denotes, so nothing further down has a spelling to test for it.
-         */
-        Ast.Var stage(Ast.Var ref) {
-            String written = ref.name();
-            int dot = written.lastIndexOf('.');
-            // Only a qualified one: `decoder` on its own is an ordinary name, and a module may
-            // declare a behavior by it.
-            String last = dot < 0 ? "" : written.substring(dot + 1);
-            if (last.equals("decoder") || last.equals("encoder")) {
-                return nothing(ref, Report.raised(Diagnostic
-                                .at(ref.pos()).say(new BehaviorMessage.ABoundaryEdgeIsNotAStage()).build()));
-            }
-            return behavior(ref, this::unknownBehavior);
-        }
-
-        /**
-         * A name a {@code depends on} clause writes. It must name an injection target, and whether the
-         * behavior it names is one is the check's to say (E1607); that nothing declares the name at
-         * all is settled here, in the same message, because it is the same question — what does this
-         * name denote — asked of a clause rather than of a stage.
-         */
-        Ast.Var required(Ast.Var ref, String by) {
-            return behavior(ref, (name, candidates) -> Report.raised(Diagnostic
-                            .at(name.written().reportedAt())
-                            .suggestion(Suggest.candidate(name.name(), candidates))
-                            .hint(new DeclarationMessage.DeclareItHereOrImportIt(name.name())).say(new DeclarationMessage.DependsOnNamesNoSuchBehavior(by, name.name())).build()));
-        }
-
-        /** A name that must denote a behavior, with what to say when none does. */
-        private Ast.Var behavior(Ast.Var ref, Unknown unknown) {
-            String written = ref.name();
-            int dot = written.lastIndexOf('.');
-            if (dot < 0) {
-                return bare(ref, written, unknown);
-            }
-            String bare = written.substring(dot + 1);
-            String qualifier = written.substring(0, dot);
-            if (Prelude.isQualifier(qualifier)) {
-                // a standard-library qualifier names a function, and a function is not a behavior
-                return nothing(ref, unknown.report(ref, Set.of()));
-            }
-            String target = qualifiers.getOrDefault(qualifier, qualifier);
-            if (target.equals(m.name())) {
-                return bare(ref, bare, unknown);   // this module, named through itself
-            }
-            if (!db.ask(new Front.ModuleNames()).value().contains(target)) {
-                return nothing(ref, Report.raised(Diagnostic.say(new ModuleMessage.NoModuleOfThatName(qualifier, bare))
-                                .at(ref.pos()).build()));
-            }
-            Answer<Set<String>> declared = db.ask(new Front.Behaviors(target));
-            if (!declared.present()) {
-                // The module is one this compilation has and could not read. What is wrong with it
-                // is reported on its own source; saying anything here sends the author to a file
-                // that is fine.
-                return reached(ref, new ValueName.Unresolved(written));
-            }
-            if (!declared.value().contains(bare)) {
-                return nothing(ref, unknown.report(ref, declared.value()));
-            }
-            if (!taken.getOrDefault(target, Set.of()).contains(bare)) {
-                added.computeIfAbsent(target, k -> new LinkedHashSet<>()).add(bare);
-                at.putIfAbsent(target, ref.pos());
-            }
-            return reached(ref, new ValueName.Behavior(target, bare));
-        }
-
-        /** A bare name: this module's own behavior, or one an import brought in. */
-        private Ast.Var bare(Ast.Var ref, String written, Unknown unknown) {
-            BehaviorsInScope.Of scope = db.ask(new BehaviorsInScope(m.name())).value();
-            if (scope == null) {
-                return reached(ref, new ValueName.Unresolved(written));
-            }
-            ValueName.Behavior named = scope.byName().get(written);
-            if (named != null) {
-                return reached(ref, named);
-            }
-            if (!scope.whole()) {
-                // An import that could not be followed may have been where this name came from.
-                // Whatever is wrong with that module is reported there.
-                return reached(ref, new ValueName.Unresolved(written));
-            }
-            return nothing(ref, unknown.report(ref, scope.byName().keySet()));
-        }
-
-        /**
-         * {@code ref} denoting {@code name}, and reached as this module reaches it.
-         *
-         * <p>Both answers together, from the one place that has them. A behavior is reached by the
-         * name written here — bare, or under the module a qualified reference names — and so is a
-         * name nothing answers to, which keeps the spelling for a report to quote.
-         */
-        private Ast.Var reached(Ast.Var ref, ValueName name) {
-            return ref.denoting(name, ReachName.of(name, ref.name(), m.name()));
-        }
-
-        /** What to say about a name no behavior answers to, given the names that were reachable. */
-        private interface Unknown {
-            Report report(Ast.Var ref, Set<String> candidates);
-        }
-
-        private Report unknownBehavior(Ast.Var ref, Set<String> candidates) {
-            WrittenName written = ref.written();
-            String name = written.canonical();
-            return Report.raised(Diagnostic
-                            .at(written.reportedAt())
-                            .suggestion(Suggest.candidate(name, candidates)).say(new NameMessage.NoBehaviorOfThatNameInThisPipeline(written.quoted())).build());
-        }
-
-        /** Records why a name denotes nothing, and gives it the name that says so. */
-        private Ast.Var nothing(Ast.Var ref, Report report) {
-            reports.add(report);
-            return reached(ref, new ValueName.Unresolved(ref.name()));
-        }
-    }
-
-    /** What a module declares, by the name written there — checked once, here, because the names
-     * are the same at every stage and every later registry reads them through this. */
     public record Declarations(String name) implements Key<Map<String, Ast.Def>> {
         @Override
         public String module() {
@@ -378,19 +221,20 @@ public final class Names {
                 // ask a question that is answering itself.
                 return Answer.absent();
             }
-            Answer<Ast.Module> m = db.ask(new Front.Available(name));
-            if (!m.present()) {
-                return Answer.absent();
+            Answer<Ast.Module> mine = db.ask(new Front.Exposed(name));
+            if (mine.present()) {
+                // A declaration the module may not have is reported and left out; the ones it may
+                // have are what it declares. So a name written twice does not take every other name
+                // in the file with it.
+                DeclaredNames.Index<Ast.Def> declared = Registry.indexed(mine.value());
+                List<Report> reports = new ArrayList<>();
+                for (DeclaredNames.Refusal<Ast.Def> refused : declared.refusals()) {
+                    reports.add(Report.of(DeclarationRefusals.reportedAsWritten(refused)));
+                }
+                return Answer.of(declared.declarations(), reports);
             }
-            // A declaration the module may not have is reported and left out; the ones it may have
-            // are what it declares. So a name written twice does not take every other name in the
-            // file with it.
-            TypeChecker.Declared declared = TypeChecker.declared(m.value());
-            List<Report> reports = new ArrayList<>();
-            for (CompileException rejected : declared.rejected()) {
-                reports.addAll(Report.of(rejected));
-            }
-            return Answer.of(declared.defs(), reports);
+            Front.FromPath.OnThePath fromPath = Front.onThePath(db, name);
+            return fromPath == null ? Answer.absent() : Answer.of(fromPath.declarations());
         }
     }
 
@@ -425,7 +269,7 @@ public final class Names {
      * this key's business: what a reader depends on is the answer, and this answer says what one
      * declaration says.
      */
-    public record Declaration(TypeName named) implements Key<Ast.Def> {
+    public record Declaration(TypeKey named) implements Key<Ast.Def> {
         @Override
         public String module() {
             return named.module();
@@ -443,56 +287,59 @@ public final class Names {
     }
 
     /** The same, with every written name in it resolved. */
-    public record ResolvedDeclaration(TypeName named) implements Key<Ast.Def> {
+    public record ResolvedDeclaration(TypeKey named) implements Key<Hir.Def> {
         @Override
         public String module() {
             return named.module();
         }
 
         @Override
-        public Answer<Ast.Def> compute(Db db) {
-            Answer<Map<String, Ast.Def>> defs = db.ask(new ResolvedDeclarations(named.module()));
+        public Answer<Hir.Def> compute(Db db) {
+            Answer<Map<String, Hir.Def>> defs = db.ask(new ResolvedDeclarations(named.module()));
             if (!defs.present()) {
                 return Answer.absent();
             }
-            Ast.Def def = defs.value().get(named.name());
+            Hir.Def def = defs.value().get(named.name());
             return def == null ? Answer.absent() : Answer.of(def);
         }
     }
 
     /** The same declarations, with every written name in them resolved. */
-    public record ResolvedDeclarations(String name) implements Key<Map<String, Ast.Def>> {
+    public record ResolvedDeclarations(String name) implements Key<Map<String, Hir.Def>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, Ast.Def>> compute(Db db) {
-            Answer<Ast.Module> m = db.ask(new Resolved(name));
+        public Answer<Map<String, Hir.Def>> compute(Db db) {
+            Answer<Hir.Module> m = db.ask(new Resolved(name));
             return m.present() ? Answer.of(defsOf(m.value())) : Answer.absent();
         }
     }
 
     /** A module's definitions by name, taking the names as already checked. */
-    static Map<String, Ast.Def> defsOf(Ast.Module m) {
-        Map<String, Ast.Def> defs = new LinkedHashMap<>();
-        for (Ast.Def def : m.defs()) {
+    static Map<String, Hir.Def> defsOf(Hir.Module m) {
+        Map<String, Hir.Def> defs = new LinkedHashMap<>();
+        for (Hir.Def def : m.defs()) {
             defs.putIfAbsent(def.name(), def);
         }
         return Ordered.map(defs);
     }
 
     /**
-     * What each bare name means in a module: its own declarations plus the ones its imports bring
-     * in, and which module each {@code import ... as} alias names.
+     * What the names a module writes mean here: what each bare name denotes in either namespace,
+     * which module each {@code import ... as} alias names, and what an import line could not do.
+     *
+     * <p>Worked out by {@link Scoping}, against this compilation as a {@link ModuleUniverse}. This
+     * is where a compilation reads the result, so this is where a refusal becomes something to tell
+     * the author — the assembly itself says nothing to anyone, which is what lets a reader that is
+     * only reading a module use the same rules.
      *
      * <p>Every import is validated here and nowhere else — that it names a module this compilation
      * has, that the module exposes what is asked for, that no two imports bring in the same name.
      */
-    public record Imports(String name) implements Key<Imports.Of> {
-
-        public record Of(Map<String, TypeName> scope, Map<String, String> aliases) {}
+    public record ModuleScope(String name) implements Key<Scoping.Scoped> {
 
         @Override
         public String module() {
@@ -500,129 +347,237 @@ public final class Names {
         }
 
         @Override
-        public Answer<Of> compute(Db db) {
-            Answer<Ast.Module> module = db.ask(new Front.Available(name));
-            if (!module.present()) {
+        public Answer<Scoping.Scoped> compute(Db db) {
+            Scoping.Subject subject = CompilationUniverse.subject(db, name);
+            if (subject == null) {
                 return Answer.absent();
             }
-            Ast.Module m = module.value();
-            Registry registry = registry(db, Stage.AVAILABLE);
-            Map<String, TypeName> scope = new HashMap<>();
-            for (String own : registry.declaredIn(name).keySet()) {
-                scope.put(own, new TypeName(name, own));
-            }
-            Set<String> ownNames = Ordered.set(scope.keySet());
-            // Which import brought each name in, so a second one naming it is reported against that
-            // import rather than against a local definition the module may not have.
-            Map<String, Ast.Import> from = new HashMap<>();
-            Map<String, String> aliases = new HashMap<>();
-            Set<String> broken = db.ask(new Front.Broken()).value();
-            // An import line that is wrong is reported and skipped, and the ones that are fine still
-            // bring in what they bring in. A half-typed import is as ordinary as a half-typed name,
-            // and taking the whole scope away would leave every name in the file meaning nothing —
-            // which is when an author most wants to be told what one means.
+            Scoping.Scoped scoped = Scoping.of(CompilationUniverse.over(db), subject);
             List<Report> reports = new ArrayList<>();
-            for (Ast.Import imp : m.imports()) {
-                if (broken != null && broken.contains(imp.module())) {
-                    nameless(scope, imp.names());
-                    continue;   // the file that will not parse reports its own error
-                }
-                Ast.Module src = db.ask(new Front.Available(imp.module())).value();
-                if (src == null || !db.ask(new Declarations(imp.module())).present()) {
-                    // Not being part of this compilation and being part of it while saying nothing
-                    // usable are different things, and only the first is the importer's business.
-                    // Whatever is wrong with a module that is here is reported on its own source;
-                    // saying it again here sends the author to a file that is fine.
-                    if (!registry.moduleNames().contains(imp.module())) {
-                        reports.add(unknownModule(imp));
-                    }
-                    nameless(scope, imp.names());
-                    continue;
-                }
-                if (imp.alias() != null) {
-                    Report clash = aliasTaken(imp, aliases, registry.moduleNames());
-                    if (clash != null) {
-                        reports.add(clash);
-                        nameless(scope, imp.names());
-                        continue;   // an alias that names two things names neither here
-                    }
-                    aliases.put(imp.alias(), imp.module());
-                }
-                Set<String> exposed = registry.exposedBy(imp.module());
-                for (String imported : imp.names()) {
-                    if (!exposed.contains(imported)) {
-                        reports.add(Report.raised(Diagnostic.say(new ModuleMessage.TheModuleDoesNotExposeIt(imported, imp.module()))
-                                        .at(imp.pos()).build()));
-                        nameless(scope, List.of(imported));
-                        continue;
-                    }
-                    // asked one name at a time: what else that module declares is not what this
-                    // import is about, and reading it would make this module depend on it
-                    if (registry.declaration(new TypeName(imp.module(), imported)) == null) {
-                        // a behavior import is resolved separately, and so is a value or a helper:
-                        // none of them is a data Def, so none goes into the symbols map
-                        if (behaviorNames(src).contains(imported) || valueNames(src).contains(imported)) {
-                            continue;
-                        }
-                        reports.add(Report.raised(Diagnostic.say(new ModuleMessage.TheModuleDeclaresNoSuchName(imported, imp.module()))
-                                        .at(imp.pos()).build()));
-                        nameless(scope, List.of(imported));
-                        continue;
-                    }
-                    TypeName standingIn = scope.get(imported);
-                    if (standingIn != null && !standingIn.isUnresolved()) {
-                        reports.add(importCollision(imported, imp,
-                                ownNames.contains(imported) ? null : from.get(imported)));
-                        continue;   // the first claim on the name keeps it
-                    }
-                    // A name a failed import line only stood in for is not a claim on it: an import
-                    // that can do the job takes it, and says nothing about the line that could not.
-                    scope.put(imported, new TypeName(imp.module(), imported));
-                    from.put(imported, imp);
-                }
+            for (Scoping.Refusal refusal : scoped.refused()) {
+                reports.add(said(refusal));
             }
-            if (!reports.isEmpty()) {
-                return Answer.of(new Of(Ordered.map(scope), Ordered.map(aliases)), reports);
-            }
-            return Answer.of(new Of(Ordered.map(scope), Ordered.map(aliases)));
+            return reports.isEmpty() ? Answer.of(scoped) : Answer.of(scoped, reports);
         }
     }
 
     /**
-     * Puts {@code names} in scope as names that denote nothing.
+     * What to tell the author about a name the scope could not hold.
      *
-     * <p>An import line that could not do its job was reported on that line. A name it was to bring
-     * in is in scope all the same, denoting nothing — so a use of it takes the error type and says
-     * nothing more. Leaving it out of scope instead would report an unknown type at every use, which
-     * sends the author to a field when what is wrong is the import.
+     * <p>A switch over every refusal there is, with nothing to fall through to: a rule added to the
+     * assembly is a rule this compilation has to have something to say about, and one that reached
+     * here with nothing to say would be a name quietly denoting nothing.
      */
-    private static void nameless(Map<String, TypeName> scope, List<String> names) {
-        for (String written : names) {
-            scope.putIfAbsent(written, TypeName.unresolved(written));
-        }
+    private static Report said(Scoping.Refusal refusal) {
+        return switch (refusal) {
+            case Scoping.Refusal.NoSuchModule(Ast.Import imp) ->
+                    Report.raised(Diagnostic.say(new ModuleMessage.UnknownModule(imp.module()))
+                            .at(imp.pos()).build());
+            case Scoping.Refusal.NotExposed(Ast.Import imp, String named) ->
+                    Report.raised(Diagnostic
+                            .say(new ModuleMessage.TheModuleDoesNotExposeIt(named, imp.module()))
+                            .at(imp.pos()).build());
+            case Scoping.Refusal.NoSuchName(Ast.Import imp, String named) ->
+                    Report.raised(Diagnostic
+                            .say(new ModuleMessage.TheModuleDeclaresNoSuchName(named, imp.module()))
+                            .at(imp.pos()).build());
+            case Scoping.Refusal.AliasTaken(Ast.Import imp, String takenBy) ->
+                    Report.raised(Diagnostic
+                            .say(new ModuleMessage.TheAliasIsAlreadyTaken(imp.alias(), takenBy))
+                            .at(imp.pos())
+                            .hint(new ModuleMessage.AnAliasIsANameNothingElseAnswersTo()).build());
+            case Scoping.Refusal.BroughtTwice(Ast.Import imp, String named, Ast.Import earlier) ->
+                    broughtTwice(named, imp, earlier);
+            case Scoping.Refusal.CollidesWithADeclaration(Ast.Import imp, String named) ->
+                    Report.raised(Diagnostic.at(imp.pos())
+                            .say(new ImportMessage.ImportedNameCollidesWithADeclaration(named))
+                            .hint(new ImportMessage.RenameOrQualifyTheCollidingName()).build());
+            case Scoping.Refusal.TakesTheLibraryQualifier(Ast.Def def) ->
+                    Report.raised(Diagnostic.at(def.pos())
+                            .say(new DataMessage.ADataTakesTheStandardLibraryQualifier(def.name()))
+                            .build());
+            case Scoping.Refusal.ALetAndADataShareASpelling(Ast.FnDef fn) ->
+                    Report.raised(Diagnostic.at(fn.pos())
+                            .say(new DataMessage.ALetAndADataShareOneSpelling(fn.name())).build());
+        };
     }
 
-    /** What names mean in a module, over declarations at {@code stage}. */
-    static Answer<Symbols> symbols(Db db, String name, Stage stage) {
-        Answer<Imports.Of> imports = db.ask(new Imports(name));
-        if (!imports.present()) {
-            return Answer.absent();
-        }
-        return Answer.of(Symbols.of(name, registry(db, stage), imports.value().scope(),
-                imports.value().aliases()));
-    }
-
-    /** What names mean in a module before anything is derived from it — what {@link Resolved}
-     * resolves against. */
-    public record NameScope(String name) implements Key<Symbols> {
+    /**
+     * What the names written in a module mean — the part of its scope that is a value.
+     *
+     * <p>The cutoff every reader of a scope stops at. A module is assembled once and the assembly
+     * holds more than this: the value namespace, a way of asking the modules around it a further
+     * question, and what its import lines could not do. A scope is built over none of those and over
+     * this, so declaring a behavior — which adds a value name and no type name — comes out here as
+     * the answer that was already there, and nothing that reads it runs again.
+     *
+     * <p>Who reads it is a second question, and not this one's. A scope asks for this the first time
+     * it is read rather than to be built ({@link souther.compiler.check.Denoting}), so a reader that
+     * reads no meaning has not asked — which is why declaring a type reaches the bodies that write
+     * its spelling and the reports read off every name in sight, and no others.
+     */
+    public record Meanings(String name) implements Key<Scoping.Meanings> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Symbols> compute(Db db) {
-            return symbols(db, name, Stage.RESOLVED);
+        public Answer<Scoping.Meanings> compute(Db db) {
+            Answer<Scoping.Scoped> scoped = db.ask(new ModuleScope(name));
+            return scoped.present() ? Answer.of(scoped.value().meanings()) : Answer.absent();
+        }
+    }
+
+    /**
+     * What names mean in a module, over the declaration world {@code registry} reads.
+     *
+     * <p>Built where it is used and never kept. What comes back reads declarations by asking this
+     * store, so it is a way of asking rather than an answer: two of them are the same when the
+     * store is, which says where they came from and not what they say. Kept as an answer, it would
+     * be an answer that never equals the one it replaces, and everything that read it would run
+     * again for as long as the compilation lived. Built here, the reads it makes are recorded
+     * against whichever question was being answered when it made them — which is one declaration at
+     * a time, and is the finer dependency this hands out.
+     */
+    private static Answer<Symbols> symbols(Db db, String name, Registry<Hir.Def> registry) {
+        if (!db.ask(new HasScope(name)).value()) {
+            return Answer.absent();
+        }
+        return Answer.of(Symbols.of(name, registry, asked(db, name)));
+    }
+
+    /**
+     * Whether this compilation can assemble a scope for {@code name} — which is the only thing a
+     * reader of one has to be told before it reads it.
+     *
+     * <p>A question of its own because of what its answer is. Read off {@link ModuleScope}, whose
+     * answer moves whenever anything in the module is edited, and answered as a yes or a no, which
+     * does not: a reader that took the assembly to find out whether there was one would be told
+     * every edit to the module, and every reader of it in turn. What is left to ask for is what the
+     * names mean, and {@link Denoting} is where that is asked.
+     */
+    public record HasScope(String name) implements Key<Boolean> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            return Answer.of(db.ask(new ModuleScope(name)).present());
+        }
+    }
+
+    /**
+     * What a module's names mean, asked of this store as a scope reads them.
+     *
+     * <p>The other half of what {@link #symbols} hands out, and the half issue #835 is about.
+     * Handing over the table meant asking {@link Meanings} to build a scope, so every reader of a
+     * scope depended on every name in the module before reading one of them — and what a body check
+     * reads of them is almost always nothing, because the names it is checked over were resolved a
+     * representation earlier and it reads the declarations they denote one at a time. Asked here, a
+     * body that reads no meaning depends on none of them, and the report that reads every name in
+     * sight depends on every name in sight, which is what it is about.
+     * {@code IncrementalCompilationTest} holds the pair.
+     *
+     * <p>Built where it is used and never kept, for the reason {@link Key} gives: it reads this
+     * store, so two of them are the same when the store is, which says where they came from and not
+     * what they say. The reads it makes land on whichever question was being answered when it made
+     * them.
+     *
+     * <p>The store is asked every time and not once. What is kept is the reading built over the
+     * answer, and it is kept only while the answer is the one it was built over — so a scope read
+     * after an edit answers from what the module means now, and one read many times while a single
+     * question is being answered builds the reading once. Fetched once instead, this would hold a
+     * snapshot for as long as it lived, and whether that could be read after an edit would be a
+     * fact about who kept a scope rather than one this can be sure of on its own.
+     *
+     * <p>Where this compilation has no such module, every spelling means nothing — the answer
+     * {@link Denoting#NONE} gives. Nothing reading a scope learns that a compilation can be missing
+     * a module, and nothing here has to hold an absence it would have to decide what to do with:
+     * {@link HasScope} is what a reader is told, before it has a scope at all.
+     */
+    private static Denoting asked(Db db, String module) {
+        return new Denoting() {
+            private Scoping.Meanings over;
+            private Denoting reading;
+
+            private Denoting read() {
+                Answer<Scoping.Meanings> meanings = db.ask(new Meanings(module));
+                Scoping.Meanings now = meanings.present() ? meanings.value() : null;
+                // The answer itself and not what it means: this is asking whether the reading in
+                // hand was built over what the store just handed over, which is a question about
+                // the two being the one object.
+                if (reading == null || now != over) {
+                    over = now;
+                    reading = now == null ? Denoting.NONE : now.denoting();
+                }
+                return reading;
+            }
+
+            @Override
+            public Denotation of(String spelling) {
+                return read().of(spelling);
+            }
+
+            @Override
+            public Set<String> spellings() {
+                return read().spellings();
+            }
+
+            @Override
+            public String moduleOfAlias(String alias) {
+                return read().moduleOfAlias(alias);
+            }
+
+            @Override
+            public Set<String> aliases() {
+                return read().aliases();
+            }
+        };
+    }
+
+    /** What names mean in a module over the declarations as resolution left them — what
+     * {@link Resolved} is resolved against. */
+    static Answer<Symbols> resolvedSymbols(Db db, String name) {
+        return symbols(db, name, resolvedRegistry(db));
+    }
+
+    /** The same over the derived declarations — what everything below the check reads. */
+    static Answer<Symbols> derivedSymbols(Db db, String name) {
+        return symbols(db, name, derivedRegistry(db));
+    }
+
+    /** The same, over the declarations as they were written — what {@code Resolve} resolves
+     * against. */
+    static Answer<SyntaxSymbols> writtenSymbols(Db db, String name) {
+        if (!db.ask(new HasScope(name)).value()) {
+            return Answer.absent();
+        }
+        return Answer.of(SyntaxSymbols.of(name, writtenRegistry(db), asked(db, name)));
+    }
+
+    /**
+     * Every bare spelling that reaches a definition in a module, and the definition it reaches —
+     * this module's own plus the ones it imported.
+     *
+     * <p>The one question a scope answers that needs both of its halves, asked here so that what a
+     * reader outside the compile gets is the answer and not the way of reading it. What a scope
+     * hands out reads declarations by asking this store, and a reader holding one past the question
+     * it was built for makes reads nothing records; the answer is a map of declarations, which is a
+     * value, so there is nothing left to hold.
+     */
+    public record Reachable(String name) implements Key<Map<String, Hir.Def>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, Hir.Def>> compute(Db db) {
+            Answer<Symbols> symbols = resolvedSymbols(db, name);
+            return symbols.present() ? Answer.of(symbols.value().reachable()) : Answer.absent();
         }
     }
 
@@ -630,14 +585,14 @@ public final class Names {
      * The module with every written type name resolved to the declaration it denotes. A name that
      * denotes nothing is reported here, so nothing downstream ever reads an unresolved one.
      */
-    public record Resolution(String name) implements Key<Resolve.Resolved> {
+    public record Resolution(String name) implements Key<Resolve.Resolution> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Resolve.Resolved> compute(Db db) {
+        public Answer<Resolve.Resolution> compute(Db db) {
             Answer<Ast.Module> available = db.ask(new Front.Available(name));
             if (!available.present()) {
                 return Answer.absent();
@@ -645,14 +600,15 @@ public final class Names {
             // Resolution reads other modules' declarations as they were written, not as they will
             // be resolved: a name written there is that module's to resolve, and asking for its
             // resolved form here would be this module waiting on its own.
-            Answer<Symbols> scope = symbols(db, name, Stage.AVAILABLE);
-            if (!scope.present()) {
+            Answer<Scoping.Scoped> scoped = db.ask(new ModuleScope(name));
+            if (!scoped.present()) {
                 return Answer.absent();
             }
-            Resolve.Resolved resolution;
+            Resolve.Resolution resolution;
             try {
-                resolution = Resolve.resolving(available.value(), scope.value(),
-                        reachableValues(db, available.value()));
+                resolution = Resolve.resolving(available.value(),
+                        scoped.value().meanings().writtenSymbols(writtenRegistry(db)),
+                        scoped.value().values());
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -660,12 +616,146 @@ public final class Names {
             // type in its place. The answer is present, so an editor can still say what the names
             // around the mistake mean; what must not happen — emitting a module with a hole in it —
             // is stopped where the module is checked.
-            List<Report> reports = new ArrayList<>(
-                    valueNamespaceCollisions(db, available.value()));
+            List<Report> reports = new ArrayList<>();
             for (CompileException unresolved : resolution.unresolved()) {
                 reports.addAll(Report.of(unresolved));
             }
             return Answer.of(resolution, reports);
+        }
+    }
+
+    /**
+     * What resolution worked out about the names a module writes.
+     *
+     * <p>This is what a reader outside the compiler is answered from, and it is asked for on its
+     * own so that such a reader never holds the tree. The two are not the same artifact and do not
+     * come and go together: a module the compiler will not build on is still a module an editor has
+     * to say things about, and every name that did resolve in it is a name it can be told about.
+     */
+    public record Facts(String name) implements Key<Resolve.ResolutionIndex> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Resolve.ResolutionIndex> compute(Db db) {
+            Answer<Resolve.Resolution> resolution = db.ask(new Resolution(name));
+            return resolution.present() ? Answer.of(resolution.value().index()) : Answer.absent();
+        }
+    }
+
+    /**
+     * One declaration as its meaning was settled, or absent where it was not settled.
+     *
+     * <p>The unit a name is answered for is the declaration. A definition is here when every name
+     * written in it was answered and every declaration it reaches has one of these too; otherwise
+     * there is nothing to hand a later pass, and it is not built rather than built around what is
+     * missing.
+     */
+    public record Definition(TypeKey named) implements Key<Hir.Def> {
+        @Override
+        public String module() {
+            return named.module();
+        }
+
+        @Override
+        public Answer<Hir.Def> compute(Db db) {
+            Answer<Resolve.Resolution> resolution = db.ask(new Resolution(named.module()));
+            Answer<Set<String>> unbuilt = db.ask(new Unbuilt(named.module()));
+            if (!resolution.present() || !unbuilt.present()
+                    || unbuilt.value().contains(named.name())) {
+                return Answer.absent();
+            }
+            for (Hir.Def def : resolution.value().module().defs()) {
+                if (def.name().equals(named.name())) {
+                    return Answer.of(def);
+                }
+            }
+            return Answer.absent();
+        }
+    }
+
+    /**
+     * The declarations of a module that have no meaning to give.
+     *
+     * <p>Two ways in, and both are about what a declaration is made of rather than about what was
+     * reported. A name written in it was not answered, so what it is made of is not there; or what
+     * it reaches is one of these, so what that is made of is not there either. A module that will
+     * not be emitted for some other reason has declarations that mean what they say, and they are
+     * not in here.
+     *
+     * <p>Asked of a whole module at once because the reaching is a relation among its own
+     * declarations, and following it one declaration at a time would ask a question of itself where
+     * two of them are made of each other. Across modules there is no such loop to close: an import
+     * cycle is settled before this, so a module's declarations reach another's and stop.
+     *
+     * <p>Not part of what a reader outside this file asks. Whether a declaration has a meaning is
+     * {@link Definition}'s to answer and is answered by handing one over or not; a reader that could
+     * ask which ones have none would be a reader deciding for itself what to do about it, which is
+     * how the question of what a name means came to be answered in several places at once.
+     */
+    record Unbuilt(String name) implements Key<Set<String>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Set<String>> compute(Db db) {
+            if (cyclic(db, name)) {
+                return Answer.absent();
+            }
+            Answer<Resolve.Resolution> resolution = db.ask(new Resolution(name));
+            if (!resolution.present()) {
+                return Answer.absent();
+            }
+            Map<String, Resolve.OfDeclaration> declarations = resolution.value().declarations();
+            Set<String> unbuilt = new LinkedHashSet<>();
+            Map<String, Set<String>> elsewhere = new LinkedHashMap<>();
+            for (Map.Entry<String, Resolve.OfDeclaration> declared : declarations.entrySet()) {
+                if (!declared.getValue().answered()) {
+                    unbuilt.add(declared.getKey());
+                    continue;
+                }
+                for (TypeSymbol reached : declared.getValue().reaches()) {
+                    if (reached.module().equals(name)) {
+                        continue;
+                    }
+                    Set<String> there = elsewhere.computeIfAbsent(reached.module(),
+                            m -> unbuiltIn(db, m));
+                    if (there.contains(reached.name())) {
+                        unbuilt.add(declared.getKey());
+                        break;
+                    }
+                }
+            }
+            // What reaches one of these has nothing to stand on either, and so has what reaches
+            // that. Held to the declarations of this module, which is where the relation is.
+            boolean more = true;
+            while (more) {
+                more = false;
+                for (Map.Entry<String, Resolve.OfDeclaration> declared : declarations.entrySet()) {
+                    if (unbuilt.contains(declared.getKey())) {
+                        continue;
+                    }
+                    for (TypeSymbol reached : declared.getValue().reaches()) {
+                        if (reached.module().equals(name) && unbuilt.contains(reached.name())) {
+                            unbuilt.add(declared.getKey());
+                            more = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            return Answer.of(Set.copyOf(unbuilt));
+        }
+
+        /** What another module could not build, or nothing where it could not be read — what is
+         * wrong there is reported there, and a name reaching into it is answered by its absence. */
+        private static Set<String> unbuiltIn(Db db, String module) {
+            Answer<Set<String>> there = db.ask(new Unbuilt(module));
+            return there.present() ? there.value() : Set.of();
         }
     }
 
@@ -694,9 +784,8 @@ public final class Names {
                     db.ask(new Front.Exposed(name)),
                     db.ask(new Front.ShadowsPath(name)),
                     db.ask(new InCycle(name)),
-                    db.ask(new Bound(name)),
                     db.ask(new Declarations(name)),
-                    db.ask(new Imports(name)),
+                    db.ask(new ModuleScope(name)),
                     db.ask(new Resolution(name)));
             for (Answer<?> answer : asked) {
                 if (answer.hasError()) {
@@ -742,16 +831,16 @@ public final class Names {
 
         @Override
         public Answer<Boolean> compute(Db db) {
-            Ast.Module m = db.ask(new Bound(name)).value();
+            Hir.Module m = db.ask(new Resolved(name)).value();
             if (m == null) {
                 return Answer.of(Boolean.FALSE);   // there is no module here to have a hole in
             }
-            for (Ast.BehaviorDef b : m.behaviors()) {
-                List<Ast.Var> named = switch (b) {
-                    case Ast.PipeBehavior pipe -> pipe.stages();
-                    case Ast.SpecBehavior spec -> spec.dependsOn();
+            for (Hir.BehaviorDef b : m.behaviors()) {
+                List<Hir.Var> named = switch (b) {
+                    case Hir.PipeBehavior pipe -> pipe.stages();
+                    case Hir.SpecBehavior spec -> spec.dependsOn();
                 };
-                for (Ast.Var ref : named) {
+                for (Hir.Var ref : named) {
                     if (ref.unresolved()) {
                         return Answer.of(Boolean.TRUE);
                     }
@@ -827,14 +916,14 @@ public final class Names {
          *
          * <p>Read off the parsed source rather than off {@link Front.Available}, because the module
          * that arrives from there has had its standard-library import lines taken out
-         * ({@link souther.compiler.check.Exposing#withoutLibraryImports}) — an unused
+         * ({@link souther.compiler.check.Exposing#check}) — an unused
          * {@code import List ( fold )} would be invisible to a check that read the module. An
          * attached {@code examples for} file writes no imports, so the declaring source's lines are
          * all of them.
          */
         private static List<Ast.Import> writtenImports(Db db, String module) {
             Front.Layout.Of layout = db.ask(new Front.Layout()).value();
-            String id = layout == null ? null : layout.idOfModule().get(module);
+            SourceId id = layout == null ? null : layout.idOfModule().get(module);
             if (id == null) {
                 return List.of();
             }
@@ -862,19 +951,15 @@ public final class Names {
     /** Every name {@code module} writes, paired with what it denotes, or null when the module could
      * not be read. */
     private static Set<Use> usesIn(Db db, String module) {
-        Answer<Resolve.Resolved> resolution = db.ask(new Resolution(module));
-        Ast.Module bound = db.ask(new Bound(module)).value();
-        if (!resolution.present() || bound == null) {
+        Answer<Resolve.ResolutionIndex> facts = db.ask(new Facts(module));
+        if (!facts.present()) {
             return null;
         }
         Set<Use> used = new HashSet<>();
-        for (Resolve.Denotation d : resolution.value().denotations()) {
-            if (!d.denotes().isUnresolved()) {
-                used.add(new Use(d.written().canonical(), d.denotes().module(),
-                        d.denotes().name()));
-            }
+        for (Resolve.TypeUse d : facts.value().types()) {
+            used.add(new Use(d.written().canonical(), d.denotes().module(), d.denotes().name()));
         }
-        for (Resolve.ValueUse v : resolution.value().values()) {
+        for (Resolve.ValueUse v : facts.value().values()) {
             switch (v.denotes()) {
                 case ValueName.Behavior b ->
                         used.add(new Use(v.written().canonical(), b.module(), b.name()));
@@ -889,64 +974,44 @@ public final class Names {
                 default -> { }   // a local, a builtin, a type used as a value (recorded as a type)
             }
         }
-        // A `>->` stage and a `depends on` name a behavior, and Resolve passes both through
-        // untouched — Bound is where they were answered, so it is where they are read.
-        for (Ast.BehaviorDef b : bound.behaviors()) {
-            List<Ast.Var> refs = switch (b) {
-                case Ast.PipeBehavior pipe -> pipe.stages();
-                case Ast.SpecBehavior spec -> spec.dependsOn();
-            };
-            for (Ast.Var ref : refs) {
-                if (ref.denotes() instanceof ValueName.Behavior named) {
-                    used.add(new Use(ref.name(), named.module(), named.name()));
-                }
-            }
-        }
+        // A `>->` stage and a `depends on` name a behavior, and resolution answers both like any
+        // other name in the value namespace — so they are in the record above, and reading the tree
+        // for them again would be a second place that says which import is used.
         return used;
     }
 
-    /** What a module's bodies can name without a binding: its own helpers, and every behavior it can
-     * reach — its own and the ones its imports bring in. */
-    private static Resolve.Values reachableValues(Db db, Ast.Module m) {
-        // A behavior's `let` is not a helper: it implements the behavior, and the name reaches the
-        // behavior. Asked the same way as HelperInliner.helpersOf, which decides what is expanded —
-        // two answers to one question is how a name came to denote a helper here and a behavior
-        // there.
-        Map<String, ValueName.Helper> helpers = new LinkedHashMap<>();
-        for (String helper : HelperInliner.helpersOf(m).keySet()) {
-            helpers.put(helper, new ValueName.Helper(m.name(), helper));
-        }
-        // A definition another module publishes is written here bare, like one of this module's own —
-        // a value substituted at its reference, a helper expanded at its call (ADR-0072). What it
-        // denotes is the module that declares it: the bare spelling is this module's way of writing
-        // it, and the pair (module, name) is what the definition is. A reader that spells one of its
-        // own the same way is a name clash, which the import check reports.
-        for (Ast.Import imp : m.imports()) {
-            Ast.Module from = db.ask(new Front.Available(imp.module())).value();
-            if (from == null) {
-                continue;
-            }
-            for (String published : Bodies.publishedNames(from, imp.names())) {
-                helpers.putIfAbsent(published, new ValueName.Helper(from.name(), published));
-            }
-        }
-        BehaviorsInScope.Of behaviors = db.ask(new BehaviorsInScope(m.name())).value();
-        Map<String, ValueName.Stdlib> exposed = db.ask(new Front.LibraryNames(m.name())).value();
-        return new Resolve.Values(m.name(), helpers,
-                behaviors == null ? Map.of() : behaviors.byName(),
-                exposed == null ? Map.of() : exposed);
-    }
-
-    /** The resolved module — {@link Resolution} without the record of how it got there. */
-    public record Resolved(String name) implements Key<Ast.Module> {
+    /**
+     * The behaviors a module reaches by naming them through their module, as resolution answered
+     * them.
+     *
+     * <p>A projection, so a reader wanting these is not put behind everything else resolution
+     * worked out. What they are used for is what a composition borrows — a signature, an injected
+     * field — and none of that changes when a body elsewhere does.
+     */
+    public record QualifiedBehaviors(String name) implements Key<List<Resolve.QualifiedUse>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Ast.Module> compute(Db db) {
-            Answer<Resolve.Resolved> resolution = db.ask(new Resolution(name));
+        public Answer<List<Resolve.QualifiedUse>> compute(Db db) {
+            Answer<Resolve.Resolution> resolution = db.ask(new Resolution(name));
+            return resolution.present() ? Answer.of(List.copyOf(resolution.value().qualified()))
+                    : Answer.absent();
+        }
+    }
+
+    /** The resolved module — {@link Resolution} without the record of how it got there. */
+    public record Resolved(String name) implements Key<Hir.Module> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Hir.Module> compute(Db db) {
+            Answer<Resolve.Resolution> resolution = db.ask(new Resolution(name));
             return resolution.present() ? Answer.of(resolution.value().module()) : Answer.absent();
         }
     }
@@ -957,8 +1022,22 @@ public final class Names {
      * so has no module to be asked of.
      */
     private static String moduleAt(Db db, SourcePos at) {
-        return at == null || at.sourceId() == null
-                ? null : db.ask(new Front.ModuleOf(at.sourceId())).value();
+        SourceId file = keyedOn(at);
+        return file == null ? null : db.ask(new Front.ModuleOf(file)).value();
+    }
+
+    /**
+     * The source a question about {@code at} is keyed on, or none.
+     *
+     * <p>None for a text this compilation has no name for, and for a position that is inside a module
+     * this compile holds no file of. Neither is a file whose edit could change the answer, which is
+     * what a key's source is for — and neither of them is a statement about whether a reader could be
+     * sent there, which is {@link souther.compiler.diag.DiagnosticPlace}'s to make.
+     */
+    private static SourceId keyedOn(SourcePos at) {
+        return at != null
+                && at.quotedFrom() instanceof QuotedFrom.ASourceThisCompileHolds(SourceId file)
+                ? file : null;
     }
 
     /**
@@ -973,24 +1052,24 @@ public final class Names {
      * settle — an attached {@code examples for} file declares none and is part of one all the same,
      * and a caller that had to name the module first was a caller that could name the wrong one.
      */
-    public record DenotedAt(SourcePos at) implements Key<Resolve.Denotation> {
+    public record DenotedAt(SourcePos at) implements Key<Resolve.TypeUse> {
         @Override
-        public String sourceId() {
-            return at == null ? null : at.sourceId();
+        public SourceId sourceId() {
+            return keyedOn(at);
         }
 
         @Override
-        public Answer<Resolve.Denotation> compute(Db db) {
+        public Answer<Resolve.TypeUse> compute(Db db) {
             String name = moduleAt(db, at);
             if (name == null) {
                 return Answer.absent();
             }
-            Answer<Resolve.Resolved> resolution = db.ask(new Resolution(name));
-            if (!resolution.present()) {
+            Answer<Resolve.ResolutionIndex> facts = db.ask(new Facts(name));
+            if (!facts.present()) {
                 return Answer.absent();
             }
-            Resolve.Denotation innermost = null;
-            for (Resolve.Denotation d : resolution.value().denotations()) {
+            Resolve.TypeUse innermost = null;
+            for (Resolve.TypeUse d : facts.value().types()) {
                 if (!spans(d.written(), at)) {
                     continue;
                 }
@@ -1011,14 +1090,14 @@ public final class Names {
      * <p>One question, so an editor's go-to-definition, find-references and rename all agree about
      * what the cursor is on. They used to each decide for themselves, by spelling.
      */
-    public record TypeAt(SourcePos at) implements Key<TypeName> {
+    public record TypeAt(SourcePos at) implements Key<TypeSymbol> {
         @Override
-        public String sourceId() {
-            return at == null ? null : at.sourceId();
+        public SourceId sourceId() {
+            return keyedOn(at);
         }
 
         @Override
-        public Answer<TypeName> compute(Db db) {
+        public Answer<TypeSymbol> compute(Db db) {
             String name = moduleAt(db, at);
             if (name == null) {
                 return Answer.absent();
@@ -1027,30 +1106,32 @@ public final class Names {
             if (defs.present()) {
                 for (Ast.Def def : defs.value().values()) {
                     if (spans(def.written(), at)) {
-                        return Answer.of(new TypeName(name, def.name()));
+                        // Asked of the declaration world this came out of, rather than made from the
+                        // address it answers to.
+                        return Answer.of(writtenRegistry(db).identify(def.declaredKey()));
                     }
                 }
             }
-            Resolve.Denotation denoted = db.ask(new DenotedAt(at)).value();
+            Resolve.TypeUse denoted = db.ask(new DenotedAt(at)).value();
             return denoted == null ? Answer.absent() : Answer.of(denoted.denotes());
         }
     }
 
     /** Every place a module names {@code denoted}, wherever it was declared. */
-    public record UsesOf(String name, TypeName denoted) implements Key<List<Resolve.Denotation>> {
+    public record UsesOf(String name, TypeSymbol denoted) implements Key<List<Resolve.TypeUse>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<List<Resolve.Denotation>> compute(Db db) {
-            Answer<Resolve.Resolved> resolution = db.ask(new Resolution(name));
-            if (!resolution.present()) {
+        public Answer<List<Resolve.TypeUse>> compute(Db db) {
+            Answer<Resolve.ResolutionIndex> facts = db.ask(new Facts(name));
+            if (!facts.present()) {
                 return Answer.of(List.of());
             }
-            List<Resolve.Denotation> uses = new ArrayList<>();
-            for (Resolve.Denotation d : resolution.value().denotations()) {
+            List<Resolve.TypeUse> uses = new ArrayList<>();
+            for (Resolve.TypeUse d : facts.value().types()) {
                 if (denoted.equals(d.denotes())) {
                     uses.add(d);
                 }
@@ -1068,8 +1149,8 @@ public final class Names {
      */
     public record ValueDenotedAt(SourcePos at) implements Key<Resolve.ValueUse> {
         @Override
-        public String sourceId() {
-            return at == null ? null : at.sourceId();
+        public SourceId sourceId() {
+            return keyedOn(at);
         }
 
         @Override
@@ -1078,11 +1159,11 @@ public final class Names {
             if (name == null) {
                 return Answer.absent();
             }
-            Answer<Resolve.Resolved> resolution = db.ask(new Resolution(name));
-            if (!resolution.present()) {
+            Answer<Resolve.ResolutionIndex> facts = db.ask(new Facts(name));
+            if (!facts.present()) {
                 return Answer.absent();
             }
-            for (Resolve.ValueUse use : resolution.value().values()) {
+            for (Resolve.ValueUse use : facts.value().values()) {
                 if (spans(use.written(), at)) {
                     return Answer.of(use);
                 }
@@ -1106,12 +1187,12 @@ public final class Names {
 
         @Override
         public Answer<List<Resolve.ValueUse>> compute(Db db) {
-            Answer<Resolve.Resolved> resolution = db.ask(new Resolution(name));
-            if (!resolution.present()) {
+            Answer<Resolve.ResolutionIndex> facts = db.ask(new Facts(name));
+            if (!facts.present()) {
                 return Answer.of(List.of());
             }
             List<Resolve.ValueUse> uses = new ArrayList<>();
-            for (Resolve.ValueUse use : resolution.value().values()) {
+            for (Resolve.ValueUse use : facts.value().values()) {
                 if (denoted.equals(use.denotes())) {
                     uses.add(use);
                 }
@@ -1131,8 +1212,8 @@ public final class Names {
      */
     public record ValueAt(SourcePos at) implements Key<ValueName> {
         @Override
-        public String sourceId() {
-            return at == null ? null : at.sourceId();
+        public SourceId sourceId() {
+            return keyedOn(at);
         }
 
         @Override
@@ -1141,11 +1222,11 @@ public final class Names {
             if (name == null) {
                 return Answer.absent();
             }
-            Answer<Resolve.Resolved> resolution = db.ask(new Resolution(name));
-            if (!resolution.present()) {
+            Answer<Resolve.ResolutionIndex> facts = db.ask(new Facts(name));
+            if (!facts.present()) {
                 return Answer.absent();
             }
-            Map<BindingId, Resolve.BoundName> binders = resolution.value().binders();
+            Map<BindingId, Resolve.BoundName> binders = facts.value().binders();
             for (Map.Entry<BindingId, Resolve.BoundName> bound : binders.entrySet()) {
                 Resolve.BoundName written = bound.getValue();
                 if (answerable(bound.getKey(), binders)
@@ -1197,8 +1278,7 @@ public final class Names {
                 case ValueName.Helper h -> h.module();
                 case ValueName.Behavior b -> b.module();
                 case ValueName.Local l -> l.id().owner().module();
-                case ValueName.Stdlib _, ValueName.OfType _,
-                        ValueName.Builtin _, ValueName.Unresolved _ -> null;
+                case ValueName.Stdlib _, ValueName.OfType _, ValueName.Builtin _ -> null;
             };
         }
 
@@ -1207,12 +1287,12 @@ public final class Names {
             // a binding is not a position, so where it was written is asked of the pass that
             // answered it rather than read off the name
             if (denoted instanceof ValueName.Local local) {
-                Answer<Resolve.Resolved> resolution =
-                        db.ask(new Resolution(local.id().owner().module()));
-                if (!resolution.present()) {
+                Answer<Resolve.ResolutionIndex> facts =
+                        db.ask(new Facts(local.id().owner().module()));
+                if (!facts.present()) {
                     return Answer.absent();
                 }
-                Resolve.BoundName binder = resolution.value().binders().get(local.id());
+                Resolve.BoundName binder = facts.value().binders().get(local.id());
                 return binder == null ? Answer.absent() : Answer.of(List.of(binder.written()));
             }
             String in = module();
@@ -1287,7 +1367,7 @@ public final class Names {
     }
 
     /** The occurrence of a type's own name, in the declaration that declares it. */
-    public record DeclaredAt(TypeName denoted) implements Key<WrittenName> {
+    public record DeclaredAt(TypeSymbol denoted) implements Key<WrittenName> {
         @Override
         public String module() {
             return denoted.module();
@@ -1381,12 +1461,9 @@ public final class Names {
 
     private static List<Dependency> dependencies(Ast.Module m, Set<String> modules) {
         List<Dependency> deps = new ArrayList<>();
-        Map<String, String> qualifiers = new HashMap<>();
+        Map<String, String> qualifiers = Scoping.qualifiersWritten(m);
         for (Ast.Import imp : m.imports()) {
             deps.add(new Dependency(imp.module(), imp.pos()));
-            if (imp.alias() != null) {
-                qualifiers.put(imp.alias(), imp.module());
-            }
         }
         for (Ast.TypeRef ref : typeRefs(m)) {
             int dot = ref.name().lastIndexOf('.');
@@ -1399,155 +1476,56 @@ public final class Names {
                 deps.add(new Dependency(target, ref.pos()));
             }
         }
+        for (Ast.Var ref : Scoping.qualifiedBehaviorRefs(m)) {
+            String target = Scoping.moduleNamedBy(ref.name(), qualifiers);
+            if (modules.contains(target) && !target.equals(m.name())) {
+                deps.add(new Dependency(target, ref.pos()));
+            }
+        }
         return deps;
     }
 
-    static Set<String> behaviorNames(Ast.Module m) {
+    /**
+     * The imports a module has: the ones it wrote, and the ones a qualified reference in its header
+     * asked for.
+     *
+     * <p>What a reader wanting "which modules does this reach, and which of their names" asks. The
+     * second kind carries no import line, and a reader that read only the lines would miss the
+     * borrowed signature it has to hold.
+     *
+     * <p>Answered by {@link Scoping}, which is where the scope those imports fill is assembled. A
+     * reader here and the scope disagreeing about which imports a module has is a reader holding a
+     * signature the scope never brought a name in for.
+     *
+     * <p>The module's own lines are read off what it wrote, so a module nothing may be built on
+     * still has the imports it wrote. The ones a qualified reference asks for are not: which
+     * behaviors another module declares is a question about that module, and a universe that will
+     * not let it be built on does not answer it. Nothing is synthesized then — what the reference
+     * names is answered where the reference is written, and an import invented for it would say it
+     * a second time against a line nobody wrote.
+     *
+     * <p>Not what a cycle is found by. That is walked off the spellings a module writes
+     * ({@link Cycles}), which is why a cycle written with no import line at all is still found.
+     */
+    public static List<Ast.Import> importsOf(Db db, String name) {
+        Ast.Module m = db.ask(new Front.Available(name)).value();
+        return m == null ? List.of() : Scoping.importsOf(CompilationUniverse.over(db), m);
+    }
+
+    /** The same, of a module resolution has been over. */
+    static Set<String> behaviorNames(Hir.Module m) {
         Set<String> names = new LinkedHashSet<>();
-        for (Ast.BehaviorDef b : m.behaviors()) {
+        for (Hir.BehaviorDef b : m.behaviors()) {
             names.add(b.name());
         }
         return names;
     }
 
-    /** The definitions a module declares in the value namespace — its values and its helpers. Like a
-     * behavior, one is a name in that namespace and not a data, so an import of it resolves
-     * elsewhere. */
-    static Set<String> valueNames(Ast.Module m) {
-        return new LinkedHashSet<>(HelperInliner.helpersOf(m).keySet());
-    }
-
-    static Report unknownModule(Ast.Import imp) {
-        return Report.raised(Diagnostic.say(new ModuleMessage.UnknownModule(imp.module()))
-                        .at(imp.pos()).build());
-    }
-
     /**
-     * An alias must be a qualifier nothing else already is: another alias, a module in this
-     * compilation, or a standard-library qualifier. Left to win silently it would take over what
-     * {@code List.map} or {@code billing.Amount} means here.
+     * The name arrived twice, from two imports. Either way the way out is inside the module: keep at
+     * most one of them bare and name the other through its module.
      */
-    private static Report aliasTaken(Ast.Import imp, Map<String, String> aliases,
-                                     Set<String> modules) {
-        String taken = aliases.containsKey(imp.alias()) ? aliases.get(imp.alias())
-                : modules.contains(imp.alias()) ? imp.alias()
-                : Prelude.isQualifier(imp.alias()) ? "souther" : null;
-        if (taken == null) {
-            return null;
-        }
-        return Report.raised(Diagnostic.say(new ModuleMessage.TheAliasIsAlreadyTaken(imp.alias(), taken))
-                        .at(imp.pos())
-                        .hint(new ModuleMessage.AnAliasIsANameNothingElseAnswersTo()).build());
-    }
-
-    /**
-     * Every way a spelling reaches this module's value namespace, and a report for each spelling that
-     * reaches it twice.
-     *
-     * <p>A data reaches it — a unit data is a value, a newtype is applied to what it wraps, a record
-     * is constructed by its name — and so do a {@code let}, a behavior, a definition another module
-     * publishes, and a standard-library qualifier. One name means one thing there, whichever way it
-     * arrived. A spelling with two meanings is answered by whichever reader looks first, which is how
-     * a name could be a unit data where it stood alone and an imported helper where it was applied.
-     *
-     * <p>Asked here because this is where the namespace is assembled (see {@link #reachableValues}).
-     * A rule stated per arrival would have to be restated for each new way in.
-     *
-     * <p>A behavior and a {@code let} of one name are not two: they are the declaration and the
-     * implementation of one thing (ADR-0072).
-     */
-    private static List<Report> valueNamespaceCollisions(Db db, Ast.Module m) {
-        List<Report> reports = new ArrayList<>();
-        Map<String, Ast.Def> declared = new LinkedHashMap<>();
-        for (Ast.Def def : m.defs()) {
-            // A standard-library qualifier is the only spelling that reaches the library, so a data
-            // of that name hides it — from every module, since the qualifier is not this module's to
-            // shadow. Refused where it is declared, as a reserved module name is (see Front).
-            if (Prelude.isQualifier(def.name())) {
-                reports.add(Report.raised(Diagnostic
-                                .at(def.pos()).say(new DataMessage.ADataTakesTheStandardLibraryQualifier(def.name())).build()));
-            }
-            declared.put(def.name(), def);
-        }
-        Set<String> implementing = new HashSet<>();
-        for (Ast.BehaviorDef b : m.behaviors()) {
-            implementing.add(b.name());
-        }
-        for (Ast.FnDef fn : m.fns()) {
-            if (implementing.contains(fn.name()) || !declared.containsKey(fn.name())) {
-                continue;
-            }
-            reports.add(Report.raised(Diagnostic
-                            .at(fn.pos()).say(new DataMessage.ALetAndADataShareOneSpelling(fn.name())).build()));
-        }
-        // What this module declares under a name, whichever kind of declaration it is: a data, a
-        // `let`, a behavior. A behavior and its `let` are one of them, so the set is what is asked
-        // rather than a count.
-        Set<String> ownNames = new LinkedHashSet<>(declared.keySet());
-        ownNames.addAll(implementing);
-        for (Ast.FnDef fn : m.fns()) {
-            ownNames.add(fn.name());
-        }
-        // A name an import brings in is written here bare (ADR-0075), so it arrives in this
-        // namespace exactly as one of this module's own does — and collides the same way. Which kind
-        // of thing each side is does not enter into it: the reader writes one spelling, and one
-        // spelling here means one thing.
-        for (Ast.Import imp : m.imports()) {
-            for (String imported : importedIntoValues(db, imp)) {
-                if (ownNames.contains(imported)) {
-                    reports.add(importCollision(imported, imp, null));
-                }
-            }
-        }
-        return reports;
-    }
-
-    /**
-     * The names {@code imp} brings into the value namespace: the definitions the module publishes,
-     * the behaviors it declares and the types it declares, all of which a reader writes bare. A type
-     * is one of them because a unit data is a value, a newtype is applied to what it wraps and a
-     * record is constructed by its name — the type namespace refuses a type against a type, so what
-     * a type adds here is a type against a {@code let} or a behavior.
-     *
-     * <p>Only what {@code from} exposes, and only what the line asks for. A name the line names and
-     * the module does not expose is nothing this import brought in, and reporting a collision for it
-     * would tell the author to rename a definition that is not what is wrong — the line is answered
-     * by {@code check.import.notexposed}, which is the whole of it.
-     *
-     * <p>A library import is not here. Those lines are read where the table they fill is built
-     * ({@link Exposing}) and are gone from the module by the time this is asked.
-     */
-    private static Set<String> importedIntoValues(Db db, Ast.Import imp) {
-        Ast.Module from = db.ask(new Front.Available(imp.module())).value();
-        if (from == null) {
-            return Set.of();
-        }
-        Set<String> names = new LinkedHashSet<>(Bodies.publishedNames(from, imp.names()));
-        Set<String> declared = new LinkedHashSet<>(behaviorNames(from));
-        for (Ast.Def def : from.defs()) {
-            declared.add(def.name());
-        }
-        Set<String> exposed = new HashSet<>(from.exposing());
-        for (String name : imp.names()) {
-            if (declared.contains(name) && exposed.contains(name)) {
-                names.add(name);
-            }
-        }
-        return names;
-    }
-
-    /**
-     * The name arrived twice. {@code earlier} is the import that already brought it in, or null when
-     * the module defines it itself. Either way the way out is inside the module: keep at most one of
-     * them bare and name the other through its module.
-     */
-    private static Report importCollision(String name, Ast.Import imp, Ast.Import earlier) {
-        if (earlier == null) {
-            return Report.raised(Diagnostic.at(imp.pos())
-                            .say(new ImportMessage.ImportedNameCollidesWithADeclaration(name))
-                            .hint(new ImportMessage.RenameOrQualifyTheCollidingName())
-                            .build());
-        }
+    private static Report broughtTwice(String name, Ast.Import imp, Ast.Import earlier) {
         Diagnostic.Builder b = Diagnostic.at(imp.pos())
                 .secondary(Region.point(earlier.pos()), new ModuleMessage.ItWasAlreadyImportedHere(name, earlier.module()));
         return Report.raised((earlier.module().equals(imp.module())

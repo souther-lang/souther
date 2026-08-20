@@ -39,7 +39,6 @@ class AnEndIsWhereItsRuleStopsTest {
             data Ok
 
             behavior take : (h: Holder) -> Ok
-                constructs Ok
 
             let take (h) = Ok
             """;
@@ -86,7 +85,6 @@ class AnEndIsWhereItsRuleStopsTest {
                 data Ok
 
                 behavior take : (h: Holder) -> Ok
-                    constructs Ok
 
                 let take (h) = Ok
 
@@ -94,8 +92,8 @@ class AnEndIsWhereItsRuleStopsTest {
                     | "a" : (Holder { a = AboveFive(6m), b = AtMostTen(1m) }) -> Ok
                 """);
 
-        assertFalse(report.contains("not known to be writable: take/h.b = 10"), () -> report);
-        assertTrue(report.contains("no row is at take/h.b = 10"),
+        assertFalse(report.contains("not known to be writable: the ON point take/h.b = 10"), () -> report);
+        assertTrue(report.contains("no row is at the ON point take/h.b = 10"),
                 () -> "and the edge is one a row is owed at:\n" + report);
     }
 
@@ -127,7 +125,6 @@ class AnEndIsWhereItsRuleStopsTest {
                 data Ok
 
                 behavior take : (h: Holder) -> Ok
-                    constructs Ok
 
                 let take (h) = Ok
                 """, "--generate");
@@ -161,7 +158,6 @@ class AnEndIsWhereItsRuleStopsTest {
                 data No
 
                 behavior pick : (r: Ratio) -> Ok | No
-                    constructs Ok, No
 
                 let pick (r) = {
                     guard r.value > 5.0m else No
@@ -200,7 +196,6 @@ class AnEndIsWhereItsRuleStopsTest {
                 data Ok
 
                 behavior take : (p: Pair, flag: Bool) -> Ok
-                    constructs Ok
 
                 let take (p, flag) = Ok
                 """, "--generate");
@@ -228,7 +223,6 @@ class AnEndIsWhereItsRuleStopsTest {
                 data No
 
                 behavior pick : (r: AboveFive) -> Ok | No
-                    constructs Ok, No
 
                 let pick (r) = {
                     guard r.value < 10m else No

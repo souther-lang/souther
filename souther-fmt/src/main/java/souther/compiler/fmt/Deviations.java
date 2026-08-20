@@ -1,7 +1,6 @@
 package souther.compiler.fmt;
 
 import souther.compiler.cst.CstParser;
-import souther.compiler.cst.SyntaxNode;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -28,6 +27,10 @@ public final class Deviations {
 
     /** One decision a source did not take, and where in it that shows. */
     public record Deviation(int line, int column, String rule, String canonical, String source) {}
+
+    /** How many times the rules are asked before a report gives up on reaching the canonical
+     * form. */
+    private static final int ROUNDS = 8;
 
     /**
      * What a source has against it, and whether that is all of it.
@@ -56,46 +59,60 @@ public final class Deviations {
      * that one leaves nine more.
      */
     public static Report of(String source) {
-        SyntaxNode root = CstParser.parse(source).root();
-        String canonical = Formatter.canonicalize(root).text();
+        // The canonical form the report is held against at the end is the first round's own, and
+        // each round after a repair writes the one for the text that repair produced. Asked for
+        // separately, the first two are the same text written twice from the same source.
+        Formatter.CanonicalForm form = Formatter.canonicalize(CstParser.parse(source).root());
+        String canonical = form.text();
         List<Deviation> out = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
         List<List<Repair.Edit>> repaired = new ArrayList<>();
         String text = source;
-        for (int round = 0; round < 8; round++) {
-            Formatter.CanonicalForm form = Formatter.canonicalize(CstParser.parse(text).root());
+        for (int round = 0; round < ROUNDS; round++) {
             Witnesses.Pairing pairing = new Witnesses.Pairing(text, form);
             List<Witness> witnesses = all(text, form, pairing);
-            for (Witness w : witnesses) {
-                int at = Repair.where(text, form, pairing, w);
-                if (at < 0) {
-                    continue;
+            if (witnesses.isEmpty()) {
+                break;   // nothing to say about this text, and nothing to project it onto
+            }
+            // One projection for both questions this round asks of it. Where a witness lands is
+            // where the first stretch it comes to begins, so a report that asked for that on its
+            // own evaluated the whole projection to keep one number and then evaluated it again to
+            // write the text.
+            List<List<Repair.Edit>> each;
+            try {
+                each = Repair.each(text, form, pairing, witnesses);
+            } catch (Witnesses.NoCorrespondence _) {
+                return new Report(sorted(out), false);   // a family that could not answer
+            }
+            for (int w = 0; w < witnesses.size(); w++) {
+                if (each.get(w).isEmpty()) {
+                    continue;   // nothing of it is written here
                 }
-                int was = at;
+                int was = each.get(w).get(0).from();
                 for (int i = repaired.size() - 1; i >= 0; i--) {
                     was = Repair.before(repaired.get(i), was);
                 }
-                Deviation d = new Deviation(lineOf(source, was), columnOf(source, was), rule(w),
-                        canonicalSide(w), sourceSide(w));
+                Deviation d = new Deviation(lineOf(source, was), columnOf(source, was),
+                        rule(witnesses.get(w)), canonicalSide(witnesses.get(w)),
+                        sourceSide(witnesses.get(w)));
                 if (seen.add(d.line() + ":" + d.column() + ": " + d.rule())) {
                     out.add(d);
                 }
             }
-            if (witnesses.isEmpty()) {
-                break;
-            }
-            List<Repair.Edit> edits;
-            try {
-                edits = Repair.edits(text, form, pairing, witnesses);
-            } catch (Witnesses.NoCorrespondence _) {
-                return new Report(sorted(out), false);   // a family that could not answer
-            }
+            List<Repair.Edit> edits = Repair.composed(each);
             String next = Repair.apply(text, edits);
             if (next.equals(text)) {
                 break;
             }
             repaired.add(edits);
             text = next;
+            if (round + 1 == ROUNDS) {
+                // No round is left to ask about this text. Writing its canonical form here would
+                // be a pass nothing reads, and this is where the source can be one the formatter
+                // refuses — so it is not written at all.
+                break;
+            }
+            form = Formatter.canonicalize(CstParser.parse(text).root());
         }
         return new Report(sorted(out), text.equals(canonical));
     }

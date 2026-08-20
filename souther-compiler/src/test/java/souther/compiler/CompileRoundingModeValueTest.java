@@ -19,7 +19,7 @@ class CompileRoundingModeValueTest {
     private static Map<?, ?> run(String source, Map<String, Object> in) throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(source),
                 CompileRoundingModeValueTest.class.getClassLoader());
-        Object behavior = loader.loadClass("demo.Go$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "go").getConstructor().newInstance();
         return (Map<?, ?>) Codecs.encode(loader, "demo.Out",
                 Codecs.apply(behavior, Codecs.decoded(loader, "demo.In", in)));
     }

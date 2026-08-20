@@ -1,22 +1,22 @@
 package souther.compiler.meta;
 
-import java.lang.classfile.Annotation;
-import java.lang.classfile.AnnotationElement;
-import java.lang.classfile.AnnotationValue;
-import java.lang.classfile.Attributes;
-import java.lang.classfile.ClassFile;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.function.Function;
 
 /**
- * Reads what {@link ModuleMetadata} wrote, out of class files.
+ * What a set of compiled classes carries, for anywhere the bytes are in hand — the classes of a
+ * compile in progress, a jar entry.
  *
- * <p>This is the reader for anywhere the bytes are in hand — the classes of a compile in progress,
- * a jar entry. Under an annotation processor the same annotations are reachable through
- * {@code Elements} without the bytes, which is a second reader of the same shape.
+ * <p>This decides what a lookup is told, and reads no class file to do it. Every use of the
+ * class-file reader is in {@link SoutherAnnotations}, and the whole of what that class does is the
+ * one call guarded here; this file imports nothing of that API, so a read hoisted out of the guard
+ * has nowhere to go that is not a new import. Parsing a class file does not read it — the model is
+ * lazy — so a guard around part of the reading answers only part of the malformed artifacts, which
+ * is what happened while the guard was around the parse.
+ *
+ * <p>Under an annotation processor the same annotations are reachable through {@code Elements}
+ * without the bytes, which is a second reader of the same shape.
  */
-public final class ClassFileDeclarations implements PublishedModule.Classes {
+public final class ClassFileDeclarations implements PublishedClasses {
 
     private final Function<String, byte[]> bytesOf;
 
@@ -26,75 +26,17 @@ public final class ClassFileDeclarations implements PublishedModule.Classes {
     }
 
     @Override
-    public PublishedModule.Declarations of(String binaryName) {
+    public PublishedClasses.Carried of(String binaryName) {
+        // Outside the guard. Whatever hands the bytes over is a caller's, and a fault in it is a
+        // fault: only what is made of bytes already in hand is an answer about an artifact.
         byte[] bytes = bytesOf.apply(binaryName);
         if (bytes == null) {
-            return null;
+            return new PublishedClasses.Carried.NoSuchClass();
         }
-        PublishedModule.SoutherModuleView module = null;
-        String data = null;
-        String signature = null;
-        Boolean injected = null;
-        for (Annotation a : annotations(bytes)) {
-            String type = a.className().stringValue();
-            if (type.endsWith("/SoutherModule;")) {
-                module = moduleView(a);
-            } else if (type.endsWith("/SoutherData;")) {
-                data = string(a, "value");
-            } else if (type.endsWith("/SoutherBehavior;")) {
-                signature = string(a, "signature");
-                injected = bool(a, "injected");
-            }
+        try {
+            return new PublishedClasses.Carried.Declared(SoutherAnnotations.in(bytes));
+        } catch (IllegalArgumentException _) {
+            return new PublishedClasses.Carried.UnreadableMetadata();
         }
-        return new PublishedModule.Declarations(module, data, signature, injected);
-    }
-
-    private static List<Annotation> annotations(byte[] bytes) {
-        return ClassFile.of().parse(bytes)
-                .findAttribute(Attributes.runtimeInvisibleAnnotations())
-                .map(a -> List.copyOf(a.annotations()))
-                .orElse(List.of());
-    }
-
-    private static PublishedModule.SoutherModuleView moduleView(Annotation a) {
-        return new PublishedModule.SoutherModuleView(
-                integer(a, "compat"), string(a, "compiler"), string(a, "name"), string(a, "header"),
-                strings(a, "imports"), strings(a, "types"), strings(a, "behaviors"),
-                strings(a, "invariantHelpers"));
-    }
-
-    /** An absent member means the writer left it at its default, which for every member here is
-     * empty; a reader older than the writer sees the same thing. */
-    private static AnnotationValue member(Annotation a, String name) {
-        for (AnnotationElement e : a.elements()) {
-            if (e.name().stringValue().equals(name)) {
-                return e.value();
-            }
-        }
-        return null;
-    }
-
-    private static String string(Annotation a, String name) {
-        return member(a, name) instanceof AnnotationValue.OfString s ? s.stringValue() : "";
-    }
-
-    private static boolean bool(Annotation a, String name) {
-        return member(a, name) instanceof AnnotationValue.OfBoolean b && b.booleanValue();
-    }
-
-    private static int integer(Annotation a, String name) {
-        return member(a, name) instanceof AnnotationValue.OfInt i ? i.intValue() : -1;
-    }
-
-    private static List<String> strings(Annotation a, String name) {
-        List<String> out = new ArrayList<>();
-        if (member(a, name) instanceof AnnotationValue.OfArray array) {
-            for (AnnotationValue v : array.values()) {
-                if (v instanceof AnnotationValue.OfString s) {
-                    out.add(s.stringValue());
-                }
-            }
-        }
-        return out;
     }
 }

@@ -3,10 +3,14 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.Map;
@@ -32,7 +36,7 @@ class ATermSaysWhyItHasNoNumberTest {
     private static final NumericTerm VALUE = new NumericTerm.ValueOf(TermPath.of("x"));
     private static final NumericTerm LENGTH = new NumericTerm.SizeOf(
             ValueName.Stdlib.operation("String", "length"), TermPath.of("x"));
-    private static final TypeName WRAPPER = new TypeName("example", "Wrapped");
+    private static final TypeSymbol WRAPPER = TypeSymbols.declared(new TypeKey("example", "Wrapped"));
 
     @Test
     void anObservationThatDidNotArriveIsMissing() {

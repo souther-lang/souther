@@ -39,7 +39,7 @@ class CompileHelperFnTest {
     @Test
     void behaviorInlinesAPureHelper() throws Exception {
         BytesClassLoader loader = loader();
-        Object bill = loader.loadClass("demo.Bill" + "$Impl").getDeclaredConstructor().newInstance();
+        Object bill = Emitted.behavior(loader, "demo", "bill").getDeclaredConstructor().newInstance();
 
         Object order = decode(loader, "Order", java.util.Map.of("price", 6L, "rate", 7L));
         Object r = Codecs.apply(bill, order);
@@ -57,18 +57,20 @@ class CompileHelperFnTest {
     @Test
     void aHelpersConstructionCountsAgainstTheCallersPermission() {
         // the helper `makeTag` builds `Tag`, attributed to the caller `label`: `Blank` is declared
-        // but `Tag` (via the helper) is also built, so the undeclared `Tag` is E1002.
+        // but `Tag` (via the helper) is also built, so the undeclared `Tag` is E1002. `Blank` carries
+        // a field because a unit is in no construction set and so could not be the declared entry.
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
                 module demo
                 import String ( length )
 
                 data Id = String
                 data Tag = { a: String, b: String }
-                data Blank
+                data Blank = { why: String }
 
-                behavior label : (id: Id) -> Tag | Blank constructs Blank
+                behavior label : (id: Id) -> Tag | Blank
+                    constructs Blank
 
-                let label (id) = if length(id.value) > 0 then makeTag(id) else Blank
+                let label (id) = if length(id.value) > 0 then makeTag(id) else Blank { why = "" }
 
                 let makeTag (id: Id) = Tag { a = id.value, b = id.value }
                 """));
@@ -158,7 +160,7 @@ class CompileHelperFnTest {
                 let taxed (price: Int, rate: Int) = price * withRate(rate)
                 let withRate (rate: Int) = rate * rate
                 """), getClass().getClassLoader());
-        Object bill = loader.loadClass("demo.Bill" + "$Impl").getDeclaredConstructor().newInstance();
+        Object bill = Emitted.behavior(loader, "demo", "bill").getDeclaredConstructor().newInstance();
         Object order = decode(loader, "Order", java.util.Map.of("price", 2L, "rate", 3L));
         Object r = Codecs.apply(bill, order);
         java.util.Map<?, ?> receipt = (java.util.Map<?, ?>) Codecs.encode(loader, "demo.Receipt", r);

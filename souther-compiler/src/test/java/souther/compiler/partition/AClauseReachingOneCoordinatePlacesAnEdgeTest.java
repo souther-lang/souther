@@ -4,7 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.BoundaryAssessment;
+import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.ItemAssessment;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.ValueName;
@@ -154,7 +155,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aRecordsBoundOnItsOwnNumberPlacesAnEdge() {
         String report = report(MODEL);
 
-        assertTrue(report.contains("no row is at onTally/v.n = 1 (invariant Tally (min))"), report);
+        assertTrue(report.contains("no row is at the ON point onTally/v.n = 1 (invariant Tally #1)"), report);
     }
 
     /**
@@ -168,7 +169,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         String report = report(MODEL);
 
         assertTrue(report.contains(
-                "no row is at onBag/List.length(v.xs) = 1 (invariant Bag (min))"), report);
+                "no row is at the ON point onBag/List.length(v.xs) = 1 (invariant Bag #1)"), report);
     }
 
     /** Both ends, so that this is read as the rules being met and not as a floor being special. */
@@ -176,8 +177,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void bothEndsOfARecordsOwnBoundAreEdges() {
         String report = report(MODEL);
 
-        assertTrue(report.contains("no row is at onBoth/v.n = 1 (invariant Both (min))"), report);
-        assertTrue(report.contains("no row is at onBoth/v.n = 10 (invariant Both (max))"), report);
+        assertTrue(report.contains("no row is at the ON point onBoth/v.n = 1 (invariant Both #1)"), report);
+        assertTrue(report.contains("no row is at the ON point onBoth/v.n = 10 (invariant Both #2)"), report);
     }
 
     /** A clause governing the position from the declaration it sits inside reaches it, and names
@@ -187,7 +188,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         String report = report(MODEL);
 
         assertTrue(report.contains(
-                "no row is at onOuter/v.inner.n = 1 (invariant Inner (min))"), report);
+                "no row is at the ON point onOuter/v.inner.n = 1 (invariant Inner #1)"), report);
     }
 
     /** And the outer record's own clause where it is the tighter of the two. */
@@ -196,7 +197,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         String report = report(MODEL);
 
         assertTrue(report.contains(
-                "no row is at onTight/v.inner.n = 5 (invariant Tight (min))"), report);
+                "no row is at the ON point onTight/v.inner.n = 5 (invariant Tight #1)"), report);
     }
 
     /**
@@ -258,19 +259,19 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      */
     @Test
     void aWrappersRuleReachesAPositionInsideARecord() {
-        Map<String, BoundaryAssessment> lines = linesOf(WRAPPERS, "wrappers");
+        Map<String, BorderAssessment> lines = linesOf(WRAPPERS, "wrappers");
 
-        assertEquals("invariant Wrapped (min)", lines.get("onHeld/v.w.n = 1").origin());
-        assertEquals("invariant NonEmptyBag (min)",
-                lines.get("onHeldBag/List.length(v.b.xs) = 1").origin());
+        assertEquals("invariant Wrapped #1", lines.get("onHeld/v.w.n = 1").rule().named());
+        assertEquals("invariant NonEmptyBag #1",
+                lines.get("onHeldBag/List.length(v.b.xs) = 1").rule().named());
     }
 
     /** And through as many names as are worn, since a name wrapped round a value is not a step. */
     @Test
     void aWrappersRuleReachesThroughAStackOfNames() {
-        Map<String, BoundaryAssessment> lines = linesOf(WRAPPERS, "wrappers");
+        Map<String, BorderAssessment> lines = linesOf(WRAPPERS, "wrappers");
 
-        assertEquals("invariant W2 (min)", lines.get("onStacked/v.w.n = 2").origin());
+        assertEquals("invariant W2 #1", lines.get("onStacked/v.w.n = 2").rule().named());
     }
 
     /**
@@ -287,11 +288,11 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      */
     @Test
     void aNameWrappedRoundARecordReachesItsPositions() {
-        Map<String, BoundaryAssessment> lines = linesOf(WRAPPERS, "wrappers");
+        Map<String, BorderAssessment> lines = linesOf(WRAPPERS, "wrappers");
 
-        assertEquals("invariant Wrapped (min)", lines.get("onWrapped/v.n = 1").origin());
-        assertEquals("invariant NonEmptyBag (min)",
-                lines.get("onNonEmpty/List.length(v.xs) = 1").origin());
+        assertEquals("invariant Wrapped #1", lines.get("onWrapped/v.n = 1").rule().named());
+        assertEquals("invariant NonEmptyBag #1",
+                lines.get("onNonEmpty/List.length(v.xs) = 1").rule().named());
     }
 
     /**
@@ -299,6 +300,11 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      *
      * <p>The rule this is here to keep. Neither position is divided by it, so an edge derived from it
      * would be a partition of a number the author never bounded (#427).
+     *
+     * <p>And neither is said to be one the model divides no way. There is a rule about each of them
+     * — the one relating them — so what a report can say is that the rule does not divide either,
+     * which is where it is sent. An absence there would tell the author their model draws no
+     * distinction at a position their model has a rule about (issue #772).
      */
     @Test
     void aClauseRelatingTwoPositionsPlacesNoEdge() {
@@ -308,9 +314,9 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                   onSpan                   implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not measured (no partition axis was derived at any position)
-                      · not derivable: v.startsAt
-                      · not derivable: v.endsAt
-                    boundary    not measured (no line was derived at any position)
+                      · not read: v.startsAt (the comparison relates it to another position rather than dividing it)
+                      · not read: v.endsAt (the comparison relates it to another position rather than dividing it)
+                    border      not measured (no line was derived at any position)
                 """), report);
     }
 
@@ -319,14 +325,14 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aBoundAgainstAnotherFieldPlacesNoEdge() {
         String report = report(MODEL);
 
-        assertFalse(report.contains("no row is at onFloor/"), report);
+        assertFalse(report.contains("point onFloor/"), report);
         assertTrue(report.contains("""
                   onFloor                  implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not measured (no partition axis was derived at any position)
-                      · not derivable: v.n
-                      · not derivable: v.min
-                    boundary    not measured (no line was derived at any position)
+                      · not read: v.n (the comparison relates it to another position rather than dividing it)
+                      · not read: v.min (the comparison relates it to another position rather than dividing it)
+                    border      not measured (no line was derived at any position)
                 """), report);
     }
 
@@ -342,8 +348,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aRangeNarrowedByAnotherPositionsBoundIsNotAnEdge() {
         String report = report(MODEL);
 
-        assertTrue(report.contains("no row is at onR/v.b = 10 (invariant R (max))"), report);
-        assertFalse(report.contains("no row is at onR/v.a"), report);
+        assertTrue(report.contains("no row is at the ON point onR/v.b = 10 (invariant R #2)"), report);
+        assertFalse(report.contains("point onR/v.a"), report);
     }
 
     /**
@@ -358,8 +364,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aRangeNarrowedThroughAnotherPositionsTypeIsNotAnEdgeEither() {
         String report = report(MODEL);
 
-        assertTrue(report.contains("no row is at onUnder/v.b = 10 (invariant B (max))"), report);
-        assertFalse(report.contains("no row is at onUnder/v.a"), report);
+        assertTrue(report.contains("no row is at the ON point onUnder/v.b = 10 (invariant B #1)"), report);
+        assertFalse(report.contains("point onUnder/v.a"), report);
     }
 
     /** The rules written on newtypes are measured as they were. A repair that moved these rather
@@ -369,10 +375,10 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         String report = report(ON_NEWTYPES);
 
         assertTrue(report.contains(
-                "no row is at onName/String.length(v) = 1 (invariant Name (min))"), report);
+                "no row is at the ON point onName/String.length(v) = 1 (invariant Name #1)"), report);
         assertTrue(report.contains(
-                "no row is at onCart/List.length(c) = 1 (invariant Cart (min))"), report);
-        assertTrue(report.contains("no row is at onHop/v.n = 1 (invariant Count (min))"), report);
+                "no row is at the ON point onCart/List.length(c) = 1 (invariant Cart #1)"), report);
+        assertTrue(report.contains("no row is at the ON point onHop/v.n = 1 (invariant Count #1)"), report);
     }
 
     /**
@@ -386,7 +392,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aTighterRecordClauseOwnsTheLineRatherThanNarrowingIt() {
         String report = report(ON_NEWTYPES);
 
-        assertTrue(report.contains("no row is at onMoved/v.n = 5 (invariant Moved (min))"), report);
+        assertTrue(report.contains("no row is at the ON point onMoved/v.n = 5 (invariant Moved #1)"), report);
         assertFalse(report.contains("within Moved"), report);
     }
 
@@ -433,7 +439,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aRuleFromOutsideDoesNotChooseWhichCoordinateAPositionIsMeasuredAt() {
         String report = report(TWO_WAYS);
 
-        assertTrue(report.contains("no row is at onPerson/v.name = m (invariant Name (min))"),
+        assertTrue(report.contains("no row is at the ON point onPerson/v.name = m (invariant Name #1)"),
                 report);
         assertFalse(report.contains("String.length(v.name"),
                 "the record's clause states an end on a coordinate this position is not measured at:\n"
@@ -444,9 +450,11 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      * And where the type chose nothing, two such rules choose nothing either.
      *
      * <p>Both coordinates of `s` are bounded and neither by `s`'s own type, so which of them this
-     * position is measured at is a question with no answer here (ADR-0090). Left as a position
-     * nothing divides, which claims nothing; taking whichever was looked at first would put a line
-     * the author can read beside one they cannot see.
+     * position is measured at is a question with no answer here (ADR-0090). Nothing is divided and
+     * nothing is claimed about the model either: two rules are written about this position and what
+     * a report says is that they were not read, which sends the author to a limit of this compiler
+     * rather than to a distinction their model does not draw. Taking whichever was looked at first
+     * would put a line the author can read beside one they cannot see.
      */
     @Test
     void rulesAboutBothCoordinatesLeaveThePositionUndivided() {
@@ -456,8 +464,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                   onR                      implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not measured (no partition axis was derived at any position)
-                      · not derivable: v.s
-                    boundary    not measured (no line was derived at any position)
+                      · not read: v.s (a rule about it is one this compiler did not read)
+                    border      not measured (no line was derived at any position)
                 """), report);
     }
 
@@ -550,7 +558,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      */
     @Test
     void aLineTheRecordPlacedIsSettledLikeOneOnANewtype() {
-        Map<String, BoundaryAssessment> lines = new LinkedHashMap<>();
+        Map<String, BorderAssessment> lines = new LinkedHashMap<>();
         Compilation compilation = Compilation.ofSource(UNMEETABLE, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
@@ -562,14 +570,20 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                         "onFlagsR/Set.size(v.s) = 2", "onNumbersR/Set.size(v.s) = 3",
                         "onTextR/String.length(v.s) = 3"),
                 lines.keySet(), "one line each, and the record's is on the count of the field");
-        assertTrue(lines.get("onFlagsN/Set.size(v) = 2").writability().known(),
+        assertTrue(onPoint(lines, "onFlagsN/Set.size(v) = 2").writability().known(),
                 "two booleans are two booleans");
-        assertTrue(lines.get("onFlagsR/Set.size(v.s) = 2").writability().known(),
+        assertTrue(onPoint(lines, "onFlagsR/Set.size(v.s) = 2").writability().known(),
                 "and writing the rule on the record does not take one away");
-        assertTrue(lines.get("onNumbersN/Set.size(v) = 3").writability().known(),
+        assertTrue(onPoint(lines, "onNumbersN/Set.size(v) = 3").writability().known(),
                 "three integers are three integers");
-        assertTrue(lines.get("onNumbersR/Set.size(v.s) = 3").writability().known(),
+        assertTrue(onPoint(lines, "onNumbersR/Set.size(v.s) = 3").writability().known(),
                 "and a record holding them is a value that can be built");
+    }
+
+    /** The point on the line of the border named {@code label}, which is what a bound owes. */
+    private static souther.compiler.query.ItemAssessment.Owed onPoint(
+            Map<String, BorderAssessment> lines, String label) {
+        return lines.get(label).owedAt(PointRole.ON);
     }
 
     /**
@@ -627,14 +641,14 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      */
     @Test
     void aWrappersRelationNarrowsThePositionsItPlacesNoEdgeOn() {
-        Map<String, BoundaryAssessment> lines = linesOf(WRAPPED_RELATION, "wrappedrelation");
+        Map<String, BorderAssessment> lines = linesOf(WRAPPED_RELATION, "wrappedrelation");
 
         assertTrue(lines.containsKey("onBare/v.a = 10"),
                 "`a` stops where its own type stops when nothing narrows it: " + lines.keySet());
         assertTrue(lines.containsKey("onWrapped/v.a = 9"),
                 "and one step lower under the wrapper's clause: " + lines.keySet());
-        assertEquals("invariant A (max) within Wrapped",
-                lines.get("onWrapped/v.a = 9").origin(),
+        assertEquals("invariant A #1 within Wrapped",
+                lines.get("onWrapped/v.a = 9").rule().named(),
                 "the wrapper moved the edge `A` drew and did not draw one");
     }
 
@@ -649,10 +663,10 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      */
     @Test
     void aNarrowedEdgeNamesTheDeclarationThatMovedItAndNotTheValueItSitsIn() {
-        Map<String, BoundaryAssessment> lines = linesOf(WRAPPED_RELATION, "wrappedrelation");
+        Map<String, BorderAssessment> lines = linesOf(WRAPPED_RELATION, "wrappedrelation");
 
-        assertEquals("invariant A (max) within Wrapped",
-                lines.get("onHeld/v.w.a = 9").origin(),
+        assertEquals("invariant A #1 within Wrapped",
+                lines.get("onHeld/v.w.a = 9").rule().named(),
                 "the clause is `Wrapped`'s wherever a `Wrapped` is held: " + lines.keySet());
     }
 
@@ -713,9 +727,9 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      */
     @Test
     void aRelationThatMovedNoEndDoesNotNameOne() {
-        Map<String, BoundaryAssessment> lines = linesOf(WHO_HELD_IT, "whoheldit");
+        Map<String, BorderAssessment> lines = linesOf(WHO_HELD_IT, "whoheldit");
 
-        assertEquals("invariant A (max) within Inner", lines.get("onOuter/v.a = 7").origin(),
+        assertEquals("invariant A #1 within Inner", lines.get("onOuter/v.a = 7").rule().named(),
                 "`Outer`'s clause reaches nothing `a` had not already passed");
     }
 
@@ -732,20 +746,20 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      */
     @Test
     void aCandidateThatHoldsNothingIsOutEvenWhereNoOneCandidateHoldsIt() {
-        Map<String, BoundaryAssessment> lines = linesOf(WHO_HELD_IT, "whoheldit");
+        Map<String, BorderAssessment> lines = linesOf(WHO_HELD_IT, "whoheldit");
 
-        assertEquals("invariant A (max) within Again or Twice",
-                lines.get("onIdle/v.a = 7").origin(),
+        assertEquals("invariant A #1 within Again or Twice",
+                lines.get("onIdle/v.a = 7").rule().named(),
                 "`Idle`'s clause moves this end nowhere");
     }
 
     /** And the two ends of one position are two answers. */
     @Test
     void eachEndIsHeldByWhicheverDeclarationHoldsIt() {
-        Map<String, BoundaryAssessment> lines = linesOf(WHO_HELD_IT, "whoheldit");
+        Map<String, BorderAssessment> lines = linesOf(WHO_HELD_IT, "whoheldit");
 
-        assertEquals("invariant N (min) within Both", lines.get("onBoth/v.n = 3").origin());
-        assertEquals("invariant N (max) within Upper", lines.get("onBoth/v.n = 7").origin());
+        assertEquals("invariant N #1 within Both", lines.get("onBoth/v.n = 3").rule().named());
+        assertEquals("invariant N #2 within Upper", lines.get("onBoth/v.n = 7").rule().named());
     }
 
     /** A length floor over an element type nothing inhabits. Its own module, since a declaration that
@@ -773,8 +787,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      */
     @Test
     void aLengthOverSomethingUninhabitedIsNotProvenByTheRange() {
-        BoundaryAssessment line = linesOf(UNINHABITED, "uninhabited")
-                .get("onLoopyR/List.length(v.xs) = 1");
+        souther.compiler.query.ItemAssessment.Owed line =
+                onPoint(linesOf(UNINHABITED, "uninhabited"), "onLoopyR/List.length(v.xs) = 1");
 
         assertFalse(line.writability().known(),
                 "nothing inhabits `Loop`, so nothing holds a list of one");
@@ -795,11 +809,11 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     }
 
     /** Every line one module draws, by the behavior and label it is reported under. */
-    private static Map<String, BoundaryAssessment> linesOf(String source, String module) {
+    private static Map<String, BorderAssessment> linesOf(String source, String module) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
-        Map<String, BoundaryAssessment> lines = new LinkedHashMap<>();
+        Map<String, BorderAssessment> lines = new LinkedHashMap<>();
         compilation.db().ask(new Adequacy.Coverage(module)).value()
                 .forEach((behavior, evidence) -> evidence.boundaries()
                         .forEach(line -> lines.put(behavior + "/" + line.label(), line)));

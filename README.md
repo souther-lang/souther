@@ -67,6 +67,13 @@ mvn install
 
 That executable is the `souther-cli` module: the compiler, the runtime, and their dependencies in one really-executable jar (a launcher stub prepended to an uber jar), so no classpath and no `java -jar` are needed.
 
+`souther init` writes a project rather than leaving one to be copied from an example. It takes the coordinate — a group and an artifact are yours to decide — and writes a build that already declares the Souther plugin, a model, the `example` rows covering it, and a Java test that reaches the generated types, so `mvn test` and `souther examples` both answer on the first run. `--build gradle` writes a Gradle build instead. Run inside a project that already has a `pom.xml` or a `build.gradle.kts`, it reads the coordinate out of that build and adds a source directory and the plugin declaration to it. Nothing already written is overwritten, and what it left alone it says.
+
+```sh
+souther init com.example:hello
+cd hello && mvn test
+```
+
 To try a behavior without writing any Java, `souther run` compiles a `.sou` in memory and drives one behavior: it decodes the `--input` JSON through the behavior's derived decoders, applies it, and prints the result through its derived encoder. A single file run on its own may omit the `module` header — it is named after the file (ADR-0043).
 
 ```sh
@@ -93,6 +100,23 @@ java -jar souther-bench/target/souther-bench.jar
 # One measurement at a time: cold, warm, phase, edit, scale, run.
 java -jar souther-bench/target/souther-bench.jar phase edit
 ```
+
+`souther-compiler` carries a conformance corpus: a model written for this compiler, held to reaching every top-level form, every reserved word and every standard library module the language declares, and checked against what the compiler answered about it last — the whole adequacy report and every diagnostic, written down beside the sources. A change that moves an answer is a change to those documents, made in the commit that moved it. This is what answers "did this break a model of the size someone writes"; running the examples repository is not part of it.
+
+```sh
+# Everything the corpus is held to. Ten seconds after an edited compiler source.
+mvn -pl souther-compiler test -Dtest='souther.compiler.conformance.*Test'
+
+# One corpus while iterating.
+mvn -pl souther-compiler test -Dtest='souther.compiler.conformance.*Test' \
+  -Dsouther.conformance.corpus=catalog
+
+# Take up what a deliberate change did to the answers, then read the diff and commit it.
+mvn -pl souther-compiler test -Dtest='souther.compiler.conformance.*Test' \
+  -Dsouther.conformance.update=true
+```
+
+The last one rewrites the expected documents and then fails: a run that rewrote what it was going to be measured against has not measured anything.
 
 To integrate Souther into an application's Maven build, configure `SoutherProcessor` as an annotation processor. The [examples repository](https://github.com/souther-lang/examples) contains that configuration and examples using the generated types from Java, Kotlin, and Clojure boundaries (Spring Boot, jOOQ, Pedestal).
 

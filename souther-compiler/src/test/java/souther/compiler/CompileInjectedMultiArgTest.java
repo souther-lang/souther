@@ -84,11 +84,11 @@ class CompileInjectedMultiArgTest {
                 behavior send : (a: A, b: B) -> Ok | Rejected
                 """;
         Map<String, byte[]> classes = Compiler.compile(src);
-        assertTrue(classes.containsKey("demo.SendResult"),
+        assertTrue(classes.containsKey(Emitted.result("demo", "send")),
                 "the union output's sealed interface is generated: " + classes.keySet());
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
         Class<?> send = loader.loadClass("demo.Send");
-        assertEquals(loader.loadClass("demo.SendResult"),
+        assertEquals(loader.loadClass(Emitted.result("demo", "send")),
                 send.getMethod("apply", loader.loadClass("demo.A"), loader.loadClass("demo.B"))
                         .getReturnType());
     }
@@ -101,7 +101,7 @@ class CompileInjectedMultiArgTest {
                 data Rejected = { why: String }
                 behavior now : () -> Ok | Rejected
                 """;
-        assertTrue(Compiler.compile(src).containsKey("demo.NowResult"),
+        assertTrue(Compiler.compile(src).containsKey(Emitted.result("demo", "now")),
                 "a zero-input injected behavior's union output needs the same interface");
     }
 

@@ -43,7 +43,7 @@ class CompileFilterMapTest {
                 Map.of("id", "i-1", "assignee", "kawasima"),
                 Map.of("id", "i-2"),
                 Map.of("id", "i-3", "assignee", "aoyagi"))));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
 
         assertEquals(List.of("kawasima", "aoyagi"), out.get("names"),
@@ -69,7 +69,7 @@ class CompileFilterMapTest {
         Object in = Codecs.decoded(loader, "demo.In", Map.of(
                 "wanted", List.of("apple", "nope", "orange"),
                 "stock", Map.of("apple", 3L, "orange", 5L)));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
 
         assertEquals(List.of(3L, 5L), out.get("found"));
@@ -158,7 +158,7 @@ class CompileFilterMapTest {
                 Map.of("id", "i-1", "assignee", "kawasima"),
                 Map.of("id", "i-2"),
                 Map.of("id", "i-3", "assignee", "aoyagi"))));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
 
         assertEquals(List.of("kawasima", "aoyagi"), out.get("names"));

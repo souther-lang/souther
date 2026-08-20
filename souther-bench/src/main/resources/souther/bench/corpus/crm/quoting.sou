@@ -222,9 +222,7 @@ behavior buildQuote : (number: QuoteNumber, opp: PerceptionAnalysis, lines: List
                        issuedOn: Date, validity: Int)
         -> Quote | NoLines | DuplicateProduct | ValidityOutOfRange
          | LineDiscountOverCap | BlendedDiscountOverCap
-    constructs Quote, QuoteLine, QuoteLines, Quantity, UnitPrice, DiscountRate, Amount,
-               ValidityDays, NotSubmitted, NoLines, DuplicateProduct, ValidityOutOfRange,
-               LineDiscountOverCap, BlendedDiscountOverCap
+    constructs Quote, QuoteLine, QuoteLines, Quantity, UnitPrice, DiscountRate, Amount, ValidityDays
 
 let buildQuote (number, opp, lines, issuedOn, validity) = {
     guard List.all(r -> r.quantity >= 1, lines) else NoLines
@@ -272,7 +270,7 @@ let roleFor (quote: Quote): List<ApproverRole> = {
 }
 
 behavior approvalNeeded : (quote: Quote) -> WithinAuthority | NeedsApproval
-    constructs WithinAuthority, NeedsApproval, DiscountRate, SalesManager, RegionalVp, Cfo
+    constructs NeedsApproval, DiscountRate
 
 let approvalNeeded (quote) =
     match List.get(0, roleFor(quote)) with
@@ -343,7 +341,7 @@ behavior approverFor : (role: ApproverRole) -> UserId
 behavior submitForApproval : (quote: Quote, on: Date) -> Quote | AlreadySubmitted | NothingToApprove
     depends on approverFor
     // The role and the worst discount are what `approvalNeeded` built, carried through.
-    constructs Quote, PendingApproval, AutoApproved, AlreadySubmitted, NothingToApprove
+    constructs Quote, PendingApproval
 
 // Whether this quote needs approving is `approvalNeeded`'s answer, so this behavior asks it rather than
 // reading the matrix a second time: a behavior whose own requirement set is empty is called by name.
@@ -385,7 +383,7 @@ example submitForApproval
 // the requirement is a case rather than an abort because it is a form somebody has to fill in again.
 behavior decideApproval : (quote: Quote, approver: UserId, on: Date, verdict: Verdict, note: String)
         -> Quote | NotPending | RejectionNoteMissing
-    constructs Quote, ApprovedQuote, RejectedQuote, RejectionNote, NotPending, RejectionNoteMissing
+    constructs Quote, ApprovedQuote, RejectedQuote, RejectionNote
 
 let decideApproval (quote, approver, on, verdict, note) =
     match quote.approval with
@@ -410,7 +408,7 @@ let decideApproval (quote, approver, on, verdict, note) =
 // Decided, the inner one reaches ApprovedQuote, and every other state is a case the caller has to handle
 // rather than a boolean it can read the wrong way round.
 behavior acceptQuote : (quote: Quote, on: Date) -> AcceptedQuote | QuoteExpired | ApprovalMissing
-    constructs AcceptedQuote, QuoteExpired, ApprovalMissing
+    constructs AcceptedQuote, QuoteExpired
 
 let acceptQuote (quote, on) = {
     guard Date.daysBetween(on, quote.expiresOn) >= 0
@@ -451,7 +449,7 @@ example acceptQuote
 // again, so the authority to state it has to be given again. A quote that has not expired is not renewed —
 // that is a case, because asking to renew a live quote is a mistake worth naming.
 behavior renewQuote : (quote: Quote, on: Date, validity: Int) -> Quote | StillValid | ValidityOutOfRange
-    constructs Quote, ValidityDays, NotSubmitted, StillValid, ValidityOutOfRange
+    constructs Quote, ValidityDays
 
 let renewQuote (quote, on, validity) = {
     guard Date.daysBetween(quote.expiresOn, on) >= 1 else StillValid

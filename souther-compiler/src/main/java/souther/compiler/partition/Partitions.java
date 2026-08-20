@@ -1,37 +1,43 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
-import souther.compiler.check.HelperInvariants;
+import souther.compiler.check.ClauseHelpers;
 import souther.compiler.check.Shape;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.check.FieldDomains;
-import souther.compiler.check.InvariantBound;
+import souther.compiler.check.Rules;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.codegen.InvariantConstraints;
-import souther.compiler.diag.SourceRef;
+import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.Position;
+import souther.compiler.inputs.StructuralInspection;
+import souther.compiler.inputs.TypeBounds;
+import souther.compiler.inputs.Membership;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.UnreadRule;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.values.AdmissibleSet;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
-import souther.compiler.types.ValueName;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeReachName;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * The equivalence classes a model already states, read off the types a behavior takes.
@@ -42,11 +48,6 @@ import java.util.Optional;
  * that would measure coverage of a rule the model never stated and report a gap for failing to test it.
  */
 public final class Partitions {
-
-    /** How deep a product is taken apart. Two levels reach a field of a record a parameter holds,
-     * which is where domain rules are written; below that a report stops being about anything the
-     * author would recognise as one input. */
-    static final int MAX_DEPTH = 2;
 
     /** How many axes one behavior is measured at. Past this the pairs are more than a person reads. */
     static final int MAX_AXES = 12;
@@ -77,8 +78,10 @@ public final class Partitions {
                                java.util.Set<NumericTerm> uncertain,
                                List<UndividedPosition> undivided,
                                List<UnreadRule> unread,
-                               List<BoundaryObligation> between) {
+                               List<Border> between,
+                               List<GuardThresholds.Guards.AtAPosition> compared) {
         public Partitioning {
+            compared = List.copyOf(compared);
             axes = List.copyOf(axes);
             omitted = List.copyOf(omitted);
             domains = Map.copyOf(domains);
@@ -119,26 +122,23 @@ public final class Partitions {
         }
     }
 
-    /** The axes of one behavior. {@code sig} says the types; {@code behavior} says the parameter names,
-     * which is what a path is written from. */
-    public static Partitioning of(Ast.SpecBehavior behavior, Sig sig, Symbols symbols,
-                                  Exclusions excluded) {
+    /**
+     * The axes of one behavior, derived from the one reading of its input.
+     *
+     * <p>Nothing is read here. Which positions the input has and what can stand at each of them is
+     * {@link InputDomain}'s, asked once and read by every measure; what this adds is which of them
+     * an axis is drawn at, what each class is called and how a row for it is written.
+     *
+     * @param behavior what the axes are named after, which is the behavior the reading was made for
+     */
+    public static Partitioning of(String behavior, InputDomain inputs, Symbols symbols) {
         List<Axis> found = new ArrayList<>();
         Map<NumericTerm, NumericDomain.Bounds> domains = new LinkedHashMap<>();
         java.util.Set<NumericTerm> uncertain = new java.util.LinkedHashSet<>();
         List<UnreadRule> unread = new ArrayList<>();
-        for (int i = 0; i < sig.inputTypes().size() && i < behavior.params().size(); i++) {
-            // One reading per parameter, not one per record met on the way down. A clause on the
-            // outer record relates positions at any depth it can name, and rebuilding the reading at
-            // each record is how `interval.startsAt < cap` stopped reaching `interval.startsAt`.
-            Type type = sig.inputTypes().get(i);
-            walk(behavior.name(), TermPath.of(behavior.params().get(i).name()), type,
-                    0, symbols, found,
-                    new Placed(readAs(type, symbols), fieldDomainsOf(type, symbols)),
-                    domains, uncertain, unread);
+        for (Position position : inputs.positions()) {
+            axisOf(behavior, position, symbols, found, domains, uncertain, unread);
         }
-        found.replaceAll(axis -> axis.excluding(
-                excluded.at(axis.path()).stream().map(TypeName::name).toList()));
         List<Axis> kept = new ArrayList<>();
         List<OmittedAxis> omitted = new ArrayList<>();
         int counted = 0;
@@ -166,7 +166,7 @@ public final class Partitions {
             keep(new ArrayList<>(), measured, axis, null, unread);
         }
         return new Partitioning(kept, omitted, domains, uncertain, undividedIn(measured),
-                List.copyOf(unread), List.of());
+                List.copyOf(unread), List.of(), List.of());
     }
 
     /**
@@ -281,7 +281,33 @@ public final class Partitions {
                                               Symbols symbols,
                                               List<UnreadRule> unread,
                                               List<GuardThresholds.Guards.Singled> singled,
-                                              List<BoundaryObligation> between) {
+                                              List<Border> between) {
+        return withThresholds(base, thresholds, symbols, unread, singled, between,
+                souther.compiler.check.PathReachability.Answers.NONE, List.of());
+    }
+
+    /**
+     * The same, told what arrives at each comparison.
+     *
+     * <p>A comparison one of whose outcomes nothing takes draws no line. It is written, it is read,
+     * and what it divides is nothing that gets there — {@code guard a.value < 6000} under
+     * {@code guard a.value < 5000} puts a line at six thousand through values that are all under
+     * five, and a report asking for a row either side of it is asking for a row nobody can write.
+     *
+     * <p>Asked of the reading of the whole body, not of the position's own values. Whether a line
+     * falls inside what the position can hold is the other question and is asked below: that one is
+     * what the classes are built out of, and a cut outside the interval it divides is not a partition
+     * of anything. Both are needed and neither is the other — a line well inside a position's values
+     * can still be one nothing on the way to it can be either side of.
+     */
+    public static Partitioning withThresholds(Partitioning base, List<Threshold> thresholds,
+                                              Symbols symbols,
+                                              List<UnreadRule> unread,
+                                              List<GuardThresholds.Guards.Singled> singled,
+                                              List<Border> between,
+                                              souther.compiler.check.PathReachability.Answers
+                                                      arrives,
+                                              List<GuardThresholds.Guards.AtAPosition> compared) {
         // Both producers of one kind of evidence. What a body compared and what a type's own rules
         // bound are read by different readers and answer the same question, so a position either of
         // them wrote about and neither could turn into a line is named once, whichever wrote it.
@@ -305,9 +331,11 @@ public final class Partitions {
                 // everything else. Ranges here would ask the rows for a distinction between the two
                 // sides of a value the behavior treats alike.
                 NumericDomain.Bounds only = domainOf(base, term);
-                keep(out, measured, axis.carrying(
-                        singledClasses(points, term, axis.type(), only, symbols),
-                        mergedPoints(axis.cuts(), points, term.carrierAt(axis.type(), symbols))),
+                NumericTerm at = term;
+                Axis here2 = axis;
+                keep(out, measured, refine(axis,
+                        () -> singledClasses(points, at, here2.type(), only, symbols),
+                        mergedPoints(axis.cuts(), points, at.carrierAt(axis.type(), symbols))),
                         new BodyCutInspection.Evidence(), rules);
                 continue;
             }
@@ -336,23 +364,21 @@ public final class Partitions {
             // position stops short of is outside it as much as anything past it is.
             List<Threshold> reachable = here.stream()
                     .filter(t -> domain == null || domain.admits(t.value()))
+                    // And what the guards above it left. Only a proof drops a line: a comparison
+                    // this could not settle keeps its line and its rows, which is the direction that
+                    // leaves an author with work rather than with a report about a model of theirs
+                    // that is fine.
+                    // Asked of the comparison, where the rule is met by having produced one. A
+                    // clause has no comparison a path can arrive at: it is checked whenever the
+                    // behavior answers, so nothing about which branch a body took drops its line.
+                    .filter(t -> t.origin().comparisonSite().stream()
+                            .noneMatch(arrives::dividesNothing))
                     .toList();
             // What the term is, not what an invariant said about it. There is a bound to read only
             // where the type is a newtype carrying one, and a plain `Decimal` has none — read off the
             // bound, every such position would be called an integer and a threshold of `0.5m` would
             // be asked for its exact `long`. A size is a whole number whatever it is a size of.
             Carrier carrier = term.carrierAt(axis.type(), symbols);
-            // The ranges a cut leaves, where the position has no finer partition of its own. On an
-            // enumeration it has: the cases are the classes, and `s < Qualified` divides them into
-            // `{Prospecting}` and `{Qualified, Won}`, which is coarser than the cases. The meet of
-            // the two is the case partition, so the cut adds no class — and a class list rebuilt
-            // from the ranges would take away distinctions the model already made. The line is still
-            // a line and still owes its rows; only the classes stay as they were.
-            List<PartitionClass> classes = carrier instanceof Carrier.Ordinal ? List.of()
-                    : Intervals.classesOf(
-                            Intervals.of(reachable, domain == null ? null : domain.min(),
-                                    domain == null ? null : domain.max()),
-                            term, axis.type(), symbols);
             // Through `excluding`, so that a class list replaced by the intervals a threshold cuts
             // keeps only the exclusions it still has classes for.
             //
@@ -360,13 +386,52 @@ public final class Partitions {
             // a rule that went unread either: what it says was understood. So the answer there is
             // that the rules were exhausted, which is what keeps `Blocked` meaning that a
             // comparison could not be interpreted rather than everything that came to nothing.
-            keep(out, measured, axis.measuredAt(axis.id(), term).carrying(
-                    classes.isEmpty() ? axis.classes() : classes,
+            NumericDomain.Bounds within = domain;
+            NumericTerm measuredAt = term;
+            Axis read = axis;
+            keep(out, measured, refine(axis.measuredAt(axis.id(), term),
+                    () -> Intervals.classesOf(
+                            Intervals.of(reachable, within == null ? null : within.min(),
+                                    within == null ? null : within.max()),
+                            measuredAt, read.type(), symbols),
                     merged(axis.cuts(), reachable, carrier)),
                     reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), rules);
         }
         return new Partitioning(out, base.omitted(), domainsOf(base, out), base.uncertain(),
-                undividedIn(measured), List.copyOf(rules), between);
+                undividedIn(measured), List.copyOf(rules), between, compared);
+    }
+
+    /**
+     * The same position, with what a body's rules add to it.
+     *
+     * <p>Refinement and not replacement. What a body draws is evidence arriving after the model's
+     * own, and evidence only ever tells a position's values apart more finely — so where the model
+     * already divides the position, the lines a body draws are lines among those classes and the
+     * classes stay as they are. Rebuilt from the lines, a position the model divides three ways
+     * would come back divided two ways, and the loss reads as the model never having stated the
+     * third.
+     *
+     * <p>Which is a rule about the classes and not about the carrier. It stood as a test for an
+     * enumeration, being where it was first noticed; a position whose rules name the values it
+     * holds is divided just as finely and had no such test, so a {@code guard} over it replaced
+     * what the model states.
+     *
+     * <p>The two agree wherever the old one fired, and they agree by construction rather than by
+     * luck: an enumeration's cases are its classes, and a crossing never leaves a position whose
+     * type states classes without any ({@code LocalInspection}'s {@code constructibleAt}). So there
+     * is no position with an ordered carrier for these to be about, and ranges over the count an
+     * enumeration's cases are ordered by are never rebuilt into a partition of them.
+     *
+     * <p>The lines are taken either way. A line is still a line where it divides nothing new, and
+     * still owes its rows.
+     *
+     * @param otherwise the classes to use where the model divides the position no way, asked for
+     *                  only there — a position that already has classes has no use for them, and
+     *                  working them out would be a reading whose answer is thrown away
+     */
+    private static Axis refine(Axis axis, java.util.function.Supplier<List<PartitionClass>> otherwise,
+                               List<Cut> cuts) {
+        return axis.carrying(axis.derivable() ? axis.classes() : otherwise.get(), cuts);
     }
 
     /**
@@ -389,9 +454,9 @@ public final class Partitions {
         List<PartitionClass> classes = new ArrayList<>();
         for (Place value : values) {
             String written = carrier.written(value);
-            classes.add(PartitionClass.of(term + "/= " + written, "= " + written,
+            classes.add(classAt(term + "/= " + written, "= " + written,
                     holding(term, carrier, at -> at.sameAs(value)),
-                    RepresentativeSource.of(standing(type, carrier, value, symbols))));
+                    standing(type, carrier, value, symbols)));
         }
         Place other = carrier.somethingOtherThan(values, within);
         String label = "/= " + String.join(", ",
@@ -401,15 +466,25 @@ public final class Partitions {
                         holding(term, carrier, at -> values.stream().noneMatch(at::sameAs)),
                         "nothing here composed a value of this position other than the ones"
                                 + " singled out")
-                : PartitionClass.of(term + "/" + label, label,
+                : classAt(term + "/" + label, label,
                         holding(term, carrier, at -> values.stream().noneMatch(at::sameAs)),
-                        RepresentativeSource.of(standing(type, carrier, other, symbols))));
+                        standing(type, carrier, other, symbols)));
         return List.copyOf(classes);
+    }
+
+    /** A class over the one value that stands for it, or one nothing produces where there is no
+     *  such value — which is what a position wearing a name this module cannot write leaves. */
+    private static PartitionClass classAt(String id, String label, Classifier is,
+                                          FixtureTemplate standing) {
+        return standing == null
+                ? PartitionClass.ungeneratable(id, label, is,
+                        "nothing here can write a value of this position")
+                : PartitionClass.of(id, label, is, RepresentativeSource.of(standing));
     }
 
     /** A count written at a position, wearing every name that position declares. */
     private static FixtureTemplate standing(Type type, Carrier carrier, Place at, Symbols symbols) {
-        return Witnesses.wrapped(type, FixtureTemplate.on(carrier, at), symbols);
+        return Witnesses.wrapped(type, FixtureTemplate.on(carrier, at, symbols.scope()::reach), symbols);
     }
 
     /** A classifier that reads the term's count out of a row and answers about it. */
@@ -492,79 +567,35 @@ public final class Partitions {
     }
 
     /**
-     * A place both positions of a line between them can hold, or null where their rules leave none.
+     * The borders a position's rules drew, one per rule that drew a cut.
      *
-     * <p>What proves a row can be written on such a line. The line is where the two positions are
-     * equal, so a row on it writes one place at both — and whether one exists is the two positions'
-     * ranges read together, which is a question the rules answer without anything being built.
+     * <p>One entry per line and not per point. What each of them owes a row at, in each of the four
+     * roles the technique names, is the border's own answer — including the roles it owes nothing in
+     * and why. Built as a list of points instead, a role nobody was owed a row in and a role this
+     * reader forgot to build were the same thing.
      *
-     * <p>Which place a pair of ends gives up is {@link Carrier#somethingInside}'s single rule, so a
-     * range open at both ends answers the same way here as anywhere else, and a carrier whose values
-     * are strings answers it the way a carrier whose values count does.
-     *
-     * <p>Null is not a proof of the opposite. Two ranges that leave no place leave none, and that is a
-     * fact about the rules; a range this could not read in full is a range this did not read, and the
-     * caller is the one holding whether that happened.
+     * <p>Keeping a rule per cut means the same value can be owed three times. That is the point: an
+     * invariant and two guards that name one value are three rules, and a row that meets one of them
+     * has met one.
      */
-    public static Place commonPlace(Map<NumericTerm, NumericDomain.Bounds> domains,
-                                    BoundaryTarget.EqualTerms line) {
-        NumericDomain.Bounds on = domains.get(line.on());
-        NumericDomain.Bounds against = domains.get(line.against());
-        Endpoint min = Endpoint.lower(on == null ? null : on.min(),
-                against == null ? null : against.min());
-        Endpoint max = Endpoint.upper(on == null ? null : on.max(),
-                against == null ? null : against.max());
-        return line.carrier().somethingInside(min, max);
-    }
-
-    /**
-     * The values a row has to be written at, one per rule that drew a cut.
-     *
-     * <p>An invariant's bound is met by writing the value: outside it nothing can be constructed, so
-     * the edge is the only row there is to write. A guard's line has values on both sides, so it wants
-     * the value and its neighbour — and the neighbour only where the type has one to give.
-     */
-    public static List<BoundaryObligation> obligationsOf(Axis axis, Symbols symbols,
-                                                         NumericDomain.Bounds within) {
-        BoundaryDomain domain = axis.term().intervals(axis.type(), symbols);
-        List<BoundaryObligation> out = new ArrayList<>();
+    public static List<Border> bordersOf(Axis axis, Symbols symbols,
+                                         NumericDomain.Bounds within) {
+        List<Border> out = new ArrayList<>();
         for (Cut cut : axis.cuts()) {
-            // A line the position does not reach. The rule that drew it did so about the type, and
-            // what is left of the type here may stop short of it or leave the value out — `low < high`
-            // under one `[0, 1]` leaves `low` every value up to 1 and not 1 itself. Writing the value
-            // is how an edge is met, so where the value is refused there is nothing to write.
-            //
-            // Asked of the count, so every carrier is asked the same question. Asked of the value, a
-            // date came back as a value the range could say nothing about — which read as reachable,
-            // and put a row at an edge the record refuses.
-            boolean reachable = within == null || within.admits(cut.at());
+            // The carrier is the cut's, which is the one the rule was read on. Asked of the axis
+            // instead, a line drawn on a count taken of a position would be written back as a value
+            // of the position.
+            BoundaryTarget target = BoundaryTarget.at(
+                    new BorderQuantity.OfACoordinate(axis.id(), axis.term(), cut.carrier()),
+                    new Level.OnACarrier(cut.carrier(), cut.at()));
             for (OriginRef origin : cut.origins()) {
-                if (reachable) {
-                    out.add(new BoundaryObligation(
-                            new BoundaryTarget.AtPlace(axis.id(), cut.carrier(), cut.at()),
-                            origin, BoundaryObligation.BoundarySide.AT));
-                }
-                // A line that singles a value out has no neighbour to ask for: the values either
-                // side of it are one class, so a row over there is a row the class's own already is.
-                if (origin instanceof OriginRef.GuardOrigin guard && !guard.singles()) {
-                    // The other class's edge is the neighbour on the side the cut value is not on —
-                    // where that class has values. A guard at the end of what the position can hold
-                    // has nothing on one side of it, and a step off the end is a row nobody can write:
-                    // `value >= 10` under `x < 10` would be owed a 9. The cut itself stays either way,
-                    // because the comparison is still reached by a row written at the line.
-                    if (guard.valueBelongsBelow()) {
-                        domain.successor(cut.at())
-                                .filter(next -> within == null || within.admits(next))
-                                .ifPresent(next -> out.add(new BoundaryObligation(
-                                        new BoundaryTarget.AtPlace(axis.id(), cut.carrier(), next),
-                                        origin, BoundaryObligation.BoundarySide.ABOVE)));
-                    } else {
-                        domain.predecessor(cut.at())
-                                .filter(before -> within == null || within.admits(before))
-                                .ifPresent(before -> out.add(new BoundaryObligation(
-                                        new BoundaryTarget.AtPlace(axis.id(), cut.carrier(), before),
-                                        origin, BoundaryObligation.BoundarySide.BELOW)));
-                    }
+                // Null where the position does not reach the line at all, which is the line and not
+                // one of its points: the rule drew it about the type, and what is left of the type
+                // here may stop short of it — `low < high` under one `[0, 1]` leaves `low` every
+                // value up to 1 and not 1 itself.
+                Border border = Border.at(target, origin, within);
+                if (border != null) {
+                    out.add(border);
                 }
             }
         }
@@ -572,176 +603,95 @@ public final class Partitions {
     }
 
     /**
-     * One position, answered by the phases in the order that decides it.
+     * One position, turned into an axis or given up in favour of what is under it.
      *
-     * <p>The local reading first, whole: the classes the type states and the lines its rules draw
-     * come back as one answer, so what "local evidence ran out" means is a value rather than two
-     * empty lists to be noticed. Only where it ran out is the position asked what it is made of —
-     * a position its own type answered for is not descended into, whatever is under it, and that
-     * precedence is the arm this is written in rather than the order of two {@code if}s.
+     * <p>The local answer first, whole: the classes the position's declarations state and the lines
+     * its rules draw come back as one value, so what "local evidence ran out" means is an answer
+     * rather than two empty lists to be noticed. Only where it ran out does what the position is
+     * made of decide anything — a position its own declarations answered for keeps its axis,
+     * whatever is under it, and that precedence is the arm this is written in rather than the order
+     * of two {@code if}s.
      *
-     * <p>Of the structural answers only {@code Children} takes the position away: the walk goes on
-     * without it, and the classes belong to what is underneath. A leaf and a block both leave the
-     * position standing, pending what a body's rules say later.
+     * <p>Of the structural answers only {@code Children} takes the position away: the fields are
+     * positions of their own and were read as such, and the classes belong to them. A leaf and a
+     * block both leave the position standing, pending what a body's rules say later.
      *
-     * <p><b>A position with local evidence and children is intended and unreachable today.</b> Only
-     * a product has children, and a product carries neither classes — its type states no division —
-     * nor cuts, having no order for a rule to name a value on. So which of the two wins is a
-     * decision about a state the language cannot currently be in. It is written as a decision all
-     * the same: a field-level partition, a guard-derived class on a record, or an invariant over a
-     * whole product would inhabit it, and an implementation that descended because the position is
-     * structural would then lose evidence it had already read.
+     * <p><b>A position with local evidence and children is unreachable today, and is refused rather
+     * than resolved.</b> Only a product has children, and a product states no distinction — its type
+     * declares no division — and carries no cut, having no order for a rule to name a value on. A
+     * language that grew one would have this reader keeping the parent's axis while the reading kept
+     * its fields, and two readers of one input disagreeing about which positions there are is the
+     * thing this arrangement exists to stop.
      */
-    private static void walk(String behavior, TermPath path, Type type, int depth, Symbols symbols,
-                             List<Axis> out, Placed placed,
-                             Map<NumericTerm, NumericDomain.Bounds> domains,
-                             java.util.Set<NumericTerm> uncertain, List<UnreadRule> unread) {
-        // Once, and every phase asks of this reading: what the position's own type and rules say,
-        // and what is under it where they say nothing, are two questions put to one reading of it.
-        //
-        // The proof first, and before anything is read off the position. A shape a partition is not
-        // derived from is this compiler disagreeing with itself about what may stand at a position,
-        // and it is refused here — asked after the local phase instead, a position that produced
-        // classes was never checked at all, and the one case the type exists to make loud was the
-        // one that stayed quiet.
-        PartitionInput input = PartitionInput.of(TypeView.of(type, symbols));
-        LocalInspection local = LocalInspection.inspect(input, path, symbols, placed);
-        LocalReading reading = local.reading();
-        for (UnreadRule each : reading.unread()) {
+    private static void axisOf(String behavior, Position position, Symbols symbols,
+                               List<Axis> out, Map<NumericTerm, NumericDomain.Bounds> domains,
+                               java.util.Set<NumericTerm> uncertain, List<UnreadRule> unread) {
+        for (UnreadRule each : position.unreadRules()) {
             if (unread.stream().noneMatch(had -> had.equals(each))) {
                 unread.add(each);
             }
         }
-        NumericTerm term = reading.term();
+        NumericTerm term = position.term();
         AxisId id = AxisId.of(behavior, term);
-        if (reading.admissible() != null && !reading.admissible().isEmpty()) {
-            domains.put(term, reading.admissible());
+        if (position.numericDomain() != null && !position.numericDomain().saysNothing()) {
+            domains.put(term, position.numericDomain());
         }
-        switch (local) {
-            case LocalInspection.Evidence evidence -> {
-                if (evidence.cuts() instanceof CutEvidence.Present drawn && drawn.uncertain()) {
+        switch (LocalInspection.of(position, symbols)) {
+            case LocalPartition.Divided divided -> {
+                if (position.structure() instanceof StructuralInspection.Children) {
+                    throw new IllegalStateException(
+                            "`" + position.path() + "` both divides and is made of positions; the"
+                                    + " reading of an input and the axes drawn from it disagree"
+                                    + " about which positions there are");
+                }
+                if (divided.cuts() instanceof CutEvidence.Present drawn && drawn.uncertain()) {
                     uncertain.add(term);
                 }
-                out.add(new Axis(id, term, type, evidence.classes(), evidence.cuts().cuts()));
+                out.add(new Axis(id, term, position.type(), divided.classes(),
+                        divided.cuts().cuts(), divided.unanswered(), divided.rulesNotReached(),
+                        null, null));
             }
-            // Both local producers were asked and neither answered, which is what licenses asking
-            // what is under the position. The answer is not a verdict: a leaf and a block are both
-            // positions still to be answered for, and each carries what it is left with if nothing
-            // answers.
-            case LocalInspection.Exhausted _ -> {
-                switch (StructuralInspection.of(input.shape(), depth < MAX_DEPTH)) {
+            // Nothing local divides the position, which is what licenses asking what it is made of.
+            // Whether the reading got to the end of the rules is carried rather than acted on here:
+            // a position made of positions is given up in favour of what is under it either way,
+            // and a rule about the whole value that this could not read says nothing about which of
+            // its fields it would have divided.
+            case LocalPartition.Open _, LocalPartition.Blocked _ -> {
+                switch (position.structure()) {
                     // The one answer that takes the position away: what is under it is what the
-                    // classes belong to, and this position is not carried further.
-                    case StructuralInspection.Children children -> {
-                        for (Map.Entry<String, Type> field : children.under().entrySet()) {
-                            walk(behavior, path.then(field.getKey()), field.getValue(), depth + 1,
-                                    symbols, out, placed, domains, uncertain, unread);
-                        }
-                    }
+                    // classes belong to, and those positions were read on their own.
+                    case StructuralInspection.Children _ -> { }
                     // A leaf and a block are both positions still to be answered for, and each
-                    // carries what it is left with if nothing answers.
+                    // carries what it is left with if nothing answers — including a rule about this
+                    // position that the local reading could not take in, which is what keeps the
+                    // position from completing as one the model divides no way.
                     case StructuralInspection.Pending pending ->
-                            out.add(Axis.pendingAt(id, term, type, pending));
+                            out.add(Axis.pendingAt(id, term, position.type(),
+                                    position.unansweredQuestions(), position.rulesNotReached(), pending,
+                                    leftUnread(position)));
                 }
             }
         }
     }
 
 
-    /** The value a position is inside: what it is called, and what its rules leave each position of
-     * it able to hold. */
-    record Placed(TypeName value, FieldDomains domains) {
 
-        /** What is left for the position at {@code path}, which is read from the value this is of. */
-        NumericDomain.Bounds at(TermPath path) {
-            return path.fields().isEmpty() ? null
-                    : domains.at(String.join(".", path.fields()));
-        }
-
-        /** The ends the clauses reaching this value place on the coordinates at {@code path}, which
-         * is a different question from what {@link #at} leaves them. */
-        List<FieldDomains.Placed> placedAt(TermPath path) {
-            return path.fields().isEmpty() ? List.of()
-                    : domains.placedAt(String.join(".", path.fields()));
-        }
-
-        /** Which declarations' clauses are holding the end at {@code path}, on the side asked for. */
-        List<TypeName> narrowedBy(TermPath path, boolean lower) {
-            return path.fields().isEmpty() ? List.of()
-                    : domains.narrowedBy(String.join(".", path.fields()), lower);
-        }
-    }
-
-    /** The record a position holds, through the names it is written under: a value of
-     *  {@code data SlotN = Slot} is a {@code Slot}, and the clauses relating its fields are
-     *  {@code Slot}'s. */
-    private static TypeName recordIn(Type type, Symbols symbols) {
-        return TypeView.of(type, symbols).shape() instanceof Shape.Product product
-                ? product.name() : null;
-    }
 
     /**
-     * What the record a field sits in leaves each of its fields able to hold.
+     * What a position with no evidence is left with, where an absence may not be concluded from it.
      *
-     * <p>Of the record, and not of a name written over it. A clause relating two fields is written
-     * on the declaration that has them, so a position of {@code data PairN = Pair} is bounded by
-     * {@code Pair}'s clauses — read off the written name, the walk descended into the fields of a
-     * record whose rules about them it had just dropped.
+     * <p>The end reading's answer ahead of the value reading's, where both have one. A rule this
+     * read for a line and could not use is the nearer of the two: lifting that limit is what would
+     * give the position an axis, and the reading that turns clauses into sets of values has no word
+     * for a range at all — so it names one limit while the report's own line names another, and one
+     * position came back with two causes for one clause.
+     *
+     * <p>The first, as a comparison's is. What a reader has to lift is the first limit in the way.
      */
-    /**
-     * What the rules reaching a value of {@code type} leave and place, read under the name the
-     * signature wrote.
-     *
-     * <p>The written name and not the record under it. A name wrapped round a record is a place the
-     * same rule can be written — {@code data NonEmptyBag = Bag invariant List.length(value.xs) >= 1}
-     * states what {@code Bag} could have stated about its own field — and reading the record alone
-     * drops every clause of every name round it. What those clauses leave is read at the paths the
-     * record's own positions have, since a name wrapped round a value is not a step of the path.
-     *
-     * <p>One reading and not two. A wrapper's clauses place ends, project ranges onto the record's
-     * fields, and can be ones this could not read, and all three are answers about the same value:
-     * lifted as ends alone, a wrapper relating two of the record's fields narrowed nothing and a
-     * wrapper clause nothing could read left every edge under it looking certain.
-     */
-    private static FieldDomains fieldDomainsOf(Type type, Symbols symbols) {
-        TypeName read = readAs(type, symbols);
-        return read != null && symbols.get(read) instanceof Ast.Data data
-                ? FieldDomains.of(read, data, symbols) : FieldDomains.NONE;
+    private static BlockReason leftUnread(Position position) {
+        return position.unreadRules().isEmpty() ? position.valuesUnread()
+                : position.unreadRules().getFirst().why();
     }
-
-    /**
-     * The declaration a value of {@code type} is read under: the name the signature wrote where it
-     * names one, and the record beneath the names where it does not.
-     *
-     * <p>One name for both questions. Which declaration's rules reach the positions, and which
-     * declaration is said to have taken an edge in, are answers about the same value — read apart,
-     * an edge a wrapper narrowed was reported as narrowed by the record under it, which is a
-     * declaration that may have no clause about the pair at all.
-     */
-    private static TypeName readAs(Type type, Symbols symbols) {
-        TypeName written = nameOf(type);
-        return written != null && symbols.get(written) instanceof Ast.Data ? written
-                : heldIn(type, symbols);
-    }
-
-    /**
-     * The declaration whose rules reach the position: the record under the names where there is
-     * one, and the declaration as written where there is not.
-     *
-     * <p>A position that is not a record has no fields for a clause to relate, and its own rules
-     * still say what a reading of them could not turn into a range — which is what keeps an edge it
-     * refuses from being called writable. So the answer falls back to the name the signature wrote
-     * rather than to nothing.
-     */
-    private static TypeName heldIn(Type type, Symbols symbols) {
-        TypeName record = recordIn(type, symbols);
-        return record != null ? record : nameOf(type);
-    }
-
-    private static TypeName nameOf(Type type) {
-        return type instanceof Type.Ref ref ? ref.name() : null;
-    }
-
 
     // --- small helpers ----------------------------------------------------------------------------
 
@@ -774,14 +724,16 @@ public final class Partitions {
      */
     static List<FixtureTemplate> representativesOf(Type type, Symbols symbols,
                                                    NumericDomain.Bounds within,
-                                                   java.util.Set<TypeName> expanding) {
+                                                   java.util.Set<TypeSymbol> expanding) {
         if (type == null) {
             return List.of();
         }
         if (type == Type.INT || type == Type.DECIMAL) {
             Carrier carrier = type == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE;
             Place at = inside(within, carrier);
-            return at == null ? List.of() : List.of(FixtureTemplate.on(carrier, at));
+            FixtureTemplate standing = at == null ? null
+                    : FixtureTemplate.on(carrier, at, symbols.scope()::reach);
+            return standing == null ? List.of() : List.of(standing);
         }
         if (type == Type.STRING) {
             return List.of(FixtureTemplate.string("x"));
@@ -832,11 +784,16 @@ public final class Partitions {
         }
         // A newtype the model only bounds has no classes — everything outside the bound is refused at
         // construction — but it does have values, and the edge of the bound is one that builds.
-        if (type instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data data) {
-            return data.newtype()
+        if (type instanceof Type.Ref ref && symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data) {
+            if (!data.newtype()) {
+                return composed(ref.name(), symbols, expanding);
+            }
+            // A newtype nothing here names has no value anything here can write: the name goes on
+            // the value as it is written, and there is none to put on.
+            return symbols.scope().reach(ref.name()) instanceof TypeReachName.Written written
                     ? insideTheNewtype(ref.name(), symbols, within, expanding).stream()
-                            .map(t -> FixtureTemplate.newtype(ref.name(), t)).toList()
-                    : composed(ref.name(), symbols, expanding);
+                            .map(t -> FixtureTemplate.newtype(written, t)).toList()
+                    : List.of();
         }
         return List.of();
     }
@@ -851,7 +808,7 @@ public final class Partitions {
      * stood at was reported as one no value can be written at (issue #651).
      */
     static List<FixtureTemplate> standingFor(RepresentativeSource source, Symbols symbols,
-                                             java.util.Set<TypeName> expanding) {
+                                             java.util.Set<TypeSymbol> expanding) {
         return switch (source.evaluate()) {
             case RepresentativeSource.Evaluation.Values values -> values.written();
             case RepresentativeSource.Evaluation.Compose compose ->
@@ -880,16 +837,16 @@ public final class Partitions {
      * one position at a time. Whether the values may be held together is the decoder's answer — the
      * same answer every other candidate this offers is put through.
      */
-    private static List<FixtureTemplate> composed(TypeName record, Symbols symbols,
-                                                  java.util.Set<TypeName> expanding) {
-        if (expanding.contains(record) || !(symbols.get(record) instanceof Ast.Data data)) {
+    private static List<FixtureTemplate> composed(TypeSymbol record, Symbols symbols,
+                                                  java.util.Set<TypeSymbol> expanding) {
+        if (expanding.contains(record) || !(symbols.declarations().declaration(record.key()) instanceof Hir.Data data)) {
             return List.of();
         }
         Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
         if (fields.isEmpty()) {
             return List.of();   // a unit has no fields to compose, and is named rather than built
         }
-        java.util.Set<TypeName> inside = new LinkedHashSet<>(expanding);
+        java.util.Set<TypeSymbol> inside = new LinkedHashSet<>(expanding);
         inside.add(record);
         Map<String, Count> settled = new LinkedHashMap<>();
         FieldDomains left = FieldDomains.of(record, data, symbols, settled);
@@ -910,7 +867,8 @@ public final class Partitions {
                 left = FieldDomains.of(record, data, symbols, settled);
             }
         }
-        return List.of(FixtureTemplate.record(record, chosen));
+        return symbols.scope().reach(record) instanceof TypeReachName.Written written
+                ? List.of(FixtureTemplate.record(written, chosen)) : List.of();
     }
 
     /** How many of whatever counts a value the rules on it require it to hold, read where the rules
@@ -995,7 +953,7 @@ public final class Partitions {
     static List<FixtureTemplate> representativesHolding(Type type, Symbols symbols,
                                                         NumericDomain.Bounds within,
                                                         FieldDomains.Held held,
-                                                        java.util.Set<TypeName> expanding) {
+                                                        java.util.Set<TypeSymbol> expanding) {
         List<FixtureTemplate> candidates = new ArrayList<>();
         // Under every name the position wears, because a floor read off the record says how much the
         // value holds and not what it is written as: a field of a newtype over a list takes a list
@@ -1099,32 +1057,34 @@ public final class Partitions {
      * one of them is how a value that holds everywhere came to be written in one place and not the
      * other.
      */
-    static List<FixtureTemplate> insideTheNewtype(TypeName newtype, Symbols symbols) {
+    static List<FixtureTemplate> insideTheNewtype(TypeSymbol newtype, Symbols symbols) {
         return insideTheNewtype(newtype, symbols, null, java.util.Set.of());
     }
 
-    static List<FixtureTemplate> insideTheNewtype(TypeName newtype, Symbols symbols,
+    static List<FixtureTemplate> insideTheNewtype(TypeSymbol newtype, Symbols symbols,
                                                           NumericDomain.Bounds within,
-                                                          java.util.Set<TypeName> expanding) {
+                                                          java.util.Set<TypeSymbol> expanding) {
         // Already inside this one's own value, so the type is written in terms of itself and there is
         // nothing to hand back. Which is the answer and not a limit: no value of such a type exists.
         if (expanding.contains(newtype)) {
             return List.of();
         }
-        java.util.Set<TypeName> inside = new java.util.LinkedHashSet<>(expanding);
+        java.util.Set<TypeSymbol> inside = new java.util.LinkedHashSet<>(expanding);
         inside.add(newtype);
         Type base = TypeOps.newtypeInner(newtype, symbols);
         List<FixtureTemplate> candidates = new ArrayList<>();
 
         DeclaredBounds.Bounds own = DeclaredBounds.of(new Type.Ref(newtype), symbols);
         NumericDomain.Bounds bounds = TypeBounds.admissible(own, within);
-        Place held = bounds == null || bounds.isEmpty() ? null : inside(bounds, own.carrier());
-        if (held != null) {
-            candidates.add(FixtureTemplate.on(own.carrier(), held));
+        Place held = bounds == null || bounds.saysNothing() ? null : inside(bounds, own.carrier());
+        FixtureTemplate at = held == null ? null
+                : FixtureTemplate.on(own.carrier(), held, symbols.scope()::reach);
+        if (at != null) {
+            candidates.add(at);
         }
-        if (base == Type.STRING && symbols.get(newtype) instanceof Ast.Data data) {
-            for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
-                for (Ast.Expr each : HelperInvariants.conjunctsOf(clause.expr())) {
+        if (base == Type.STRING && symbols.declarations().declaration(newtype.key()) instanceof Hir.Data data) {
+            for (Hir.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
+                for (Hir.Expr each : ClauseHelpers.conjunctsOf(clause.expr())) {
                     if (InvariantConstraints.of(each, base).orElse(null)
                             instanceof InvariantConstraints.Pattern format) {
                         PatternValues.shortestAccepted(format.regex())
@@ -1181,7 +1141,7 @@ public final class Partitions {
      */
     static List<FixtureTemplate> inReserve(Type type, Symbols symbols,
                                            NumericDomain.Bounds within) {
-        if (!(type instanceof Type.Ref ref) || !(symbols.get(ref.name()) instanceof Ast.Data data)
+        if (!(type instanceof Type.Ref ref) || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data)
                 || !data.newtype()) {
             return List.of();
         }

@@ -3,6 +3,8 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.inputs.Membership;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
@@ -195,7 +197,9 @@ final class Intervals {
     private static List<FixtureTemplate> standingIn(NumericTerm of, Place inside, Type type,
                                                     Carrier carrier, Symbols symbols) {
         if (of instanceof NumericTerm.ValueOf) {
-            return List.of(Witnesses.wrapped(type, FixtureTemplate.on(carrier, inside), symbols));
+            FixtureTemplate standing = Witnesses.wrapped(type,
+                    FixtureTemplate.on(carrier, inside, symbols.scope()::reach), symbols);
+            return standing == null ? List.of() : List.of(standing);
         }
         int size = CountDomain.asCount(inside);
         if (size < 0) {

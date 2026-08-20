@@ -125,7 +125,7 @@ class AResultReportUnderlinesWhatSuppliedTheValueTest {
 
         Diagnostic report = only(source);
         assertEquals("if n > 0 then", lineUnderlined(source, report).trim());
-        assertEquals(1, report.region().sourceSpan(), "a construct is measured from its start");
+        assertEquals(1, ((Primary.InSource) report.primary()).place().region().sourceSpan(), "a construct is measured from its start");
     }
 
     /** A fold's step, written as a block, answers something the accumulator cannot hold. */
@@ -202,7 +202,7 @@ class AResultReportUnderlinesWhatSuppliedTheValueTest {
 
     /** The characters of {@code source} a report's primary region covers. */
     private static String underlined(String source, Diagnostic report) {
-        Region region = report.region();
+        Region region = ((Primary.InSource) report.primary()).place().region();
         assertEquals(region.start().line(), region.end().line(),
                 "an expression this test is about is one line's worth");
         int from = region.start().column() - 1;
@@ -211,6 +211,6 @@ class AResultReportUnderlinesWhatSuppliedTheValueTest {
 
     /** The whole source line a report's primary region begins on. */
     private static String lineUnderlined(String source, Diagnostic report) {
-        return source.lines().toList().get(report.region().start().line() - 1);
+        return source.lines().toList().get(((Primary.InSource) report.primary()).place().region().start().line() - 1);
     }
 }

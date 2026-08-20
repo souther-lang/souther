@@ -2,12 +2,15 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.query.Scopes;
+import souther.compiler.ast.Hir;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
@@ -63,20 +66,21 @@ class RowClassesTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Ast.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        TypeChecker.Checked checked = compilation.db().ask(new Bodies.Checked(module)).value();
+        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
 
-        Ast.SpecBehavior spec = (Ast.SpecBehavior) prepared.behaviors().stream()
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("submit")).findFirst().orElseThrow();
         Core body = checked.behaviorBodies().get("submit");
-        CoverageSites.Plan plan = CoverageSites.of("m.sou", checked.behaviorBodies());
-        List<String> parameters = spec.params().stream().map(Ast.Param::name).toList();
+        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
+        List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
         Partitions.Partitioning partitioning = Partitions.withThresholds(
-                Partitions.of(spec, sigs.get("submit"), symbols, Exclusions.NONE),
-                GuardThresholds.of("submit", body, plan, parameters, symbols).thresholds(),
+                Partitions.of(spec.name(), InputDomain.of(spec, sigs.get("submit"), symbols), symbols),
+                GuardThresholds.of("submit", body, plan,
+                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("submit"), symbols).thresholds(),
                 symbols);
 
         Output.Examples.Of observed = compilation.db()
@@ -158,10 +162,10 @@ class RowClassesTest {
                 assertInstanceOf(ObservedValue.Constructed.class, row.inputs().get(0));
         Map<String, ObservedValue> broken = new java.util.LinkedHashMap<>(request.fields());
         broken.put("cost", new ObservedValue.Truncated());
-        RowOutcome damaged = new RowOutcome(row.at(), row.target(), row.description(), row.stage(),
+        RowOutcome damaged = new RowOutcome(row.at(), row.target(), row.identity(), row.stage(),
                 row.disposition(), row.failurePhase(), row.expectedArm(), row.resultArm(),
                 row.inputCases(),
-                List.of(new ObservedValue.Constructed(request.type(), broken)), row.hits(), row.stepsSpent());
+                List.of(new ObservedValue.Constructed(request.type(), broken)), row.run());
 
         Map<AxisId, Classification> classes =
                 RowClasses.of(damaged, read.inputs(), read.axes());

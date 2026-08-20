@@ -1,13 +1,21 @@
 package souther.compiler.query;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.source.SourceId;
+
+import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.LabeledRegion;
+import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.diag.Citation;
+import souther.compiler.diag.Primary;
+import souther.compiler.diag.ReportContext;
+import souther.compiler.diag.Region;
+import souther.compiler.diag.SourceProvenance;
+import souther.compiler.diag.WhereCodeIsWritten;
 import souther.compiler.meta.ModulePath;
 
 import java.util.ArrayList;
@@ -31,12 +39,13 @@ public final class Compilation {
 
     private final Db db = new Db();
     /** Which source each id was, for a caller that identifies sources by index. */
-    private final Map<String, Integer> indexOfId = new LinkedHashMap<>();
-    /** Whether a diagnostic of this compilation says which source it is in. A compile of one source
-     *  does not: the caller knows the file it handed over. */
-    private boolean saysWhichSource = true;
+    private final Map<SourceId, Integer> indexOfId = new LinkedHashMap<>();
     /** The sources this compilation currently has, so one that goes away can be forgotten. */
-    private final Set<String> held = new LinkedHashSet<>();
+    private final Set<SourceId> held = new LinkedHashSet<>();
+    /** The loader over the classes as they were when it was made, and those classes — held so that
+     *  {@link #loader()} can tell whether the one it has is still a loader over what there is. */
+    private ClassLoader loader;
+    private Map<String, byte[]> loadedClasses;
 
     private Compilation() {
         // Read now, so this compilation is held to what the settings said when it started rather than
@@ -49,9 +58,9 @@ public final class Compilation {
      * An import naming no module among them is resolved against {@code path}. */
     public static Compilation ofSources(List<String> sources, ModulePath path) {
         Compilation c = new Compilation();
-        List<String> ids = new ArrayList<>();
+        List<SourceId> ids = new ArrayList<>();
         for (int i = 0; i < sources.size(); i++) {
-            String id = idOfSourceIndex(i);
+            SourceId id = idOfSourceIndex(i);
             ids.add(id);
             c.indexOfId.put(id, i);
             c.db.set(new Front.Text(id), sources.get(i));
@@ -73,8 +82,8 @@ public final class Compilation {
      * reader, so a renderer asks for it. A report printed this number where a file name belongs for
      * as long as that was left unsaid.
      */
-    public static String idOfSourceIndex(int i) {
-        return String.valueOf(i);
+    public static SourceId idOfSourceIndex(int i) {
+        return new SourceId(String.valueOf(i));
     }
 
     /** A compile of one source. A source with no {@code module} header takes
@@ -96,10 +105,6 @@ public final class Compilation {
     public static Compilation ofSource(String source, String defaultModuleName, ModulePath path) {
         Compilation c = ofSources(List.of(source), path);
         c.db.set(new Front.DefaultName(), defaultModuleName);
-        // There is only one source, so an error carries no origin: the caller knows which file it
-        // handed over, and a rendered id would be a file number nobody asked for.
-        c.indexOfId.clear();
-        c.saysWhichSource = false;
         return c;
     }
 
@@ -112,12 +117,12 @@ public final class Compilation {
                                           ModulePath path) {
         Compilation c = new Compilation();
         for (Map.Entry<String, String> e : byId.entrySet()) {
-            c.db.set(new Front.Text(e.getKey()), e.getValue());
+            c.db.set(new Front.Text(new SourceId(e.getKey())), e.getValue());
         }
-        c.db.set(new Front.Ids(), List.copyOf(byId.keySet()));
+        c.db.set(new Front.Ids(), byId.keySet().stream().map(SourceId::new).toList());
         c.db.set(new Front.Broken(), Set.copyOf(broken));
         c.db.set(new Front.Path(), path);
-        c.held.addAll(byId.keySet());
+        c.held.addAll(byId.keySet().stream().map(SourceId::new).toList());
         return c;
     }
 
@@ -132,27 +137,27 @@ public final class Compilation {
     public void update(Map<String, String> byId, Set<String> broken) {
         // A source that is gone is forgotten, along with the module it declared. Which module that
         // was has to be read before the layout is told the source is gone.
-        for (String gone : List.copyOf(held)) {
-            if (!byId.containsKey(gone)) {
+        for (SourceId gone : List.copyOf(held)) {
+            if (!byId.containsKey(gone.value())) {
                 db.forget(gone, moduleDeclaredBy(gone));
                 held.remove(gone);
             }
         }
         for (Map.Entry<String, String> e : byId.entrySet()) {
-            db.set(new Front.Text(e.getKey()), e.getValue());
+            db.set(new Front.Text(new SourceId(e.getKey())), e.getValue());
         }
-        db.set(new Front.Ids(), List.copyOf(byId.keySet()));
+        db.set(new Front.Ids(), byId.keySet().stream().map(SourceId::new).toList());
         db.set(new Front.Broken(), Set.copyOf(broken));
-        held.addAll(byId.keySet());
+        held.addAll(byId.keySet().stream().map(SourceId::new).toList());
     }
 
     /** The module {@code id} declares, as this compilation currently has it. */
-    private String moduleDeclaredBy(String id) {
+    private String moduleDeclaredBy(SourceId id) {
         Front.Layout.Of layout = db.ask(new Front.Layout()).value();
         if (layout == null) {
             return null;
         }
-        for (Map.Entry<String, String> e : layout.idOfModule().entrySet()) {
+        for (Map.Entry<String, SourceId> e : layout.idOfModule().entrySet()) {
             if (e.getValue().equals(id)) {
                 return e.getKey();
             }
@@ -183,20 +188,42 @@ public final class Compilation {
      * have to be under the map rather than beside it. Which order that is, and why a loader that
      * delegates first would answer with a stale build instead, is settled once for every caller —
      * the same composition the compile-time evaluation runs against.
+     *
+     * <p>The same loader for as long as the classes are the same classes. A class is its binary name
+     * and the loader that defined it, so two loaders over one compilation are two definitions of
+     * every type it generated, and a value made under the first is not a value of the second's
+     * classes. What that looks like is a model answering wrongly: a decoded key stops equalling the
+     * key a behavior looks up, so the lookup misses and the behavior answers with its default. There
+     * is no exception and nothing that mentions loading. The path's classes divide the same way —
+     * {@link ModulePath#loader} defines them afresh each time it is asked — so it is the composed
+     * loader that is kept and not one layer of it.
+     *
+     * <p>Kept against the classes rather than for the life of this compilation, because an edit
+     * makes a different program. {@link #classes()} answers with the map it answered with before
+     * until something a generation reads changes, and with a new one after, so this follows that
+     * answer rather than deciding for itself when a compilation is settled — which it never has to
+     * be, nothing here running until something asks. A loader held across an edit would be one that
+     * cannot see it, which is the first fault the other way round.
      */
     public ClassLoader loader() {
-        return Output.loader(db, classes());
+        Map<String, byte[]> classes = classes();
+        if (loader == null || loadedClasses != classes) {
+            // Built before either field is written, so a build that threw leaves this holding what it
+            // held before rather than the classes it did not manage to make a loader for. Recording
+            // them first would leave the two saying different things, and the next ask would read
+            // that as a loader it already has — handing out the one from before the edit, which is
+            // this whole method's fault with an exception in front of it.
+            ClassLoader built = Output.loader(db, classes);
+            loadedClasses = classes;
+            loader = built;
+        }
+        return loader;
     }
 
     /** A module as everything below the check reads it — derived, desugared, and carrying the
-     * recursive prelude helpers it reaches. */
-    public Ast.Module module(String name) {
+     * recursive prelude helpers it reaches. Null where it did not get that far. */
+    public Prepared module(String name) {
         return db.ask(new Shapes.Prepared(name)).value();
-    }
-
-    /** What the names in {@code module} denote — the table a question about a type is asked against. */
-    public Symbols symbols(String module) {
-        return db.ask(new Shapes.Scope(module)).value();
     }
 
     /**
@@ -221,22 +248,25 @@ public final class Compilation {
     }
 
     /** Every source id this compilation was given, in order. */
-    public List<String> sourceIds() {
-        List<String> ids = db.ask(new Front.Ids()).value();
+    public List<SourceId> sourceIds() {
+        List<SourceId> ids = db.ask(new Front.Ids()).value();
         return ids == null ? List.of() : ids;
     }
 
     /**
      * Answers everything there is to answer about these sources — the classes, the constant
      * constructions, the examples — without deciding anything about what was found. A caller that
-     * wants every problem at once asks for this and then reads {@link Db#allReports()}.
+     * wants every problem at once asks for this and then reads {@link #reports()}, or one of the
+     * readings of it: {@link #failure()}, {@link #errors()}, {@link #warnings()},
+     * {@link #diagnostics()}.
      */
     public void answerEverything() {
         structuralReports();
         db.ask(new Output.All());
         for (String module : modules()) {
             db.ask(new Output.ConstConstructions(module));
-            for (String id : exampleSourcesOf(module)) {
+            for (SourceId id : exampleSourcesOf(module)) {
+                db.ask(new Front.RowNames(id));
                 db.ask(Output.Examples.asked(db, module, id));
             }
             db.ask(new Output.SaidDisagreements(module));
@@ -256,6 +286,9 @@ public final class Compilation {
      */
     public void answerWarnings(String module) {
         db.ask(new Names.UnusedImports(module));
+        // A defect in the model rather than a gap in its rows, so it is asked whether or not this
+        // build wanted a coverage report.
+        db.ask(new Adequacy.DeadBranches(module));
         // Costs nothing unless the build asked to be told.
         db.ask(new Adequacy.Warnings(module));
     }
@@ -267,17 +300,10 @@ public final class Compilation {
      * said about it: a fake that answers otherwise than a row records is reported at both, and the
      * fake's side is this source's to say.
      */
-    public List<String> exampleSourcesOf(String module) {
-        Set<String> distinct = new LinkedHashSet<>();
-        List<String> rows = db.ask(new Front.ExampleOrigins(module)).value();
-        List<String> fakes = db.ask(new Front.FakeOrigins(module)).value();
-        if (rows != null) {
-            distinct.addAll(rows);
-        }
-        if (fakes != null) {
-            distinct.addAll(fakes);
-        }
-        return List.copyOf(distinct);
+    public java.util.SequencedSet<SourceId> exampleSourcesOf(String module) {
+        java.util.SequencedSet<SourceId> wrote = db.ask(new Front.ExampleSources(module)).value();
+        return wrote == null
+                ? java.util.Collections.unmodifiableSequencedSet(new LinkedHashSet<>()) : wrote;
     }
 
     /** What this compilation was asked to measure. Set before anything is asked; the answers are
@@ -360,7 +386,7 @@ public final class Compilation {
     }
 
     /** The id of the source that declares {@code module}, or null when nothing here does. */
-    public String sourceIdOf(String module) {
+    public SourceId sourceIdOf(String module) {
         Front.Layout.Of layout = db.ask(new Front.Layout()).value();
         return layout == null ? null : layout.idOfModule().get(module);
     }
@@ -372,7 +398,7 @@ public final class Compilation {
      * <p>The other direction of {@link #sourceIdOf}, and not its inverse: a module is declared in
      * one source, and several sources may be part of it.
      */
-    public String moduleOf(String sourceId) {
+    public String moduleOf(SourceId sourceId) {
         return db.ask(new Front.ModuleOf(sourceId)).value();
     }
 
@@ -389,7 +415,7 @@ public final class Compilation {
         for (Report report : layout.reports()) {
             found.add(new Db.Found(null, null, report));
         }
-        for (String id : sourceIds()) {
+        for (SourceId id : sourceIds()) {
             for (Report report : db.ask(new Front.Declares(id)).reports()) {
                 found.add(new Db.Found(null, id, report));
             }
@@ -414,8 +440,10 @@ public final class Compilation {
      *
      * <p>Where a report goes is the report's to say, not this method's: an error in an imported
      * module lands on that module's document however far away it was asked for, and a failing
-     * example row lands on the file the row was written in. A report about something the caller does
-     * not have — a module read off the path — has nowhere to go and is left out.
+     * example row lands on the file the row was written in. A report about a module the caller has
+     * no document for is said where that module was reached from, which is a document the caller
+     * does have ({@link #reports()}) — left as it was found it would have nowhere to go, and a
+     * compile that emitted nothing would publish nothing to say why.
      *
      * <p>This is the only place one report becomes several entries. A problem written in two files is
      * said in both, so an author editing either is told, and each entry carries the source its
@@ -423,24 +451,153 @@ public final class Compilation {
      * other half. A reader turns that pair into what to quote and what to link to
      * ({@link souther.compiler.diag.DiagnosticView}).
      */
-    public Map<String, List<Located>> diagnostics() {
+    public Map<SourceId, List<Located>> diagnostics() {
         answerEverything();
-        Map<String, List<Located>> byId = new LinkedHashMap<>();
-        for (String id : sourceIds()) {
+        Map<SourceId, List<Located>> byId = new LinkedHashMap<>();
+        for (SourceId id : sourceIds()) {
             byId.put(id, new ArrayList<>());
         }
-        for (Db.Found found : db.allReports()) {
-            String primary = locatedSourceIdOf(found);
-            for (String id : publishSourceIdsOf(found)) {
+        for (Db.Found found : reports()) {
+            SourceId primary = filedUnderOf(found);
+            for (SourceId id : publishSourceIdsOf(found)) {
                 List<Located> on = byId.get(id);
                 if (on != null) {
-                    on.add(new Located(found.report().diagnostic(), primary));
+                    // Listed under the file the report claims, and read from the file this entry
+                    // is for. A problem written in two files is one report said in both, and on
+                    // the second of them the text being read is that second file.
+                    on.add(new Located(found.report().diagnostic(),
+                            ReportContext.of(primary, id)));
                 }
             }
         }
-        Map<String, List<Located>> published = new LinkedHashMap<>();
+        Map<SourceId, List<Located>> published = new LinkedHashMap<>();
         byId.forEach((id, found) -> published.put(id, List.copyOf(found)));
         return published;
+    }
+
+    /**
+     * Everything this compilation found, as a reader may be shown it.
+     *
+     * <p>The one set. What a terminal is told and what an editor is told are the same problems said
+     * the same way, so both read this and neither reads {@link Db#allReports()} — two readings of one
+     * set is how a failure came to stop a build on the command line and leave an editor showing a
+     * clean file.
+     *
+     * <p>What a reading adds is where a report may be sent. A question about a module read off the
+     * class path is answered against text this compile reassembled from what the module published,
+     * and a report it finds carries a coordinate in that text: a line and a column of a file nobody
+     * holds. Filed as it stands, it lands wherever those numbers happen to fall in the file the
+     * author is looking at, or nowhere at all. So it is said at the nearest place on the way to that
+     * module a source of this compilation writes — the {@code import} line naming it, or the one
+     * naming whichever dependency led there — with the code's own home named rather than pointed at
+     * ({@link Diagnostic#reachedFrom}).
+     */
+    public List<Db.Found> reports() {
+        // Read again for repeats, because reading for where a reader can be sent is what makes two
+        // of them. Coordinates in a module's own reassembled text tell apart two findings this
+        // compilation collected separately; said at the place that module was reached from, both
+        // are one sentence at one caret, and an author shown it twice has nothing to tell them
+        // apart by either.
+        Map<Repeat, Db.Found> reports = new LinkedHashMap<>();
+        for (Db.Found found : db.allReports()) {
+            Db.Found said = citable(found);
+            reports.putIfAbsent(new Repeat(said.module(), filedUnderOf(said),
+                    said.report().problem()), said);
+        }
+        return new ArrayList<>(reports.values());
+    }
+
+    /** One thing said once: what {@link Db#allReports()} tells apart before a report is read for
+     *  where it may be said, asked again of what that reading left. */
+    private record Repeat(String module, SourceId sourceId, Diagnostic.Identity problem) {}
+
+    /**
+     * {@code found} where a reader can be sent to it — itself, for the reports already pointing at a
+     * source this compile holds.
+     *
+     * <p>Which of them those are, and what to say about them, is one question rather than a source
+     * test here and a provenance lookup after it. What a report is moved with is what it already says
+     * about where its code is written; the module this walk was about answers only for a report that
+     * says nothing, which is the one case with nothing to prefer.
+     *
+     * <p>What a raised report carried as the text its pass threw it with is dropped with the move
+     * ({@link Report#legacyMessage}). That text was rendered with the old coordinate written into
+     * it, and a message naming one place beside a caret at another is the defect twice. The body of
+     * a {@link Diagnostic#literal} is not that and is not dropped: it is the whole of what such a
+     * diagnostic says, there being no message under it to render again.
+     */
+    private Db.Found citable(Db.Found found) {
+        Diagnostic said = found.report().diagnostic();
+        SourceProvenance about = whatToMove(said, found.module());
+        if (about == null) {
+            return found;
+        }
+        Front.FromPath.OnThePath onThePath = Front.onThePath(db, found.module());
+        if (onThePath == null || onThePath.reachedFrom().isEmpty()) {
+            return found;
+        }
+        return new Db.Found(found.module(), found.sourceId(), Report.of(
+                said.reachedFrom(onThePath.reachedFrom(), about,
+                        new ModuleMessage.ItIsReachedFromHereToo())));
+    }
+
+    /**
+     * Where the code a report is about is written, for a report this reading should move — and null
+     * for one it should leave alone.
+     *
+     * <p>Two questions, and they are not the same one. Whether this compilation can send a reader to
+     * where the report points is about the place; what the report says about where its code is
+     * written is about the code. A report pointing at a call in the reader's file says its code is
+     * elsewhere and needs no moving, so reading one off the other would move it.
+     *
+     * <p>Its own answer wherever it has one. A position carries which text it is in and whose code it
+     * holds separately, so a report from a body spliced into a module's published text says the
+     * body's module and not the text's — and reading the module this walk was about instead would put
+     * them back together, which is the inference this whole change removes.
+     *
+     * <p>The module only where nothing was pointed at at all. There is nothing to read an answer off,
+     * and the module the report was filed under is the whole of what is known about it.
+     *
+     * <p>A report in a text this compilation cannot name is left where it is. Its position is one
+     * whoever handed the text over can use and this is not being read by them — but nothing about it
+     * says where its code came from, and moving it would mean answering that from the module, which
+     * is the inference again.
+     */
+    static SourceProvenance whatToMove(Diagnostic said, String module) {
+        if (module == null) {
+            return null;
+        }
+        boolean nowhereToSendAReader = switch (said.primary()) {
+            case Primary.Unavailable _, Primary.Nowhere _ -> true;
+            case Primary.InSource _, Primary.InAnUnnamedText _ -> false;
+        };
+        if (!nowhereToSendAReader) {
+            return null;
+        }
+        return switch (said.whereItsCodeIsWritten()) {
+            case WhereCodeIsWritten.Elsewhere(SourceProvenance from) -> from;
+            case WhereCodeIsWritten.Unstated _ ->
+                    souther.compiler.meta.ModuleReadback.provenanceOf(module);
+            // A report saying its code is where it points has somewhere to point, so it did not
+            // reach here.
+            case WhereCodeIsWritten.Here _ -> null;
+        };
+    }
+
+
+    /** The one failure these sources have, or null when they have none. */
+    public CompileException failure() {
+        return failure(reports());
+    }
+
+    /**
+     * The failure among {@link #structuralReports()}, or null when there is none — what a caller
+     * that stops before any module is looked at asks for.
+     *
+     * <p>Its own method so that {@link #failure(List)} can stay private.
+     */
+    public CompileException structuralFailure() {
+        return failure(structuralReports());
     }
 
     /**
@@ -480,8 +637,12 @@ public final class Compilation {
      * positions, and a secondary diagnostic is the checker's to withhold where it should not be said
      * at all. This decides how the errors are presented; whether one of them should have been
      * reported is the checker's own question.
+     *
+     * <p>Not public. The reports a surface reads are the ones {@link #reports()} answers, and a
+     * caller able to pass a list of its own is one able to pass the set before it was read for where
+     * a reader can be sent. What is left inside this package is this ordering rule and its test.
      */
-    public CompileException failure(List<Db.Found> found) {
+    CompileException failure(List<Db.Found> found) {
         List<Db.Found> errors = new ArrayList<>();
         for (Db.Found f : found) {
             if (f.report().isError()) {
@@ -495,15 +656,14 @@ public final class Compilation {
                 .thenComparingInt(f -> lineOf(f.report().diagnostic()))
                 .thenComparingInt(f -> columnOf(f.report().diagnostic())));
         Db.Found first = errors.get(0);
-        List<Diagnostic> rest = new ArrayList<>();
-        List<String> restSources = new ArrayList<>();
+        List<Located> rest = new ArrayList<>();
         for (Db.Found f : errors.subList(1, errors.size())) {
-            rest.add(f.report().diagnostic());
-            restSources.add(sourceIdOf(f));
+            rest.add(new Located(f.report().diagnostic(),
+                    ReportContext.inFile(filedUnderOf(f))));
         }
         return first.report().asException()
-                .alsoReporting(rest, restSources)
-                .inSource(sourceIdOf(first));
+                .alsoReporting(rest)
+                .inSource(filedUnderOf(first));
     }
 
     /** Where a report sits among the sources for ordering, with the one naming none before them all. */
@@ -512,47 +672,69 @@ public final class Compilation {
         return index < 0 ? -1 : index;
     }
 
-    /** A report with no position comes before the ones in its source that have one: it is about the
-     *  source rather than about a line of it. */
+    /**
+     * Where in its file a report sits, for ordering — and before every line of it where it points at
+     * no part of the file.
+     *
+     * <p>A report about the file rather than about a line of it comes first, and so does one whose
+     * numbers are of a text this compile could not name: those numbers are not of the file it is
+     * listed under, so ordering by them would interleave it with the lines of a file it says nothing
+     * about.
+     */
+    private static SourcePos orderingPositionOf(Diagnostic diagnostic) {
+        return diagnostic == null ? null : switch (diagnostic.primary()) {
+            case Primary.InSource(souther.compiler.diag.DiagnosticPlace.InSource place) ->
+                    place.region().start();
+            case Primary.InAnUnnamedText _, Primary.Unavailable _, Primary.Nowhere _ -> null;
+        };
+    }
+
     private static int lineOf(Diagnostic diagnostic) {
-        SourcePos pos = diagnostic == null ? null : diagnostic.pos();
+        SourcePos pos = orderingPositionOf(diagnostic);
         return pos == null ? -1 : pos.line();
     }
 
     private static int columnOf(Diagnostic diagnostic) {
-        SourcePos pos = diagnostic == null ? null : diagnostic.pos();
+        SourcePos pos = orderingPositionOf(diagnostic);
         return pos == null ? -1 : pos.column();
     }
 
     /**
-     * Which of the sources this compilation holds a report's primary region is in: the one the report
-     * claims ({@link Db.Found#claimedSourceId()}), or — where it claims none, or claims one this
-     * compile was not handed — the one that declares the module it was about.
+     * Which of this compilation's sources a report is listed under: the one it claims
+     * ({@link Db.Found#claimedSourceId()}), or — where it claims none, or claims one this compile
+     * was not handed — the one that declares the module it was about.
      *
-     * <p>The second half of that is a guard, and it guards availability as much as attribution. A
-     * position may have been read from a source this compile does not have: the prelude, or a module
-     * read back off the module path. Filing a report under a name {@link #diagnostics()} has no entry
-     * for would drop it silently, and a report the author never sees is worse than one on the wrong
-     * file.
+     * <p>Listed under, and not "the source its primary region is in". Those were one method and one
+     * word for two questions, and the second of them has no answer here any more: a report that
+     * points into a source says which one, on the place itself
+     * ({@link souther.compiler.diag.Primary.InSource}), and nothing needs to be told. What is left
+     * is this one, which the report cannot answer — a report about a module, one whose code is out
+     * of sight, one in a text this compile could not name, all have to be listed somewhere for an
+     * author to be shown them, and only a caller holding the files can say where.
      *
-     * <p>Always answered, whatever the compile tells a caller about its sources. What a source is
-     * called here is how a report is filed and how its regions are quoted; what a caller is told is
-     * {@link #sourceIdOf(Db.Found)}, and the two are not the same question.
+     * <p>So the fallback below is not a place. It is where the report is listed, and nothing reads
+     * it as a caret: a renderer quotes from the place the report points at and names the file it is
+     * listed under, which for a report pointing nowhere is the whole of what it says. Read as a
+     * place — which it was, while one field answered both — it put a line and a column from one
+     * source against the text of another.
+     *
+     * <p>The fallback guards availability as much as attribution. A position may have been read
+     * from a source this compile does not have: the prelude, or a module read back off the module
+     * path. Filing a report under a name {@link #diagnostics()} has no entry for would drop it
+     * silently, and a report the author never sees is worse than one listed on the wrong file.
+     *
+     * <p>Which module the report is a failure of is a third question and not this one. A report
+     * points into another module wherever the code it is about was written there — an invariant of
+     * this module reaching a construction in a helper another module declares — and the caret stays
+     * on that code, because that is what the report is about. Where it is said is
+     * {@link #publishSourceIdsOf(Db.Found)}.
      */
-    private String locatedSourceIdOf(Db.Found found) {
-        String claimed = found.claimedSourceId();
+    public SourceId filedUnderOf(Db.Found found) {
+        SourceId claimed = found.claimedSourceId();
         if (claimed != null && sourceIds().contains(claimed)) {
             return claimed;
         }
         return found.module() == null ? null : sourceIdOf(found.module());
-    }
-
-    /**
-     * Which source a report's primary region is in, as a caller holding its own list of files is
-     * told — none, for a compile of one source, where that caller knows the file it handed over.
-     */
-    public String sourceIdOf(Db.Found found) {
-        return saysWhichSource ? locatedSourceIdOf(found) : null;
     }
 
     /**
@@ -562,28 +744,50 @@ public final class Compilation {
      *
      * <p>Read off the regions rather than off a list of files, so every entry is somewhere the
      * report has something to show.
+     *
+     * <p>Which of them those are is what the labels say ({@link LabeledRegion#belongsToFinding}),
+     * and is not worked out here. A rule of one module is broken by code written in another — an
+     * invariant here reaching a construction in a helper declared there — and neither place reads as
+     * the whole of it: an author sent only to the helper is looking at code that is fine to call
+     * from anywhere else, and one sent only to the clause is looking at a call that builds nothing.
+     * The check that found it is what knows the two are one problem, and a second region pointed at
+     * to explain a mistake written elsewhere is not that case and says so by not being labelled one.
+     *
+     * <p>Nothing here reads which module the compile was walking. A caret that left its module is a
+     * coordinate, and the same two regions are the same problem in the same two files whichever of
+     * them was being checked — reading the traversal would put a marker in front of one author and
+     * not the other for a difference neither of them wrote.
      */
-    public List<String> publishSourceIdsOf(Db.Found found) {
-        String primary = locatedSourceIdOf(found);
-        List<String> saidAt = new ArrayList<>();
+    public List<SourceId> publishSourceIdsOf(Db.Found found) {
+        SourceId primary = filedUnderOf(found);
+        List<SourceId> saidAt = new ArrayList<>();
         if (primary != null) {
             saidAt.add(primary);
         }
-        if (found.report().delivery().saidAtEveryRegion()) {
-            for (LabeledRegion label : found.report().diagnostic().secondary()) {
-                String where = label.sourceIdOr(primary);
-                if (where != null && !saidAt.contains(where)) {
-                    saidAt.add(where);
+        for (LabeledRegion label : found.report().diagnostic().secondary()) {
+            if (!label.belongsToFinding()) {
+                continue;
+            }
+            // A label with nowhere to point puts the report in front of nobody new. It is part
+            // of what is found wrong and is in a file this compile does not have, so there is no
+            // author here to tell and no marker to place; what it has to say is said wherever the
+            // report is already said.
+            switch (label.place()) {
+                case souther.compiler.diag.DiagnosticPlace.InSource in -> {
+                    if (!saidAt.contains(in.source())) {
+                        saidAt.add(in.source());
+                    }
                 }
+                case souther.compiler.diag.DiagnosticPlace.Unavailable _ -> { }
             }
         }
         return List.copyOf(saidAt);
     }
 
     /** Where a report sits in the order the sources were given, or -1 when it names none. Only for
-     * ordering: which file a reader is sent to is {@link #sourceIdOf(Db.Found)}. */
+     * ordering: which file a report is listed under is {@link #filedUnderOf(Db.Found)}. */
     private int indexOf(Db.Found found) {
-        String id = locatedSourceIdOf(found);
+        SourceId id = filedUnderOf(found);
         if (id == null) {
             return -1;
         }
@@ -599,11 +803,12 @@ public final class Compilation {
      * one thing to be told about on a terminal; the second telling is what an editor needs, and that
      * is {@link #diagnostics()}.
      */
-    public List<Located> warnings(List<Db.Found> found) {
+    public List<Located> warnings() {
         List<Located> warnings = new ArrayList<>();
+        List<Db.Found> found = reports();
         for (Db.Found f : found) {
             if (!f.report().isError()) {
-                warnings.add(new Located(f.report().diagnostic(), sourceIdOf(f)));
+                warnings.add(new Located(f.report().diagnostic(), ReportContext.inFile(filedUnderOf(f))));
             }
         }
         return warnings;
@@ -617,11 +822,12 @@ public final class Compilation {
      * already read past it, and showing a reader one error beside an account of everything else
      * would leave them to wonder what the rest of the errors were.
      */
-    public List<Located> errors(List<Db.Found> found) {
+    public List<Located> errors() {
         List<Located> errors = new ArrayList<>();
+        List<Db.Found> found = reports();
         for (Db.Found f : found) {
             if (f.report().isError()) {
-                errors.add(new Located(f.report().diagnostic(), sourceIdOf(f)));
+                errors.add(new Located(f.report().diagnostic(), ReportContext.inFile(filedUnderOf(f))));
             }
         }
         return errors;

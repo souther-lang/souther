@@ -1,13 +1,16 @@
 package souther.compiler.codegen;
 
 import souther.compiler.check.Symbols;
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.check.Ordering;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.MatchElaborator;
 
+import souther.compiler.jvm.DecoderKind;
+import souther.compiler.jvm.GeneratedClass;
 import java.lang.classfile.Attribute;
 import java.lang.classfile.ClassBuilder;
 import java.lang.classfile.ClassFile;
@@ -55,19 +58,21 @@ final class ValueClassGen {
         this.codec = codec;
     }
 
-    private ClassDesc cd(String typeName) { return ctx.cd(typeName); }
-    private ClassDesc cd(TypeName typeName) { return ctx.cd(typeName); }
+    private ClassDesc cd(GeneratedClass generated) { return ctx.cd(generated); }
+    private GeneratedClass.Value valueOf(Hir.Def def) { return new GeneratedClass.Value(def.declares()); }
+    private ClassDesc cd(Hir.Def def) { return ctx.cd(def); }
+    private ClassDesc cd(TypeSymbol typeName) { return ctx.cd(typeName); }
     private ClassDesc[] caseInterfaces(String name) { return ctx.caseInterfaces(name); }
-    private Map<String, Type> fieldTypes(Ast.Data data) { return ctx.fieldTypes(data); }
+    private Map<String, Type> fieldTypes(Hir.Data data) { return ctx.fieldTypes(data); }
     private int pub(String name) { return ctx.pub(name); }
     private ClassDesc jvmType(Type type) { return JvmTypes.jvmType(type, ctx); }
     private ClassDesc[] fieldDescs(Map<String, Type> fields) { return JvmTypes.fieldDescs(fields, ctx); }
 
-    void generateData(Ast.Data data, Map<String, byte[]> out) {
-        ClassDesc cdName = cd(data.name());
+    void generateData(Hir.Data data, Emissions out) {
+        ClassDesc cdName = cd(data);
         Map<String, Type> fields = fieldTypes(data);
 
-        out.put(pkg + "." + data.name(), build(cdName, cb -> {
+        out.put(valueOf(data), build(cdName, cb -> {
             cb.withFlags(pub(data.name()) | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withSuperclass(CD_Record);
             cb.with(recordComponents(fields));
@@ -94,26 +99,26 @@ final class ValueClassGen {
             emitConstructMethod(cb, cdName, data, fields);
             emitAccessors(cb, cdName, fields);
             data.decoder().ifPresent(d -> {
-                boolean mapInput = codec.isMapInput(data.name());
-                codec.emitFactory(cb, "decoder", CD_RDecoder, data, "$Dec");
-                codec.emitSourceFactory(cb, data.name(), CodecGen.Src.JSON, mapInput);
-                if (codec.recordCompatible(data.name())) codec.emitSourceFactory(cb, data.name(), CodecGen.Src.JOOQ, mapInput);
+                boolean mapInput = codec.isMapInput(data);
+                codec.emitFactory(cb, "decoder", CD_RDecoder, data, new GeneratedClass.Decoder(valueOf(data), DecoderKind.VALUE));
+                codec.emitSourceFactory(cb, data, CodecGen.Src.JSON, mapInput);
+                if (codec.recordCompatible(data)) codec.emitSourceFactory(cb, data, CodecGen.Src.JOOQ, mapInput);
             });
-            data.encoder().ifPresent(e -> codec.emitFactory(cb, "encoder", CD_REncoder, data, "$Enc"));
+            data.encoder().ifPresent(e -> codec.emitFactory(cb, "encoder", CD_REncoder, data, new GeneratedClass.Encoder(valueOf(data))));
         }));
 
         data.decoder().ifPresent(dec -> {
-            out.put(pkg + "." + data.name() + "$Dec",
+            out.put(new GeneratedClass.Decoder(valueOf(data), DecoderKind.VALUE),
                     codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.NEUTRAL));
-            out.put(pkg + "." + data.name() + "$DecJson",
+            out.put(new GeneratedClass.Decoder(valueOf(data), DecoderKind.JSON),
                     codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.JSON));
-            if (codec.recordCompatible(data.name())) {
-                out.put(pkg + "." + data.name() + "$DecRecord",
+            if (codec.recordCompatible(data)) {
+                out.put(new GeneratedClass.Decoder(valueOf(data), DecoderKind.RECORD),
                         codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.JOOQ));
             }
         });
         data.encoder().ifPresent(enc ->
-                out.put(pkg + "." + data.name() + "$Enc", codec.generateEncoderClass(cdName, data, enc)));
+                out.put(new GeneratedClass.Encoder(valueOf(data)), codec.generateEncoderClass(cdName, data, enc)));
 
         // A helper for an invariant-bearing newtype: a Raoh-free `boolean check(value)` that runs the
         // same invariant bytecode as __construct (via gen.expr). Two callers: a constant construction
@@ -135,11 +140,11 @@ final class ValueClassGen {
      * predicate, so a rule no Raoh constraint states exactly is still reported as the rule it is
      * rather than as the whole invariant (issue #83, spec §decoder-error).
      */
-    private void emitCtfeCheck(Ast.Data data, Map<String, Type> fields, Map<String, byte[]> out) {
-        ClassDesc cdName = cd(data.name());
-        ClassDesc cdCtfe = cd(data.name() + "$Ctfe");
-        List<Ast.InvariantClause> clauses = TypeOps.effectiveInvariants(data, symbols);
-        out.put(pkg + "." + data.name() + "$Ctfe", build(cdCtfe, cb -> {
+    private void emitCtfeCheck(Hir.Data data, Map<String, Type> fields, Emissions out) {
+        ClassDesc cdName = cd(data);
+        ClassDesc cdCtfe = cd(new GeneratedClass.Ctfe(valueOf(data)));
+        List<Hir.InvariantClause> clauses = TypeOps.effectiveInvariants(data, symbols);
+        out.put(new GeneratedClass.Ctfe(valueOf(data)), build(cdCtfe, cb -> {
             cb.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             emitClauseCheck(cb, "check", cdName, data, fields, clauses);
             for (int i = 0; i < clauses.size(); i++) {
@@ -154,19 +159,19 @@ final class ValueClassGen {
         return "check$" + index;
     }
 
-    private void emitClauseCheck(ClassBuilder cb, String method, ClassDesc cdName, Ast.Data data,
-                                 Map<String, Type> fields, List<Ast.InvariantClause> clauses) {
+    private void emitClauseCheck(ClassBuilder cb, String method, ClassDesc cdName, Hir.Data data,
+                                 Map<String, Type> fields, List<Hir.InvariantClause> clauses) {
         cb.withMethodBody(method, MethodTypeDesc.of(ConstantDescs.CD_boolean, fieldDescs(fields)),
                 ClassFile.ACC_STATIC | ClassFile.ACC_PUBLIC, code -> {
                     BodyGen gen = new BodyGen(ctx, code, data, cdName, 0);
                     int slot = 0;
                     Map<String, BindingId> bound =
-                            TypeOps.fieldBindings(symbols.own(data.name()), data, symbols);
+                            TypeOps.fieldBindings(data.declares(), data, symbols);
                     for (Map.Entry<String, Type> f : fields.entrySet()) {
                         gen.bind(bound.get(f.getKey()), f.getKey(), slot, f.getValue());
                         slot += width(f.getValue());
                     }
-                    for (Ast.InvariantClause clause : clauses) {
+                    for (Hir.InvariantClause clause : clauses) {
                         gen.expr(clause.expr());       // the same boolean __construct checks
                         Label ok = code.newLabel();
                         code.ifne(ok);
@@ -179,15 +184,18 @@ final class ValueClassGen {
                 });
     }
 
-    void generateSum(Ast.SumData sum, Map<String, byte[]> out) {
-        ClassDesc cdX = cd(sum.name());
+    void generateSum(Hir.SumData sum, Emissions out) {
+        ClassDesc cdX = cd(sum);
         List<ClassDesc> caseCds = new ArrayList<>();
-        for (Ast.Name caseName : sum.cases()) {
-            caseCds.add(cd(caseName.denotes()));
+        for (Hir.Name caseName : sum.cases()) {
+            // Every name in a module the backend generates was answered: `Bodies.Checked` hands an
+            // elaboration over only where `Names.Sound` holds of the module, which resolution makes
+            // false as soon as it reports a name denoting nothing.
+            caseCds.add(cd(Backend.names(caseName)));
         }
         boolean enumeration = TypeOps.isUnitOnlySum(sum, symbols);
-        List<TypeName> cases = TypeOps.leafCases(sum, symbols);
-        out.put(pkg + "." + sum.name(), build(cdX, cb -> {
+        List<TypeSymbol> cases = TypeOps.leafCases(sum, symbols);
+        out.put(valueOf(sum), build(cdX, cb -> {
             cb.withFlags(pub(sum.name()) | ClassFile.ACC_INTERFACE | ClassFile.ACC_ABSTRACT);
             // A sum may itself be a case of another sum (spec §sum-data), and then it carries that sum's
             // interface as a product or unit case does. Only the direct link is recorded, which is
@@ -211,27 +219,27 @@ final class ValueClassGen {
                 emitOrderMethods(cb, cdX, cases);
             }
             sum.decoder().ifPresent(disc -> {
-                codec.emitCodecFactory(cb, "decoder", CD_RDecoder, cd(sum.name() + "$Dec"),
+                codec.emitCodecFactory(cb, "decoder", CD_RDecoder, cd(new GeneratedClass.Decoder(valueOf(sum), DecoderKind.VALUE)),
                         CodecGen.decoderSig(cdX, !enumeration));
-                codec.emitSourceFactory(cb, sum.name(), CodecGen.Src.JSON, !enumeration);
-                if (codec.recordCompatible(sum.name())) codec.emitSourceFactory(cb, sum.name(), CodecGen.Src.JOOQ, true);
+                codec.emitSourceFactory(cb, sum, CodecGen.Src.JSON, !enumeration);
+                if (codec.recordCompatible(sum)) codec.emitSourceFactory(cb, sum, CodecGen.Src.JOOQ, true);
             });
             sum.encoder().ifPresent(enc ->
-                    codec.emitCodecFactory(cb, "encoder", CD_REncoder, cd(sum.name() + "$Enc"),
+                    codec.emitCodecFactory(cb, "encoder", CD_REncoder, cd(new GeneratedClass.Encoder(valueOf(sum))),
                             CodecGen.encoderSig(cdX, enumeration ? CD_String : CD_Map)));
         }));
         sum.decoder().ifPresent(disc -> {
-            out.put(pkg + "." + sum.name() + "$Dec", enumeration
+            out.put(new GeneratedClass.Decoder(valueOf(sum), DecoderKind.VALUE), enumeration
                     ? codec.generateEnumSumDecoder(sum, CodecGen.Src.NEUTRAL)
                     : codec.generateSumDecoder(sum, disc, CodecGen.Src.NEUTRAL));
-            out.put(pkg + "." + sum.name() + "$DecJson", enumeration
+            out.put(new GeneratedClass.Decoder(valueOf(sum), DecoderKind.JSON), enumeration
                     ? codec.generateEnumSumDecoder(sum, CodecGen.Src.JSON)
                     : codec.generateSumDecoder(sum, disc, CodecGen.Src.JSON));
-            if (codec.recordCompatible(sum.name())) {
-                out.put(pkg + "." + sum.name() + "$DecRecord", codec.generateSumDecoder(sum, disc, CodecGen.Src.JOOQ));
+            if (codec.recordCompatible(sum)) {
+                out.put(new GeneratedClass.Decoder(valueOf(sum), DecoderKind.RECORD), codec.generateSumDecoder(sum, disc, CodecGen.Src.JOOQ));
             }
         });
-        sum.encoder().ifPresent(enc -> out.put(pkg + "." + sum.name() + "$Enc", enumeration
+        sum.encoder().ifPresent(enc -> out.put(new GeneratedClass.Encoder(valueOf(sum)), enumeration
                 ? codec.generateEnumSumEncoder(sum)
                 : codec.generateSumEncoder(sum, enc)));
     }
@@ -242,11 +250,11 @@ final class ValueClassGen {
      * the case records because one unit data may be a case of two sums, which place it differently;
      * a {@code Comparable} on the record would have to answer for both (issue #161).
      */
-    private void emitOrderMethods(ClassBuilder cb, ClassDesc cdX, List<TypeName> cases) {
+    private void emitOrderMethods(ClassBuilder cb, ClassDesc cdX, List<TypeSymbol> cases) {
         cb.withMethod(ORDER_METHOD, MTD_order, ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC
                 | ClassFile.ACC_SYNTHETIC, mb -> mb.withCode(code -> {
             int i = 0;
-            for (TypeName c : cases) {
+            for (TypeSymbol c : cases) {
                 code.aload(0);
                 code.instanceOf(cd(c));
                 Label next = code.newLabel();
@@ -277,10 +285,10 @@ final class ValueClassGen {
     }
 
     /** Emits {@code static String __tag(Object)}: which case a value of this enumeration is. */
-    private void emitTagMethod(ClassBuilder cb, List<TypeName> cases) {
+    private void emitTagMethod(ClassBuilder cb, List<TypeSymbol> cases) {
         cb.withMethod(TAG_METHOD, MTD_tag, ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC
                 | ClassFile.ACC_SYNTHETIC, mb -> mb.withCode(code -> {
-            for (TypeName c : cases) {
+            for (TypeSymbol c : cases) {
                 code.aload(0);
                 code.instanceOf(cd(c));
                 Label next = code.newLabel();
@@ -306,11 +314,11 @@ final class ValueClassGen {
      * <p>It has no codec. Belonging to a union does not change a member's external representation, so
      * a consumer that has switched to this case takes the value out and uses the member's own codec.
      */
-    byte[] generateBridgeCase(TypeName member, List<String> unions, Map<String, byte[]> out) {
+    byte[] generateBridgeCase(TypeSymbol member, List<GeneratedClass.BehaviorResult> unions) {
         ClassDesc cdB = ctx.bridgeCaseClass(member);
-        Map<String, Type> held = Map.of("value", MatchElaborator.caseBindType(member));
+        Map<String, Type> held = Map.of("value", TypeOps.caseBindType(member));
         List<ClassDesc> ifaces = new ArrayList<>();
-        for (String union : unions) {
+        for (GeneratedClass.BehaviorResult union : unions) {
             ifaces.add(cd(union));
         }
         return build(cdB, cb -> {
@@ -325,16 +333,16 @@ final class ValueClassGen {
             // injected behavior has to be able to answer with this member.
             emitCtor(cb, cdB, held, ClassFile.ACC_PUBLIC);
             emitValueEquality(cb, cdB, held);
-            emitToString(cb, cdB, CodegenContext.bridgeCaseName(member), held);
+            emitToString(cb, cdB, cdB.displayName(), held);
             emitAccessors(cb, cdB, held);
         });
     }
 
-    void generateUnit(Ast.UnitData unit, Map<String, byte[]> out) {
-        ClassDesc cdU = cd(unit.name());
-        ClassDesc cdDec = cd(unit.name() + "$Dec");
-        ClassDesc cdEnc = cd(unit.name() + "$Enc");
-        out.put(pkg + "." + unit.name(), build(cdU, cb -> {
+    void generateUnit(Hir.UnitData unit, Emissions out) {
+        ClassDesc cdU = cd(unit);
+        ClassDesc cdDec = cd(new GeneratedClass.Decoder(valueOf(unit), DecoderKind.VALUE));
+        ClassDesc cdEnc = cd(new GeneratedClass.Encoder(valueOf(unit)));
+        out.put(valueOf(unit), build(cdU, cb -> {
             cb.withFlags(pub(unit.name()) | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             // a unit is a field-less data, so it is a record with no components: `case 承認済み()`
             // deconstructs it in a Java switch as its sibling product cases do (spec §jvm-product)
@@ -357,16 +365,16 @@ final class ValueClassGen {
             // A unit ignores its input, so it decodes from every source. Generate all three so
             // unit cases of a JSON/record sum have a matching decoder to dispatch to.
             codec.emitCodecFactory(cb, "decoder", CD_RDecoder, cdDec, CodecGen.decoderSig(cdU, false));
-            codec.emitCodecFactory(cb, "jsonDecoder", CD_RDecoder, cd(unit.name() + "$DecJson"),
+            codec.emitCodecFactory(cb, "jsonDecoder", CD_RDecoder, cd(new GeneratedClass.Decoder(valueOf(unit), DecoderKind.JSON)),
                     CodecGen.decoderSigFor(CodecGen.Src.JSON, cdU, false));
-            codec.emitCodecFactory(cb, "recordDecoder", CD_RDecoder, cd(unit.name() + "$DecRecord"),
+            codec.emitCodecFactory(cb, "recordDecoder", CD_RDecoder, cd(new GeneratedClass.Decoder(valueOf(unit), DecoderKind.RECORD)),
                     CodecGen.decoderSigFor(CodecGen.Src.JOOQ, cdU, false));
             codec.emitCodecFactory(cb, "encoder", CD_REncoder, cdEnc, CodecGen.encoderSig(cdU, CD_Map));
         }));
-        out.put(pkg + "." + unit.name() + "$Dec", codec.generateUnitDecoder(cdU, cdDec));
-        out.put(pkg + "." + unit.name() + "$DecJson", codec.generateUnitDecoder(cdU, cd(unit.name() + "$DecJson")));
-        out.put(pkg + "." + unit.name() + "$DecRecord", codec.generateUnitDecoder(cdU, cd(unit.name() + "$DecRecord")));
-        out.put(pkg + "." + unit.name() + "$Enc", codec.generateUnitEncoder(cdEnc));
+        out.put(new GeneratedClass.Decoder(valueOf(unit), DecoderKind.VALUE), codec.generateUnitDecoder(cdU, cdDec));
+        out.put(new GeneratedClass.Decoder(valueOf(unit), DecoderKind.JSON), codec.generateUnitDecoder(cdU, cd(new GeneratedClass.Decoder(valueOf(unit), DecoderKind.JSON))));
+        out.put(new GeneratedClass.Decoder(valueOf(unit), DecoderKind.RECORD), codec.generateUnitDecoder(cdU, cd(new GeneratedClass.Decoder(valueOf(unit), DecoderKind.RECORD))));
+        out.put(new GeneratedClass.Encoder(valueOf(unit)), codec.generateUnitEncoder(cdEnc));
     }
 
     /**
@@ -447,10 +455,19 @@ final class ValueClassGen {
 
     /** A single-value newtype over an ordered type — ordered by the value it wraps (ADR-0047), which
      * the class carries as {@link Comparable} so {@code sort} / {@code max} / {@code min} compare it
-     * by natural order, and a Java reader can put it in a {@code TreeSet}. */
-    private boolean isOrderedNewtype(Ast.Data data, Map<String, Type> fields) {
+     * by natural order, and a Java reader can put it in a {@code TreeSet}. The order it carries is
+     * {@link #orderOfWrapped}: claiming one here that the {@code compareTo} below cannot emit is
+     * what left {@code data StageN = Stage} declaring {@code Comparable} and throwing on the first
+     * Java reader that compared two (issue #856). */
+    private boolean isOrderedNewtype(Hir.Data data, Map<String, Type> fields) {
         return data.newtype() && fields.size() == 1
-                && TypeOps.supportsOrdering(fields.values().iterator().next(), symbols);
+                && orderOfWrapped(fields.values().iterator().next()) != null;
+    }
+
+    /** How the value a newtype wraps compares, as the newtype's own field holds it. */
+    private Ordering orderOfWrapped(Type value) {
+        Ordering how = Ordering.of(value, symbols);
+        return how == null ? null : how.asHeld();
     }
 
     /** {@code Record} plus each interface, with {@code Comparable} bound to the class itself, so a
@@ -509,24 +526,46 @@ final class ValueClassGen {
     }
 
     /**
-     * Emits {@code compareTo}: an {@code Int} newtype compares its {@code long} carrier, any other
-     * ordered value is itself {@link Comparable} — a {@code String} / {@code BigDecimal} /
-     * {@code LocalDate} / {@code LocalDateTime}, or a newtype over one, which carries its own
-     * {@code compareTo}. The erased {@code compareTo(Object)} bridge is what the runtime's
-     * natural-order compare calls.
+     * Emits {@code compareTo}, from the order the wrapped value has rather than from a guess at its
+     * representation. An {@code Int} newtype compares its {@code long} carrier; a value the JVM
+     * carries as {@link Comparable} — a {@code String} / {@code BigDecimal} / {@code LocalDate} /
+     * {@code LocalTime} / {@code LocalDateTime} / {@code Instant}, or a newtype over one — compares
+     * itself; a value of an enumeration has no {@code compareTo} of its own, because the order lives
+     * on the sum and one unit data may be a case of two (ADR-0069), so its place is read off the sum.
+     *
+     * <p>That last arm is the one that was missing. "Ordered and not an {@code Int}" was read as
+     * "{@code Comparable}", which every ordered value but an enumeration's is, and the class went out
+     * declaring an interface it could not honour. The erased {@code compareTo(Object)} bridge is what
+     * the runtime's natural-order compare calls.
      */
     private void emitCompareTo(ClassBuilder cb, ClassDesc cdName, Map.Entry<String, Type> value) {
         ClassDesc fd = jvmType(value.getValue());
+        Ordering how = orderOfWrapped(value.getValue());
         cb.withMethodBody("compareTo", MethodTypeDesc.of(ConstantDescs.CD_int, cdName),
                 ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL, code -> {
                     code.aload(0);
                     code.getfield(cdName, value.getKey(), fd);
+                    if (how instanceof Ordering.Places places) {
+                        code.invokestatic(cd(places.enumeration()), ORDER_METHOD, MTD_order, true);
+                    }
                     code.aload(1);
                     code.getfield(cdName, value.getKey(), fd);
-                    if (value.getValue() == Type.INT) {
-                        code.lcmp();   // -1 / 0 / 1, which is compareTo's contract
-                    } else {
-                        code.invokeinterface(CD_Comparable, "compareTo", MTD_compareTo_Object);
+                    switch (how) {
+                        case Ordering.Longs _ ->
+                                code.lcmp();   // -1 / 0 / 1, which is compareTo's contract
+                        case Ordering.Natural _ ->
+                                code.invokeinterface(CD_Comparable, "compareTo", MTD_compareTo_Object);
+                        case Ordering.Places places -> {
+                            code.invokestatic(cd(places.enumeration()), ORDER_METHOD, MTD_order, true);
+                            code.invokestatic(CD_Integer, "compare", MTD_Integer_compare, false);
+                        }
+                        // asHeld answers for the newtype as its own class holds it, and a newtype is
+                        // Comparable, so nothing reaches here.
+                        case Ordering.Wrapped _ -> throw new IllegalStateException(
+                                "a wrapped order is never what a value is held as: " + value.getValue());
+                        case null -> throw new IllegalStateException(
+                                "compareTo is emitted only where isOrderedNewtype found an order: "
+                                        + value.getValue());
                     }
                     code.ireturn();
                 });
@@ -642,7 +681,7 @@ final class ValueClassGen {
         });
     }
 
-    private void emitConstructMethod(ClassBuilder cb, ClassDesc cdName, Ast.Data data,
+    private void emitConstructMethod(ClassBuilder cb, ClassDesc cdName, Hir.Data data,
                                      Map<String, Type> fields) {
         // Public for an exposed type: a behavior of another module may declare `constructs T`
         // (ADR-0002 never restricted that to T's own module), and this is the path it takes — the one
@@ -655,7 +694,7 @@ final class ValueClassGen {
                         BodyGen gen = new BodyGen(ctx, code, data, cdName, 0);
                         int slot = 0;
                         Map<String, BindingId> bound =
-                                TypeOps.fieldBindings(symbols.own(data.name()), data, symbols);
+                                TypeOps.fieldBindings(data.declares(), data, symbols);
                         for (Map.Entry<String, Type> f : fields.entrySet()) {
                             gen.bind(bound.get(f.getKey()), f.getKey(), slot, f.getValue());
                             slot += width(f.getValue());
@@ -664,7 +703,7 @@ final class ValueClassGen {
                         // Clause by clause, in the order they are declared, stopping at the first that
                         // does not hold: what the failure carries is that clause, so a reordering of
                         // the declaration changes which one a caller is told about.
-                        for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
+                        for (Hir.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
                             gen.expr(clause.expr());
                             Label ok = code.newLabel();
                             code.ifne(ok);

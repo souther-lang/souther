@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.BlockReason;
+
 /**
  * What the rules written about a position, beyond the ends its own type states, came to.
  *

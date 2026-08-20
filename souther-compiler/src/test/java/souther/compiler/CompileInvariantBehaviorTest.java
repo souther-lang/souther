@@ -41,7 +41,7 @@ class CompileInvariantBehaviorTest {
     @Test
     void constructionSucceedsWhenInvariantHolds() throws Exception {
         BytesClassLoader loader = loader();
-        Object discount = loader.loadClass("demo.Discount" + "$Impl").getConstructor().newInstance();
+        Object discount = Emitted.behavior(loader, "demo", "discount").getConstructor().newInstance();
         Object r = Codecs.apply(discount, draft(loader, 3000));
         assertEquals("demo.Adjusted", r.getClass().getName(), "3000 - 2000 = 1000 >= 0");
 
@@ -51,7 +51,7 @@ class CompileInvariantBehaviorTest {
     @Test
     void invariantViolationAborts() throws Exception {
         BytesClassLoader loader = loader();
-        Object discount = loader.loadClass("demo.Discount" + "$Impl").getConstructor().newInstance();
+        Object discount = Emitted.behavior(loader, "demo", "discount").getConstructor().newInstance();
         // 100 - 2000 = -1900 violates cost >= 0, so the construction aborts rather than returning
         ConstraintViolation v = assertThrows(ConstraintViolation.class,
                 () -> Codecs.apply(discount, draft(loader, 100)));
@@ -89,7 +89,7 @@ class CompileInvariantBehaviorTest {
                 }
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object adjust = loader.loadClass("demo.Adjust" + "$Impl").getConstructor().newInstance();
+        Object adjust = Emitted.behavior(loader, "demo", "adjust").getConstructor().newInstance();
 
         // the guard fails, so the else branch builds Adjusted { cost: 999 - 2000 = -1001 },
         // which breaks cost >= 0 — it must abort, not come back as an Adjusted
@@ -110,12 +110,13 @@ class CompileInvariantBehaviorTest {
                 module demo
                 data Draft = { cost: Int }
                 data Rejected = { why: String }
-                data Flagged
-                behavior adjust : (d: Draft) -> Draft | Rejected | Flagged constructs Flagged
+                data Flagged = { at: Int }
+                behavior adjust : (d: Draft) -> Draft | Rejected | Flagged
+                    constructs Flagged
 
                 let adjust (d) = {
                     guard d.cost > 0 else Rejected { why = "nonpositive" }
-                    guard d.cost < 1000 else Flagged
+                    guard d.cost < 1000 else Flagged { at = d.cost }
                     d
                 }
                 """;

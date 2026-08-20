@@ -32,7 +32,7 @@ class CompileSumCommonFieldTest {
 
     private static String runWith(BytesClassLoader loader, Object raw) throws Exception {
         Object in = Codecs.decoded(loader, "demo.Doc", raw);
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         return (String) ((Map<?, ?>) Codecs.encode(loader, "demo.Out",
                 Codecs.apply(behavior, in))).get("id");
     }
@@ -61,7 +61,7 @@ class CompileSumCommonFieldTest {
                 Compiler.compileModules(List.of(docs, app)), getClass().getClassLoader());
 
         Object in = Codecs.decoded(loader, "docs.Doc", Map.of("type", "Draft", "id", "d-1"));
-        Object behavior = loader.loadClass("app.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "app", "run").getConstructor().newInstance();
         assertEquals("d-1", ((Map<?, ?>) Codecs.encode(loader, "app.Out",
                 Codecs.apply(behavior, in))).get("id"));
     }
@@ -85,7 +85,7 @@ class CompileSumCommonFieldTest {
                 new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
 
         Object in = Codecs.decoded(loader, "demo.S", Map.of("type", "A", "n", 7L));
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         assertEquals(7L, ((Map<?, ?>) Codecs.encode(loader, "demo.Out",
                 Codecs.apply(behavior, in))).get("n"));
     }
@@ -111,7 +111,7 @@ class CompileSumCommonFieldTest {
 
         Object in = Codecs.decoded(loader, "demo.Doc",
                 Map.of("type", "Draft", "id", "d-1", "at", "10:00"));
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         assertEquals("d-1", ((Map<?, ?>) Codecs.encode(loader, "demo.Out",
                 Codecs.apply(behavior, in))).get("id"));
     }
@@ -138,7 +138,7 @@ class CompileSumCommonFieldTest {
 
         Object in = Codecs.decoded(loader, "demo.Doc",
                 Map.of("type", "Filed", "id", "f-1", "by", "kawasima"));
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         assertEquals("f-1", ((Map<?, ?>) Codecs.encode(loader, "demo.Out",
                 Codecs.apply(behavior, in))).get("id"));
     }

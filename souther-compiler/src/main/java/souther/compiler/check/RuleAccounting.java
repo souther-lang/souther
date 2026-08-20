@@ -1,0 +1,241 @@
+package souther.compiler.check;
+
+import souther.compiler.values.UnreadReason;
+
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
+
+/**
+ * One rule of the model, every question it raises, and what answered each.
+ *
+ * <p>Closed over the questions rather than a list of answers somebody assembled. What can go wrong
+ * with a list is that a question is missing from it, and a completeness read off a list with a
+ * question missing says the model was accounted for because nobody asked. So the questions come
+ * from {@link Required} and the answers are obtained for exactly those, one apiece: a question
+ * without an answer, an answer without a question, and two answers to one question are all
+ * unreachable rather than checked for.
+ *
+ * <p>No verdict about the rule. Whether the rule is settled follows from its answers and from the
+ * answers to whatever its questions rest on, and that is a derivation over the whole accounting
+ * rather than a field here — written as a field, a question blocked by another would have to be
+ * marked blocked by whoever noticed, which is a third state anybody can write.
+ */
+public final class RuleAccounting {
+
+    private final RuleRef rule;
+    private final RuleCitation cited;
+    private final Required required;
+    private final Map<Owed, Outcome> answers;
+
+    private RuleAccounting(RuleRef rule, RuleCitation cited, Required required,
+                           Map<Owed, Outcome> answers) {
+        this.rule = rule;
+        this.cited = cited;
+        this.required = required;
+        this.answers = Collections.unmodifiableMap(answers);
+    }
+
+    /**
+     * The accounting of {@code rule}, with {@code answered} asked once for each question it
+     * raises.
+     *
+     * <p>The only way to one of these, and not one anything outside this package can take. What is
+     * closed here is which questions there are — {@code answered} is asked for them and never
+     * handed the map — and closing that while leaving the answers to whoever asked would let a
+     * caller hold a genuine {@link Required} beside answers it wrote itself. A reader outside wants
+     * a finished accounting, never a way to make one.
+     */
+    static RuleAccounting of(RuleRef rule, Required required,
+                             Function<Owed, Outcome> answered) {
+        Map<Owed, Outcome> answers = new LinkedHashMap<>();
+        for (Owed each : required.obligations()) {
+            Outcome outcome = answered.apply(each);
+            if (outcome == null) {
+                throw new IllegalStateException(
+                        "no reading answered for " + each + " of " + rule);
+            }
+            answers.put(each, outcome);
+        }
+        return new RuleAccounting(rule, new RuleCitation.Named(rule.named()), required, answers);
+    }
+
+    /**
+     * The accounting of one comparison, from what it places and what a reading made of it.
+     *
+     * <p>The way in from outside this package, and it takes a reading rather than answers. What a
+     * caller has is what it managed with the comparison; which questions that answers is settled
+     * here, beside every other accounting, so a reader cannot pair a genuine {@link Required} with
+     * answers it wrote itself.
+     */
+    public static RuleAccounting ofComparison(RuleRef rule, ComparisonClaim claim,
+                                              Required.ComparisonSubject of,
+                                              Required.LineRead read, RuleCitation cited) {
+        Required required = Required.ofComparison(claim, of);
+        return new RuleAccounting(rule, cited, required, answersOf(rule, required, read).answers);
+    }
+
+    private static RuleAccounting answersOf(RuleRef rule, Required required,
+                                            Required.LineRead read) {
+        return of(rule, required, _ -> switch (read) {
+            // The reading that draws the line answers both of the questions the line raises: the
+            // classes either side of it are what it divided the position into, and the values it
+            // named are where the rows go.
+            case Required.LineRead.ALineOnThePosition _,
+                 Required.LineRead.ALineBetweenTwoPositions _ ->
+                    new Outcome.Accounted(Reader.THE_END_READING);
+            // And where it drew none, both stand. Which is the whole of why they are raised off the
+            // comparison: read off the lines that came back, a line nothing could read would be a
+            // rule the model never wrote.
+            case Required.LineRead.NoLine no ->
+                    new Outcome.Unaccounted(new Why.TheEndReadingSays(no.why()));
+        });
+    }
+
+    /** Which rule of the model, as everything that names a rule names it. */
+    public RuleRef rule() {
+        return rule;
+    }
+
+    /** How a reader finds it, which is not what tells it from another rule. */
+    public RuleCitation cited() {
+        return cited;
+    }
+
+    /** What it raises. */
+    public Required required() {
+        return required;
+    }
+
+    /** What answered each question, keyed by the question. */
+    public Map<Owed, Outcome> answers() {
+        return answers;
+    }
+
+    /** The questions nothing answered, which is what a report is about. */
+    public Set<Owed> unaccounted() {
+        return answers.entrySet().stream()
+                .filter(e -> e.getValue() instanceof Outcome.Unaccounted)
+                .map(Map.Entry::getKey)
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+    }
+
+    /**
+     * The same, each carrying the rule that raised it and what stopped the reading.
+     *
+     * <p>What a reader downstream is owed. A question with no rule beside it can be reported at a
+     * position and never named, which is the sentence #842 is about: an author was told that a rule
+     * about the position went unread, with nothing saying which rule.
+     */
+    public List<Unanswered> unansweredQuestions() {
+        return answers.entrySet().stream()
+                .filter(e -> e.getValue() instanceof Outcome.Unaccounted)
+                .map(e -> new Unanswered(rule, cited, e.getKey()))
+                .toList();
+    }
+
+    /**
+     * One question of one rule that nothing answered.
+     *
+     * <p>No reason beside it. What a reading records about why it stopped is about a position and
+     * this is about a rule at a subject, and putting the first here would be a fact at one
+     * granularity wearing another's name — which is the shape this whole accounting was written
+     * against. A reason belongs here once the readings say why per part of a clause, and until then
+     * an absent one is the honest answer.
+     *
+     * <p>The rule as {@link RuleRef}, all the way to the report that names it. Carried as the
+     * clause reference the reading had in hand, the one reader of these built the identity at the
+     * last moment — right while only invariants raise a question, and a decision about what a rule
+     * is taken by whoever consumed one.
+     */
+    public record Unanswered(RuleRef rule, RuleCitation cited, Owed owed) {}
+
+    @Override
+    public String toString() {
+        return rule + " " + answers;
+    }
+
+    /** What became of one question. */
+    public sealed interface Outcome {
+
+        /**
+         * A reading took the rule in and answered this.
+         *
+         * <p>{@code by} is provenance and nothing else. Which reading answered is worth having for
+         * a diagnostic and for anyone working out why an answer is what it is; nothing about
+         * whether the model is covered may be read off it, because that is what tying a completeness
+         * to the readers there happen to be amounts to.
+         */
+        record Accounted(Reader by) implements Outcome {}
+
+        /**
+         * Nothing took the rule in, so the question stands.
+         *
+         * <p>{@code why} is this compiler's own account of what stopped it, in the vocabulary of the
+         * reading that would have answered. What a document writes for it is a projection made
+         * elsewhere: a published word reaching back into what a reading is allowed to record is the
+         * coupling this whole arrangement is written against.
+         */
+        record Unaccounted(Why why) implements Outcome {}
+    }
+
+    /**
+     * What stopped the reading that would have answered, in that reading's own words.
+     *
+     * <p>One arm per reading, because they do not share a vocabulary and neither is the other's. The
+     * reading that turns clauses into sets of values says which form it could not take apart; the
+     * reading that turns a clause into an end says what would have to change before the rule could
+     * be a line. Held as one word, a line about an end was written in the words of a set of values —
+     * which is the sentence #842 is about, one level down.
+     */
+    public sealed interface Why {
+
+        /** The reading that turns a clause into a set of values. */
+        record TheValueReadingSays(UnreadReason why) implements Why {
+
+            public TheValueReadingSays {
+                if (why == null) {
+                    throw new IllegalArgumentException("a reading that stopped says why");
+                }
+            }
+        }
+
+        /** The reading that turns a clause into an end a line can be drawn at. */
+        record TheEndReadingSays(souther.compiler.inputs.BlockReason why) implements Why {
+
+            public TheEndReadingSays {
+                if (why == null) {
+                    throw new IllegalArgumentException("a reading that stopped says why");
+                }
+            }
+        }
+    }
+
+    /** Which reading answered a question. */
+    public enum Reader {
+
+        /**
+         * The reading that turns a rule into a line.
+         *
+         * <p>One word for it wherever the rule is written. A {@code guard}'s comparison and a
+         * newtype's bound are two producers of one kind of evidence (spec §example-partition), and
+         * a reader told which of them answered would be holding a fact about this compiler's
+         * arrangement of readers rather than about the model.
+         */
+        THE_END_READING,
+
+        /**
+         * A reading that holds what a clause says about the values themselves — which values may
+         * stand, what range they run over, what the numbers satisfy.
+         *
+         * <p>One word for however many of them there are. Which reading answered is provenance;
+         * telling them apart here would make the set of readings this compiler happens to have into
+         * something a reader downstream can act on, and a reading gained or lost would move what a
+         * report says about a model nobody edited.
+         */
+        THE_VALUE_READING
+    }
+}

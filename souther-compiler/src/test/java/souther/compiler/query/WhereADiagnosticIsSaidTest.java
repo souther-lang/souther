@@ -1,5 +1,9 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.Primary;
+
+import souther.compiler.source.SourceId;
+
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.Located;
 
@@ -7,7 +11,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -27,10 +30,10 @@ class WhereADiagnosticIsSaidTest {
     void aCompileOfOneSourceStillFilesItsProblemsUnderThatSource() {
         Compilation c = Compilation.ofSource(BROKEN, "Main");
 
-        Map<String, List<Located>> found = c.diagnostics();
+        Map<SourceId, List<Located>> found = c.diagnostics();
 
-        assertEquals(List.of("0"), List.copyOf(found.keySet()));
-        assertEquals(1, found.get("0").size(),
+        assertEquals(List.of(new SourceId("0")), List.copyOf(found.keySet()));
+        assertEquals(1, found.get(new SourceId("0")).size(),
                 "the one source is where its one problem is: " + found);
     }
 
@@ -38,21 +41,30 @@ class WhereADiagnosticIsSaidTest {
     void aCompileOfOneSourceFilesUnderTheSourceItQuotesFrom() {
         Compilation c = Compilation.ofSource(BROKEN, "Main");
 
-        Map<String, List<Located>> found = c.diagnostics();
+        Map<SourceId, List<Located>> found = c.diagnostics();
 
-        assertEquals("0", found.get("0").get(0).primarySourceId(),
+        assertEquals(new SourceId("0"), found.get(new SourceId("0")).get(0).context().filedUnder().orElse(null),
                 "the entry and the file it is filed under agree, or nothing can be quoted");
     }
 
+    /**
+     * A compile of one source names it like any other.
+     *
+     * <p>It used to name none, on the grounds that a caller holding one file knows which it is. What
+     * that left was a primary naming nothing and every secondary naming the one source there was, so
+     * a renderer comparing the two read them as two files and printed a file name over a note in the
+     * file it was already quoting. Whether to print an id at all is answered by the names a caller
+     * gives, and never by leaving the report unable to say where it is.
+     */
     @Test
-    void aCallerHoldingItsOwnFileIsToldNothingAboutWhichSource() {
+    void aCompileOfOneSourceNamesItLikeAnyOther() {
         Compilation c = Compilation.ofSource(BROKEN, "Main");
         c.answerEverything();
 
         Db.Found only = c.db().allReports().get(0);
 
-        assertNull(c.sourceIdOf(only),
-                "one source: the caller knows the file it handed over");
+        assertEquals(new SourceId("0"), c.filedUnderOf(only),
+                "the one source is a source, and a report in it says so");
     }
 
     @Test
@@ -67,9 +79,9 @@ class WhereADiagnosticIsSaidTest {
                 """), souther.compiler.meta.ModulePath.EMPTY);
         c.answerEverything();
 
-        List<String> said = c.db().allReports().stream().map(c::sourceIdOf).toList();
+        List<SourceId> said = c.db().allReports().stream().map(c::filedUnderOf).toList();
 
-        assertTrue(said.contains("1"), "the mistake is in the second source: " + said);
+        assertTrue(said.contains(new SourceId("1")), "the mistake is in the second source: " + said);
     }
 
     /** Where a report goes is read off where it points, so there is no way to name a file it has
@@ -80,8 +92,8 @@ class WhereADiagnosticIsSaidTest {
         c.answerEverything();
 
         for (Db.Found found : c.db().allReports()) {
-            List<String> saidAt = c.publishSourceIdsOf(found);
-            for (String id : saidAt) {
+            List<SourceId> saidAt = c.publishSourceIdsOf(found);
+            for (SourceId id : saidAt) {
                 assertTrue(hasARegionIn(found, id, c),
                         found.report().diagnostic().code() + " is said at " + id
                                 + " and points into nothing there");
@@ -89,13 +101,13 @@ class WhereADiagnosticIsSaidTest {
         }
     }
 
-    private static boolean hasARegionIn(Db.Found found, String id, Compilation c) {
-        String primary = c.publishSourceIdsOf(found).get(0);
-        if (id.equals(primary)) {
+    private static boolean hasARegionIn(Db.Found found, SourceId id, Compilation c) {
+        if (id.equals(c.publishSourceIdsOf(found).get(0))) {
             return true;
         }
         return found.report().diagnostic().secondary().stream()
-                .anyMatch(label -> id.equals(label.sourceIdOr(primary)));
+                .anyMatch(label -> label.place() instanceof souther.compiler.diag.DiagnosticPlace.InSource in
+                        && in.region().start().isIn(id));
     }
 
     // --- one problem, one report; two problems, two ----------------------------------------------
@@ -120,9 +132,9 @@ class WhereADiagnosticIsSaidTest {
                 let g (n) = joined(n)
                 """), souther.compiler.meta.ModulePath.EMPTY);
 
-        Map<String, List<Located>> found = c.diagnostics();
+        Map<SourceId, List<Located>> found = c.diagnostics();
 
-        assertEquals(1, found.get("0").size(),
+        assertEquals(1, found.get(new SourceId("0")).size(),
                 "the helper and the two bodies it is expanded into found one mistake: " + found);
     }
 
@@ -142,9 +154,9 @@ class WhereADiagnosticIsSaidTest {
                 let g (n) = bogusTwo
                 """), souther.compiler.meta.ModulePath.EMPTY);
 
-        Map<String, List<Located>> found = c.diagnostics();
+        Map<SourceId, List<Located>> found = c.diagnostics();
 
-        assertEquals(2, found.get("0").size(),
+        assertEquals(2, found.get(new SourceId("0")).size(),
                 "two names denote nothing, so there are two things to say: " + found);
     }
 
@@ -164,9 +176,9 @@ class WhereADiagnosticIsSaidTest {
                 List.of("module a\n" + same, "module b\n" + same),
                 souther.compiler.meta.ModulePath.EMPTY);
 
-        Map<String, List<Located>> found = c.diagnostics();
+        Map<SourceId, List<Located>> found = c.diagnostics();
 
-        assertEquals(1, found.get("0").size(), "a's is said on a: " + found);
-        assertEquals(1, found.get("1").size(), "b's is said on b: " + found);
+        assertEquals(1, found.get(new SourceId("0")).size(), "a's is said on a: " + found);
+        assertEquals(1, found.get(new SourceId("1")).size(), "b's is said on b: " + found);
     }
 }

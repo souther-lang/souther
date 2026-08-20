@@ -1,7 +1,7 @@
 package souther.compiler.types;
 
 /**
- * What a name written in the value namespace denotes — the answer {@link TypeName} gives for the
+ * What a name written in the value namespace denotes — the answer {@link TypeSymbol} gives for the
  * type namespace.
  *
  * <p>A behavior is named from a {@code >->} stage and from a {@code depends on} clause; a body names a
@@ -87,6 +87,34 @@ public sealed interface ValueName {
             return name == null;
         }
 
+        /**
+         * The primitive this builds when it is applied, or null where applying it builds nothing.
+         *
+         * <p>The one place that says what a library name applied to an argument <em>constructs</em>,
+         * as against computing something. Only the namespace itself builds a value —
+         * {@code Date("2026-09-30")} — and only where the namespace is one of the temporals;
+         * {@code Date.fromParts} is an operation and answers a case, and {@code List} builds nothing
+         * by being applied.
+         *
+         * <p>Asked here rather than at each reader, because a reader that had to answer it took the
+         * only thing in reach, which was the spelling in front of the argument. Three of them did,
+         * each with a different reading of it, and a model declaring a behavior of its own called
+         * {@code Date} was compiled as this construction.
+         *
+         * <p>What is read is the alias, through {@link Type.Prim#named} — the backwards reading of
+         * the one table that writes a primitive out, not a second list of the four spellings. That
+         * a namespace constructs the primitive its alias is written as holds because the library
+         * publishes it under that alias; a library that published a temporal under some other name
+         * would be deciding this here, and this is where it would be decided.
+         */
+        public Type.Prim constructs() {
+            if (!isNamespace()) {
+                return null;
+            }
+            Type.Prim prim = Type.Prim.named(alias);
+            return prim != null && prim.temporal() ? prim : null;
+        }
+
         /** The operation this reaches, or null where it is the namespace itself. */
         public String operation() {
             return name;
@@ -116,11 +144,11 @@ public sealed interface ValueName {
      * it wraps. Which of the two is decided by what the type is, not by how the name was written.
      *
      * <p>{@code origin} says where the construction came from. A unit data is *constructed* by being
-     * named, and a construction says where it came from ({@link souther.compiler.ast.Ast.NewData}) so
+     * named, and a construction says where it came from ({@link souther.compiler.ast.Hir.NewData}) so
      * that the permission check can tell the reader's own from one it was handed; a unit data has no
      * node of its own to say it on, so the name says it.
      */
-    record OfType(String name, TypeName type, ConstructionOrigin origin) implements ValueName {
+    record OfType(String name, TypeSymbol type, ConstructionOrigin origin) implements ValueName {
 
         /** The same name, carried into a reader by {@code module}'s published body. */
         public OfType publishedBy(String module) {
@@ -161,26 +189,6 @@ public sealed interface ValueName {
         @Override
         public String toString() {
             return module + "." + name;
-        }
-    }
-
-    /**
-     * A name nothing denotes, keeping the spelling that was written.
-     *
-     * <p>Why it denotes nothing was reported where it was written, so a reader that meets one says
-     * nothing further: the definition resting on it is abandoned, and the definitions around it are
-     * checked as they would be without it. This is what {@link TypeName#unresolved} is for a type.
-     */
-    record Unresolved(String written) implements ValueName {
-
-        @Override
-        public String name() {
-            return written;
-        }
-
-        @Override
-        public String toString() {
-            return written;
         }
     }
 }

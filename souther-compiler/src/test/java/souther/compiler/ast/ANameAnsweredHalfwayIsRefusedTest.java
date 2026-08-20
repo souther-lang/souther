@@ -1,10 +1,13 @@
 package souther.compiler.ast;
 
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -27,41 +30,68 @@ class ANameAnsweredHalfwayIsRefusedTest {
 
     private static final ValueName.Helper DECLARED = new ValueName.Helper("demo", "spin");
 
-    /** A name the parser read: nothing has been answered about it yet, and that is a state. */
+    /**
+     * A name the parser read says what it is written as and nothing else. It has no question about
+     * a declaration to refuse, because it carries no slot for one — the answers are
+     * {@link Hir.Var}'s, and this is the other representation.
+     */
     @Test
-    void aNameNothingHasAnsweredYetIsFine() {
-        Ast.Var written = new Ast.Var("spin", POS);
+    void aNameTheParserReadSaysOnlyWhatItIsWrittenAs() {
+        Ast.Var written = Ast.Var.written("spin", POS);
 
         assertEquals("spin", written.name());
-        assertEquals("spin", written.reaches(),
-                "nothing resolved it, so what it reaches is what it is written as");
+        assertEquals(Ast.Var.class, written.getClass(),
+                "one form: what a name means is not something this representation can hold");
     }
 
-    /** What it denotes without how it is reached is not a state a rewrite may leave behind. */
+    /**
+     * Half an answer is not a state a rewrite may leave behind, whichever half it is. One way round
+     * leaves a reference that resolves to a declaration and reaches nothing; the other leaves a key
+     * with nothing saying what it means, and there is nowhere for it to have come from —
+     * {@link ReachName#of} takes the denotation to work one out.
+     */
     @Test
-    void aNameThatDenotesSomethingAndReachesNothingCannotBeBuilt() {
-        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> new Ast.Var(WrittenName.of("spin", POS), DECLARED, null));
+    void aNameAnsweredOnOneCountOnlyCannotBeBuilt() {
+        IllegalArgumentException noReach = assertThrows(IllegalArgumentException.class,
+                () -> new Hir.Var.Denoting(WrittenName.of("spin", POS), DECLARED, null, null));
+        IllegalArgumentException noDenotation = assertThrows(IllegalArgumentException.class,
+                () -> new Hir.Var.Denoting(WrittenName.of("spin", POS), null,
+                        new ReachName.OfModule("demo", "spin"), null));
 
-        assertEquals(true, refused.getMessage().contains("spin"), refused.getMessage());
+        assertEquals(true, noReach.getMessage().contains("spin"), noReach.getMessage());
+        assertEquals(true, noDenotation.getMessage().contains("spin"), noDenotation.getMessage());
     }
 
-    /** And a reader asking what a name is declared as, of one nothing answered, is told so rather
-     * than handed the spelling — the answer it wanted is the one that is missing. */
+    /**
+     * And a pass applying a name says what it means. The application a pass writes takes both
+     * answers and takes them as answers: the constructor that took a spelling alone is gone, and
+     * this is the one that replaced it, so a caller with nothing to say cannot say it here either.
+     *
+     * <p>Refused at the application rather than left to {@link Hir.Var}: what a pass hands in is a
+     * spelling and two answers, and a caller with nothing to say would otherwise write a name for
+     * someone downstream to resolve, which is what ADR-0067 rules out.
+     */
     @Test
-    void theDeclaredNameOfSomethingNothingAnsweredIsRefused() {
-        Ast.Var written = new Ast.Var("spin", POS);
-
-        assertThrows(IllegalStateException.class, written::bare);
+    void anApplicationAPassWritesCannotLeaveItsNameUnanswered() {
+        assertThrows(NullPointerException.class,
+                () -> new Hir.Apply("spin", null, new ReachName.OfModule("demo", "spin"),
+                        List.of(), ConstructionOrigin.own(), POS, null));
+        assertThrows(NullPointerException.class,
+                () -> new Hir.Apply("spin", DECLARED, null,
+                        List.of(), ConstructionOrigin.own(), POS, null));
+        assertThrows(NullPointerException.class,
+                () -> new Hir.Apply("spin", null, null,
+                        List.of(), ConstructionOrigin.own(), POS, null));
     }
 
     /** Answered, it says both. */
     @Test
     void aResolvedNameSaysWhatItDenotesAndHowItIsReached() {
-        Ast.Var resolved = new Ast.Var(WrittenName.of("spin", POS), DECLARED,
-                new ReachName.OfModule("demo", "spin"));
+        WrittenName spin = WrittenName.of("spin", POS);
+        Hir.Var resolved = new Hir.Var.Denoting(spin, DECLARED,
+                new ReachName.OfModule("demo", "spin"), spin.region());
 
-        assertEquals("spin", resolved.bare());
-        assertEquals("demo.spin", resolved.reaches());
+        assertEquals("spin", resolved.answered().denotes().name());
+        assertEquals("demo.spin", resolved.answered().reaches());
     }
 }

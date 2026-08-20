@@ -54,6 +54,54 @@ enum Question {
         }
     },
 
+    /**
+     * Whether it walks a container from a seed through its closure, and where the seed arrives
+     * ({@link Reductions}). Asked of an operation given a container, taking a closure that answers
+     * what the operation answers and takes a value of that type, beside a plain argument of it —
+     * which is the shape a walk from a seed has and is not what makes an operation one. A closure
+     * applied once, or applied to something the operation built rather than to the accumulator it
+     * carries, is declared the same way.
+     *
+     * <p>The container is part of the range and not only of the answer. This asks whether an
+     * operation walks <em>a container</em>, so one given none is outside it rather than in it with
+     * nothing to say — an operation declared {@code ((A) -> A, A) -> A} repeats a step over no
+     * elements and is a different question, which nobody has had to ask yet.
+     *
+     * <p>Beside {@link #COMBINATOR} and not folded into it. What an operation hands its closure is
+     * read off the declaration; that it hands it the same closure again with what came back is not,
+     * and a range that took the first as an answer for the second would let the second go missing in
+     * silence.
+     */
+    REDUCTION("whether it reduces a container from a seed through its closure") {
+        @Override
+        boolean asksOf(Prelude.Signature signature) {
+            Type result = signature.result();
+            if (result == null || signature.params().stream().noneMatch(Question::holdsElements)) {
+                return false;
+            }
+            boolean carriesItBack = signature.params().stream().anyMatch(
+                    t -> t instanceof Type.FnOf fn && result.equals(fn.result())
+                            && fn.params().contains(result));
+            return carriesItBack && signature.params().stream().anyMatch(
+                    t -> !(t instanceof Type.FnOf) && result.equals(t));
+        }
+
+        @Override
+        boolean answeredFor(ValueName operation) {
+            return Reductions.answered().contains(operation);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return Reductions.answered();
+        }
+
+        @Override
+        Set<ValueName> nothingSaidOf() {
+            return Reductions.REDUCES_NOTHING;
+        }
+    },
+
     /** What it keeps of the container it was built from ({@link DischargeRules#builtFrom}). Asked of
      * an operation that answers a container and is given one. A string is not in range: a shape says
      * what became of a container's elements, and of a string this names only its length. */
@@ -242,6 +290,120 @@ enum Question {
         }
     },
 
+    /**
+     * What holds of the number it answers wherever it is called ({@link DischargeRules#boundsOn}).
+     * Asked of an operation answering a number from a number: a bound is stated against the arguments,
+     * so an operation given none has nothing for a row to bound its result against.
+     */
+    BOUNDS("what bounds the number it answers") {
+        @Override
+        boolean asksOf(Prelude.Signature signature) {
+            return isANumber(signature.result())
+                    && signature.params().stream().anyMatch(Question::isANumber);
+        }
+
+        @Override
+        boolean answeredFor(ValueName operation) {
+            return DischargeRules.boundedOperations().contains(operation);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.boundedOperations();
+        }
+
+        @Override
+        Set<ValueName> nothingSaidOf() {
+            return DischargeRules.BOUNDS_NOTHING;
+        }
+    },
+
+    /**
+     * What it states through the measure that counts what it shifted and what it answered apart
+     * ({@link DischargeRules#shiftBy}). Asked of an operation answering a value of the kind one of
+     * its arguments is, given a number — which is the shape moving a value by an amount has.
+     */
+    MEASURE("what it states through the measure counting the two apart") {
+        @Override
+        boolean asksOf(Prelude.Signature signature) {
+            return signature.result() != null && !isANumber(signature.result())
+                    && signature.params().contains(signature.result())
+                    && signature.params().stream().anyMatch(Question::isANumber)
+                    && isCounted(signature.result());
+        }
+
+        @Override
+        boolean answeredFor(ValueName operation) {
+            return DischargeRules.shiftingOperations().contains(operation);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.shiftingOperations();
+        }
+
+        @Override
+        Set<ValueName> nothingSaidOf() {
+            return DischargeRules.SHIFTS_BY_NOTHING_MEASURABLE;
+        }
+    },
+
+    /**
+     * Whether it answers one of the values it was given, and in which cases
+     * ({@link DischargeRules#chosenBy}). Asked of an operation answering a number from a number: what
+     * such an operation answers may be one of its arguments, decided by the arguments.
+     */
+    CHOICE("whether it answers one of its arguments, and in which cases") {
+        @Override
+        boolean asksOf(Prelude.Signature signature) {
+            return isANumber(signature.result())
+                    && signature.params().stream().anyMatch(Question::isANumber);
+        }
+
+        @Override
+        boolean answeredFor(ValueName operation) {
+            return DischargeRules.choosingOperations().contains(operation);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.choosingOperations();
+        }
+
+        @Override
+        Set<ValueName> nothingSaidOf() {
+            return DischargeRules.CHOOSES_NOTHING;
+        }
+    },
+
+    /**
+     * Whether the number it answers is a number it was given ({@link DischargeRules#answersItsArgument}).
+     * Asked of an operation answering a number from a number, which is the shape a value re-expressed
+     * has — the result may be one of the arguments read again rather than a number computed from them.
+     */
+    FORM("whether the number it answers is one it was given") {
+        @Override
+        boolean asksOf(Prelude.Signature signature) {
+            return isANumber(signature.result())
+                    && signature.params().stream().anyMatch(Question::isANumber);
+        }
+
+        @Override
+        boolean answeredFor(ValueName operation) {
+            return DischargeRules.formOperations().contains(operation);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.formOperations();
+        }
+
+        @Override
+        Set<ValueName> nothingSaidOf() {
+            return DischargeRules.ANSWERS_NO_ARGUMENT_OF_ITS_OWN;
+        }
+    },
+
     /** Which operator it is the function form of ({@link DischargeRules#operator}). Asked of an
      * operation over two numbers answering a number of the same kind. */
     OPERATOR("which operator it computes") {
@@ -315,6 +477,30 @@ enum Question {
      * question as what puts an operation in range of one. */
     static boolean holdsElements(Type t) {
         return t instanceof Type.ListOf || t instanceof Type.SetOf || t instanceof Type.MapOf;
+    }
+
+    /**
+     * Whether the library counts two values of {@code t} apart as a number.
+     *
+     * <p>What makes moving a value by an amount a question with an answer. A list shortened by three
+     * and a string padded to a width are shifts as much as a date a day on is, and neither says
+     * anything <em>through a measure</em>, because the library has none that counts two lists or two
+     * strings apart — a size counts one of them. So the range is read off the declarations, and the
+     * day the library gains such a measure the operations of that kind come into range and are asked.
+     */
+    private static boolean isCounted(Type t) {
+        return Prelude.entries().values().stream().anyMatch(entry -> {
+            List<Type> counted = entry.signature().params();
+            return isANumber(entry.signature().result()) && counted.size() == 2
+                    && counted.get(0).equals(t) && counted.get(1).equals(t);
+        });
+    }
+
+    /** Whether {@code t} is one of the kinds of number the domain relates arithmetically. Read where
+     * the numeric rules are bound as well: what such a rule may be written about is the same question
+     * as what puts an operation in range of one. */
+    static boolean isANumber(Type t) {
+        return t == Type.Prim.INT || t == Type.Prim.DECIMAL;
     }
 
     /** Whether {@code t} is something the check can name the size of — a container, or a string. */

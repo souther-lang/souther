@@ -2,15 +2,17 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.query.Scopes;
+import souther.compiler.ast.Hir;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
-import souther.compiler.partition.Exclusions;
 import souther.compiler.partition.GenerationReason;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.Partitions;
@@ -65,21 +67,21 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
         Compilation compilation = Compilation.ofSource(TRIP, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Ast.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
-        Ast.SpecBehavior spec = (Ast.SpecBehavior) prepared.behaviors().stream()
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("submit")).findFirst().orElseThrow();
         Sig sig = sigs.get("submit");
         return new Generator.Subject(new souther.compiler.partition.BehaviorInputs(
-                spec.params().stream().map(Ast.Param::name).toList(), sig.inputTypes(), symbols),
-                Partitions.of(spec, sig, symbols, Exclusions.NONE).axes());
+                spec.params().stream().map(Hir.Param::name).toList(), sig.inputTypes(), symbols),
+                Partitions.of(spec.name(), InputDomain.of(spec, sig, symbols), symbols).axes());
     }
 
     private static String written(Generator.GenerationResult result) {
         return GeneratedRows.of("example.trip",
                 Map.of("submit", new Adequacy.Filling(result, Generator.GenerationResult.NONE, List.of())),
-                false, SourceNameResolver.identity());
+                Map.of(), false, SourceNameResolver.identity());
     }
 
     /**

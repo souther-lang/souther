@@ -18,6 +18,7 @@ import java.util.List;
  *   run     what the generated code costs to run, per element
  *   scale   how a whole-workspace compile grows with the number of modules
  *   values  how one module's compile grows with the number of values it declares
+ *   report  how what a source has against its canonical form grows with the source
  * </pre>
  *
  * <p>Every corpus is compiled once and checked before anything is timed. A language change that
@@ -31,7 +32,7 @@ public final class Bench {
     public static void main(String[] args) {
         Report report = new Report(System.out);
         List<String> wanted = args.length == 0
-                ? List.of("cold", "warm", "phase", "edit", "run", "scale", "values")
+                ? List.of("cold", "warm", "phase", "edit", "run", "scale", "values", "report")
                 : new ArrayList<>(List.of(args));
 
         List<Corpus> corpora = Corpus.all();
@@ -78,6 +79,10 @@ public final class Bench {
         }
         if (wanted.contains("values")) {
             Values.measure(report);
+            report.blank();
+        }
+        if (wanted.contains("report")) {
+            Reporting.measure(report);
         }
     }
 }

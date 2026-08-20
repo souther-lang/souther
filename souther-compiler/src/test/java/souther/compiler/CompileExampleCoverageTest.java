@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.MeasurementStatus;
@@ -55,7 +57,7 @@ class CompileExampleCoverageTest {
 
     private static List<String> unreached(Adequacy.BranchEvidence branch) {
         return branch.unreached().stream()
-                .map(souther.compiler.coverage.CoverageSites.Site::label).toList();
+                .map(souther.compiler.report.ArmVocabulary::label).toList();
     }
 
     /** One row through the guard leaves the other arm with nothing going through it. */
@@ -176,7 +178,7 @@ class CompileExampleCoverageTest {
                 """, "pick");
 
         assertEquals(List.of("case Off"),
-                branch.all().stream().map(site -> site.label()).toList());
+                branch.all().stream().map(site -> souther.compiler.report.ArmVocabulary.label(site)).toList());
         assertEquals(List.of(), unreached(branch), "the row went through the arm that is left");
     }
 
@@ -254,7 +256,7 @@ class CompileExampleCoverageTest {
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        String sourceId = compilation.exampleSourcesOf(module).get(0);
+        SourceId sourceId = compilation.exampleSourcesOf(module).getFirst();
         List<souther.compiler.observe.RowOutcome> rows = compilation.db()
                 .ask(souther.compiler.query.Output.Examples.asked(
                         compilation.db(), module, sourceId)).value().rows();
@@ -263,8 +265,10 @@ class CompileExampleCoverageTest {
         assertEquals(souther.compiler.observe.Disposition.INCOMPLETE, rows.get(0).disposition(),
                 "the row is the one that never came back");
         assertEquals(souther.compiler.observe.FailurePhase.TIMEOUT, rows.get(0).failurePhase());
-        assertEquals(java.util.Set.of(), rows.get(0).hits(),
-                "and what it went through on the way is not read");
+        assertEquals(new souther.compiler.observe.Applied.Nothing(), rows.get(0).run().applied(),
+                "the deadline gave the row up before the behavior was applied");
+        assertEquals(new souther.compiler.observe.Counting.Unread(), rows.get(0).run().counting(),
+                "and what it spent on the way was never read, which is not the same as nothing");
 
         Adequacy.BranchEvidence branch = compilation.db()
                 .ask(new Adequacy.BranchCoverage(module)).value().get("go");
@@ -373,7 +377,9 @@ class CompileExampleCoverageTest {
         Adequacy.SignatureEvidence signature = compilation.db()
                 .ask(new Adequacy.Witnesses(module)).value().get("submit");
 
-        assertEquals(List.of("then"), unreached(branch));
+        // The `guard` passes into the rest of the block, and the author wrote no `then` for it
+        // to be called after.
+        assertEquals(List.of("continued"), unreached(branch));
         assertEquals(1, signature.output().verified().size());
         assertFalse(signature.output().verified().isEmpty(),
                 "the arm that ran is the case that was verified");

@@ -1,5 +1,8 @@
 package souther.cli;
 
+import souther.compiler.source.SourceId;
+
+import souther.compiler.jvm.JvmClassName;
 import souther.compiler.Compiler;
 import souther.compiler.Reserved;
 import souther.compiler.cst.CstError;
@@ -28,6 +31,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 import souther.compiler.report.UnifiedDiff;
+import souther.cli.init.InitCommand;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -144,6 +148,7 @@ public final class Main {
      */
     private static java.util.function.IntSupplier work(CliCommand command, String[] rest) {
         return switch (command) {
+            case INIT -> () -> initSubcommand(rest);
             case RUN -> () -> runSubcommand(rest);
             case COMPILE -> () -> compileSubcommand(rest);
             case FMT -> () -> fmtSubcommand(rest);
@@ -202,7 +207,7 @@ public final class Main {
                     }
                     refuseWarnings = args[i].equals("error");
                 }
-                case "-d" -> outDir = Path.of(args[++i]);
+                case "-d", "--dir" -> outDir = Path.of(args[++i]);
                 case "-cp", "--class-path" -> {
                     for (String entry : args[++i].split(java.io.File.pathSeparator)) {
                         if (!entry.isBlank()) {
@@ -241,6 +246,23 @@ public final class Main {
             System.err.println("io error: " + e.getMessage());
             return 1;
         }
+    }
+
+    /**
+     * {@code souther init [<groupId>:<artifactId>]}: writes a project, or adds Souther to one.
+     *
+     * <p>Through the same flag extraction as every other command that answers a reader, so that what
+     * it writes is in the language the line asked for, and a language tag that names nothing is
+     * refused here the way it is everywhere else. No other rendering flag is one of this command's:
+     * what it writes is a list of files rather than a diagnostic.
+     */
+    private static int initSubcommand(String[] rawArgs) {
+        RenderOptions render = new RenderOptions();
+        String[] args = render.extract(rawArgs);
+        if (args == null) {
+            return 2;
+        }
+        return InitCommand.run(args, render.locale(), System.out, System.err);
     }
 
     /**
@@ -315,7 +337,7 @@ public final class Main {
                     : Compiler.analyzedModules(texts, path, warnings, measure);
             // Said first, and whatever the command answers with after. What is wrong with the source
             // is the same news whether the rest of this reports, refuses, or succeeds.
-            List<Located> errors = compilation.errors(compilation.db().allReports());
+            List<Located> errors = compilation.errors();
             List<Located> said = new ArrayList<>(errors);
             said.addAll(warnings);
             report(said, sources, render);
@@ -356,8 +378,15 @@ public final class Main {
             // them: waiting is the normal state of a model being written, and a gate on it refuses the
             // record of what an injected behavior owes — which is the thing the report exists to keep.
             if (strict && report.adequacy() == AdequacyReport.AdequacyStatus.NOT_SATISFIED) {
-                System.err.println(Messages.get("cli.examples.strict.refused", render.locale(),
-                        report.adequacyGaps().size()));
+                // Said in the terms of the report the reader was given. A count is only worth
+                // anything beside a way of finding the entries it counts, and the two surfaces name
+                // them differently: a person reads a mark and a consumer reads a field. Pointing at
+                // the mark whatever was printed sent a reader of a JSON document looking for a
+                // character that is nowhere in it.
+                System.err.println(Messages.get(render.json()
+                                ? "cli.examples.strict.refused.json"
+                                : "cli.examples.strict.refused",
+                        render.locale(), report.adequacyGaps().size()));
                 return 1;
             }
             return 0;
@@ -659,10 +688,11 @@ public final class Main {
     /**
      * Which of the files handed over a source id names, or null when it names none of them.
      *
-     * <p>A compile of one source names none, and the one file it was given is the answer however the
-     * diagnostic is tagged — which is why one item is not read as "the source called 0, or nothing".
+     * <p>Matched on the id, like everything else this command resolves. A report says which source
+     * it points into, so a caller with one file to hand has nothing to guess at and a caller with
+     * several has nothing to work out.
      */
-    private static Path pathOf(List<Path> sources, String sourceId) {
+    private static Path pathOf(List<Path> sources, SourceId sourceId) {
         int at = indexOf(sources, sourceId);
         return at < 0 ? null : sources.get(at);
     }
@@ -685,12 +715,10 @@ public final class Main {
      * front of the reader. Both renderings go through {@link #displayNames}, so a run cannot quote a
      * line from {@code a/model.sou} and then say the rows of {@code model.sou} were not read.
      *
-     * <p>Matched on the id and nothing else, which is where this parts from {@link #indexOf}. That
-     * answers for a diagnostic, which may name no source at all: a compile of one file tags its
-     * problems with nothing, and the one file handed over is the answer however the diagnostic is
-     * tagged. A reason in a report always names one, so an id that is none of these files is an id
-     * about a source this command did not hand over, and answering with the only file would be
-     * inventing the very correspondence this is here to stop being guessed at.
+     * <p>Matched on the id and nothing else, as {@link #indexOf} is. An id that is none of these
+     * files is an id about a source this command did not hand over, and answering with the only file
+     * there happens to be would be inventing the very correspondence this is here to stop being
+     * guessed at.
      */
     static SourceNameResolver namesOf(List<Path> sources) {
         List<String> names = displayNames(sources);
@@ -700,7 +728,7 @@ public final class Main {
                     return names.get(i);
                 }
             }
-            return id;
+            return id.value();
         };
     }
 
@@ -712,14 +740,14 @@ public final class Main {
     /**
      * Which of the files handed over a source id names, or -1 when it names none of them.
      *
-     * <p>For a diagnostic, which may name no source: a compile of one file tags its problems with
-     * nothing, so the single file is the answer whatever the id reads. Not for a reason in a report,
-     * which always names one — {@link #namesOf} matches on the id alone.
+     * <p>On the id and nothing else. The one file handed over used to be the answer for whatever it
+     * was asked, including for no id at all, because a report could arrive here without one and the
+     * single file was the only guess to be had. A report says which source it points into now, so
+     * there is nothing left to guess — and the guess was answering for reports it had no business
+     * answering for: handed one file and a report about another, it quoted that file at the
+     * report's numbers, which put a caret past the end of a line the author never wrote.
      */
-    private static int indexOf(List<Path> sources, String sourceId) {
-        if (sources.size() == 1) {
-            return 0;
-        }
+    private static int indexOf(List<Path> sources, SourceId sourceId) {
         for (int i = 0; i < sources.size(); i++) {
             if (Compilation.idOfSourceIndex(i).equals(sourceId)) {
                 return i;
@@ -1041,7 +1069,7 @@ public final class Main {
     static List<Path> writeClasses(Map<String, byte[]> classes, Path outDir) throws IOException {
         List<Path> written = new ArrayList<>();
         for (Map.Entry<String, byte[]> entry : classes.entrySet()) {
-            Path file = outDir.resolve(entry.getKey().replace('.', '/') + ".class");
+            Path file = outDir.resolve(JvmClassName.classFile(entry.getKey()));
             Files.createDirectories(file.getParent());
             Files.write(file, entry.getValue());
             written.add(file);

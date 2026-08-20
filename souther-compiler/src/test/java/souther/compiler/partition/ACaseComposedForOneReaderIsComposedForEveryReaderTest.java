@@ -2,10 +2,15 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Resolve;
+import souther.compiler.check.SyntaxSymbols;
 import souther.compiler.check.Symbols;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 import java.util.Set;
@@ -49,13 +54,13 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
 
     private final Symbols symbols = Symbols.of(resolved());
 
-    private static Ast.Module resolved() {
+    private static Hir.Module resolved() {
         Ast.Module parsed = CstFrontend.parse(MODULE);
-        return Resolve.module(parsed, Symbols.of(parsed));
+        return Resolve.module(parsed, SyntaxSymbols.of(parsed));
     }
 
     private Type named(String name) {
-        return Type.ref(symbols.own(name));
+        return Type.ref(TypeSymbols.declared(new TypeKey(symbols.module(), name)));
     }
 
     private Type sum() {

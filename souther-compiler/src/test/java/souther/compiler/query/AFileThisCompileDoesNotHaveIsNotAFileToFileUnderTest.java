@@ -1,7 +1,10 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.Primary;
+
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.msg.NameMessage;
-import souther.compiler.diag.DiagnosticCode;
 
 
 import souther.compiler.diag.Diagnostic;
@@ -38,7 +41,7 @@ class AFileThisCompileDoesNotHaveIsNotAFileToFileUnderTest {
     /** A report about module {@code m} whose primary region was read from {@code positionsFile}. */
     private static Db.Found about(String positionsFile) {
         Diagnostic d = Diagnostic.say(new NameMessage.NoValueOfThatNameInScope("x"))
-                .at(new SourcePos(2, 1, positionsFile), 4).build();
+                .at(new SourcePos(2, 1, new SourceId(positionsFile)), 4).build();
         return new Db.Found("m", null, Report.of(d));
     }
 
@@ -52,7 +55,7 @@ class AFileThisCompileDoesNotHaveIsNotAFileToFileUnderTest {
         byId.put("m.sou", M);
         Compilation c = ofDocuments(byId);
 
-        assertEquals("m.sou", c.sourceIdOf(about("m.sou")));
+        assertEquals(new SourceId("m.sou"), c.filedUnderOf(about("m.sou")));
     }
 
     @Test
@@ -61,7 +64,7 @@ class AFileThisCompileDoesNotHaveIsNotAFileToFileUnderTest {
         byId.put("m.sou", M);
         Compilation c = ofDocuments(byId);
 
-        assertEquals("m.sou", c.sourceIdOf(about("somewhere-else.sou")),
+        assertEquals(new SourceId("m.sou"), c.filedUnderOf(about("somewhere-else.sou")),
                 "the position names a file this compile was never handed");
     }
 
@@ -73,7 +76,7 @@ class AFileThisCompileDoesNotHaveIsNotAFileToFileUnderTest {
         byId.put("m.sou", M);
         Compilation c = ofDocuments(byId);
 
-        List<String> saidAt = c.publishSourceIdsOf(about("somewhere-else.sou"));
+        List<SourceId> saidAt = c.publishSourceIdsOf(about("somewhere-else.sou"));
 
         assertEquals(1, saidAt.size(), saidAt.toString());
         assertTrue(c.sourceIds().contains(saidAt.get(0)),
@@ -88,7 +91,7 @@ class AFileThisCompileDoesNotHaveIsNotAFileToFileUnderTest {
         byId.put("file:///w/m.sou", M);
         Compilation c = ofDocuments(byId);
 
-        assertEquals(List.of("file:///w/m.sou"), c.publishSourceIdsOf(about("file:///w/m.sou")));
+        assertEquals(List.of(new SourceId("file:///w/m.sou")), c.publishSourceIdsOf(about("file:///w/m.sou")));
     }
 
     /** A compile of one source tells its caller nothing about which file, since the caller knows —
@@ -97,6 +100,6 @@ class AFileThisCompileDoesNotHaveIsNotAFileToFileUnderTest {
     void aKnownSourceIsRecognisedThroughOfSource() {
         Compilation c = Compilation.ofSource(M, "Main");
 
-        assertEquals(List.of("0"), c.publishSourceIdsOf(about("0")));
+        assertEquals(List.of(new SourceId("0")), c.publishSourceIdsOf(about("0")));
     }
 }

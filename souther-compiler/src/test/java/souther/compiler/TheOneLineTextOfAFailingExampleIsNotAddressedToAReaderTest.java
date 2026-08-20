@@ -4,7 +4,6 @@ import souther.compiler.examples.ExampleVerifier;
 import souther.compiler.diag.msg.ExampleMessage;
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Messages;
 
 import java.util.List;
@@ -33,7 +32,7 @@ class TheOneLineTextOfAFailingExampleIsNotAddressedToAReaderTest {
 
     @Test
     void aFailingExampleSaysWhatTheEnglishCatalogSays() {
-        Diagnostic failure = Diagnostic.say(SAID).build();
+        Diagnostic failure = Diagnostic.say(SAID).nowhere().build();
 
         String said = ExampleVerifier.legacySummary(List.of(failure));
 
@@ -46,7 +45,7 @@ class TheOneLineTextOfAFailingExampleIsNotAddressedToAReaderTest {
      */
     @Test
     void theCatalogWouldHaveSaidSomethingElseInJapanese() {
-        Diagnostic failure = Diagnostic.say(SAID).build();
+        Diagnostic failure = Diagnostic.say(SAID).nowhere().build();
 
         String said = ExampleVerifier.legacySummary(List.of(failure));
 

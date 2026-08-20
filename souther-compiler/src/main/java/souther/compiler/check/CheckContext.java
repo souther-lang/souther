@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
+import souther.compiler.types.ValueName;
 
 import java.util.Map;
 
@@ -14,23 +15,49 @@ import java.util.Map;
  * as separate parameters threaded through every method. What does change — the variable environment and
  * the expected type pushed down from the surrounding context — is passed separately.
  */
-public record CheckContext(Symbols symbols, Ast.Data data, Map<String, ReqSig> reqs,
-                           Map<String, ReqSig> callees, boolean makingAnOptional,
-                           Preserved preserved) {
+public record CheckContext(Symbols symbols, Hir.Data data, Map<ValueName.Behavior, ReqSig> reqs,
+                           Map<ValueName.Behavior, ReqSig> callees, boolean makingAnOptional,
+                           Preserved preserved,
+                           Map<souther.compiler.types.BindingId, ValueName.Behavior> dependencies) {
 
-    public CheckContext(Symbols symbols, Ast.Data data, Map<String, ReqSig> reqs,
-                        Map<String, ReqSig> callees, boolean makingAnOptional) {
+    public CheckContext(Symbols symbols, Hir.Data data, Map<ValueName.Behavior, ReqSig> reqs,
+                        Map<ValueName.Behavior, ReqSig> callees, boolean makingAnOptional,
+                        Preserved preserved) {
+        this(symbols, data, reqs, callees, makingAnOptional, preserved, Map.of());
+    }
+
+    /**
+     * Which behavior each of an implementation's trailing parameters stands for.
+     *
+     * <p>A {@code let} implementing a behavior takes its {@code depends on} as parameters, so a
+     * body naming one names a binding — and what that binding is is the behavior the clause
+     * resolved to. Held by the binding and not by the name it was written under: an implementation
+     * chooses its own parameter names, and two modules may declare a behavior of one name.
+     */
+    public ValueName.Behavior dependencyOf(souther.compiler.types.BindingId binding) {
+        return dependencies.get(binding);
+    }
+
+    /** The same context, told which behavior each trailing parameter of the definition being
+     *  checked stands for. */
+    public CheckContext withDependencies(
+            Map<souther.compiler.types.BindingId, ValueName.Behavior> bound) {
+        return new CheckContext(symbols, data, reqs, callees, makingAnOptional, preserved, bound);
+    }
+
+    public CheckContext(Symbols symbols, Hir.Data data, Map<ValueName.Behavior, ReqSig> reqs,
+                        Map<ValueName.Behavior, ReqSig> callees, boolean makingAnOptional) {
         this(symbols, data, reqs, callees, makingAnOptional, Preserved.NONE);
     }
 
     /** A context with no behavior callable by name — every construction that predates the
      *  distinction, and every position where only injected behaviors are in sight. */
-    public CheckContext(Symbols symbols, Ast.Data data, Map<String, ReqSig> reqs) {
+    public CheckContext(Symbols symbols, Hir.Data data, Map<ValueName.Behavior, ReqSig> reqs) {
         this(symbols, data, reqs, Map.of());
     }
 
-    public CheckContext(Symbols symbols, Ast.Data data, Map<String, ReqSig> reqs,
-                        Map<String, ReqSig> callees) {
+    public CheckContext(Symbols symbols, Hir.Data data, Map<ValueName.Behavior, ReqSig> reqs,
+                        Map<ValueName.Behavior, ReqSig> callees) {
         this(symbols, data, reqs, callees, false);
     }
 
@@ -41,19 +68,22 @@ public record CheckContext(Symbols symbols, Ast.Data data, Map<String, ReqSig> r
     }
 
     /** The same context checking a different {@code data}'s invariant, decoder, or encoder. */
-    public CheckContext forData(Ast.Data other) {
-        return new CheckContext(symbols, other, reqs, callees, makingAnOptional, preserved);
+    public CheckContext forData(Hir.Data other) {
+        return new CheckContext(symbols, other, reqs, callees, makingAnOptional, preserved,
+                dependencies);
     }
 
     /** The same context with the behaviors a body may call in scope. */
-    public CheckContext withReqs(Map<String, ReqSig> required) {
-        return new CheckContext(symbols, data, required, callees, makingAnOptional, preserved);
+    public CheckContext withReqs(Map<ValueName.Behavior, ReqSig> required) {
+        return new CheckContext(symbols, data, required, callees, makingAnOptional, preserved,
+                dependencies);
     }
 
     /** The same context with the behaviors a body may call by name in scope — the ones that require
      *  nothing (spec {@code [#calling-a-behavior]}). */
-    public CheckContext withCallees(Map<String, ReqSig> callable) {
-        return new CheckContext(symbols, data, reqs, callable, makingAnOptional, preserved);
+    public CheckContext withCallees(Map<ValueName.Behavior, ReqSig> callable) {
+        return new CheckContext(symbols, data, reqs, callable, makingAnOptional, preserved,
+                dependencies);
     }
 
     /**
@@ -66,7 +96,7 @@ public record CheckContext(Symbols symbols, Ast.Data data, Map<String, ReqSig> r
      * that value.
      */
     public CheckContext makingAnOptional(boolean making) {
-        return new CheckContext(symbols, data, reqs, callees, making, preserved);
+        return new CheckContext(symbols, data, reqs, callees, making, preserved, dependencies);
     }
 
     /**
@@ -77,7 +107,8 @@ public record CheckContext(Symbols symbols, Ast.Data data, Map<String, ReqSig> r
      * become another representation part-way down.
      */
     public CheckContext preserving(Preserved kept) {
-        return new CheckContext(symbols, data, reqs, callees, makingAnOptional, kept);
+        return new CheckContext(symbols, data, reqs, callees, makingAnOptional, kept,
+                dependencies);
     }
 
     /**

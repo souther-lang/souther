@@ -16,9 +16,4 @@ public sealed interface ImportMessage extends Message {
 
     /** What to do about a name that would stand for two things. */
     record RenameOrQualifyTheCollidingName() implements ImportMessage, Supporting {}
-
-    /** Two modules publish the name, so importing both leaves it saying neither. */
-    @Code(DiagnosticCode.E1508)
-    record NameIsPublishedByTwoModules(String name, String publishedBy, String andBy)
-            implements ImportMessage, Reported {}
 }

@@ -1,11 +1,10 @@
 package souther.compiler.check;
 
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.diag.msg.ArithmeticMessage;
 import souther.compiler.types.Type;
 
-import java.util.List;
 
 /**
  * What arithmetic makes of two operand types: the type the operator answers with, or the rule that
@@ -178,7 +177,7 @@ sealed interface ArithmeticCheck {
      * What {@code op} makes of the operand types, given whether each operand was written as a
      * literal — the one thing about the expression, rather than its type, that the rules read.
      */
-    static ArithmeticCheck of(Ast.BinOp op, Type lt, Type rt,
+    static ArithmeticCheck of(Hir.BinOp op, Type lt, Type rt,
                               boolean leftIsLiteral, boolean rightIsLiteral, Symbols symbols) {
         // A type that states nothing states nothing about being an operand either — the element of
         // an empty collection that context has not fixed, an `unreachable`, an error already
@@ -224,13 +223,13 @@ sealed interface ArithmeticCheck {
         Type newtype = newtypeOnTheLeft ? lt : rt;
         Type value = newtypeOnTheLeft ? rt : lt;
         Side valueSide = newtypeOnTheLeft ? Side.RIGHT : Side.LEFT;
-        if (op == Ast.BinOp.ADD || op == Ast.BinOp.SUB) {
+        if (op == Hir.BinOp.ADD || op == Hir.BinOp.SUB) {
             boolean valueIsLiteral = newtypeOnTheLeft ? rightIsLiteral : leftIsLiteral;
             return valueIsLiteral
                     ? new Allowed(newtype)
                     : new Refused(new BareValueIsNotALiteral(newtype, value, valueSide));
         }
-        if (!newtypeOnTheLeft && op == Ast.BinOp.DIV) {
+        if (!newtypeOnTheLeft && op == Hir.BinOp.DIV) {
             return new Refused(new ReciprocalChangesDimension(value, newtype));
         }
         return new Allowed(newtype);

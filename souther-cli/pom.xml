@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.souther-lang</groupId>
         <artifactId>souther-parent</artifactId>
-        <version>0.1.0-rc4</version>
+        <version>0.1.0-rc5</version>
     </parent>
 
     <artifactId>souther-cli</artifactId>
@@ -33,11 +33,40 @@
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Test scope, and not part of what this jar bundles. `souther init` writes a build plugin
+             version into a project, and a plugin drives a Souther over a numbered protocol; this is
+             the artifact that states which number this Souther speaks, so it is what the pinned
+             versions are held against. -->
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-build-driver</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
         <!-- The uber jar is `souther.jar` and the prepended launcher is `souther`. -->
         <finalName>souther</finalName>
+        <resources>
+            <!-- `souther init` writes a build file naming Raoh, JUnit and Surefire, and what it
+                 names is what this build uses. Filtered rather than written out in the code, so the
+                 two cannot drift apart. -->
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+                <includes>
+                    <include>souther/cli/init/versions.properties</include>
+                </includes>
+            </resource>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+                <excludes>
+                    <exclude>souther/cli/init/versions.properties</exclude>
+                </excludes>
+            </resource>
+        </resources>
         <plugins>
             <!-- The `*IT` tests run the shaded jar itself, after `package` has produced it. What
                  they cover is what only packaging decides: that the specification and the doc sets

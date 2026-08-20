@@ -5,7 +5,8 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.partition.Generator;
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.BoundaryAssessment;
+import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
@@ -33,12 +34,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AnEdgeIsWritableBecauseSomethingSaidSoTest {
 
     /**
-     * Two edges of one range, one refused by a rule that reaches it and one not.
+     * A clause placing an end at a value the clause beside it takes away.
      *
-     * <p>{@code value /= 0} is a rule the projection cannot take into a bound, so neither edge is
-     * proven. It reaches the bottom of the range and nothing else: the decoder refuses a 0 and builds
-     * a 10. The pair is the whole point — an answer that turned {@code allRulesRead == false} into
-     * "writable" would settle both, and one that kept it as "not writable" would settle neither.
+     * <p>{@code within} writes the bottom of the range at 0 and {@code nonzero} refuses the 0, and
+     * the two are read by different readings: an end is placed by whichever clause states one, and a
+     * denial states none. So the end as written is at 0 and the position starts at 1, and the line
+     * this position has is the one at 1 — a line at 0 is a line at no value of {@code N}, and asking
+     * whether a row can be written there asks about a value the model excludes.
+     *
+     * <p>Which rule the line belongs to does not move with it. {@code within} placed it and holds it
+     * still; {@code nonzero} did not draw a new line at 1.
      */
     private static final String HOLED = """
             module example.holed
@@ -50,7 +55,6 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
             data Ok
 
             behavior f : (n: N) -> Ok
-                constructs Ok
 
             let f (n) = Ok
 
@@ -59,25 +63,23 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
             """;
 
     @Test
-    void aRuleTheProjectionCouldNotReadLeavesTheEdgeItRefusesUnknown() {
-        BoundaryAssessment at = assessmentAt(HOLED, "example.holed", "f", "0");
+    void anEndTakenAwayByAClauseBesideItIsALineAtTheValueTheRulesLeave() {
+        assertEquals(List.of("1", "10"), valuesAt(HOLED, "example.holed", "f"),
+                "the position starts at 1, so that is where the line is and 0 is no line of it");
 
-        assertInstanceOf(BoundaryAssessment.Writability.Unknown.class, at.writability(),
-                "nothing proved it and nothing built it");
-        BoundaryAssessment.Attempt.Unresolved unresolved = assertInstanceOf(
-                BoundaryAssessment.Attempt.Unresolved.class, at.attempt(),
-                "and refused is not impossible: nothing here says no row can be written");
-        assertEquals(Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
-                unresolved.why().reason());
+        ItemAssessment.Owed at = assessmentAt(HOLED, "example.holed", "f", "1");
+        assertInstanceOf(ItemAssessment.Writability.WitnessedByConstruction.class,
+                at.writability(),
+                "and a value at it went through the decoder, which is more than a proof of one");
     }
 
     @Test
     void anEdgeTheSameRuleDoesNotReachIsWitnessedByTheValueThatWasBuilt() {
-        BoundaryAssessment at = assessmentAt(HOLED, "example.holed", "f", "10");
+        ItemAssessment.Owed at = assessmentAt(HOLED, "example.holed", "f", "10");
 
-        assertInstanceOf(BoundaryAssessment.Writability.WitnessedByConstruction.class,
+        assertInstanceOf(ItemAssessment.Writability.WitnessedByConstruction.class,
                 at.writability(), "a value at 10 went through the decoder");
-        assertInstanceOf(BoundaryAssessment.Attempt.Built.class, at.attempt(),
+        assertInstanceOf(ItemAssessment.Attempt.Built.class, at.attempt(),
                 "and the value it built is kept, because it is also the row an author is offered");
     }
 
@@ -105,7 +107,6 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
             data Ok
 
             behavior place : (amount: Amount, code: Code) -> Ok
-                constructs Ok
 
             let place (amount, code) = Ok
 
@@ -115,13 +116,13 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
 
     @Test
     void anEdgeTheProjectionProvesCanStillBeOneNoSearchReached() {
-        BoundaryAssessment at =
+        ItemAssessment.Owed at =
                 assessmentAt(PROVEN_BUT_UNREACHED, "example.proven", "place", "0");
 
-        assertInstanceOf(BoundaryAssessment.Coverage.Missed.class, at.coverage());
-        assertInstanceOf(BoundaryAssessment.Writability.ProvenByProjection.class, at.writability(),
+        assertInstanceOf(ItemAssessment.Coverage.Missed.class, at.coverage());
+        assertInstanceOf(ItemAssessment.Writability.ProvenByProjection.class, at.writability(),
                 "every rule of `Amount` was read, so 0 is a value it holds");
-        assertInstanceOf(BoundaryAssessment.Attempt.Unresolved.class, at.attempt(),
+        assertInstanceOf(ItemAssessment.Attempt.Unresolved.class, at.attempt(),
                 "and the search still came back with nothing, which takes nothing away from that");
     }
 
@@ -169,14 +170,13 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
                 data Ok
 
                 behavior place : (order: Order) -> Ok
-                    constructs Ok
 
                 let place (order) = Ok
 
                 example place
                     | "some" : (Order { id = OrderId("0001"), amount = Amount(7) }) -> Ok
                 """;
-        assertInstanceOf(BoundaryAssessment.Writability.WitnessedByConstruction.class,
+        assertInstanceOf(ItemAssessment.Writability.WitnessedByConstruction.class,
                 writabilityAt(model, "example.order", "place", "0"),
                 "the id's rule cannot refuse an amount of 0");
     }
@@ -194,19 +194,18 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
                 data Ok
 
                 behavior f : (n: N) -> Ok
-                    constructs Ok
 
                 let f (n) = Ok
 
                 example f
                     | "bottom" : (N(0)) -> Ok
                 """;
-        BoundaryAssessment at = assessmentAt(model, "example.at", "f", "0");
-        assertInstanceOf(BoundaryAssessment.Coverage.Hit.class, at.coverage());
-        assertInstanceOf(BoundaryAssessment.Writability.WitnessedByRow.class, at.writability(),
+        ItemAssessment.Owed at = assessmentAt(model, "example.at", "f", "0");
+        assertInstanceOf(ItemAssessment.Coverage.Hit.class, at.coverage());
+        assertInstanceOf(ItemAssessment.Writability.WitnessedByRow.class, at.writability(),
                 "the row is the witness");
-        assertEquals(BoundaryAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE,
-                assertInstanceOf(BoundaryAssessment.Attempt.NotAttempted.class, at.attempt())
+        assertEquals(ItemAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE,
+                assertInstanceOf(ItemAssessment.Attempt.NotAttempted.class, at.attempt())
                         .reason(),
                 "and no candidate was built for a value that is already there");
     }
@@ -229,27 +228,25 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
                 data Ok
 
                 behavior f : (n: N) -> Ok
-                    constructs Ok
 
                 let f (n) = Ok
 
                 data Other
 
                 behavior g : (n: N) -> Other
-                    constructs Other
 
                 let g (n) = Other
 
                 example g
                     | "some" : (N(4)) -> Other
                 """;
-        BoundaryAssessment at = assessmentAt(model, "example.unnamed", "f", "0");
-        BoundaryAssessment.Coverage.NotMeasured absent = assertInstanceOf(
-                BoundaryAssessment.Coverage.NotMeasured.class, at.coverage());
-        assertEquals(BoundaryAssessment.Coverage.Reason.NO_ROWS, absent.reason());
+        ItemAssessment.Owed at = assessmentAt(model, "example.unnamed", "f", "0");
+        ItemAssessment.Coverage.NotMeasured absent = assertInstanceOf(
+                ItemAssessment.Coverage.NotMeasured.class, at.coverage());
+        assertEquals(ItemAssessment.Coverage.Reason.NO_ROWS, absent.reason());
         assertTrue(at.writability().known(),
                 "nobody wrote a row, which says nothing about whether one could be written");
-        assertInstanceOf(BoundaryAssessment.Attempt.Built.class, at.attempt(),
+        assertInstanceOf(ItemAssessment.Attempt.Built.class, at.attempt(),
                 "a value was built here, and what it settles is the writability and not the rows");
     }
 
@@ -272,7 +269,6 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
                 data Big
 
                 behavior f : (n: N) -> Ok | Big
-                    constructs Ok, Big
 
                 let f (n) = if n.value <= 4 then Ok else Big
 
@@ -283,38 +279,55 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
         // What a guard's line waits on, and this build does not ask for it.
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         compilation.answerEverything();
-        Map<String, List<BoundaryAssessment>> boundaries =
+        Map<String, List<BorderAssessment>> boundaries =
                 compilation.db().ask(new Adequacy.Boundaries("example.waiting")).value();
 
-        List<BoundaryAssessment> guards = boundaries.get("f").stream()
-                .filter(b -> b.origin().startsWith("guard")).toList();
+        List<BorderAssessment.Point> guards =
+                BorderAssessment.pointsOf(boundaries.get("f")).stream()
+                        .filter(p -> p.border().rule().wasDrawnInABodyFork())
+                        .filter(p -> p.owed() != null).toList();
         assertFalse(guards.isEmpty(), "the comparison draws lines: " + boundaries.get("f"));
-        for (BoundaryAssessment at : guards) {
-            assertEquals(BoundaryAssessment.Coverage.Reason.ARMS_NOT_ASKED,
-                    assertInstanceOf(BoundaryAssessment.Coverage.NotMeasured.class, at.coverage())
-                            .reason(), at.label());
-            assertEquals(BoundaryAssessment.Attempt.Reason.NOT_MEASURED,
-                    assertInstanceOf(BoundaryAssessment.Attempt.NotAttempted.class, at.attempt())
-                            .reason(), at.label());
+        for (BorderAssessment.Point at : guards) {
+            assertEquals(ItemAssessment.Coverage.Reason.ARMS_NOT_ASKED,
+                    assertInstanceOf(ItemAssessment.Coverage.NotMeasured.class,
+                            at.owed().coverage()).reason(), at.label());
+            assertEquals(ItemAssessment.Attempt.Reason.NOT_MEASURED,
+                    assertInstanceOf(ItemAssessment.Attempt.NotAttempted.class,
+                            at.owed().attempt()).reason(), at.label());
         }
     }
 
-    private static BoundaryAssessment.Writability writabilityAt(String model, String module,
+    /** Every value a point against a line names, as the report names them. */
+    private static List<String> valuesAt(String model, String module, String behavior) {
+        return pointsAt(model, module, behavior).stream()
+                .filter(p -> p.role().againstTheLine()).filter(p -> p.owed() != null)
+                .map(BorderAssessment.Point::against).sorted().toList();
+    }
+
+    private static ItemAssessment.Writability writabilityAt(String model, String module,
                                                                 String behavior, String value) {
         return assessmentAt(model, module, behavior, value).writability();
     }
 
-    private static BoundaryAssessment assessmentAt(String model, String module, String behavior,
-                                                   String value) {
+    /** The point against a line at {@code value}, which is what a row there is owed for. */
+    private static ItemAssessment.Owed assessmentAt(String model, String module, String behavior,
+                                                    String value) {
+        return pointsAt(model, module, behavior).stream()
+                .filter(p -> p.role().againstTheLine()).filter(p -> p.owed() != null)
+                .filter(p -> value.equals(p.against()))
+                .findFirst().map(BorderAssessment.Point::owed).orElseThrow(
+                        () -> new AssertionError("no boundary at " + value + " of " + behavior));
+    }
+
+    private static List<BorderAssessment.Point> pointsAt(String model, String module,
+                                                         String behavior) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
-        Map<String, List<BoundaryAssessment>> boundaries =
+        Map<String, List<BorderAssessment>> boundaries =
                 compilation.db().ask(new Adequacy.Boundaries(module)).value();
         assertNotNull(boundaries, "the model under test compiles");
-        return boundaries.get(behavior).stream().filter(b -> b.value().equals(value))
-                .findFirst().orElseThrow(
-                        () -> new AssertionError("no boundary at " + value + " of " + behavior));
+        return BorderAssessment.pointsOf(boundaries.get(behavior));
     }
 
     /**
@@ -338,11 +351,9 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
             data Ok
 
             behavior onADate : (c: Cutoff) -> Ok
-                constructs Ok
             let onADate (c) = Ok
 
             behavior onAMoment : (m: Moment) -> Ok
-                constructs Ok
             let onAMoment (m) = Ok
 
             example onADate
@@ -356,10 +367,10 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
     void aTemporalEdgeNothingComposedIsTheSearchsFailureAndNotTheModelsSilence() {
         for (String[] each : new String[][] {
                 {"onADate", "c = 2026-01-01"}, {"onAMoment", "m = 2026-01-01T00:00:00"}}) {
-            BoundaryAssessment at = assessmentAt(TEMPORAL_EDGE_NOTHING_COMPOSED,
+            ItemAssessment.Owed at = assessmentAt(TEMPORAL_EDGE_NOTHING_COMPOSED,
                     "example.temporal", each[0], each[1].substring(each[1].indexOf('=') + 2));
 
-            assertInstanceOf(BoundaryAssessment.Attempt.Unresolved.class, at.attempt(),
+            assertInstanceOf(ItemAssessment.Attempt.Unresolved.class, at.attempt(),
                     each[0] + ": the search came back with nothing");
 
             Compilation compilation =

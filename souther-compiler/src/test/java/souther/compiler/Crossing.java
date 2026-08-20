@@ -2,7 +2,7 @@ package souther.compiler;
 
 import souther.compiler.generated.GeneratedBehavior;
 import souther.compiler.generated.JsonBoundary;
-import souther.compiler.ast.Ast;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.query.Compilation;
 
@@ -30,12 +30,9 @@ final class Crossing {
     /** The behavior's answer as JSON, for a sole input that reads. */
     static String of(String source, String module, String behavior, String json) throws Exception {
         Compilation compilation = Compiler.compiled(source, module, new ArrayList<>());
-        Ast.Module written = compilation.module(compilation.modules().get(0));
+        Prepared written = compilation.module(compilation.modules().get(0));
         Sig sig = compilation.signatures(written.name()).get(behavior);
 
-        // One loader for the whole crossing, as `souther run` holds one: asked twice, a compilation
-        // answers with two, and a value the first one's classes made is not a value the second one's
-        // classes are — a decoded key stops equalling the key the behavior looks up.
         ClassLoader loader = compilation.loader();
         JsonBoundary.Read read = JsonBoundary.read(loader, sig.ins().get(0), JSON.readTree(json));
         Object argument = assertInstanceOf(JsonBoundary.Read.Value.class, read, json).value();
@@ -49,7 +46,7 @@ final class Crossing {
     static JsonBoundary.Read reading(String source, String module, String behavior, String json)
             throws Exception {
         Compilation compilation = Compiler.compiled(source, module, new ArrayList<>());
-        Ast.Module written = compilation.module(compilation.modules().get(0));
+        Prepared written = compilation.module(compilation.modules().get(0));
         Sig sig = compilation.signatures(written.name()).get(behavior);
         return JsonBoundary.read(compilation.loader(), sig.ins().get(0), JSON.readTree(json));
     }

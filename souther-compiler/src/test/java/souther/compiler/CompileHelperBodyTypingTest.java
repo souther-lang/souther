@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
@@ -41,7 +43,7 @@ class CompileHelperBodyTypingTest {
     /** Applies {@code demo.F} to {@code in} decoded as {@code dataType}, and encodes the result back. */
     private long applyToInt(String src, String dataType, long in) throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object behavior = loader.loadClass("demo.F$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "f").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, Codecs.decoded(loader, dataType, in));
         return (long) Codecs.encode(loader, dataType, out);
     }
@@ -176,7 +178,7 @@ class CompileHelperBodyTypingTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object m = Codecs.decoded(loader, "demo.Money", java.util.Map.of("amount", 4L));
 
-        Object behavior = loader.loadClass("demo.F$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "f").getConstructor().newInstance();
 
         java.util.Map<?, ?> out = (java.util.Map<?, ?>) Codecs.encode(
                 loader, "demo.Money", Codecs.apply(behavior, m));
@@ -285,7 +287,7 @@ class CompileHelperBodyTypingTest {
         assertFalse(e.diagnostic().secondary().isEmpty(), "the open use is labelled");
         assertInstanceOf(HelperMessage.AFieldIsReadOffItAndThatNamesNoType.class,
                 e.diagnostic().secondary().get(0).said());
-        assertEquals(5, e.diagnostic().secondary().get(0).region().start().line(),
+        assertEquals(5, ((souther.compiler.diag.DiagnosticPlace.InSource) e.diagnostic().secondary().get(0).place()).region().start().line(),
                 "the label sits on `line.qty`, the use that names no type");
     }
 
@@ -652,7 +654,7 @@ class CompileHelperBodyTypingTest {
                 let f (a) = X(describe(a))
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object behavior = loader.loadClass("demo.F$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "f").getConstructor().newInstance();
         Object in = Codecs.decoded(loader, "demo.A", java.util.Map.of("x", 7L));
         assertEquals(7L, Codecs.encode(loader, "demo.X", Codecs.apply(behavior, in)));
     }
@@ -740,7 +742,7 @@ class CompileHelperBodyTypingTest {
                 """;
         assertEquals(List.of("name.a-recursive-helper-must-declare-its-return-type"),
                 Located.diagnosticsOf(Compiler.diagnoseModules(java.util.Map.of("demo.sou", src)))
-                        .get("demo.sou").stream()
+                        .get(new SourceId("demo.sou")).stream()
                         .map(d -> MessageKeys.of(d.said())).toList(),
                 "the undeclared recursive helper is reported, and nothing else is");
     }

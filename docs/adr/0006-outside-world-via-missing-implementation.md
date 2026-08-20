@@ -30,10 +30,16 @@ argument of the using `let` (see ADR-0016). The read-only "// depends" versus mu
 "// side effect" distinction is documentation of intent only; it does not affect the value
 composition rules.
 
-`constructs` is still required on a non-implemented behavior (`[#constructs]`): the declaration
-reads the same as if it were implemented in Souther — `findMember` mints its failure cases
-but does *not* mint `Member` (it reads an outside value through a decoder). The generated
-Java base class (`[#java-base-class]`) hands out factories for the declared unit cases from here.
+`constructs` on a non-implemented behavior (`[#constructs]`) reads the same as if it were
+implemented in Souther — `findMember` mints what it mints, but does *not* mint `Member` (it
+reads an outside value through a decoder). Its failure cases are usually unit data, which are
+in no construction set and so are not named (`[#constructs-excludes-unit-data]`); a clause with
+nothing left to name is not written at all.
+
+The generated Java base class (`[#java-base-class]`) hands out a factory for each unit case of
+the *output type*, which is where the failure cases are read from — not from this clause. The
+clause supplies the factories for the field-bearing data and newtypes it names, which a decoded
+pass-through output cannot be told from by shape alone.
 
 The base class an implementation extends is public whatever `exposing` says, so the
 implementation overrides `apply` from outside the module and *writes* the behavior's input

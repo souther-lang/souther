@@ -1,12 +1,14 @@
 package souther.compiler.core;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 
 import org.junit.jupiter.api.Test;
 
@@ -33,19 +35,29 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class EverySlotIsAChildTest {
 
     private static final SourcePos POS = new SourcePos(1, 1);
-    private static final CoverageOrigin ORIGIN = CoverageOrigin.written("t", 0);
+    private static final CoverageOrigin ORIGIN = CoverageOrigin.written("t", 0, souther.compiler.types.CoverageConstruct.IF);
     private static final BindingOwner OWNER = new BindingOwner.OfValue("demo", "go");
-    private static final TypeName PERSON = new TypeName("demo", "Person");
+
+    private static final Hir.Binders BINDERS = new Hir.Binders(OWNER);
+
+    /** A binding this test writes. Nothing runs after a pass that writes into a resolved body to
+     *  answer a binder it left, so one is minted with its binding rather than a spelling. */
+    private static Hir.Binder binder(String name) {
+        return BINDERS.binder(name, POS);
+    }
+    private static final TypeSymbol PERSON = TypeSymbols.declared(new TypeKey("demo", "Person"));
 
     private static Core.Read read(String name, int ordinal) {
         return new Core.Read(name, new BindingId(OWNER, ordinal), Type.INT, POS);
     }
 
-    /** {@code Person { ..base, age: 1 }}. */
-    private static Core.NewData construction() {
-        return new Core.NewData(PERSON,
-                List.of(new Core.FieldInit("age", new Core.Int(1, Type.INT, POS), POS)),
-                List.of(read("base", 0)),
+    /** {@code Person { ...base, age = 1 }} as a construction holds it: the spread resolved into the
+     * read of the field it supplies. */
+    private static Core.Construct construction() {
+        return new Core.Construct(PERSON,
+                List.of(new Core.FieldValue("name",
+                                new Core.FieldAccess(read("base", 0), "name", Type.STRING, POS), POS),
+                        new Core.FieldValue("age", new Core.Int(1, Type.INT, POS), POS)),
                 Type.ref(PERSON), POS);
     }
 
@@ -60,9 +72,16 @@ class EverySlotIsAChildTest {
                 .map(c -> ((Core.Read) c).name()).toList();
     }
 
+    /** What each field is given is a child, and a binding one of them reads is reached through it.
+     * A pass that asks which bindings a body reaches has to be given them, or it undercounts — which
+     * is what a construction holding a spread beside its fields used to be about. */
     @Test
-    void aSpreadIsAChild() {
-        assertEquals(List.of("base"), namesIn(childrenOf(construction())));
+    void whatEachFieldIsGivenIsAChild() {
+        List<Core> children = childrenOf(construction());
+
+        assertEquals(List.of("FieldAccess", "Int"),
+                children.stream().map(c -> c.getClass().getSimpleName()).toList());
+        assertEquals(List.of("base"), namesIn(childrenOf(children.get(0))));
     }
 
     /**
@@ -85,18 +104,18 @@ class EverySlotIsAChildTest {
     @Test
     void anAttemptsConstructionIsAChild() {
         Core.IfConstructed attempt = new Core.IfConstructed(construction(),
-                Ast.Binder.desugared("p", POS), new Core.Int(0, Type.INT, POS),
+                binder("p"), new Core.Int(0, Type.INT, POS),
                 List.of(new Core.ElseArm(Optional.empty(), new Core.Int(1, Type.INT, POS))),
                 ORIGIN, Type.INT, POS);
 
-        assertTrue(childrenOf(attempt).stream().anyMatch(c -> c instanceof Core.NewData),
+        assertTrue(childrenOf(attempt).stream().anyMatch(c -> c instanceof Core.Construct),
                 "the construction itself, rather than the field values inside it");
     }
 
     @Test
     void eachSlotGoesThroughTheOperatorForItsKind() {
         Core.IfConstructed attempt = new Core.IfConstructed(construction(),
-                Ast.Binder.desugared("p", POS),
+                binder("p"),
                 new Core.Apply(read("f", 1), List.of(), Type.INT, POS),
                 List.of(), ORIGIN, Type.INT, POS);
 
@@ -123,8 +142,9 @@ class EverySlotIsAChildTest {
 
     @Test
     void aWalkThatChangesNothingKeepsTheNodeItWalked() {
-        Core.NewData built = construction();
+        Core.Construct built = construction();
 
         assertSame(built, Core.mapChildren(built, c -> c, n -> n, b -> b));
+        assertSame(built, Core.mapChildren(built, c -> c));
     }
 }

@@ -1,8 +1,9 @@
 package souther.compiler.partition;
 
 import souther.compiler.core.Core;
+import souther.compiler.check.PathReachability;
 import souther.compiler.coverage.CoverageSites;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -32,8 +33,8 @@ import java.util.Set;
  * something true about their model.
  *
  * <p>Only guards take an arm away, because only a guard's arm has a reachability proof behind it. A
- * {@code match} arm is left alone: which cases of a sum can arrive is a different question and
- * {@link Exclusions} is where it is asked.
+ * {@code match} arm is left alone here: which cases of a sum can arrive is a different question, and
+ * it is asked of the reading of the input ({@link PathReachability}).
  */
 public final class ProducedCases {
 
@@ -41,20 +42,20 @@ public final class ProducedCases {
      * @param declared what the output type's cases are, which is what this answers where nothing is
      *                 taken away
      */
-    public static Set<TypeName> of(Core body, CoverageSites.Plan plan, GuardReachability reachable,
-                                   Set<TypeName> declared) {
+    public static Set<TypeSymbol> of(Core body, CoverageSites.Plan plan, PathReachability.Answers arrives,
+                                   Set<TypeSymbol> declared) {
         // Nothing proven is nothing to take away: what this returns is `declared` less the cases whose
         // every producer is behind a proven arm, and with no such arm there are none. Skipped rather
         // than walked to the same answer.
-        if (body == null || declared.isEmpty() || reachable.isEmpty()) {
+        if (body == null || declared.isEmpty() || arrives.provesNothingUnreached()) {
             return declared;
         }
         Seen seen = new Seen();
-        walk(body, List.of(), plan, reachable, declared, seen);
+        walk(body, List.of(), plan, arrives, declared, seen);
         if (seen.anythingUnreadable) {
             return declared;   // something reachable answers with what this cannot name
         }
-        Set<TypeName> out = new LinkedHashSet<>(declared);
+        Set<TypeSymbol> out = new LinkedHashSet<>(declared);
         seen.behindAProvenArm.stream().filter(each -> !seen.reachable.contains(each)).toList()
                 .forEach(out::remove);
         // The order the cases were declared in, which is the order they are named in. `Set.copyOf`
@@ -67,10 +68,10 @@ public final class ProducedCases {
     private static final class Seen {
 
         /** Answered with somewhere no proof rules out. */
-        private final Set<TypeName> reachable = new LinkedHashSet<>();
+        private final Set<TypeSymbol> reachable = new LinkedHashSet<>();
         /** Answered with behind an arm nothing reaches, which is only worth acting on where the case
          * is answered with nowhere else. */
-        private final Set<TypeName> behindAProvenArm = new LinkedHashSet<>();
+        private final Set<TypeSymbol> behindAProvenArm = new LinkedHashSet<>();
         /** A producer that could answer with anything, at a place something reaches. */
         private boolean anythingUnreadable;
     }
@@ -83,45 +84,45 @@ public final class ProducedCases {
      * case owed because the body happened to build one on its way past.
      */
     private static void walk(Core e, List<Integer> under, CoverageSites.Plan plan,
-                             GuardReachability reachable, Set<TypeName> declared, Seen seen) {
+                             PathReachability.Answers arrives, Set<TypeSymbol> declared, Seen seen) {
         if (seen.anythingUnreadable) {
             return;   // nothing further can be taken away
         }
         switch (e) {
             case Core.Unreachable _ -> { }   // answers nothing, so it produces nothing
-            case Core.LetIn li -> walk(li.body(), under, plan, reachable, declared, seen);
+            case Core.LetIn li -> walk(li.body(), under, plan, arrives, declared, seen);
             case Core.If iff -> {
                 int[] arms = plan.probesOf(iff);
-                walk(iff.then(), beneath(under, arms, 0), plan, reachable, declared, seen);
-                walk(iff.els(), beneath(under, arms, 1), plan, reachable, declared, seen);
+                walk(iff.then(), beneath(under, arms, 0), plan, arrives, declared, seen);
+                walk(iff.els(), beneath(under, arms, 1), plan, arrives, declared, seen);
             }
             case Core.Match m -> {
                 int[] arms = plan.probesOf(m);
                 for (int i = 0; i < m.cases().size(); i++) {
-                    walk(m.cases().get(i).body(), beneath(under, arms, i), plan, reachable, declared,
+                    walk(m.cases().get(i).body(), beneath(under, arms, i), plan, arrives, declared,
                             seen);
                 }
             }
             case Core.IfConstructed ic -> {
                 int[] arms = plan.probesOf(ic);
-                walk(ic.then(), beneath(under, arms, 0), plan, reachable, declared, seen);
+                walk(ic.then(), beneath(under, arms, 0), plan, arrives, declared, seen);
                 for (int i = 0; i < ic.els().size(); i++) {
-                    walk(ic.els().get(i).body(), beneath(under, arms, i + 1), plan, reachable,
+                    walk(ic.els().get(i).body(), beneath(under, arms, i + 1), plan, arrives,
                             declared, seen);
                 }
             }
-            case Core.UnitValue u -> produce(u.data(), under, reachable, declared, seen);
-            case Core.NewData nd -> produce(nd.typeName(), under, reachable, declared, seen);
+            case Core.UnitValue u -> produce(u.data(), under, arrives, declared, seen);
+            case Core.Construct nd -> produce(nd.typeName(), under, arrives, declared, seen);
             // Everything else answers something this cannot name: a call, a name read from a binding,
             // a function value. The top of the lattice, which keeps every case owed.
-            case null, default -> produce(null, under, reachable, declared, seen);
+            case null, default -> produce(null, under, arrives, declared, seen);
         }
     }
 
     /** Where one producer puts the case it answers with. */
-    private static void produce(TypeName built, List<Integer> under, GuardReachability reachable,
-                                Set<TypeName> declared, Seen seen) {
-        boolean proven = under.stream().anyMatch(reachable::provenUnreachable);
+    private static void produce(TypeSymbol built, List<Integer> under, PathReachability.Answers arrives,
+                                Set<TypeSymbol> declared, Seen seen) {
+        boolean proven = under.stream().anyMatch(arrives::nothingArrivesAt);
         if (built == null || !declared.contains(built)) {
             // Not a case this can name. Reachable, it could be any of them and nothing is taken away;
             // behind a proven arm it answers nothing and says nothing about any case either.

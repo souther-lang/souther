@@ -53,7 +53,7 @@ class CompileFunctionTypeGrammarTest {
     void aFunctionMayTakeAFunctionAndReturnOne() throws Exception {
         BytesClassLoader loader =
                 new BytesClassLoader(Compiler.compile(NESTED), getClass().getClassLoader());
-        Object check = loader.loadClass("demo.Check" + "$Impl").getDeclaredConstructor().newInstance();
+        Object check = Emitted.behavior(loader, "demo", "check").getDeclaredConstructor().newInstance();
         Object order = Codecs.decoded(loader, "demo.Order", Map.of("xs", List.of(10L, 20L)));
         assertEquals(List.of(12L, 22L),
                 ((Map<?, ?>) Codecs.encode(loader, "demo.Result",

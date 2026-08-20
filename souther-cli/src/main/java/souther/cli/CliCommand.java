@@ -26,7 +26,12 @@ import java.util.Map;
  */
 enum CliCommand {
 
-    COMPILE("compile", "<file.sou>...", "compile to .class files"),
+    INIT("init", "[<groupId>:<artifactId>]", "start a project, or add Souther to one",
+            Map.of(CliOption.MODULE, "the `.sou` module header (default: the coordinate)",
+                    CliOption.DIRECTORY,
+                    "where to write it (default: the artifactId, or here when adding)")),
+    COMPILE("compile", "<file.sou>...", "compile to .class files",
+            Map.of(CliOption.DIRECTORY, "where the generated .class files are written")),
     RUN("run", "<file.sou>", "run one behavior and print its output",
             Map.of(CliOption.BEHAVIOR, "which behavior to run (default: the only one)")),
     FMT("fmt", "<file.sou>...", "format source, to stdout or in place"),

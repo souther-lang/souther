@@ -2,7 +2,9 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.query.Scopes;
+import souther.compiler.ast.Hir;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.core.Core;
@@ -12,7 +14,6 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -42,7 +43,6 @@ class WhichArmWitnessesAComparisonIsPerComparisonTest {
                 data High
 
                 behavior pick : (r: Request) -> Low | High
-                    constructs Low, High
 
                 let pick (r) =
                     if CONDITION
@@ -52,19 +52,20 @@ class WhichArmWitnessesAComparisonIsPerComparisonTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Ast.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
-        TypeChecker.Checked checked = compilation.db().ask(new Bodies.Checked(module)).value();
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, () -> "the model under test compiles: " + condition);
-        Ast.SpecBehavior spec = (Ast.SpecBehavior) prepared.behaviors().stream()
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("pick")).findFirst().orElseThrow();
         Core body = checked.behaviorBodies().get("pick");
-        CoverageSites.Plan plan = CoverageSites.of("m.sou", checked.behaviorBodies());
+        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
         GuardThresholds.Guards guards = GuardThresholds.of("pick", body, plan,
-                spec.params().stream().map(Ast.Param::name).toList(), symbols);
+                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("pick"), symbols);
         Map<String, OriginRef.GuardOrigin.Witness> out = new LinkedHashMap<>();
         for (Threshold each : guards.thresholds()) {
-            out.put(each.path().toString(), each.origin().witness());
+            out.put(each.path().toString(),
+                    ((OriginRef.GuardOrigin) each.origin()).witness());
         }
         return out;
     }

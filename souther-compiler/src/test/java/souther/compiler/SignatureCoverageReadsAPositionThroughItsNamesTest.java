@@ -8,7 +8,7 @@ import souther.compiler.observe.OutputCaseEvidence;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -45,15 +45,12 @@ class SignatureCoverageReadsAPositionThroughItsNamesTest {
             data OtherN = Decision
 
             behavior bare : (decision: Decision) -> Ok
-                constructs Ok
             let bare (decision) = Ok
 
             behavior wrapped : (decision: DecisionN) -> Ok
-                constructs Ok
             let wrapped (decision) = Ok
 
             behavior twice : (decision: DecisionNN) -> Ok
-                constructs Ok
             let twice (decision) = Ok
 
             behavior makes : (id: Int) -> DecisionN
@@ -208,7 +205,7 @@ class SignatureCoverageReadsAPositionThroughItsNamesTest {
         return compilation;
     }
 
-    private static List<String> names(java.util.Collection<TypeName> cases) {
-        return cases.stream().map(TypeName::name).toList();
+    private static List<String> names(java.util.Collection<TypeSymbol> cases) {
+        return cases.stream().map(TypeSymbol::name).toList();
     }
 }

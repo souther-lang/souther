@@ -31,16 +31,16 @@ class AKeptRelationComposesWithWhatTheDomainProvesTest {
     private static final String D = "d";
     private static final String E = "e";
 
-    private static LinearForm atom(String a) {
-        return LinearForm.atom(a);
+    private static LinearForm<String> atom(String a) {
+        return LinearForm.<String>atom(a);
     }
 
-    private static LinearForm num(long n) {
-        return LinearForm.constant(BigDecimal.valueOf(n));
+    private static LinearForm<String> num(long n) {
+        return LinearForm.<String>constant(BigDecimal.valueOf(n));
     }
 
     /** {@code a + b - c}, which is of neither shape: three atoms, so it is kept as written. */
-    private static LinearForm aPlusBMinus(String c) {
+    private static LinearForm<String> aPlusBMinus(String c) {
         return atom(A).plus(atom(B)).minus(atom(c));
     }
 
@@ -56,7 +56,7 @@ class AKeptRelationComposesWithWhatTheDomainProvesTest {
      * the second is a difference; nothing but their sum reaches the goal. */
     @Test
     void aKeptRelationComposesWithADifference() {
-        NumericDomain d = NumericDomain.top()
+        NumericDomain<String> d = NumericDomain.<String>top()
                 .assume(aPlusBMinus(C), Rel.LE, dense(A, B, C))
                 .assume(atom(C).minus(atom(D)), Rel.LE, dense(C, D));
 
@@ -68,7 +68,7 @@ class AKeptRelationComposesWithWhatTheDomainProvesTest {
      * particular but whatever the domain proves of the residual. */
     @Test
     void aKeptRelationComposesWithAnIntervalBound() {
-        NumericDomain d = NumericDomain.top()
+        NumericDomain<String> d = NumericDomain.<String>top()
                 .assume(aPlusBMinus(C), Rel.LE, dense(A, B, C))
                 .assume(atom(C).minus(num(100)), Rel.LE, dense(C));
 
@@ -80,7 +80,7 @@ class AKeptRelationComposesWithWhatTheDomainProvesTest {
      * {@code a + b < d}. */
     @Test
     void aStrictResidualCarriesItsStrictnessToTheGoal() {
-        NumericDomain d = NumericDomain.top()
+        NumericDomain<String> d = NumericDomain.<String>top()
                 .assume(aPlusBMinus(C), Rel.LE, dense(A, B, C))
                 .assume(atom(C).minus(atom(D)), Rel.LT, dense(C, D));
 
@@ -91,7 +91,7 @@ class AKeptRelationComposesWithWhatTheDomainProvesTest {
      * {@code a + b < d}, so the residual is only asked for what the premise did not already give. */
     @Test
     void aStrictKeptRelationLeavesTheResidualNothingToProve() {
-        NumericDomain d = NumericDomain.top()
+        NumericDomain<String> d = NumericDomain.<String>top()
                 .assume(aPlusBMinus(C), Rel.LT, dense(A, B, C))
                 .assume(atom(C).minus(atom(D)), Rel.LE, dense(C, D));
 
@@ -102,7 +102,7 @@ class AKeptRelationComposesWithWhatTheDomainProvesTest {
      * {@code a + b = d} admitted, so {@code a + b < d} does not follow. */
     @Test
     void twoNonStrictRelationsDoNotProveAStrictGoal() {
-        NumericDomain d = NumericDomain.top()
+        NumericDomain<String> d = NumericDomain.<String>top()
                 .assume(aPlusBMinus(C), Rel.LE, dense(A, B, C))
                 .assume(atom(C).minus(atom(D)), Rel.LE, dense(C, D));
 
@@ -114,7 +114,7 @@ class AKeptRelationComposesWithWhatTheDomainProvesTest {
      * residual of either against the goal is of neither shape too and nothing proves it. */
     @Test
     void twoKeptRelationsAreNotAddedTogether() {
-        NumericDomain d = NumericDomain.top()
+        NumericDomain<String> d = NumericDomain.<String>top()
                 .assume(aPlusBMinus(C), Rel.LE, dense(A, B, C))
                 .assume(atom(C).minus(atom(D)).minus(atom(E)), Rel.LE, dense(C, D, E));
 

@@ -34,7 +34,7 @@ class AskingForAMessageWithoutALanguageIsRefusedTest {
     @Test
     void renderingABodyWithNoLanguageIsRefused() {
         Diagnostic d = Diagnostic.say(
-                new ExampleMessage.TheRowReachedAnUnreachablePoint("why")).build();
+                new ExampleMessage.TheRowReachedAnUnreachablePoint("why")).nowhere().build();
 
         assertThrows(NullPointerException.class, () -> DiagnosticRenderer.body(d, null));
     }

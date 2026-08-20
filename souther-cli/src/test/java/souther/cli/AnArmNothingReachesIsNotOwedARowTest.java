@@ -6,18 +6,13 @@ import souther.compiler.types.CoverageOrigin;
 
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.Endpoint;
-import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.MeasurementStatus;
-import souther.compiler.partition.GuardEdge;
-import souther.compiler.partition.GuardReachability;
-import souther.compiler.partition.NumericTerm;
-import souther.compiler.partition.TermPath;
+import souther.compiler.check.PathReachability;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
-import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -59,7 +54,6 @@ class AnArmNothingReachesIsNotOwedARowTest {
             data Big
 
             behavior classify : (pair: Pair) -> Small | Big
-                constructs Small, Big
 
             let classify (pair) =
                 if pair.b.value >= 50
@@ -82,6 +76,62 @@ class AnArmNothingReachesIsNotOwedARowTest {
             System.setOut(was);
         }
         return out.toString(StandardCharsets.UTF_8);
+    }
+
+    /**
+     * An arm for a case the position's own rules refuse is not an arm either.
+     *
+     * <p>The other half of the same fact, and the one that was missing: a guard's arm went when its
+     * comparison could not come out that way, and a {@code match} arm stayed however the rules
+     * narrowed what it matched on. The arm answers a value here, so nothing about the body says it
+     * is not an arm — what says so is that no {@code Active} is ever {@code Off}.
+     */
+    private static final String NARROWED = """
+            module example.narrowed
+
+            data On
+            data Off
+            data Pending
+            data Flag = On | Off | Pending
+            data Active = Flag invariant value /= Off
+            data Answer = Int
+
+            behavior pick : (f: Active) -> Answer
+                constructs Answer
+
+            let pick (f) = match f.value with
+                | On      -> Answer(1)
+                | Pending -> Answer(0)
+                | Off     -> Answer(9)
+
+            example pick
+                | "on" : (Active(On)) -> Answer(1)
+            """;
+
+    @Test
+    void anArmForACaseTheRulesRefuseIsNotCounted() throws Exception {
+        String report = reportOn(NARROWED);
+
+        assertTrue(report.contains("branch      1/2"),
+                () -> "the `Off` arm is one no value reaches:\n" + report);
+        assertTrue(report.contains("no row goes through `case Pending`"),
+                () -> "and the arm that is owed a row is still named:\n" + report);
+        assertFalse(report.contains("case Off"),
+                () -> "nothing asks for a row through the arm nothing reaches:\n" + report);
+    }
+
+    /** The control: the same arms with nothing refusing the case. Without this the assertion above
+     *  would pass on a measure that had stopped counting `match` arms at all. */
+    @Test
+    void andIsCountedWhereNothingRefusesTheCase() throws Exception {
+        String report = reportOn(NARROWED
+                .replace("data Active = Flag invariant value /= Off", "data Active = Flag")
+                .replace("(f: Active)", "(f: Active)"));
+
+        assertTrue(report.contains("branch      1/3"),
+                () -> "every arm is owed a row where the rules refuse nothing:\n" + report);
+        assertTrue(report.contains("no row goes through `case Off`"),
+                () -> "including the one for `Off`:\n" + report);
     }
 
     @Test
@@ -187,7 +237,6 @@ class AnArmNothingReachesIsNotOwedARowTest {
                 data B
 
                 behavior f : (n: N) -> A | B
-                    constructs BUILDS
 
                 let f (n) = BODY
 
@@ -232,7 +281,6 @@ class AnArmNothingReachesIsNotOwedARowTest {
                 data Kind = Alpha | Beta | Gamma | Delta | Epsilon | Zeta
 
                 behavior f : (n: N) -> Kind
-                    constructs Alpha, Beta
 
                 let f (n) =
                     if n.value > 100 then Beta else Alpha
@@ -244,7 +292,7 @@ class AnArmNothingReachesIsNotOwedARowTest {
         assertTrue(report.contains("out specified 1/5"),
                 () -> "`Beta` is answered only where nothing reaches:\n" + report);
         List<String> named = report.lines().map(String::trim)
-                .filter(line -> line.startsWith("· no row expects"))
+                .filter(line -> line.contains("no row expects"))
                 .map(line -> line.substring(line.indexOf('`') + 1, line.lastIndexOf('`')))
                 .toList();
         assertEquals(List.of("Gamma", "Delta", "Epsilon", "Zeta"), named,
@@ -254,27 +302,36 @@ class AnArmNothingReachesIsNotOwedARowTest {
     // --- what happens if the proof is wrong -------------------------------------------------------
 
     private static CoverageSites.Site arm(int index) {
-        return new CoverageSites.Site("classify", CoverageSites.Site.Kind.THEN, "then", null,
-                index, index,
-                new CoverageSites.Obligation("classify", CoverageOrigin.written("t", index), 0));
+        return new CoverageSites.Site("classify",
+                new souther.compiler.coverage.SourceOutcome.Held(
+                        new souther.compiler.coverage.SourceOutcome.HeldBy.Condition()),
+                null, index, index,
+                new CoverageSites.Obligation("classify",
+                        CoverageOrigin.written("t", index,
+                                souther.compiler.types.CoverageConstruct.IF), 0));
     }
 
-    /** A reachability that proves arm 0 unreachable: nothing at or above 50 is a value of [0, 10]. */
-    private static GuardReachability proving() {
-        GuardEdge edge = GuardEdge.above(
-                new CoverageSites.GuardRef("classify", CoverageOrigin.written("t", 0), 0, 1, null),
-                0, new NumericTerm.ValueOf(TermPath.of("pair")), Count.of(50), true);
-        return GuardReachability.of(List.of(edge),
-                Map.of(new NumericTerm.ValueOf(TermPath.of("pair")),
-                        new NumericDomain.Bounds(Endpoint.inclusive(Count.of(BigDecimal.ZERO)),
-                                Endpoint.inclusive(Count.of(BigDecimal.TEN)))));
+    /**
+     * The model's own reachability, which proves arm 0 unreachable: nothing at or above 50 is a
+     * value any pair holds.
+     *
+     * <p>Read off the model rather than assembled here. A proof written by hand is one this test
+     * agrees with by construction, and what the rows below are about is what happens when the proof
+     * the compiler made turns out to be wrong.
+     */
+    private static PathReachability.Answers proving() {
+        Compilation compilation = Compilation.ofSource(CAPPED, "Main");
+        compilation.answerEverything();
+        return compilation.db()
+                .ask(new Adequacy.PathReached(compilation.modules().get(0))).value()
+                .get("classify");
     }
 
     @Test
     void aProvenArmLeavesTheDenominator() {
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured(
                 List.of(arm(0), arm(1)), Set.of(1),
-                new Adequacy.Effective(proving(), Set.of()), MeasurementStatus.COMPLETE);
+                proving().asRunWith(Set.of(1)), MeasurementStatus.COMPLETE);
 
         assertEquals(List.of(1), measured.all().stream().map(CoverageSites.Site::index).toList());
         assertEquals(Set.of(1), measured.covered());
@@ -291,11 +348,11 @@ class AnArmNothingReachesIsNotOwedARowTest {
      */
     @Test
     void anArmObservedAgainstTheProofIsKeptAndSaidSo() {
-        GuardReachability proven = proving();
-        Adequacy.Effective effective = new Adequacy.Effective(
-                proven.without(Set.of(0)), Set.of(0));
+        // The rows lit both arms, one of which nothing was supposed to reach. Handed to the same
+        // fold the measures read, so what a run does to a proof is decided in one place.
+        PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(0, 1));
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured(
-                List.of(arm(0), arm(1)), Set.of(0, 1), effective, MeasurementStatus.COMPLETE);
+                List.of(arm(0), arm(1)), Set.of(0, 1), asRun, MeasurementStatus.COMPLETE);
 
         assertEquals(Set.of(0), measured.contradicted(),
                 "arm 0 was proven unreachable and a row went through it");
@@ -311,12 +368,20 @@ class AnArmNothingReachesIsNotOwedARowTest {
      * the case behind it would stay unowed over a proof already disproved. */
     @Test
     void theSameArmIsBackForEveryMeasure() {
-        Adequacy.Effective effective = new Adequacy.Effective(
-                proving().without(Set.of(0)), Set.of(0));
+        PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(0));
 
-        assertFalse(effective.reachable().provenUnreachable(0),
-                "a row went through it, so nothing about it is proven any more");
-        assertTrue(effective.reachable().isEmpty(),
-                "and what the signature reads is the same set the arms are counted by");
+        assertEquals(Set.of(0), asRun.provedWrong(),
+                "a row went through an arm this reading had proven nothing reaches");
+        assertFalse(asRun.answers().nothingArrivesAt(0),
+                "so nothing about it is proven any more");
+        // Both measures read this one object, so what is back for one is back for the other. Said
+        // of the arms: what a comparison's outcome was proven to be is not something a row through
+        // an arm settles — a lit comparison says it ran, not which way it came out.
+        assertTrue(asRun.answers().found().entrySet().stream()
+                        .filter(each -> each.getKey()
+                                instanceof souther.compiler.coverage.ControlPointId.ArmOccurrence)
+                        .noneMatch(each -> each.getValue()
+                                instanceof souther.compiler.reach.Reachability.Unreachable),
+                "and what the signature reads is the same answer the arms are counted by");
     }
 }

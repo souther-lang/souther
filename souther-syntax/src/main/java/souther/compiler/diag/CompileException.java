@@ -1,5 +1,7 @@
 package souther.compiler.diag;
 
+import souther.compiler.source.SourceId;
+
 import java.util.List;
 
 /**
@@ -19,30 +21,24 @@ import java.util.List;
  */
 public class CompileException extends RuntimeException {
 
-    /** A position is a line and a column, so a compile that was handed several sources also has to
-     *  say which one — otherwise there is nothing to quote the line from. */
-    private static final String NO_SOURCE = Located.NO_SOURCE;
-
-    private final transient List<Diagnostic> diagnostics;
-    /** One entry per diagnostic: which source it came from, or {@link #NO_SOURCE}. A compile that
-     *  reports several modules at once has a diagnostic per module, and each quotes its own file.
-     *  Parallel to {@link #diagnostics}, so the order here is that list's order and nothing else. */
-    private final transient List<String> sources;
+    /**
+     * What this error found, each with what the compile can say about where it is listed.
+     *
+     * <p>One list and not two. It was a list of diagnostics beside a list of sources with one entry
+     * per diagnostic, which is a pair kept in step by hand: two builders checked the sizes matched
+     * and every reader indexed both by the same {@code i}. A diagnostic and the file it is listed
+     * under are one thing to carry, and {@link Located} is that thing.
+     */
+    private final transient List<Located> reported;
 
     /** Throws with a fully structured diagnostic (a migrated site). */
     public CompileException(Diagnostic diagnostic, String legacyMessage) {
-        this(List.of(diagnostic), legacyMessage, NO_SOURCE);
+        this(List.of(new Located(diagnostic, ReportContext.NONE)), legacyMessage);
     }
 
-    private CompileException(List<Diagnostic> diagnostics, String legacyMessage, String sourceId) {
-        this(diagnostics, legacyMessage, java.util.Collections.nCopies(diagnostics.size(), sourceId));
-    }
-
-    private CompileException(List<Diagnostic> diagnostics, String legacyMessage, List<String> sources) {
+    private CompileException(List<Located> reported, String legacyMessage) {
         super(legacyMessage);
-        this.diagnostics = diagnostics;
-        // Not List.copyOf: an entry is NO_SOURCE for a diagnostic that names none, and that is null.
-        this.sources = java.util.Collections.unmodifiableList(new java.util.ArrayList<>(sources));
+        this.reported = List.copyOf(reported);
     }
 
     /**
@@ -53,7 +49,7 @@ public class CompileException extends RuntimeException {
      * rule says is in the catalog, and this is where it is read.
      */
     public static CompileException of(Diagnostic diagnostic) {
-        return new CompileException(diagnostic, format(diagnostic.pos(), diagnostic.code(),
+        return new CompileException(diagnostic, format(positionOf(diagnostic), diagnostic.code(),
                 DiagnosticRenderer.legacyBody(diagnostic)));
     }
 
@@ -69,32 +65,42 @@ public class CompileException extends RuntimeException {
             throw new IllegalArgumentException("a compile error carries at least one diagnostic");
         }
         Diagnostic first = diagnostics.get(0);
-        return new CompileException(List.copyOf(diagnostics),
-                format(first.pos(), first.code(), legacyBody), NO_SOURCE);
+        return new CompileException(
+                diagnostics.stream().map(d -> new Located(d, ReportContext.NONE)).toList(),
+                format(positionOf(first), first.code(), legacyBody));
     }
 
     /**
-     * Several errors found across several sources, each tagged with the source it came from —
-     * a multi-module compile reporting every module's failing examples rather than the first
-     * module's. {@code sources} has one entry per diagnostic, {@link Located#NO_SOURCE} for one that
-     * names none.
+     * Several errors found across several sources, each carrying the file it is listed under — a
+     * multi-module compile reporting every module's failing examples rather than the first module's.
      */
-    public static CompileException ofAllInSources(List<Diagnostic> diagnostics, List<String> sources,
-                                                  String legacyBody) {
-        if (diagnostics == null || diagnostics.isEmpty()) {
+    public static CompileException ofAllReported(List<Located> reported, String legacyBody) {
+        if (reported == null || reported.isEmpty()) {
             throw new IllegalArgumentException("a compile error carries at least one diagnostic");
         }
-        if (sources.size() != diagnostics.size()) {
-            throw new IllegalArgumentException("one source per diagnostic");
-        }
-        Diagnostic first = diagnostics.get(0);
-        return new CompileException(List.copyOf(diagnostics),
-                format(first.pos(), first.code(), legacyBody), sources);
+        Diagnostic first = reported.get(0).diagnostic();
+        return new CompileException(List.copyOf(reported),
+                format(positionOf(first), first.code(), legacyBody));
     }
 
+    /**
+     * Where the leading diagnostic points, as a single position, or none where it points nowhere.
+     *
+     * <p>Read off what it points at rather than off a region it might not have. A report about a
+     * module, and one whose code is out of sight, have no position at all; one in a text this
+     * compile could not name has numbers, and they are numbers of that text — which is what the
+     * one-line message below says them as, and is not a place anything sends a reader to.
+     */
     public SourcePos pos() {
-        Diagnostic d = diagnostic();
-        return d == null ? null : d.pos();
+        return positionOf(diagnostic());
+    }
+
+    private static SourcePos positionOf(Diagnostic d) {
+        return d == null ? null : switch (d.primary()) {
+            case Primary.InSource(DiagnosticPlace.InSource place) -> place.region().start();
+            case Primary.InAnUnnamedText(UnnamedRegion where) -> where.region().start();
+            case Primary.Unavailable _, Primary.Nowhere _ -> null;
+        };
     }
 
     public String code() {
@@ -113,7 +119,7 @@ public class CompileException extends RuntimeException {
      * several when a pass reports each of its independent failures. Empty when the structured form
      * did not survive (the field is transient, so a deserialized error has only its message). */
     public List<Diagnostic> diagnostics() {
-        return diagnostics == null ? List.of() : diagnostics;
+        return Located.diagnosticsOf(locatedDiagnostics());
     }
 
     /**
@@ -123,25 +129,22 @@ public class CompileException extends RuntimeException {
      * in from an {@code examples for} file. A caller reads null as "quote no line", never as "the
      * first source".
      */
-    public String sourceId() {
-        return sources.isEmpty() ? NO_SOURCE : sources.get(0);
+    public SourceId sourceId() {
+        return sourceIdOf(0);
     }
 
-    /** Which source the {@code i}-th of {@link #diagnostics()} came from, or null when it names
-     *  none. A renderer walking the list quotes each diagnostic's own file. */
-    public String sourceIdOf(int i) {
-        return sources == null || i >= sources.size() ? NO_SOURCE : sources.get(i);
+    /** Which source the {@code i}-th of {@link #diagnostics()} is listed under, or null when the
+     *  compile could name none. A renderer walking the list quotes each diagnostic's own file. */
+    public SourceId sourceIdOf(int i) {
+        List<Located> all = locatedDiagnostics();
+        return i >= all.size() ? null : all.get(i).context().filedUnder().orElse(null);
     }
 
-    /** Every diagnostic this error carries, each with the source it came from — what a renderer
-     *  walks, and the shape a warning arrives in too, so one loop renders both. */
+    /** Every diagnostic this error carries, each with what the compile can say about where it is
+     *  listed — what a renderer walks, and the shape a warning arrives in too, so one loop renders
+     *  both. */
     public List<Located> locatedDiagnostics() {
-        List<Diagnostic> ds = diagnostics();
-        List<Located> located = new java.util.ArrayList<>(ds.size());
-        for (int i = 0; i < ds.size(); i++) {
-            located.add(new Located(ds.get(i), sourceIdOf(i)));
-        }
-        return List.copyOf(located);
+        return reported == null ? List.of() : reported;
     }
 
     /**
@@ -153,21 +156,14 @@ public class CompileException extends RuntimeException {
      * {@code example} row — words it over what it found, and rendering the leading diagnostic again
      * here would answer with a sentence about one row instead.
      *
-     * @param moreSources one entry per added diagnostic, {@link Located#NO_SOURCE} for one that
-     *                    names no source
      */
-    public CompileException alsoReporting(List<Diagnostic> more, List<String> moreSources) {
+    public CompileException alsoReporting(List<Located> more) {
         if (more.isEmpty()) {
             return this;
         }
-        if (more.size() != moreSources.size()) {
-            throw new IllegalArgumentException("one source per diagnostic");
-        }
-        List<Diagnostic> all = new java.util.ArrayList<>(diagnostics);
+        List<Located> all = new java.util.ArrayList<>(locatedDiagnostics());
         all.addAll(more);
-        List<String> allSources = new java.util.ArrayList<>(sources);
-        allSources.addAll(moreSources);
-        CompileException joined = new CompileException(all, getMessage(), allSources);
+        CompileException joined = new CompileException(all, getMessage());
         joined.setStackTrace(getStackTrace());
         return joined;
     }
@@ -176,12 +172,15 @@ public class CompileException extends RuntimeException {
      * The same error, tagged with the source being compiled when it was thrown. The first tag wins:
      * an inner phase that already named its source keeps it, so a surrounding loop may tag freely.
      */
-    public CompileException inSource(String sourceId) {
-        if (sourceId == null || sources.stream().allMatch(src -> src != NO_SOURCE)) {
+    public CompileException inSource(SourceId sourceId) {
+        List<Located> all = locatedDiagnostics();
+        if (sourceId == null || all.stream().allMatch(one -> one.context().filedUnder().isPresent())) {
             return this;   // already named, or nothing to name it with
         }
-        List<String> filled = sources.stream().map(src -> src == NO_SOURCE ? sourceId : src).toList();
-        CompileException tagged = new CompileException(diagnostics, getMessage(), filled);
+        CompileException tagged = new CompileException(
+                all.stream().map(one -> one.context().filedUnder().isPresent() ? one
+                        : new Located(one.diagnostic(), ReportContext.inFile(sourceId))).toList(),
+                getMessage());
         tagged.setStackTrace(getStackTrace());
         return tagged;
     }

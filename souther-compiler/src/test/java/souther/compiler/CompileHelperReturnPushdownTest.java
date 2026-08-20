@@ -41,7 +41,7 @@ class CompileHelperReturnPushdownTest {
                 let run (i) = Out { lines = map(entryKey, Map.toList(tally(i.keys))) }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object in = Codecs.decoded(loader, "demo.In", Map.of("keys", List.of("a", "b", "a")));
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
         assertEquals(2, ((List<?>) out.get("lines")).size());
@@ -64,7 +64,7 @@ class CompileHelperReturnPushdownTest {
                 let run (i) = Out { n = length(List.distinct(doubled(i.ns))) }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object in = Codecs.decoded(loader, "demo.In", Map.of("ns", List.of(1L, 1L, 2L)));
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
         assertEquals(2L, out.get("n"));
@@ -108,7 +108,7 @@ class CompileHelperReturnPushdownTest {
                 }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object in = Codecs.decoded(loader, "demo.In", Map.of("keys", List.of("a", "b", "a")));
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
         assertEquals(List.of("a"), out.get("ranked"), "the most frequent key leads the ranking");

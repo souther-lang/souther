@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.BinaryOperator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -43,82 +42,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class NoTypePositionAnswersWithADelimiterTest {
 
-    /** A type position, as the whole source it is written in, given a form and a value of it. */
-    private record Position(String name, BinaryOperator<String> source) {}
-
     /** A form the type position admits somewhere, with something of that type to write. */
     private record Form(String type, String value) {}
-
-    private static final String CASES = """
-            data A = { a: Int }
-            data B = { b: Int }
-            data Out = { v: Int }
-            """;
-
-    private static final String RUN = """
-
-            behavior run : (i: Out) -> Out
-                constructs Out
-
-            let run (i) = Out { v = 1 }
-            """;
-
-    /** Two stages to write a composition over. The composition's inferred output is `A`. */
-    private static final String STAGES = """
-
-            behavior s1 : (i: Out) -> A
-                constructs A
-
-            let s1 (i) = A { a = 1 }
-
-            behavior s2 : (i: A) -> A
-                constructs A
-
-            let s2 (i) = A { a = i.a }
-            """;
-
-    /** A position whose source needs only the form written into it. */
-    private static Position at(String name, String body) {
-        return new Position(name,
-                (type, value) -> "module demo\n\n" + CASES + "\n" + body.formatted(type) + RUN);
-    }
-
-    /** A position that has to be given a value of the form as well as the form. */
-    private static Position valued(String name, String body) {
-        return new Position(name,
-                (type, value) -> "module demo\n\n" + CASES + "\n" + body.formatted(type, value) + RUN);
-    }
-
-    /** Every position `a-type-is-written-in-a-type-position` names. */
-    private static final List<Position> POSITIONS = List.of(
-            at("data field", "data Hold = { x: %s }\n"),
-            at("newtype base", "data Hold = %s\n"),
-            at("behavior parameter",
-                    "behavior go : (i: %s) -> A\n    constructs A\n\nlet go (i) = A { a = 1 }\n"),
-            at("behavior output",
-                    "behavior go : (i: Out) -> %s\n    constructs A\n\nlet go (i) = A { a = 1 }\n"),
-            at("composition declared output", STAGES + "\nbehavior go = s1 >-> s2\n    -> %s\n"),
-            new Position("composition output in exposing",
-                    (type, value) ->
-                            "module demo exposing (A, B, Out, s1, s2, run, go : %s)\n\n".formatted(type)
-                                    + CASES + STAGES + "\nbehavior go = s1 >-> s2\n" + RUN),
-            at("helper parameter", "let aux (h: %s) = 1\n"),
-            valued("helper declared return", "let aux (n: Int) : %s = %s\n"),
-            new Position("local binding annotation",
-                    (type, value) -> "module demo\n\n" + CASES + """
-
-                            behavior run : (i: Out) -> Out
-                                constructs Out, A
-
-                            let run (i) = {
-                                let a: %s = %s
-                                Out { v = 1 }
-                            }
-                            """.formatted(type, value)),
-            at("type argument", "let aux (h: List<%s>) = 1\n"),
-            at("tuple member", "let aux (h: (%s, Int)) = 1\n"),
-            at("function type parameter", "let aux (f: (%s) -> Int) = 1\n"),
-            at("function type result", "let aux (f: (Int) -> %s) = 1\n"));
 
     /** The forms, each with something of it to write where a position needs a value. */
     private static final List<Form> FORMS = List.of(
@@ -130,7 +55,7 @@ class NoTypePositionAnswersWithADelimiterTest {
             new Form("A", "A { a = 1 }"));
 
     /**
-     * How many of the {@link #POSITIONS} × {@link #FORMS} cells are refused at all. Pinned so the
+     * How many of the {@link TypePositions#ALL} × {@link #FORMS} cells are refused at all. Pinned so the
      * delimiter assertion cannot come to pass by everything compiling; what refuses what is elsewhere.
      */
     private static final int REFUSED = 36;
@@ -148,11 +73,11 @@ class NoTypePositionAnswersWithADelimiterTest {
         List<String> bare = new ArrayList<>();
         List<String> neverCompiles = new ArrayList<>();
         int refused = 0;
-        for (Position position : POSITIONS) {
+        for (TypePositions.Position position : TypePositions.ALL) {
             int accepted = 0;
             for (Form form : FORMS) {
                 try {
-                    Compiler.compile(position.source().apply(form.type(), form.value()));
+                    Compiler.compile(position.of(form.type(), form.value()));
                     accepted++;
                 } catch (CompileException e) {
                     refused++;

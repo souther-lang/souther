@@ -18,7 +18,9 @@ public enum RetiredDiagnosticCode {
     E1003,
     E1302,
     E1401,
+    E1505,
     E1601,
+    E1625,
     E1801;
 
     /** The anchor of this code's retirement note in the specification. */

@@ -1,14 +1,14 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeReachName;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -97,7 +97,7 @@ final class Witnesses {
      * proposal for a floor and are not the count asked for here, and offering them would put a row of
      * two under a line drawn at three.
      */
-    static Sized ofSize(Type carrier, int size, Symbols symbols, Set<TypeName> expanding) {
+    static Sized ofSize(Type carrier, int size, Symbols symbols, Set<TypeSymbol> expanding) {
         if (size == 0) {
             return Sized.all(carrier == Type.STRING ? List.of(FixtureTemplate.string(""))
                     : carrier instanceof Type.ListOf || carrier instanceof Type.SetOf
@@ -147,7 +147,7 @@ final class Witnesses {
      * in terms of the other, so a cheaper value for a floor cannot move a line.
      */
     static List<FixtureTemplate> holding(Type carrier, int least, Symbols symbols,
-                                         Set<TypeName> expanding) {
+                                         Set<TypeSymbol> expanding) {
         return least <= 0 ? List.of() : sized(carrier, least, symbols, expanding).all();
     }
 
@@ -200,7 +200,7 @@ final class Witnesses {
         }
     }
 
-    private static Built sized(Type carrier, int least, Symbols symbols, Set<TypeName> expanding) {
+    private static Built sized(Type carrier, int least, Symbols symbols, Set<TypeSymbol> expanding) {
         if (carrier == null || least <= 0) {
             return Built.NONE;
         }
@@ -282,7 +282,7 @@ final class Witnesses {
      * is added last of those, which is exactly the one such a budget takes away.
      */
     private static List<FixtureTemplate> proposalsFor(Type type, Symbols symbols,
-                                                      Set<TypeName> expanding) {
+                                                      Set<TypeSymbol> expanding) {
         return Partitions.representativesOf(type, symbols, null, expanding);
     }
 
@@ -294,7 +294,7 @@ final class Witnesses {
      * answers the way it answers any other.
      */
     private static List<FixtureTemplate> distinctFrom(FixtureTemplate seed, Type type, int least,
-                                                      Symbols symbols, Set<TypeName> expanding) {
+                                                      Symbols symbols, Set<TypeSymbol> expanding) {
         Set<String> written = new LinkedHashSet<>();
         List<FixtureTemplate> out = new ArrayList<>();
         written.add(seed.text());
@@ -327,7 +327,7 @@ final class Witnesses {
      * and is all there is where the carrier neither divides nor steps.
      */
     private static List<FixtureTemplate> distinctValuesOf(Type type, int many, Symbols symbols,
-                                                          Set<TypeName> expanding) {
+                                                          Set<TypeSymbol> expanding) {
         Set<String> written = new LinkedHashSet<>();
         List<FixtureTemplate> out = new ArrayList<>();
         for (FixtureTemplate each : dividesInto(type, symbols, expanding)) {
@@ -369,7 +369,7 @@ final class Witnesses {
      * goes through the names now and hands the values back written under them.
      */
     private static List<FixtureTemplate> dividesInto(Type type, Symbols symbols,
-                                                     Set<TypeName> expanding) {
+                                                     Set<TypeSymbol> expanding) {
         List<FixtureTemplate> out = new ArrayList<>();
         for (PartitionClass each : PartitionClasses.of(type, symbols)) {
             out.addAll(Partitions.standingFor(each.representatives(), symbols, expanding));
@@ -397,19 +397,26 @@ final class Witnesses {
             return null;
         }
         return wrapped(type, FixtureTemplate.on(
-                carrier == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE, at), symbols);
+                carrier == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE, at, symbols.scope()::reach), symbols);
     }
 
-    /** The value under every name the position wears, which is how it is written where the position
-     * declares a newtype rather than what the newtype carries. */
+    /**
+     * The value under every name the position wears, which is how it is written where the position
+     * declares a newtype rather than what the newtype carries.
+     *
+     * <p>Null where {@code bare} is, and where a name the position wears is one this module cannot
+     * write: a value goes under the names as it is written, so a name there is nothing here reaches
+     * leaves no way of writing the value at all.
+     */
     static FixtureTemplate wrapped(Type type, FixtureTemplate bare, Symbols symbols) {
-        if (!(type instanceof Type.Ref ref) || !(symbols.get(ref.name()) instanceof Ast.Data data)
-                || !data.newtype()) {
+        if (bare == null || !(type instanceof Type.Ref ref)
+                || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data) || !data.newtype()) {
             return bare;
         }
-        TypeName name = ref.name();
-        return FixtureTemplate.newtype(name,
-                wrapped(TypeOps.newtypeInner(name, symbols), bare, symbols));
+        TypeSymbol name = ref.name();
+        FixtureTemplate inner = wrapped(TypeOps.newtypeInner(name, symbols), bare, symbols);
+        return inner != null && symbols.scope().reach(name) instanceof TypeReachName.Written written
+                ? FixtureTemplate.newtype(written, inner) : null;
     }
 
     private Witnesses() {}

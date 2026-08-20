@@ -1,21 +1,19 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.DataMessage;
-import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.msg.InjectionMessage;
 import souther.compiler.diag.msg.ModuleMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -47,51 +45,63 @@ public final class SpecChecker {
      * cycle of imports is already refused (E1501), so following one here could not close a loop this
      * check has not already seen.
      */
-    static void checkBehaviorsDoNotRecurse(Ast.Module module) {
-        Set<String> names = new LinkedHashSet<>();
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            names.add(b.name());
+    static void checkBehaviorsDoNotRecurse(Hir.Module module) {
+        // This module's own behaviors, as declarations. A reference to another module's may be
+        // written with the same name as one of these, and it is not one of these: matched by
+        // spelling, a stage naming `other.f` would be an edge from this module's `f` to itself.
+        Set<ValueName.Behavior> names = new LinkedHashSet<>();
+        for (Hir.BehaviorDef b : module.behaviors()) {
+            names.add(new ValueName.Behavior(module.name(), b.name()));
         }
-        Map<String, List<String>> edges = new LinkedHashMap<>();
-        Map<String, Ast.FnDef> fns = new LinkedHashMap<>();
-        for (Ast.FnDef fn : module.fns()) {
+        Map<ValueName.Behavior, List<ValueName.Behavior>> edges = new LinkedHashMap<>();
+        Map<String, Hir.FnDef> fns = new LinkedHashMap<>();
+        for (Hir.FnDef fn : module.fns()) {
             fns.put(fn.name(), fn);
         }
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            List<String> out = new ArrayList<>();
+        for (Hir.BehaviorDef b : module.behaviors()) {
+            List<ValueName.Behavior> out = new ArrayList<>();
             switch (b) {
-                case Ast.SpecBehavior spec -> {
-                    for (Ast.Var req : spec.dependsOn()) {
-                        if (names.contains(req.bare()) && !out.contains(req.bare())) {
-                            out.add(req.bare());
+                case Hir.SpecBehavior spec -> {
+                    for (Hir.Var req : spec.dependsOn()) {
+                        ValueName.Behavior named = behaviorReached(req);
+                        if (named != null && names.contains(named) && !out.contains(named)) {
+                            out.add(named);
                         }
                     }
-                    Ast.FnDef fn = fns.get(spec.name());
+                    Hir.FnDef fn = fns.get(spec.name());
                     if (fn != null) {
-                        for (String called : requiredCalls(fn.writtenBody(), names)) {
+                        for (ValueName.Behavior called
+                                : requiredCalls(fn.writtenBody(), names,
+                                        dependencyBindings(spec, fn))) {
                             if (!out.contains(called)) {
                                 out.add(called);
                             }
                         }
                     }
                 }
-                case Ast.PipeBehavior pipe -> {
-                    for (Ast.Var stage : pipe.stages()) {
-                        if (names.contains(stage.bare()) && !out.contains(stage.bare())) {
-                            out.add(stage.bare());
+                case Hir.PipeBehavior pipe -> {
+                    for (Hir.Var stage : pipe.stages()) {
+                        ValueName.Behavior named = behaviorReached(stage);
+                        if (named != null && names.contains(named) && !out.contains(named)) {
+                            out.add(named);
                         }
                     }
                 }
             }
-            edges.put(b.name(), out);
+            edges.put(new ValueName.Behavior(module.name(), b.name()), out);
         }
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            List<String> path = new ArrayList<>();
-            if (reaches(b.name(), b.name(), edges, path, new HashSet<>())) {
-                path.add(b.name());
+        for (Hir.BehaviorDef b : module.behaviors()) {
+            ValueName.Behavior self = new ValueName.Behavior(module.name(), b.name());
+            List<ValueName.Behavior> path = new ArrayList<>();
+            if (reaches(self, self, edges, path, new HashSet<>())) {
+                path.add(self);
+                List<String> written = new ArrayList<>();
+                for (ValueName.Behavior each : path) {
+                    written.add(each.name());
+                }
                 throw CompileException.of(Diagnostic
                                 .at(b.pos())
-                                .hint(new DeclarationMessage.ABehaviorDoesNotRecurse()).say(new DeclarationMessage.ABehaviorReachesItself(b.name(), String.join(" -> ", path))).build());
+                                .hint(new DeclarationMessage.ABehaviorDoesNotRecurse()).say(new DeclarationMessage.ABehaviorReachesItself(b.name(), String.join(" -> ", written))).build());
             }
         }
     }
@@ -99,13 +109,14 @@ public final class SpecChecker {
     /** Whether {@code target} is reachable from {@code from}, recording the way there in
      *  {@code path}. {@code path} starts with {@code from} and ends at the last step before
      *  {@code target}. */
-    private static boolean reaches(String from, String target, Map<String, List<String>> edges,
-                                   List<String> path, Set<String> seen) {
+    private static boolean reaches(ValueName.Behavior from, ValueName.Behavior target,
+                                   Map<ValueName.Behavior, List<ValueName.Behavior>> edges,
+                                   List<ValueName.Behavior> path, Set<ValueName.Behavior> seen) {
         if (!seen.add(from)) {
             return false;
         }
         path.add(from);
-        for (String next : edges.getOrDefault(from, List.of())) {
+        for (ValueName.Behavior next : edges.getOrDefault(from, List.of())) {
             if (next.equals(target) || reaches(next, target, edges, path, seen)) {
                 return true;
             }
@@ -125,17 +136,21 @@ public final class SpecChecker {
      * behavior has to be declared or imported. The body check would see only a call it cannot type
      * and report all three as a name that resolves to nothing (E1023).
      */
-    static void checkRequiresAreInjectionTargets(Ast.Module module, Map<String, ReqSig> reqSigs,
-                                                 Map<String, ReqSig> calleeSigs) {
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            if (!(b instanceof Ast.SpecBehavior spec)) {
+    static void checkRequiresAreInjectionTargets(Hir.Module module, Map<ValueName.Behavior, ReqSig> reqSigs,
+                                                 Map<ValueName.Behavior, ReqSig> calleeSigs) {
+        for (Hir.BehaviorDef b : module.behaviors()) {
+            if (!(b instanceof Hir.SpecBehavior spec)) {
                 continue;
             }
-            for (Ast.Var required : spec.dependsOn()) {
-                if (required.unresolved() || reqSigs.containsKey(required.bare())) {
+            for (Hir.Var required : spec.dependsOn()) {
+                if (!(required.answered() instanceof Hir.Var.Denoting named)) {
                     continue;
                 }
-                String req = required.bare();
+                ValueName.Behavior reached = behaviorReached(required);
+                if (reached != null && reqSigs.containsKey(reached)) {
+                    continue;
+                }
+                String req = named.written().canonical();
                 // Three ways a name can be wrong here, told apart because the fix differs. A
                 // behavior that depends on nothing has nothing to inject and is called instead; a
                 // composition cannot be rested on because its requirements are not written; a name
@@ -143,8 +158,8 @@ public final class SpecChecker {
                 // what the name was resolved to, so an imported composition is the composition case
                 // rather than the unknown one — scanning this module's own behaviors would only find
                 // the local ones. All are reported at the name, as the clause that names nothing is.
-                boolean dependsOnNothing = calleeSigs.containsKey(req);
-                boolean aComposition = required.denotes() instanceof ValueName.Behavior;
+                boolean dependsOnNothing = reached != null && calleeSigs.containsKey(reached);
+                boolean aComposition = named.denotes() instanceof ValueName.Behavior;
                 throw CompileException.of(Diagnostic.at(required.written().reportedAt())
                         .say(dependsOnNothing
                                 ? new DeclarationMessage
@@ -176,11 +191,11 @@ public final class SpecChecker {
      * {@code exposing} publishes everything with inference intact, and a non-composition behavior
      * states its type at its definition, so a signature on one is rejected.
      */
-    static void checkExposedPipeOutputs(Ast.Module module, Set<String> exposed,
+    static void checkExposedPipeOutputs(Hir.Module module, Set<String> exposed,
             Map<String, Sig> sigs, Symbols symbols) {
         Set<String> pipeNames = new HashSet<>();
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            if (b instanceof Ast.PipeBehavior p) {
+        for (Hir.BehaviorDef b : module.behaviors()) {
+            if (b instanceof Hir.PipeBehavior p) {
                 pipeNames.add(p.name());
             }
         }
@@ -191,8 +206,8 @@ public final class SpecChecker {
             }
         }
         // every exposed composition must declare its output, matching the inferred one
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            if (!(b instanceof Ast.PipeBehavior pipe) || !exposed.contains(pipe.name())) {
+        for (Hir.BehaviorDef b : module.behaviors()) {
+            if (!(b instanceof Hir.PipeBehavior pipe) || !exposed.contains(pipe.name())) {
                 continue;
             }
             Sig sig = sigs.get(pipe.name());
@@ -202,15 +217,22 @@ public final class SpecChecker {
                 // against, and the other compositions still have theirs.
                 continue;
             }
-            Set<TypeName> inferred = TypeOps.leafCases(sig.outputType(), symbols);
-            Ast.RetType declared = module.exposedOutputs().get(pipe.name());
+            Set<TypeSymbol> inferred = TypeOps.leafCases(sig.outputType(), symbols);
+            Hir.RetType declared = module.exposedOutputs().get(pipe.name());
             if (declared == null) {
                 throw CompileException.of(Diagnostic.at(pipe.pos())
                                 
                                 .hint(new DeclarationMessage.WriteTheOutputSignature(pipe.name(), PipelineSigs.caseList(inferred)))
                                 .say(new DeclarationMessage.AnExposedCompositionDeclaresItsOutput(pipe.name())).build());
             }
-            Set<TypeName> declaredCases = TypeOps.leafCases(TypeOps.successType(declared, symbols), symbols);
+            // What was written is read first, and whether it can be compared with what is produced
+            // is asked of the reading. A member no arm can name is a mistake in the declaration
+            // itself, and it is the author's whether or not something beside it went unresolved.
+            Type declaredOut = TypeOps.successType(declared);
+            if (TypeOps.restsOnAnUnresolvedName(declared)) {
+                throw new Unanswerable(declared.pos());
+            }
+            Set<TypeSymbol> declaredCases = TypeOps.leafCases(declaredOut, symbols);
             if (!inferred.equals(declaredCases)) {
                 throw CompileException.of(Diagnostic.at(pipe.pos())
                                 
@@ -226,10 +248,10 @@ public final class SpecChecker {
      * {@code depends on} (§depends-on); the trailing ones name the injection targets in declared order and
      * do not bind values — they resolve as inline calls to those behaviors.
      */
-    static Core checkSpecFn(Ast.SpecBehavior spec, Ast.FnDef fn, Ast.Expr inlinedBody,
+    static Core checkSpecFn(Hir.SpecBehavior spec, Hir.FnDef fn, Hir.Expr inlinedBody,
                                     InvariantChecker.Source discharge,
-                                    Symbols symbols, Map<String, ReqSig> calleeSigs,
-                                    Map<String, ReqSig> reqSigs, HelperInliner inliner,
+                                    Symbols symbols, Map<ValueName.Behavior, ReqSig> calleeSigs,
+                                    Map<ValueName.Behavior, ReqSig> reqSigs, HelperInliner inliner,
                                     Map<String, Type> recursiveHelperFns,
                                     Map<String, DataChecker.Constructs> recHelperConstructs,
                                     List<Diagnostic> warnings) {
@@ -237,7 +259,7 @@ public final class SpecChecker {
             throw CompileException.of(Diagnostic
                             .at(fn.pos()).say(new BehaviorMessage.AnImplementationsReturnComesFromTheBehavior(fn.name(), spec.name())).build());
         }
-        for (Ast.Var required : spec.dependsOn()) {
+        for (Hir.Var required : spec.dependsOn()) {
             // A `depends on` naming nothing was reported where it is written. What this fn's trailing
             // parameters should be called comes from those names, so there is nothing to hold them
             // against — saying they are named wrongly would name the spelling that denotes nothing.
@@ -245,14 +267,15 @@ public final class SpecChecker {
                 throw new Unanswerable(required.pos());
             }
         }
+        // What this fn has to take, asked of the behavior rather than added up here (§fn-declaration).
+        List<SpecImplementation.Parameter> shape = SpecImplementation.parameters(spec);
         int nBusiness = spec.params().size();
-        int nReq = spec.dependsOn().size();
-        if (fn.params().size() != nBusiness + nReq) {
+        if (fn.params().size() != shape.size()) {
             throw CompileException.of(Diagnostic
                             .at(fn.pos())
-                            .say(new BehaviorMessage.TheImplementationTakesAnotherNumberOfParameters(fn.name(), String.valueOf(fn.params().size()), spec.name(), String.valueOf(nBusiness), String.valueOf(nReq))).build());
+                            .say(new BehaviorMessage.TheImplementationTakesAnotherNumberOfParameters(fn.name(), String.valueOf(fn.params().size()), spec.name(), String.valueOf(nBusiness), String.valueOf(shape.size() - nBusiness))).build());
         }
-        for (Ast.FnParam p : fn.params()) {
+        for (Hir.FnParam p : fn.params()) {
             // a pattern in parameter position names a type, but it is not an annotation: it opens
             // the input the behavior already typed
             if (p.type() != null && !p.typeFromPattern()) {
@@ -260,25 +283,39 @@ public final class SpecChecker {
                                 .at(p.pos()).say(new BehaviorMessage.AnImplementationsParametersTakeTheirTypesFromIt(fn.name(), spec.name(), p.name())).build());
             }
         }
-        for (int i = 0; i < nReq; i++) {
-            String got = fn.params().get(nBusiness + i).name();
-            String want = spec.dependsOn().get(i).bare();
-            if (!got.equals(want)) {
-                throw CompileException.of(Diagnostic
-                                .at(fn.pos()).say(new BehaviorMessage.AnInjectedParameterIsOutOfOrder(fn.name(), got, want)).build());
+        for (int i = 0; i < shape.size(); i++) {
+            switch (shape.get(i)) {
+                // An input's name is the implementation's to choose.
+                case SpecImplementation.Parameter.Input _ -> { }
+                // A clause naming nothing names no parameter for this one to be out of order
+                // against, and it was refused above, at the clause rather than at this list.
+                case SpecImplementation.Parameter.Unanswered _ -> { }
+                case SpecImplementation.Parameter.Injected injected -> {
+                    String got = fn.params().get(i).name();
+                    if (!got.equals(injected.name())) {
+                        throw CompileException.of(Diagnostic
+                                        .at(fn.pos()).say(new BehaviorMessage.AnInjectedParameterIsOutOfOrder(fn.name(), got, injected.name())).build());
+                    }
+                }
             }
         }
 
         Scope env = Scope.NONE;
-        for (Ast.FnParam p : fn.params()) {
+        for (Hir.FnParam p : fn.params()) {
             Elaborator.rejectBuiltinShadow(p.name(), p.pos());
         }
         Elaborator.rejectBuiltinShadowing(fn.writtenBody());
         for (int i = 0; i < nBusiness; i++) {
             env = env.with(fn.params().get(i).binder(),
-                    TypeOps.successType(spec.params().get(i).type(), symbols));
+                    TypeOps.successType(spec.params().get(i).type()));
         }
-        Type output = TypeOps.successType(spec.ret(), symbols);
+        // Which behavior each trailing parameter stands for. The clause and the parameter list are
+        // held in the same order above, so the two are read together here rather than paired by
+        // name — an implementation names its own parameters, and the behaviors it depends on may be
+        // declared by different modules under one name.
+        Map<souther.compiler.types.BindingId, ValueName.Behavior> dependsOn =
+                dependencyBindings(spec, fn);
+        Type output = TypeOps.successType(spec.ret());
         // recursive helpers this behavior calls resolve through their signatures (spec §fn-declaration); merged
         // only for typing, so the construction and dependency walks below still see the business params alone.
         // A parameter of the same name wins: a binding in force wins over the declaration it shadows
@@ -291,12 +328,13 @@ public final class SpecChecker {
         // The body arrives with helper calls already expanded (the Lower stage, ADR-0021): it is
         // checked as one expression, so a helper's constructions and injected calls count toward this
         // behavior's permission and dependencies — exactly as if the code had been written inline (§blocks).
-        Ast.Expr body = inlinedBody;
+        Hir.Expr body = inlinedBody;
 
         // push the declared output type into the body so a body that is directly an empty collection
         // (or a construction whose field is one) takes the declared type rather than a bottom
         Core elaboratedBody = Elaborator.elaborate(body, tenv,
-                new CheckContext(symbols, null, reqSigs).withCallees(calleeSigs), output);
+                new CheckContext(symbols, null, reqSigs).withCallees(calleeSigs)
+                        .withDependencies(dependsOn), output);
         Type rt = elaboratedBody.type();
         if (!TypeOps.assignable(rt, output, symbols)) {
             throw CompileException.of(Diagnostic
@@ -319,7 +357,7 @@ public final class SpecChecker {
             // Both sides name types, and a type has one identity however it is written — `up.Amount`
             // and an `Amount` an import brings in are the same one. Each side keeps its own spelling
             // in whatever it has to report.
-            Set<TypeName> declared = new HashSet<>(MatchElaborator.denoted(spec.constructs()));
+            Set<TypeSymbol> declared = new HashSet<>(MatchElaborator.denoted(spec.constructs()));
             // Every way this clause and this body disagree, and not the first of them. Both sides
             // are worked out once and whole before any of it is said, so stopping at one left the
             // author to fix that one, compile, and be told the next — a walk down the call graph,
@@ -335,16 +373,33 @@ public final class SpecChecker {
             // clause writes them — every one of them is at the declaration, so nothing reorders them
             // afterwards.
             List<Diagnostic> disagreements = new ArrayList<>();
-            for (Map.Entry<TypeName, String> built : constructed.originated().entrySet()) {
+            for (Map.Entry<TypeSymbol, String> built : constructed.originated().entrySet()) {
                 if (!declared.contains(built.getKey())) {
                     String c = built.getValue();
                     disagreements.add(Diagnostic.at(spec.pos())
                                     .hint(new DeclarationMessage.AddTheConstructsEntry(spec.name(), c)).say(new DeclarationMessage.ItConstructsWithoutDeclaringIt(spec.name(), c)).build());
                 }
             }
-            for (Ast.Name declaredName : spec.constructs()) {
+            for (Hir.Name declaredName : spec.constructs()) {
                 String name = declaredName.written();
-                if (!constructed.builds(declaredName.denotes())) {
+                // A name that names nothing declares no construction to be kept or removed; it is
+                // reported where it is written.
+                if (declaredName.answered() == null) {
+                    continue;
+                }
+                // A unit is in no construction set, so `builds` is false for one however the body is
+                // written — and E1006 would say the body never built it, which is a different claim
+                // and often a false one. The entry has its own answer (E1026), raised by the check
+                // that reads every clause of the module.
+                //
+                // Load-bearing rather than belt-and-braces: this reader is reached by the
+                // per-behavior query as well, which asks about one body and not about the module, so
+                // the clause check has not run before it. Measured from there by
+                // `askingOneBodyOfSuchAModuleReportsNoOverDeclaration`.
+                if (isUnitData(declaredName.answered().type(), symbols)) {
+                    continue;
+                }
+                if (!constructed.builds(declaredName.answered().type())) {
                     disagreements.add(Diagnostic.at(spec.pos())
                                     .hint(new DeclarationMessage.RemoveTheConstructsEntry(name)).say(new DeclarationMessage.ItDeclaresConstructsAndNeverBuilds(spec.name(), name)).build());
                 }
@@ -356,21 +411,27 @@ public final class SpecChecker {
         }
         // The `depends on` clause must match what the fn actually calls (spec §depends-on): missing -> E1602,
         // extra -> E1603.
-        List<String> actual = requiredCalls(body, reqSigs.keySet());
-        List<String> declared = new ArrayList<>();
-        for (Ast.Var required : spec.dependsOn()) {
-            declared.add(required.bare());
-        }
-        for (String call : actual) {
-            if (!declared.contains(call)) {
-                throw CompileException.of(Diagnostic.at(spec.pos())
-                                .hint(new DeclarationMessage.AddTheDependsOnEntry(call, spec.name())).say(new DeclarationMessage.ItCallsSomethingWithNoImplementation(fn.name(), call, spec.name())).build());
+        List<ValueName.Behavior> actual = requiredCalls(body, reqSigs.keySet(), dependsOn);
+        List<ValueName.Behavior> declared = new ArrayList<>();
+        for (Hir.Var required : spec.dependsOn()) {
+            // Reported where it is written; it declares no requirement for a call to answer to.
+            ValueName.Behavior named = behaviorReached(required);
+            if (named != null) {
+                declared.add(named);
             }
         }
-        for (String req : declared) {
-            if (!actual.contains(req)) {
+        for (ValueName.Behavior call : actual) {
+            if (!declared.contains(call)) {
+                String written = call.name();
                 throw CompileException.of(Diagnostic.at(spec.pos())
-                                .hint(new DeclarationMessage.RemoveTheDependsOnEntry(req)).say(new DeclarationMessage.ItDeclaresDependsOnAndNeverCallsIt(spec.name(), req, fn.name())).build());
+                                .hint(new DeclarationMessage.AddTheDependsOnEntry(written, spec.name())).say(new DeclarationMessage.ItCallsSomethingWithNoImplementation(fn.name(), written, spec.name())).build());
+            }
+        }
+        for (ValueName.Behavior req : declared) {
+            if (!actual.contains(req)) {
+                String written = req.name();
+                throw CompileException.of(Diagnostic.at(spec.pos())
+                                .hint(new DeclarationMessage.RemoveTheDependsOnEntry(written)).say(new DeclarationMessage.ItDeclaresDependsOnAndNeverCallsIt(spec.name(), written, fn.name())).build());
             }
         }
         // Intraprocedural invariant discharge: seed from the input
@@ -385,9 +446,10 @@ public final class SpecChecker {
         Core dischargeBody = discharge == null ? null
                 : Elaborator.elaborate(discharge.body(), tenv,
                         new CheckContext(symbols, null, reqSigs).withCallees(calleeSigs)
-                                .forDischarge(), output);
+                                .withDependencies(dependsOn).forDischarge(), output);
         InvariantChecker.Findings inv = InvariantChecker.analyze(dischargeBody,
-                discharge == null ? Map.of() : discharge.invariants(), env, symbols);
+                discharge == null ? Map.of() : discharge.invariants(),
+                discharge == null ? Map.of() : discharge.contracts(), env, symbols);
         warnings.addAll(inv.warnings());
         if (!inv.errors().isEmpty()) {
             throw inv.errors().get(0);
@@ -404,13 +466,13 @@ public final class SpecChecker {
      * <p>Asked of the signature rather than of what was written, so a composition is subject to it as
      * well: two stages may depart cases of one spelling from two modules.
      */
-    static void checkUnionMemberNames(Ast.Module module, Map<String, Sig> sigs, Symbols symbols) {
-        for (Ast.BehaviorDef b : module.behaviors()) {
+    static void checkUnionMemberNames(Hir.Module module, Map<String, Sig> sigs, Symbols symbols) {
+        for (Hir.BehaviorDef b : module.behaviors()) {
             Sig sig = sigs.get(b.name());
             if (sig == null) {
                 continue;
             }
-            TypeName[] clash = TypeOps.ambiguousMembers(sig.outputType(), symbols);
+            TypeSymbol[] clash = TypeOps.ambiguousMembers(sig.outputType(), symbols);
             if (clash == null) {
                 continue;
             }
@@ -425,13 +487,13 @@ public final class SpecChecker {
      * writes (spec §jvm-anonymous-union), so a member declaring a field of that name and the tag want one key. The
      * same rule a sum's cases are under, asked of the signature so a composition is subject to it too.
      */
-    static void checkUnionMemberFields(Ast.Module module, Map<String, Sig> sigs, Symbols symbols) {
-        for (Ast.BehaviorDef b : module.behaviors()) {
+    static void checkUnionMemberFields(Hir.Module module, Map<String, Sig> sigs, Symbols symbols) {
+        for (Hir.BehaviorDef b : module.behaviors()) {
             Sig sig = sigs.get(b.name());
             if (sig == null || !(sig.outputType() instanceof Type.Union)) {
                 continue;
             }
-            TypeName carrying = TypeOps.memberCarryingField(sig.outputType(), DISCRIMINATOR, symbols);
+            TypeSymbol carrying = TypeOps.memberCarryingField(sig.outputType(), DISCRIMINATOR, symbols);
             if (carrying == null) {
                 continue;
             }
@@ -445,29 +507,68 @@ public final class SpecChecker {
     private static final String DISCRIMINATOR = "type";
 
 
+    /** Whether a name resolves to a unit data of this compilation or of a module it reads. */
+    private static boolean isUnitData(TypeSymbol type, Symbols symbols) {
+        return symbols.declarations().declaration(type.key()) instanceof Hir.UnitData;
+    }
+
+    /**
+     * No entry of a {@code constructs} clause is a unit data (spec §constructs-excludes-unit-data).
+     *
+     * <p>Asked of the clause and of nothing else, so it is the same answer for an injected behavior
+     * and an implemented one. A unit is constructed where its name is written and holds no
+     * construction authority — it has no fields, carries no invariant, and has one value, so there
+     * is no telling a minted one from the existing one passed through. Collected into the set, the
+     * position a unit name stood in decided the clause: {@code r.kind == Domestic} demanded an entry
+     * that {@code match r.kind with | Domestic} did not.
+     *
+     * <p>Every entry of one clause, rather than the first, and handed back rather than raised: the
+     * caller has the module's other clauses to ask the same of, and a wrong clause is one thing to
+     * rewrite. That is the reason E1002 and E1006 report each name too.
+     */
+    static List<Diagnostic> unitDataNamedInConstructs(Hir.SpecBehavior spec, Symbols symbols) {
+        List<Diagnostic> named = new ArrayList<>();
+        for (Hir.Name name : spec.constructs()) {
+            // A name that answers nothing names no data to be kept or removed; it is reported where
+            // it is written.
+            if (name.answered() != null && isUnitData(name.answered().type(), symbols)) {
+                String c = name.written();
+                named.add(Diagnostic.at(spec.pos())
+                        .hint(new DeclarationMessage.RemoveTheConstructsEntry(c))
+                        .say(new DeclarationMessage.ItNamesAUnitDataInConstructs(spec.name(), c))
+                        .build());
+            }
+        }
+        return named;
+    }
+
     /**
      * An injected behavior's declared {@code constructs} must each be Java-buildable (spec §java-base-class):
-     * a unit data (the base class hands the implementation a {@code protected} factory) or an
-     * exposed data (its {@code decoder} is public). A non-unit, unexposed one is E1305 — Java has
-     * no way to mint it.
+     * an exposed data, whose {@code decoder} is public. An unexposed one is E1305 — Java has no way
+     * to mint it.
+     *
+     * <p>Every entry is a non-unit data (spec §constructs-excludes-unit-data), so this reaches all of
+     * them. A unit case of the output is creatable without being exposed, through the
+     * {@code protected} factory the base class carries for it — which the output type supplies, not
+     * this clause.
      */
-    static void checkInjectionConstructs(Ast.SpecBehavior spec, Symbols symbols,
+    static void checkInjectionConstructs(Hir.SpecBehavior spec, Symbols symbols,
                                                  boolean exposeAll, Set<String> exposed) {
-        for (Ast.Name name : spec.constructs()) {
+        for (Hir.Name name : spec.constructs()) {
             String c = name.written();
-            TypeName built = name.denotes();
-            if (symbols.get(built) instanceof Ast.UnitData) {
-                continue;   // a unit has a generated factory
+            if (name.answered() == null) {
+                continue;   // it names no type to be built from outside; reported where written
             }
+            TypeSymbol built = name.answered().type();
             // What Java needs is a way in: the decoder, which a module publishes by exposing the type.
             // For a type of another module that is its own `exposing` to answer, not this one's.
             // `exposed` lists this module's own names, so the resolved name is what to look up — a
             // type of this module written through it (`down.Out`) is the same one as `Out`
-            boolean buildable = symbols.isForeign(built)
-                    ? symbols.isExposed(built) : exposeAll || exposed.contains(built.name());
+            boolean buildable = symbols.scope().isForeign(built)
+                    ? symbols.scope().isExposed(built) : exposeAll || exposed.contains(built.name());
             if (!buildable) {
                 throw CompileException.of(Diagnostic.at(spec.pos())
-                                .hint(new DeclarationMessage.ExposeItOrMakeItAUnitData(c)).say(new DeclarationMessage.AnInjectedBehaviorConstructsWhatIsKept(spec.name(), c)).build());
+                                .hint(new DeclarationMessage.ExposeIt(c)).say(new DeclarationMessage.AnInjectedBehaviorConstructsWhatIsKept(spec.name(), c)).build());
             }
         }
     }
@@ -491,15 +592,15 @@ public final class SpecChecker {
      * a reader through the decoder or through the {@code protected} factory rather than by being
      * named — which is what E1305's unit-data allowance rests on.
      */
-    static void checkExposedSurface(Ast.Module module, Set<String> injectionTargets,
+    static void checkExposedSurface(Hir.Module module, Set<String> injectionTargets,
                                     Map<String, Sig> sigs, Symbols symbols,
                                     boolean exposeAll, Set<String> exposed,
                                     Map<String, Type> definitionTypes) {
         if (exposeAll) {
             return;   // nothing is kept to the module, so nothing can be rested on
         }
-        for (Ast.Def d : module.defs()) {
-            if (!(d instanceof Ast.Data data) || !exposed.contains(data.name())) {
+        for (Hir.Def d : module.defs()) {
+            if (!(d instanceof Hir.Data data) || !exposed.contains(data.name())) {
                 continue;
             }
             // Read through the includes: a spread flattens another data's fields into this one, so
@@ -526,12 +627,12 @@ public final class SpecChecker {
         //
         // A behavior's input and output are asked below, under its own name; a behavior's own `let`
         // is an implementation and not one of the module's definitions.
-        for (Ast.FnDef fn : HelperInliner.helpersOf(module).values()) {
-            if (!(fn.body() instanceof Ast.FnBody.Written) || !exposed.contains(fn.name())) {
+        for (Hir.FnDef fn : HelperInliner.helpersOf(module).values()) {
+            if (!(fn.body() instanceof Hir.FnBody.Written) || !exposed.contains(fn.name())) {
                 continue;
             }
-            for (Ast.FnParam p : fn.params()) {
-                refuseHidden(TypeOps.resolveParamType(p.type(), symbols),
+            for (Hir.FnParam p : fn.params()) {
+                refuseHidden(TypeOps.resolveParamType(p.type()),
                         hidden -> Diagnostic
                                 .say(new ModuleMessage.AnExposedArgumentRestsOnWhatIsKept(fn.name(),
                                         p.name(), hidden))
@@ -555,7 +656,7 @@ public final class SpecChecker {
         // Read off the signature map rather than the declarations: a composition's input and output
         // are inferred from its stages, so they are written nowhere, and this is the one place both
         // kinds of behavior answer the same question.
-        for (Ast.BehaviorDef b : module.behaviors()) {
+        for (Hir.BehaviorDef b : module.behaviors()) {
             boolean injected = injectionTargets.contains(b.name());
             Sig sig = sigs.get(b.name());
             if (sig == null || (!injected && !exposed.contains(b.name()))) {
@@ -605,7 +706,7 @@ public final class SpecChecker {
         }
         // `mentions` stops at the first match, so the predicate keeps the name it stopped on: a
         // collection carries its element out with it too (`List<Id>` names `Id`).
-        TypeName[] hidden = new TypeName[1];
+        TypeSymbol[] hidden = new TypeSymbol[1];
         Type.mentions(written, t -> {
             if (t instanceof Type.Ref ref && !nameableOutside(ref.name(), symbols, exposeAll, exposed)) {
                 hidden[0] = ref.name();
@@ -621,10 +722,10 @@ public final class SpecChecker {
     }
 
     /** Whether a reader outside the declaring module can write {@code name}. */
-    private static boolean nameableOutside(TypeName name, Symbols symbols, boolean exposeAll,
+    private static boolean nameableOutside(TypeSymbol name, Symbols symbols, boolean exposeAll,
                                            Set<String> exposed) {
-        return symbols.isForeign(name)
-                ? symbols.isExposed(name) : exposeAll || exposed.contains(name.name());
+        return symbols.scope().isForeign(name)
+                ? symbols.scope().isExposed(name) : exposeAll || exposed.contains(name.name());
     }
 
     /**
@@ -637,28 +738,31 @@ public final class SpecChecker {
      * `事前承認待ち AND 却下者ID`); requiring the whole chain to be single-input would reject the
      * very line 14.1 cites.
      */
-    static void checkStagesAreSingleInput(Ast.Module module) {
-        Map<String, Integer> arity = new HashMap<>();
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            if (b instanceof Ast.SpecBehavior spec) {
-                arity.put(spec.name(), spec.params().size());
+    static void checkStagesAreSingleInput(Hir.Module module) {
+        Map<ValueName.Behavior, Integer> arity = new HashMap<>();
+        for (Hir.BehaviorDef b : module.behaviors()) {
+            if (b instanceof Hir.SpecBehavior spec) {
+                arity.put(new ValueName.Behavior(module.name(), spec.name()), spec.params().size());
             }
         }
-        Map<String, List<Ast.Var>> pipeStages = PipelineSigs.pipelineStages(module);
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            if (!(b instanceof Ast.PipeBehavior pipe)) {
+        Map<ValueName.Behavior, List<Hir.Var>> pipeStages = PipelineSigs.pipelineStages(module);
+        for (Hir.BehaviorDef b : module.behaviors()) {
+            if (!(b instanceof Hir.PipeBehavior pipe)) {
                 continue;
             }
             // check the flattened stages: a named intermediate splices in its own first stage, which
             // then sits after `>->` and so must be single-input too (spec §sequential-composition, §type-routing)
-            List<Ast.Var> stages = PipelineSigs.flattenStages(pipe.stages(), pipeStages,
+            List<Hir.Var> stages = PipelineSigs.flattenStages(pipe.stages(), pipeStages,
                     pipe.pos());
             for (int i = 1; i < stages.size(); i++) {
-                String stage = stages.get(i).bare();
+                ValueName.Behavior stage = behaviorReached(stages.get(i));
+                if (stage == null) {
+                    continue;   // reported where it is written; it declares no arity to hold it to
+                }
                 Integer n = arity.get(stage);
                 if (n != null && n != 1) {
                     throw CompileException.of(Diagnostic
-                                    .at(pipe.pos()).say(new BehaviorMessage.AStageAfterTheFirstTakesOneInput(stage, String.valueOf(n), pipe.name())).build());
+                                    .at(pipe.pos()).say(new BehaviorMessage.AStageAfterTheFirstTakesOneInput(stage.name(), String.valueOf(n), pipe.name())).build());
                 }
             }
         }
@@ -666,22 +770,69 @@ public final class SpecChecker {
 
     /** The distinct injection targets a fn body calls, in first-seen order. Calls may appear
      * anywhere in an expression (e.g. inline in a record literal), not only bound to a let. */
-    public static List<String> requiredCalls(Ast.Expr body, java.util.Set<String> requiredNames) {
-        List<String> calls = new java.util.ArrayList<>();
-        collectRequiredCalls(body, requiredNames, calls);
+    public static List<ValueName.Behavior> requiredCalls(
+            Hir.Expr body, java.util.Set<ValueName.Behavior> requiredNames,
+            Map<souther.compiler.types.BindingId, ValueName.Behavior> dependencies) {
+        List<ValueName.Behavior> calls = new java.util.ArrayList<>();
+        collectRequiredCalls(body, requiredNames, dependencies, calls);
         return calls;
     }
 
-    private static void collectRequiredCalls(Ast.Expr e, Set<String> requiredNames, List<String> out) {
-        if (e instanceof Ast.Apply call && requiredNames.contains(call.reaches())
-                && !out.contains(call.reaches())) {
-            out.add(call.written());
+    /**
+     * Which behavior each trailing parameter of {@code fn} stands for.
+     *
+     * <p>The clause and the parameter list are held in the same order (checked just above), so the
+     * two are read together rather than paired by name: an implementation names its own parameters,
+     * and two modules may declare a behavior of one name.
+     */
+    public static Map<souther.compiler.types.BindingId, ValueName.Behavior> dependencyBindings(
+            Hir.SpecBehavior spec, Hir.FnDef fn) {
+        Map<souther.compiler.types.BindingId, ValueName.Behavior> bound = new LinkedHashMap<>();
+        int business = spec.params().size();
+        for (int i = 0; i < spec.dependsOn().size() && business + i < fn.params().size(); i++) {
+            ValueName.Behavior named = behaviorReached(spec.dependsOn().get(i));
+            if (named != null) {
+                bound.put(fn.params().get(business + i).binder().id(), named);
+            }
+        }
+        return bound;
+    }
+
+    /**
+     * The behavior {@code named} reaches, or null where resolution found none or it names something
+     * that is no behavior.
+     *
+     * <p>Asked of the declaration and not of the name it was written under. A call to another
+     * module's behavior and a call to one this module declares can be written the same, and what a
+     * requirement is about is one of the two.
+     */
+    private static ValueName.Behavior behaviorReached(Hir.Var named) {
+        return named.answered() != null
+                && named.answered().denotes() instanceof ValueName.Behavior behavior
+                ? behavior : null;
+    }
+
+    private static void collectRequiredCalls(
+            Hir.Expr e, Set<ValueName.Behavior> requiredNames,
+            Map<souther.compiler.types.BindingId, ValueName.Behavior> dependencies,
+            List<ValueName.Behavior> out) {
+        if (e instanceof Hir.Apply call && call.answered() != null) {
+            // The behavior called: one named outright, or the trailing parameter an implementation
+            // takes it as, which is a binding.
+            ValueName.Behavior reached = switch (call.answered().denotes()) {
+                case ValueName.Behavior behavior -> behavior;
+                case ValueName.Local local -> dependencies.get(local.id());
+                default -> null;
+            };
+            if (reached != null && requiredNames.contains(reached) && !out.contains(reached)) {
+                out.add(reached);
+            }
         }
         // Every subexpression, through the one exhaustive walk — a call to an injected behavior may
         // sit anywhere. Listing the node kinds here instead left `-dep(x)` and `(dep(x), y)` out of
         // the set, and a block's requirements still float out to the behavior that passes it
         // (spec §blocks, §requirement-propagation) because a Block's body is one of its children.
-        Ast.forEachChild(e, c -> collectRequiredCalls(c, requiredNames, out));
+        Hir.forEachChild(e, c -> collectRequiredCalls(c, requiredNames, dependencies, out));
     }
 
 }

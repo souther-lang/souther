@@ -19,14 +19,14 @@ class TypeCapabilityTest {
     @Test
     void aTupleComparesButDoesNotOrder() {
         Type pair = Type.tuple(List.of(Type.STRING, Type.STRING));
-        assertTrue(TypeOps.supportsEquality(pair, null));
+        assertTrue(TypeOps.supportsEquality(pair));
         assertFalse(TypeOps.supportsOrdering(pair, null));
     }
 
     @Test
     void aFunctionAnswersNoneOfTheThree() {
         Type fn = Type.fn(List.of(Type.INT), Type.BOOL);
-        assertFalse(TypeOps.supportsEquality(fn, null));
+        assertFalse(TypeOps.supportsEquality(fn));
         assertFalse(TypeOps.supportsOrdering(fn, null));
         assertFalse(TypeOps.hasExternalForm(fn, null));
     }
@@ -34,17 +34,17 @@ class TypeCapabilityTest {
     @Test
     void aCollectionOfFunctionsCannotBeCompared() {
         Type fn = Type.fn(List.of(Type.INT), Type.BOOL);
-        assertFalse(TypeOps.supportsEquality(Type.list(fn), null));
-        assertFalse(TypeOps.supportsEquality(Type.set(fn), null));
-        assertFalse(TypeOps.supportsEquality(Type.option(fn), null));
-        assertFalse(TypeOps.supportsEquality(Type.map(Type.STRING, fn), null));
-        assertFalse(TypeOps.supportsEquality(Type.tuple(List.of(Type.INT, fn)), null));
+        assertFalse(TypeOps.supportsEquality(Type.list(fn)));
+        assertFalse(TypeOps.supportsEquality(Type.set(fn)));
+        assertFalse(TypeOps.supportsEquality(Type.option(fn)));
+        assertFalse(TypeOps.supportsEquality(Type.map(Type.STRING, fn)));
+        assertFalse(TypeOps.supportsEquality(Type.tuple(List.of(Type.INT, fn))));
     }
 
     @Test
     void aListOfOrderedElementsIsNotItselfOrdered() {
         assertFalse(TypeOps.supportsOrdering(Type.list(Type.INT), null));
-        assertTrue(TypeOps.supportsEquality(Type.list(Type.INT), null));
+        assertTrue(TypeOps.supportsEquality(Type.list(Type.INT)));
     }
 
     @Test
@@ -58,9 +58,9 @@ class TypeCapabilityTest {
 
     @Test
     void boolAndRawCompareButDoNotOrder() {
-        assertTrue(TypeOps.supportsEquality(Type.BOOL, null));
+        assertTrue(TypeOps.supportsEquality(Type.BOOL));
         assertFalse(TypeOps.supportsOrdering(Type.BOOL, null));
-        assertTrue(TypeOps.supportsEquality(Type.RAW, null));
+        assertTrue(TypeOps.supportsEquality(Type.RAW));
         assertFalse(TypeOps.supportsOrdering(Type.RAW, null));
     }
 

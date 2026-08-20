@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>The line is where the two are equal. A guard's arms are above the line and below-or-on it, so a
  * row on the line takes the same arm as one well below it, and the arms cannot stand in for it — a
  * row on the line is the one thing that tells a rule written {@code >} from one written {@code >=}
- * (spec §every-guard-boundary-has-a-row).
+ * (spec §every-border-has-a-row-against-its-line).
  *
  * <p>Nothing asked for it. The reader that turns a comparison into a line wants a constant on one
  * side, and where there is none it produced nothing at all: no line, no obligation, and a note saying
@@ -47,7 +47,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = NoBenefit | Benefit
 
             behavior benefitOf : (charge: Charge, ceiling: Ceiling) -> Result
-                constructs NoBenefit, Benefit, Charge
+                constructs Benefit, Charge
             let benefitOf (charge, ceiling) = {
                 guard charge.value > ceiling.value else NoBenefit
                 Benefit { amount = Charge(charge.value - ceiling.value) }
@@ -75,7 +75,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = NoBenefit | Benefit
 
             behavior benefitOf : (charge: Int, ceiling: Int) -> Result
-                constructs NoBenefit, Benefit
+                constructs Benefit
             let benefitOf (charge, ceiling) = {
                 guard charge > ceiling else NoBenefit
                 Benefit { amount = charge - ceiling }
@@ -100,7 +100,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = No | Yes
 
             behavior cmp : (a: Rank, b: Rank) -> Result
-                constructs No, Yes
+                constructs Yes
             let cmp (a, b) = {
                 guard a > b else No
                 Yes { r = a }
@@ -120,7 +120,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = No | Yes
 
             behavior cmp : (a: String, b: String) -> Result
-                constructs No, Yes
+                constructs Yes
             let cmp (a, b) = {
                 guard a > b else No
                 Yes { s = a }
@@ -146,7 +146,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = No | Yes
 
             behavior cmp : (a: Bronze, b: Gold) -> Result
-                constructs No, Yes
+                constructs Yes
             let cmp (a, b) = {
                 guard a > b else No
                 Yes { r = a }
@@ -166,7 +166,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = No | Yes
 
             behavior cmp : (a: String, b: String) -> Result
-                constructs No, Yes
+                constructs Yes
             let cmp (a, b) = {
                 guard String.length(a) > String.length(b) else No
                 Yes { s = a }
@@ -190,7 +190,6 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = No | Yes
 
             behavior cmp : (p: Pair) -> Result
-                constructs No, Yes
             let cmp (p) = {
                 guard p.a > p.b else No
                 Yes
@@ -220,7 +219,6 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = No | Yes
 
             behavior cmp : (a: NonZero, b: Zero) -> Result
-                constructs No, Yes
             let cmp (a, b) = {
                 guard a.value > b.value else No
                 Yes
@@ -240,7 +238,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = NoBenefit | Benefit
 
             behavior benefitOf : (charge: Int, ceiling: Int) -> Result
-                constructs NoBenefit, Benefit
+                constructs Benefit
             let benefitOf (charge, ceiling) = {
                 guard charge > ceiling + 1000 else NoBenefit
                 Benefit { amount = charge - ceiling }
@@ -265,7 +263,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             data Result = No | Yes
 
             behavior cmp : (a: Low, b: High) -> Result
-                constructs No, Yes
+                constructs Yes
             let cmp (a, b) = {
                 guard a.value > b.value else No
                 Yes { v = a }
@@ -279,18 +277,29 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aComparisonOfTwoPositionsAsksForARowWhereTheyAreEqual() {
         String report = report(TWO_NEWTYPES);
 
-        assertTrue(report.contains("no row is at benefitOf/charge = ceiling"), report);
-        assertTrue(report.contains("boundary    2/3"), report);
+        assertTrue(report.contains("no row is at the OFF point benefitOf/charge = ceiling"), report);
+        assertTrue(report.contains("border      borders 3   coverage items 6/8   excluded 4"), report);
     }
 
-    /** The row on the line meets it, and the line is met by a row that reached the comparison — the
-     *  same rule a line against a constant is met by. */
+    /**
+     * The row on the line meets the point where the two terms meet, and is met by a row that reached
+     * the comparison — the same rule a line against a constant is met by.
+     *
+     * <p>And meets that point alone. The border owes a row one step from the line as well, which is
+     * a different pair: `charge > ceiling` is open where they meet, so the row on the line is the
+     * point outside and the point inside is where the charge is one over. A reading that had them as
+     * one set would call this border covered on the strength of a row that is at the other side of
+     * it.
+     */
     @Test
     void aRowOnTheLineMeetsIt() {
         String report = report(ON_THE_LINE);
 
-        assertTrue(report.contains("boundary    3/3"), report);
-        assertFalse(report.contains("no row is at benefitOf/charge = ceiling"), report);
+        assertTrue(report.contains("border      borders 3   coverage items 7/8   excluded 4"), report);
+        assertFalse(report.contains("no row is at the OFF point benefitOf/charge = ceiling ("),
+                report);
+        assertTrue(report.contains("no row is at the ON point benefitOf/charge = ceiling + 1"),
+                report);
     }
 
     /**
@@ -304,8 +313,8 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aBehaviorWithNoAxisStillDrawsALineBetweenItsPositions() {
         String report = report(NO_AXIS);
 
-        assertTrue(report.contains("no row is at benefitOf/charge = ceiling"), report);
-        assertTrue(report.contains("boundary    0/1"), report);
+        assertTrue(report.contains("no row is at the OFF point benefitOf/charge = ceiling"), report);
+        assertTrue(report.contains("border      borders 1   coverage items 2/4"), report);
     }
 
     /** An enumeration counts on the place its cases are declared at, so it reaches this by the same
@@ -314,7 +323,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void anEnumerationDrawsOneToo() {
         String report = report(ENUMERATION);
 
-        assertTrue(report.contains("no row is at cmp/a = b"), report);
+        assertTrue(report.contains("no row is at the OFF point cmp/a = b"), report);
     }
 
     /** A carrier whose values are strings reaches this the way one whose values count does. Nothing
@@ -323,7 +332,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aCarrierOfStringsDrawsOneToo() {
         String report = report(TEXT);
 
-        assertTrue(report.contains("no row is at cmp/a = b"), report);
+        assertTrue(report.contains("no row is at the OFF point cmp/a = b"), report);
     }
 
     /**
@@ -337,18 +346,30 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aComparableTypeWithNoCarrierDrawsNone() {
         String report = report(NO_CARRIER);
 
-        assertFalse(report.contains("no row is at cmp/a = b"), report);
-        assertTrue(report.contains("boundary    not measured (no line was derived at any position)"),
+        assertFalse(report.contains("point cmp/a = b"), report);
+        assertTrue(report.contains("border      not measured (no line was derived at any position)"),
                 report);
     }
 
-    /** One side has to be a position and not something taken of one. Where it is not, the line is
-     *  where the difference is a constant, which is not a place either position can be asked for. */
+    /**
+     * An offset on one side moves the line rather than taking it away.
+     *
+     * <p>{@code charge > ceiling + 1000} is {@code charge - ceiling > 1000}: a line on the same
+     * distance, one thousand along it. Read as a position against a position, the offset made the
+     * second side something no line could be drawn against, and the rule went unread — while the
+     * check enforced it and refused every row past it.
+     *
+     * <p>It still divides neither position, so the note under the classes measure is the one a
+     * relation gets.
+     */
     @Test
-    void anOperandThatIsNotAPositionDrawsNone() {
+    void anOffsetOnOneSideMovesTheLineRatherThanTakingItAway() {
         String report = report(NOT_A_TERM);
 
-        assertFalse(report.contains("no row is at"), report);
+        assertTrue(report.contains("no row is at the OFF point benefitOf/charge = ceiling + 1000"),
+                report);
+        assertTrue(report.contains("no row is at the ON point benefitOf/charge = ceiling + 1001"),
+                report);
         assertTrue(report.contains("not read: charge"), report);
     }
 
@@ -363,8 +384,8 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aLineNoCountSatisfiesIsSaidAndNotCounted() {
         String report = report(NO_COMMON_COUNT);
 
-        assertTrue(report.contains("not known to be writable: cmp/a = b"), report);
-        assertFalse(report.contains("no row is at cmp/a = b"), report);
+        assertTrue(report.contains("not known to be writable: the OFF point cmp/a = b"), report);
+        assertFalse(report.contains("no row is at the OFF point cmp/a = b"), report);
     }
 
     /**
@@ -381,7 +402,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
 
         int partition = report.indexOf("    partition ");
         int note = report.indexOf("· not read: charge");
-        int boundary = report.indexOf("    boundary ");
+        int boundary = report.indexOf("    border ");
 
         assertTrue(note > partition && note < boundary,
                 "the note about the classes sits under the classes measure:\n" + report);
@@ -431,9 +452,9 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         String report = report(MEASURED);
         String rows = generated(MEASURED);
 
-        assertFalse(report.contains("no row is at cmp/String.length(a) = String.length(b)"), report);
+        assertFalse(report.contains("no row is at the OFF point cmp/String.length(a) = String.length(b)"), report);
         assertTrue(report.contains(
-                "not known to be writable: cmp/String.length(a) = String.length(b)"), report);
+                "not known to be writable: the OFF point cmp/String.length(a) = String.length(b)"), report);
         assertTrue(rows.contains("nothing here could build a representative for it"), rows);
         assertTrue(rows.contains("does not make one unwritable"), rows);
     }
@@ -452,9 +473,9 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aRuleTheRangesCouldNotTakeInIsNotAProofEither() {
         String report = report(A_HOLE_AND_A_POINT);
 
-        assertFalse(report.contains("no row is at cmp/a = b"),
+        assertFalse(report.contains("no row is at the OFF point cmp/a = b"),
                 "zero is the only place both ranges hold and one position refuses it:\n" + report);
-        assertTrue(report.contains("not known to be writable: cmp/a = b"), report);
+        assertTrue(report.contains("not known to be writable: the OFF point cmp/a = b"), report);
     }
 
     /**
@@ -469,9 +490,9 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aRuleRelatingTheTwoPositionsIsNotAnsweredByTheirRangesOverlapping() {
         String report = report(RULED_OUT_BY_THE_RECORD);
 
-        assertFalse(report.contains("no row is at cmp/p.a = p.b"),
+        assertFalse(report.contains("no row is at the OFF point cmp/p.a = p.b"),
                 "the line holds no value, so no row is owed at it:\n" + report);
-        assertTrue(report.contains("not known to be writable: cmp/p.a = p.b"), report);
+        assertTrue(report.contains("not known to be writable: the OFF point cmp/p.a = p.b"), report);
     }
 
     /**
@@ -485,8 +506,8 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aRuleThatAdmitsTheDiagonalStillOwesTheRow() {
         String report = report(ALLOWED_BY_THE_RECORD);
 
-        assertTrue(report.contains("no row is at cmp/p.a = p.b"), report);
-        assertTrue(report.contains("boundary    0/1"), report);
+        assertTrue(report.contains("no row is at the OFF point cmp/p.a = p.b"), report);
+        assertTrue(report.contains("border      borders 1   coverage items 1/2"), report);
     }
 
     private static String report(String model) {
@@ -510,7 +531,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void theReportStillNamesTheMeasuresTheseAssertionsRead() {
         String report = report(TWO_NEWTYPES);
 
-        assertEquals(1, report.split("    boundary ", -1).length - 1, report);
+        assertEquals(1, report.split("    border ", -1).length - 1, report);
         assertEquals(1, report.split("    partition ", -1).length - 1, report);
     }
 }

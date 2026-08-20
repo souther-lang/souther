@@ -143,10 +143,17 @@ class CompilePublishedHelperTest {
                 """)));
     }
 
-    /** The reader's own unit data is still the reader's to declare. */
+    /**
+     * The reader's own unit data is no more the reader's to declare than a carried one.
+     *
+     * <p>Where the two above turn on whose construction it is, this one says the question is not
+     * asked of a unit at all: it is in no construction set, carried or originated
+     * (spec §constructs-excludes-unit-data). Both answers, because a check that had stopped reading
+     * the clause would pass the first alone.
+     */
     @Test
-    void theReadersOwnUnitDataIsStillItsToDeclare() {
-        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+    void theReadersOwnUnitDataIsNoMoreItsToDeclareThanACarriedOne() {
+        String src = """
                 module order exposing ( Marker, Out, bill )
 
                 data Marker
@@ -154,8 +161,12 @@ class CompilePublishedHelperTest {
 
                 behavior bill : (n: Int) -> Out constructs Out
                 let bill (n) = Out { v = if Marker == Marker then n else 0 }
-                """));
+                """;
+        assertDoesNotThrow(() -> Compiler.compile(src));
 
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compile(src.replace("constructs Out", "constructs Out, Marker")));
+        assertEquals("E1026", e.code());
         assertTrue(e.getMessage().contains("Marker"), e.getMessage());
     }
 
@@ -305,7 +316,7 @@ class CompilePublishedHelperTest {
                 """));
 
         Class<?> fns = new BytesClassLoader(classes, getClass().getClassLoader())
-                .loadClass("top.$Fns");
+                .loadClass(Emitted.helpers("top"));
         assertEquals(List.of("low$summed"), java.util.Arrays.stream(fns.getDeclaredMethods())
                 .map(java.lang.reflect.Method::getName).sorted().toList());
     }
@@ -361,9 +372,9 @@ class CompilePublishedHelperTest {
                 let bill (n) = Out { v = step(n) + viaStep(n) }
                 """));
 
-        assertTrue(classes.containsKey("order.$Fns"), classes.keySet().toString());
+        assertTrue(classes.containsKey(Emitted.helpers("order")), classes.keySet().toString());
         Class<?> fns = new BytesClassLoader(classes, getClass().getClassLoader())
-                .loadClass("order.$Fns");
+                .loadClass(Emitted.helpers("order"));
         List<String> methods = java.util.Arrays.stream(fns.getDeclaredMethods())
                 .map(java.lang.reflect.Method::getName).sorted().toList();
         assertEquals(List.of("up$a$step", "up$b$step"), methods);
@@ -391,9 +402,9 @@ class CompilePublishedHelperTest {
                 let bill (n) = Out { v = loop(n).value }
                 """));
 
-        assertTrue(classes.containsKey("order.$Fns"), classes.keySet().toString());
+        assertTrue(classes.containsKey(Emitted.helpers("order")), classes.keySet().toString());
         Class<?> fns = new BytesClassLoader(classes, getClass().getClassLoader())
-                .loadClass("order.$Fns");
+                .loadClass(Emitted.helpers("order"));
         assertFalse(Modifier.isPublic(fns.getModifiers()), "$Fns is package-private");
         for (java.lang.reflect.Method m : fns.getDeclaredMethods()) {
             assertFalse(Modifier.isPublic(m.getModifiers()),
@@ -545,9 +556,7 @@ class CompilePublishedHelperTest {
                 let bill (a) = Receipt { total = taxed(a) }
                 """));
 
-        assertFalse(classes.containsKey("order.$Fns"), classes.keySet().toString());
-        assertEquals(0, classes.keySet().stream().filter(n -> n.endsWith("$Fns")).count(),
-                classes.keySet().toString());
+        assertFalse(classes.containsKey(Emitted.helpers("order")), classes.keySet().toString());
     }
 
     // --- a helper whose element its body left open ---

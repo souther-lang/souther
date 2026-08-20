@@ -66,16 +66,18 @@ class EverySurfaceThatAnswersAReaderNamesItsLanguageTest {
     /**
      * Every pick in the tree.
      *
-     * <p>Three surfaces answer a reader. The CLI and the annotation processor resolve, from the flag
-     * and from the processor option; a language server is not told the editor's UI locale, so there
-     * is nothing for it to resolve from and it names English outright.
+     * <p>Four surfaces answer a reader. The CLI, the annotation processor and the build driver
+     * resolve — from the flag, from the processor option, and from what a build plugin was asked
+     * for; a language server is not told the editor's UI locale, so there is nothing for it to
+     * resolve from and it names English outright.
      *
-     * <p>The fourth is not a surface. It is the one-line text a {@code CompileException} carries for
+     * <p>The fifth is not a surface. It is the one-line text a {@code CompileException} carries for
      * {@code getMessage()}, which no adapter prints while the exception carries a diagnostic — and
      * the two sites that build it always supply one. It has no reader whose language could be
      * asked, so the language is written where the text is made and no caller can pass one.
      */
     private static final Set<String> NAMED = Set.of(
+            "souther/build/driver/CompilerBuildDriver.java picks Messages.resolveLocale(",
             "souther/cli/Main.java picks Messages.resolveLocale(",
             "souther/compiler/apt/SoutherProcessor.java picks Messages.resolveLocale(",
             "souther/lsp/analysis/Analyzer.java picks Locale.ENGLISH",

@@ -1,8 +1,9 @@
 package souther.compiler.codegen;
 
-import souther.compiler.check.MatchElaborator;
+import souther.compiler.check.TypeOps;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ValueName;
 
 import java.lang.classfile.CodeBuilder;
 import java.lang.classfile.Label;
@@ -37,19 +38,19 @@ final class ResultBoundary {
     private ResultBoundary() {}
 
     /** Returns the value on the stack as a member of {@code members}' union. */
-    static void inject(CodeBuilder code, CodegenContext ctx, List<TypeName> bridged, int slot) {
+    static void inject(CodeBuilder code, CodegenContext ctx, List<TypeSymbol> bridged, int slot) {
         if (bridged.isEmpty()) {
             code.areturn();
             return;
         }
         code.astore(slot);
-        for (TypeName member : bridged) {
+        for (TypeSymbol member : bridged) {
             Label next = code.newLabel();
             code.aload(slot);
             code.instanceOf(ctx.matchCaseClass(member));
             code.ifeq(next);
             ClassDesc bridge = ctx.bridgeCaseClass(member);
-            Type held = MatchElaborator.caseBindType(member);
+            Type held = TypeOps.caseBindType(member);
             code.new_(bridge);
             code.dup();
             code.aload(slot);
@@ -64,14 +65,15 @@ final class ResultBoundary {
     }
 
     /** Reads the Souther value out of the union member on the stack, leaving it boxed. */
-    static void project(CodeBuilder code, CodegenContext ctx, String callee, List<TypeName> bridged,
+    static void project(CodeBuilder code, CodegenContext ctx, ValueName.Behavior callee,
+                        List<TypeSymbol> bridged,
                         int slot) {
         if (bridged.isEmpty()) {
             return;
         }
         code.astore(slot);
         Label done = code.newLabel();
-        for (TypeName member : bridged) {
+        for (TypeSymbol member : bridged) {
             Label next = code.newLabel();
             ClassDesc bridge = ctx.bridgeCaseClassOf(callee, member);
             code.aload(slot);
@@ -79,7 +81,7 @@ final class ResultBoundary {
             code.ifeq(next);
             code.aload(slot);
             code.checkcast(bridge);
-            Type held = MatchElaborator.caseBindType(member);
+            Type held = TypeOps.caseBindType(member);
             code.invokevirtual(bridge, "value", MethodTypeDesc.of(JvmTypes.jvmType(held, ctx)));
             JvmTypes.box(code, held);
             code.goto_(done);

@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 import java.util.Map;
@@ -55,8 +55,8 @@ class CompileExampleWitnessTest {
         return out;
     }
 
-    private static List<String> names(java.util.Set<TypeName> cases) {
-        return cases.stream().map(TypeName::name).sorted().toList();
+    private static List<String> names(java.util.Set<TypeSymbol> cases) {
+        return cases.stream().map(TypeSymbol::name).sorted().toList();
     }
 
     /** A row that disagreed is no evidence for what it expected and is evidence for what it saw. */
@@ -77,7 +77,7 @@ class CompileExampleWitnessTest {
         assertEquals(List.of("Found"), names(lookup.output().verified()),
                 "only the row that held confirms anything");
         assertEquals(List.of("Missing"), lookup.output().unspecified().stream()
-                .map(TypeName::name).toList());
+                .map(TypeSymbol::name).toList());
     }
 
     @Test
@@ -119,7 +119,7 @@ class CompileExampleWitnessTest {
         assertEquals(List.of("Active", "Suspended"), names(lookup.inputs().get(1).declared()));
         assertEquals(List.of("Active"), names(lookup.inputs().get(1).specified()));
         assertEquals(List.of("Suspended"), lookup.inputs().get(1).unspecified().stream()
-                .map(TypeName::name).toList());
+                .map(TypeSymbol::name).toList());
     }
 
     @Test

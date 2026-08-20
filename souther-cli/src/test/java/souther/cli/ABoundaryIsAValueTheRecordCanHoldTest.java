@@ -40,7 +40,6 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
             data LongShift
 
             behavior classifyInterval : (interval: WorkInterval) -> ShortShift | LongShift
-                constructs ShortShift, LongShift
 
             let classifyInterval (interval) =
                 if interval.endsAt.value - interval.startsAt.value >= 480
@@ -69,7 +68,6 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
             data Ok
 
             behavior classify : (band: Band) -> Ok
-                constructs Ok
 
             let classify (band) = Ok
 
@@ -80,8 +78,22 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
     private static List<String> boundariesOf(String model) throws Exception {
         return reportOn(model).lines()
                 .map(String::trim)
-                .filter(line -> line.startsWith("· no row is at"))
+                // The sentence, whichever mark it is printed under. What a build does about a finding
+                // is said by the mark and held by the test that owns it.
+                .filter(line -> line.contains("no row is at"))
                 .toList();
+    }
+
+    /**
+     * The lines the declarations place, which is what these two tests are about.
+     *
+     * <p>The body of the behavior draws lines of its own — {@code endsAt <= startsAt + 480} holds the
+     * two ends within a working day, which is a line on how far apart they stand — and those are a
+     * different rule's. Counted together, a reading that learned to draw one more of them would fail
+     * these tests without anything having changed about where the record stops.
+     */
+    private static List<String> placedByTheRecord(String model) throws Exception {
+        return boundariesOf(model).stream().filter(line -> line.contains("(invariant")).toList();
     }
 
     private static String reportOn(String model, String... extra) throws Exception {
@@ -102,7 +114,7 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
 
     @Test
     void anEdgeIsWhereTheRecordStopsAndNotWhereTheFieldsTypeDoes() throws Exception {
-        List<String> asked = boundariesOf(TIMESHEET);
+        List<String> asked = placedByTheRecord(TIMESHEET);
 
         assertEquals(4, asked.size(), () -> "asked for " + asked);
         assertTrue(asked.stream().anyMatch(l -> l.contains("interval.startsAt = 1439")),
@@ -123,10 +135,10 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
         List<String> asked = boundariesOf(TIMESHEET);
 
         assertTrue(asked.stream().anyMatch(l -> l.contains("interval.startsAt = 1439")
-                        && l.contains("invariant MinuteOfDay (max) within WorkInterval")),
+                        && l.contains("invariant MinuteOfDay (withinDay) within WorkInterval")),
                 () -> "asked for " + asked);
         assertTrue(asked.stream().anyMatch(l -> l.contains("interval.startsAt = 0")
-                        && l.contains("(invariant MinuteOfDay (min))")),
+                        && l.contains("(invariant MinuteOfDay (withinDay))")),
                 () -> "an end the record left alone names only the rule that put it there: " + asked);
     }
 
@@ -164,7 +176,10 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
         List<String> asked = boundariesOf(gated);
 
         assertEquals(4, asked.size(), () -> "asked for " + asked);
-        assertFalse(asked.stream().anyMatch(l -> l.contains("guard@")),
+        // The word and not the spelling. A guard says `guard@15:23` where it is written in a file
+        // this compile holds and names its declaration where it is not, so matching the first of
+        // those would stop seeing the second — which is a line drawn by a guard all the same.
+        assertFalse(asked.stream().anyMatch(l -> l.contains("guard")),
                 () -> "no interval starts at 1440, so the comparison has no line to be at: " + asked);
     }
 
@@ -196,7 +211,6 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 data Big
 
                 behavior classify : (pair: Pair) -> Small | Big
-                    constructs Small, Big
 
                 let classify (pair) =
                     if pair.b.value >= 50
@@ -204,13 +218,15 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                         else Small
                 """, "--generate", "--boundaries");
 
-        assertFalse(report.contains("pair.b = 50"),
+        // Read off the values the rows are written with: a row composed only for a line carries no
+        // name, so what is asked for is a row holding the value rather than a line named in the text.
+        assertFalse(report.contains("b = Count(50)"),
                 () -> "no pair holds a `b` of 50, so the guard draws no line there:\n" + report);
-        assertFalse(report.contains("pair.b = 49"),
+        assertFalse(report.contains("b = Count(49)"),
                 () -> "and none holds the value below it either:\n" + report);
         assertFalse(report.contains("pair.b=50 <= x"),
                 () -> "a class nothing can be in is not a class:\n" + report);
-        assertTrue(report.contains("pair.b = 1"),
+        assertTrue(report.contains("b = Count(1)"),
                 () -> "the end the record moved is still asked for:\n" + report);
         assertFalse(report.contains("every value tried was refused"),
                 () -> "and everything left is writable:\n" + report);
@@ -298,7 +314,6 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 data No
 
                 behavior classify : (input: Input) -> Yes | No
-                    constructs Yes, No
 
                 let classify (input) = if input.interval.startsAt.value >= 100 then Yes else No
 
@@ -383,7 +398,6 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 data Ok
 
                 behavior f : (r: R) -> Ok
-                    constructs Ok
 
                 let f (r) = Ok
 
@@ -392,13 +406,13 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 """;
         String report = reportOn(holed);
 
-        assertFalse(report.contains("not known to be writable: f/r.a = 0"),
+        assertFalse(report.contains("not known to be writable: the ON point f/r.a = 0"),
                 () -> "there is a row at it:\n" + report);
         // The row settles its own edge without anything being built for it, and the other edge is
         // settled by building one. Two kinds of witness, and the projection proves neither.
-        assertTrue(report.contains("boundary    1/2"),
+        assertTrue(report.contains("border      borders 2   coverage items 2/4   excluded 4"),
                 () -> "the row at 0 is met, and 10 was built and is owed:\n" + report);
-        assertTrue(report.contains("no row is at f/r.a = 10"), () -> report);
+        assertTrue(report.contains("no row is at the ON point f/r.a = 10"), () -> report);
     }
 
     /**
@@ -430,7 +444,6 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 data Ok
 
                 behavior f : (root: Root) -> Ok
-                    constructs Ok
 
                 let f (root) = Ok
 
@@ -448,10 +461,11 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
     /**
      * A newtype taken straight as a parameter is held to its own rules like any other position.
      *
-     * <p>It has no siblings, which is why it has no per-field bounds to hand out. It still has rules
-     * a range cannot keep, and `value /= 0` makes the bottom of `[0, 10]` a value the decoder
-     * refuses. Answering the question at the door for a newtype is what made this depend on whether
-     * the type was a parameter or a field of one.
+     * <p>It has no siblings, which is why it has no per-field bounds to hand out. Its own rules are
+     * read all the same, and they leave it `[1, 10]`: `within` writes the bottom at 0 and `nonzero`
+     * takes the 0 away, so the line `within` placed is at the first value the position has. A line
+     * at the 0 would be a line at no value of `N`, and asking whether a row can be written there
+     * asks about a value the model excludes.
      */
     @Test
     void aNewtypeTakenStraightIsHeldToItsOwnRules() throws Exception {
@@ -465,7 +479,6 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 data Ok
 
                 behavior f : (n: N) -> Ok
-                    constructs Ok
 
                 let f (n) = Ok
 
@@ -477,20 +490,23 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
 
         List<String> owed = boundariesOf(holed);
 
-        assertTrue(report.contains("not known to be writable: f/n = 0"), () -> report);
-        assertFalse(owed.stream().anyMatch(l -> l.contains("f/n = 0")),
-                () -> "0 is in the range and the decoder refuses it: " + owed);
-        // A refusal at one edge says nothing about the other. `value /= 0` leaves the top of the
-        // range alone, and a value was built there, so that one is a row somebody is owed.
+        assertFalse(report.contains("f/n = 0"),
+                () -> "0 is no value of `N`, so it is no line of it: " + report);
+        assertTrue(owed.stream().anyMatch(l -> l.contains("f/n = 1")),
+                () -> "the line `within` placed is at the first value the rules leave: " + owed);
         assertTrue(owed.stream().anyMatch(l -> l.contains("f/n = 10")),
-                () -> "and the top of the same range builds: " + owed);
+                () -> "and the top of the same range: " + owed);
+        // Both are rows an author is owed rather than edges nothing promises. The bounds state
+        // every rule of the value — the denial became an end rather than a hole — so what is
+        // missing is the row and not the reading.
+        assertFalse(report.contains("not known to be writable"), () -> report);
     }
 
     /** The same two fields with the rule removed keep the whole of their type's range, so the
      * narrowing above is read as that rule doing it. */
     @Test
     void withoutTheRuleBothEndsKeepTheirTypesRange() throws Exception {
-        List<String> asked = boundariesOf(TIMESHEET.replace(
+        List<String> asked = placedByTheRecord(TIMESHEET.replace(
                 "    invariant endsAfterStart = startsAt < endsAt\n", ""));
 
         assertEquals(4, asked.size(), () -> "asked for " + asked);

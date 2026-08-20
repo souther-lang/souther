@@ -1,9 +1,10 @@
 package souther.compiler.check;
 
+import souther.compiler.query.Scopes;
 import souther.compiler.Compiler;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Severity;
@@ -12,7 +13,9 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.Collections;
 import java.util.List;
@@ -41,7 +44,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AFieldIsBoundByTheDeclarationThatWroteItTest {
 
-    private static final TypeName RANGE = new TypeName("up", "Range");
+    private static final TypeSymbol RANGE = TypeSymbols.declared(new TypeKey("up", "Range"));
 
     private static final String DECLARING = """
             module up exposing ( Range )
@@ -84,15 +87,15 @@ class AFieldIsBoundByTheDeclarationThatWroteItTest {
         return c;
     }
 
-    private static Ast.Data range(Compilation c) {
-        Ast.Def def = c.db().ask(new Names.ResolvedDeclaration(RANGE)).value();
+    private static Hir.Data range(Compilation c) {
+        Hir.Def def = c.db().ask(new Names.ResolvedDeclaration(RANGE.key())).value();
         assertNotNull(def, "the model under test compiles");
-        return (Ast.Data) def;
+        return (Hir.Data) def;
     }
 
     /** The clauses as the module named {@code reading} reads them. */
     private static Clauses readBy(Compilation c, String reading) {
-        return new Clauses(c.db().ask(new Names.NameScope(reading)).value(), Map.of());
+        return new Clauses(Scopes.resolved(c.db(), reading).value(), Map.of());
     }
 
     /**
@@ -124,8 +127,8 @@ class AFieldIsBoundByTheDeclarationThatWroteItTest {
     void anImportedClauseIsTypedAsItIsWhereItIsDeclared() {
         for (Reached reached : Reached.values()) {
             Compilation c = compiled(reached);
-            Ast.Data range = range(c);
-            Ast.Expr clause = range.invariants().get(0).expr();
+            Hir.Data range = range(c);
+            Hir.Expr clause = range.invariants().get(0).expr();
 
             Core athome = readBy(c, "up").typed(clause, RANGE, range);
             assertNotNull(athome, "the declaring module reads its own rule");
@@ -176,8 +179,8 @@ class AFieldIsBoundByTheDeclarationThatWroteItTest {
         Compilation c = compiled(Reached.BESIDE_THE_READERS_OWN);
         Clauses read = readBy(c, "demo");
 
-        TypeName ours = new TypeName("demo", "Range");
-        Ast.Data mine = (Ast.Data) c.db().ask(new Names.ResolvedDeclaration(ours)).value();
+        TypeSymbol ours = TypeSymbols.declared(new TypeKey("demo", "Range"));
+        Hir.Data mine = (Hir.Data) c.db().ask(new Names.ResolvedDeclaration(ours.key())).value();
 
         assertTrue(Collections.disjoint(read.bindingsOf(RANGE, range(c)).values(),
                         read.bindingsOf(ours, mine).values()),

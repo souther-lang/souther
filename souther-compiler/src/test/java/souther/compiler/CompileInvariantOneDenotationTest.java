@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import java.util.List;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Severity;
 
@@ -19,6 +20,16 @@ class CompileInvariantOneDenotationTest {
 
     private static long warnings(Compiler.Compiled c) {
         return c.warnings().stream().filter(d -> d.severity() == Severity.WARNING).count();
+    }
+
+    /** Every warning code a compile answered with, in order. Asked for by code where a model has
+     *  something other than a construction to be told about, so that the silence this check is
+     *  about is measured rather than the silence of every check at once. */
+    private static List<String> warningCodes(Compiler.Compiled c) {
+        return c.warnings().stream()
+                .filter(d -> d.severity() == Severity.WARNING)
+                .map(souther.compiler.diag.Diagnostic::code)
+                .toList();
     }
 
     @Test
@@ -70,8 +81,9 @@ class CompileInvariantOneDenotationTest {
     }
 
     @Test
-    void aVariableProductIsNotRead() {
-        // `x * y` is not affine, and neither is its function form — nothing is proven either way
+    void aVariableProductAnswersAlikeInBothSpellings() {
+        // `x * y` is not affine, and what is known of it is read off its factors — which is one
+        // reading of one value, so the function form answers what the operator does
         String m = """
                 module demo
                 data Count = Int
@@ -131,11 +143,23 @@ class CompileInvariantOneDenotationTest {
      * <p>Being able to point at a value and knowing something about it are two things. The check
      * names this call — the two writings of it are one value — and names nothing that settles
      * {@code value >= 0} of it, which is a clause left standing rather than a clause never asked.
+     *
+     * <p>The witness is a product of two values nothing on the path bounds. A remainder was the
+     * witness until the check gained a rule about what {@code Int.floorMod} answers, and a product
+     * of two bounded values until it gained one about what a product of two ranges lies between —
+     * neither of which made this any less true, only made those calls ones the check does say
+     * something about.
      */
     @Test
     void aCallNothingHasSaidAnythingAboutIsOwedItsClause() {
-        assertEquals(1, warnings(Compiler.compileWithWarnings(
-                        EACHES.formatted("Eaches(Int.floorMod(eaches.value, pack.value))"))),
+        assertEquals(1, warnings(Compiler.compileWithWarnings("""
+                        module demo
+                        data Eaches = Int
+                            invariant value >= 0
+                        behavior scale : (a: Int, b: Int) -> Eaches
+                            constructs Eaches
+                        let scale (a, b) = Eaches(Int.multiply(a, b))
+                        """)),
                 "the call is a value the clause is read against, and nothing here discharges it");
     }
 
@@ -358,7 +382,9 @@ class CompileInvariantOneDenotationTest {
                     constructs Positive
                 let mk (x) = if x > 5 then Positive(if x < 3 then 0 else 7) else Positive(9)
                 """;
-        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+        // Nothing is said about the construction. That the branch holding it is one nothing
+        // reaches is the other reading of the same conditions, and is said.
+        assertEquals(List.of("E1327"), warningCodes(Compiler.compileWithWarnings(m)),
                 "a branch the conditions exclude is not one the value could have taken");
     }
 

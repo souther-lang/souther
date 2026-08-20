@@ -2,9 +2,12 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.query.Scopes;
+import souther.compiler.ast.Hir;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
@@ -49,7 +52,6 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
             data Shape = Wide
 
             behavior classify : (s: Span) -> Shape
-                constructs Wide
             let classify (s) = Wide
             """;
 
@@ -69,7 +71,6 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
             data Shape = Wide
 
             behavior classify : (s: Span) -> Shape
-                constructs Wide
             let classify (s) = Wide
             """;
 
@@ -90,9 +91,9 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
      * two empty lists. */
     @Test
     void theDatesOwnEdgesAreObligationsWrittenAsDates() {
-        assertEquals(List.of("AT 2020-01-01 writable", "AT 2020-01-02 writable"),
+        assertEquals(List.of("ON 2020-01-01 writable", "ON 2020-01-02 writable"),
                 measured(BESIDE, "s.d"));
-        assertEquals(List.of("AT 0 writable", "AT 10 writable"), measured(BESIDE, "s.a"));
+        assertEquals(List.of("ON 0 writable", "ON 10 writable"), measured(BESIDE, "s.a"));
     }
 
     /** Every obligation of one position: where it is, and whether anything promises a row can be
@@ -103,9 +104,13 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
                 .filter(a -> a.path().toString().equals(path)).findFirst().orElseThrow();
         String standing = read.partitioning().edgeIsKnownWritable(axis.term())
                 ? " writable" : " not known to be writable";
-        return Partitions.obligationsOf(axis, read.symbols(),
+        return Partitions.bordersOf(axis, read.symbols(),
                         read.partitioning().domains().get(axis.term())).stream()
-                .map(o -> o.side() + " " + o.target().right() + standing).sorted().toList();
+                .flatMap(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
+                        .filter(role -> border.demand(role).criterion() != null)
+                        .map(role -> role + " "
+                                + border.demand(role).criterion().asked(border.cut().of()).substring(2) + standing))
+                .sorted().toList();
     }
 
     private record Read(Partitions.Partitioning partitioning, Symbols symbols) {}
@@ -114,12 +119,12 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Ast.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Ast.SpecBehavior spec = (Ast.SpecBehavior) prepared.behaviors().stream()
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
         assertNotNull(sigs.get(behavior), "the model under test compiles");
-        return new Read(Partitions.of(spec, sigs.get(behavior), symbols, Exclusions.NONE), symbols);
+        return new Read(Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(behavior), symbols), symbols), symbols);
     }
 }

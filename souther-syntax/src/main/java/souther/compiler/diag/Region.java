@@ -24,9 +24,7 @@ public record Region(SourcePos start, SourcePos end) {
      * same line — the length of the text it covers, not the room that text takes on a screen. The
      * end is in the file the start is in: a region does not leave the source it began in. */
     public static Region ofWidth(SourcePos start, int width) {
-        int w = Math.max(0, width);
-        return new Region(start,
-                new SourcePos(start.line(), start.column() + w, start.sourceId()));
+        return new Region(start, start.along(Math.max(0, width)));
     }
 
     /**
@@ -41,7 +39,7 @@ public record Region(SourcePos start, SourcePos end) {
         if (outer == null || inner == null) {
             return true;
         }
-        if (!java.util.Objects.equals(outer.start.sourceId(), inner.start.sourceId())) {
+        if (!outer.start.isInTheSameTextAs(inner.start)) {
             return false;
         }
         return !before(inner.start, outer.start) && !before(outer.end, inner.end);

@@ -2,10 +2,12 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
-import souther.compiler.numeric.Cardinality;
+import souther.compiler.query.Scopes;
+import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -19,9 +21,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class HowManyValuesAPositionHasIsNotHowMuchItHoldsTest {
 
-    private static Ast.Data data(Compilation compilation, String name) {
-        for (Ast.Def def : compilation.module("demo").defs()) {
-            if (def instanceof Ast.Data found && found.name().equals(name)) {
+    private static Hir.Data data(Compilation compilation, String name) {
+        for (Hir.Def def : compilation.module("demo").defs().stream().map(Derived.Def::read).toList()) {
+            if (def instanceof Hir.Data found && found.name().equals(name)) {
                 return found;
             }
         }
@@ -37,8 +39,8 @@ class HowManyValuesAPositionHasIsNotHowMuchItHoldsTest {
                         .flatMap(java.util.List::stream)
                         .map(each -> each.diagnostic().code().toString()).toList(),
                 "the model this reads has to be one somebody could write");
-        Symbols symbols = compilation.symbols("demo");
-        return OccurrenceValues.of(symbols.own(name), data(compilation, name), symbols)
+        Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
+        return OccurrenceValues.of(TypeSymbols.declared(new TypeKey(symbols.module(), name)), data(compilation, name), symbols)
                 .wholeValuesAt(path);
     }
 

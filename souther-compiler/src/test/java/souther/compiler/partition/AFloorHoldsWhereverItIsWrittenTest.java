@@ -2,13 +2,15 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.query.Scopes;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Symbols;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Shapes;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 
@@ -28,14 +30,14 @@ class AFloorHoldsWhereverItIsWrittenTest {
     private record Model(Symbols symbols, String module) {
 
         FieldDomains domainsOf(String type) {
-            TypeName named = new TypeName(module, type);
-            Ast.Data data = (Ast.Data) symbols.get(named);
+            TypeSymbol named = TypeSymbols.declared(new TypeKey(module, type));
+            Hir.Data data = (Hir.Data) symbols.declarations().declaration(named.key());
             assertNotNull(data, "no `" + type + "`");
             return FieldDomains.of(named, data, symbols);
         }
 
         Type ref(String type) {
-            return new Type.Ref(new TypeName(module, type));
+            return new Type.Ref(TypeSymbols.declared(new TypeKey(module, type)));
         }
     }
 
@@ -46,7 +48,7 @@ class AFloorHoldsWhereverItIsWrittenTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols, "the model did not compile");
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                         .flatMap(List::stream).map(each -> each.diagnostic().code()).toList(),

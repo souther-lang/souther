@@ -50,6 +50,7 @@ public enum DiagnosticCode {
     E1023("a-name-is-in-scope", "check.unknown.title"),
     E1024("a-name-held-as-a-value-is-a-value", "check.unknown.title"),
     E1025("a-standard-library-function-is-called-qualified", "check.unknown.title"),
+    E1026("constructs-excludes-unit-data", "e1026.title"),
     E1101("invariant-expression-is-bool", "e1101.title"),
     E1102("invariant-needs-a-value-to-constrain", "check.invariant.invalid.title"),
     E1103("invariant-clause-names-are-distinct", "check.invariant.invalid.title"),
@@ -59,6 +60,8 @@ public enum DiagnosticCode {
     E1022("a-value-does-not-reach-itself", "check.value.cycle.title"),
     E1105("an-invariant-observes-and-does-not-build", "check.invariant.invalid.title"),
     E1106("an-invariant-answers-on-every-path", "check.invariant.invalid.title"),
+    E1107("an-invariant-is-declared-where-a-construction-owes-it",
+            "check.invariant.invalid.title"),
     E1201("match-covers-every-case", "e1201.title"),
     E1202("a-match-subject-is-a-sum", "check.match.title"),
     E1203("a-match-arm-names-a-case-of-the-subject", "check.match.title"),
@@ -90,6 +93,8 @@ public enum DiagnosticCode {
     E1323("a-matches-pattern-is-a-literal-regular-expression", "check.type.mismatch.title"),
     E1324("newtype-arithmetic-follows-the-units", "check.type.mismatch.title"),
     E1325("a-boundary-carries-the-models-own-vocabulary", "check.boundary.title"),
+    E1326("unreachable-is-for-what-the-model-rules-out", "check.unreachable.title"),
+    E1327("a-branch-the-rules-make-dead-is-said-so", "check.dead.branch.title"),
     E1402("core-privileges-stay-in-the-core", "parse.title"),
 
     // --- modules, requirements, composition ---
@@ -97,10 +102,10 @@ public enum DiagnosticCode {
     E1502("a-core-name-is-not-taken", "check.module.title"),
     E1503("a-module-is-declared-in-one-place", "check.module.title"),
     E1504("every-module-reached-is-on-the-path", "check.module.title"),
-    E1505("a-published-module-agrees-with-this-compiler", "check.module.title"),
     E1506("a-reached-name-is-declared-by-its-module", "check.module.title"),
     E1507("a-reached-name-is-exposed-by-its-module", "check.module.title"),
     E1508("an-imported-name-denotes-one-thing", "check.module.title"),
+    E1509("a-published-module-can-be-read-back", "check.module.title"),
     E1602("depends-on-names-every-requirement", "e1602.title"),
     E1603("depends-on-names-no-more", "e1603.title"),
     E1604("composition-output-agrees-with-inference", "e1604.title"),
@@ -115,6 +120,16 @@ public enum DiagnosticCode {
     E1613("a-union-member-is-nameable-in-an-arm", "check.boundary.title"),
     E1614("a-composition-has-no-let", "check.impl.title"),
     E1615("an-implementing-let-takes-its-shape-from-the-behavior", "check.impl.title"),
+    E1616("an-ensures-clause-names-the-answer", "check.boundary.title"),
+    E1617("an-ensures-clause-names-a-parameter", "check.boundary.title"),
+    E1618("a-behavior-with-a-clause-has-no-parameter-named-value", "check.boundary.title"),
+    E1619("an-ensures-arm-is-an-output-case", "check.boundary.title"),
+    E1620("an-ensures-clause-over-a-sum-names-arms", "check.boundary.title"),
+    E1621("an-ensures-clause-over-a-single-type-names-no-arm", "check.boundary.title"),
+    E1622("ensures-clause-names-are-distinct", "check.boundary.title"),
+    E1623("an-ensures-clause-name-is-not-underscore", "check.boundary.title"),
+    E1624("a-composition-carries-no-ensures", "check.pipe.title"),
+    E1626("an-attached-files-values-are-for-its-rows", "check.example.title"),
     E1701("composition-stages-type-route", "e1701.title"),
     E1702("a-stage-after-the-first-takes-one-input", "check.pipe.title"),
     E1703("a-pipeline-composes-behaviors", "check.pipe.title"),
@@ -152,7 +167,7 @@ public enum DiagnosticCode {
     E1911("example-does-not-reach-unreachable", "check.example.title"),
     E1913("every-output-case-is-expected-by-a-row", "check.example.title"),
     E1915("every-input-case-is-used-by-a-row", "check.example.title"),
-    E1916("every-guard-boundary-has-a-row", "check.example.title"),
+    E1916("every-border-has-a-row-against-its-line", "check.example.title"),
     E1918("every-arm-has-a-row", "check.example.title"),
     E1919("stand-in-and-recorded-row-agree", "check.example.title"),
     E1920("stand-in-comparison-completes", "check.example.title"),
@@ -160,6 +175,12 @@ public enum DiagnosticCode {
     E1922("imports-are-used", "check.import.title"),
     E1923("example-evaluation-answers", "check.example.title"),
     E1924("example-evaluation-stays-within-stack", "check.example.title"),
+    E1925("a-row-name-is-unique-within-its-behavior", "check.example.title"),
+    E1926("every-row-of-a-fake-table-can-answer", "check.example.title"),
+    E1927("an-answer-is-of-the-module-being-evaluated", "check.example.title"),
+    E1928("a-row-keeps-what-the-behavior-states", "check.example.title"),
+    E1929("a-fake-row-keeps-what-the-dependency-states", "check.example.title"),
+    E1930("an-implementation-keeps-what-the-behavior-states", "check.example.title"),
 
     // --- totality, invariant discharge, attempted construction ---
     E2001("helper-carries-its-termination-guarantee", "check.totality.title"),
@@ -241,8 +262,8 @@ public enum DiagnosticCode {
 
     /** The rules that are reported without failing the build. */
     private static final java.util.Set<DiagnosticCode> WARNINGS =
-            java.util.EnumSet.of(E1913, E1915, E1916, E1918, E1919, E1920, E1921, E1922,
-                    E2011);
+            java.util.EnumSet.of(E1327, E1913, E1915, E1916, E1918, E1919, E1920, E1921,
+                    E1922, E2011);
 
     public String titleKey() {
         return titleKey;

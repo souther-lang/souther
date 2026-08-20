@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.Compiler;
 import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.diag.Located;
@@ -30,13 +32,13 @@ class TheOperandThatFailedFirstIsTheOneReportedTest {
             """;
 
     private static List<String> messageKeys(String body) {
-        Map<String, List<Located>> found = Compiler.diagnoseModules(Map.of("demo", """
+        Map<SourceId, List<Located>> found = Compiler.diagnoseModules(Map.of("demo", """
                 module demo
 
                 %s
                 %s
                 """.formatted(NOWHERE, body)));
-        return found.getOrDefault("demo", List.of()).stream()
+        return found.getOrDefault(new SourceId("demo"), List.of()).stream()
                 .map(l -> MessageKeys.of(l.diagnostic().said())).toList();
     }
 

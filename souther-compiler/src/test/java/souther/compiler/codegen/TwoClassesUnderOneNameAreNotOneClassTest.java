@@ -1,59 +1,150 @@
 package souther.compiler.codegen;
 
+import souther.compiler.Emitted;
+import souther.compiler.EmittedBytes;
 import org.junit.jupiter.api.Test;
+import souther.compiler.jvm.DecoderKind;
+import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * What a module emits holds one class under one binary name, and says so when it does not.
+ * What a module emits holds one class under one JVM name, and says which two things wanted it when it
+ * does not.
  *
- * <p>A plain map answers a second write of a name by keeping the second and dropping the first, so
- * the compile succeeded and the artifact set was a class short — which arrived, much later, as a
- * linkage error against whatever had gone missing. No source reaches that today: {@code $} is not
- * written in a name, so a model cannot spell a generated class's name, and a declaration that would
- * emit a class another declaration already has is refused where it is declared. Both of those are
- * rules about names; this is about the writing, and it is what a naming scheme changed later runs
- * into instead of the silence.
+ * <p>A plain map answers a second write of a name by keeping the second and dropping the first, so the
+ * compile succeeded and the artifact set was a class short — which arrived, much later, as a linkage
+ * error against whatever had gone missing. What is written here is not a name but a
+ * {@link GeneratedClass}, and the map from those to names is not injective: two identities that mean
+ * different things can land on one class. That is where a collision exists, so that is what is keyed
+ * on — and the identities are kept under the key so the report says what collided rather than only
+ * that something did.
+ *
+ * <p>No source reaches either of these today; both pairs are refused where they are declared. This is
+ * the backstop under those rules, and it is what a naming scheme changed later runs into instead of
+ * the silence.
  */
 class TwoClassesUnderOneNameAreNotOneClassTest {
 
+    private static final GeneratedClass.Value QUOTE_DATA =
+            new GeneratedClass.Value(TypeSymbols.declared(new TypeKey("demo", "Quote")));
+    private static final GeneratedClass.BehaviorInterface QUOTE_BEHAVIOR =
+            new GeneratedClass.BehaviorInterface("demo", "quote");
+
     @Test
-    void asecondClassUnderAWrittenNameIsRefused() {
-        Map<String, byte[]> out = new Backend.OneClassPerName();
-        out.put("demo.A", new byte[] {1});
+    void aDataAndABehaviorThatCapitalizesOntoItAreOneClass() {
+        Emissions out = new Emissions("demo");
+        out.put(QUOTE_DATA, EmittedBytes.of(QUOTE_DATA, "first"));
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> out.put("demo.A", new byte[] {2}));
-        assertEquals(List.of("demo.A"), List.copyOf(out.keySet()),
+                () -> out.put(QUOTE_BEHAVIOR, EmittedBytes.of(QUOTE_BEHAVIOR, "second")));
+        assertTrue(refused.getMessage().contains("demo.Quote"),
+                "the refusal names the class both wanted: " + refused.getMessage());
+        assertTrue(refused.getMessage().contains("Quote") && refused.getMessage().contains("quote"),
+                "and the two identities that wanted it: " + refused.getMessage());
+        assertEquals(List.of(Emitted.value("demo", "Quote")), List.copyOf(out.byBinaryName().keySet()),
                 "the class already written stays the one that is written");
-        assertEquals(1, out.get("demo.A")[0], "and it is not replaced on the way out");
-        org.junit.jupiter.api.Assertions.assertTrue(refused.getMessage().contains("demo.A"),
-                "the refusal names the class: " + refused.getMessage());
+        assertArrayEquals(EmittedBytes.of(QUOTE_DATA, "first"),
+                out.byBinaryName().get(Emitted.value("demo", "Quote")),
+                "and it is not replaced on the way out");
+    }
+
+    /** Two members of one spelling from two modules, bridged into one module. Different identities —
+     *  and this ABI has one name for them. */
+    @Test
+    void twoMembersBridgedUnderOneNameAreOneClass() {
+        Emissions out = new Emissions("demo");
+        GeneratedClass.BridgeCase fromA =
+                new GeneratedClass.BridgeCase("demo", TypeSymbols.declared(new TypeKey("a", "Foo")));
+        out.put(fromA, EmittedBytes.of(fromA));
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> out.put(new GeneratedClass.BridgeCase("demo",
+                        TypeSymbols.declared(new TypeKey("b", "Foo"))), EmittedBytes.of(fromA)));
+        assertTrue(refused.getMessage().contains("a.Foo") && refused.getMessage().contains("b.Foo"),
+                "the refusal names both members: " + refused.getMessage());
+    }
+
+    /**
+     * And the same pair through the other door. Writing a declaration onto a class asks for it by
+     * identity, and finding something under that name is not finding that identity — the two spell
+     * the same. Without this the behavior's declaration would go onto the data's class and the
+     * registry would then say the class had been emitted for the behavior.
+     */
+    @Test
+    void oneIdentityCannotRewriteAnotherThatHasTheSameName() {
+        Emissions out = new Emissions("demo");
+        out.put(QUOTE_DATA, EmittedBytes.of(QUOTE_DATA, "first"));
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> out.rewrite(QUOTE_BEHAVIOR, _ -> EmittedBytes.of(QUOTE_BEHAVIOR)));
+        assertTrue(refused.getMessage().contains("Quote") && refused.getMessage().contains("quote"),
+                "the refusal names what was emitted and what asked: " + refused.getMessage());
+        assertArrayEquals(EmittedBytes.of(QUOTE_DATA, "first"),
+                out.byBinaryName().get(Emitted.value("demo", "Quote")),
+                "and the class is not rewritten");
+    }
+
+    /** The control: the identity that was emitted may rewrite what it holds, and stays what it is. */
+    @Test
+    void andTheIdentityThatWasEmittedMayRewriteIt() {
+        Emissions out = new Emissions("demo");
+        out.put(QUOTE_DATA, EmittedBytes.of(QUOTE_DATA, "first"));
+        out.rewrite(QUOTE_DATA, _ -> EmittedBytes.of(QUOTE_DATA, "rewritten"));
+        assertArrayEquals(EmittedBytes.of(QUOTE_DATA, "rewritten"),
+                out.byBinaryName().get(Emitted.value("demo", "Quote")));
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> out.put(QUOTE_DATA, EmittedBytes.of(QUOTE_DATA, "third")));
+        assertTrue(refused.getMessage().contains("written twice"),
+                "and a rewrite is not a second emission: " + refused.getMessage());
+    }
+
+    /** A rewrite of something nothing emitted is refused rather than becoming the emission of it. */
+    @Test
+    void andNothingCanBeRewrittenThatWasNeverEmitted() {
+        Emissions out = new Emissions("demo");
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> out.rewrite(QUOTE_DATA, _ -> EmittedBytes.of(QUOTE_DATA)));
+        assertTrue(refused.getMessage().contains("demo.Quote"), refused.getMessage());
+        assertEquals(List.of(), List.copyOf(out.byBinaryName().keySet()));
     }
 
     /** And through the door a whole set of classes arrives by, which is how the classes compiled for
      *  escaping lambdas are added. */
     @Test
     void andSoIsOneArrivingWithOthers() {
-        Map<String, byte[]> out = new Backend.OneClassPerName();
-        out.put("demo.A", new byte[] {1});
-        Map<String, byte[]> more = new LinkedHashMap<>();
-        more.put("demo.B", new byte[] {2});
-        more.put("demo.A", new byte[] {3});
+        Emissions out = new Emissions("demo");
+        out.put(QUOTE_DATA, EmittedBytes.of(QUOTE_DATA, "first"));
+        Map<GeneratedClass, byte[]> more = new LinkedHashMap<>();
+        GeneratedClass.Lambda lambda = new GeneratedClass.Lambda("demo", 0);
+        more.put(lambda, EmittedBytes.of(lambda));
+        more.put(QUOTE_DATA, EmittedBytes.of(QUOTE_DATA, "third"));
         assertThrows(IllegalStateException.class, () -> out.putAll(more));
     }
 
-    /** The control: distinct names are written, in the order they were written in. */
+    /** The control: identities this ABI spells apart are all written, in the order they were written
+     *  in. Without it the refusals above would pass on a registry that refused everything. */
     @Test
-    void andEveryOtherNameIsWritten() {
-        Map<String, byte[]> out = new Backend.OneClassPerName();
-        out.put("demo.A", new byte[] {1});
-        out.putAll(Map.of("demo.A$Enc", new byte[] {2}));
-        out.put("demo.B", new byte[] {3});
-        assertEquals(List.of("demo.A", "demo.A$Enc", "demo.B"), List.copyOf(out.keySet()));
+    void andEveryOtherIdentityIsWritten() {
+        Emissions out = new Emissions("demo");
+        out.put(QUOTE_DATA, EmittedBytes.of(QUOTE_DATA, "first"));
+        GeneratedClass.Encoder encoder = new GeneratedClass.Encoder(QUOTE_DATA);
+        GeneratedClass.Decoder decoder = new GeneratedClass.Decoder(QUOTE_DATA, DecoderKind.JSON);
+        GeneratedClass.BehaviorInterface price =
+                new GeneratedClass.BehaviorInterface("demo", "price");
+        out.putAll(Map.of(encoder, EmittedBytes.of(encoder)));
+        out.put(decoder, EmittedBytes.of(decoder));
+        out.put(price, EmittedBytes.of(price));
+        assertEquals(List.of(Emitted.value("demo", "Quote"), Emitted.encoder("demo", "Quote"),
+                        Emitted.decoder("demo", "Quote", DecoderKind.JSON),
+                        Emitted.behaviorInterface("demo", "price")),
+                List.copyOf(out.byBinaryName().keySet()));
     }
 }

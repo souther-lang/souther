@@ -1,11 +1,11 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -31,13 +31,22 @@ import java.util.List;
 public final class DeclaredBounds {
 
     /**
-     * One end of a range, and every name that put it there.
+     * One end of a range, and every rule that put it there.
      *
-     * <p>Names, plural. Two layers can state the same bound — a wrapper repeating what it wraps — and
+     * <p>Rules, plural. Two layers can state the same bound — a wrapper repeating what it wraps — and
      * they are two rules a row could be owed to, which is the accounting a cut already keeps. Holding
      * one would drop an obligation rather than a line of text.
+     *
+     * <p>The clauses and not the declarations they are written on. Held as declarations, two clauses
+     * of one declaration at one value came out as one rule, and a report owed one line for a
+     * boundary two rules had drawn ({@link Clause}).
+     *
+     * <p>Each as the rule a report names it by. An end here is read by the measure that turns it
+     * into lines to write rows at, and that measure names the rule that drew it — handed the clause
+     * reference, it built the identity back for itself, which is a decision about what a rule is
+     * being taken by whoever happened to consume one.
      */
-    public record End(Endpoint at, List<TypeName> from) {
+    public record End(Endpoint at, List<RuleRef.Invariant> from) {
 
         public Place value() {
             return at.at();
@@ -62,7 +71,7 @@ public final class DeclaredBounds {
             if (had.value().compareTo(one.value()) != 0) {
                 return at == had.at() ? had : one;
             }
-            List<TypeName> both = new ArrayList<>(had.from());
+            List<RuleRef.Invariant> both = new ArrayList<>(had.from());
             one.from().stream().filter(n -> !both.contains(n)).forEach(both::add);
             return new End(at, List.copyOf(both));
         }
@@ -105,14 +114,24 @@ public final class DeclaredBounds {
         // alone says so. How far that reaches is asked of `TypeOps` rather than walked again here,
         // and every layer that put an end where it is is kept, because each is a rule a row is owed.
         for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
-            for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
-                for (Ast.Expr each : HelperInvariants.conjunctsOf(clause.expr())) {
-                    InvariantBound read = (measure == null ? InvariantBound.of(each, carrier)
-                            : InvariantBound.ofSize(each, measure)).orElse(null);
-                    if (read == null) {
+            // The clauses with the declaration each was written on, which is what names the line
+            // (ADR-0090). Read flat, every clause a spread brought in was named after the type that
+            // spread it, and two clauses of one declaration were one rule.
+            for (TypeOps.Declared declared
+                    : TypeOps.declaredInvariants(layer.named(), layer.data(), symbols, _ -> null)) {
+                RuleRef.Invariant rule = new RuleRef.Invariant(Clause.Ref.of(declared));
+                for (Hir.Expr each : ClauseHelpers.conjunctsOf(declared.clause().expr())) {
+                    // An end and nothing else. A rule this reads no end from narrows nothing here,
+                    // and a rule stepping past the last value of the order states an end no value is
+                    // at — which is a declaration with no value, answered where counts are and not
+                    // by a bound written at a place nothing can be.
+                    if (!((measure == null ? InvariantBound.of(each, carrier)
+                            : InvariantBound.ofSize(each, measure))
+                            instanceof InvariantBound.Read.AnEnd placed)) {
                         continue;
                     }
-                    End end = new End(read.end(), List.of(layer.named()));
+                    InvariantBound read = placed.bound();
+                    End end = new End(read.end(), List.of(rule));
                     if (read.lower()) {
                         min = End.tighter(min, end, false);
                     } else {

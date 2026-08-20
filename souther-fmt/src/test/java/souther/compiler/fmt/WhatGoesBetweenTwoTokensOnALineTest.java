@@ -65,6 +65,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             behavior pay : (a: Amount, b: Int) -> Paid | Refused
                 depends on clock, audit
                 constructs Paid, Refused
+                ensures same = Paid | Refused -> value.id == a
             """,
             """
             module m
@@ -564,6 +565,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             ELSE_KW INT_LIT
             ELSE_KW LPAREN
             ELSE_KW TRUE_KW
+            ENSURES_KW IDENT
             EQ IDENT
             EQ INT_LIT
             EXPOSING_KW LPAREN

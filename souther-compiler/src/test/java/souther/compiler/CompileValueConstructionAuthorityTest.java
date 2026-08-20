@@ -45,7 +45,6 @@ class CompileValueConstructionAuthorityTest {
                 let floorHours = Hours(20.0m)
 
                 behavior judge : (h: Hours) -> Hours | TooShort
-                    constructs TooShort
                 let judge (h) = {
                     guard h >= floorHours else TooShort
                     h
@@ -66,7 +65,6 @@ class CompileValueConstructionAuthorityTest {
                 let floorHours = Hours(20.0m)
 
                 behavior judge : (h: Hours) -> Hours | TooShort
-                    constructs TooShort
                 let judge (h) = {
                     guard h >= floorHours else TooShort
                     h
@@ -92,7 +90,6 @@ class CompileValueConstructionAuthorityTest {
                 let floorHours = Hours(20.0m)
 
                 behavior judge : (h: Hours) -> Hours | TooShort
-                    constructs TooShort
                 let judge (h) = {
                     guard h >= floorHours else TooShort
                     h
@@ -119,7 +116,6 @@ class CompileValueConstructionAuthorityTest {
                 data TooShort
 
                 behavior judge : (h: Hours) -> Hours | TooShort
-                    constructs TooShort
                 let judge (h) = {
                     guard h >= floor else TooShort
                     h
@@ -169,7 +165,7 @@ class CompileValueConstructionAuthorityTest {
                 let floorHours = Hours(20.0m)
 
                 behavior judge : (h: Hours) -> Hours | TooShort
-                    constructs TooShort, Hours
+                    constructs Hours
                 let judge (h) = {
                     guard h >= floorHours else TooShort
                     h
@@ -195,7 +191,6 @@ class CompileValueConstructionAuthorityTest {
                 partial let floorHours = makeFloor(1)
 
                 behavior judge : (h: Hours) -> Hours | TooShort
-                    constructs TooShort
                 let judge (h) = {
                     guard h >= floorHours else TooShort
                     h
@@ -212,17 +207,18 @@ class CompileValueConstructionAuthorityTest {
 
                 data Hours = Decimal invariant value >= 0.0m
                 data TooShort
+                data Judged = { h: Hours }
 
                 partial let makeFloor (n: Int) : Hours =
                     if n == 0 then Hours(20.0m) else makeFloor(n - 1)
 
                 partial let floorHours = makeFloor(1)
 
-                behavior judge : (h: Hours) -> Hours | TooShort
-                    constructs TooShort
+                behavior judge : (h: Hours) -> Judged | TooShort
+                    constructs Judged
                 let judge (h) = {
                     guard h >= floorHours else TooShort
-                    makeFloor(2)
+                    Judged { h = makeFloor(2) }
                 }
                 """));
 
@@ -245,7 +241,6 @@ class CompileValueConstructionAuthorityTest {
                 let floorHours = namedHours
 
                 behavior judge : (h: Hours) -> Hours | TooShort
-                    constructs TooShort
                 let judge (h) = {
                     guard h >= floorHours else TooShort
                     h
@@ -269,7 +264,6 @@ class CompileValueConstructionAuthorityTest {
                 let floorHours = baseHours
 
                 behavior judge : (h: Hours) -> Hours | TooShort
-                    constructs TooShort
                 let judge (h) = {
                     guard h >= floorHours else TooShort
                     h
@@ -304,12 +298,13 @@ class CompileValueConstructionAuthorityTest {
 
                 data Hours = Decimal invariant value >= 0.0m
                 data TooShort
+                data Judged = { h: Hours }
 
-                behavior judge : (h: Hours) -> Hours | TooShort
-                    constructs TooShort
+                behavior judge : (h: Hours) -> Judged | TooShort
+                    constructs Judged
                 let judge (h) = {
                     guard h >= Hours(20.0m) else TooShort
-                    h
+                    Judged { h = h }
                 }
                 """));
 
@@ -325,14 +320,15 @@ class CompileValueConstructionAuthorityTest {
 
                 data Hours = Decimal invariant value >= 0.0m
                 data TooShort
+                data Judged = { h: Hours }
 
                 let floorOf (d) = Hours(d)
 
-                behavior judge : (h: Hours) -> Hours | TooShort
-                    constructs TooShort
+                behavior judge : (h: Hours) -> Judged | TooShort
+                    constructs Judged
                 let judge (h) = {
                     guard h >= floorOf(20.0m) else TooShort
-                    h
+                    Judged { h = h }
                 }
                 """));
 
@@ -351,14 +347,13 @@ class CompileValueConstructionAuthorityTest {
                 let floorHours = Hours(20.0m)
 
                 behavior judge : (h: Hours) -> Hours | TooShort
-                    constructs TooShort
                 let judge (h) = {
                     guard h >= floorHours else TooShort
                     h
                 }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("m.Judge$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "m", "judge").getConstructor().newInstance();
 
         Object kept = Codecs.apply(behavior, Codecs.decoded(loader, "m.Hours", new java.math.BigDecimal("40.0")));
         assertEquals(new java.math.BigDecimal("40"), Codecs.encode(loader, "m.Hours", kept),

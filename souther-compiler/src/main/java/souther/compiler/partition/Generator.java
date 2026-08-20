@@ -1,19 +1,21 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Shape;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.Classification;
-import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeReachName;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -35,12 +37,12 @@ import java.util.TreeSet;
  * a legacy system or in someone's head, and a generator that guessed would turn a question into an
  * assertion nobody made.
  *
- * <p>What it reports is not only the rows. A combination it could produce nothing for is said out loud,
- * with which of the four things happened — the body leaves no class open at some other position,
- * nothing here composed a value, every value tried was refused at construction, or the search stopped
- * before deciding. A generator that returned only the rows it managed would read as though the rest
- * were covered, and one that gave the same answer to all four would send an author looking for a value
- * that does not exist while a row they could write in a line went unwritten.
+ * <p>What it reports is not only the rows. A combination it could produce nothing for is said out
+ * loud, with which of {@link UnresolvedCombination.Reason} it was — the list is that enum's to keep,
+ * and naming it here would be a second copy going stale. A generator that returned only the rows it
+ * managed would read as though the rest were covered, and one that gave the same answer to every kind
+ * would send an author looking for a value that does not exist while a row they could write in a line
+ * went unwritten.
  */
 public final class Generator {
 
@@ -122,15 +124,6 @@ public final class Generator {
 
         public enum Reason {
             /**
-             * Every class at some other position is one the body says it does not answer for, so no
-             * row reaches this combination whatever is written there.
-             *
-             * <p>About the classes a row may be written at and not about the values of the position:
-             * each of those classes has values, and what refuses them is the body. Read as a
-             * position without values, an author is sent looking for a type that has none.
-             */
-            NO_CLASS_OPEN_AT_POSITION,
-            /**
              * Nothing here knows how to compose a value of the shape asked for.
              *
              * <p>A fact about this compiler rather than about the model — a collection of more
@@ -147,6 +140,16 @@ public final class Generator {
             ALL_CANDIDATES_REJECTED,
             /** The search stopped before it got here. */
             SEARCH_LIMIT,
+            /**
+             * The rules leave no value here, and the whole of what they leave was walked.
+             *
+             * <p>Apart from every other word here, and the difference is the whole point of having
+             * it. The rest say what this compiler did not manage; this one says what the model
+             * settles — every position of the point is bounded, every combination of those bounds
+             * was tried, and none of them reaches it. A reader may act on this and may not act on
+             * the others (ADR-0091).
+             */
+            THE_RULES_LEAVE_NOTHING_THERE,
             /** The module's classes were not there to build a candidate against. */
             NOTHING_TO_BUILD_AGAINST,
             /** The generated classes would not link, so the decoders could not be reached. Told
@@ -288,15 +291,6 @@ public final class Generator {
             }
             Pair seed = (pairs.isEmpty() ? singles : pairs).iterator().next();
             int[] where = assign(axes, pairs, seed);
-            if (where == null) {
-                // Some other position has no class a row may be written at, so no row reaches this
-                // combination however it is filled. Answered rather than attempted.
-                pairs.remove(seed);
-                singles.remove(seed);
-                unresolved.add(new UnresolvedCombination(labels(axes, seed),
-                        UnresolvedCombination.Reason.NO_CLASS_OPEN_AT_POSITION));
-                continue;
-            }
             Attempt built = build(subject, axes, where, check);
             if (built.row() != null) {
                 rows.add(built.row());
@@ -331,7 +325,18 @@ public final class Generator {
     }
 
     /**
-     * A row at one boundary, built through the module's own decoders.
+     * A row at one coverage item of a border, built through the module's own decoders.
+     *
+     * <p>One entry, whatever the border was drawn on. What a search is handed is where each position
+     * has to stand — one of them for a line at a position's own value, two for a line where two
+     * positions stand apart, and as many as the rule named for a line over a form — and writing a row
+     * with some positions fixed is one procedure. Written as a method per shape of line, the two that
+     * existed offered different candidates for the same position and a third would have been a third
+     * offer.
+     *
+     * <p><b>Every position of the item is fixed at once</b>, which is what makes the row one at the
+     * item. A search that settled one and left the others to their own ranges would produce a row
+     * beside the line as readily as one at it.
      *
      * <p>One row per boundary rather than one row covering several, because a row is a question put to
      * a person and a row sitting on three edges at once is three answers they have to separate.
@@ -340,139 +345,113 @@ public final class Generator {
      * candidates that were tried, and another value of the same edge may build; what comes back says
      * which of the two happened and leaves the reading to the caller.
      */
-    public static BoundaryAttempt probe(Subject subject, BoundaryObligation obligation,
-                                        CandidateCheck check) {
-        return switch (obligation.target()) {
-            case BoundaryTarget.AtPlace place -> probeAt(subject, place, check);
-            // A line between two positions is not at a count of its own, so the one to write is
-            // handed in, and `probeBetween` is where the caller has it. Asked here, the count is
-            // missing rather than absent — which is this compiler calling itself wrongly, and not
-            // something established about the model. Reported as a reason it would read as the
-            // second, and an author would be told a line they can write is one nothing reaches.
-            case BoundaryTarget.EqualTerms line -> throw new IllegalStateException(
-                    "line between " + line.left() + " and " + line.right()
-                            + " was requested without a count: ask `probeBetween`");
-        };
-    }
-
-    /**
-     * A row on a line between two positions, written at a count both of them admit.
-     *
-     * <p>The count comes in rather than off the line. Where the line is is that the two are equal, and
-     * which count satisfies that is the rules' answer about the pair — written into the line it would
-     * make one row at it a different boundary from another.
-     *
-     * <p>Both positions are fixed at once, which is the whole of what makes this a row on the line. A
-     * search that settled one and left the other to its own range would produce a row beside the line
-     * as readily as one on it.
-     */
-    public static BoundaryAttempt probeBetween(Subject subject, BoundaryTarget.EqualTerms line,
-                                               Place at, CandidateCheck check) {
-        String label = line.left() + " = " + line.right();
-        FixtureTemplate on = written(subject, line.on(), line.carrier(), at);
-        FixtureTemplate against = written(subject, line.against(), line.carrier(), at);
-        if (on == null || against == null) {
-            // What this has no way to write, and not a position with no values. The line may be the
-            // easiest row in the file to write by hand — two strings of one length are — and
-            // Nothing here says the edge cannot be written at: what ran is this compiler's search.
-            return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
-                    UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE));
-        }
+    public static BoundaryAttempt probeFixing(Subject subject, String label, Carrier carrier,
+                                              Map<NumericTerm, Place> fixing, CandidateCheck check) {
         Map<String, List<FixtureTemplate>> decided = new LinkedHashMap<>();
-        decided.put(line.on().path().toString(), List.of(on));
-        decided.put(line.against().path().toString(), List.of(against));
+        // What the rest of the row has to sit beside. A field of a record is not chosen from its own
+        // type once another field of that record is fixed: the rule relating them says what is left,
+        // and taking the bottom of the type's range instead is how a boundary that can be written
+        // came back as one every value tried was refused at.
         Map<String, Place> settled = new LinkedHashMap<>();
-        settled.put(line.on().path().toString(), at);
-        settled.put(line.against().path().toString(), at);
+        Map<String, UnresolvedCombination.Reason> heldBack = new LinkedHashMap<>();
+        for (Map.Entry<NumericTerm, Place> each : fixing.entrySet()) {
+            Edge edge = edgeAt(subject, carrier, each.getKey(), each.getValue(), fixing.size() > 1);
+            if (edge.values().isEmpty()) {
+                return new BoundaryAttempt.Unresolved(
+                        new UnresolvedCombination(List.of(label), edge.reason()));
+            }
+            String at = each.getKey().path().toString();
+            // Two terms at one path is one location asked for two things at once — a string of a
+            // length and the string itself — and what a row writes at a location is one value. The
+            // fixing keeps them apart ({@link Realization.Found}) and this cannot, so it says so
+            // rather than writing whichever came last and offering half the point as the whole.
+            if (decided.containsKey(at)) {
+                return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
+                        UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE));
+            }
+            decided.put(at, edge.values());
+            if (edge.settledAt() != null) {
+                settled.put(at, edge.settledAt());
+            }
+            heldBack.put(at, edge.refused());
+        }
         List<FixtureTemplate> inputs = new ArrayList<>();
         for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
             String head = subject.parameters().get(p);
             Map<String, List<FixtureTemplate>> here = new LinkedHashMap<>();
-            if (line.on().path().head().equals(head)) {
-                here.put(line.on().path().toString(), decided.get(line.on().path().toString()));
-            }
-            if (line.against().path().head().equals(head)) {
-                here.put(line.against().path().toString(),
-                        decided.get(line.against().path().toString()));
+            for (NumericTerm term : fixing.keySet()) {
+                if (term.path().head().equals(head)) {
+                    here.put(term.path().toString(), decided.get(term.path().toString()));
+                }
             }
             Outcome tried = valueAt(subject, p, here, settled, Map.of(), check);
             if (tried.value() == null) {
-                return new BoundaryAttempt.Unresolved(
-                        new UnresolvedCombination(List.of(label), tried.reason(), tried.detail()));
-            }
-            inputs.add(tried.value());
-        }
-        return new BoundaryAttempt.Built(new GeneratedRow(List.of(label), inputs));
-    }
-
-    /**
-     * One count written as the value the position it stands at is declared as.
-     *
-     * <p>Null where nothing here can say what that is — a position whose type this cannot reach, and a
-     * term that is a measure of a value rather than the value: a length of four is not a count to write
-     * at the position, it is four characters somebody has to choose.
-     */
-    private static FixtureTemplate written(Subject subject, NumericTerm term, Carrier carrier,
-                                           Place at) {
-        if (term instanceof NumericTerm.SizeOf) {
-            return null;
-        }
-        Type declared = null;
-        for (Axis axis : subject.axes()) {
-            if (axis.term().equals(term)) {
-                declared = axis.type();
-                break;
-            }
-        }
-        if (declared == null && term.path().fields().isEmpty()) {
-            int at1 = subject.parameters().indexOf(term.path().head());
-            declared = at1 < 0 || at1 >= subject.types().size() ? null : subject.types().get(at1);
-        }
-        return declared == null ? null
-                : Witnesses.wrapped(declared, FixtureTemplate.on(carrier, at), subject.symbols());
-    }
-
-    /** A row at a line drawn at one count of one position. */
-    private static BoundaryAttempt probeAt(Subject subject, BoundaryTarget.AtPlace place,
-                                           CandidateCheck check) {
-        // The obligation was read off this subject's axes, so one it names is one this has. A
-        // subject without it is two structures that disagree, which is not a search result and has
-        // no reading in a report.
-        Axis axis = subject.axes().stream().filter(a -> a.id().equals(place.axis())).findFirst()
-                .orElseThrow(() -> new IllegalStateException(
-                        "boundary names axis " + place.axis() + ", which "
-                                + "this subject has no axis at"));
-        String label = place.left() + " = " + place.right();
-        Edge edge = edgeOf(axis, place.carrier(), place.at(), subject.symbols());
-        if (edge.values().isEmpty()) {
-            return new BoundaryAttempt.Unresolved(
-                    new UnresolvedCombination(List.of(label), edge.reason()));
-        }
-        List<FixtureTemplate> inputs = new ArrayList<>();
-        // What the rest of the row has to sit beside. A field of a record is not chosen from its
-        // own type once another field of that record is fixed: the rule relating them says what
-        // is left, and taking the bottom of the type's range instead is how a boundary that can
-        // be written came back as one every value tried was refused at.
-        Map<String, Place> settled = edge.settledAt() == null ? Map.of()
-                : Map.of(axis.path().toString(), edge.settledAt());
-        for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
-            Map<String, List<FixtureTemplate>> here =
-                    TermPath.of(subject.parameters().get(p)).head().equals(axis.path().head())
-                            ? Map.of(axis.path().toString(), edge.values()) : Map.of();
-            Outcome tried = valueAt(subject, p, here, settled, Map.of(), check);
-            if (tried.value() == null) {
-                // Where the refusal is of the values this edge offered, what the edge held back
-                // outranks it: values that were never built were not among the ones refused.
-                UnresolvedCombination.Reason why =
-                        !here.isEmpty() && tried.reason()
-                                == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED
-                                ? edge.refused() : tried.reason();
+                // Where the refusal is of the values one edge offered, what that edge held back
+                // outranks it: values that were never built were not among the ones refused. Only
+                // where one edge offered them, though — a point of a form fixes several positions
+                // under one parameter, and which of their edges the refusal was about is not
+                // something this knows. Taken from whichever came first, the reason named the wrong
+                // position's search.
+                UnresolvedCombination.Reason why = tried.reason();
+                if (here.size() == 1
+                        && why == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED) {
+                    why = heldBack.getOrDefault(here.keySet().iterator().next(), why);
+                }
                 return new BoundaryAttempt.Unresolved(
                         new UnresolvedCombination(List.of(label), why, tried.detail()));
             }
             inputs.add(tried.value());
         }
         return new BoundaryAttempt.Built(new GeneratedRow(List.of(label), inputs));
+    }
+
+    /**
+     * The values that stand at one position's place of the item.
+     *
+     * <p>The axis's own edge where the subject has an axis at this position, which is where a count
+     * taken of a location is met by whatever carries that count. Where it has none — a behavior whose
+     * inputs nothing bounds has no axis and its body still draws lines between them — the value is
+     * written from the declared type.
+     *
+     * @param besideAnother whether another position of the same item is fixed too. A count taken of a
+     *                      location is met by several values and only one of them can be offered
+     *                      beside a second position that is being fixed as well, which is a limit of
+     *                      the reading this replaced rather than a rule: it is preserved here so that
+     *                      collapsing the two searches into one changed nothing, and removing it is
+     *                      its own answer to give
+     */
+    private static Edge edgeAt(Subject subject, Carrier carrier, NumericTerm term, Place at,
+                               boolean besideAnother) {
+        if (besideAnother && term instanceof NumericTerm.SizeOf) {
+            return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        for (Axis axis : subject.axes()) {
+            if (axis.term().equals(term)) {
+                return edgeOf(axis, carrier, at, subject.symbols());
+            }
+        }
+        // No axis at this position, which a behavior whose inputs nothing bounds has none of while
+        // its body still draws lines between them. A count taken of a location is not writable this
+        // way: four is not what goes at the position, it is four characters somebody has to choose.
+        Type declared = term instanceof NumericTerm.SizeOf ? null : declaredAt(subject, term.path());
+        if (declared == null) {
+            return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        FixtureTemplate standing = Witnesses.wrapped(declared,
+                FixtureTemplate.on(carrier, at, subject.symbols().scope()::reach),
+                subject.symbols());
+        return standing == null ? Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
+                : new Edge(List.of(standing), null, at, null);
+    }
+
+    /** The type declared at a position this subject has no axis for, which is a bare parameter and
+     *  nothing else: a field of one is reached through a type this cannot name here. */
+    private static Type declaredAt(Subject subject, TermPath path) {
+        if (!path.fields().isEmpty()) {
+            return null;
+        }
+        int at = subject.parameters().indexOf(path.head());
+        return at < 0 || at >= subject.types().size() ? null : subject.types().get(at);
     }
 
     // --- the pair space -------------------------------------------------------------------------
@@ -519,26 +498,13 @@ public final class Generator {
         return List.copyOf(divided);
     }
 
-    /**
-     * Whether a row may be written at this class of this position.
-     *
-     * <p>A row at a class the body rules out reaches an {@code unreachable} and is E1911, so offering
-     * one hands the author work the compiler will refuse. Asked by index because everything here
-     * addresses a class by its place in the axis.
-     */
-    private static boolean open(Axis axis, int cls) {
-        return !axis.excluded().contains(axis.classes().get(cls).id());
-    }
-
     private static Set<Pair> pairsOf(List<Axis> axes) {
         Set<Pair> all = new TreeSet<>();
         for (int i = 0; i < axes.size(); i++) {
             for (int j = i + 1; j < axes.size(); j++) {
                 for (int a = 0; a < axes.get(i).classes().size(); a++) {
                     for (int b = 0; b < axes.get(j).classes().size(); b++) {
-                        if (open(axes.get(i), a) && open(axes.get(j), b)) {
-                            all.add(new Pair(i, a, j, b));
-                        }
+                        all.add(new Pair(i, a, j, b));
                     }
                 }
             }
@@ -550,9 +516,7 @@ public final class Generator {
         Set<Pair> all = new TreeSet<>();
         for (int i = 0; i < axes.size(); i++) {
             for (int c = 0; c < axes.get(i).classes().size(); c++) {
-                if (open(axes.get(i), c)) {
-                    all.add(Pair.alone(i, c));
-                }
+                all.add(Pair.alone(i, c));
             }
         }
         return all;
@@ -615,15 +579,12 @@ public final class Generator {
             if (where[i] >= 0) {
                 continue;
             }
-            // A position this row is not about still has to hold something, and what it holds has to
-            // be writable: filling it with a class the body rules out would make the whole row
-            // E1911, whichever gap it was generated for.
+            // A position this row is not about still has to hold something, and every class of an
+            // axis is one a row can be written at: what the rules refuse is not a class of the
+            // position at all.
             int best = -1;
             int bestGain = -1;
             for (int c = 0; c < axes.get(i).classes().size(); c++) {
-                if (!open(axes.get(i), c)) {
-                    continue;
-                }
                 int gain = 0;
                 for (int j = 0; j < axes.size(); j++) {
                     if (j == i || where[j] < 0) {
@@ -639,10 +600,7 @@ public final class Generator {
                     best = c;
                 }
             }
-            if (best < 0) {
-                return null;   // every class of this position is ruled out: no row can be written
-            }
-            where[i] = best;
+            where[i] = best;   // every axis here has a class, so there is always one to place
         }
         return where;
     }
@@ -861,7 +819,7 @@ public final class Generator {
      * <p>Depth first, so that a position is chosen against a projection that already has the ones
      * before it in it. The projection is the same one the whole search started from — what the
      * record's rules leave each of its fields — asked again with the assignment so far settled into
-     * it, which is what {@link FieldDomains#of(TypeName, Ast.Data, Symbols, Map)} is for.
+     * it, which is what {@link FieldDomains#of(TypeSymbol, Hir.Data, Symbols, Map)} is for.
      *
      * <p>Second, and not instead. What it costs is a reading of the record's rules per position per
      * branch, and the search in front of it answers most rows without any of that; running this one
@@ -1085,7 +1043,7 @@ public final class Generator {
      */
     private static FieldDomains rulesOf(Type type, Symbols symbols, Map<String, Count> settled) {
         return type instanceof Type.Ref ref
-                && symbols.get(ref.name()) instanceof Ast.Data data && !data.newtype()
+                && symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data && !data.newtype()
                 ? FieldDomains.of(ref.name(), data, symbols, settled) : FieldDomains.NONE;
     }
 
@@ -1279,9 +1237,18 @@ public final class Generator {
             // Under the names the position is written with, which the reading that found the fields
             // took off to find them. A row at a `data SlotN = Slot` carries `SlotN(Slot { ... })`,
             // and a value composed without them is of a type the parameter does not declare.
-            FixtureTemplate record = RepresentativeSource.under(
-                    view.wrappers().stream().map(TypeOps.Layer::named).toList(),
-                    FixtureTemplate.record(product.name(), built));
+            List<TypeReachName.Written> worn = new ArrayList<>();
+            for (TypeOps.Layer layer : view.wrappers()) {
+                if (!(symbols.scope().reach(layer.named()) instanceof TypeReachName.Written written)) {
+                    return null;   // a name this module cannot write leaves no value to write
+                }
+                worn.add(written);
+            }
+            if (!(symbols.scope().reach(product.name()) instanceof TypeReachName.Written written)) {
+                return null;
+            }
+            FixtureTemplate record = RepresentativeSource.under(worn,
+                    FixtureTemplate.record(written, built));
             return recipe == null ? record : recipe.written(record);
         }
         return null;
@@ -1334,8 +1301,11 @@ public final class Generator {
             // written as a literal of another — which is how a date-time's second count reached a
             // row as an `Int`, and the decoder refused it with the report saying only that every
             // value tried had been refused.
-            return new Edge(List.of(Witnesses.wrapped(axis.type(),
-                    FixtureTemplate.on(carrier, at), symbols)), null, at, null);
+            FixtureTemplate standing = Witnesses.wrapped(axis.type(),
+                    FixtureTemplate.on(carrier, at, symbols.scope()::reach), symbols);
+            return standing == null
+                    ? Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
+                    : new Edge(List.of(standing), null, at, null);
         }
         int size = CountDomain.asCount(at);
         if (size < 0) {

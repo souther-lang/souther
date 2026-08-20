@@ -1,7 +1,5 @@
 package souther.compiler.examples;
 
-import souther.compiler.check.Prelude;
-
 /**
  * A fixture an {@code example} writes cannot be built: an unsupported form, a value that breaks the
  * type's invariant, a function with no method to apply, or a value a helper returned that cannot be
@@ -14,22 +12,14 @@ final class FixtureException extends RuntimeException {
     }
 
     /**
-     * A call a fixture cannot run. Two different things reach here and a row is told which: a
-     * standard-library function, which a fixture may not apply however it is implemented, and a
-     * helper of this module that no method was emitted for.
+     * The method a row's operand was emitted as is not in the classes this run was handed.
      *
-     * <p>Written once because three readings refuse the same call — the two that build a fixture and
-     * the one that applies a helper — and three copies of a sentence are three sentences that can
-     * come to say different things about one rule.
-     *
-     * @param written  the call as the row spelled it, which is what a report underlines
-     * @param reached  the name the callee was looked up by, which is what decides the reason
+     * <p>Not a rule about what a row may write: the operand was compiled, and what is missing is
+     * this compiler's own output. It is said as the absence it is rather than as something the
+     * author did.
      */
-    static FixtureException cannotBeCalled(String written, String reached) {
-        return new FixtureException("`" + written + "` cannot be called from an example fixture: "
-                + (Prelude.isLibraryFunction(reached)
-                        ? "a standard-library function is not one a fixture may apply. Compute the"
-                                + " value in a `let` helper and apply that instead"
-                        : "no method was emitted for it, so there is nothing here to run"));
+    static FixtureException nothingWasEmittedFor() {
+        return new FixtureException("the value the row writes cannot be run:"
+                + " no method was emitted for it, so there is nothing here to run");
     }
 }

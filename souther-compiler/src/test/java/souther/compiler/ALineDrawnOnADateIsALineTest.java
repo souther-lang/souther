@@ -32,7 +32,6 @@ class ALineDrawnOnADateIsALineTest {
             data Fresh
 
             behavior freshness : (on: Date) -> Stale | Fresh
-                constructs Stale, Fresh
             let freshness (on) = if on < Date("2026-01-01") then Stale else Fresh
 
             example freshness
@@ -60,7 +59,7 @@ class ALineDrawnOnADateIsALineTest {
     void bothSidesOfTheLineAreOwed() {
         String human = report();
 
-        assertTrue(human.contains("boundary    1/2"), human);
+        assertTrue(human.contains("border      borders 1   coverage items 1/4"), human);
         assertTrue(human.contains("2026-01-01"), human);
     }
 

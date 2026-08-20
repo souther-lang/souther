@@ -1,5 +1,7 @@
 package souther.compiler.diag;
 
+import souther.compiler.source.SourceId;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
@@ -11,10 +13,11 @@ import java.util.function.Function;
  * <p>An id it does not know, and a file it cannot read, both answer null — the renderer then leaves
  * the snippet out rather than quoting a line from somewhere else.
  *
- * <p>A secondary that names no source of its own is never asked about: it inherits the diagnostic's
- * ({@link LabeledRegion#sourceIdOr(String)}) before anything is looked up. A whole diagnostic that
- * names none is asked about as {@link Located#NO_SOURCE}, and what that means is the caller's to
- * say — a compile of one source names none and yet has exactly one file to quote.
+ * <p>A secondary is asked about under the source it names, which every one of them does
+ * ({@link DiagnosticPlace.InSource}); one with nothing to quote is not asked about at all, because
+ * it points at nothing and is said in words instead. A report that points at nothing is asked about
+ * under the file it is listed on ({@link ReportContext#filedUnder()}), and one in a text the caller
+ * handed over is not asked about here at all — {@link #quotedFrom} has the text.
  *
  * <p>Answering twice for one id must give the same text, since a caret is drawn under a line quoted
  * from it. {@link #memoized} is how a caller reading files off disk keeps that true, and it also
@@ -25,7 +28,25 @@ import java.util.function.Function;
 public interface SourceContextResolver {
 
     /** The text and display name for {@code sourceId}, or null when there is none to quote. */
-    SourceContext sourceOf(String sourceId);
+    SourceContext sourceOf(SourceId sourceId);
+
+    /**
+     * The text to quote a spot from, or null when there is none.
+     *
+     * <p>A switch over where the spot is rather than a lookup, because one of the two arms is not a
+     * lookup: a caller reading a text it has no identity for handed the text over, and asking this
+     * for an identity nobody gave is what used to come back as "no file" for a place the caller was
+     * holding the file of.
+     */
+    default SourceContext quotedFrom(Spot spot) {
+        return switch (spot) {
+            case Spot.InSource in -> sourceOf(in.place().source());
+            case Spot.InTextBeingRead(TextBeingRead text, UnnamedRegion _) -> switch (text) {
+                case TextBeingRead.UnderAnId(SourceId source) -> sourceOf(source);
+                case TextBeingRead.AsHandedOver(SourceContext held) -> held;
+            };
+        };
+    }
 
     /** Nothing to quote for anything — a caller that has no sources to hand. */
     static SourceContextResolver none() {
@@ -33,8 +54,8 @@ public interface SourceContextResolver {
     }
 
     /** A resolver that asks {@code loader} once per id and keeps the answer, absence included. */
-    static SourceContextResolver memoized(Function<String, SourceContext> loader) {
-        Map<String, SourceContext> known = new HashMap<>();
+    static SourceContextResolver memoized(Function<SourceId, SourceContext> loader) {
+        Map<SourceId, SourceContext> known = new HashMap<>();
         return id -> {
             if (known.containsKey(id)) {
                 return known.get(id);

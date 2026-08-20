@@ -41,7 +41,7 @@ class CompileLetAnnotationTest {
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo.In", Map.of("v", 21L));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
         assertEquals(42L, out.get("v"));
     }
@@ -64,7 +64,7 @@ class CompileLetAnnotationTest {
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo.In", Map.of("keys", List.of("a", "b", "a")));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
         assertEquals(Map.of("a", 2L, "b", 1L), out.get("m"));
     }
@@ -86,7 +86,7 @@ class CompileLetAnnotationTest {
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo.In", Map.of("words", List.of("a", "bbb")));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
         assertEquals(List.of(1L, 3L), out.get("lengths"));
     }
@@ -126,7 +126,7 @@ class CompileLetAnnotationTest {
                 }
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object run = loader.loadClass("demo.Run" + "$Impl").getDeclaredConstructor().newInstance();
+        Object run = Emitted.behavior(loader, "demo", "run").getDeclaredConstructor().newInstance();
         Object in = Codecs.decoded(loader, "demo.In", java.util.Map.of("v", 41L));
         assertEquals(42L, ((java.util.Map<?, ?>) Codecs.encode(loader, "demo.Out",
                 Codecs.apply(run, in))).get("v"));
@@ -168,7 +168,7 @@ class CompileLetAnnotationTest {
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo.In", Map.of("keys", List.of("a", "b", "a")));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
         assertEquals(2L, out.get("n"));
     }
@@ -229,7 +229,7 @@ class CompileLetAnnotationTest {
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo.In", Map.of("v", 41L));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
         assertEquals(42L, out.get("v"));
     }
@@ -251,7 +251,7 @@ class CompileLetAnnotationTest {
                 }
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object big = Codecs.apply(behavior, Codecs.decoded(loader, "demo.In", Map.of("v", 11L)));
         assertEquals("demo.Big", big.getClass().getName());
         Object small = Codecs.apply(behavior, Codecs.decoded(loader, "demo.In", Map.of("v", 1L)));
@@ -274,7 +274,7 @@ class CompileLetAnnotationTest {
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo.In", Map.of("v", 9L));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
         assertEquals(10L, out.get("total"));
     }

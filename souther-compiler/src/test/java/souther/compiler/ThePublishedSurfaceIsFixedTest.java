@@ -1,6 +1,6 @@
 package souther.compiler;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Prelude;
 import souther.compiler.types.Type;
 
@@ -80,7 +80,7 @@ class ThePublishedSurfaceIsFixedTest {
 
     /** The parameters as the declaration writes them, and the return type where it states one. */
     private static String signature(Prelude.PreludeEntry entry) {
-        Ast.FnDef fn = entry.declaration();
+        Hir.FnDef fn = entry.declaration();
         String result = entry.signature().result() == null ? ""
                 : " : " + Type.show(entry.signature().result());
         if (fn.params().isEmpty()) {

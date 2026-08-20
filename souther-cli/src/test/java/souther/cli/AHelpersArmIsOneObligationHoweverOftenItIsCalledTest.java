@@ -200,7 +200,7 @@ class AHelpersArmIsOneObligationHoweverOftenItIsCalledTest {
                     invariant value >= 0
 
                 behavior twoFilters : (items: List<Item>) -> Count
-                    constructs Count, Kept, Dropped
+                    constructs Count
                 let twoFilters (items) =
                     Count(List.length(List.filter(i -> i.mark == Kept, items))
                         + List.length(List.filter(i -> i.mark == Dropped, items)))
@@ -250,7 +250,7 @@ class AHelpersArmIsOneObligationHoweverOftenItIsCalledTest {
                 """);
 
         // The record's own minimum, and the two the guard draws at 100.
-        assertTrue(report.contains("boundary    0/3"),
+        assertTrue(report.contains("border      borders 2   coverage items 3/6   excluded 2"),
                 () -> "one line per rule, not one per reading of it:\n" + report);
         assertEquals(1, count(report, "a = 100"),
                 () -> "and the line at 100 is written once:\n" + report);

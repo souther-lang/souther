@@ -45,7 +45,7 @@ class AValueIsCheckedAgainstWhatTheOnesItNamesSettledTest {
                 behavior bump : (i: In) -> Out constructs Out
                 let bump (i) = Out { n = i.n + four }
                 """);
-        Object behavior = loader.loadClass("demo.Bump$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "bump").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, Codecs.decoded(loader, "demo.In", Map.of("n", 10L)));
         assertEquals(14L, ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("n"));
     }
@@ -67,7 +67,7 @@ class AValueIsCheckedAgainstWhatTheOnesItNamesSettledTest {
                 behavior bump : (i: In) -> Out constructs Out
                 let bump (i) = Out { n = i.n + four }
                 """);
-        Object behavior = loader.loadClass("demo.Bump$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "bump").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, Codecs.decoded(loader, "demo.In", Map.of("n", 10L)));
         assertEquals(14L, ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("n"));
     }
@@ -111,7 +111,7 @@ class AValueIsCheckedAgainstWhatTheOnesItNamesSettledTest {
                 behavior bump : (i: In) -> Out constructs Out
                 let bump (i) = Out { n = i.n + again.value }
                 """);
-        Object behavior = loader.loadClass("demo.Bump$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "bump").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, Codecs.decoded(loader, "demo.In", Map.of("n", 10L)));
         assertEquals(13L, ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("n"));
     }

@@ -25,7 +25,7 @@ class CompileHelperShadowingTest {
     private static Object run(String source, Map<String, Object> input) throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(source),
                 CompileHelperShadowingTest.class.getClassLoader());
-        Object go = loader.loadClass("demo.Go" + "$Impl").getDeclaredConstructor().newInstance();
+        Object go = Emitted.behavior(loader, "demo", "go").getDeclaredConstructor().newInstance();
         Object in = Codecs.decoded(loader, "demo.In", input);
         return ((Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(go, in))).get("ys");
     }
@@ -106,8 +106,13 @@ class CompileHelperShadowingTest {
     }
 
     /**
-     * A unit data written where a value goes is that construction, and the permission the behavior
-     * declares covers it — whatever something around it happens to bind under that spelling.
+     * A unit data written where a value goes is that construction, whatever something around it
+     * happens to bind under that spelling.
+     *
+     * <p>What the spelling cannot change is which type the name answers, and that is what both
+     * halves measure. It compiles under either binding, and naming the unit in {@code constructs} is
+     * refused under either — a unit is in no construction set (spec §constructs-excludes-unit-data),
+     * so the refusal is about the entry rather than about what the body turned out to build.
      */
     @Test
     void aUnitDataNamedAsAValueIsThatConstructionWhateverIsBoundAround() {
@@ -120,7 +125,7 @@ class CompileHelperShadowingTest {
                 let pick (v: Int): Out | Missing =
                     if v > 0 then Out { ys = [v] } else Missing
 
-                behavior go : (i: In) -> Out | Missing constructs Out, DECLARED
+                behavior go : (i: In) -> Out | Missing constructs Out
                 let go (i) = {
                     let NAME = i.n + 1
                     pick(NAME)
@@ -128,11 +133,12 @@ class CompileHelperShadowingTest {
                 """;
         for (String spelled : List.of("held", "Missing")) {
             String src = source.replace("NAME", spelled);
-            assertDoesNotThrow(() -> Compiler.compile(src.replace("DECLARED", "Missing")),
+            assertDoesNotThrow(() -> Compiler.compile(src),
                     "`Missing` is the construction it is, with a binding spelled " + spelled);
-            assertThrows(CompileException.class,
-                    () -> Compiler.compile(src.replace("constructs Out, DECLARED", "constructs Out")),
-                    "and the permission for it is still required, with a binding spelled " + spelled);
+            CompileException e = assertThrows(CompileException.class,
+                    () -> Compiler.compile(src.replace("constructs Out", "constructs Out, Missing")),
+                    "and it is in no construction set, with a binding spelled " + spelled);
+            assertEquals("E1026", e.code());
         }
     }
 

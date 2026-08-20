@@ -2,12 +2,16 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.query.Scopes;
+import souther.compiler.ast.Hir;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.inputs.InputDomain;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -43,21 +47,21 @@ class ThresholdNormalizationTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Ast.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        TypeChecker.Checked checked = compilation.db().ask(new Bodies.Checked(module)).value();
+        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
 
-        Ast.SpecBehavior spec = (Ast.SpecBehavior) prepared.behaviors().stream()
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
         Core body = checked.behaviorBodies().get(behavior);
         assertNotNull(body);
-        CoverageSites.Plan plan = CoverageSites.of("m.sou", checked.behaviorBodies());
+        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
         GuardThresholds.Guards guards = GuardThresholds.of(behavior, body, plan,
-                spec.params().stream().map(Ast.Param::name).toList(), symbols);
+                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get(behavior), symbols);
         List<Threshold> thresholds = guards.thresholds();
-        Partitions.Partitioning base = Partitions.of(spec, sigs.get(behavior), symbols, Exclusions.NONE);
+        Partitions.Partitioning base = Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(behavior), symbols), symbols);
         return new Read(Partitions.withThresholds(base, thresholds, symbols), thresholds, symbols);
     }
 
@@ -216,15 +220,14 @@ class ThresholdNormalizationTest {
         Read read = read(CEILING, "submit");
         Axis cost = axis(read.partitioning(), "request.cost");
 
-        List<BoundaryObligation> obligations = Partitions.obligationsOf(cost, read.symbols(),
-                read.partitioning().domains().get("request.cost"));
-        List<String> described = obligations.stream()
-                .map(o -> o.side() + " " + o.target().right()).toList();
+        NumericDomain.Bounds within = read.partitioning().domains().get(cost.term());
+        assertNotNull(within, "the invariant's domain is what this asks the obligations about");
+        List<String> described = pointsAgainstTheLines(cost, read.symbols(), within);
 
-        assertTrue(described.contains("AT 100000"), described.toString());
-        assertTrue(described.contains("ABOVE 100001"), described.toString());
-        assertTrue(described.contains("AT 0"), "the invariant's own edge is still worth a row");
-        assertFalse(described.contains("ABOVE 1"),
+        assertTrue(described.contains("ON 100000"), described.toString());
+        assertTrue(described.contains("OFF 100001"), described.toString());
+        assertTrue(described.contains("ON 0"), "the invariant's own edge is still worth a row");
+        assertFalse(described.contains("OFF 1"),
                 "an invariant's bound has nothing on the far side to reach");
     }
 
@@ -255,7 +258,6 @@ class ThresholdNormalizationTest {
                 data Size = Bigger | Smaller
 
                 behavior classifyStage : (s: Stage) -> Size
-                    constructs Bigger, Smaller, Qualified
                 let classifyStage (s) = {
                     guard s < Qualified else Bigger
                     Smaller }
@@ -265,10 +267,9 @@ class ThresholdNormalizationTest {
         assertEquals(List.of("Prospecting", "Qualified", "Won"), labels(stage),
                 "the cut is the coarser partition, so the classes stay the cases");
 
-        List<String> described = Partitions.obligationsOf(stage, read.symbols(),
-                        read.partitioning().domains().get(stage.term())).stream()
-                .map(o -> o.side() + " " + o.target().right()).toList();
-        assertEquals(List.of("AT Qualified", "BELOW Prospecting"), described);
+        List<String> described = pointsAgainstTheLines(stage, read.symbols(),
+                read.partitioning().domains().get(stage.term()));
+        assertEquals(List.of("ON Prospecting", "OFF Qualified"), described);
     }
 
     /**
@@ -296,12 +297,24 @@ class ThresholdNormalizationTest {
         Axis amount = axis(read.partitioning(), "amount");
         assertEquals(List.of("0 <= x < 3000", "3000 <= x"), labels(amount));
 
-        List<String> described = Partitions.obligationsOf(amount, read.symbols(),
-                read.partitioning().domains().get(amount.path().toString())).stream()
-                .map(o -> o.side() + " " + o.target().right()).toList();
-        assertTrue(described.contains("AT 3000"), described.toString());
-        assertTrue(described.contains("BELOW 2999"), described.toString());
+        NumericDomain.Bounds within = read.partitioning().domains().get(amount.term());
+        assertNotNull(within, "the invariant's domain is what this asks the obligations about");
+        List<String> described = pointsAgainstTheLines(amount, read.symbols(), within);
+        assertTrue(described.contains("OFF 3000"), described.toString());
+        assertTrue(described.contains("ON 2999"), described.toString());
     }
+
+    /** The points against each of {@code axis}'s borders, as {@code role value}. */
+    private static List<String> pointsAgainstTheLines(Axis axis, Symbols symbols,
+                                                      NumericDomain.Bounds within) {
+        return Partitions.bordersOf(axis, symbols, within).stream()
+                .flatMap(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
+                        .filter(role -> border.demand(role).criterion() != null)
+                        .map(role -> role + " "
+                                + border.demand(role).criterion().asked(border.cut().of()).substring(2)))
+                .toList();
+    }
+
 
     /** The same value cut by two rules is one class boundary and two things to exercise. */
     @Test

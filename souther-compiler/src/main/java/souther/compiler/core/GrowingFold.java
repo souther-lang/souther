@@ -1,6 +1,6 @@
 package souther.compiler.core;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 
@@ -82,7 +82,7 @@ public final class GrowingFold {
      *  a {@code filter} builds both, and the two builds are then joined into one. */
     public static Core rewrite(Core body) {
         Core mapped = Core.mapChildren(body, GrowingFold::rewrite, s -> s,
-                nd -> Core.mapChildren(nd, GrowingFold::rewrite, s -> s));
+                nd -> Core.mapChildren(nd, GrowingFold::rewrite));
         if (mapped instanceof Core.Call call) {
             Core built = built(call);
             if (built != null) {
@@ -216,7 +216,7 @@ public final class GrowingFold {
      * see through. A binding of a binding is followed the same way, so the set is closed rather than
      * one level deep.
      */
-    private static Set<BindingId> aliases(Core body, Ast.Binder acc) {
+    private static Set<BindingId> aliases(Core body, Hir.Binder acc) {
         Set<BindingId> names = new LinkedHashSet<>();
         names.add(acc.id());
         int before;
@@ -332,7 +332,7 @@ public final class GrowingFold {
                     body.type(), c.pos());
         }
         return Core.mapChildren(e, child -> piped(child, outer, refused), s -> s,
-                nd -> Core.mapChildren(nd, child -> piped(child, outer, refused), s -> s));
+                nd -> Core.mapChildren(nd, child -> piped(child, outer, refused)));
     }
 
     /** The step with its appends turned into adds, or null when the step does something else with the
@@ -367,7 +367,7 @@ public final class GrowingFold {
 
     /** {@code acc ++ rhs} as an add to the builder. */
     private static Core appended(Core e, Set<BindingId> acc) {
-        if (!(e instanceof Core.Binary b) || b.op() != Ast.BinOp.CONCAT
+        if (!(e instanceof Core.Binary b) || b.op() != Hir.BinOp.CONCAT
                 || !(b.left() instanceof Core.Read v) || !acc.contains(v.binding())) {
             return null;
         }
@@ -427,7 +427,7 @@ public final class GrowingFold {
                     if (body == null) {
                         return null;
                     }
-                    cases.add(new Core.Case(c.caseTypes(), c.binding(), body, c.bindType(), c.pos()));
+                    cases.add(c.answering(body));
                 }
                 return new Core.Match(m.scrutinee(), cases, m.origin(), m.type(), m.pos());
             }

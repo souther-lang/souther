@@ -2,7 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -34,34 +34,34 @@ public sealed interface BoundaryOutput {
      *  and nowhere else — see {@link BoundaryInput.Nominal}. */
     final class Nominal implements BoundaryOutput {
 
-        private final TypeName name;
+        private final CrossingNominal admitted;
 
-        Nominal(TypeName name) {
-            this.name = name;
+        Nominal(CrossingNominal admitted) {
+            this.admitted = admitted;
         }
 
-        public TypeName name() {
-            return name;
+        public TypeSymbol name() {
+            return admitted.name();
         }
 
         @Override
         public Type type() {
-            return Type.ref(name);
+            return Type.ref(name());
         }
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof Nominal n && name.equals(n.name);
+            return other instanceof Nominal n && admitted.equals(n.admitted);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hashCode(name);
+            return Objects.hashCode(admitted);
         }
 
         @Override
         public String toString() {
-            return "Nominal[name=" + name + "]";
+            return "Nominal[name=" + name() + "]";
         }
     }
 
@@ -82,7 +82,7 @@ public sealed interface BoundaryOutput {
     }
 
     /** A map of them, under a key the boundary can write as text. */
-    record MapOf(BoundaryMapKey key, BoundaryOutput value) implements BoundaryOutput {
+    record MapOf(CrossingMapKey key, BoundaryOutput value) implements BoundaryOutput {
         @Override
         public Type type() {
             return Type.map(key.type(), value.type());
@@ -97,16 +97,22 @@ public sealed interface BoundaryOutput {
      *
      * <p>Every member is a name, so this is closed the way {@link Nominal} is: a union assembled from
      * names nothing admitted would be a witness for an answer the boundary never allowed.
+     *
+     * <p>Names and not {@link CrossingNominal}s, though each member went through that admission.
+     * What a witness is carried for is a reader that acts on the proposition being true; a reader
+     * here asks which cases the answer has, and builds a type or a class name out of them. Carrying
+     * the admission on into that would say a reader below still needs it, which is a claim about
+     * them that is not so. If one comes to need it, this is where it changes.
      */
     final class Cases implements BoundaryOutput {
 
-        private final List<TypeName> members;
+        private final List<TypeSymbol> members;
 
-        Cases(List<TypeName> members) {
+        Cases(List<TypeSymbol> members) {
             this.members = List.copyOf(members);
         }
 
-        public List<TypeName> members() {
+        public List<TypeSymbol> members() {
             return members;
         }
 

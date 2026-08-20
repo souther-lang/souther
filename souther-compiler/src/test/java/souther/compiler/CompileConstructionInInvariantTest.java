@@ -1,8 +1,13 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.msg.InvariantMessage;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Region;
 import souther.compiler.diag.Diagnostic;
 
 import org.junit.jupiter.api.Test;
@@ -46,7 +51,7 @@ class CompileConstructionInInvariantTest {
                     invariant ok = List.all(x -> Yen(0).value <= x, value)
                 """);
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, e.diagnostic().said());
-        assertEquals(4, e.diagnostic().region().start().line());
+        assertEquals(4, ((Primary.InSource) e.diagnostic().primary()).place().region().start().line());
     }
 
     @Test
@@ -58,7 +63,7 @@ class CompileConstructionInInvariantTest {
                     invariant ok = List.all(x -> Yen { value = 0 }.value <= x, value)
                 """);
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, e.diagnostic().said());
-        assertEquals(4, e.diagnostic().region().start().line());
+        assertEquals(4, ((Primary.InSource) e.diagnostic().primary()).place().region().start().line());
     }
 
     @Test
@@ -71,7 +76,7 @@ class CompileConstructionInInvariantTest {
                     invariant ok = atLeastZero(value)
                 """);
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, e.diagnostic().said());
-        assertEquals(3, e.diagnostic().region().start().line(),
+        assertEquals(3, ((Primary.InSource) e.diagnostic().primary()).place().region().start().line(),
                 "the error is at the construction, which is in the helper");
     }
 
@@ -85,7 +90,7 @@ class CompileConstructionInInvariantTest {
                     invariant ok = atLeastZero(value)
                 """);
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, e.diagnostic().said());
-        assertEquals(3, e.diagnostic().region().start().line());
+        assertEquals(3, ((Primary.InSource) e.diagnostic().primary()).place().region().start().line());
     }
 
     /** However many helpers away: the clause arrives at the check with all of them expanded into it,
@@ -101,7 +106,7 @@ class CompileConstructionInInvariantTest {
                     invariant ok = outer(value)
                 """);
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, e.diagnostic().said());
-        assertEquals(3, e.diagnostic().region().start().line(),
+        assertEquals(3, ((Primary.InSource) e.diagnostic().primary()).place().region().start().line(),
                 "`inner` holds the construction; `outer` only passes through");
     }
 
@@ -121,7 +126,7 @@ class CompileConstructionInInvariantTest {
                         data Table = List<Int>
                             invariant ok = List.all(x -> atLeastZero(x), value)
                         """);
-        List<Diagnostic> down = Located.diagnosticsOf(Compiler.diagnoseModules(sources)).get("down");
+        List<Diagnostic> down = Located.diagnosticsOf(Compiler.diagnoseModules(sources)).get(new SourceId("down"));
         assertEquals(1, down.size(), () -> "expected one diagnostic, got " + down);
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, down.get(0).said());
     }
@@ -152,21 +157,34 @@ class CompileConstructionInInvariantTest {
         assertInstanceOf(InvariantMessage.TheInvariantConstructsAData.class, e.diagnostic().said());
     }
 
-    /** The construction and the clause that reaches it are two places, so the diagnostic carries
-     *  both: the error where the data is built, the clause labelled where the rule is written. */
+    /**
+     * The construction and the clause that reaches it are two places, so the diagnostic carries
+     * both: the error where the data is built, the clause labelled where the rule is written.
+     *
+     * <p>The label covers the clause, which the clause has held since it was parsed. A marker at the
+     * one point the clause is anchored at leaves a reader looking for what about that line the
+     * report means, on a line the report is about the whole of.
+     */
     @Test
     void theClauseIsLabelledWhereItIsWritten() {
-        CompileException e = err("""
+        String source = """
                 module m
                 data Yen = Int invariant value >= 0
                 let atLeastZero (x: Int): Bool = Yen(0).value <= x
                 data Table = Int
                     invariant ok = atLeastZero(value)
-                """);
+                """;
+        CompileException e = err(source);
         assertEquals(1, e.diagnostic().secondary().size());
         assertInstanceOf(InvariantMessage.TheClauseReachesThatConstruction.class,
                 e.diagnostic().secondary().get(0).said());
-        assertEquals(5, e.diagnostic().secondary().get(0).region().start().line());
+
+        Region marked = ((souther.compiler.diag.DiagnosticPlace.InSource) e.diagnostic().secondary().get(0).place()).region();
+        assertEquals(5, marked.start().line());
+        assertEquals("invariant ok = atLeastZero(value)",
+                source.split("\n", -1)[marked.start().line() - 1]
+                        .substring(marked.start().column() - 1, marked.end().column() - 1),
+                "the clause as it was written, and not the point it is anchored at");
     }
 
     /**
@@ -185,8 +203,8 @@ class CompileConstructionInInvariantTest {
                     invariant ok = List.all(x -> atLeastZero(x), value)
                 """);
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, e.diagnostic().said());
-        assertEquals(3, e.diagnostic().region().start().line());
-        assertEquals(34, e.diagnostic().region().start().column(),
+        assertEquals(3, ((Primary.InSource) e.diagnostic().primary()).place().region().start().line());
+        assertEquals(34, ((Primary.InSource) e.diagnostic().primary()).place().region().start().column(),
                 "the construction in the helper, not the combinator the clause calls");
     }
 
@@ -204,8 +222,8 @@ class CompileConstructionInInvariantTest {
                         value)
                 """);
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, e.diagnostic().said());
-        assertEquals(5, e.diagnostic().region().start().line());
-        assertEquals(14, e.diagnostic().region().start().column());
+        assertEquals(5, ((Primary.InSource) e.diagnostic().primary()).place().region().start().line());
+        assertEquals(14, ((Primary.InSource) e.diagnostic().primary()).place().region().start().column());
     }
 
     /** Written in the clause itself there is one place, and labelling it twice says nothing. */
@@ -224,7 +242,7 @@ class CompileConstructionInInvariantTest {
      *  answers about — so a declaration with two wrong clauses says so about both. */
     @Test
     void everyWrongClauseIsReported() {
-        Map<String, List<Diagnostic>> found = Located.diagnosticsOf(Compiler.diagnoseModules(Map.of("m", """
+        Map<SourceId, List<Diagnostic>> found = Located.diagnosticsOf(Compiler.diagnoseModules(Map.of("m", """
                 module m
                 data Yen = Int invariant value >= 0
                 let atLeastZero (x: Int): Bool = Yen(0).value <= x
@@ -232,7 +250,7 @@ class CompileConstructionInInvariantTest {
                     invariant low = List.all(x -> atLeastZero(x), value)
                     invariant high = List.all(x -> atLeastZero(x), value)
                 """)));
-        List<String> clauses = found.get("m").stream()
+        List<String> clauses = found.get(new SourceId("m")).stream()
                 .filter(d -> d.said() instanceof InvariantMessage.TheNamedClauseConstructsAData)
                 .map(d -> String.valueOf(d.values().get("clause")))
                 .toList();
@@ -248,7 +266,7 @@ class CompileConstructionInInvariantTest {
                 data Yen = Int invariant value >= 0
                 data Table = List<Int>
                     invariant ok = List.all(x -> Yen(0).value <= x, value) && Yen(1).value >= 0
-                """))).get("m");
+                """))).get(new SourceId("m"));
         assertEquals(1, found.stream()
                 .filter(d -> "E1105".equals(d.code())).count());
     }

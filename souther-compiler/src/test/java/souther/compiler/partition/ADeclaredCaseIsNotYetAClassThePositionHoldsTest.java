@@ -3,13 +3,18 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Resolve;
+import souther.compiler.check.SyntaxSymbols;
 import souther.compiler.check.Symbols;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 
@@ -41,26 +46,26 @@ class ADeclaredCaseIsNotYetAClassThePositionHoldsTest {
             data Stage = Prospecting | Qualified | Won
             data StageI = Stage invariant value >= Qualified
 
-            behavior boundStage : (x: StageI) -> Ok constructs Ok
+            behavior boundStage : (x: StageI) -> Ok
             let boundStage (x) = Ok
 
-            behavior guardStage : (x: Stage) -> Ok constructs Ok
+            behavior guardStage : (x: Stage) -> Ok
             let guardStage (x) = { guard x < Qualified else Ok
                 Ok }
             """;
 
     private final Symbols symbols = Symbols.of(resolved());
 
-    private static Ast.Module resolved() {
+    private static Hir.Module resolved() {
         Ast.Module parsed = CstFrontend.parse(MODEL);
-        return Resolve.module(parsed, Symbols.of(parsed));
+        return Resolve.module(parsed, SyntaxSymbols.of(parsed));
     }
 
     /** The declaration's own answer, which the rule on the newtype does not enter into. */
     @Test
     void theTypeDeclaresEveryCaseWhateverItsRulesSay() {
         assertEquals(List.of("Prospecting", "Qualified", "Won"),
-                PartitionClasses.of(Type.ref(symbols.own("StageI")), symbols).stream()
+                PartitionClasses.of(Type.ref(TypeSymbols.declared(new TypeKey(symbols.module(), "StageI"))), symbols).stream()
                         .map(PartitionClass::id).toList());
     }
 

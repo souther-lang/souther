@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -38,7 +40,7 @@ class AnUnmarkedHelperMayNotReachAPartialOneTest {
 
     private static List<Diagnostic> diagnosed(String source) {
         return Located.diagnosticsOf(Compiler.diagnoseModules(Map.of("demo", source)))
-                .getOrDefault("demo", List.of());
+                .getOrDefault(new SourceId("demo"), List.of());
     }
 
     /** The paths reported under {@code key}, in the order the build found them. The rendered path is

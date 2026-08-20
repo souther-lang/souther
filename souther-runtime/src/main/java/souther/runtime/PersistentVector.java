@@ -217,7 +217,7 @@ public final class PersistentVector<E> extends AbstractList<E>
     @Override
     @SuppressWarnings("unchecked")
     public E get(int i) {
-        return (E) arrayFor(i)[i & MASK];
+        return (E) Objects.requireNonNull(arrayFor(i)[i & MASK]);
     }
 
     /** This vector with {@code val} appended (Clojure {@code conj}); O(1) amortized, sharing the
@@ -305,7 +305,7 @@ public final class PersistentVector<E> extends AbstractList<E>
                     leaf = arrayFor(i);
                     base += WIDTH;
                 }
-                return (E) leaf[i++ & MASK];
+                return (E) Objects.requireNonNull(leaf[i++ & MASK]);
             }
         };
     }
@@ -463,13 +463,13 @@ public final class PersistentVector<E> extends AbstractList<E>
             }
             int spilled = cnt - tailLen;
             if (i >= spilled) {
-                return (E) tail[i - spilled];
+                return (E) Objects.requireNonNull(tail[i - spilled]);
             }
             @Nullable Object[] node = root;
             for (int level = shift; level > 0; level -= BITS) {
                 node = (@Nullable Object[]) Objects.requireNonNull(node[(i >>> level) & MASK]);
             }
-            return (E) node[i & MASK];
+            return (E) Objects.requireNonNull(node[i & MASK]);
         }
 
         PersistentVector<E> build() {

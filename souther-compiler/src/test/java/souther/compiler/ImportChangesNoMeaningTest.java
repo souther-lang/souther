@@ -60,7 +60,7 @@ class ImportChangesNoMeaningTest {
                         invariant String.length(value) > 0
                     data In = { s: String }
                     data Out = { v: NonEmpty }
-                    behavior go : (i: In) -> Out | Empty constructs Out, NonEmpty, Empty
+                    behavior go : (i: In) -> Out | Empty constructs Out, NonEmpty
                     let go (i) = {
                         guard String.length(i.s) > 0
                             else Empty
@@ -74,7 +74,7 @@ class ImportChangesNoMeaningTest {
                         invariant length(value) > 0
                     data In = { s: String }
                     data Out = { v: NonEmpty }
-                    behavior go : (i: In) -> Out | Empty constructs Out, NonEmpty, Empty
+                    behavior go : (i: In) -> Out | Empty constructs Out, NonEmpty
                     let go (i) = {
                         guard length(i.s) > 0
                             else Empty
@@ -88,7 +88,7 @@ class ImportChangesNoMeaningTest {
                         invariant List.length(value) >= 2
                     data In = { xs: List<Int> }
                     data Out = { v: Several }
-                    behavior go : (i: In) -> Out | TooFew constructs Out, Several, TooFew
+                    behavior go : (i: In) -> Out | TooFew constructs Out, Several
                     let go (i) = {
                         guard List.length(i.xs) >= 2
                             else TooFew
@@ -102,7 +102,7 @@ class ImportChangesNoMeaningTest {
                         invariant length(value) >= 2
                     data In = { xs: List<Int> }
                     data Out = { v: Several }
-                    behavior go : (i: In) -> Out | TooFew constructs Out, Several, TooFew
+                    behavior go : (i: In) -> Out | TooFew constructs Out, Several
                     let go (i) = {
                         guard length(i.xs) >= 2
                             else TooFew
@@ -116,7 +116,7 @@ class ImportChangesNoMeaningTest {
                     data In = { s: String }
                     data Out = { c: Code }
                     data Bad
-                    behavior go : (i: In) -> Out | Bad constructs Out, Code, Bad
+                    behavior go : (i: In) -> Out | Bad constructs Out, Code
                     let go (i) = {
                         guard Code(i.s) as c
                             else Bad
@@ -130,7 +130,7 @@ class ImportChangesNoMeaningTest {
                     data In = { s: String }
                     data Out = { c: Code }
                     data Bad
-                    behavior go : (i: In) -> Out | Bad constructs Out, Code, Bad
+                    behavior go : (i: In) -> Out | Bad constructs Out, Code
                     let go (i) = {
                         guard Code(i.s) as c
                             else Bad
@@ -200,7 +200,7 @@ class ImportChangesNoMeaningTest {
      */
     private static String shrinkage(Compiler.Compiled qualified, Compiler.Compiled imported) {
         return qualified.classes().entrySet().stream()
-                .filter(e -> !e.getKey().endsWith(".$Module"))
+                .filter(e -> !e.getKey().equals(Emitted.declarations("demo")))
                 .sorted(java.util.Map.Entry.comparingByKey())
                 .filter(e -> e.getValue().length != imported.classes().get(e.getKey()).length)
                 .map(e -> e.getKey() + "="

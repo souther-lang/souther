@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.LabeledRegion;
 import souther.compiler.diag.Located;
@@ -95,14 +97,14 @@ class ARowAndItsStandInAreUnderlinedOverWhatTheyStateTest {
 
     /** The primary region of the one disagreement {@code source} is warned about. */
     private static Region primary(String source) {
-        return disagreement(source).region();
+        return ((Primary.InSource) disagreement(source).primary()).place().region();
     }
 
     /** The region said beside it — where the stand-in is written. */
     private static Region standIn(String source) {
         List<LabeledRegion> labels = disagreement(source).secondary();
         assertEquals(1, labels.size(), "the stand-in is the one place said beside it: " + labels);
-        return labels.get(0).region();
+        return ((souther.compiler.diag.DiagnosticPlace.InSource) labels.get(0).place()).region();
     }
 
     private static Diagnostic disagreement(String source) {

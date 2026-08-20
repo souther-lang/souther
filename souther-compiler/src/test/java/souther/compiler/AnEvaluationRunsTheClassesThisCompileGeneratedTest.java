@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.Disposition;
@@ -64,7 +66,7 @@ class AnEvaluationRunsTheClassesThisCompileGeneratedTest {
      */
     private static ModulePath leftOverClassFiles() {
         Map<String, byte[]> built = new LinkedHashMap<>(Compiler.compile(EARLIER));
-        built.keySet().removeIf(name -> name.endsWith(".$Module"));
+        built.keySet().remove(Emitted.declarations("example.stale"));
         return built::get;
     }
 
@@ -73,10 +75,10 @@ class AnEvaluationRunsTheClassesThisCompileGeneratedTest {
         Compilation compilation = Compilation.ofSources(List.of(NOW), leftOverClassFiles());
         compilation.answerEverything();
 
-        assertNull(compilation.failure(compilation.db().allReports()),
+        assertNull(compilation.failure(),
                 "the model is correct, so nothing is wrong with it");
 
-        String sourceId = compilation.exampleSourcesOf("example.stale").get(0);
+        SourceId sourceId = compilation.exampleSourcesOf("example.stale").getFirst();
         List<RowOutcome> rows = compilation.db()
                 .ask(new Output.Examples("example.stale", sourceId, Output.CoverageMode.NONE))
                 .value().rows();

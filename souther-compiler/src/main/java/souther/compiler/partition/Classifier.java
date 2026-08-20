@@ -1,7 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.Membership;
 import souther.compiler.observe.ObservedValue;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 import java.util.function.Predicate;
@@ -57,7 +58,7 @@ public interface Classifier {
      *
      * @param worn the names, outermost first, as {@code TypeView} reads them off the position
      */
-    static Classifier under(List<TypeName> worn, Classifier inner) {
+    static Classifier under(List<TypeSymbol> worn, Classifier inner) {
         if (worn.isEmpty()) {
             return inner;
         }
@@ -73,9 +74,9 @@ public interface Classifier {
      * field under it — takes them off the same way and by name, so that a record whose own field is
      * called {@code value} is never mistaken for a name worn over one.
      */
-    static ObservedValue inside(List<TypeName> worn, ObservedValue value) {
+    static ObservedValue inside(List<TypeSymbol> worn, ObservedValue value) {
         ObservedValue at = value;
-        for (TypeName name : worn) {
+        for (TypeSymbol name : worn) {
             if (!(at instanceof ObservedValue.Constructed constructed)
                     || !name.equals(constructed.type())) {
                 return at;

@@ -1,5 +1,6 @@
 package souther.compiler.apt;
 
+import souther.compiler.Emitted;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -46,7 +47,7 @@ class CrossProjectProcessorTest {
                 """, List.of(libClasses));
 
         assertTrue(Files.exists(appClasses.resolve("app/order/Order.class")));
-        assertTrue(Files.exists(appClasses.resolve("app/order/$Module.class")),
+        assertTrue(Files.exists(appClasses.resolve(Emitted.declarations("app.order").replace('.', '/') + ".class")),
                 "the module's declarations go through the Filer with everything else");
         assertFalse(Files.exists(appClasses.resolve("shared/money/Amount.class")),
                 "the dependency's classes belong to its own build");

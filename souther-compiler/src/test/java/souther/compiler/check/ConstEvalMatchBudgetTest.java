@@ -1,7 +1,10 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.ConstructionOrigin;
+import souther.compiler.types.ReachName;
+import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
@@ -22,8 +25,11 @@ class ConstEvalMatchBudgetTest {
     private static final SourcePos POS = new SourcePos(1, 1);
 
     private static Optional<Object> fold(String pattern, String subject) {
-        return ConstEval.eval(new Ast.Apply("String.matches",
-                List.of(new Ast.StringLit(pattern, POS, null), new Ast.StringLit(subject, POS, null)), POS, null));
+        ValueName.Stdlib matches = new ValueName.Stdlib("String", "matches");
+        return ConstEval.eval(new Hir.Apply("String.matches", matches,
+                new ReachName.OfLibrary(matches),
+                List.of(new Hir.StringLit(pattern, POS, null), new Hir.StringLit(subject, POS, null)),
+                ConstructionOrigin.own(), POS, null));
     }
 
     @Test

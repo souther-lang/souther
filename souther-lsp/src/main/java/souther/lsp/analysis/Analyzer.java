@@ -1,16 +1,28 @@
 package souther.lsp.analysis;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.Compiler;
+import souther.compiler.check.BehaviorRequirement;
+import souther.compiler.check.Prepared;
+import souther.compiler.check.Requirements;
+import souther.compiler.check.Sig;
 import souther.compiler.check.Resolve;
+import souther.compiler.check.SpecImplementation;
+import souther.compiler.examples.ExampleProvisioning;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
 import souther.compiler.query.Shapes;
 import souther.compiler.check.ClauseDischarge;
-import souther.compiler.types.TypeName;
+import souther.compiler.check.ContractDischarge;
+import souther.compiler.check.ContractDischarge.RuleDischarge;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.Reserved;
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.cst.CstError;
 import souther.compiler.cst.CstLexer;
@@ -21,17 +33,26 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.editor.EditorSymbols;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticRenderer;
+import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.DiagnosticView;
+import souther.compiler.diag.LabeledRegion;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Spot;
 import souther.compiler.diag.Region;
+import souther.compiler.diag.Primary;
+import souther.compiler.diag.UnnamedRegion;
+import souther.compiler.diag.ReportContext;
+import souther.compiler.diag.SourceContext;
+import souther.compiler.diag.Shown;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.cst.SyntaxElement;
 import souther.compiler.cst.SyntaxKind;
 import souther.compiler.cst.SyntaxNode;
 import souther.compiler.cst.SyntaxToken;
+import souther.compiler.cst.TopLevelForm;
 import souther.compiler.fmt.Formatter;
+import souther.compiler.fmt.Skeleton;
 import souther.compiler.frontend.CstFrontend;
 import souther.lsp.protocol.CodeAction;
 import souther.lsp.protocol.CodeLens;
@@ -45,8 +66,10 @@ import souther.lsp.protocol.Range;
 import souther.lsp.protocol.TextEdit;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -84,6 +107,14 @@ public final class Analyzer {
     /** Which module path {@link #workspaceCompile} was built for. A different one is a different
      * set of modules to resolve an import against, so the compile is started again. */
     private souther.compiler.meta.ModulePath compiledAgainst;
+
+    /** What each open document reaches from outside itself, as the last compile that could answer
+     * said. Held across edits so completion has something to offer while the document being typed in
+     * is held out of the compile for its syntax errors. */
+    private final NamesFromElsewhere elsewhere = new NamesFromElsewhere();
+
+    /** What the last compile that could answer said each document owes a declaration for. */
+    private final LastAnswered<List<CompletionItem>> behaviorsOwed = new LastAnswered<>();
 
     /**
      * How much of what the rows cover this editor was told to measure. Off by default.
@@ -136,10 +167,10 @@ public final class Analyzer {
             // A self-contained module compiles fully here, so its inline `example`s are evaluated
             // on save and a failing one (E1805) surfaces as an editor diagnostic.
             for (Located w : Compiler.compileWithWarnings(text, "Main").locatedWarnings()) {
-                out.add(fromDiagnostic(lines, w.diagnostic()));
+                out.add(fromDiagnostic(text, lines, w.diagnostic()));
             }
         } catch (CompileException e) {
-            out.addAll(fromCompile(lines, e));
+            out.addAll(fromCompile(text, lines, e));
         } catch (RuntimeException | StackOverflowError e) {
             out.add(internalError(lines, e));
         }
@@ -219,9 +250,9 @@ public final class Analyzer {
             }
         }
 
-        Map<String, List<Located>> byUri;
+        Map<SourceId, List<Located>> byUri;
         try {
-            byUri = compileOf(path, compileSet, brokenModules).diagnostics();
+            byUri = compileOf(graph, path, compileSet, brokenModules).diagnostics();
         } catch (RuntimeException | StackOverflowError e) {
             // Which file broke the walk is not known here, so every file that entered the compile is
             // marked. Silence would leave the whole workspace looking clean.
@@ -240,24 +271,47 @@ public final class Analyzer {
                 return text == null ? null : new LineIndex(text);
             });
         };
-        for (Map.Entry<String, List<Located>> e : byUri.entrySet()) {
-            List<LspDiagnostic> list = out.get(e.getKey());
+        for (Map.Entry<SourceId, List<Located>> e : byUri.entrySet()) {
+            List<LspDiagnostic> list = out.get(e.getKey().value());
             if (list == null) {
                 continue;
             }
             for (Located loc : e.getValue()) {
                 // A workspace names its sources by document URI, so a source id is already the name
                 // the editor opens.
-                list.add(project(loc.diagnostic(), loc.primarySourceId(), e.getKey(),
+                // The document this marker is going in is what this route is reading, and the
+                // file the report is listed under is what the compile said. Both, because they
+                // are two answers: a problem written in two files is listed under one of them
+                // and read from each in turn.
+                list.add(project(loc.diagnostic(),
+                        ReportContext.of(loc.context().filedUnder().orElse(null),
+                                new SourceId(e.getKey().value())),
                         linesOf, uri -> graph.text(uri) == null ? null : uri));
             }
         }
         return out;
     }
 
-    /** The workspace's compile, brought up to date with what the documents now say. */
-    private Compilation compileOf(souther.compiler.meta.ModulePath path,
+    /**
+     * The workspace's compile, brought up to date with what the documents now say.
+     *
+     * <p>Where this analyzer is told which documents the workspace holds, and so where what it
+     * remembers about a document it no longer holds is dropped. {@code sources} is not that set —
+     * it is the documents that could join the compile — and a document held out for its syntax
+     * errors is one this still has. The graph is, which is why it is taken rather than worked out
+     * from the two maps.
+     *
+     * <p>A document is named by its URI and a URI can be used again, so what was remembered has to
+     * be dropped while the document is gone rather than when the next one arrives — by then the two
+     * are both "the document at this URI" and nothing tells them apart. Every request that arrives
+     * with a workspace comes through here, and a file created or deleted on disk reaches it as a
+     * diagnose, so the gap is observed wherever there is one.
+     */
+    private Compilation compileOf(ModuleGraph graph, souther.compiler.meta.ModulePath path,
                                   Map<String, String> sources, Set<String> broken) {
+        elsewhere.forgetAllBut(graph.uris());
+        behaviorsOwed.forgetAllBut(graph.uris());
+        readings.keySet().retainAll(Set.copyOf(graph.uris()));
         if (workspaceCompile == null || !path.equals(compiledAgainst)) {
             workspaceCompile = Compilation.ofDocuments(sources, broken, path);
             workspaceCompile.measure(measure);
@@ -279,35 +333,68 @@ public final class Analyzer {
         Set<String> broken = new HashSet<>();
         for (String uri : graph.uris()) {
             String text = graph.text(uri);
-            boolean readable;
-            try {
-                readable = CstParser.parse(text).errors().isEmpty();
-            } catch (RuntimeException | StackOverflowError e) {
-                readable = false;
-            }
-            if (readable) {
+            Reading reading = readingOf(uri, text);
+            if (reading.parses()) {
                 clean.put(uri, text);
-            } else {
-                String name = Compiler.moduleNameFromHeader(text);
-                if (name != null) {
-                    broken.add(name);
-                }
+            } else if (reading.declares() != null) {
+                broken.add(reading.declares());
             }
         }
-        return compileOf(compiledAgainst == null ? souther.compiler.meta.ModulePath.EMPTY
+        return compileOf(graph, compiledAgainst == null ? souther.compiler.meta.ModulePath.EMPTY
                 : compiledAgainst, clean, broken);
+    }
+
+    /**
+     * What one document was found to be: whether it can join a compile, and — where it cannot — the
+     * module its header names, which is what keeps an importer from being told the module is
+     * unknown.
+     *
+     * <p>Kept with the text it was read from. Every request that arrives with the workspace sorts it
+     * into what can be compiled and what cannot, and a request arrives for each keystroke while
+     * completion is open; reading every file in the workspace again on each of them is work whose
+     * answer cannot have changed, since one text parses one way. On the crm example — seven sources,
+     * 3898 lines — it was 7.3 of the 9.3 milliseconds a completion took, and it grows with the
+     * workspace rather than with the edit.
+     */
+    private record Reading(String text, boolean parses, String declares) {}
+
+    /** Documents this analyzer has already read, by URI. Dropped along with everything else it
+     * remembers about a document the workspace no longer holds. */
+    private final Map<String, Reading> readings = new HashMap<>();
+
+    private Reading readingOf(String uri, String text) {
+        Reading had = readings.get(uri);
+        if (had != null && had.text().equals(text)) {
+            return had;
+        }
+        boolean parses;
+        try {
+            parses = CstParser.parse(text).errors().isEmpty();
+        } catch (RuntimeException | StackOverflowError e) {
+            parses = false;
+        }
+        Reading now = new Reading(text, parses,
+                parses ? null : Compiler.moduleNameFromHeader(text));
+        readings.put(uri, now);
+        return now;
+    }
+
+    /** A source of the compile as the editor names it. A workspace hands its documents over under
+     *  their URIs, so the identity a compile files one under is the URI it opens. */
+    private static String uriOf(SourceId id) {
+        return id == null ? null : id.value();
     }
 
     /** Where the cursor is, in the terms the compiler answers about: a place in a file, not a line
      * and a column that any file might have. */
     private static SourcePos cursor(String uri, Position pos) {
-        return new SourcePos(pos.line() + 1, pos.character() + 1, uri);
+        return new SourcePos(pos.line() + 1, pos.character() + 1, new SourceId(uri));
     }
 
     /** What the cursor is on, as the compiler answers it: the type a name at {@code pos} denotes,
      * or the declaration whose own name is there. Null when the compiler cannot say — a file it
      * could not read, or a name in the value namespace. */
-    private TypeName typeUnderCursor(Compilation compilation, String uri, Position pos) {
+    private TypeSymbol typeUnderCursor(Compilation compilation, String uri, Position pos) {
         return compilation.db().ask(new Names.TypeAt(cursor(uri, pos))).value();
     }
 
@@ -342,7 +429,14 @@ public final class Analyzer {
      * module is one file, and nothing checks that it is.
      */
     private String documentOf(SourcePos written, String moduleUri, ModuleGraph graph) {
-        String uri = written != null && written.sourceId() != null ? written.sourceId() : moduleUri;
+        String uri = written == null ? moduleUri : switch (written.quotedFrom()) {
+            case souther.compiler.diag.QuotedFrom.ASourceThisCompileHolds(var source) ->
+                    source.value();
+            // A place with no file of its own is shown against the module's, which is the file this
+            // answer was asked of. Right while a module is one file, and nothing checks that it is.
+            case souther.compiler.diag.QuotedFrom.TextItCannotShow _,
+                 souther.compiler.diag.QuotedFrom.TextItCannotName _ -> moduleUri;
+        };
         return uri != null && graph.text(uri) != null ? uri : null;
     }
 
@@ -387,14 +481,15 @@ public final class Analyzer {
         if (module == null) {
             return List.of();
         }
-        Ast.Module written = compilation.db().ask(new Shapes.Prepared(module)).value();
+        souther.compiler.check.Prepared written =
+                compilation.db().ask(new Shapes.Prepared(module)).value();
         if (written == null) {
             return List.of();
         }
         Adequacy.Of adequacy = compilation.adequacy(module);
         LineIndex lines = new LineIndex(graph.text(uri));
         List<CodeLens> out = new ArrayList<>();
-        for (Ast.BehaviorDef behavior : written.behaviors()) {
+        for (Hir.BehaviorDef behavior : written.behaviors()) {
             // A module's declarations need not all be in this document, and a line number from
             // another file read against this one's index points somewhere arbitrary.
             if (!uri.equals(documentOf(behavior.pos(), null, graph))) {
@@ -418,7 +513,7 @@ public final class Analyzer {
      * asked nothing.
      */
     private String moduleOf(Compilation compilation, ModuleGraph graph, String uri) {
-        String known = compilation.moduleOf(uri);
+        String known = compilation.moduleOf(new SourceId(uri));
         if (known != null) {
             return known;
         }
@@ -437,7 +532,7 @@ public final class Analyzer {
                                     Adequacy.Of adequacy) {
         int rows = 0;
         int pending = 0;
-        for (String sourceId : compilation.exampleSourcesOf(module)) {
+        for (SourceId sourceId : compilation.exampleSourcesOf(module)) {
             souther.compiler.query.Output.Examples.Of observed = compilation.db()
                     .ask(souther.compiler.query.Output.Examples.asked(
                             compilation.db(), module, sourceId)).value();
@@ -469,13 +564,19 @@ public final class Analyzer {
         souther.compiler.query.PartitionEvidence partition =
                 adequacy.partitions() == null ? null : adequacy.partitions().get(behavior);
         if (partition != null) {
-            long measured = partition.boundaries().stream()
-                    .filter(b -> settled(b.coverage())).count();
-            long met = partition.boundaries().stream()
-                    .filter(b -> settled(b.coverage()))
-                    .filter(b -> b.coverage().hit()).count();
-            if (measured > 0) {
-                parts.add("boundary " + met + "/" + measured);
+            // Over the coverage items and not over the borders. A border owes a row at up to four
+            // points, and counting borders would call one with a single point met as covered as one
+            // that owes only that point.
+            List<souther.compiler.query.ItemAssessment> settled =
+                    souther.compiler.query.BorderAssessment.pointsOf(partition.boundaries()).stream()
+                            .map(souther.compiler.query.BorderAssessment.Point::item)
+                            .filter(Analyzer::settled).toList();
+            long met = settled.stream()
+                    .filter(item -> item instanceof souther.compiler.query.ItemAssessment.Owed owed
+                            && owed.coverage().hit())
+                    .count();
+            if (!settled.isEmpty()) {
+                parts.add("boundary " + met + "/" + settled.size());
             }
         }
         Adequacy.BranchEvidence branch =
@@ -490,15 +591,20 @@ public final class Analyzer {
     /**
      * Whether a line came to an answer against the rows.
      *
-     * <p>Hit or missed, and nothing else. A line waiting on the arms has no answer to show beside a
+     * <p>Hit or missed, and nothing else. A point waiting on the arms has no answer to show beside a
      * declaration, and one whose value could not be read has no answer either — a lens counting it
      * would put a number in front of an author that says a row is missing at a value nothing was able
-     * to look at. The report can afford to include such a line because it writes "undecided" beside
+     * to look at. The report can afford to include such a point because it writes "undecided" beside
      * the count; one number on one line has nowhere to put that word.
+     *
+     * <p>Nor a point nobody is owed a row at. Nothing was measured there and nothing is missing, and
+     * a lens that counted it would put the model's own answer into a ratio of what the rows reach.
      */
-    private static boolean settled(souther.compiler.query.BoundaryAssessment.Coverage coverage) {
-        return coverage instanceof souther.compiler.query.BoundaryAssessment.Coverage.Hit
-                || coverage instanceof souther.compiler.query.BoundaryAssessment.Coverage.Missed;
+    private static boolean settled(souther.compiler.query.ItemAssessment item) {
+        return item instanceof souther.compiler.query.ItemAssessment.Owed owed
+                && (owed.coverage() instanceof souther.compiler.query.ItemAssessment.Coverage.Hit
+                        || owed.coverage()
+                                instanceof souther.compiler.query.ItemAssessment.Coverage.Missed);
     }
 
     /** The caret at one position, as a range of no width. */
@@ -536,10 +642,22 @@ public final class Analyzer {
             out.addAll(rowsToWrite(uri, text, requested, graph));
         }
         Diagnostic d = firstSemanticDiagnostic(text);
-        if (d == null || d.suggestion() == null || d.region() == null) {
+        if (d == null || d.suggestion() == null) {
             return out;
         }
-        Range diagRange = rangeOf(new LineIndex(text), d);
+        // The compile behind this read the document's own text and could not name it, so what it
+        // points at is a stretch of the text in front of the author. A report with nothing to point
+        // at has no edit to offer: an action needs a range, and a sentence about a module is not
+        // one.
+        Region diagnosed = switch (d.primary()) {
+            case Primary.InSource(DiagnosticPlace.InSource place) -> place.region();
+            case Primary.InAnUnnamedText(UnnamedRegion where) -> where.region();
+            case Primary.Unavailable _, Primary.Nowhere _ -> null;
+        };
+        if (diagnosed == null) {
+            return out;
+        }
+        Range diagRange = rangeOfRegion(diagnosed);
         if (overlaps(diagRange, requested)) {
             out.add(new CodeAction("Replace with '" + d.suggestion() + "'", uri, diagRange, d.suggestion()));
         }
@@ -568,12 +686,13 @@ public final class Analyzer {
         if (module == null) {
             return List.of();
         }
-        Ast.Module written = compilation.db().ask(new Shapes.Prepared(module)).value();
+        souther.compiler.check.Prepared written =
+                compilation.db().ask(new Shapes.Prepared(module)).value();
         if (written == null) {
             return List.of();
         }
         LineIndex lines = new LineIndex(text);
-        for (Ast.BehaviorDef behavior : written.behaviors()) {
+        for (Hir.BehaviorDef behavior : written.behaviors()) {
             // The cursor is in this document, so a declaration written in another one is not what
             // it is on, however the lines happen to line up.
             if (!uri.equals(documentOf(behavior.pos(), null, graph))
@@ -653,7 +772,7 @@ public final class Analyzer {
         }
         Compilation compilation = compileOf(graph);
         if (resolves(compilation, uri)) {
-            TypeName type = typeUnderCursor(compilation, uri, pos);
+            TypeSymbol type = typeUnderCursor(compilation, uri, pos);
             if (type != null) {
                 return declarationOf(compilation, type, graph);
             }
@@ -863,7 +982,7 @@ public final class Analyzer {
         // reference names, and matching the spelling here would edit this module's own `exposing`
         // instead — leaving both modules uncompilable.
         Compilation compilation = compileOf(graph);
-        TypeName type = typeUnderCursor(compilation, uri, pos);
+        TypeSymbol type = typeUnderCursor(compilation, uri, pos);
         if (type != null) {
             addExposingAndImportSites(compilation, type.name(), type.module(), graph, byUri);
             return byUri;
@@ -876,7 +995,7 @@ public final class Analyzer {
                 // a local is named where it is bound and nowhere else; the library and the language
                 // are not this workspace's to rename
                 case ValueName.Local _, ValueName.Stdlib _, ValueName.OfType _,
-                        ValueName.Builtin _, ValueName.Unresolved _ -> null;
+                        ValueName.Builtin _ -> null;
             };
             if (declaring != null) {
                 addExposingAndImportSites(compilation, value.name(), declaring, graph, byUri);
@@ -952,10 +1071,9 @@ public final class Analyzer {
     private String declaringFile(Compilation compilation, ValueName target, String uri) {
         return switch (target) {
             case ValueName.Local _ -> uri;   // bound in the body the cursor is in
-            case ValueName.Helper h -> compilation.sourceIdOf(h.module());
-            case ValueName.Behavior b -> compilation.sourceIdOf(b.module());
-            case ValueName.Stdlib _, ValueName.OfType _, ValueName.Builtin _,
-                    ValueName.Unresolved _ -> null;
+            case ValueName.Helper h -> uriOf(compilation.sourceIdOf(h.module()));
+            case ValueName.Behavior b -> uriOf(compilation.sourceIdOf(b.module()));
+            case ValueName.Stdlib _, ValueName.OfType _, ValueName.Builtin _ -> null;
         };
     }
 
@@ -992,17 +1110,17 @@ public final class Analyzer {
      * is half-typed.
      */
     private boolean resolves(Compilation compilation, String uri) {
-        String module = compilation.moduleOf(uri);
-        return module != null && compilation.db().ask(new Names.Resolution(module)).present();
+        String module = compilation.moduleOf(new SourceId(uri));
+        return module != null && compilation.db().ask(new Names.Facts(module)).present();
     }
 
     /** Where a type is declared, as the compiler answers it. */
-    private Optional<Location> declarationOf(Compilation compilation, TypeName target,
+    private Optional<Location> declarationOf(Compilation compilation, TypeSymbol target,
                                              ModuleGraph graph) {
         // Which module, which name and where it was written is the compiler's answer — the part a
         // spelling match gets wrong.
         WrittenName at = compilation.db().ask(new Names.DeclaredAt(target)).value();
-        return nameAt(at, compilation.sourceIdOf(target.module()), graph);
+        return nameAt(at, uriOf(compilation.sourceIdOf(target.module())), graph);
     }
 
     /**
@@ -1013,7 +1131,7 @@ public final class Analyzer {
      */
     private List<Location> usesOf(Compilation compilation, String uri, Position pos,
                                   ModuleGraph graph, boolean includeDeclaration) {
-        TypeName target = typeUnderCursor(compilation, uri, pos);
+        TypeSymbol target = typeUnderCursor(compilation, uri, pos);
         if (target == null) {
             return null;
         }
@@ -1022,8 +1140,8 @@ public final class Analyzer {
             declarationOf(compilation, target, graph).ifPresent(out::add);
         }
         for (String module : compilation.modules()) {
-            String moduleUri = compilation.sourceIdOf(module);
-            for (Resolve.Denotation use
+            String moduleUri = uriOf(compilation.sourceIdOf(module));
+            for (Resolve.TypeUse use
                     : compilation.db().ask(new Names.UsesOf(module, target)).value()) {
                 String at = documentOf(use.pos(), moduleUri, graph);
                 if (at != null) {
@@ -1054,7 +1172,7 @@ public final class Analyzer {
             out.addAll(valueDeclarationsOf(compilation, target, uri, graph));
         }
         for (String module : compilation.modules()) {
-            String moduleUri = compilation.sourceIdOf(module);
+            String moduleUri = uriOf(compilation.sourceIdOf(module));
             for (Resolve.ValueUse use
                     : compilation.db().ask(new Names.ValueUsesOf(module, target)).value()) {
                 String at = documentOf(use.pos(), moduleUri, graph);
@@ -1124,76 +1242,423 @@ public final class Analyzer {
     }
 
     /**
-     * Completion candidates at the cursor: the language keywords, the top-level names defined in this
-     * file (types, behaviors, functions), the names its imports bring in, and the params and
-     * {@code let} bindings of the definition the cursor sits in. Deduplicated by label, in that order.
-     * This is name completion, not context-sensitive member completion — a {@code .} field list is
-     * ADR-deferred, so every visible name is offered regardless of the position's expected type.
+     * Completion candidates at the cursor, nearest scope first: the params and {@code let} bindings
+     * of the definition the cursor sits in, the top-level names this document declares, the names
+     * that reach it from elsewhere, and the language keywords. One item per label, the nearest
+     * winning — which is what shadowing means, a binding in force being what its spelling denotes
+     * however many imports also spell it.
+     *
+     * <p>The first two are read off this document's syntax tree every time, so a definition being
+     * written now is offered before it compiles. The third is the compiler's answer about the module
+     * this document belongs to, kept while the compiler cannot answer (see
+     * {@link NamesFromElsewhere}) — a document that does not parse is held out of the compile, and
+     * that is the document being typed in.
+     *
+     * <p>This is name completion, not context-sensitive member completion — a {@code .} field list is
+     * ADR-deferred, so every reachable name is offered regardless of the position's expected type.
+     * One item per label follows from that: which namespace a position is in is not being read, so
+     * two entities of one spelling cannot be told apart by anything but the label, and the nearest is
+     * offered. That is a limit of this list, not a property of the language.
      */
-    public List<CompletionItem> completions(String text, Position pos) {
-        LinkedHashMap<String, CompletionItem> byLabel = new LinkedHashMap<>();
-        for (String keyword : CstLexer.keywords()) {
-            byLabel.putIfAbsent(keyword, new CompletionItem(keyword, CompletionItem.KEYWORD));
+    public List<CompletionItem> completions(String uri, Position pos, ModuleGraph graph) {
+        String text = graph.text(uri);
+        if (text == null) {
+            return List.of();
         }
         SyntaxNode root = CstParser.parse(text).root();
-        for (SyntaxNode def : root.childNodes()) {
-            switch (def.kind()) {
-                case DATA_DEF -> addName(byLabel, def, CompletionItem.CLASS);
-                case BEHAVIOR_DEF -> addName(byLabel, def, CompletionItem.INTERFACE);
-                case FN_DEF -> addName(byLabel, def, CompletionItem.FUNCTION);
-                default -> { /* header, imports, error nodes contribute no completion name */ }
-            }
-        }
-        try {
-            for (Ast.Import imp : CstFrontend.parse(text, "Main").imports()) {
-                for (String name : imp.names()) {
-                    byLabel.putIfAbsent(name, new CompletionItem(name, CompletionItem.FUNCTION));
-                }
-            }
-        } catch (RuntimeException | StackOverflowError _) {
-            // a file that does not parse cleanly exposes no imports; the rest of the list still stands
-        }
-        SyntaxNode enclosing = enclosingDef(root, new LineIndex(text).offsetOf(pos.line(), pos.character()));
+        Compilation compilation = compileOf(graph);
+        String module = moduleOf(compilation, graph, uri);
+        List<CompletionItem> declared = declaredIn(root, module);
+        // Whether this document is an attached file, read off its own text rather than off the
+        // compile: what is offered while a document will not parse is the point of keeping the last
+        // answer, and a document held out of the compile still says which of the two it is on its
+        // first line.
+        boolean writesRows = root.child(SyntaxKind.EXAMPLES_FILE_HEADER).isPresent();
+        List<CompletionItem> fromElsewhere =
+                elsewhere.of(compilation, uri, module, labelsOf(declared), writesRows);
+
+        LinkedHashMap<String, CompletionItem> byLabel = new LinkedHashMap<>();
+        int cursor = new LineIndex(text).offsetOf(pos.line(), pos.character());
+        SyntaxNode enclosing = enclosingDef(root, cursor);
         if (enclosing != null) {
-            collectLocalBindings(enclosing, byLabel);
+            collectLocalBindings(enclosing, cursor, byLabel);
+        }
+        for (CompletionItem item : declared) {
+            byLabel.putIfAbsent(item.label(), item);
+        }
+        for (CompletionItem item : fromElsewhere) {
+            byLabel.putIfAbsent(item.label(), item);
+        }
+        // Ahead of the keywords, so where a declaration may be written the offer is the declaration
+        // rather than the word it starts with. Inside a definition none of these are offered and the
+        // word stands, which is what a `let` binding in a block is written with.
+        for (CompletionItem item : declarationsToWrite(uri, root, cursor, compilation, module)) {
+            byLabel.putIfAbsent(item.label(), item);
+        }
+        for (String keyword : CstLexer.keywords()) {
+            byLabel.putIfAbsent(keyword, new CompletionItem(keyword, CompletionItem.KEYWORD, null));
         }
         return new ArrayList<>(byLabel.values());
     }
 
-    private void addName(Map<String, CompletionItem> out, SyntaxNode def, int kind) {
-        SyntaxToken name = nameToken(def);
-        if (name != null) {
-            out.putIfAbsent(nameOf(name), new CompletionItem(nameOf(name), kind));
+    /**
+     * The declarations that may be written at the cursor.
+     *
+     * <p>Nothing where the cursor is inside a definition: what may be written there is an
+     * expression, and a declaration offered inside one is an offer to write a syntax error. At the
+     * file level, the forms whose place in a file the cursor is still in — a header opens a file, an
+     * import follows it, and a body item may be written wherever one may.
+     *
+     * <p>Where the compile can say what this module declares, a behavior with no implementation is
+     * offered the {@code let} its signature describes, and every behavior is offered a row. Where it
+     * cannot — which is every keystroke that leaves the document unparseable — the forms are still
+     * offered, stating what they are and nothing that was not read.
+     */
+    private List<CompletionItem> declarationsToWrite(String uri, SyntaxNode root, int cursor,
+                                                     Compilation compilation, String module) {
+        if (enclosingDef(root, cursor) != null) {
+            return List.of();
+        }
+        List<CompletionItem> out = new ArrayList<>();
+        Set<TopLevelForm.Region> here = regionsAt(root, cursor);
+        for (TopLevelForm form : TopLevelForm.values()) {
+            if (here.contains(form.region())) {
+                built(form.starter(), CompletionItem.SNIPPET, null,
+                        DeclarationSkeletons.fixed(form)).ifPresent(out::add);
+            }
+        }
+        // Through the same gate. A declaration written from a signature stands where a declaration
+        // stands, and knowing which one it is does not make it writable anywhere else.
+        if (here.contains(TopLevelForm.Region.BODY)) {
+            out.addAll(behaviorsToWrite(uri, compilation, module));
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * What the behaviors of {@code module} are still owed, as declarations to write.
+     *
+     * <p>Two sets, not one. An implementation is owed by a behavior written as a signature with
+     * nothing implementing it, which is {@link Requirements#injected} — the same question the
+     * emitter asks about what it has to be given. A row may be written for any behavior at all: a
+     * composition has no implementation to offer, since it is its own, and has rows like anything
+     * else.
+     */
+    private List<CompletionItem> behaviorsToWrite(String uri, Compilation compilation,
+                                                  String module) {
+        List<CompletionItem> answered =
+                behaviorsOwed.of(uri, module, () -> askBehaviorsToWrite(compilation, module));
+        return answered == null ? List.of() : answered;
+    }
+
+    /**
+     * The same, asked of the compile — null where it cannot say what this module declares.
+     *
+     * <p>Null for each of the three questions going unanswered, and not only for the first. A
+     * module's requirements not being answered is not that module requiring nothing: a row written
+     * from that would leave out the stand-in its target needs, which is E1908 the moment it is
+     * completed. Answering nothing is what lets the last answer that was given stand.
+     */
+    private List<CompletionItem> askBehaviorsToWrite(Compilation compilation, String module) {
+        if (module == null) {
+            return null;
+        }
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Map<String, List<BehaviorRequirement>> requirements =
+                compilation.db().ask(new Bodies.Requirements(module)).value();
+        Map<String, Sig> signatures = compilation.db().ask(new Bodies.Signatures(module)).value();
+        if (prepared == null || requirements == null || signatures == null) {
+            return null;
+        }
+        List<CompletionItem> out = new ArrayList<>();
+        for (Hir.BehaviorDef declared : prepared.behaviors()) {
+            implementationToWrite(prepared, declared, module).ifPresent(out::add);
+            rowToWrite(prepared, declared, signatures, requirements, module).ifPresent(out::add);
+        }
+        return out;
+    }
+
+    /** The {@code let} a behavior is owed, where it is owed one. */
+    private static Optional<CompletionItem> implementationToWrite(
+            Prepared prepared, Hir.BehaviorDef declared, String module) {
+        if (!(declared instanceof Hir.SpecBehavior behavior) || !prepared.injected(behavior)) {
+            return Optional.empty();
+        }
+        List<SpecImplementation.Parameter> parameters = SpecImplementation.parameters(behavior);
+        if (parameters.contains(new SpecImplementation.Parameter.Unanswered())) {
+            // A dependency naming nothing settles no parameter, and a skeleton stating one it did
+            // not read would be this server inventing it.
+            return Optional.empty();
+        }
+        return built(TopLevelForm.FN.starter() + " " + behavior.name(), CompletionItem.SNIPPET,
+                module, DeclarationSkeletons.implementing(behavior.name(), parameters));
+    }
+
+    /**
+     * A row for a behavior: as many arguments as it takes, and what nothing stands in for.
+     *
+     * <p>How many it takes is the signature's, which is what a row is held to whether the behavior
+     * is written as one or composed out of others — a composition takes what its first stage takes,
+     * and nothing here works that out a second time. What it depends on is the same:
+     * {@link Bodies.Requirements} carries a composition's stages' requirements as its own, so a row
+     * for one supplies what the stages want.
+     *
+     * <p>A behavior that is itself injected requires nothing and is not a key there — the one place
+     * a name being missing says something rather than being something missing. Which of the two it
+     * is, is asked of the behavior rather than read off the absence: a name that is not there for
+     * any other reason is an answer that does not hold together, and a row written as though it
+     * required nothing would state no stand-in for what it depends on.
+     */
+    private static Optional<CompletionItem> rowToWrite(
+            Prepared prepared, Hir.BehaviorDef declared, Map<String, Sig> signatures,
+            Map<String, List<BehaviorRequirement>> requirements, String module) {
+        Sig sig = signatures.get(declared.name());
+        if (sig == null) {
+            return Optional.empty();
+        }
+        List<BehaviorRequirement> required = List.of();
+        if (!prepared.injected(declared)) {
+            required = requirements.get(declared.name());
+            if (required == null) {
+                return Optional.empty();
+            }
+        }
+        List<String> unsupplied = ExampleProvisioning.unsupplied(List.of(),
+                Requirements.asWritten(required), prepared.forExamples());
+        return built(TopLevelForm.EXAMPLE.starter() + " " + declared.name(),
+                CompletionItem.SNIPPET, module,
+                DeclarationSkeletons.exampleFor(declared.name(), argumentsOf(declared, sig),
+                        unsupplied));
+    }
+
+    /**
+     * What to write in each of a row's argument places.
+     *
+     * <p>How many there are is the signature's. What each is called is a label and nothing more —
+     * what stands there is a value, not the parameter — so it is taken from the declaration where
+     * there is one to take it from, and held to the count rather than deciding it. A composition
+     * names no parameters of its own, and a row for one says what it takes without saying what its
+     * first stage happened to call them.
+     */
+    private static List<String> argumentsOf(Hir.BehaviorDef declared, Sig sig) {
+        List<String> labels = new ArrayList<>();
+        if (declared instanceof Hir.SpecBehavior behavior
+                && behavior.params().size() == sig.ins().size()) {
+            for (Hir.Param param : behavior.params()) {
+                labels.add(param.name());
+            }
+            return labels;
+        }
+        for (int i = 0; i < sig.ins().size(); i++) {
+            labels.add("arg");
+        }
+        return labels;
+    }
+
+    /**
+     * An item writing {@code parts}, or nothing where they do not make a declaration.
+     *
+     * <p>Fail-open, deliberately. A skeleton is refused where the tokens do not parse or where the
+     * formatter did not write back what it was given, and neither is about what an author typed:
+     * every name in one comes from a declaration the compiler read, so both mean a defect in the
+     * formatter or the grammar. What that costs here is one candidate fewer, which nothing says out
+     * loud — this server has no channel to say it on, since its output is the protocol.
+     *
+     * <p>Taken over the alternative, which is to let it out and lose the whole list: an editor would
+     * be left with no completion at all, for every request against that document, over a candidate
+     * that was never the one being asked for. What guards against it going unnoticed is that every
+     * form is built in a test, and a behavior's is built over each model those tests are written
+     * against.
+     */
+    private static Optional<CompletionItem> built(String label, int kind, String detail,
+                                                  List<Skeleton.Part> parts) {
+        try {
+            return Optional.of(new CompletionItem(label, kind, detail, Skeleton.of(parts)));
+        } catch (Skeleton.Mismatch _) {
+            return Optional.empty();
         }
     }
 
-    /** The top-level definition whose span contains {@code offset}, or {@code null} at the file level. */
+    /**
+     * The places in a file the cursor is in.
+     *
+     * <p>A file is read as a header, then its imports, then its body, and a form may be written at
+     * the cursor when writing it there leaves the file still in that order. So both sides of the
+     * cursor are read: what stands before it says what it is past, and what stands after it says
+     * what it may not be written in front of. An import offered above one already written is an
+     * offer to write a file whose imports are not together, and a definition offered above one is an
+     * offer to write a definition the imports come after.
+     *
+     * <p>A header is offered only to a file with none. There is one, it opens the file, and a second
+     * is not something to write.
+     */
+    private static Set<TopLevelForm.Region> regionsAt(SyntaxNode root, int cursor) {
+        int headerEnds = -1;
+        boolean hasHeader = false;
+        int lastImportEnds = -1;
+        int firstDefinition = Integer.MAX_VALUE;
+        boolean anythingBefore = false;
+        for (SyntaxNode item : root.childNodes()) {
+            // Where the item is written, not where its node begins: a node reaches back over the
+            // blank line in front of it, and a cursor on that line is in front of the item.
+            int written = writtenFrom(item);
+            if (written < 0) {
+                continue;
+            }
+            anythingBefore |= written < cursor;
+            switch (item.kind()) {
+                case MODULE_HEADER, EXAMPLES_FILE_HEADER -> {
+                    hasHeader = true;
+                    headerEnds = Math.max(headerEnds, item.end());
+                }
+                case IMPORT_DECL -> lastImportEnds = Math.max(lastImportEnds, item.end());
+                default -> firstDefinition = Math.min(firstDefinition, written);
+            }
+        }
+        Set<TopLevelForm.Region> here = new LinkedHashSet<>();
+        if (!hasHeader && !anythingBefore) {
+            here.add(TopLevelForm.Region.FILE_HEADER);
+        }
+        boolean pastTheHeader = cursor >= headerEnds;
+        if (pastTheHeader && cursor <= firstDefinition) {
+            here.add(TopLevelForm.Region.PRELUDE);
+        }
+        if (pastTheHeader && cursor >= lastImportEnds) {
+            here.add(TopLevelForm.Region.BODY);
+        }
+        return here;
+    }
+
+    /**
+     * The top-level names this document declares, read off its tree.
+     *
+     * <p>Off the tree and not off the compile, because the compile does not have a document that
+     * will not parse and this is the one it is being asked about. A {@code data} written as a sum is
+     * offered as one, so a declaration reads the same here as it does from another document, where
+     * the compiler answers what it is.
+     */
+    private List<CompletionItem> declaredIn(SyntaxNode root, String module) {
+        List<CompletionItem> declared = new ArrayList<>();
+        for (SyntaxNode def : root.childNodes()) {
+            SyntaxToken name = nameToken(def);
+            if (name == null) {
+                continue;
+            }
+            Integer kind = switch (def.kind()) {
+                case DATA_DEF -> def.child(SyntaxKind.SUM_BODY).isPresent()
+                        ? CompletionItem.ENUM : CompletionItem.CLASS;
+                case BEHAVIOR_DEF -> CompletionItem.INTERFACE;
+                case FN_DEF -> CompletionItem.FUNCTION;
+                default -> null;   // header, imports, error nodes declare no completion name
+            };
+            if (kind != null) {
+                declared.add(new CompletionItem(nameOf(name), kind, module));
+            }
+        }
+        return declared;
+    }
+
+    private static Set<String> labelsOf(List<CompletionItem> items) {
+        Set<String> labels = new HashSet<>();
+        for (CompletionItem item : items) {
+            labels.add(item.label());
+        }
+        return labels;
+    }
+
+    /** The top-level definitions, each of which is written as one thing and holds what it binds. */
+    private static final Set<SyntaxKind> DEFINITIONS = Set.of(
+            SyntaxKind.DATA_DEF, SyntaxKind.BEHAVIOR_DEF, SyntaxKind.FN_DEF,
+            SyntaxKind.EXAMPLE_DEF, SyntaxKind.FAKE_DEF);
+
+    /**
+     * The top-level definition whose text contains {@code offset}, or {@code null} at the file level.
+     *
+     * <p>Its text, and not its span. A node reaches back over the blank lines and comments in front
+     * of it — the tree covers every character, and they belong to something — so a cursor on the
+     * empty line above a definition is inside its span while being nowhere near it. That line is
+     * where the next declaration is written, and what is bound inside the definition below is bound
+     * nowhere there.
+     *
+     * <p>The rows of an {@code example} and of a {@code fake} are definitions here as much as a
+     * {@code let} is. What is written in one is an expression — a row's inputs, what it expects, what
+     * a table answers with — so a declaration offered inside one would be offered inside an
+     * expression, and a binding written in a row's block holds there and is in force at a cursor in
+     * it.
+     */
     private SyntaxNode enclosingDef(SyntaxNode root, int offset) {
         for (SyntaxNode def : root.childNodes()) {
-            if ((def.kind() == SyntaxKind.DATA_DEF || def.kind() == SyntaxKind.BEHAVIOR_DEF
-                    || def.kind() == SyntaxKind.FN_DEF)
-                    && offset >= def.start() && offset <= def.end()) {
+            if (!DEFINITIONS.contains(def.kind())) {
+                continue;
+            }
+            int written = writtenFrom(def);
+            if (written >= 0 && offset >= written && offset <= def.end()) {
                 return def;
             }
         }
         return null;
     }
 
-    /** Adds every param and {@code let} name bound anywhere inside {@code node} as a variable candidate. */
-    private void collectLocalBindings(SyntaxNode node, Map<String, CompletionItem> out) {
+    /** Where {@code node}'s own text begins: its first code token, past the trivia in front of it. */
+    private static int writtenFrom(SyntaxNode node) {
+        for (SyntaxElement e : node.children()) {
+            if (e instanceof SyntaxToken token) {
+                if (!token.kind().isTrivia()) {
+                    return token.start();
+                }
+            } else if (e instanceof SyntaxNode child) {
+                int written = writtenFrom(child);
+                if (written >= 0) {
+                    return written;
+                }
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Adds the params and {@code let} names in force at {@code offset} as variable candidates.
+     *
+     * <p>In force, and not every name bound anywhere in the definition. A binding is what its
+     * spelling denotes where it holds, which is what lets a candidate offered from here stand ahead
+     * of one an import brought in — so the two have to be the same set. A name bound in an arm of a
+     * {@code match} the cursor is not in denotes nothing where the cursor is, and offering it there
+     * both says something untrue and takes the place of the name that spelling does denote.
+     *
+     * <p>A construct that confines what it binds is walked into only when the cursor is inside it,
+     * and what it binds is offered only then. Everything else is walked through: a pattern is not a
+     * scope of its own, and the names it binds hold over the arm that holds the cursor.
+     *
+     * <p>A binding written after the cursor is not in force yet either. That is read off where it
+     * starts, so the {@code let} on the line below is not offered as though it had already been
+     * written.
+     */
+    private void collectLocalBindings(SyntaxNode node, int offset,
+                                      Map<String, CompletionItem> out) {
         for (SyntaxElement e : node.children()) {
             if (e instanceof SyntaxNode child) {
-                if (VALUE_BINDINGS.contains(child.kind())) {
+                boolean holds = !BINDING_SCOPES.contains(child.kind())
+                        || (offset >= child.start() && offset <= child.end());
+                if (!holds) {
+                    continue;
+                }
+                if (VALUE_BINDINGS.contains(child.kind()) && child.start() <= offset) {
                     SyntaxToken bound = firstIdent(child);
                     if (bound != null) {
+                        // A binding comes from nowhere else, so it has no origin to show.
                         out.putIfAbsent(nameOf(bound),
-                                new CompletionItem(nameOf(bound), CompletionItem.VARIABLE));
+                                new CompletionItem(nameOf(bound), CompletionItem.VARIABLE, null));
                     }
                 }
-                collectLocalBindings(child, out);
+                collectLocalBindings(child, offset, out);
             }
         }
     }
+
+    /** Node kinds that confine what they bind: a name bound in one holds inside it and nowhere else.
+     * A pattern is not among them — it binds over the arm that holds it, not over itself. */
+    private static final java.util.Set<SyntaxKind> BINDING_SCOPES = java.util.Set.of(
+            SyntaxKind.BLOCK_EXPR, SyntaxKind.MATCH_CASE, SyntaxKind.LAMBDA_EXPR);
 
     /** Whether {@code name} is a legal rename target: a single identifier token, not a keyword. The
      * lexer decides, so a non-ASCII name (Souther identifiers may be Japanese) is judged correctly. */
@@ -1345,7 +1810,7 @@ public final class Analyzer {
      * compile's answer, with the headers read only for a module whose file the compile could not
      * read. */
     private String uriOfModule(Compilation compilation, ModuleGraph graph, String moduleName) {
-        String declared = compilation.sourceIdOf(moduleName);
+        String declared = uriOf(compilation.sourceIdOf(moduleName));
         if (declared != null && graph.text(declared) != null) {
             return declared;
         }
@@ -1386,7 +1851,131 @@ public final class Analyzer {
      */
     public Optional<Hover> hover(String uri, String text, Position pos, ModuleGraph graph) {
         Optional<Hover> clause = invariantClauseHover(uri, text, pos, graph);
-        return clause.isPresent() ? clause : hover(text, pos);
+        if (clause.isPresent()) {
+            return clause;
+        }
+        Optional<Hover> rule = ensuresClauseHover(uri, text, pos, graph);
+        return rule.isPresent() ? rule
+                : hover(text, pos).map(shown -> withWhatIsNotStated(shown, uri, text, pos, graph));
+    }
+
+    /**
+     * The same hover, and on a behavior that states something, which of its cases nothing is said
+     * about.
+     *
+     * <p>There is no wildcard arm, so a case no rule names is one the behavior promises nothing of.
+     * That is the declaration speaking and not a mistake in it, which is why a reader is shown it
+     * where they are reading the declaration rather than told about it as a problem.
+     */
+    private Hover withWhatIsNotStated(Hover shown, String uri, String text, Position pos,
+                                      ModuleGraph graph) {
+        LineIndex lines = new LineIndex(text);
+        SyntaxNode root = CstParser.parse(text).root();
+        SyntaxToken ident = identAt(meaningfulTokens(root), lines,
+                lines.offsetOf(pos.line(), pos.character()));
+        // The cursor on the name a behavior is declared under, and nowhere else. `declaringDef` finds
+        // a definition by the characters of a name, so a parameter or a local spelled like a behavior
+        // of this module finds that behavior — and what is said here would be said about a value that
+        // states nothing. Which token the cursor is on tells the declaration from anything spelled
+        // like it.
+        SyntaxNode def = ident == null ? null : declaringDef(root, nameOf(ident));
+        SyntaxToken declares = def == null ? null : nameToken(def);
+        ContractDischarge discharge = def != null && def.kind() == SyntaxKind.BEHAVIOR_DEF
+                && declares != null && declares.start() == ident.start()
+                ? contractOf(uri, graph, ident) : null;
+        if (discharge == null || discharge.casesNothingIsSaidAbout().isEmpty()) {
+            return shown;
+        }
+        List<String> unstated = new ArrayList<>();
+        for (TypeSymbol each : discharge.casesNothingIsSaidAbout()) {
+            unstated.add("`" + each.name() + "`");
+        }
+        return new Hover(shown.contents() + "\n\nNothing is stated about "
+                + String.join(", ", unstated) + ".", shown.range());
+    }
+
+    /**
+     * What the check reads of the {@code ensures} clause the cursor is in, rule by rule, or empty
+     * when it is not in one.
+     *
+     * <p>Rule by rule and not clause by clause. One arrow may be written over several cases, and what
+     * {@code value} is differs between them, so the same words can be read to different depths — a
+     * single answer on the clause would be one of those readings shown as if it were the clause's.
+     */
+    private Optional<Hover> ensuresClauseHover(String uri, String text, Position pos,
+                                               ModuleGraph graph) {
+        LineIndex lines = new LineIndex(text);
+        SyntaxNode root = CstParser.parse(text).root();
+        int offset = lines.offsetOf(pos.line(), pos.character());
+        SyntaxNode clause = enclosing(root, offset, SyntaxKind.ENSURES_CLAUSE);
+        SyntaxNode behavior = enclosing(root, offset, SyntaxKind.BEHAVIOR_DEF);
+        SyntaxToken name = behavior == null ? null : nameToken(behavior);
+        if (clause == null || name == null) {
+            return Optional.empty();
+        }
+        ContractDischarge discharge = contractOf(uri, graph, name);
+        if (discharge == null) {
+            return Optional.empty();
+        }
+        // The rules of this clause are the ones written inside it. A behavior may carry several
+        // clauses, and each of them is classified on its own.
+        List<RuleDischarge> here = new ArrayList<>();
+        for (RuleDischarge rule : discharge.rules()) {
+            int at = lines.offsetOf(rule.capability().clause().line() - 1,
+                    rule.capability().clause().column() - 1);
+            if (at >= clause.start() && at < clause.end()) {
+                here.add(rule);
+            }
+        }
+        return here.isEmpty() ? Optional.empty()
+                : Optional.of(new Hover(ruleContents(here), nodeRange(lines, clause)));
+    }
+
+    /**
+     * What the compiler says about the behavior the token {@code named} spells, or null where the
+     * document belongs to no module this compile has, or the behavior states nothing.
+     *
+     * <p>A token and not a spelling. The compiler files its answer under the canonical name, and a
+     * cursor is characters; handed a {@link String}, a caller has already decided which of the two
+     * it is passing, and both call sites here had that decision to make. Canonically equivalent
+     * spellings are one name ({@link #nameOf}), and which of them an author's cursor happens to be
+     * on is not a thing an editor may answer differently.
+     */
+    private ContractDischarge contractOf(String uri, ModuleGraph graph, SyntaxToken named) {
+        Compilation compilation = compileOf(graph);
+        String module = moduleOf(compilation, graph, uri);
+        if (module == null || named == null) {
+            return null;
+        }
+        Map<String, ContractDischarge> byName =
+                compilation.db().ask(new Bodies.ContractCapabilities(module)).value();
+        return byName == null ? null : byName.get(nameOf(named));
+    }
+
+    /**
+     * What the check reads of each rule, in the terms an author acts on.
+     *
+     * <p>What the check reads is not what the run-time check holds. Every rule is held when the
+     * behavior answers, whatever this says; what this says is how much of the relation is written in
+     * a form the check can carry.
+     */
+    private String ruleContents(List<RuleDischarge> rules) {
+        StringBuilder out = new StringBuilder("**What the check reads of this**\n");
+        for (RuleDischarge rule : rules) {
+            ClauseDischarge capability = rule.capability();
+            String read = switch (capability.kind()) {
+                case DERIVABLE -> "**derivable** — read as a relation the numeric domain reasons over";
+                case EXACT_MATCH -> "**exact match** — read as a term the check can name and compare, "
+                        + "and nothing weaker states it";
+                case RUNTIME_ONLY -> "**runtime only** — not read at all, so the check the behavior "
+                        + "runs on its answer is the whole of it";
+            };
+            String about = rule.rule().selector() == null ? ""
+                    : "`" + rule.rule().selector().name() + "`: ";
+            out.append("\n- ").append(about).append(read)
+                    .append(capability.reason().map(why -> "; " + why).orElse("")).append(".");
+        }
+        return out.toString();
     }
 
     /** The discharge classification of the invariant clause the cursor is in, or empty when it is not
@@ -1407,25 +1996,38 @@ public final class Analyzer {
         if (name == null || module == null) {
             return Optional.empty();
         }
-        Map<TypeName, List<ClauseDischarge>> byType =
+        // Asked of the compiler, which is what resolved the declaration this clause is written in.
+        // Put together here from the module and the spelling instead, it would be an identity for
+        // whatever that address names — including nothing.
+        TypeSymbol declared = typeUnderCursor(compilation, uri,
+                new Position(lines.lspLine(name.start()), lines.lspColumn(name.start())));
+        Map<TypeSymbol, List<ClauseDischarge>> byType =
                 compilation.db().ask(new Shapes.InvariantCapabilities(module)).value();
-        List<ClauseDischarge> clauses = byType == null
-                ? null : byType.get(new TypeName(module, nameOf(name)));
+        List<ClauseDischarge> clauses = byType == null || declared == null
+                ? null : byType.get(declared);
         if (clauses == null || clauses.isEmpty()) {
             return Optional.empty();
         }
         // The clauses are in the order they are written, so the one the cursor is in is the last that
         // starts at or before it.
-        ClauseDischarge found = null;
+        SourcePos found = null;
         for (ClauseDischarge c : clauses) {
             if (lines.offsetOf(c.clause().line() - 1, c.clause().column() - 1) <= offset) {
-                found = c;
+                found = c.clause();
             }
         }
         if (found == null) {
             return Optional.empty();
         }
-        return Optional.of(new Hover(dischargeContents(found), nodeRange(lines, clause)));
+        // Every reading of that clause, which may be more than one: what is written once can be read
+        // as a bound and as a term besides, and showing whichever came last would describe half of it.
+        List<String> said = new ArrayList<>();
+        for (ClauseDischarge c : clauses) {
+            if (c.clause().equals(found)) {
+                said.add(dischargeContents(c));
+            }
+        }
+        return Optional.of(new Hover(String.join("\n\n", said), nodeRange(lines, clause)));
     }
 
     /** What a clause's classification says, in the terms an author acts on. */
@@ -1782,6 +2384,7 @@ public final class Analyzer {
         }
         return switch (parent) {
             case TYPE_REF, TYPE_ARGS, SUM_BODY, NEWTYPE_BODY, CONSTRUCTS_CLAUSE, DEPENDS_CLAUSE,
+                 ENSURES_ARM,
                  DATA_DEF, NEW_DATA_EXPR, PATTERN_CTOR -> T_TYPE;
             case BEHAVIOR_DEF, FN_DEF, STAGE -> T_FUNCTION;
             case PARAM, FN_PARAM, LAMBDA_EXPR -> T_PARAMETER;
@@ -1793,7 +2396,7 @@ public final class Analyzer {
 
     private static boolean isKeyword(SyntaxKind k) {
         return switch (k) {
-            case MODULE_KW, IMPORT_KW, EXPOSING_KW, DATA_KW, INVARIANT_KW, AS_KW, LET_KW, GUARD_KW,
+            case MODULE_KW, IMPORT_KW, EXPOSING_KW, DATA_KW, INVARIANT_KW, ENSURES_KW, AS_KW, LET_KW, GUARD_KW,
                  ELSE_KW, TRUE_KW, FALSE_KW, IF_KW, THEN_KW, BEHAVIOR_KW, DEPENDS_KW, CONSTRUCTS_KW,
                  MATCH_KW, WITH_KW, UNREACHABLE_KW -> true;
             default -> false;
@@ -1865,15 +2468,15 @@ public final class Analyzer {
     /** Every diagnostic the compile error carries, each as its own editor marker — a compile stops at
      * the first error, but a pass that finds several at once (each failing {@code example} row) is
      * squiggled row by row rather than collapsed onto the first. */
-    private List<LspDiagnostic> fromCompile(LineIndex lines, CompileException e) {
+    private List<LspDiagnostic> fromCompile(String text, LineIndex lines, CompileException e) {
         if (e.diagnostic() != null) {
             List<LspDiagnostic> out = new ArrayList<>();
             for (Diagnostic d : e.diagnostics()) {
-                out.add(fromDiagnostic(lines, d));
+                out.add(fromDiagnostic(text, lines, d));
             }
             return out;
         }
-        return List.of(new LspDiagnostic(rangeOf(lines, null), LspDiagnostic.ERROR, null,
+        return List.of(new LspDiagnostic(theHeadOfTheDocument(), LspDiagnostic.ERROR, null,
                 cleanMessage(e.getMessage())));
     }
 
@@ -1884,8 +2487,12 @@ public final class Analyzer {
      * <p>No linked locations. A link is a URI, and a document compiled from its text alone has none
      * to give — the workspace path is where a marker can point somewhere the editor can open.
      */
-    private LspDiagnostic fromDiagnostic(LineIndex lines, Diagnostic d) {
-        return project(d, null, null, id -> lines, id -> null);
+    private LspDiagnostic fromDiagnostic(String text, LineIndex lines, Diagnostic d) {
+        // The document itself is what this route is reading, and it is the only thing that knows:
+        // the compile behind it read this text without a name for it, so a report from that parse
+        // has real numbers and no file. Left unsaid, the marker fell to the head of the document.
+        return project(d, ReportContext.ofTheTextItself(new SourceContext(null, text)),
+                id -> lines, id -> null);
     }
 
     /**
@@ -1897,12 +2504,13 @@ public final class Analyzer {
      * the two change places rather than the second file getting a marker on a line that has nothing
      * to do with it.
      *
-     * @param primarySourceId the source the primary region is in, null when the compile named none
-     * @param publishedUri the file this marker is being put in, null for a single-document compile
+     * @param context what the editor answers for this report: the file it lists it under, and the
+     *        document it is reading — which is the one thing that knows which text a report parsed
+     *        out of an unsaved buffer is in
      * @param linesOf the line index of a source, for turning its positions into ranges
      * @param uriOf the editor's name for a source, null when it has none to link to
      */
-    private LspDiagnostic project(Diagnostic d, String primarySourceId, String publishedUri,
+    private LspDiagnostic project(Diagnostic d, ReportContext context,
                                   java.util.function.Function<String, LineIndex> linesOf,
                                   java.util.function.Function<String, String> uriOf) {
         String message = DiagnosticRenderer.body(d, EDITOR_LANGUAGE);
@@ -1912,22 +2520,37 @@ public final class Analyzer {
         }
         int severity = d.severity() == souther.compiler.diag.Severity.WARNING
                 ? LspDiagnostic.WARNING : LspDiagnostic.ERROR;
-        DiagnosticView view = DiagnosticView.of(d, primarySourceId, publishedUri);
+        DiagnosticView view = DiagnosticView.of(d, context);
         List<LspDiagnostic.Related> related = new ArrayList<>();
-        for (Spot other : view.others()) {
-            String uri = other.sourceId() == null ? publishedUri : uriOf.apply(other.sourceId());
-            LineIndex lines = linesOf.apply(other.sourceId());
-            if (uri == null || lines == null || other.region() == null) {
+        // A label with nothing to point at joins the message. An editor's related information is a
+        // location, and there is no location — the clause is in a module this workspace has no file
+        // for. It used to be given `publishedUri` and the numbers it was read at, which made a link
+        // the author could follow into an unrelated line of their own file.
+        //
+        // What an unlabelled related entry says stays the message as it was. Those sentences are
+        // about code somewhere else, and an entry that borrowed them would show them as the note on
+        // a location they say nothing about.
+        String aboutTheDiagnostic = message;
+        for (DiagnosticView.Unquotable said : view.unquotable()) {
+            message = message + " " + DiagnosticRenderer.saidAbout(said, EDITOR_LANGUAGE);
+        }
+        for (Shown other : view.others()) {
+            SourceId source = sourceOf(other.spot());
+            String uri = source == null ? null : uriOf.apply(source.value());
+            LineIndex lines = linesOf.apply(uriOf(source));
+            if (uri == null || lines == null) {
                 continue;   // nothing the editor could open, so nothing to link to
             }
-            related.add(new LspDiagnostic.Related(uri, rangeOfRegion(other.region()),
-                    other.labelled()
-                            ? Messages.render(other.said(), EDITOR_LANGUAGE)
-                            : message));
+            related.add(new LspDiagnostic.Related(uri, rangeOfRegion(other.spot().region()),
+                    other instanceof Shown.ALabel(Spot _, souther.compiler.diag.msg.Message said)
+                            ? DiagnosticRenderer.qualified(
+                                    Messages.render(said, EDITOR_LANGUAGE),
+                                    other.spot().region().start(), EDITOR_LANGUAGE)
+                            : aboutTheDiagnostic));
         }
-        Range range = view.anchor().region() != null
-                ? rangeOfRegion(view.anchor().region())
-                : rangeOf(linesOf.apply(view.anchor().sourceId()), d);
+        Range range = view.anchor()
+                .map(shown -> rangeOfRegion(shown.spot().region()))
+                .orElseGet(Analyzer::theHeadOfTheDocument);
         return new LspDiagnostic(range, severity, d.code(), message, tagsOf(d), related);
     }
 
@@ -1937,19 +2560,22 @@ public final class Analyzer {
         return "E1922".equals(d.code()) ? List.of(LspDiagnostic.UNNECESSARY) : List.of();
     }
 
+    /** The document a spot is in, or none where it is in a text this workspace cannot name. */
+    private static SourceId sourceOf(Spot spot) {
+        return switch (spot) {
+            case Spot.InSource in -> in.place().source();
+            case Spot.InTextBeingRead(souther.compiler.diag.TextBeingRead text, UnnamedRegion _) ->
+                    text.identity().orElse(null);
+        };
+    }
+
     private Range rangeOfRegion(Region r) {
         return new Range(position(r.start()), position(r.end()));
     }
 
-    private Range rangeOf(LineIndex lines, Diagnostic d) {
-        if (d != null && d.region() != null) {
-            Region r = d.region();
-            return new Range(position(r.start()), position(r.end()));
-        }
-        if (d != null && d.pos() != null) {
-            Position p = position(d.pos());
-            return new Range(p, p);
-        }
+    /** Where an editor puts a marker for something with no place of its own: the head of the
+     *  document, which is where a reader looks when nothing points anywhere. */
+    private static Range theHeadOfTheDocument() {
         Position origin = new Position(0, 0);
         return new Range(origin, origin);
     }

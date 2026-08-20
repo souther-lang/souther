@@ -2,17 +2,19 @@ package souther.compiler.codegen;
 
 import souther.compiler.check.MatchElaborator;
 import souther.compiler.check.Symbols;
-import souther.compiler.check.HelperInvariants;
-import souther.compiler.ast.Ast;
+import souther.compiler.check.ClauseHelpers;
+import souther.compiler.ast.Hir;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.CaseShape;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.TemporalRule;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 
+import souther.compiler.jvm.DecoderKind;
+import souther.compiler.jvm.GeneratedClass;
 import java.lang.classfile.ClassBuilder;
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.CodeBuilder;
@@ -26,9 +28,9 @@ import java.lang.constant.DynamicCallSiteDesc;
 import java.lang.constant.MethodHandleDesc;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -52,23 +54,40 @@ final class CodecGen {
      * newtype-keyed map decoder references. Set per {@link #generateDecoderClass}. */
     private ClassDesc decoderClass;
 
+    /** The value class the decoder being generated builds. Its {@code $Ctfe} carries the clause
+     *  predicates a refined constraint reaches for, and asking for that class by the type it belongs
+     *  to is what keeps the two from being named apart. Set beside {@link #decoderClass}. */
+    private GeneratedClass.Value decodedValue;
+
     CodecGen(CodegenContext ctx) {
         this.ctx = ctx;
         this.symbols = ctx.symbols;
     }
 
     /** The three boundary input sources a decoder can read from (spec §external-representation, §codec-generation). */
-    enum Src { NEUTRAL, JSON, JOOQ }
+    enum Src {
+        NEUTRAL, JSON, JOOQ;
 
-    private ClassDesc cd(String typeName) { return ctx.cd(typeName); }
-    private ClassDesc cd(TypeName typeName) { return ctx.cd(typeName); }
-    private Map<String, Type> fieldTypes(Ast.Data data) { return ctx.fieldTypes(data); }
+        /** Which of a type's decoders reads this source. What that decoder is called is the ABI's,
+         *  and everything else this enum drives — the accessors, the leaf decoders, the object
+         *  guard — is this package's. */
+        DecoderKind kind() {
+            return switch (this) {
+                case NEUTRAL -> DecoderKind.VALUE;
+                case JSON -> DecoderKind.JSON;
+                case JOOQ -> DecoderKind.RECORD;
+            };
+        }
+    }
+
+    private ClassDesc cd(GeneratedClass generated) { return ctx.cd(generated); }
+    private GeneratedClass.Value valueOf(Hir.Def def) { return new GeneratedClass.Value(def.declares()); }
+    private GeneratedClass decoderOf(Hir.Def def, Src src) { return new GeneratedClass.Decoder(valueOf(def), src.kind()); }
+    private ClassDesc cd(Hir.Def def) { return ctx.cd(def); }
+    private ClassDesc cd(TypeSymbol typeName) { return ctx.cd(typeName); }
+    private Map<String, Type> fieldTypes(Hir.Data data) { return ctx.fieldTypes(data); }
     private ClassDesc[] fieldDescs(Map<String, Type> fields) { return JvmTypes.fieldDescs(fields, ctx); }
     private void unbox(CodeBuilder code, Type type, int slot) { JvmTypes.unbox(code, type, slot, ctx); }
-
-    private static String srcSuffix(Src s) {
-        return switch (s) { case NEUTRAL -> "$Dec"; case JSON -> "$DecJson"; case JOOQ -> "$DecRecord"; };
-    }
 
     private static String srcFactory(Src s) {
         return switch (s) { case NEUTRAL -> "decoder"; case JSON -> "jsonDecoder"; case JOOQ -> "recordDecoder"; };
@@ -217,16 +236,16 @@ final class CodecGen {
 
     /** Invokes a type's static {@code decoder()}/{@code encoder()} factory, as an interface
      * method reference when the type is a sum (its factory lives on a sealed interface). */
-    private void invokeCodec(CodeBuilder code, Ast.Name typeName, String method, MethodTypeDesc mtd) {
-        invokeCodec(code, typeName.denotes(), method, mtd);
+    private void invokeCodec(CodeBuilder code, Hir.Name typeName, String method, MethodTypeDesc mtd) {
+        invokeCodec(code, Backend.names(typeName), method, mtd);
     }
 
-    private void invokeCodec(CodeBuilder code, TypeName type, String method, MethodTypeDesc mtd) {
-        code.invokestatic(cd(type), method, mtd, symbols.get(type) instanceof Ast.SumData);
+    private void invokeCodec(CodeBuilder code, TypeSymbol type, String method, MethodTypeDesc mtd) {
+        code.invokestatic(cd(type), method, mtd, symbols.declarations().declaration(type.key()) instanceof Hir.SumData);
     }
 
-    byte[] generateSumEncoder(Ast.SumData sum, Ast.SumEncoder enc) {
-        ClassDesc cdEnc = cd(sum.name() + "$Enc");
+    byte[] generateSumEncoder(Hir.SumData sum, Hir.SumEncoder enc) {
+        ClassDesc cdEnc = cd(new GeneratedClass.Encoder(valueOf(sum)));
         return build(cdEnc, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_REncoder);
@@ -235,8 +254,8 @@ final class CodecGen {
             // Dispatch on the runtime case type, encode that case as it writes itself, then add what
             // membership in this sum requires of it (spec §encoder-derivation).
             cb.withMethodBody("encode", MTD_Rencode, ClassFile.ACC_PUBLIC, code -> {
-                for (Ast.EncVariant v : enc.variants()) {
-                    TypeName caseName = v.caseType().denotes();
+                for (Hir.EncVariant v : enc.variants()) {
+                    TypeSymbol caseName = Backend.names(v.caseType());
                     code.aload(1);
                     code.instanceOf(cd(caseName));
                     Label next = code.newLabel();
@@ -257,8 +276,8 @@ final class CodecGen {
         });
     }
 
-    byte[] generateSumDecoder(Ast.SumData sum, Ast.Discriminate disc, Src src) {
-        ClassDesc cdDec = cd(sum.name() + srcSuffix(src));
+    byte[] generateSumDecoder(Hir.SumData sum, Hir.Discriminate disc, Src src) {
+        ClassDesc cdDec = cd(decoderOf(sum, src));
         return build(cdDec, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_RDecoder);
@@ -281,7 +300,7 @@ final class CodecGen {
                 pushInt(code, disc.variants().size());
                 code.anewarray(CD_RVariant);
                 int i = 0;
-                for (Ast.Variant v : disc.variants()) {
+                for (Hir.Variant v : disc.variants()) {
                     code.dup();
                     pushInt(code, i);
                     code.loadConstant(v.tag());
@@ -289,7 +308,7 @@ final class CodecGen {
                     // what is under `"value"` and reads it as the standalone value it is, while a
                     // product and a unit read the discriminated object they are part of. So a wrapped
                     // case is read from under a key, which is not always this source's own decoder.
-                    if (TypeOps.caseShape(v.caseType().denotes(), symbols) == CaseShape.WRAPPED) {
+                    if (TypeOps.caseShape(Backend.names(v.caseType()), symbols) == CaseShape.WRAPPED) {
                         code.loadConstant(CaseShape.ENVELOPE_KEY);
                         emitUnderAKeyDecoder(code, v.caseType(), src);
                         code.invokestatic(srcFieldOwner(src), "field", srcFieldMtd(src));
@@ -315,9 +334,9 @@ final class CodecGen {
      * bare string and answers that case's singleton (issue #161). A name no case answers to fails at
      * the value's path, the way a newtype's invariant does, rather than being read as some other case.
      */
-    byte[] generateEnumSumDecoder(Ast.SumData sum, Src src) {
-        ClassDesc cdDec = cd(sum.name() + srcSuffix(src));
-        List<TypeName> cases = TypeOps.leafCases(sum, symbols);
+    byte[] generateEnumSumDecoder(Hir.SumData sum, Src src) {
+        ClassDesc cdDec = cd(decoderOf(sum, src));
+        List<TypeSymbol> cases = TypeOps.leafCases(sum, symbols);
         return build(cdDec, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_RDecoder);
@@ -338,10 +357,10 @@ final class CodecGen {
 
     /** {@code static Result __fromName(String name, Path path)}: the case that name denotes, or the
      *  failure saying it denotes none of them. */
-    private void emitFromNameHelper(ClassBuilder cb, String sumName, List<TypeName> cases) {
+    private void emitFromNameHelper(ClassBuilder cb, String sumName, List<TypeSymbol> cases) {
         cb.withMethodBody("__fromName", MTD_fromName,
                 ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC, code -> {
-            for (TypeName c : cases) {
+            for (TypeSymbol c : cases) {
                 code.loadConstant(c.name());
                 code.aload(0);
                 code.invokevirtual(CD_String, "equals", MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
@@ -375,8 +394,8 @@ final class CodecGen {
     }
 
     /** Encodes an enumeration to its case's name — the same string its decoder reads. */
-    byte[] generateEnumSumEncoder(Ast.SumData sum) {
-        ClassDesc cdEnc = cd(sum.name() + "$Enc");
+    byte[] generateEnumSumEncoder(Hir.SumData sum) {
+        ClassDesc cdEnc = cd(new GeneratedClass.Encoder(valueOf(sum)));
         return build(cdEnc, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_REncoder);
@@ -384,7 +403,7 @@ final class CodecGen {
             emitSharedInstance(cb, cdEnc);
             cb.withMethodBody("encode", MTD_Rencode, ClassFile.ACC_PUBLIC, code -> {
                 code.aload(1);
-                code.invokestatic(cd(sum.name()), TAG_METHOD, MTD_tag, true);
+                code.invokestatic(cd(sum), TAG_METHOD, MTD_tag, true);
                 code.areturn();
             });
         });
@@ -421,12 +440,12 @@ final class CodecGen {
         });
     }
 
-    void emitFactory(ClassBuilder cb, String name, ClassDesc returnIface, Ast.Data data,
-                             String suffix) {
-        ClassDesc impl = cd(data.name() + suffix);
-        ClassDesc self = cd(data.name());
+    void emitFactory(ClassBuilder cb, String name, ClassDesc returnIface, Hir.Data data,
+                             GeneratedClass codec) {
+        ClassDesc impl = cd(codec);
+        ClassDesc self = cd(data);
         MethodSignature sig = name.equals("decoder")
-                ? decoderSig(self, isMapInput(data.name()))
+                ? decoderSig(self, isMapInput(data))
                 : encoderSig(self, encoderOutput(data));
         emitCodecFactory(cb, name, returnIface, impl, sig);
     }
@@ -467,23 +486,23 @@ final class CodecGen {
 
     /** The runtime type a data's {@code encode} returns: a {@code Map} for objects/sums, the bare
      * boxed scalar (or {@code Object} for a nested/list/optional value) for a newtype. */
-    private static ClassDesc encoderOutput(Ast.Data data) {
+    private static ClassDesc encoderOutput(Hir.Data data) {
         return data.encoder().map(enc -> rawOutputType(enc.result())).orElse(CD_Map);
     }
 
-    private static ClassDesc rawOutputType(Ast.RawExpr raw) {
+    private static ClassDesc rawOutputType(Hir.RawExpr raw) {
         return switch (raw) {
-            case Ast.TextRaw _ -> CD_String;
-            case Ast.IsoTextRaw _ -> CD_String;
-            case Ast.IntRaw _ -> CD_Long;
-            case Ast.BoolRaw _ -> CD_Boolean;
-            case Ast.DecimalRaw _ -> CD_BigDecimal;
-            case Ast.ObjectRaw _ -> CD_Map;
-            case Ast.EncodeRaw _ -> CD_Object;
-            case Ast.OptionRaw _ -> CD_Object;
-            case Ast.ListEnc _ -> CD_Object;
-            case Ast.SetEnc _ -> CD_Object;
-            case Ast.MapEnc _ -> CD_Object;
+            case Hir.TextRaw _ -> CD_String;
+            case Hir.IsoTextRaw _ -> CD_String;
+            case Hir.IntRaw _ -> CD_Long;
+            case Hir.BoolRaw _ -> CD_Boolean;
+            case Hir.DecimalRaw _ -> CD_BigDecimal;
+            case Hir.ObjectRaw _ -> CD_Map;
+            case Hir.EncodeRaw _ -> CD_Object;
+            case Hir.OptionRaw _ -> CD_Object;
+            case Hir.ListEnc _ -> CD_Object;
+            case Hir.SetEnc _ -> CD_Object;
+            case Hir.MapEnc _ -> CD_Object;
         };
     }
 
@@ -501,25 +520,24 @@ final class CodecGen {
     }
 
     /** Emits a source's decoder factory ({@code jsonDecoder()} / {@code recordDecoder()}). */
-    void emitSourceFactory(ClassBuilder cb, String typeName, Src src, boolean mapInput) {
-        emitCodecFactory(cb, srcFactory(src), CD_RDecoder, cd(typeName + srcSuffix(src)),
-                decoderSigFor(src, cd(typeName), mapInput));
+    void emitSourceFactory(ClassBuilder cb, Hir.Def def, Src src, boolean mapInput) {
+        emitCodecFactory(cb, srcFactory(src), CD_RDecoder, cd(decoderOf(def, src)),
+                decoderSigFor(src, cd(def), mapInput));
     }
 
     /** jOOQ rows are flat: a type is Record-decodable iff it is an object (or a sum of objects/units)
      * whose every field is a scalar column — a primitive, a newtype, or an optional of those; no
      * nested object, list, map, or sum. */
-    boolean recordCompatible(String typeName) {
-        Ast.Def def = symbols.declaration(typeName);
-        if (def instanceof Ast.SumData sum) {
+    boolean recordCompatible(Hir.Def def) {
+        if (def instanceof Hir.SumData sum) {
             if (TypeOps.isUnitOnlySum(sum, symbols)) {
                 return false;   // an enumeration is a bare column, not a whole row (issue #161)
             }
-            for (Ast.Name written : sum.cases()) {
-                TypeName caseName = written.denotes();
-                Ast.Def caseDef = symbols.get(caseName);
-                if (caseDef instanceof Ast.UnitData) continue;   // the discriminator alone, no column
-                if (!(caseDef instanceof Ast.Data d)) return false;   // a nested sum is not a row
+            for (Hir.Name written : sum.cases()) {
+                TypeSymbol caseName = Backend.names(written);
+                Hir.Def caseDef = symbols.declarations().declaration(caseName.key());
+                if (caseDef instanceof Hir.UnitData) continue;   // the discriminator alone, no column
+                if (!(caseDef instanceof Hir.Data d)) return false;   // a nested sum is not a row
                 // A case wearing the envelope reads the column the sum's decoder hands it, so it is a
                 // row when what it wraps is a column.
                 boolean ok = TypeOps.caseShape(caseName, symbols) == CaseShape.WRAPPED
@@ -529,11 +547,11 @@ final class CodecGen {
             }
             return true;
         }
-        return def instanceof Ast.Data data && isFlatObject(data);
+        return def instanceof Hir.Data data && isFlatObject(data);
     }
 
-    private boolean isFlatObject(Ast.Data data) {
-        if (!(data.decoder().orElse(null) instanceof Ast.ObjectDecoder)) {
+    private boolean isFlatObject(Hir.Data data) {
+        if (!(data.decoder().orElse(null) instanceof Hir.ObjectDecoder)) {
             return false;   // a newtype is a bare column, not a whole-row object
         }
         for (Type t : fieldTypes(data).values()) {
@@ -547,16 +565,17 @@ final class CodecGen {
         if (t instanceof Type.ListOf || t instanceof Type.MapOf || t instanceof Type.SetOf
                 || t instanceof Type.Union) return false;
         if (t instanceof Type.Ref r) {
-            return symbols.get(r.name()) instanceof Ast.Data d
-                    && d.decoder().orElse(null) instanceof Ast.PrimDecoder;   // newtype column only
+            return symbols.declarations().declaration(r.name().key()) instanceof Hir.Data d
+                    && d.decoder().orElse(null) instanceof Hir.PrimDecoder;   // newtype column only
         }
         return true;   // primitive scalar
     }
 
-    byte[] generateDecoderClass(ClassDesc cdName, Ast.Data data, Ast.DecoderDef dec,
+    byte[] generateDecoderClass(ClassDesc cdName, Hir.Data data, Hir.DecoderDef dec,
                                         Map<String, Type> fields, Src src) {
-        ClassDesc cdDec = cd(data.name() + srcSuffix(src));
+        ClassDesc cdDec = cd(decoderOf(data, src));
         decoderClass = cdDec;
+        decodedValue = valueOf(data);
         Invariants invariants = invariantsOf(data, fields);
         return build(cdDec, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
@@ -566,10 +585,10 @@ final class CodecGen {
             cb.withMethodBody("decode", MTD_Rdecode, ClassFile.ACC_PUBLIC, code -> {
                 BodyGen gen = new BodyGen(ctx, code, data, cdName, 3);
                 switch (dec) {
-                    case Ast.PrimDecoder prim ->
+                    case Hir.PrimDecoder prim ->
                             emitPrimDecode(code, gen, cdName, prim, fields, src, invariants);
-                    case Ast.ObjectDecoder obj -> emitObjectDecode(code, gen, cdName, obj, fields, src);
-                    case Ast.NewtypeDecoder nt ->
+                    case Hir.ObjectDecoder obj -> emitObjectDecode(code, gen, cdName, obj, fields, src);
+                    case Hir.NewtypeDecoder nt ->
                             emitNewtypeDecode(code, gen, cdName, nt, fields, src, invariants);
                 }
             });
@@ -633,11 +652,11 @@ final class CodecGen {
      * the boundary and an attempted construction would name different rules for the same value. A mapped
      * clause declared after an unmapped one therefore trades Raoh's code for its place in the order.
      */
-    private Invariants invariantsOf(Ast.Data data, Map<String, Type> fields) {
+    private Invariants invariantsOf(Hir.Data data, Map<String, Type> fields) {
         if (!data.newtype()) {
             return Invariants.NONE;   // an object's invariant has no single value to constrain
         }
-        List<Ast.InvariantClause> declared = dischargeForm(data);
+        List<Hir.InvariantClause> declared = dischargeForm(data);
         if (declared.isEmpty()) {
             return Invariants.NONE;
         }
@@ -649,7 +668,7 @@ final class CodecGen {
             boolean refine = true;
             if (!refining) {
                 refine = false;
-                for (Ast.Expr conjunct : HelperInvariants.conjunctsOf(declared.get(i).expr())) {
+                for (Hir.Expr conjunct : ClauseHelpers.conjunctsOf(declared.get(i).expr())) {
                     Optional<InvariantConstraints.Constraint> c =
                             InvariantConstraints.of(conjunct, base);
                     if (c.isPresent()) {
@@ -676,37 +695,37 @@ final class CodecGen {
      * unrecognised. A type another module declares has no such form here; nothing asks, because a type's
      * decoder is generated where the type is declared.
      */
-    private List<Ast.InvariantClause> dischargeForm(Ast.Data data) {
-        return TypeOps.effectiveInvariants(new TypeName(ctx.module(), data.name()), data, symbols,
+    private List<Hir.InvariantClause> dischargeForm(Hir.Data data) {
+        return TypeOps.effectiveInvariants(data.declares(), data, symbols,
                 ctx.dischargeInvariants()::get);
     }
 
     /** Collects the named types used as map keys anywhere in a derived decoder. */
-    private void collectKeyedMapTypes(Ast.DecoderDef dec, Map<String, MapKeyRepresentation> out) {
+    private void collectKeyedMapTypes(Hir.DecoderDef dec, Map<String, MapKeyRepresentation> out) {
         switch (dec) {
-            case Ast.ObjectDecoder obj -> {
-                for (Ast.Bind bind : obj.binds()) {
+            case Hir.ObjectDecoder obj -> {
+                for (Hir.Bind bind : obj.binds()) {
                     collectKeyedMapTypes(bind.ref(), out);
                 }
             }
-            case Ast.NewtypeDecoder nt -> collectKeyedMapTypes(nt.inner(), out);
-            case Ast.PrimDecoder _ -> { }
+            case Hir.NewtypeDecoder nt -> collectKeyedMapTypes(nt.inner(), out);
+            case Hir.PrimDecoder _ -> { }
         }
     }
 
-    private void collectKeyedMapTypes(Ast.DecRef ref, Map<String, MapKeyRepresentation> out) {
+    private void collectKeyedMapTypes(Hir.DecRef ref, Map<String, MapKeyRepresentation> out) {
         switch (ref) {
-            case Ast.MapDecRef mp -> {
+            case Hir.MapDecRef mp -> {
                 if (needsRekey(mp.key())) {
                     out.putIfAbsent(rekeyMethod(mp.key()), mp.key());
                 }
                 collectKeyedMapTypes(mp.value(), out);
             }
-            case Ast.ListDecRef l -> collectKeyedMapTypes(l.element(), out);
-            case Ast.SetDecRef s -> collectKeyedMapTypes(s.element(), out);
-            case Ast.OptionDecRef o -> collectKeyedMapTypes(o.element(), out);
-            case Ast.PrimDecRef _ -> { }
-            case Ast.DataDecRef _ -> { }
+            case Hir.ListDecRef l -> collectKeyedMapTypes(l.element(), out);
+            case Hir.SetDecRef s -> collectKeyedMapTypes(s.element(), out);
+            case Hir.OptionDecRef o -> collectKeyedMapTypes(o.element(), out);
+            case Hir.PrimDecRef _ -> { }
+            case Hir.DataDecRef _ -> { }
         }
     }
 
@@ -825,27 +844,27 @@ final class CodecGen {
 
     /** True when the type's decoder reads from a {@code Map} (object/sum), false for a bare
      * value (newtype/unit). Used to bridge nested field-value decoders with {@code nested()}. */
-    boolean isMapInput(String typeName) {
-        return isMapInputOf(symbols.declaration(typeName));
+    boolean isMapInput(Hir.Def def) {
+        return isMapInputOf(def);
     }
 
-    boolean isMapInput(Ast.Name typeName) {
-        return isMapInputOf(symbols.get(typeName.denotes()));
+    boolean isMapInput(Hir.Name typeName) {
+        return isMapInputOf(symbols.declarations().declaration(Backend.names(typeName).key()));
     }
 
-    private boolean isMapInputOf(Ast.Def def) {
-        if (def instanceof Ast.SumData sum) {
+    private boolean isMapInputOf(Hir.Def def) {
+        if (def instanceof Hir.SumData sum) {
             // an enumeration arrives as its case's name, a bare string (issue #161)
             return !TypeOps.isUnitOnlySum(sum, symbols);
         }
-        if (def instanceof Ast.Data data) {
-            Ast.DecoderDef d = data.decoder().orElse(null);
-            if (d instanceof Ast.ObjectDecoder) {
+        if (def instanceof Hir.Data data) {
+            Hir.DecoderDef d = data.decoder().orElse(null);
+            if (d instanceof Hir.ObjectDecoder) {
                 return true;
             }
             // a newtype reads whatever its inner type reads: a Map for an object/sum inner, a bare
             // value for a primitive one
-            if (d instanceof Ast.NewtypeDecoder nt && nt.inner() instanceof Ast.DataDecRef inner) {
+            if (d instanceof Hir.NewtypeDecoder nt && nt.inner() instanceof Hir.DataDecRef inner) {
                 return isMapInput(inner.typeName());
             }
         }
@@ -950,7 +969,7 @@ final class CodecGen {
         emitToTheSecond(code, temporal);
     }
 
-    private void emitPrimDecode(CodeBuilder code, BodyGen gen, ClassDesc cdName, Ast.PrimDecoder prim,
+    private void emitPrimDecode(CodeBuilder code, BodyGen gen, ClassDesc cdName, Hir.PrimDecoder prim,
                                 Map<String, Type> fields, Src src, Invariants invariants) {
         Type inputType = TypeOps.primType(prim.from());
         ClassDesc leaf = srcLeafOwner(src);
@@ -989,9 +1008,9 @@ final class CodecGen {
         unbox(code, inputType, inputSlot);
         gen.bind(prim.input(), inputSlot, inputType);
 
-        for (Ast.DecStmt stmt : prim.stmts()) {
+        for (Hir.DecStmt stmt : prim.stmts()) {
             switch (stmt) {
-                case Ast.Let let -> {
+                case Hir.Let let -> {
                     Type t = gen.expr(let.value());
                     int slot = gen.slot(t);
                     store(code, slot, t);
@@ -1007,9 +1026,9 @@ final class CodecGen {
      * result in X (spec §newtype). Same Err short-circuit as {@link #emitPrimDecode}, but the leaf is
      * Y's decoder rather than a primitive one.
      */
-    private void emitNewtypeDecode(CodeBuilder code, BodyGen gen, ClassDesc cdName, Ast.NewtypeDecoder dec,
+    private void emitNewtypeDecode(CodeBuilder code, BodyGen gen, ClassDesc cdName, Hir.NewtypeDecoder dec,
                                    Map<String, Type> fields, Src src, Invariants invariants) {
-        if (dec.inner() instanceof Ast.MapDecRef mp) {
+        if (dec.inner() instanceof Hir.MapDecRef mp) {
             // The map's own decoder, then its two halves of invariant either side of the key remap.
             // A mapped constraint is one of Raoh's and needs the typed leaf, which is only before the
             // remap; size is the same either way on the success path, since a remap that collided has
@@ -1119,15 +1138,15 @@ final class CodecGen {
         code.labelBinding(ok);
     }
 
-    private void emitObjectDecode(CodeBuilder code, BodyGen gen, ClassDesc cdName, Ast.ObjectDecoder obj,
+    private void emitObjectDecode(CodeBuilder code, BodyGen gen, ClassDesc cdName, Hir.ObjectDecoder obj,
                                   Map<String, Type> fields, Src src) {
         emitObjectGuard(code, src, gen.slot(Type.STRING));
-        List<Ast.Bind> binds = obj.binds();
+        List<Hir.Bind> binds = obj.binds();
         int[] resultSlots = new int[binds.size()];
         for (int i = 0; i < binds.size(); i++) {
-            Ast.Bind bind = binds.get(i);
+            Hir.Bind bind = binds.get(i);
             code.loadConstant(bind.key());
-            if (bind.ref() instanceof Ast.OptionDecRef opt) {
+            if (bind.ref() instanceof Hir.OptionDecRef opt) {
                 emitDecoderObject(code, opt.element(), src);
                 code.invokestatic(srcFieldOwner(src), "nullableField", srcNullableFieldMtd(src));
             } else {
@@ -1171,12 +1190,12 @@ final class CodecGen {
         code.labelBinding(ok);
 
         for (int i = 0; i < binds.size(); i++) {
-            Ast.Bind bind = binds.get(i);
+            Hir.Bind bind = binds.get(i);
             Type t = bindType(bind.ref());
             code.aload(resultSlots[i]);
             code.checkcast(CD_ROk);
             code.invokevirtual(CD_ROk, "value", MTD_Object);
-            if (bind.ref() instanceof Ast.OptionDecRef) {
+            if (bind.ref() instanceof Hir.OptionDecRef) {
                 code.invokestatic(CD_Option, "ofNullable", MTD_ofNullable, true);
                 int vSlot = gen.slot(t);
                 code.astore(vSlot);
@@ -1190,14 +1209,14 @@ final class CodecGen {
         emitConstructCall(code, gen, cdName, obj.result(), fields);
     }
 
-    private Type bindType(Ast.DecRef ref) {
+    private Type bindType(Hir.DecRef ref) {
         return switch (ref) {
-            case Ast.PrimDecRef p -> TypeOps.primType(p.kind());
-            case Ast.DataDecRef d -> Type.ref(d.typeName().denotes());
-            case Ast.ListDecRef l -> Type.list(bindType(l.element()));
-            case Ast.SetDecRef s -> Type.set(bindType(s.element()));
-            case Ast.OptionDecRef o -> Type.option(bindType(o.element()));
-            case Ast.MapDecRef mp -> Type.map(mp.key().type(), bindType(mp.value()));
+            case Hir.PrimDecRef p -> TypeOps.primType(p.kind());
+            case Hir.DataDecRef d -> Type.ref(Backend.names(d.typeName()));
+            case Hir.ListDecRef l -> Type.list(bindType(l.element()));
+            case Hir.SetDecRef s -> Type.set(bindType(s.element()));
+            case Hir.OptionDecRef o -> Type.option(bindType(o.element()));
+            case Hir.MapDecRef mp -> Type.map(mp.key().type(), bindType(mp.value()));
         };
     }
 
@@ -1213,7 +1232,7 @@ final class CodecGen {
      * shape is told so at that key. A JSON object's value is a {@code JsonNode} like the object
      * holding it, so that source alone carries through.
      */
-    private void emitUnderAKeyDecoder(CodeBuilder code, Ast.Name typeName, Src src) {
+    private void emitUnderAKeyDecoder(CodeBuilder code, Hir.Name typeName, Src src) {
         switch (src) {
             case NEUTRAL -> {
                 invokeCodec(code, typeName, "decoder", MTD_Rdecoder);
@@ -1227,15 +1246,15 @@ final class CodecGen {
     }
 
     /** Pushes a {@code Decoder} for the given field-value reference, for the given source. */
-    private void emitDecoderObject(CodeBuilder code, Ast.DecRef ref, Src src) {
+    private void emitDecoderObject(CodeBuilder code, Hir.DecRef ref, Src src) {
         switch (ref) {
-            case Ast.PrimDecRef p -> emitLeafDecoder(code, p.kind(), src);
-            case Ast.DataDecRef d -> emitUnderAKeyDecoder(code, d.typeName(), src);
-            case Ast.ListDecRef l -> {
+            case Hir.PrimDecRef p -> emitLeafDecoder(code, p.kind(), src);
+            case Hir.DataDecRef d -> emitUnderAKeyDecoder(code, d.typeName(), src);
+            case Hir.ListDecRef l -> {
                 emitDecoderObject(code, l.element(), src);
                 code.invokestatic(srcListOwner(src), "list", MTD_listDec);
             }
-            case Ast.SetDecRef s -> {
+            case Hir.SetDecRef s -> {
                 emitDecoderObject(code, s.element(), src);
                 code.invokestatic(srcListOwner(src), "list", MTD_listDec);   // Decoder<I, List<T>>
                 code.invokedynamic(setFromListCallSite());                   // Function: List -> Set
@@ -1245,13 +1264,13 @@ final class CodecGen {
             // There null is the whole of what absence is (spec [#absence-is-written-as-null]), so
             // the element decoder is the present one made null-tolerant and lifted into an Option.
             // A field's optional never reaches here: its key is read by `nullableField` instead.
-            case Ast.OptionDecRef o -> {
+            case Hir.OptionDecRef o -> {
                 emitDecoderObject(code, o.element(), src);
                 code.invokestatic(srcListOwner(src), "nullable", MTD_nullableDec);
                 code.invokedynamic(optionOfNullableCallSite());              // Function: Object -> Option
                 code.invokeinterface(CD_RDecoder, "map", MTD_Rdecoder_map);  // Decoder<I, Option<T>>
             }
-            case Ast.MapDecRef mp -> {
+            case Hir.MapDecRef mp -> {
                 emitDecoderObject(code, mp.value(), src);
                 code.invokestatic(srcListOwner(src), "map", MTD_mapDec);   // Decoder<I, Map<String,V>>
                 if (needsRekey(mp.key())) {
@@ -1396,7 +1415,7 @@ final class CodecGen {
      * clause declared {@code i}th as a plain boolean, emitted beside the whole-invariant check
      * compile-time construction checking uses (ADR-0032). */
     private DynamicCallSiteDesc invariantPredicateCallSite(ClassDesc cdName, Type base, int clause) {
-        ClassDesc cdCtfe = cd(typeName(cdName) + "$Ctfe");
+        ClassDesc cdCtfe = cd(new GeneratedClass.Ctfe(decodedValue));
         MethodTypeDesc check = MethodTypeDesc.of(ConstantDescs.CD_boolean, JvmTypes.jvmType(base, ctx));
         // A Predicate's argument is a reference, so the instantiated type takes the decoded value's
         // boxed form and the metafactory unboxes it into `check`'s primitive parameter.
@@ -1502,11 +1521,6 @@ final class CodecGen {
     }
 
 
-    /** The Souther type name behind a generated class descriptor. */
-    private static String typeName(ClassDesc cdName) {
-        return cdName.displayName();
-    }
-
     /**
      * Emits the {@code __construct} call for a decoded value and maps an invariant failure to a Raoh
      * failure at the value's path. Must be emitted inside a {@code decode(Object, RPath)} body: it
@@ -1514,19 +1528,24 @@ final class CodecGen {
      * {@code emitPrimDecode}, {@code emitNewtypeDecode}, {@code emitObjectDecode} — are all such
      * bodies whose {@code BodyGen} locals start above slot 2, so slot 2 always holds the path.
      */
-    private void emitConstructCall(CodeBuilder code, BodyGen gen, ClassDesc cdName, Ast.Construct construct,
+    private void emitConstructCall(CodeBuilder code, BodyGen gen, ClassDesc cdName, Hir.Construct construct,
                                    Map<String, Type> fields) {
         // The decoder is still AST-level; elaborate its field inits so the shared emitFieldValues
         // consumes one representation, with the type the checker decides for each (ADR-0021, #81).
         // The field's declared type is pushed in, as the checker does when it checks a construction.
-        List<Core.FieldInit> inits = new ArrayList<>();
-        for (Ast.FieldInit init : construct.inits()) {
-            inits.add(new Core.FieldInit(init.name(),
-                    gen.elaborate(init.value(), fields.get(init.name())), init.pos()));
+        // a decoder's construction gives every field a value of its own, and they are put in
+        // declaration order here as a construction in a body already holds them
+        Map<String, Hir.FieldInit> written = new HashMap<>();
+        for (Hir.FieldInit init : construct.inits()) {
+            written.put(init.name(), init);
         }
-        // a decoder's construction gives every field a value of its own; nothing builds one with a
-        // spread, so there is no binding to copy from here
-        gen.emitFieldValues(fields, inits, List.of());
+        List<Core.FieldValue> values = new ArrayList<>();
+        for (String field : fields.keySet()) {
+            Hir.FieldInit init = written.get(field);
+            values.add(new Core.FieldValue(field,
+                    gen.elaborate(init.value(), fields.get(field)), init.pos()));
+        }
+        gen.emitFieldValues(fields, values);
         code.invokestatic(cdName, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(fields)));
         // Souther construction Result -> Raoh boundary Result. An invariant failure becomes a
         // Raoh failure (spec §violation-destination, §decoder-role); success wraps the constructed value.
@@ -1564,8 +1583,8 @@ final class CodecGen {
         code.areturn();
     }
 
-    byte[] generateEncoderClass(ClassDesc cdName, Ast.Data data, Ast.EncoderDef enc) {
-        ClassDesc cdEnc = cd(data.name() + "$Enc");
+    byte[] generateEncoderClass(ClassDesc cdName, Hir.Data data, Hir.EncoderDef enc) {
+        ClassDesc cdEnc = cd(new GeneratedClass.Encoder(valueOf(data)));
         return build(cdEnc, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_REncoder);
@@ -1575,40 +1594,40 @@ final class CodecGen {
                 BodyGen gen = new BodyGen(ctx, code, data, cdName, 2);
                 code.aload(1);
                 code.checkcast(cdName);
-                int selfSlot = gen.slot(Type.ref(symbols.own(data.name())));
+                int selfSlot = gen.slot(Type.ref(data.declares()));
                 code.astore(selfSlot);
-                gen.bind(enc.self(), selfSlot, Type.ref(symbols.own(data.name())));
+                gen.bind(enc.self(), selfSlot, Type.ref(data.declares()));
                 emitRawExpr(code, gen, enc.result());
                 code.areturn();
             });
         });
     }
 
-    private void emitRawExpr(CodeBuilder code, BodyGen gen, Ast.RawExpr raw) {
+    private void emitRawExpr(CodeBuilder code, BodyGen gen, Hir.RawExpr raw) {
         switch (raw) {
-            case Ast.TextRaw t -> gen.expr(t.arg());                 // String is a neutral value
-            case Ast.IntRaw i -> {
+            case Hir.TextRaw t -> gen.expr(t.arg());                 // String is a neutral value
+            case Hir.IntRaw i -> {
                 gen.expr(i.arg());
                 box(code, Type.INT);                                 // long -> Long
             }
-            case Ast.BoolRaw b -> {
+            case Hir.BoolRaw b -> {
                 gen.expr(b.arg());
                 box(code, Type.BOOL);                                // boolean -> Boolean
             }
-            case Ast.DecimalRaw d -> {
+            case Hir.DecimalRaw d -> {
                 gen.expr(d.arg());                                   // BigDecimal is neutral
                 code.invokestatic(CD_Representations, "canonicalNumber", MTD_canonicalNumber);
             }
-            case Ast.IsoTextRaw t -> {
+            case Hir.IsoTextRaw t -> {
                 gen.expr(t.arg());
                 code.invokevirtual(CD_Object, "toString", MethodTypeDesc.of(CD_String));
             }
-            case Ast.EncodeRaw e -> {
+            case Hir.EncodeRaw e -> {
                 invokeCodec(code, e.typeName(), "encoder", MTD_Rencoder);
                 gen.expr(e.arg());
                 code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);
             }
-            case Ast.OptionRaw o -> {
+            case Hir.OptionRaw o -> {
                 Type at = gen.expr(o.access());            // Option on the stack
                 Type elemType = ((Type.OptionOf) at).element();
                 code.dup();
@@ -1628,13 +1647,13 @@ final class CodecGen {
                 code.aconst_null();                         // null in the neutral tree
                 code.labelBinding(end);
             }
-            case Ast.ListEnc le -> {
+            case Hir.ListEnc le -> {
                 pushElemEncoder(code, le.elem());
                 code.invokestatic(CD_MapEncoders, "list", MTD_Rencode_list);
                 gen.expr(le.source());
                 code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);
             }
-            case Ast.SetEnc se -> {
+            case Hir.SetEnc se -> {
                 pushElemEncoder(code, se.elem());
                 code.invokestatic(CD_MapEncoders, "list", MTD_Rencode_list);   // Encoder for an array
                 gen.expr(se.source());                                          // the Set value
@@ -1642,7 +1661,7 @@ final class CodecGen {
                 code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);      // encode the array
                 code.invokestatic(CD_Representations, "sortedArray", MTD_Representations_sorted);
             }
-            case Ast.MapEnc me -> {
+            case Hir.MapEnc me -> {
                 pushElemEncoder(code, me.elem());
                 code.invokestatic(CD_MapEncoders, "mapOf", MTD_Rencode_list);   // Encoder<Map<String,V>,Object>
                 gen.expr(me.source());                                          // Map<K,V>
@@ -1654,12 +1673,12 @@ final class CodecGen {
                 code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);
                 code.invokestatic(CD_Representations, "sortedObject", MTD_Representations_sorted);
             }
-            case Ast.ObjectRaw o -> {
+            case Hir.ObjectRaw o -> {
                 code.new_(CD_LinkedHashMap);
                 code.dup();
                 code.invokespecial(CD_LinkedHashMap, "<init>", MTD_void);
-                for (Ast.RawEntry entry : o.entries()) {
-                    if (entry.value() instanceof Ast.OptionRaw opt) {
+                for (Hir.RawEntry entry : o.entries()) {
+                    if (entry.value() instanceof Hir.OptionRaw opt) {
                         emitOptionalEntry(code, gen, entry.key(), opt);
                         continue;
                     }
@@ -1679,7 +1698,7 @@ final class CodecGen {
      * the key entirely rather than writing {@code null} (spec §encoder-derivation). The map is on the stack on
      * entry and left on the stack on exit, so both the Some and None branches converge on it.
      */
-    private void emitOptionalEntry(CodeBuilder code, BodyGen gen, String key, Ast.OptionRaw o) {
+    private void emitOptionalEntry(CodeBuilder code, BodyGen gen, String key, Hir.OptionRaw o) {
         Type at = gen.expr(o.access());                 // map, opt
         Type elemType = ((Type.OptionOf) at).element();
         code.dup();                                     // map, opt, opt
@@ -1708,18 +1727,18 @@ final class CodecGen {
      * {@code Map<String, List<商品ID>>} encodes as {@code mapOf(list(商品ID.encoder()))}. Set and
      * newtype-keyed Map are not Raoh shapes on their own — they are the list / String-keyed map
      * encoder with the value converted first, which {@code contramap} does. */
-    private void pushElemEncoder(CodeBuilder code, Ast.EncElem elem) {
+    private void pushElemEncoder(CodeBuilder code, Hir.EncElem elem) {
         switch (elem) {
-            case Ast.PrimEnc p -> {
+            case Hir.PrimEnc p -> {
                 code.invokestatic(CD_ObjectEncoders, leafEncoderName(p.kind()), MTD_Rencode_leaf);
                 canonicalizeAmount(code, p.kind());
             }
-            case Ast.DataEnc d -> invokeCodec(code, d.typeName(), "encoder", MTD_Rencoder);
-            case Ast.ListElemEnc l -> {
+            case Hir.DataEnc d -> invokeCodec(code, d.typeName(), "encoder", MTD_Rencoder);
+            case Hir.ListElemEnc l -> {
                 pushElemEncoder(code, l.elem());
                 code.invokestatic(CD_MapEncoders, "list", MTD_Rencode_list);
             }
-            case Ast.SetElemEnc s -> {
+            case Hir.SetElemEnc s -> {
                 pushElemEncoder(code, s.elem());
                 code.invokestatic(CD_MapEncoders, "list", MTD_Rencode_list);
                 code.invokedynamic(setToListCallSite());                    // Function<Set, List>
@@ -1728,12 +1747,12 @@ final class CodecGen {
                 code.invokeinterface(CD_REncoder, "andThen", MTD_Rencoder_andThen);
             }
             // no key to omit here, so an absent member is written null
-            case Ast.OptionElemEnc o -> {
+            case Hir.OptionElemEnc o -> {
                 pushElemEncoder(code, o.elem());                            // Encoder<T, Object>
                 code.invokedynamic(encodeAsFunctionCallSite());             // Function<T, Object>
                 code.invokedynamic(optionElemEncoderCallSite());            // Encoder<Option<T>, Object>
             }
-            case Ast.MapElemEnc m -> {
+            case Hir.MapElemEnc m -> {
                 pushElemEncoder(code, m.value());
                 code.invokestatic(CD_MapEncoders, "mapOf", MTD_Rencode_list);
                 if (needsKeyRender(m.key())) {
@@ -1874,8 +1893,8 @@ final class CodecGen {
      * codec of its own — belonging to a union does not change a member's external representation,
      * only what wraps it here.
      */
-    byte[] generateResultUnionEncoder(String resultName, List<TypeName> members) {
-        ClassDesc cdEnc = cd(resultName + "$Enc");
+    byte[] generateResultUnionEncoder(GeneratedClass.BehaviorResult union, List<TypeSymbol> members) {
+        ClassDesc cdEnc = cd(new GeneratedClass.Encoder(union));
         boolean enumeration = isEnumeration(members);
         return build(cdEnc, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
@@ -1883,7 +1902,7 @@ final class CodecGen {
             emitDefaultCtor(cb);
             emitSharedInstance(cb, cdEnc);
             cb.withMethodBody("encode", MTD_Rencode, ClassFile.ACC_PUBLIC, code -> {
-                for (TypeName member : members) {
+                for (TypeSymbol member : members) {
                     Label next = code.newLabel();
                     code.aload(1);
                     code.instanceOf(ctx.resultMemberClass(member));
@@ -1905,7 +1924,7 @@ final class CodecGen {
     }
 
     /** Leaves the member on the stack encoded and tagged, the value in slot 1. */
-    private void emitMemberEncode(CodeBuilder code, TypeName member) {
+    private void emitMemberEncode(CodeBuilder code, TypeSymbol member) {
         emitTagged(code, TypeOps.caseShape(member, symbols), "type", member.name(), () -> {
             pushMemberEncoder(code, member);
             pushMemberValue(code, member);
@@ -1954,7 +1973,7 @@ final class CodecGen {
 
     /** Pushes the encoder a member writes itself with: its own derived one, or the Raoh leaf encoder
      * for a primitive, which declares none. */
-    private void pushMemberEncoder(CodeBuilder code, TypeName member) {
+    private void pushMemberEncoder(CodeBuilder code, TypeSymbol member) {
         if (member.isPrimitive()) {
             LeafScalar scalar = memberScalar(member);
             code.invokestatic(CD_ObjectEncoders, leafEncoderName(scalar), MTD_Rencode_leaf);
@@ -1968,13 +1987,13 @@ final class CodecGen {
 
     /** Pushes the Souther value the member holds: the union value itself for a member this module
      * declared, and what the bridge case wraps for any other. */
-    private void pushMemberValue(CodeBuilder code, TypeName member) {
+    private void pushMemberValue(CodeBuilder code, TypeSymbol member) {
         code.aload(1);
         if (ctx.isLocalMember(member)) {
             return;
         }
         ClassDesc bridge = ctx.bridgeCaseClass(member);
-        Type held = MatchElaborator.caseBindType(member);
+        Type held = TypeOps.caseBindType(member);
         code.checkcast(bridge);
         code.invokevirtual(bridge, "value", MethodTypeDesc.of(JvmTypes.jvmType(held, ctx)));
         JvmTypes.box(code, held);
@@ -1982,9 +2001,9 @@ final class CodecGen {
 
     /** Whether every member is a unit, so the union carries nothing but which member it is and
      * travels as that member's name — the form a named sum of units has (spec §encoder-derivation). */
-    private boolean isEnumeration(List<TypeName> members) {
-        for (TypeName member : members) {
-            if (!(symbols.get(member) instanceof Ast.UnitData)) {
+    private boolean isEnumeration(List<TypeSymbol> members) {
+        for (TypeSymbol member : members) {
+            if (!(symbols.declarations().declaration(member.key()) instanceof Hir.UnitData)) {
                 return false;
             }
         }
@@ -1992,18 +2011,19 @@ final class CodecGen {
     }
 
     /** The static {@code encoder()} factory on the union's sealed interface. */
-    void emitResultUnionEncoderFactory(ClassBuilder cb, String resultName, List<TypeName> members) {
-        emitCodecFactory(cb, "encoder", CD_REncoder, cd(resultName + "$Enc"),
-                encoderSig(cd(resultName), isEnumeration(members) ? CD_String : CD_Map));
+    void emitResultUnionEncoderFactory(ClassBuilder cb, GeneratedClass.BehaviorResult union,
+                                       List<TypeSymbol> members) {
+        emitCodecFactory(cb, "encoder", CD_REncoder, cd(new GeneratedClass.Encoder(union)),
+                encoderSig(cd(union), isEnumeration(members) ? CD_String : CD_Map));
     }
 
     /**
-     * The scalar a primitive member is. Recovered through {@link TypeName#primitiveKind()}, which is
+     * The scalar a primitive member is. Recovered through {@link TypeSymbol#primitiveKind()}, which is
      * the inverse of the mint a primitive case name comes from, rather than through a table of
      * spellings kept here — that table was a second place for the language's own spelling to be
      * written, and it answered a member outside it by raising.
      */
-    private static LeafScalar memberScalar(TypeName member) {
+    private static LeafScalar memberScalar(TypeSymbol member) {
         Type.Prim prim = member.primitiveKind();
         LeafScalar scalar = prim == null ? null : LeafScalar.of(prim);
         if (scalar == null) {

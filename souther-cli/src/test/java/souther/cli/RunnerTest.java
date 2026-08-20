@@ -106,7 +106,6 @@ class RunnerTest {
         Path file = write("len.sou", """
                 data NotFound
                 behavior lengthOf : (key: String) -> Int | NotFound
-                    constructs NotFound
                 let lengthOf (key) = {
                     guard String.length(key) > 0 else NotFound
                     String.length(key)
@@ -122,7 +121,6 @@ class RunnerTest {
                 data Approved
                 data Rejected
                 behavior decide : (n: Int) -> Approved | Rejected
-                    constructs Approved, Rejected
                 let decide (n) = if n > 0 then Approved else Rejected
                 """);
         assertEquals("\"Approved\"", Runner.run(file, "decide", "1"));
@@ -167,6 +165,35 @@ class RunnerTest {
         Runner.RunException e = assertThrows(Runner.RunException.class,
                 () -> Runner.run(file, "stamp", "\"x\""));
         assertTrue(e.getMessage().contains("depends on injected dependencies"), e.getMessage());
+    }
+
+    /**
+     * A stage another module declares, sharing a name with one this module implements.
+     *
+     * <p>What `run` asks of a stage is whether this module implements it, and it used to ask that
+     * of the name. A stage naming another module's behavior answered yes whenever this module
+     * happened to declare a `let` of the same name — so a composition that cannot be built without
+     * an injection was offered as runnable, and the run failed inside the compiler's own reflection.
+     */
+    @Test
+    void refusesAPipelineWhoseStageIsAnotherModulesInjectedBehavior() throws Exception {
+        java.util.Map<String, byte[]> published = souther.compiler.Compiler.compile("""
+                module app.a exposing ( In, Mid, f )
+                data In = { v: Int }
+                data Mid = { v: Int }
+                behavior f : (i: In) -> Mid
+                """);
+        Path file = write("own.sou", """
+                module app.own exposing ( Out, f, flow : Out )
+                data Out = { v: Int }
+                behavior f : (m: app.a.Mid) -> Out constructs Out
+                let f (m) = Out { v = m.v }
+                behavior flow = app.a.f >-> f
+                """);
+        Runner.RunException e = assertThrows(Runner.RunException.class,
+                () -> Runner.run(file, "flow", "{\"v\": 1}", new java.util.ArrayList<>(),
+                        published::get));
+        assertTrue(e.getMessage().contains("no implementation"), e.getMessage());
     }
 
     @Test

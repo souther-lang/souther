@@ -31,7 +31,7 @@ class CompileAttemptedConstructionTest {
             data Rejected
 
             behavior take : (raw: String) -> Accepted | Rejected
-                constructs Accepted, Code, Rejected
+                constructs Accepted, Code
 
             let take (raw) = {
                 guard Code(raw) as c else Rejected
@@ -41,7 +41,7 @@ class CompileAttemptedConstructionTest {
             """;
 
     private Object take(BytesClassLoader loader, String raw) throws Exception {
-        Object impl = loader.loadClass("demo.Take" + "$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "take").getConstructor().newInstance();
         return Codecs.apply(impl, raw);
     }
 
@@ -86,7 +86,7 @@ class CompileAttemptedConstructionTest {
                 let collect (raw) = Codes { kept = accept(raw) }
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object impl = loader.loadClass("demo.Collect" + "$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "collect").getConstructor().newInstance();
 
         assertEquals(Map.of("kept", List.of("AB")),
                 Codecs.encode(loader, "demo.Codes", Codecs.apply(impl, "AB")),
@@ -127,7 +127,7 @@ class CompileAttemptedConstructionTest {
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of(m1, m2)),
                 getClass().getClassLoader());
-        Object impl = loader.loadClass("m2.Take" + "$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "m2", "take").getConstructor().newInstance();
 
         assertEquals(Map.of("codes", List.of("AB")),
                 Codecs.encode(loader, "m2.Kept", Codecs.apply(impl, "AB")));
@@ -149,7 +149,7 @@ class CompileAttemptedConstructionTest {
                 data Skipped
 
                 behavior take : (raw: String) -> Kept | Skipped
-                    constructs Kept, Code, Skipped
+                    constructs Kept, Code
 
                 let take (raw) = {
                     guard Code(raw) as c else Skipped
@@ -176,7 +176,7 @@ class CompileAttemptedConstructionTest {
                 data TooSmall
 
                 behavior diff : (p: Pair) -> Money | TooSmall
-                    constructs Money, TooSmall
+                    constructs Money
 
                 let diff (p) = {
                     guard Money(p.a.value - p.b.value) as d else TooSmall
@@ -204,7 +204,7 @@ class CompileAttemptedConstructionTest {
                 data TooSmall
 
                 behavior calc : (x: Int) -> Money | TooSmall
-                    constructs Money, TooSmall
+                    constructs Money
 
                 let calc (x) = {
                     guard Money(-1m) as m else TooSmall
@@ -233,7 +233,7 @@ class CompileAttemptedConstructionTest {
                 data Required = { note: String }
 
                 behavior judge : (age: Int) -> Required | NotRequired
-                    constructs Required, NotRequired, A
+                    constructs Required, NotRequired
 
                 let judge (age) =
                     if NotRequired { reasons = [ A | age >= 75 ] } as excluded
@@ -258,7 +258,7 @@ class CompileAttemptedConstructionTest {
                 data Skipped
 
                 behavior take : (raw: String) -> Kept | Skipped
-                    constructs Kept, Skipped
+                    constructs Kept
 
                 let take (raw) = {
                     guard Code(raw) as c else Skipped
@@ -285,7 +285,7 @@ class CompileAttemptedConstructionTest {
                 data Rejected
 
                 behavior take : (raw: String) -> Accepted | Rejected
-                    constructs Accepted, Code, Rejected
+                    constructs Accepted, Code
 
                 let take (raw) = {
                     guard Code(raw) as c else Rejected
@@ -310,7 +310,7 @@ class CompileAttemptedConstructionTest {
                 data Skipped
 
                 behavior take : (n: Int) -> Kept | Skipped
-                    constructs Kept, Skipped
+                    constructs Kept
 
                 let take (n) = {
                     guard n > 0 as c else Skipped
@@ -347,7 +347,7 @@ class CompileAttemptedConstructionTest {
                 }
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object impl = loader.loadClass("demo.Take" + "$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "take").getConstructor().newInstance();
 
         assertEquals(Map.of("n", 7L), Codecs.encode(loader, "demo.Out", Codecs.apply(impl, "zzz")),
                 "the else branch's `c` is the outer 7, not the value the attempt tried to build");
@@ -379,7 +379,7 @@ class CompileAttemptedConstructionTest {
                 }
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object impl = loader.loadClass("demo.Take" + "$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "take").getConstructor().newInstance();
 
         assertEquals(Map.of("n", 8L), Codecs.encode(loader, "demo.Out", Codecs.apply(impl, "AB")),
                 "after the attempt `c` is the outer 7 again, so 7 + 1");
@@ -411,7 +411,7 @@ class CompileAttemptedConstructionTest {
                 let run (n) = Out { n = walk(n, 0) }
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object impl = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
 
         assertEquals(Map.of("n", 200000L),
                 Codecs.encode(loader, "demo.Out", Codecs.apply(impl, 200000L)),
@@ -447,7 +447,7 @@ class CompileAttemptedConstructionTest {
                     ++ (if n >= 20 then [] else [ CloseDateInPast ])
 
                 behavior convert : (n: Int) -> Converted | Blocked
-                    constructs Converted, Blocked, BudgetNotConfirmed, CloseDateInPast
+                    constructs Converted, Blocked
 
                 let convert (n) =
                     if Blocked { reasons = blockingReasons(n) } as blocked
@@ -455,7 +455,7 @@ class CompileAttemptedConstructionTest {
                     else Converted { id = n }
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object impl = loader.loadClass("demo.Convert" + "$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "convert").getConstructor().newInstance();
 
         assertEquals("demo.Converted", Codecs.apply(impl, 25L).getClass().getName(),
                 "no reason applies, so the invariant fails and the attempt takes its else branch");

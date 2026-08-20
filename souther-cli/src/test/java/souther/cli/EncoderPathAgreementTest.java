@@ -167,15 +167,14 @@ class EncoderPathAgreementTest {
         return Runner.run(file, behavior, "1").trim();
     }
 
-    /** What the value expression builds, for the `constructs` both behaviors need. A row builds at
-     *  most one of the module's data types, which is what keeps this a lookup rather than a parse. */
+    /** What the value expression builds that belongs in `constructs`, for the clause both behaviors
+     *  need. A row builds at most one of the module's data types, which is what keeps this a lookup
+     *  rather than a parse. A row writing `Won` builds a unit, which is in no construction set
+     *  (spec §constructs-excludes-unit-data), so it leaves the clause empty. */
     private static String builtBy(String value) {
         if (value.contains("Code(")) {
             return "Code";
         }
-        if (value.contains("Day(")) {
-            return "Day";
-        }
-        return value.contains("Won") ? "Won" : "";
+        return value.contains("Day(") ? "Day" : "";
     }
 }

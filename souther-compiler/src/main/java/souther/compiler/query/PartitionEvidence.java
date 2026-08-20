@@ -33,9 +33,11 @@ import java.util.Set;
 public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
                                 PairSpace pairs,
                                 List<souther.compiler.partition.UndividedPosition> notDerivable,
-                                List<souther.compiler.partition.UnreadRule> unread,
+                                List<souther.compiler.inputs.UnreadRule> unread,
+                                List<Unanswered> unanswered,
                                 List<Partitions.OmittedAxis> omitted,
                                 List<Incompleteness> whyUnclassified) {
+
 
     /**
      * No measure of this kind here at all, which is not a measure that came back empty.
@@ -46,13 +48,125 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
      * in it open for a measurement that was never anybody's to make.
      */
     public static final PartitionEvidence NONE = new PartitionEvidence(Partitioned.absent(),
-            Bounded.absent(), PairSpace.NONE, List.of(), List.of(), List.of(), List.of());
+            Bounded.absent(), PairSpace.NONE, List.of(), List.of(), List.of(), List.of(),
+            List.of());
 
     public PartitionEvidence {
         notDerivable = List.copyOf(notDerivable);
         unread = List.copyOf(unread);
+        unanswered = List.copyOf(unanswered);
         omitted = List.copyOf(omitted);
         whyUnclassified = List.copyOf(whyUnclassified);
+    }
+
+    /**
+     * One question a rule of the model raised about a position that nothing answered.
+     *
+     * <p>Beside the measures rather than inside one of them. The questions are the model's and every
+     * measure here is one reader of them, so a position an axis could not be derived at is not a
+     * position whose rules went unwritten — read off the axes, {@code value <= 10 * 2} raised a
+     * question about its line, left it standing, and was reported as a model with nothing to answer
+     * for, because no axis survived to carry it.
+     *
+     * <p>The rule as words and not as whatever identifies it. Which rules there are is a question
+     * with more than one answer in it — an invariant's clause, a comparison in a body — and a reader
+     * downstream that took one of them apart would have to be taught the next; the words come from
+     * the one place that names a rule, and everything here is a string by the time it arrives.
+     *
+     * @param asked   the question as the accounting that raised it holds it: which rule, how a
+     *                reader finds that rule, and what is owed. Handed on whole rather than taken
+     *                apart — every round of this lost a part at a seam, and what is not taken apart
+     *                cannot lose one. Which rule it is tells one question from another; the handle
+     *                beside it is what a document shows and is not in step with that wherever a rule
+     *                has no name
+     * @param at      the position it is about, spelled the way a report names it. The walk's and not
+     *                the accounting's: which position of a behavior's inputs a rule was filed at is
+     *                what the walk that found it says, and the subject is relative to it
+     * @param measure the number the position is measured by, where a border falls on one. Beside the
+     *                subject because it is the reading's spelling of it and this document promises
+     *                both
+     */
+    public record Unanswered(souther.compiler.check.RuleAccounting.Unanswered asked, String at,
+                             String measure) {
+
+        /** Which rule of the model raised it, which is what tells one question from another. */
+        public souther.compiler.check.RuleRef rule() {
+            return asked.rule();
+        }
+
+        /** How a reader finds that rule, which is not what tells it from another. */
+        public souther.compiler.check.RuleCitation cited() {
+            return asked.cited();
+        }
+
+        /** What it asks. Which measure's section a reader meets it in follows from this. */
+        public souther.compiler.check.CoverageObligation question() {
+            return asked.owed().obligation();
+        }
+
+        /**
+         * And what it asks it about.
+         *
+         * <p>As the reading that raised it named it, and not as words for it: a position, a number
+         * taken of one, and the comparison that drew a border between two moving terms are three
+         * things, and two of them cannot be told apart once they are one string.
+         */
+        public souther.compiler.check.Owed.Subject subject() {
+            return asked.owed().subject();
+        }
+    }
+
+    /**
+     * A position something is written about that this reading did not turn into a line, and what
+     * stopped it.
+     *
+     * <p>The reason in the vocabulary a document promises its reader, not the one this compiler
+     * records for itself: which capability was missing is this compiler's own business, and which
+     * kind of thing stopped the derivation is what a reader can act on.
+     */
+    public record UnreadPosition(String at,
+                                 souther.compiler.partition.UndividedPosition.Reason reason) {}
+
+    /**
+     * Every position this reading carries an unread finding about: a rule it did not turn into a
+     * line, and a position it divided no way and said why.
+     *
+     * <p>Not every position whose rules this reading is short of. How far the reading of a position
+     * ran is what its axis carries ({@link AxisCoverage#read()}), and a position measured on a
+     * reading that did not run to the end need have no entry here — these are findings about rules
+     * and that is an account of a position. Read as the whole of what was left unread, this would
+     * be the very thing it was written to stop: one question answered by a list that answers
+     * another.
+     *
+     * <p>One reading, and the two surfaces write from it. It used to be assembled twice — a person
+     * was shown the rules no line came from together with the positions divided no way, and the
+     * document was written from the second alone — so a rule left unread at a position the axes
+     * went on to measure reached one reader and stopped there. Nothing was wrong with either list;
+     * what was wrong is that one question was answered by reading two of them in one place and one
+     * of them in the other.
+     *
+     * <p>The rules come first and the undivided positions after, deduplicated: a position can be
+     * in both, and it is one thing that was found about it either way.
+     */
+    public List<UnreadPosition> notRead() {
+        List<UnreadPosition> out = new java.util.ArrayList<>();
+        for (souther.compiler.inputs.UnreadRule each : unread) {
+            add(out, new UnreadPosition(each.at().toString(),
+                    souther.compiler.partition.ReportedReason.of(each.why())));
+        }
+        for (souther.compiler.partition.UndividedPosition position : notDerivable) {
+            if (position.why() instanceof souther.compiler.partition.UndividedPosition.Why
+                    .CannotDerive stopped) {
+                add(out, new UnreadPosition(position.at().toString(), stopped.reason()));
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    private static void add(List<UnreadPosition> out, UnreadPosition said) {
+        if (!out.contains(said)) {
+            out.add(said);
+        }
     }
 
     /** The positions, for a reader that wants them and not what the measure made of itself. */
@@ -61,7 +175,7 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
     }
 
     /** The lines, likewise. */
-    public List<BoundaryAssessment> boundaries() {
+    public List<BorderAssessment> boundaries() {
         return bounded.at();
     }
 
@@ -117,7 +231,7 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
     /** The lines some rule drew that this behavior is measured at, and — where there are none — why
      * not. The same argument as {@link Partitioned}: an empty list of obligations reads exactly like
      * a measure that was made and found everything met. */
-    public record Bounded(List<BoundaryAssessment> at, MeasurementStatus status, Reason reason) {
+    public record Bounded(List<BorderAssessment> at, MeasurementStatus status, Reason reason) {
 
         /** Why no line was measured. */
         public enum Reason implements souther.compiler.observe.MeasureReason {
@@ -142,7 +256,7 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
             }
         }
 
-        public static Bounded of(List<BoundaryAssessment> at) {
+        public static Bounded of(List<BorderAssessment> at) {
             return at.isEmpty()
                     ? new Bounded(List.of(), Reason.NO_LINES_DERIVED.status(),
                             Reason.NO_LINES_DERIVED)
@@ -215,33 +329,77 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
         }
     }
 
-    /**
-     * One class the body says it does not answer for, and why.
-     *
-     * <p>{@code reasons} is every reason on the paths that abort, and usually one. An arm made of a
-     * {@code match} whose arms abort for different reasons has no single reason, and naming the one
-     * written above the others would describe the class by where the file happens to put it.
-     */
-    public record ExcludedClass(String classId, List<String> reasons) {
 
-        public ExcludedClass {
-            reasons = List.copyOf(reasons);
-        }
-    }
 
     /**
      * How much of one position's partition the rows reach.
      *
-     * @param classes          the classes a row can be written at. What the model divides the position
-     *                         into, less what the body says it does not answer for
-     * @param excluded         the classes the body rules out, named so that a report says what it took
+     * @param classes          the classes a row can be written at, which is what the model divides
+     *                         the position into: a case its rules refuse is not one of them. Nothing
+     *                         a body declares narrows this — what it declared is said beside these
+     *                         numbers ({@link ClaimAnnotations}) and never into them
+     * @param excluded         the classes the rules rule out and a body's claim named, so that a report says what it took
      *                         out rather than showing a position with fewer classes than the type has
      * @param unclassifiedRows rows whose value at this position could not be read. Above zero, an
      *                         unreached class is undecided rather than unreached.
      */
     public record AxisCoverage(String axis, String path, List<String> classes, Set<String> covered,
-                               List<ExcludedClass> excluded, int unclassifiedRows,
-                               MeasurementStatus status, Reason reason) {
+                               int unclassifiedRows, MeasurementStatus status, Reason reason,
+                               Reading read) {
+
+        /**
+         * Which of this position's rules nothing accounted for.
+         *
+         * <p>It qualifies the classes and nothing else says it. A rule nothing took in may yet
+         * refuse a value one of the classes holds, so the classes are the denominator the model
+         * states and not one every class of which is known to be inhabited.
+         *
+         * <p><b>The questions the model raises, not a reading's account of itself.</b> There are
+         * several readings of a clause and they are short of different things: the one that turns
+         * clauses into sets of values has no word for a range, so it is short at every numeric
+         * position an invariant bounds while two others have those rules whole. Written off that
+         * reading, this line said a model had gone unread on the strength of a fact about this
+         * compiler, two rows above a boundary drawn from the very rule it was about (issue #842).
+         *
+         * <p>Each entry names the rule. A position was all a reader used to be given, which left
+         * them looking for a rule the sentence never named.
+         */
+        public record Reading(Reach reach, boolean everyQuestionAboutItsValuesWasAnswered) {
+
+            /**
+             * Whether what this measure is short of is nothing.
+             *
+             * <p>Its own questions and not every question the position raises. Which values may
+             * stand somewhere is what classes are made of and is this measure's to be short of;
+             * where the line falls is the border measure's, and a position with a line nothing
+             * answered has classes that are all the model divides it into. Counted here, the two
+             * measures #869 told apart would go back to one number.
+             */
+            public boolean answered() {
+                return reach == Reach.EVERY_RULE && everyQuestionAboutItsValuesWasAnswered;
+            }
+        }
+
+        /**
+         * Whether the walk reached the rules written about this position.
+         *
+         * <p>Its own axis beside the questions, and not another arm among them. Nothing was found
+         * where nothing looked, and an empty list of questions says every rule was accounted for —
+         * which is the opposite of the one thing worth knowing (issue #791). The two are not
+         * exclusive either: a rule can have arrived and gone unaccounted for while a subtree beside
+         * it was never entered, and a type that made them arms could not say so.
+         */
+        public enum Reach {
+
+            /** Every rule written about the position reached a reading. */
+            EVERY_RULE,
+
+            /** Some of them did not, so what is written there is not known. */
+            SOME_OUT_OF_SIGHT
+        }
+
+        /** Nothing standing, which is what a caller holding no account of its own says. */
+        public static final Reading ANSWERED = new Reading(Reach.EVERY_RULE, true);
 
         /** Why a position has no coverage numbers. */
         public enum Reason implements souther.compiler.observe.MeasureReason {
@@ -261,23 +419,58 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
             }
         }
 
-        /** What the body rules out is still said. Which classes there are and which the body answers
-         * for are facts about the model, and no row has to exist for either. */
+        /** Which classes there are is a fact about the model, and no row has to exist for it to be
+         *  so — which is why a position nothing was measured at still names them. */
         public static AxisCoverage unavailable(String axis, String path, List<String> classes,
-                                               List<ExcludedClass> excluded, Reason reason) {
-            return new AxisCoverage(axis, path, classes, Set.of(), excluded, 0,
-                    reason.status(), reason);
+                                               Reason reason, Reading read) {
+            return new AxisCoverage(axis, path, classes, Set.of(), 0, reason.status(), reason, read);
         }
 
         public AxisCoverage {
             classes = List.copyOf(classes);
             covered = Set.copyOf(covered);
-            excluded = List.copyOf(excluded);
+            if (read == null) {
+                throw new IllegalArgumentException(
+                        "a position with no account of what was read about its values: " + path);
+            }
             Unavailable.check(status, reason);
         }
 
-        public List<String> uncovered() {
-            return classes.stream().filter(c -> !covered.contains(c)).toList();
+        /**
+         * The classes of this position no row is in, each knowing which position it is a class of.
+         *
+         * <p>A bare name used to be enough because one axis was read at a time. It is not enough to
+         * be told apart by: two positions of one behavior divide into classes named after the same
+         * cases, and a class name alone is the same words about two of them. A reader given the
+         * name and nothing else cannot say which position to write the row at, and neither can a
+         * document trying to join the two back together.
+         *
+         * <p>Which of {@link #axis} and {@link #path} names the position to a reader is not settled
+         * here. The two are for different readers and a value that chose one of them would be this
+         * measure writing a report's sentence.
+         */
+        public List<AxisClass> uncovered() {
+            return classes.stream().filter(c -> !covered.contains(c))
+                    .map(c -> new AxisClass(this, c)).toList();
+        }
+    }
+
+    /**
+     * One class of one position.
+     *
+     * <p>A class is a class <em>of</em> something, and the two halves travel together for the same
+     * reason {@link BorderAssessment.Point} exists: a count, a document and a finding are three
+     * readings of one item, and each of them flattening it its own way is where a part goes missing.
+     */
+    public record AxisClass(AxisCoverage axis, String name) {
+
+        public AxisClass {
+            // A class with no position is the thing this exists to make unsayable. Held here and
+            // not only where a finding takes one: the value is what says a class is a class of
+            // something, and a reader that got one without a position would find out at whichever
+            // sentence names the position first.
+            java.util.Objects.requireNonNull(axis, "a class is a class of a position");
+            java.util.Objects.requireNonNull(name, "a class of a position has a name");
         }
     }
 

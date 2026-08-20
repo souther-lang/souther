@@ -226,7 +226,7 @@ class CompileExampleTest {
                 data Tier = Bronze | Silver
                 data Reading = { n: Int }
 
-                behavior rankOf : (r: Reading) -> Tier constructs Bronze, Silver
+                behavior rankOf : (r: Reading) -> Tier
 
                 let rankOf (r) = if r.n > 10 then Silver else Bronze
 

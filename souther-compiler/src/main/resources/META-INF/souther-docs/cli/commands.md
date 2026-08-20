@@ -8,11 +8,71 @@ souther <command> [options] [args]
 every option it takes. That listing is generated from the same table the compiler resolves an option
 against, so it says what this build does rather than what a text was last edited to say.
 
+<!-- souther-section: init -->
+## init
+
+```
+souther init [<groupId>:<artifactId>] [-d|--dir <path>] [--build maven|gradle]
+                                      [--model none|minimal|full] [--module <name>]
+```
+
+Writes a project, or adds Souther to one that is already there. Never interactive, and nothing
+already written is overwritten — a second run finishes what a first one left, and says which files it
+left alone.
+
+Where there is no build file, a project is created and the coordinate is required: a group and an
+artifact are a person's decision, and neither a directory name nor a git remote makes it. `--dir`
+says where it goes, and defaults to the artifact.
+
+```
+$ souther init com.example:hello
+    created  hello/pom.xml
+    created  hello/.gitignore
+    created  hello/src/main/souther/hello.sou
+             module com.example.hello
+    created  hello/src/main/souther/hello.examples.sou
+    created  hello/src/test/java/com/example/hello/ReturnBookTest.java
+
+    cd hello && mvn test
+```
+
+`--build gradle` writes `settings.gradle.kts` and `build.gradle.kts` instead, and no wrapper: a
+wrapper pins a Gradle version, and a version pinned when this compiler was released is one it can
+never revisit. It says to run `gradle wrapper` first.
+
+The generated Gradle build names no Souther version, where the Maven one names the version of the
+compiler that wrote it. On Gradle the plugin adds the runtime at the version it compiles with, so
+there is no second number in the build script to keep in step — and the version it compiles with is
+the one that plugin release was verified against, which need not be the one that ran `souther init`.
+Write it to say which:
+
+```kotlin
+souther {
+    southerVersion = "0.1.0-rc5"
+}
+```
+
+Where a `pom.xml` or a `build.gradle.kts` is already there, the coordinate is read out of it rather
+than written on the line, `--build` is not read — the build that is there is the build — and what is
+added is a source directory and the plugin declaration. The previous contents of the build file are
+left in a `.orig` beside it, unless git is already holding them.
+
+The module header follows from the coordinate: the group and the artifact, with a hyphen written as
+an underscore, so `com.acme:billing-service` writes `module com.acme.billing_service`. That name is
+also the Java package the model generates into, and the source is named after its last segment —
+`src/main/souther/billing_service.sou`. `--module` writes another.
+
+`--model` says how much of a model to start with, and defaults to `full` where a project is created
+and `none` where one is added to. `none` is the module header; `minimal` adds one `data` with an
+`invariant`; `full` is a model that uses `data`, `invariant`, `behavior`, `constructs` and `guard`,
+with an `.examples.sou` covering it and a Java test that reaches the generated types — so that both
+`mvn test` and `souther examples` answer on the first run.
+
 <!-- souther-section: compile -->
 ## compile
 
 ```
-souther compile <file.sou>... -d <outdir> [-cp|--class-path <path>]
+souther compile <file.sou>... -d|--dir <outdir> [-cp|--class-path <path>]
                               [--adequacy off|witness|all] [--warnings report|error]
 ```
 
@@ -271,6 +331,12 @@ Reports how well the `example` rows cover the model — which partitions, bounda
 no row reaches. `--generate` prints commented rows for what nothing covers, `--boundaries` adds
 rows at the untried boundaries, and `--strict` exits non-zero on a gap the report names.
 
+A generated row leaves the answer as `<?>`, and where the behavior carries an `ensures`, part of that
+answer is already written down. So the clauses are quoted over the rows of the behavior they are
+written on, in the author's own words, cut out of the source. They are quoted whether or not this
+compiler could make a rule of them, which is all the heading claims: these are the words in the
+declaration.
+
 This is the command worth running on a model you believe is finished. It names gaps that reading
 the rows does not reveal.
 
@@ -282,7 +348,17 @@ where nothing that could find a gap was asked about, or one of those measures co
 measure that does not apply — the arms of a `>->` composition, which has none of its own — is neither
 asked nor missing, and does not hold the answer open. `--strict`
 refuses `not_satisfied` and nothing else, which is the same set of findings `compile --adequacy all
---warnings error` refuses. How many rows are waiting for a `let` is reported and never gated on:
+--warnings error` refuses.
+
+The report prints more findings than a build refuses over, and says which is which. A line under `!`
+is one of them; a line under `·` is something measured and named and not gated on — a class no row is
+in, a position the model divides no way. The two read alike and are a sentence apart: `no row uses
+`C`` is refused over and `no row is in `C`` is not, and writing a row for `C` closes both. The count
+under `adequacy` is how many are marked. In the JSON each behavior carries `findings`, where every
+one of them says its `kind` and what a build does about it under `disposition` — `refused`,
+`reported`, or `undecided` where the measure behind it came to no answer.
+
+How many rows are waiting for a `let` is reported and never gated on:
 waiting is the normal state of a model being written, and an injected behavior's recorded row is the
 record of what that behavior owes.
 
@@ -421,8 +497,10 @@ value it is, not as a request.
 | `--color auto\|always\|never` | color the human output (default `auto`) |
 | `--help`, `-h` | what this command takes, and what its options mean |
 
-`--help` and `-h` are taken by every command, including `help` itself. The other three apply to
-`compile`, `run` and `examples`, and passing one of them to another command is an error.
+`--help` and `-h` are taken by every command, including `help` itself. `--format` and `--color`
+apply to `compile`, `run` and `examples`; `--lang` to those and to `init`, which writes what it did
+in the language the line asks for. Passing one of them to a command that does not take it is an
+error.
 
 Because every command takes `-h`, no command reads that token as a file name. A single dash is
 otherwise read as a path by any command that has no such option — a file may be named `-d` — and

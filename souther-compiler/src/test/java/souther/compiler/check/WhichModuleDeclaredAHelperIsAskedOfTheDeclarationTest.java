@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.ValueName;
@@ -34,20 +35,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
 
-    private static Ast.Module resolved(String source) {
+    private static Hir.Module resolved(String source) {
         Ast.Module parsed = CstFrontend.parse(source);
-        return Resolve.module(parsed, Symbols.of(parsed));
+        return Resolve.module(parsed, SyntaxSymbols.of(parsed));
     }
 
     /** {@code source} resolved with {@code imported} (bare name -> declaring module) reachable, which
      * is what the query layer hands a module that writes an {@code import}. */
-    private static Ast.Module resolved(String source, Map<String, String> imported) {
+    private static Hir.Module resolved(String source, Map<String, String> imported) {
         Ast.Module parsed = CstFrontend.parse(source);
         Map<String, ValueName.Helper> helpers =
-                new LinkedHashMap<>(Resolve.Values.of(parsed).helpers());
+                new LinkedHashMap<>(Resolve.Reachable.of(parsed).helpers());
         imported.forEach((bare, module) -> helpers.put(bare, new ValueName.Helper(module, bare)));
-        Resolve.Resolved answered = Resolve.resolving(parsed, Symbols.of(parsed),
-                new Resolve.Values(parsed.name(), helpers, Map.of(), Map.of()));
+        Resolve.Resolution answered = Resolve.resolving(parsed, SyntaxSymbols.of(parsed),
+                new Resolve.Values(
+                        new Resolve.Reachable(parsed.name(), helpers, Map.of(), java.util.Set.of(), true, Map.of(),
+                                java.util.Set.of()),
+                        Resolve.Elsewhere.NONE));
         if (!answered.unresolved().isEmpty()) {
             throw answered.unresolved().get(0);
         }
@@ -55,15 +59,15 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
     }
 
     /** A module declaring one recursive helper that descends on nothing. */
-    private static Ast.FnDef spinOf(String module) {
-        Ast.Module m = resolved("module " + module + "\n\nlet spin (n: Int) : Int = spin(n)\n");
+    private static Hir.FnDef spinOf(String module) {
+        Hir.Module m = resolved("module " + module + "\n\nlet spin (n: Int) : Int = spin(n)\n");
         return HelperInliner.helpersOf(m).get("spin");
     }
 
     /** The totality check over a module that declared {@code declared} and took {@code takenOn} on to
      * emit. Both are walked; only the first is this module's to prove. */
-    private static void check(String module, Map<String, Ast.FnDef> declared,
-                              Map<String, Ast.FnDef> takenOn) {
+    private static void check(String module, Map<String, Hir.FnDef> declared,
+                              Map<String, Hir.FnDef> takenOn) {
         HelperTable table =
                 HelperTable.of(module, declared, takenOn, Map.of(), InliningPolicy.FULL);
         TotalityChecker.check(HelperInliner.over(table, HelperGraph.of(table)));
@@ -77,9 +81,9 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
      */
     @Test
     void aQualifiedNameIsNotAnExemption() {
-        Ast.FnDef own = spinOf("maths");
+        Hir.FnDef own = spinOf("maths");
         HelperInliner maths = HelperInliner.forHelpers("maths", Map.of("spin", own));
-        Ast.FnDef closed = maths.closeAcross(own, "maths");
+        Hir.FnDef closed = maths.closeAcross(own, "maths");
 
         assertEquals("maths.spin", closed.name());
         assertEquals("maths", closed.declaredIn());
@@ -99,7 +103,7 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
      */
     @Test
     void aBareNameIsNotADeclaration() {
-        Ast.FnDef foreign = spinOf("maths");
+        Hir.FnDef foreign = spinOf("maths");
 
         assertEquals("spin", foreign.name());
         assertEquals("maths", foreign.declaredIn());
@@ -120,18 +124,18 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
      */
     @Test
     void aHelperTakenOnToEmitIsATerminal() {
-        Ast.Module maths = resolved("""
+        Hir.Module maths = resolved("""
                 module maths exposing ( wrapped )
 
                 partial let spin (n: Int) : Int = spin(n)
                 let wrapped (n: Int) : Int = spin(n)
                 """);
-        Map<String, Ast.FnDef> declared = HelperInliner.helpersOf(maths);
+        Map<String, Hir.FnDef> declared = HelperInliner.helpersOf(maths);
         HelperInliner from = HelperInliner.forHelpers("maths", declared);
-        Ast.FnDef spin = from.closeAcross(declared.get("spin"), "maths");
-        Ast.FnDef wrapped = from.closeAcross(declared.get("wrapped"), "maths");
+        Hir.FnDef spin = from.closeAcross(declared.get("spin"), "maths");
+        Hir.FnDef wrapped = from.closeAcross(declared.get("wrapped"), "maths");
 
-        Ast.Module order = resolved("""
+        Hir.Module order = resolved("""
                 module order
 
                 import maths ( wrapped, spin )
@@ -139,7 +143,7 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
                 let throughWrapped (n: Int) : Int = wrapped(n)
                 let straightToSpin (n: Int) : Int = spin(n)
                 """, Map.of("wrapped", "maths", "spin", "maths"));
-        Map<String, Ast.FnDef> takenOn = new LinkedHashMap<>();
+        Map<String, Hir.FnDef> takenOn = new LinkedHashMap<>();
         takenOn.put(spin.name(), spin);
         takenOn.put(wrapped.name(), wrapped);
         HelperTable table = HelperTable.of("order", HelperInliner.helpersOf(order), takenOn,
@@ -166,36 +170,35 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
      * turns up.
      *
      * <p>The body below is the declaration as its own module wrote it, which is the shape
-     * {@link HelperInliner#injectedRecursiveHelpers} and {@link HelperInliner#injectedExampleHelpers}
-     * put into a reader's fns for a library helper: those read {@code Prelude.helpers()}, whose bodies
-     * were never closed. A body that <em>was</em> closed cannot carry this at all — the expansion
+     * {@link HelperInliner#injectedRecursiveHelpers} puts into a reader's fns for a library helper:
+     * it reads {@code Prelude.helpers()}, whose bodies were never closed. A body that <em>was</em> closed cannot carry this at all — the expansion
      * eta-expands a helper named where a value goes — so this rule and the one above meet a foreign
      * declaration by different routes and need the same scope either way.
      */
     @Test
     void aHelperTakenOnToEmitIsNotReReadForAPartialHandedOver() {
-        Ast.Module maths = resolved("""
+        Hir.Module maths = resolved("""
                 module maths exposing ( hands )
 
                 partial let spin (n: Int) : Int = spin(n)
                 partial let loop (f: (Int) -> Int, n: Int) : Int = loop(f, n)
                 let hands (n: Int) : Int = loop(spin, n)
                 """);
-        Map<String, Ast.FnDef> declared = HelperInliner.helpersOf(maths);
+        Map<String, Hir.FnDef> declared = HelperInliner.helpersOf(maths);
         HelperInliner from = HelperInliner.forHelpers("maths", declared);
-        Ast.FnDef spin = from.closeAcross(declared.get("spin"), "maths");
-        Ast.FnDef written = declared.get("hands");
+        Hir.FnDef spin = from.closeAcross(declared.get("spin"), "maths");
+        Hir.FnDef written = declared.get("hands");
         // Taken on by `order` under the name it reaches it by, and its body read against `order`'s
         // names: a body a reader holds names what the reader reaches, whoever declared it.
-        Ast.FnDef hands = written.reachedAs("maths.hands").withBody(new Ast.FnBody.Written(
+        Hir.FnDef hands = written.reachedAs("maths.hands").withBody(new Hir.FnBody.Written(
                 HelperNames.qualifyHelpersOf(written.writtenBody(), "maths")));
 
-        Ast.Module order = resolved("""
+        Hir.Module order = resolved("""
                 module order
 
                 let ownWork (n: Int) : Int = n + 1
                 """);
-        Map<String, Ast.FnDef> takenOn = new LinkedHashMap<>();
+        Map<String, Hir.FnDef> takenOn = new LinkedHashMap<>();
         takenOn.put(spin.name(), spin);
         takenOn.put(hands.name(), hands);
         HelperTable table = HelperTable.of("order", HelperInliner.helpersOf(order), takenOn,
@@ -221,7 +224,7 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
      */
     @Test
     void theNameAHelperIsReachedByDoesNotHoldTheModuleThatWroteIt() {
-        Ast.FnDef foldFrom = Prelude.helpers().get("List.foldFrom");
+        Hir.FnDef foldFrom = Prelude.helpers().get("List.foldFrom");
 
         assertEquals("souther.list", foldFrom.declaredIn());
         assertTrue(foldFrom.declaredIn().startsWith("souther."));

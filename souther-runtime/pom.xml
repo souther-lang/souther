@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.souther-lang</groupId>
         <artifactId>souther-parent</artifactId>
-        <version>0.1.0-rc4</version>
+        <version>0.1.0-rc5</version>
     </parent>
 
     <artifactId>souther-runtime</artifactId>
@@ -32,6 +32,20 @@
             <groupId>org.jspecify</groupId>
             <artifactId>jspecify</artifactId>
             <scope>provided</scope>
+        </dependency>
+        <!-- What generated code calls beside this. Nothing here calls Raoh: a data's derived
+             decoder and encoder are emitted as bytecode built from Raoh's combinators, and
+             `decoder()` is generated for every exposed data — so a project holding this artifact
+             holds classes that reach for Raoh the first time a behavior builds anything.
+
+             Declared here so that nobody has to declare it. A build plugin cannot add it — what a
+             plugin adds is not in the pom the project publishes, so a consumer of that project
+             would not get it — and asking every project to write it is asking them to remember a
+             second version. Through this one, both the project and everything downstream of it
+             resolve the Raoh the Souther that produced the code was built against. -->
+        <dependency>
+            <groupId>net.unit8.raoh</groupId>
+            <artifactId>raoh</artifactId>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

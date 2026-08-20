@@ -1,5 +1,10 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
+import souther.compiler.source.SourceId;
+import souther.compiler.diag.QuotedFrom;
+
 import souther.compiler.examples.Deadline;
 import souther.compiler.examples.EvaluationPolicy;
 import souther.compiler.examples.ExampleStatements;
@@ -21,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -89,11 +93,12 @@ class CompileFakeExampleDisagreementTest {
         // both are written statements, and which of them is right is not what this reports.
         assertEquals(1, found.size(), found.toString());
         Diagnostic one = found.get(0).diagnostic();
-        assertEquals(22, one.pos().line(), "anchored at the recorded row");
+        assertEquals(22, ((Primary.InSource) one.primary()).place().region().start().line(), "anchored at the recorded row");
         assertEquals(1, one.secondary().size(), one.secondary().toString());
-        assertEquals(25, one.secondary().get(0).region().start().line(), "pointing at the fake row");
-        assertNull(one.secondary().get(0).sourceId(),
-                "both are in this source, so the second region names none of its own");
+        assertEquals(25, ((souther.compiler.diag.DiagnosticPlace.InSource) one.secondary().get(0).place()).region().start().line(), "pointing at the fake row");
+        assertEquals(new QuotedFrom.ASourceThisCompileHolds(((souther.compiler.diag.DiagnosticPlace.InSource) one.secondary().get(0).place()).source()), ((Primary.InSource) one.primary()).place().region().start().quotedFrom(),
+                "both are in this source, and the second region says so rather than leaving a"
+                        + " reader to work it out from where the diagnostic was filed");
     }
 
     @Test
@@ -329,8 +334,8 @@ class CompileFakeExampleDisagreementTest {
 
         assertEquals(1, said.size(), said.toString());
         Diagnostic one = said.get(0).diagnostic();
-        assertEquals(17, one.pos().line(), "anchored where the fake names the behavior");
-        assertEquals(6, one.pos().column());
+        assertEquals(17, ((Primary.InSource) one.primary()).place().region().start().line(), "anchored where the fake names the behavior");
+        assertEquals(6, ((Primary.InSource) one.primary()).place().region().start().column());
         // What could not be done, then what stopped: the table is what did not answer, and the
         // comparison is what that cost. The number is read off the wait this compile was given
         // rather than written in, so the line still holds if that wait changes — and it is read as
@@ -443,18 +448,19 @@ class CompileFakeExampleDisagreementTest {
                 souther.compiler.query.Compilation.ofSource(model, "Main");
         c.db().ask(new souther.compiler.query.Output.All());
         String name = c.modules().get(0);
+        souther.compiler.check.Prepared prepared =
+                c.db().ask(new souther.compiler.query.Shapes.Prepared(name)).value();
         return ExampleStatements.disagreements(
-                c.db().ask(new souther.compiler.query.Shapes.Prepared(name)).value(),
-                c.db().ask(new souther.compiler.query.Shapes.Scope(name)).value(),
+                prepared.forExamples(),
+                souther.compiler.query.Scopes.derived(c.db(), name).value(),
                 c.db().ask(new souther.compiler.query.Bodies.Signatures(name)).value(),
                 c.db().ask(new souther.compiler.query.Output.EvaluationLinked(
-                        name, souther.compiler.query.Output.CoverageMode.NONE)).value(),
+                        name, souther.compiler.query.Output.CoverageMode.NONE)).value().classes(),
                 parent,
                 c.db().ask(new souther.compiler.query.Bodies.ModuleDefinitions(name)).value(),
-                c.db().ask(new souther.compiler.query.Front.ExampleOrigins(name)).value(),
-                c.db().ask(new souther.compiler.query.Front.FakeOrigins(name)).value(),
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
-                EvaluationPolicy.DEFAULT);
+                EvaluationPolicy.DEFAULT,
+                c.db().ask(new souther.compiler.query.Bodies.Contracts(name)).value());
     }
 
     /** The warnings of a single-source compile that holds. */
@@ -496,13 +502,15 @@ class CompileFakeExampleDisagreementTest {
     }
 
     /**
-     * A `with` stands in with a value or it stands in with nothing. A bare case name is an assertion
-     * a row may make and a stand-in may not: `Missing` has fields, so there is no `Missing` to
-     * install, and the row is left with nothing to disagree with (E1908 says why).
+     * A `with` stands in with a value. `Missing` has fields, so its name stands for no value —
+     * which the language says where the name is written, as it does anywhere else a name is
+     * written where a value goes. Nothing about stand-ins is involved, and the row never gets as
+     * far as having something to disagree with.
      */
     @Test
     void aWithThatCannotBeBuiltStandsInForNothing() {
-        assertEquals(List.of("E1908"), allCodesOf("""
+        CompileException e = org.junit.jupiter.api.Assertions.assertThrows(
+                CompileException.class, () -> Compiler.compile("""
                 module example.b1
 
                 data Found = { id: String }
@@ -513,7 +521,6 @@ class CompileFakeExampleDisagreementTest {
 
                 behavior use : () -> Done
                     depends on lookup
-                    constructs Done
                 let use (lookup) = match lookup() with
                     | Found   -> Done
                     | Missing -> Done
@@ -524,6 +531,8 @@ class CompileFakeExampleDisagreementTest {
                 example use
                     | "runs" : () with lookup = Missing -> Done
                 """));
+        assertEquals("E1023", e.diagnostic().code(), e.getMessage());
+        assertTrue(e.getMessage().contains("Missing"), e.getMessage());
     }
 
     /**
@@ -815,11 +824,12 @@ class CompileFakeExampleDisagreementTest {
         assertEquals(1, found.size(), found.toString());
         Diagnostic one = found.get(0).diagnostic();
         assertEquals(1, one.secondary().size(), one.secondary().toString());
-        String primary = found.get(0).primarySourceId();
-        String other = one.secondary().get(0).sourceId();
+        souther.compiler.source.SourceId primary = found.get(0).context().filedUnder().orElse(null);
+        souther.compiler.source.SourceId other = ((souther.compiler.diag.DiagnosticPlace.InSource)
+                one.secondary().get(0).place()).source();
         assertNotNull(other, why + ": the second region names the file it is in");
         assertNotEquals(primary, other, why + ": the two statements are in different sources");
-        assertEquals(java.util.Set.of("0", "1"), java.util.Set.of(primary, other),
+        assertEquals(java.util.Set.of(new SourceId("0"), new SourceId("1")), java.util.Set.of(primary, other),
                 why + ": " + primary + " and " + other);
     }
 

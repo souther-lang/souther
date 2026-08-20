@@ -1,6 +1,7 @@
 package souther.compiler.examples;
 
 import souther.compiler.diag.SourcePos;
+import souther.compiler.observe.RowIdentity;
 
 import java.util.concurrent.Callable;
 
@@ -22,37 +23,32 @@ public interface Deadline {
     /**
      * One piece of work, said as what it is rather than as a sentence about it.
      *
-     * <p>A deadline a test writes decides by reading this, so it is an identity and not a label:
-     * a description that read well would still have to be unique, and would break every test that
-     * matched on it the day the wording improved. What makes it unique is where the writing is —
-     * two rows of one behavior differ in nothing else, and a behavior can be exampled by more than
-     * one {@code example} block and by more than one file.
+     * <p>A deadline a test writes decides by reading this, so what it carries has to say which piece
+     * of work it is. Where the writing is says that for any of them, and a row written with a name
+     * says it as well: a name is unique among the rows one behavior has, over the module's own source
+     * and every file attached to it, so a test may match on either. Editing a name is renaming the
+     * row, and a deadline matched on the old one no longer meets it — which is what a rename is.
      */
     sealed interface Work {
 
         /** The behavior this work is about. */
         String target();
 
-        /** The source the writing this is about was written in. */
-        String sourceId();
-
-        /** Where in that source it starts. */
+        /** Where the writing this is about starts, which says which source it is in. */
         SourcePos pos();
 
         /** A row of an {@code example}, evaluated: its fixtures built, the behavior applied, the
-         * result compared. {@code description} is what the row was written with, or null. */
-        record Row(String target, String sourceId, SourcePos pos, String description)
-                implements Work {}
+         * result compared. {@code identity} is what the row names itself. */
+        record Row(String target, SourcePos pos, RowIdentity identity) implements Work {}
 
         /** The statements a row is read from, with no behavior applied. */
-        record Fixtures(String target, String sourceId, SourcePos pos, String description)
-                implements Work {}
+        record Fixtures(String target, SourcePos pos, RowIdentity identity) implements Work {}
 
         /** A {@code fake} table, built. */
-        record Table(String target, String sourceId, SourcePos pos) implements Work {}
+        record Table(String target, SourcePos pos) implements Work {}
 
         /** A {@code with} written on a row. */
-        record With(String target, String sourceId, SourcePos pos) implements Work {}
+        record With(String target, SourcePos pos) implements Work {}
     }
 
     /** How many milliseconds this allows. What a report about an overrun quotes. */
@@ -85,6 +81,62 @@ public interface Deadline {
      *  on the clock. */
     static Deadline ofMillis(long budgetMs) {
         return ofMillis(budgetMs, 0L);
+    }
+
+    /**
+     * A worker of this compile's own, and no clock: what the row hands outside runs on the thread
+     * that asked.
+     *
+     * <p>For a run whose answers come from outside the compile. Two things have to hold at once and
+     * they look like they conflict. A row is one thread's from beginning to end — what it spends is
+     * counted there, and how deep it may recurse is decided by the stack that thread was made with,
+     * which is why {@link EvaluationPolicy#workerStackBytes} is said outright rather than inherited
+     * from whatever {@code -Xss} the surrounding JVM has. And a supplied implementation answers out
+     * of the caller's world, of which a thread is part — a transaction bound to one, a security or
+     * request context, an MDC, a scoped value — so it has to run where the caller called from.
+     *
+     * <p>Both hold once the boundary is drawn at what each side owns rather than at the row. The row
+     * runs on the worker and stays there; the application crosses back through {@link Handoff}, which
+     * this thread services while the worker waits. So a model's recursion limit means the same thing
+     * here as in a build, and the implementation still runs in the world the caller arranged.
+     *
+     * <p>What is given up is the clock, and only the clock. A row's counted limits are counted in the
+     * code and thrown from it, so they arrive as {@link Outcome.Threw} exactly as they do on a build's
+     * worker; a wall clock guards code this compile generated, and there is none of that past the
+     * crossing. An implementation that does not return does not return, which is what calling one
+     * synchronously is: what bounds a database query, an HTTP call or a whole test run belongs to
+     * whoever owns the world, and each of those has its own way of saying so.
+     */
+    static Deadline crossingBackToTheCaller(long stackBytes) {
+        return new Deadline() {
+
+            @Override
+            public long budgetMs() {
+                return 0L;   // nothing here is bounded by a clock
+            }
+
+            @Override
+            public <T> Outcome<T> given(Work work, Callable<T> body) {
+                Handoff handoff = new Handoff();
+                java.util.concurrent.FutureTask<T> task =
+                        new java.util.concurrent.FutureTask<>(() -> handoff.installedFor(body));
+                Thread worker = new Thread(null, task, "souther-reading", stackBytes);
+                worker.setDaemon(true);
+                worker.start();
+                try {
+                    handoff.serviceUntilDone();
+                    return new Outcome.Finished<>(task.get());
+                } catch (java.util.concurrent.ExecutionException ee) {
+                    return new Outcome.Threw<>(ee.getCause());
+                } catch (InterruptedException _) {
+                    task.cancel(true);
+                    Thread.currentThread().interrupt();
+                    return new Outcome.Threw<>(
+                            new java.util.concurrent.CancellationException(
+                                    "interrupted while reading " + work.target()));
+                }
+            }
+        };
     }
 
     /**

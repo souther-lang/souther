@@ -72,7 +72,7 @@ class CompileStringMatchesTest {
                 let check (i) = Out(String.matches("[a-z]+", i.s))
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object behavior = loader.loadClass("demo.Check$Impl").getDeclaredConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "check").getDeclaredConstructor().newInstance();
         assertEquals(true, run(loader, behavior, "abc"));
         assertEquals(false, run(loader, behavior, "abc1"));   // anchored: the whole string must match
     }

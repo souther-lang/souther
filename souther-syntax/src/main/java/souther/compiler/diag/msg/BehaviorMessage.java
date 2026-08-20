@@ -34,6 +34,51 @@ public sealed interface BehaviorMessage extends Message {
     @Code(DiagnosticCode.E1615)
     record AnInjectedParameterIsOutOfOrder(String let, String parameter, String shouldBe) implements BehaviorMessage, Reported {}
 
+    @Code(DiagnosticCode.E1616)
+    record AnEnsuresClauseDoesNotNameTheAnswer(String behavior) implements BehaviorMessage, Reported {}
+
+    @Code(DiagnosticCode.E1617)
+    record AnEnsuresClauseDoesNotNameAParameter(String behavior) implements BehaviorMessage, Reported {}
+
+    @Code(DiagnosticCode.E1101)
+    record AnEnsuresExpressionIsNotBool(String behavior, String actual) implements BehaviorMessage, Reported {}
+
+    @Code(DiagnosticCode.E1618)
+    record ABehaviorWithAClauseHasAParameterNamedValue(String behavior) implements BehaviorMessage, Reported {}
+
+    @Code(DiagnosticCode.E1619)
+    record AnEnsuresArmIsNotAnOutputCase(String arm, String behavior) implements BehaviorMessage, Reported {}
+
+    @Code(DiagnosticCode.E1620)
+    record AnEnsuresClauseOverASumNamesNoArm(String behavior) implements BehaviorMessage, Reported {}
+
+    @Code(DiagnosticCode.E1621)
+    record AnEnsuresClauseOverASingleTypeNamesAnArm(String behavior) implements BehaviorMessage, Reported {}
+
+    @Code(DiagnosticCode.E1622)
+    record TwoEnsuresClausesShareOneName(String name, String behavior) implements BehaviorMessage, Reported {}
+
+    @Code(DiagnosticCode.E1623)
+    record UnderscoreCannotNameAnEnsuresClause(String behavior) implements BehaviorMessage, Reported {}
+
+    @Code(DiagnosticCode.E1624)
+    record ACompositionCarriesAnEnsures(String behavior) implements BehaviorMessage, Reported {}
+
+    @Code(DiagnosticCode.E1106)
+    record TheEnsuresReachesAPartialHelper(String behavior, String partial, String through)
+            implements BehaviorMessage, Reported {}
+
+    @Code(DiagnosticCode.E1105)
+    record TheEnsuresConstructsAData(String behavior, String constructs)
+            implements BehaviorMessage, Reported {}
+
+    @Code(DiagnosticCode.E1105)
+    record TheNamedEnsuresConstructsAData(String behavior, String constructs, String clause)
+            implements BehaviorMessage, Reported {}
+
+    @Code(DiagnosticCode.E1106)
+    record AnEnsuresAnswersOnEveryPath(String behavior) implements BehaviorMessage, Reported {}
+
     @Code(DiagnosticCode.E1703)
     record ABoundaryEdgeIsNotAStage() implements BehaviorMessage, Reported {}
 

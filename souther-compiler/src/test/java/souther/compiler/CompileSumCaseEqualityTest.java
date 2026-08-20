@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CompileSumCaseEqualityTest {
 
     private Object behavior(BytesClassLoader loader) throws Exception {
-        return loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        return Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
     }
 
     @Test
@@ -34,7 +34,7 @@ class CompileSumCaseEqualityTest {
                 data In = { senior: Bool }
                 data Out = { junior: Bool, notJunior: Bool }
 
-                behavior run : (i: In) -> Out constructs Out, 一般社員, 管理職
+                behavior run : (i: In) -> Out constructs Out
 
                 let run (i) = {
                     let r = if i.senior then 管理職 else 一般社員
@@ -64,7 +64,7 @@ class CompileSumCaseEqualityTest {
                 data Manager
                 data Role = Junior | Manager
                 data In = { x: Int }
-                behavior run : (i: In) -> Bool constructs Junior, Manager
+                behavior run : (i: In) -> Bool
                 let run (i) = {
                     let juniors = [Junior]
                     let roles = [Junior, Manager]

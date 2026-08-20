@@ -58,12 +58,13 @@ class ARowAppliesTheHelperItsCallReachesTest {
         assertEquals("E1905", e.diagnostic().code(), e.getMessage());
     }
 
-    /** Which library function a row applied decides what it is told about it, so that question is
-     * asked with the name the call reaches too: an intrinsic has no method for a fixture to run, and
-     * saying so is not the same as saying the call was not a construction. */
+    /** An intrinsic is applied under the name the call reaches, so an import that lets it be written
+     * without its qualifier reaches the same kernel (#680). A table keyed by reach names misses on the
+     * bare spelling, and a miss here reads as a row naming a construction it cannot make. The row
+     * holding is what says the kernel ran: a value it did not answer would be E1903 or E1905. */
     @Test
-    void aLibraryIntrinsicWrittenBareIsRefusedAsTheIntrinsicItIs() {
-        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+    void aLibraryIntrinsicWrittenBareIsAppliedUnderTheNameItReaches() {
+        assertDoesNotThrow(() -> Compiler.compile("""
                 module demo
                 import String ( length )
                 data In  = { s: String }
@@ -73,7 +74,6 @@ class ARowAppliesTheHelperItsCallReachesTest {
                 example go
                     | "bare" : (In { s = "abc" }) -> Out { n = length("abc") }
                 """));
-        assertTrue(e.getMessage().contains("a standard-library function is not one a fixture may apply"), e.getMessage());
     }
 
     /**
@@ -99,14 +99,11 @@ class ARowAppliesTheHelperItsCallReachesTest {
     }
 
     /**
-     * Which name a fixture looks a call up by is one question and whether it may look it up as a helper
-     * at all is another. A binding that shares a helper's spelling is the binding, and a fixture cannot
-     * apply what a binding holds — so the row is refused rather than answered by the helper.
-     *
-     * <p>The first row is what makes this reachable: it applies the helper, so the method is emitted and
-     * a lookup by spelling would find one to run. Asked by spelling, the second row runs {@code twice}
-     * over 3, gets the 6 the behavior also returns, and holds — a row that states one thing and is
-     * passed by another.
+     * A binding that shares a helper's spelling is the binding: the row's expectation is compiled as
+     * this module's code, so its {@code twice} is the lambda the row bound and not the helper. The
+     * mismatch's own content is what proves it — the expectation computed 103, the binding's answer,
+     * where a lookup by spelling would have run the helper, got the 6 the behavior also returns, and
+     * passed a row that states something else.
      */
     @Test
     void aBindingIsNotTheHelperThatSharesItsSpelling() {
@@ -124,6 +121,8 @@ class ARowAppliesTheHelperItsCallReachesTest {
                         Out { m = twice(3) }
                       }
                 """));
-        assertEquals("E1903", e.diagnostic().code(), e.getMessage());
+        assertEquals("E1905", e.diagnostic().code(), e.getMessage());
+        assertTrue(e.getMessage().contains("103"),
+                "the expectation is the binding's answer, not the helper's: " + e.getMessage());
     }
 }

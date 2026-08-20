@@ -33,7 +33,7 @@ class CompileMatchDestructureTest {
     private String run(String matchBody, Map<String, Object> input) throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(HEAD + matchBody), getClass().getClassLoader());
         Object contact = Codecs.decoded(loader, "demo.Contact", input);
-        Object behavior = loader.loadClass("demo.ContactValue" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "contactValue").getConstructor().newInstance();
         Object label = Codecs.apply(behavior, contact);
         return (String) Codecs.encode(loader, "demo.Label", label);
     }

@@ -143,6 +143,22 @@ final class Descriptors {
     static final MethodTypeDesc MTD_failureClause = MethodTypeDesc.of(CD_String);
     /** {@code meta()}: the rejecting type, and the clause where it has a name. */
     static final MethodTypeDesc MTD_failureMeta = MethodTypeDesc.of(CD_Map);
+    /** The failure side of a behavior's declared relation: which clause of which behavior did not
+     *  hold, and which case of the answer it was about. */
+    static final ClassDesc CD_EnsuresFailure = ClassDesc.of("souther.runtime.EnsuresFailure");
+    /** Its constructor. Written rather than a factory per shape of the two nullable parts, which
+     *  would be four names for one value; a null is pushed for the part that is not there. */
+    /** The case a failure names, as the module that declares it and the name written there. */
+    static final ClassDesc CD_DeclaredCase = ClassDesc.of("souther.runtime.DeclaredCase");
+    /** Its constructor. */
+    static final MethodTypeDesc MTD_declaredCase =
+            MethodTypeDesc.of(ConstantDescs.CD_void, CD_String, CD_String);
+    static final MethodTypeDesc MTD_ensuresFailure = MethodTypeDesc.of(ConstantDescs.CD_void,
+            CD_String, CD_String, CD_String, CD_DeclaredCase, CD_DeclaredCase);
+    /** The one abort either kind of broken constraint leaves by. */
+    static final ClassDesc CD_ConstraintFailure = ClassDesc.of("souther.runtime.ConstraintFailure");
+    static final MethodTypeDesc MTD_notHeld =
+            MethodTypeDesc.of(CD_ConstraintViolation, CD_ConstraintFailure);
     static final ClassDesc CD_IntMath = ClassDesc.of("souther.runtime.IntMath");
     /** {@code (long, long) -> long}: overflow-checked Int arithmetic (spec §stdlib-int). */
     static final MethodTypeDesc MTD_intExact =
@@ -211,6 +227,12 @@ final class Descriptors {
     static final MethodTypeDesc MTD_Strings_fromInt = MethodTypeDesc.of(CD_String, ConstantDescs.CD_long);
     static final ClassDesc CD_Comparable = ClassDesc.of("java.lang.Comparable");
     static final MethodTypeDesc MTD_compareTo_Object = MethodTypeDesc.of(ConstantDescs.CD_int, CD_Object);
+
+    /** {@code Integer.compare(int, int)}: the sign of two places in an enumeration's declaration,
+     *  which is what a {@code compareTo} over a newtype wrapping one answers with. */
+    static final ClassDesc CD_Integer = ClassDesc.of("java.lang.Integer");
+    static final MethodTypeDesc MTD_Integer_compare =
+            MethodTypeDesc.of(ConstantDescs.CD_int, ConstantDescs.CD_int, ConstantDescs.CD_int);
     static final MethodTypeDesc MTD_Map_put = MethodTypeDesc.of(CD_Object, CD_Object, CD_Object);
     static final MethodTypeDesc MTD_Map_containsKey =
             MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object);

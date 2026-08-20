@@ -1,0 +1,3 @@
+catalog.sou
+shipping.sou
+shipping.examples.sou

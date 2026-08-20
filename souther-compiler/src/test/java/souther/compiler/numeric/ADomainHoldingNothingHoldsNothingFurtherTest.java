@@ -25,13 +25,13 @@ class ADomainHoldingNothingHoldsNothingFurtherTest {
 
     private static final Map<String, Granularity> COUNTS = Map.of("n", Granularity.DISCRETE);
 
-    private static NumericDomain.LinearForm nMinus(long count) {
-        return NumericDomain.LinearForm.atom("n")
-                .minus(NumericDomain.LinearForm.constant(BigDecimal.valueOf(count)));
+    private static NumericDomain.LinearForm<String> nMinus(long count) {
+        return NumericDomain.LinearForm.<String>atom("n")
+                .minus(NumericDomain.LinearForm.<String>constant(BigDecimal.valueOf(count)));
     }
 
-    private static NumericDomain atLeastTwo() {
-        return NumericDomain.top().assume(nMinus(2), NumericDomain.Rel.GE, COUNTS);
+    private static NumericDomain<String> atLeastTwo() {
+        return NumericDomain.<String>top().assume(nMinus(2), NumericDomain.Rel.GE, COUNTS);
     }
 
     @Test
@@ -55,7 +55,7 @@ class ADomainHoldingNothingHoldsNothingFurtherTest {
 
     @Test
     void whatHoldsNothingKeepsHoldingNothing() {
-        NumericDomain none = atLeastTwo().assume(nMinus(1), NumericDomain.Rel.LE, COUNTS);
+        NumericDomain<String> none = atLeastTwo().assume(nMinus(1), NumericDomain.Rel.LE, COUNTS);
         assertTrue(none.assume(nMinus(0), NumericDomain.Rel.EQ, COUNTS).isBottom());
         assertTrue(none.assume(nMinus(5), NumericDomain.Rel.GE, COUNTS).isBottom());
     }

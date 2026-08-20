@@ -20,10 +20,10 @@ final class PredicateFacts {
     private static final PredicateFacts BOTTOM = new PredicateFacts(true, Set.of(), Set.of());
 
     private final boolean bottom;    // contradictory guards — this path is not taken
-    private final Set<String> holds;
-    private final Set<String> fails;
+    private final Set<FactSubject> holds;
+    private final Set<FactSubject> fails;
 
-    private PredicateFacts(boolean bottom, Set<String> holds, Set<String> fails) {
+    private PredicateFacts(boolean bottom, Set<FactSubject> holds, Set<FactSubject> fails) {
         this.bottom = bottom;
         this.holds = holds;
         this.fails = fails;
@@ -33,15 +33,28 @@ final class PredicateFacts {
         return NONE;
     }
 
+    /**
+     * Whether the predicates settled here cannot all hold.
+     *
+     * <p>A claim about the values and not about the reading: what it takes to reach it is one key
+     * settled both ways, which is a contradiction whatever the predicate says. So it is read where a
+     * value is asked for as well as where a path is — a declaration stating a predicate of its value
+     * and denying the same predicate of the same value has no value, and nothing about that answer
+     * needs the numbers.
+     */
+    boolean isBottom() {
+        return bottom;
+    }
+
     /** The facts with {@code key} settled. Settling it both ways makes the path infeasible. */
-    PredicateFacts assume(String key, boolean positive) {
+    PredicateFacts assume(FactSubject key, boolean positive) {
         if (bottom) {
             return this;
         }
         if ((positive ? fails : holds).contains(key)) {
             return BOTTOM;
         }
-        Set<String> next = new HashSet<>(positive ? holds : fails);
+        Set<FactSubject> next = new HashSet<>(positive ? holds : fails);
         next.add(key);
         return positive
                 ? new PredicateFacts(false, Set.copyOf(next), fails)
@@ -49,12 +62,12 @@ final class PredicateFacts {
     }
 
     /** Whether the guards prove {@code key} (or its negation, when {@code positive} is false). */
-    boolean entails(String key, boolean positive) {
+    boolean entails(FactSubject key, boolean positive) {
         return bottom || (positive ? holds : fails).contains(key);
     }
 
     /** Whether the guards prove the opposite of what {@code positive} asks of {@code key}. */
-    boolean refutes(String key, boolean positive) {
+    boolean refutes(FactSubject key, boolean positive) {
         return !bottom && (positive ? fails : holds).contains(key);
     }
 

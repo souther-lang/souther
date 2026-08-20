@@ -1,5 +1,6 @@
 package souther.compiler.meta;
 
+import souther.compiler.jvm.JvmClassName;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -25,7 +26,7 @@ public interface ModulePath {
     byte[] bytes(String binaryName);
 
     /** The declarations published on these classes. */
-    default PublishedModule.Classes declarations() {
+    default PublishedClasses declarations() {
         return new ClassFileDeclarations(this::bytes);
     }
 
@@ -60,7 +61,7 @@ public interface ModulePath {
     record ClassPath(List<Path> entries) implements ModulePath {
         @Override
         public byte[] bytes(String binaryName) {
-            String resource = binaryName.replace('.', '/') + ".class";
+            String resource = JvmClassName.classFile(binaryName);
             for (Path entry : entries) {
                 byte[] bytes = read(entry, resource);
                 if (bytes != null) {

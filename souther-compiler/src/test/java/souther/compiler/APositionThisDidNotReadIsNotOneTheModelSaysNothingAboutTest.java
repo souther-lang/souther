@@ -4,7 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.BoundaryAssessment;
+import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
@@ -45,11 +46,9 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
             data Stage = Prospecting | Qualified | Won
 
             behavior alone : (r: Request) -> Auto | Manual
-                constructs Auto, Manual
             let alone (r) = if r.cost <= 100000 then Auto else Manual
 
             behavior inAConjunction : (r: Request) -> Auto | Manual
-                constructs Auto, Manual
             let inAConjunction (r) =
                 if r.cost >= 0 && r.cost <= 100000 then Auto else Manual
 
@@ -58,24 +57,19 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
             data Outer = { middle: Middle }
 
             behavior tooDeep : (o: Outer) -> Auto | Manual
-                constructs Auto, Manual
             let tooDeep (o) = if o.middle.deep.note == "x" then Auto else Manual
 
             behavior byEquality : (r: Request) -> Auto | Manual
-                constructs Auto, Manual
             let byEquality (r) = if r.cost == 3 then Auto else Manual
 
             behavior byDateTime : (at: DateTime) -> Auto | Manual
-                constructs Auto, Manual
             let byDateTime (at) =
                 if at < DateTime("2026-01-01T00:00:00") then Auto else Manual
 
             behavior byCase : (s: Qualified) -> Auto | Manual
-                constructs Auto, Manual, Won
             let byCase (s) = if s < Won then Auto else Manual
 
             behavior nothingCompared : (r: Request) -> Auto | Manual
-                constructs Auto, Manual
             let nothingCompared (r) =
                 match r.kind with
                     | Domestic -> Auto
@@ -89,15 +83,12 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
                 invariant value >= 100
 
             behavior boundedByADate : (c: Cutoff) -> Auto | Manual
-                constructs Auto
             let boundedByADate (c) = Auto
 
             behavior boundedByAnUnreadableEnd : (m: Stepped) -> Auto | Manual
-                constructs Auto
             let boundedByAnUnreadableEnd (m) = Auto
 
             behavior boundedByANumber : (a: Amount) -> Auto | Manual
-                constructs Auto
             let boundedByANumber (a) = Auto
             """;
 
@@ -131,11 +122,11 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     }
 
     /** Every line one behavior's rules drew, which is what says the position was read at all. */
-    private static List<BoundaryAssessment> linesOf(String behavior) {
+    private static List<BorderAssessment> linesOf(String behavior) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
-        Map<String, List<BoundaryAssessment>> boundaries =
+        Map<String, List<BorderAssessment>> boundaries =
                 compilation.db().ask(new Adequacy.Boundaries("example.repro")).value();
         assertNotNull(boundaries, "the model under test compiles");
         return boundaries.get(behavior);
@@ -212,7 +203,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
 
         assertFalse(block.contains("not derivable: m"), block);
         assertTrue(block.contains("not read: m"), block);
-        assertTrue(block.contains("does not read"), block);
+        assertTrue(block.contains("did not read"), block);
     }
 
     /**
@@ -228,7 +219,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
 
         assertFalse(block.contains("not derivable: c"), block);
         assertFalse(block.contains("not read: c"), block);
-        assertTrue(block.contains("boundary    0/0   (1 not measured"), block);
+        assertTrue(block.contains("border      borders 1   coverage items 0/0   excluded 2   (2 not measured"), block);
     }
 
     /**

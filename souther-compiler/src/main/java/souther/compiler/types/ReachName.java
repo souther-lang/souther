@@ -4,7 +4,7 @@ package souther.compiler.types;
  * The name a module reaches a definition by, from the place that named it.
  *
  * <p>Not the definition's identity. Which module declares something is a fact about the declaration
- * and is written there ({@code Ast.FnDef#declaredIn}); this is a fact about the reference, and the two
+ * and is written there ({@code Hir.FnDef#declaredIn}); this is a fact about the reference, and the two
  * cannot be derived from each other. {@code souther.list} declares {@code foldFrom} and a reader
  * reaches it as {@code List.foldFrom}: the alias belongs to the reference, and the declaring module is
  * nowhere in it.
@@ -92,21 +92,36 @@ public sealed interface ReachName {
      * is what decides the answer for a helper: the module's own is reached bare and another's under
      * the module that declares it, and neither the declaration nor the spelling says which case this
      * is on its own.
+     *
+     * <p>Asked only of a name that denotes something. One nothing declares is
+     * {@link souther.compiler.ast.Hir.Var.Unanswered}, which reaches nothing and is not asked; it
+     * used to be answered with its own spelling, and a spelling handed back as a reach name is a
+     * reference that reaches whatever the reading module happens to mean by it (ADR-0067). A caller
+     * with no denotation at hand has not resolved one yet, and is refused for the same reason.
      */
     static ReachName of(ValueName denotes, String written, String self) {
         if (self == null) {
             throw new IllegalArgumentException("which module is reading decides this: " + written);
         }
+        if (denotes == null) {
+            throw new IllegalArgumentException("`" + written
+                    + "` has not been resolved, so nothing here says how it is reached");
+        }
         return switch (denotes) {
-            case null -> new Bare(written);
             case ValueName.Helper helper -> helper.module().equals(self)
                     ? new Bare(helper.name()) : new OfModule(helper.module(), helper.name());
+            // A behavior is declared by a module, so it is reached the two ways a helper is, and
+            // the answer is read off the declaration rather than off the spelling. Written it can
+            // be either — a module's own behavior may be written through its own module, and
+            // another's may be written bare where an import brought it in — and neither spelling
+            // says which module declares what it reaches.
+            case ValueName.Behavior behavior -> behavior.module().equals(self)
+                    ? new Bare(behavior.name())
+                    : new OfModule(behavior.module(), behavior.name());
             case ValueName.Stdlib library -> new OfLibrary(library);
-            // Each of these is reached by the name it is written with. A binding is named where it is
-            // bound, a behavior and a type by what this module calls them, and a name that denotes
-            // nothing keeps the spelling so that a report quotes what was written.
-            case ValueName.Local _, ValueName.Behavior _, ValueName.OfType _, ValueName.Builtin _,
-                    ValueName.Unresolved _ -> new Bare(written);
+            // Each of these is reached by the name it is written with: a binding is named where it
+            // is bound, and a type used as a value by what this module calls it.
+            case ValueName.Local _, ValueName.OfType _, ValueName.Builtin _ -> new Bare(written);
         };
     }
 

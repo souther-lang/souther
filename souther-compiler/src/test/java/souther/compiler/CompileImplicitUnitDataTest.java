@@ -49,7 +49,7 @@ class CompileImplicitUnitDataTest {
                 data Priced = { total: Int }
 
                 behavior quote : (c: Cart) -> Priced | EmptyCart
-                    constructs Priced, EmptyCart
+                    constructs Priced
 
                 let quote (c) = {
                     guard c.n >= 1 else EmptyCart
@@ -58,7 +58,7 @@ class CompileImplicitUnitDataTest {
                 """);
 
         Object cart = Codecs.decoded(loader, "demo.Cart", Map.of("n", 0L));
-        Object behavior = loader.loadClass("demo.Quote$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "quote").getConstructor().newInstance();
         Object out = behavior.getClass().getMethod("apply", Object.class).invoke(behavior, cart);
 
         assertInstanceOf(loader.loadClass("demo.EmptyCart"), out);
@@ -73,12 +73,12 @@ class CompileImplicitUnitDataTest {
 
                 data Cart = { n: Int }
 
-                behavior close : (c: Cart) -> Closed constructs Closed
+                behavior close : (c: Cart) -> Closed
                 let close (c) = Closed
                 """);
 
         Object cart = Codecs.decoded(loader, "demo.Cart", Map.of("n", 1L));
-        Object behavior = loader.loadClass("demo.Close$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "close").getConstructor().newInstance();
         Object out = behavior.getClass().getMethod("apply", Object.class).invoke(behavior, cart);
 
         assertInstanceOf(loader.loadClass("demo.Closed"), out);
@@ -129,11 +129,11 @@ class CompileImplicitUnitDataTest {
                 data Cart = { n: Int }
                 data Out = { n: Int }
 
-                behavior f : (c: Cart) -> Out constructs Out, Refused
+                behavior f : (c: Cart) -> Out constructs Out, Basket
                 let f (c) = Out { n = 1 }
                 """));
 
-        assertTrue(e.getMessage().contains("Refused"), e.getMessage());
+        assertTrue(e.getMessage().contains("Basket"), e.getMessage());
     }
 
     /** A qualified name says which module declares it, so it is a reference wherever it is written. */
@@ -174,13 +174,13 @@ class CompileImplicitUnitDataTest {
 
                 data Cart = { n: Int }
 
-                behavior finish : (c: Cart) -> Done constructs Done
+                behavior finish : (c: Cart) -> Done
                 let finish (c) = Done
                 """));
 
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
         Object cart = Codecs.decoded(loader, "down.Cart", Map.of("n", 1L));
-        Object behavior = loader.loadClass("down.Finish$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "down", "finish").getConstructor().newInstance();
         Object out = behavior.getClass().getMethod("apply", Object.class).invoke(behavior, cart);
 
         assertEquals("up.Done", out.getClass().getName());

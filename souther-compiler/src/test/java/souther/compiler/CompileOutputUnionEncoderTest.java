@@ -19,14 +19,14 @@ class CompileOutputUnionEncoderTest {
     void aProductMemberLaysItsFieldsFlatUnderTheTypeTag() throws Exception {
         BytesClassLoader loader = compileBill();
         Object ok = Codecs.apply(loader.loadClass("m.Bill").getMethod("of").invoke(null), 5L);
-        assertEquals(Map.of("v", 5L, "type", "Ok"), Codecs.encode(loader, "m.BillResult", ok));
+        assertEquals(Map.of("v", 5L, "type", "Ok"), Codecs.encode(loader, Emitted.result("m", "bill"), ok));
     }
 
     @Test
     void aUnitMemberWritesTheTypeTagAlone() throws Exception {
         BytesClassLoader loader = compileBill();
         Object none = Codecs.apply(loader.loadClass("m.Bill").getMethod("of").invoke(null), 0L);
-        assertEquals(Map.of("type", "NotFound"), Codecs.encode(loader, "m.BillResult", none));
+        assertEquals(Map.of("type", "NotFound"), Codecs.encode(loader, Emitted.result("m", "bill"), none));
     }
 
     @Test
@@ -35,12 +35,11 @@ class CompileOutputUnionEncoderTest {
                 module m exposing ( NoAnswer, half )
                 data NoAnswer
                 behavior half : (n: Int) -> Int | NoAnswer
-                    constructs NoAnswer
                 let half (n) = if n >= 0 then n / 2 else NoAnswer
                 """), getClass().getClassLoader());
         Object answered = Codecs.apply(loader.loadClass("m.Half").getMethod("of").invoke(null), 7L);
         assertEquals(Map.of("type", "Int", "value", 3L),
-                Codecs.encode(loader, "m.HalfResult", answered));
+                Codecs.encode(loader, Emitted.result("m", "half"), answered));
     }
 
     @Test
@@ -54,13 +53,13 @@ class CompileOutputUnionEncoderTest {
                 import up ( Yen )
                 data NothingOwed
                 behavior owed : (a: Yen) -> Yen | NothingOwed
-                    constructs Yen, NothingOwed
+                    constructs Yen
                 let owed (a) = if a.value > 0 then Yen(a.value) else NothingOwed
                 """)), getClass().getClassLoader());
         Object owed = loader.loadClass("down.Owed").getMethod("of").invoke(null);
         Object answered = Codecs.apply(owed, Codecs.decoded(loader, "up.Yen", 5L));
         assertEquals(Map.of("type", "Yen", "value", 5L),
-                Codecs.encode(loader, "down.OwedResult", answered));
+                Codecs.encode(loader, Emitted.result("down", "owed"), answered));
     }
 
     @Test
@@ -70,12 +69,11 @@ class CompileOutputUnionEncoderTest {
                 data Approved
                 data Rejected
                 behavior decide : (n: Int) -> Approved | Rejected
-                    constructs Approved, Rejected
                 let decide (n) = if n > 0 then Approved else Rejected
                 """), getClass().getClassLoader());
         Object decide = loader.loadClass("m.Decide").getMethod("of").invoke(null);
-        assertEquals("Approved", Codecs.encode(loader, "m.DecideResult", Codecs.apply(decide, 1L)));
-        assertEquals("Rejected", Codecs.encode(loader, "m.DecideResult", Codecs.apply(decide, 0L)));
+        assertEquals("Approved", Codecs.encode(loader, Emitted.result("m", "decide"), Codecs.apply(decide, 1L)));
+        assertEquals("Rejected", Codecs.encode(loader, Emitted.result("m", "decide"), Codecs.apply(decide, 0L)));
     }
 
     @Test
@@ -87,7 +85,7 @@ class CompileOutputUnionEncoderTest {
                 data Answer = Hit | Miss
                 data NoAnswer
                 behavior ask : (n: Int) -> Answer | NoAnswer
-                    constructs Hit, Miss, NoAnswer
+                    constructs Hit, Miss
                 let ask (n) = {
                     guard n >= 0 else NoAnswer
                     if n > 0 then Hit { score = n } else Miss { reason = "no" }
@@ -95,7 +93,7 @@ class CompileOutputUnionEncoderTest {
                 """), getClass().getClassLoader());
         Object ask = loader.loadClass("m.Ask").getMethod("of").invoke(null);
         assertEquals(Map.of("type", "Hit", "score", 3L),
-                Codecs.encode(loader, "m.AskResult", Codecs.apply(ask, 3L)));
+                Codecs.encode(loader, Emitted.result("m", "ask"), Codecs.apply(ask, 3L)));
     }
 
     @Test
@@ -109,14 +107,14 @@ class CompileOutputUnionEncoderTest {
                 data Answer = Hit | Miss
                 data NoAnswer
                 behavior ask : (n: Int) -> Answer | NoAnswer
-                    constructs Hit, Miss, NoAnswer
+                    constructs Hit, Miss
                 let ask (n) = {
                     guard n >= 0 else NoAnswer
                     if n > 0 then Hit { score = n } else Miss { reason = "no" }
                 }
                 """), getClass().getClassLoader());
         Object hit = Codecs.apply(loader.loadClass("m.Ask").getMethod("of").invoke(null), 3L);
-        Object written = Codecs.encode(loader, "m.AskResult", hit);
+        Object written = Codecs.encode(loader, Emitted.result("m", "ask"), hit);
         assertEquals(hit, Codecs.decoded(loader, "m.Answer", written));
     }
 
@@ -126,7 +124,7 @@ class CompileOutputUnionEncoderTest {
                 data Ok = { v: Int }
                 data NotFound
                 behavior bill : (n: Int) -> Ok | NotFound
-                    constructs Ok, NotFound
+                    constructs Ok
                 let bill (n) = if n > 0 then Ok { v = n } else NotFound
                 """), getClass().getClassLoader());
     }

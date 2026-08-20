@@ -1,6 +1,6 @@
 package souther.compiler.observe;
 
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 import java.util.Set;
@@ -23,10 +23,15 @@ import java.util.Set;
  *
  * @param unclassifiedRows rows whose case could not be read. While this is above zero a missing case
  *                         is undecided rather than missing, because one of those rows may cover it.
+ * @param answeredRows     rows the behavior answered for. Not the size of {@link #observed}: an
+ *                         answer of a type no declaration names is an answer this cannot place, so a
+ *                         run that got one has an empty {@code observed} and a count above zero.
+ *                         What separates a run that produced nothing from one whose answers could not
+ *                         be named is this, and neither of the case sets says it.
  */
-public record OutputCaseEvidence(Set<TypeName> declared, Set<TypeName> specified,
-                                 Set<TypeName> observed, Set<TypeName> verified,
-                                 int unclassifiedRows) {
+public record OutputCaseEvidence(Set<TypeSymbol> declared, Set<TypeSymbol> specified,
+                                 Set<TypeSymbol> observed, Set<TypeSymbol> verified,
+                                 int unclassifiedRows, int answeredRows) {
 
     public OutputCaseEvidence {
         declared = Evidence.ordered(declared);
@@ -36,16 +41,16 @@ public record OutputCaseEvidence(Set<TypeName> declared, Set<TypeName> specified
     }
 
     public static OutputCaseEvidence none() {
-        return new OutputCaseEvidence(Set.of(), Set.of(), Set.of(), Set.of(), 0);
+        return new OutputCaseEvidence(Set.of(), Set.of(), Set.of(), Set.of(), 0, 0);
     }
 
     /** Cases the behavior can answer with that no row expects. */
-    public List<TypeName> unspecified() {
+    public List<TypeSymbol> unspecified() {
         return Evidence.missingFrom(declared, specified);
     }
 
     /** Cases no row has confirmed the behavior answers with. */
-    public List<TypeName> unverified() {
+    public List<TypeSymbol> unverified() {
         return Evidence.missingFrom(declared, verified);
     }
 

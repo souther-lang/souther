@@ -27,7 +27,7 @@ class CompileValueDefinitionTest {
 
     /** `bump` applied to `In { n }`, read back as the `n` of its `Out`. */
     private static Object bumped(BytesClassLoader loader, long n) throws Exception {
-        Object behavior = loader.loadClass("demo.Bump$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "bump").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, Codecs.decoded(loader, "demo.In", Map.of("n", n)));
         return ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("n");
     }

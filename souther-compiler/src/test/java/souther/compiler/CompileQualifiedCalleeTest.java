@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.diag.msg.NameMessage;
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.CompileException;
@@ -90,7 +92,7 @@ class CompileQualifiedCalleeTest {
 
         assertTrue(e.getMessage().contains("`up.defaults`"), e.getMessage());
         assertEquals("up.defaults".length(),
-                e.diagnostic().region().end().column() - e.diagnostic().region().start().column());
+                ((Primary.InSource) e.diagnostic().primary()).place().region().end().column() - ((Primary.InSource) e.diagnostic().primary()).place().region().start().column());
     }
 
     /** A chain rooted at a binding is field reads all the way down, however long it is: the root is
@@ -111,7 +113,7 @@ class CompileQualifiedCalleeTest {
                 """);
 
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
-        Object b = loader.loadClass("demo.Go$Impl").getConstructor().newInstance();
+        Object b = Emitted.behavior(loader, "demo", "go").getConstructor().newInstance();
         Object out = Codecs.apply(b, Codecs.decoded(loader, "demo.In", Map.of("n", 5L)));
         assertEquals(5L, out.getClass().getMethod("m").invoke(out));
     }
@@ -147,7 +149,7 @@ class CompileQualifiedCalleeTest {
 
         assertTrue(e.getMessage().contains("probe.a.NoSuch"), e.getMessage());
         assertEquals("probe.a.NoSuch".length(),
-                e.diagnostic().region().end().column() - e.diagnostic().region().start().column(),
+                ((Primary.InSource) e.diagnostic().primary()).place().region().end().column() - ((Primary.InSource) e.diagnostic().primary()).place().region().start().column(),
                 "the report underlines exactly the name that was written");
     }
 
@@ -166,7 +168,7 @@ class CompileQualifiedCalleeTest {
         assertInstanceOf(NameMessage.NoValueOfThatNameInScope.class, e.diagnostic().said());
         assertTrue(e.getMessage().contains("`unknown`"), e.getMessage());
         assertEquals("unknown".length(),
-                e.diagnostic().region().end().column() - e.diagnostic().region().start().column());
+                ((Primary.InSource) e.diagnostic().primary()).place().region().end().column() - ((Primary.InSource) e.diagnostic().primary()).place().region().start().column());
     }
 
     /**
@@ -191,7 +193,7 @@ class CompileQualifiedCalleeTest {
         assertInstanceOf(NameMessage.ItIsNotAFunctionHere.class, e.diagnostic().said());
         assertTrue(e.getMessage().contains("`d.count`"), e.getMessage());
         assertEquals("d.count".length(),
-                e.diagnostic().region().end().column() - e.diagnostic().region().start().column(),
+                ((Primary.InSource) e.diagnostic().primary()).place().region().end().column() - ((Primary.InSource) e.diagnostic().primary()).place().region().start().column(),
                 "the report underlines the read, not the binding the lowering introduced");
     }
 
@@ -208,7 +210,7 @@ class CompileQualifiedCalleeTest {
                 """);
 
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
-        Object b = loader.loadClass("demo.Go$Impl").getConstructor().newInstance();
+        Object b = Emitted.behavior(loader, "demo", "go").getConstructor().newInstance();
         Object out = Codecs.apply(b, Codecs.decoded(loader, "demo.In", Map.of("s", "  a  ")));
         assertEquals("a", out.getClass().getMethod("t").invoke(out));
         assertEquals("a", out.getClass().getMethod("u").invoke(out));

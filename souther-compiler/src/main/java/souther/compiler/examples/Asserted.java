@@ -1,7 +1,7 @@
 package souther.compiler.examples;
 
 import souther.compiler.observe.ObservedValue;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 import java.util.Map;
@@ -29,7 +29,7 @@ sealed interface Asserted {
     record Value(ObservedValue value) implements Asserted {}
 
     /** A construction, under the name the row wrote and with the parts it wrote. */
-    record Built(TypeName type, Map<String, Asserted> fields) implements Asserted {}
+    record Built(TypeSymbol type, Map<String, Asserted> fields) implements Asserted {}
 
     /**
      * A sequence, and which sequence the row said it was.

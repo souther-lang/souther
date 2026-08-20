@@ -81,7 +81,7 @@ class AdequacyLensTest {
 
         assertEquals(1, lenses.size());
         assertEquals(9, lenses.get(0).range().start().line(), "the `behavior` line, zero-based");
-        assertEquals("1 row · out 1/2 · boundary 0/3 · branch 1/2", lenses.get(0).title());
+        assertEquals("1 row · out 1/2 · boundary 2/6 · branch 1/2", lenses.get(0).title());
     }
 
     /**
@@ -104,7 +104,7 @@ class AdequacyLensTest {
         List<CodeLens> lenses = measuring(Adequacy.Level.ALL).codeLenses(MODULE, graphOf(workspace));
 
         assertEquals(1, lenses.size());
-        assertEquals("2 rows · out 2/2 · boundary 0/3 · branch 2/2", lenses.get(0).title());
+        assertEquals("2 rows · out 2/2 · boundary 3/6 · branch 2/2", lenses.get(0).title());
     }
 
     /** Nothing has been claimed about a behavior no row names, so there is nothing to draw over it. */
@@ -182,17 +182,10 @@ class AdequacyLensTest {
      */
     @Test
     void aLineWhoseValueCouldNotBeReadIsNotInTheRatio() {
-        StringBuilder items = new StringBuilder();
-        for (int i = 0; i < 64; i++) {
-            items.append(i == 0 ? "" : ", ")
-                    .append("Item { a = \"").append(i).append("\", b = \"").append(i)
-                    .append("\", c = \"").append(i).append("\" }");
-        }
-        StringBuilder groups = new StringBuilder();
-        for (int i = 0; i < 64; i++) {
-            groups.append(i == 0 ? "" : ", ")
-                    .append("Group { items = [ ").append(items).append(" ] }");
-        }
+        // Computed rather than spelled: a row's operand is compiled as a method of the module, and
+        // a literal this size is past what a JVM method holds — which would leave the module with
+        // no classes at all, where what this measures is the observation's limit.
+        String groups = "someGroups(64)";
         String unread = """
                 module example.wide
 
@@ -209,8 +202,14 @@ class AdequacyLensTest {
 
                 let take (request) = Ok { n = request.cost.value }
 
+                let someItems (n: Int): List<Item> =
+                    List.map({ (i) -> Item { a = "x", b = "x", c = "x" } }, List.rangeInclusive(1, n))
+
+                let someGroups (n: Int): List<Group> =
+                    List.map({ (i) -> Group { items = someItems(64) } }, List.rangeInclusive(1, n))
+
                 example take
-                    | (Draft { groups = [ %s ], cost = Amount(0) }) -> Ok { n = 0 }
+                    | (Draft { groups = %s, cost = Amount(0) }) -> Ok { n = 0 }
                 """.formatted(groups);
 
         List<CodeLens> lenses = measuring(Adequacy.Level.ALL)

@@ -1,6 +1,6 @@
 package souther.compiler.query;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
@@ -35,24 +35,24 @@ class BodyForInvariantDischargeTest {
             let shift (b) = List.map(x -> doubled(x), b.items)
             """;
 
-    private static Ast.Expr body(Key<Ast.FnDef> key) {
+    private static Hir.Expr body(Key<Hir.FnDef> key) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("a.sou", SOURCE);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
         return c.db().ask(key).value().writtenBody();
     }
 
-    private static List<String> calls(Ast.Expr e) {
+    private static List<String> calls(Hir.Expr e) {
         List<String> out = new ArrayList<>();
         collect(e, out);
         return out;
     }
 
-    private static void collect(Ast.Expr e, List<String> out) {
-        if (e instanceof Ast.Apply call) {
+    private static void collect(Hir.Expr e, List<String> out) {
+        if (e instanceof Hir.Apply call) {
             out.add(call.written());
         }
-        Ast.forEachChild(e, child -> collect(child, out));
+        Hir.forEachChild(e, child -> collect(child, out));
     }
 
     @Test

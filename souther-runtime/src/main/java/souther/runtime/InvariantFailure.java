@@ -20,7 +20,8 @@ import java.util.Map;
  * constructor and its caller, and every path out of that turns it into an abort, a departure, or a
  * boundary issue.
  */
-public record InvariantFailure(String module, String type, @Nullable String clause) {
+public record InvariantFailure(String module, String type, @Nullable String clause)
+        implements ConstraintFailure {
 
     /** The failure of a clause declared with a name. */
     public static InvariantFailure of(String module, String type, String clause) {

@@ -1,5 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.TermPath;
+
 /**
  * A position no class came back for, and which of the two that is.
  *
@@ -23,8 +26,8 @@ public record UndividedPosition(TermPath at, Why why) {
     public sealed interface Why {
 
         /**
-         * Every producer was asked, none of them stopped, and none of them divided the position:
-         * the model divides it no way at all.
+         * Every reading ran to the end, none of them stopped, and none of them divided the
+         * position: the model divides it no way at all.
          *
          * <p>A class with no way to make one rather than a record, because what it says is a
          * conclusion about a model and the only thing entitled to draw it is the completion of a
@@ -73,8 +76,30 @@ public record UndividedPosition(TermPath at, Why why) {
      * capability was missing.
      */
     public enum Reason {
-        /** A comparison this position is named by sits inside a condition this does not read. */
+        /**
+         * A rule about this position was read and could not be used.
+         *
+         * <p>Said of the rule and not of one way of failing to use it. A comparison inside a
+         * condition this does not take apart is one; a rule naming which values may stand here,
+         * written as something other than a value written out, is another. Which reader of the
+         * clause gave up is not part of the promise.
+         *
+         * <p>A rule this never arrived at is {@link #RULES_NOT_READ_AT_ALL} and not this. The two
+         * were one word, and the sentence this one prints — an expression the terms do not name —
+         * was said of positions whose rules nothing had looked at, which is a different thing and
+         * is lifted by different work.
+         */
         UNSUPPORTED_SYNTAX,
+        /**
+         * The reading did not reach the rules written about this position.
+         *
+         * <p>Nothing here was read and found wanting: the rules are behind something this walk did
+         * not enter, and what is written under it is whatever it is. Which limit stopped the walk
+         * is not recorded and is not promised — a depth, a type it had been through, a shape it
+         * does not descend into, and a clause that could not be typed all leave the same hole, and
+         * a reader is told the hole and not this compiler's route to it.
+         */
+        RULES_NOT_READ_AT_ALL,
         /** The values the comparison is against are not ones a line can be drawn on here. */
         UNSUPPORTED_DOMAIN,
         /**

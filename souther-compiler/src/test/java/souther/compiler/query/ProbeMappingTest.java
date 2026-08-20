@@ -63,7 +63,7 @@ class ProbeMappingTest {
         IllegalStateException stopped = assertThrows(IllegalStateException.class,
                 () -> Backend.generate(in.lowered(), in.scope(), in.typePackages(), in.sigs(),
                         in.imported(), in.injected(), in.callees(), in.requirements(), in.checked(),
-                        in.dischargeClauses(),
+                        in.dischargeClauses(), in.checks(),
                         Instrumentation.NONE.measuring(somewhereElse)));
 
         assertTrue(stopped.getMessage().contains("no probe was planned"), stopped.getMessage());
@@ -89,7 +89,7 @@ class ProbeMappingTest {
         // The same plan with one more arm in it than any body will emit.
         CoverageSites.Site extra = real.sites().get(0);
         List<CoverageSites.Site> longer = new java.util.ArrayList<>(real.sites());
-        longer.add(new CoverageSites.Site(extra.behavior(), extra.kind(), "phantom", extra.at(),
+        longer.add(new CoverageSites.Site(extra.behavior(), extra.outcome(), extra.at(),
                 real.sites().size(), real.sites().size(), extra.obligation()));
         CoverageSites.Plan overcounted =
                 new CoverageSites.Plan(longer, real.guards(), real.byNode(), real.byComparison());
@@ -97,7 +97,7 @@ class ProbeMappingTest {
         IllegalStateException stopped = assertThrows(IllegalStateException.class,
                 () -> Backend.generate(in.lowered(), in.scope(), in.typePackages(), in.sigs(),
                         in.imported(), in.injected(), in.callees(), in.requirements(), in.checked(),
-                        in.dischargeClauses(),
+                        in.dischargeClauses(), in.checks(),
                         Instrumentation.NONE.measuring(overcounted)));
 
         assertTrue(stopped.getMessage().contains("nothing emitted"), stopped.getMessage());
@@ -118,7 +118,7 @@ class ProbeMappingTest {
     @Test
     void theQueryAnswersWithNothingRatherThanWithAHole() {
         Compilation emitting = compiled();
-        Answer<java.util.Map<String, byte[]>> probed =
+        Answer<souther.compiler.generated.EvaluationArtifact> probed =
                 emitting.db().ask(new Output.Evaluated("no.such.module", Output.CoverageMode.ARMS));
 
         assertTrue(!probed.present() || probed.value() == null);

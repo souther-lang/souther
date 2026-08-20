@@ -56,6 +56,15 @@ public sealed interface ExampleMessage extends Message {
     /** What the row said and what came back. */
     record WhatTheRowSaid(String said) implements ExampleMessage, Supporting {}
 
+    /**
+     * A name is on more than one row of one behavior, so it says which row nowhere.
+     *
+     * <p>Said at every row that carries it, in the source that row is written in. Which of them is
+     * the one that should have been named otherwise is not a question the language answers.
+     */
+    @Code(DiagnosticCode.E1925)
+    record TheNameIsOnMoreThanOneRow(String name, String target) implements ExampleMessage, Reported {}
+
     /** The row reached a point the model says cannot arise. */
     @Code(DiagnosticCode.E1911)
     record TheRowReachedAnUnreachablePoint(String reason) implements ExampleMessage, Reported {}
@@ -72,6 +81,14 @@ public sealed interface ExampleMessage extends Message {
     /** A value the file names is already declared by the module it is about. */
     @Code(DiagnosticCode.E1906)
     record TheNameIsAlreadyDeclared(String name, String module) implements ExampleMessage, Reported {}
+
+    /** A declaration of the model names a value an attached file declares. */
+    @Code(DiagnosticCode.E1626)
+    record TheModelNamesAValueAnAttachedFileDeclares(String name)
+            implements ExampleMessage, Reported {}
+
+    /** Where such a value belongs if the model is to name it. */
+    record MoveTheValueIntoTheModuleItself(String name) implements ExampleMessage, Supporting {}
 
     // --- the fakes ---
 
@@ -95,20 +112,109 @@ public sealed interface ExampleMessage extends Message {
     @Code(DiagnosticCode.E1908)
     record TheFakeCouldNotBeBuilt(String dependency, String why) implements ExampleMessage, Reported {}
 
+    /**
+     * A row states arguments an earlier row of the table states, so the table answers with that one.
+     *
+     * <p>The dispatch takes the first row stating what it is asked, so a second is written and never
+     * reached.
+     */
+    @Code(DiagnosticCode.E1926)
+    record AnEarlierRowAnswersTheseArguments(String fake) implements ExampleMessage, Reported {}
+
+    /** A `_` row is followed by another, which is what the table falls through to instead. */
+    @Code(DiagnosticCode.E1926)
+    record ALaterDefaultRowAnswersInstead(String fake) implements ExampleMessage, Reported {}
+
+    /** Where the row that does answer is written. */
+    record TheRowThatAnswersIsHere(String fake) implements ExampleMessage, Supporting {}
+
     /** A fake was asked for an input its table has no output for. */
     @Code(DiagnosticCode.E1909)
     record AFakeHadNoOutputForAnInput(String input) implements ExampleMessage, Reported {}
+
+    /**
+     * The row states an input and an answer the behavior's {@code ensures} says cannot go together.
+     *
+     * <p>{@code why} is what the check said when it was run over the row's own values, so the clause
+     * that was not kept, and the case the row's answer turned out to be, are named by the thing that
+     * found it rather than worked out again here.
+     */
+    @Code(DiagnosticCode.E1928)
+    record ARowDoesNotKeepWhatTheBehaviorStates(String target, String why)
+            implements ExampleMessage, Reported {}
+
+    /**
+     * A row of a fake's table stands in with an answer the dependency's {@code ensures} says it
+     * cannot give for the input that row states.
+     */
+    @Code(DiagnosticCode.E1929)
+    record AFakeRowDoesNotKeepWhatTheDependencyStates(String dependency, String why)
+            implements ExampleMessage, Reported {}
+
+    /**
+     * An implementation supplied for an injected behavior answered a row's input with something the
+     * behavior's {@code ensures} says it cannot answer with.
+     *
+     * <p>Told apart from {@link ARowDoesNotKeepWhatTheBehaviorStates} because the two are about
+     * different texts: that one is a row recording something the model rules out, and this is code
+     * outside the model doing something the model says it will not. What an author does about them
+     * is not the same — one is a row to correct, the other an implementation to correct.
+     *
+     * <p>A behavior with a body cannot reach this. Its own {@code apply} checks its answer where it
+     * answers, so what it answers has already been held to the declaration by the time a row sees it.
+     */
+    @Code(DiagnosticCode.E1930)
+    record AnImplementationDoesNotKeepWhatTheBehaviorStates(String target, String why)
+            implements ExampleMessage, Reported {}
+
+    /** What to do about any of them: the declaration is what says what the behavior answers, so a row
+     *  stating otherwise records something the behavior will not do. */
+    record TheDeclarationIsWhatSaysWhatItAnswers(String target)
+            implements ExampleMessage, Supporting {}
+
+    /**
+     * What answers the behavior was built against another revision of the module, and the two say
+     * different things about something a value crossing between them depends on.
+     */
+    @Code(DiagnosticCode.E1927)
+    record TheAnswerIsOfAnotherBuild(String target, String module, String declaration)
+            implements ExampleMessage, Reported {}
+
+    /** What to do about it: the two are one model, built twice. */
+    record BuildWhatAnswersItAgainstThisRevision(String module)
+            implements ExampleMessage, Supporting {}
+
+    /** What to do about classes that are short of a module rather than wrong about one: the
+     *  artifact naming it is fine, and what is missing is somewhere for the name to be read from. */
+    record BuildWhatAnswersItAgainstAPathThatCarries(String module)
+            implements ExampleMessage, Supporting {}
+
+    /**
+     * Whether what answers the behavior was built against this module could not be told — which is
+     * not the same as their disagreeing, and is said as its own thing for that reason.
+     */
+    @Code(DiagnosticCode.E1927)
+    record WhetherTheAnswerIsOfThisModuleCannotBeTold(String target, String module)
+            implements ExampleMessage, Reported {}
+
+    /** Nothing was published for the module: the classes carry no declarations at all. */
+    record ItsClassesCarryNoDeclarations(String module) implements ExampleMessage, Supporting {}
+
+    /** Declarations were published and this compiler does not read them. */
+    record WhatItPublishedCannotBeReadHere(String module) implements ExampleMessage, Supporting {}
+
+    /** The answer never said which build's declarations it reads a row's values by. */
+    record ItDidNotSayWhichBuildItReadsBy(String module) implements ExampleMessage, Supporting {}
+
+    /** The side that could not be read is the one the rows are written for, not the answer's. */
+    record ThisCompileCannotReadItsOwnDeclarationsOf(String module)
+            implements ExampleMessage, Supporting {}
 
     // --- what the evaluation could not finish ---
 
     /** The evaluation did not answer in time. */
     @Code(DiagnosticCode.E1923)
     record TheEvaluationDidNotAnswer(String within) implements ExampleMessage, Reported {}
-
-    /** The same, naming what it was in when it stopped. */
-    @Code(DiagnosticCode.E1923)
-    record TheEvaluationDidNotAnswerWhileCalling(String within, String calling)
-            implements ExampleMessage, Reported {}
 
     /** What that says and what it does not. */
     record NotAnsweringIsNotNotTerminating() implements ExampleMessage, Supporting {}
@@ -149,16 +255,81 @@ public sealed interface ExampleMessage extends Message {
     record NoRowAppliesItToThatCase(String caseName, String at, String behavior)
             implements ExampleMessage, Reported {}
 
-    /** No row sits on a boundary an invariant draws. */
+    /**
+     * No row is at one of the points a border owes, the rule that drew it having a name.
+     *
+     * <p>{@code point} is which of them, in the word domain testing gives it (ISTQB CTAL-TA v4.0
+     * §3.1.1). The report writes the same word for the same finding, and a reader handed a
+     * vocabulary by one of the two surfaces was being asked to translate at the other.
+     *
+     * <p>The same word in every catalog. {@code ON} and {@code OFF} are the technique's terms for
+     * the two points against the line rather than English words for them, so they are handed over
+     * as a name is and what a catalog holds is the sentence around them. A catalog that translated
+     * them would be answering a reader who practises the technique in words it has no term for.
+     *
+     * <p>The border is named by the rule that drew it and not by the point: only one of the two
+     * points carries the value the rule was written with, so a sentence saying the line is here
+     * would be false of whichever point is the step over.
+     */
     @Code(DiagnosticCode.E1916)
-    record NoRowIsAtThatBoundary(String at, String value, String rule) implements ExampleMessage, Reported {}
+    record NoRowIsAtThePointOfTheBorderARuleDrew(String point, String at, String value, String rule)
+            implements ExampleMessage, Reported {}
 
-    /** What a row on the line tells apart. */
-    record ARowOnTheLineTellsTwoRulesApart() implements ExampleMessage, Supporting {}
+    /**
+     * The same, where a fork of a body drew the line.
+     *
+     * <p>A rule of its own because a fork has no name to put in the other one's slot. What went
+     * there was a phrase built in Java — `a guard` — which is a rendering, so it read as English in
+     * every language the rest of the sentence was written in, and it named one construct where three
+     * draw a line this way. A type and an invariant have names, and a name is the same in every
+     * language; this has none, so the words are the catalog's.
+     *
+     * <p>Which construct it was is a {@link souther.compiler.diag.Localizable}, and not three rules
+     * of this one. What the sentence says does not turn on it — the phrase is a noun dropped into one
+     * wording, which is what a token category already is — so what varies is a catalog entry rather
+     * than a sentence written twice.
+     *
+     * <p>Where the construct is written is not here either. It is a place, and a place is pointed at.
+     */
+    @Code(DiagnosticCode.E1916)
+    record NoRowIsAtThePointOfTheBorderAConstructDrew(String point, String at, String value,
+                                                     souther.compiler.diag.Localizable construct)
+            implements ExampleMessage, Reported {}
 
-    /** No row goes through an arm of the body. */
+    /** Said beside the construct a line was drawn in, the sentence naming the rule without a place —
+     *  a fork has no name, and where it is written is a place a renderer resolves a file for. */
+    record TheConstructThatDrawsTheLine(souther.compiler.diag.Localizable construct)
+            implements ExampleMessage, Supporting {}
+
+    /**
+     * What a row at the {@code ON} point shows.
+     *
+     * <p>Said in the same words the sentence above it just used. A hint keyed on where the value
+     * falls against the line would be a second vocabulary for one finding, which is the cost this
+     * diagnostic was being fixed to stop charging — and it is not the same axis: which of the two
+     * points carries the line's own value turns on whether the border is closed, so
+     * {@code n <= 100} is at its {@code ON} point on the line and {@code n < 100} is at its
+     * {@code OFF} point there.
+     *
+     * <p>What tells a rule written {@code <=} from one written {@code <} is the border being closed
+     * or open, which the report says of the border and not of either of its points.
+     */
+    record ARowJustInsideShowsTheBorderIsNotFurtherIn() implements ExampleMessage, Supporting {}
+
+    /** And what a row at the {@code OFF} point shows, which is the other half of the pair. */
+    record ARowJustOutsideShowsTheBorderIsNotFurtherOut() implements ExampleMessage, Supporting {}
+
+    /**
+     * No row goes through an arm of the body.
+     *
+     * <p>{@code arm} is localized where the sentence is. What an outcome is called depends on the
+     * construct it belongs to — an {@code if} has a {@code then} to quote, a {@code guard} has the
+     * rest of its block and no word for it — and the analysis that found the arm has no reader and
+     * so no language to name it in.
+     */
     @Code(DiagnosticCode.E1918)
-    record NoRowGoesThroughThatArm(String arm, String behavior) implements ExampleMessage, Reported {}
+    record NoRowGoesThroughThatArm(souther.compiler.diag.Localizable arm, String behavior)
+            implements ExampleMessage, Reported {}
 
     /** Which of the two that is. */
     record EitherARowIsMissingOrNothingReachesIt() implements ExampleMessage, Supporting {}
@@ -179,11 +350,12 @@ public sealed interface ExampleMessage extends Message {
     /** The same, for a `with`. */
     record WhatTheRowSaysAndWhatTheWithSays(String row, String with) implements ExampleMessage, Supporting {}
 
-    /** Where the fake that disagrees is written. */
-    record TheFakeRowIsHere(String behavior) implements ExampleMessage, Supporting {}
+    /** Where the fake that disagrees is written — the other half of the disagreement, since neither
+     *  statement is the one the model is to be held to. */
+    record TheFakeRowIsHere(String behavior) implements ExampleMessage, FindingRegion {}
 
-    /** Where the `with` that disagrees is written. */
-    record TheWithIsHere(String behavior) implements ExampleMessage, Supporting {}
+    /** Where the `with` that disagrees is written, for the same reason. */
+    record TheWithIsHere(String behavior) implements ExampleMessage, FindingRegion {}
 
     // --- a table that could not be built, so nothing it states was checked ---
 

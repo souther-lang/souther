@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Place;
 
 /**
@@ -15,10 +17,13 @@ import souther.compiler.numeric.Place;
  * @param valueBelongsBelow whether {@code value} itself is on the low side. {@code x <= c} puts it
  *                          there; {@code x < c} puts it on the high side. Getting this wrong moves
  *                          the boundary by one and asks for a row that proves nothing.
- * @param origin           the guard that drew it
+ * @param origin           the rule that drew it, which is a {@code guard} of a body or a comparison
+ *                         written in an {@code ensures}. Both leave values a row can write either
+ *                         side; what differs is what meeting the line takes, and that is the
+ *                         origin's to answer
  */
 public record Threshold(NumericTerm term, Place value, boolean valueBelongsBelow,
-                        OriginRef.GuardOrigin origin) {
+                        OriginRef origin) {
 
     /** Where the value this line is drawn on sits. Not what the line is drawn on: that is
      * {@link #term()}, and two terms can be taken of one location. */

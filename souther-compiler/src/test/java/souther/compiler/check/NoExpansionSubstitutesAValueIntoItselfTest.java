@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.frontend.CstFrontend;
 
@@ -45,14 +46,14 @@ class NoExpansionSubstitutesAValueIntoItselfTest {
 
     private static HelperInliner inlinerFor(String source) {
         Ast.Module parsed = CstFrontend.parse(source);
-        return HelperInliner.forModule(Resolve.module(parsed, Symbols.of(parsed)));
+        return HelperInliner.forModule(Resolve.module(parsed, SyntaxSymbols.of(parsed)));
     }
 
-    private static Ast.Expr expand(HelperInliner inliner, String helper) {
+    private static Hir.Expr expand(HelperInliner inliner, String helper) {
         return inliner.inline(inliner.held().get(helper).writtenBody(), inliner.bodyOf(helper));
     }
 
-    private static Ast.Expr expand(String source, String helper) {
+    private static Hir.Expr expand(String source, String helper) {
         return expand(inlinerFor(source), helper);
     }
 

@@ -39,7 +39,7 @@ class CompilePipeAssocTest {
 
     private String run(BytesClassLoader loader, long n) throws Exception {
         Object in = Codecs.decoded(loader, "demo.In", n);
-        Object flow = loader.loadClass("demo.Flow" + "$Impl").getConstructor().newInstance();
+        Object flow = Emitted.behavior(loader, "demo", "flow").getConstructor().newInstance();
         return Codecs.apply(flow, in).getClass().getName();
     }
 

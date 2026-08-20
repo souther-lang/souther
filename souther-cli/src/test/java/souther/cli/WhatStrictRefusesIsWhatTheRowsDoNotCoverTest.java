@@ -1,10 +1,16 @@
 package souther.cli;
 
+import souther.compiler.check.RuleRef;
+import souther.compiler.source.SourceId;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.observe.MeasurementStatus;
-import souther.compiler.partition.BoundaryObligation;
+import souther.compiler.partition.Border;
+import souther.compiler.partition.Cut;
+import souther.compiler.partition.Demand;
+import souther.compiler.partition.PointRole;
 import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.partition.Partitions;
 import souther.compiler.query.Adequacy;
@@ -12,10 +18,14 @@ import souther.compiler.query.Compilation;
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
 import souther.compiler.partition.AxisId;
+import souther.compiler.check.Clause;
+import souther.compiler.check.ClauseName;
 import souther.compiler.partition.OriginRef;
-import souther.compiler.observe.ObservedValue;
-import souther.compiler.query.BoundaryAssessment;
-import souther.compiler.types.TypeName;
+import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.ItemAssessment;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 
@@ -26,7 +36,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -122,6 +131,28 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
     }
 
     /**
+     * The refusal points at the entries in the terms of the report the reader was given.
+     *
+     * <p>A count is worth something beside a way of finding what it counts, and the two surfaces name
+     * the same findings differently: a person reads a mark and a consumer reads a field. Naming the
+     * mark whatever was printed sent a reader of a JSON document looking for a character that is
+     * nowhere in it.
+     */
+    @Test
+    void theRefusalNamesTheFindingsTheWayTheReportItPrintedDoes() throws Exception {
+        Run human = examples(UNCOVERED_ONLY, "--strict");
+        Run json = examples(UNCOVERED_ONLY, "--strict", "--format", "json");
+
+        assertEquals(1, json.code(), json.out() + json.err());
+        assertTrue(human.err().contains("marked `!` above"), human.err());
+        assertTrue(json.err().contains("`disposition: refused`"), json.err());
+        assertFalse(json.err().contains("`!`"), json.err());
+        // The word the document it just printed says it under.
+        assertTrue(json.out().contains("\"disposition\" : \"refused\""), json.out());
+        assertFalse(json.out().contains("!"), "a JSON document carries no mark: " + json.out());
+    }
+
+    /**
      * The round trip the report used to lose.
      *
      * <p>{@code --generate --boundaries} proposes a row for the boundary nothing sits on. Answering it
@@ -134,10 +165,10 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
         Run before = examples(WAITING_AND_UNCOVERED, "--generate", "--boundaries", "--strict");
 
         assertEquals(1, before.code(), before.out() + before.err());
-        assertTrue(before.out().contains("no row is at baseRate/score = 0"), before.out());
+        assertTrue(before.out().contains("no row is at the ON point baseRate/score = 0"), before.out());
         assertTrue(before.out().contains("1 row waiting for a `let`."), before.out());
         // The row the block proposes, which is what the pasted model below answers.
-        assertTrue(before.out().contains("| \"score = 0\" : (RiskScore(0)) -> <?>"), before.out());
+        assertTrue(before.out().contains("| (RiskScore(0)) -> <?>"), before.out());
 
         Run after = examples(ONLY_WAITING, "--strict");
 
@@ -238,17 +269,35 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
      */
     @Test
     void anAxisDroppedPastTheLimitHoldsTheVerdictOpenOnlyWhereItCarriedAnObligation() {
-        BoundaryAssessment met = new BoundaryAssessment(
-                new BoundaryObligation(
-                        new BoundaryTarget.AtPlace(new AxisId("weigh", "w.a"), Carrier.WHOLE,
-                                Count.of(100)),
-                        new OriginRef.InvariantOrigin(Optional.empty(),
-                                new TypeName("example.rate", "Amount"), "value <= 100"),
-                        BoundaryObligation.BoundarySide.AT),
-                new BoundaryAssessment.Coverage.Hit(),
-                new BoundaryAssessment.Writability.WitnessedByRow(),
-                new BoundaryAssessment.Attempt.NotAttempted(
-                        BoundaryAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE));
+        OriginRef origin = new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
+                new Clause.Id(TypeSymbols.declared(new TypeKey("example.rate", "Amount")), 0),
+                java.util.Optional.of(new ClauseName("cap")))), true);
+        // A bound at 100 over a position the rules leave at 100 and up: the ON point is the whole of
+        // what it owes, and a row is at it.
+        Border border = Border.at(
+                souther.compiler.partition.BoundaryTarget.at(
+                        new souther.compiler.partition.BorderQuantity.OfACoordinate(
+                                new AxisId("weigh", "w.a"),
+                                new souther.compiler.inputs.NumericTerm.ValueOf(
+                                        souther.compiler.inputs.TermPath.of("w").then("a")),
+                                Carrier.WHOLE),
+                        new souther.compiler.partition.Level.OnACarrier(
+                                Carrier.WHOLE, Count.of(100))),
+                origin,
+                new souther.compiler.numeric.NumericDomain.Bounds(
+                        souther.compiler.numeric.Endpoint.inclusive(Count.of(100)), null));
+        java.util.EnumMap<PointRole, ItemAssessment> items =
+                new java.util.EnumMap<>(PointRole.class);
+        for (PointRole role : PointRole.values()) {
+            items.put(role, border.demand(role) instanceof Demand.NotOwed not
+                    ? new ItemAssessment.NotOwed(not.reason())
+                    : new ItemAssessment.Owed(border.demand(role).criterion(),
+                            new ItemAssessment.Coverage.Hit(),
+                            new ItemAssessment.Writability.WitnessedByRow(),
+                            new ItemAssessment.Attempt.NotAttempted(
+                                    ItemAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE)));
+        }
+        BorderAssessment met = new BorderAssessment(border, items);
 
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, verdictOf(partition(met)),
                 "nothing dropped");
@@ -265,21 +314,21 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
         return new Partitions.OmittedAxis(new AxisId(behavior, path), carriedAnObligation);
     }
 
-    private static PartitionEvidence partition(BoundaryAssessment boundary,
+    private static PartitionEvidence partition(BorderAssessment boundary,
                                                Partitions.OmittedAxis... omitted) {
         return new PartitionEvidence(PartitionEvidence.Partitioned.of(List.of()),
                 PartitionEvidence.Bounded.of(List.of(boundary)), PartitionEvidence.PairSpace.NONE,
-                List.of(), List.of(), List.of(omitted), List.of());
+                List.of(), List.of(), List.of(), List.of(omitted), List.of());
     }
 
     /** What one behavior's partition makes of the whole report, with nothing else asked about. */
     private static AdequacyReport.AdequacyStatus verdictOf(PartitionEvidence partition) {
         AdequacyReport.BehaviorReport behavior = new AdequacyReport.BehaviorReport(
                 "weigh", false, 1, 0, MeasurementStatus.COMPLETE, null, partition,
-                null, List.of());
+                souther.compiler.query.ClaimAnnotations.NONE, null, List.of());
         return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test", Adequacy.Level.ALL,
                 MeasurementStatus.COMPLETE,
-                List.of(new AdequacyReport.ModuleReport("example.wide", MeasurementStatus.COMPLETE,
+                List.of(new AdequacyReport.ModuleReport("example.wide", new SourceId("wide.sou"), MeasurementStatus.COMPLETE,
                         List.of(), List.of(behavior))))
                 .adequacy();
     }

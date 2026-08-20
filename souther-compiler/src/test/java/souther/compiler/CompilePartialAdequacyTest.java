@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.examples.Deadline;
 import org.junit.jupiter.api.Test;
 
@@ -10,7 +12,8 @@ import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
-import souther.compiler.query.BoundaryAssessment;
+import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
@@ -68,16 +71,7 @@ class CompilePartialAdequacyTest {
      * writes exactly the number the invariant's lower bound names.
      */
     private static String budgetSpent(String tail) {
-        StringBuilder inner = new StringBuilder();
-        for (int i = 0; i < 64; i++) {
-            inner.append(i == 0 ? "" : ", ")
-                    .append("Item { a = \"").append(i).append("\", b = \"").append(i)
-                    .append("\", c = \"").append(i).append("\" }");
-        }
-        StringBuilder groups = new StringBuilder();
-        for (int i = 0; i < 64; i++) {
-            groups.append(i == 0 ? "" : ", ").append("Group { items = [ ").append(inner).append(" ] }");
-        }
+        String groups = "someGroups(64)";
         return """
                 module example.budget
 
@@ -99,8 +93,15 @@ class CompilePartialAdequacyTest {
 
                 let take (request) = Ok { n = request.cost.value }
 
+
+                let someItems (n: Int): List<Item> =
+                    List.map({ (i) -> Item { a = "x", b = "x", c = "x" } }, List.rangeInclusive(1, n))
+
+                let someGroups (n: Int): List<Group> =
+                    List.map({ (i) -> Group { items = someItems(64) } }, List.rangeInclusive(1, n))
+
                 example take
-                    | (Draft { groups = [ %s ], cost = Amount(0), flag = Yes }) -> Ok { n = 0 }
+                    | (Draft { groups = %s, cost = Amount(0), flag = Yes }) -> Ok { n = 0 }
                 """.formatted(groups) + tail;
     }
 
@@ -220,11 +221,12 @@ class CompilePartialAdequacyTest {
         PartitionEvidence partition = measured(budgetSpent("")).db()
                 .ask(new Adequacy.Coverage("example.budget")).value().get("take");
 
-        List<BoundaryAssessment> at = partition.boundaries().stream()
-                .filter(b -> b.value().equals("0")).toList();
+        List<BorderAssessment.Point> at = pointsAgainstTheLine(partition).stream()
+                .filter(p -> "0".equals(p.against())).toList();
         assertEquals(1, at.size());
-        assertEquals(MeasurementStatus.PARTIAL, at.get(0).status());
-        assertFalse(at.get(0).coverage().hit(), "nothing was read, so nothing was met either");
+        assertEquals(MeasurementStatus.PARTIAL, at.get(0).item().status());
+        assertFalse(at.get(0).owed().coverage().hit(),
+                "nothing was read, so nothing was met either");
     }
 
     @Test
@@ -250,7 +252,7 @@ class CompilePartialAdequacyTest {
                 "the flag's classes are undecided, so nothing is written for them");
         assertFalse(generated.get("take").pairs().reasons().isEmpty(),
                 "and the position that could not be read is named");
-        String written = GeneratedRows.of("example.budget", generated, true, SourceNameResolver.identity());
+        String written = GeneratedRows.of("example.budget", generated, Map.of(), true, SourceNameResolver.identity());
         assertFalse(written.contains("example take"), "no row is offered: " + written);
         assertTrue(written.contains("no rows offered at"),
                 "the position it could not read is what there is to say: " + written);
@@ -274,6 +276,35 @@ class CompilePartialAdequacyTest {
         assertEquals(MeasurementStatus.PARTIAL, signature.status());
         assertFalse(warningCodes(warned("loop", TIMES_OUT, DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("go")))).contains("E1913"),
                 "a case the unfinished row might have produced is not a case nothing claims");
+    }
+
+    /**
+     * The third disposition, which is the one a two-valued field would lose.
+     *
+     * <p>Said here rather than beside the other two, because this is where a measure that came to no
+     * answer is. A kind a build refuses over, from a measurement that did not finish, is neither a
+     * gap nor a kind nobody gates on — and the line above is the same fact from the warning's side:
+     * no code is printed for it. What a report calls it and what a build does about it come from
+     * this one word, so a finding that is undecided and a finding nobody gates on may not read
+     * alike.
+     */
+    @Test
+    void aGapFromAMeasureThatCameToNoAnswerIsUndecided() {
+        List<Adequacy.Finding> findings = AdequacyReport.of(
+                        measured("loop", TIMES_OUT,
+                                DoesNotComeBack.overrunningOn(
+                                        DoesNotComeBack.everythingAboutRowsOf("go"))))
+                .findings();
+
+        List<Adequacy.Finding> undecided = findings.stream()
+                .filter(f -> f.kind().isAdequacyGap()).toList();
+
+        assertFalse(undecided.isEmpty(), () -> "the model has a kind a build gates on: " + findings);
+        for (Adequacy.Finding f : undecided) {
+            assertEquals(MeasurementStatus.PARTIAL, f.status(), f::toString);
+            assertEquals(Adequacy.Finding.Disposition.UNDECIDED, f.disposition(), f::toString);
+            assertFalse(f.isAdequacyGap(), f::toString);
+        }
     }
 
     /**
@@ -387,10 +418,10 @@ class CompilePartialAdequacyTest {
         PartitionEvidence partition = split().db()
                 .ask(new Adequacy.Coverage("example.split")).value().get("take");
 
-        assertEquals(2, partition.boundaries().size());
-        for (BoundaryAssessment boundary : partition.boundaries()) {
-            assertEquals(MeasurementStatus.PARTIAL, boundary.status(), boundary.value());
-            assertFalse(boundary.coverage().hit());
+        assertEquals(2, pointsAgainstTheLine(partition).size());
+        for (BorderAssessment.Point boundary : pointsAgainstTheLine(partition)) {
+            assertEquals(MeasurementStatus.PARTIAL, boundary.item().status(), boundary.against());
+            assertFalse(boundary.owed().coverage().hit());
         }
     }
 
@@ -408,7 +439,7 @@ class CompilePartialAdequacyTest {
 
         assertEquals(List.of(), generated.get("take").pairs().rows());
         assertEquals(List.of(), generated.get("take").boundaries().rows());
-        String written = GeneratedRows.of("example.split", generated, true, SourceNameResolver.identity());
+        String written = GeneratedRows.of("example.split", generated, Map.of(), true, SourceNameResolver.identity());
         assertFalse(written.contains("example take"),
                 "the row may be sitting in the file that could not be read: " + written);
         assertTrue(written.contains("generation stopped"),
@@ -614,18 +645,25 @@ class CompilePartialAdequacyTest {
                     | "at the line" : (Draft { kind = Overseas, cost = Amount(100) }) -> Ok { n = 100 }
                     | "over it"     : (Draft { kind = Domestic, cost = Amount(500) }) -> Big { n = 0 }
                 """, DoesNotComeBack.overrunningOn(
-                        DoesNotComeBack.everythingAboutTheRowDescribed("over it")), Adequacy.Asked.reportOnly())
+                        DoesNotComeBack.everythingAboutTheRowNamed("over it")), Adequacy.Asked.reportOnly())
                 .db().ask(new Adequacy.Coverage("example.mix")).value().get("take");
 
-        BoundaryAssessment line = partition.boundaries().stream()
-                .filter(b -> b.value().equals("100")).findFirst().orElseThrow();
-        assertTrue(line.coverage().hit(), "a row wrote 100 and went through the comparison");
-        assertEquals(MeasurementStatus.COMPLETE, line.status());
+        BorderAssessment.Point line = pointsAgainstTheLine(partition).stream()
+                .filter(p -> "100".equals(p.against())).findFirst().orElseThrow();
+        assertTrue(line.owed().coverage().hit(),
+                "a row wrote 100 and went through the comparison");
+        assertEquals(MeasurementStatus.COMPLETE, line.item().status());
 
-        BoundaryAssessment beyond = partition.boundaries().stream()
-                .filter(b -> b.value().equals("101")).findFirst().orElseThrow();
-        assertEquals(MeasurementStatus.PARTIAL, beyond.status(),
+        BorderAssessment.Point beyond = pointsAgainstTheLine(partition).stream()
+                .filter(p -> "101".equals(p.against())).findFirst().orElseThrow();
+        assertEquals(MeasurementStatus.PARTIAL, beyond.item().status(),
                 "and the one nothing was found at is undecided, not missed");
+    }
+
+    /** The points a row is owed at against a line, which is what a value names. */
+    private static List<BorderAssessment.Point> pointsAgainstTheLine(PartitionEvidence partition) {
+        return BorderAssessment.pointsOf(partition.boundaries()).stream()
+                .filter(p -> p.role().againstTheLine()).filter(p -> p.owed() != null).toList();
     }
 
     /**
@@ -658,7 +696,7 @@ class CompilePartialAdequacyTest {
                     | "comes back" : (Draft { n = 2 }) -> Ok { n = 2 }
                 """,
                 DoesNotComeBack.overrunningOn(
-                        DoesNotComeBack.everythingAboutTheRowDescribed("does not come back")));
+                        DoesNotComeBack.everythingAboutTheRowNamed("does not come back")));
 
         List<String> codes = new ArrayList<>();
         for (Db.Found found : compilation.db().allReports()) {
@@ -685,9 +723,9 @@ class CompilePartialAdequacyTest {
                         souther.compiler.observe.Incompleteness.Code.ROW_UNDECIDED,
                         souther.compiler.observe.Incompleteness.Scope.BEHAVIOR, "submit");
         souther.compiler.observe.Incompleteness aboutTheSource =
-                souther.compiler.observe.Incompleteness.of(
+                souther.compiler.observe.Incompleteness.ofSource(
                         souther.compiler.observe.Incompleteness.Code.OBSERVATION_ABSENT,
-                        souther.compiler.observe.Incompleteness.Scope.SOURCE, "3");
+                        new souther.compiler.source.SourceId("3"));
 
         assertTrue(aboutOne.countsAgainst("submit"));
         assertFalse(aboutOne.countsAgainst("cancel"));
@@ -726,7 +764,7 @@ class CompilePartialAdequacyTest {
     @Test
     void theUnfinishedRowIsStillReported() {
         Compilation compilation = measured("loop", TIMES_OUT, DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("go")));
-        String sourceId = compilation.exampleSourcesOf("example.loop").get(0);
+        SourceId sourceId = compilation.exampleSourcesOf("example.loop").getFirst();
 
         List<souther.compiler.observe.RowOutcome> rows = compilation.db()
                 .ask(souther.compiler.query.Output.Examples.asked(

@@ -42,7 +42,7 @@ class CompileDecimalConversionTest {
                 new BytesClassLoader(Compiler.compile(MODULE), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo.In",
                 Map.of("税抜", 税抜, "税率", new BigDecimal(税率)));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         return (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
     }
 

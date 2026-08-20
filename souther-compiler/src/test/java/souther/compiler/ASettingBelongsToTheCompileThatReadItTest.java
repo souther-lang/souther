@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.examples.EvaluationPolicy;
 import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.RowOutcome;
@@ -36,7 +38,7 @@ class ASettingBelongsToTheCompileThatReadItTest {
     private static RowOutcome onlyRow() {
         Compilation compilation = Compilation.ofSource(COUNTS_DOWN, "Main");
         compilation.answerEverything();
-        String sourceId = compilation.exampleSourcesOf("example.setting").get(0);
+        SourceId sourceId = compilation.exampleSourcesOf("example.setting").getFirst();
         List<RowOutcome> rows = compilation.db()
                 .ask(new Output.Examples("example.setting", sourceId, Output.CoverageMode.NONE))
                 .value().rows();

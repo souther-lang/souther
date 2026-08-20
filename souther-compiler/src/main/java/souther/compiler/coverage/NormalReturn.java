@@ -36,7 +36,7 @@ public final class NormalReturn {
     public static boolean of(Core e) {
         return switch (e) {
             case Core.Unreachable _ -> false;
-            case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Read _,
+            case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _, Core.Read _,
                  Core.UnitValue _, Core.OptionNone _ -> true;
             case Core.Neg n -> of(n.operand());
             case Core.FieldAccess fa -> of(fa.target());
@@ -45,7 +45,7 @@ public final class NormalReturn {
             case Core.TupleGet tg -> of(tg.tuple());
             case Core.Tuple t -> all(t.elements());
             case Core.ListLit lit -> all(lit.elements());
-            case Core.NewData nd -> nd.inits().stream().allMatch(init -> of(init.value()));
+            case Core.Construct nd -> nd.values().stream().allMatch(given -> of(given.value()));
             // The callee's own body is not read; its arguments are evaluated before it is reached.
             case Core.Call c -> all(c.args());
             case Core.Apply a -> all(a.args());
@@ -63,7 +63,7 @@ public final class NormalReturn {
             case Core.Match m -> of(m.scrutinee())
                     && m.cases().stream().anyMatch(arm -> of(arm.body()));
             case Core.IfConstructed ic ->
-                    ic.construct().inits().stream().allMatch(init -> of(init.value()))
+                    ic.construct().values().stream().allMatch(given -> of(given.value()))
                             && (of(ic.then()) || ic.els().stream().anyMatch(arm -> of(arm.body())));
         };
     }

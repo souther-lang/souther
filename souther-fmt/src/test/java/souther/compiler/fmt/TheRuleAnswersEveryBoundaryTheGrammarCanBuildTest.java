@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.cst.CstParser;
 import souther.compiler.cst.SyntaxKind;
 
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -142,6 +141,14 @@ class TheRuleAnswersEveryBoundaryTheGrammarCanBuildTest {
             new Face(PARAM_LIST, of(LPAREN), of(IDENT, RPAREN)),
             new Face(PARAM_LIST, TYPE_LAST, of(RPAREN, COMMA)),
             new Face(PARAM_LIST, of(COMMA), of(IDENT)),
+            new Face(ENSURES_CLAUSE, of(ENSURES_KW), of(IDENT, UNDERSCORE)),
+            new Face(ENSURES_CLAUSE, of(IDENT, UNDERSCORE), of(ASSIGN)),
+            new Face(ENSURES_CLAUSE, of(ASSIGN), of(IDENT)),
+            new Face(ENSURES_CLAUSE, EXPR_LAST, of(PIPE)),
+            new Face(ENSURES_CLAUSE, of(PIPE), of(IDENT)),
+            new Face(ENSURES_ARM, of(IDENT), of(DOT, PIPE, ARROW)),
+            new Face(ENSURES_ARM, of(DOT, PIPE), of(IDENT)),
+            new Face(ENSURES_ARM, of(ARROW), EXPR_FIRST),
             new Face(FN_PARAM_LIST, of(LPAREN, COMMA), PAT_FIRST),
             new Face(FN_PARAM_LIST, PAT_LAST, of(RPAREN, COMMA)),
             new Face(FN_PARAM_LIST, TYPE_LAST, of(RPAREN, COMMA)),

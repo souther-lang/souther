@@ -71,7 +71,7 @@ class AStringIsMeasuredInCodePointsTest {
         BytesClassLoader loader =
                 new BytesClassLoader(Compiler.compile(module.formatted(expr)), getClass0());
         Object in = Codecs.decoded(loader, "demo.In", Map.of("s", input));
-        Object behavior = loader.loadClass("demo.Calc$Impl").getDeclaredConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "calc").getDeclaredConstructor().newInstance();
         return Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
     }
 

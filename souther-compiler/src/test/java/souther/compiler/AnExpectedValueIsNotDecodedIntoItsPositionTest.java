@@ -85,6 +85,22 @@ class AnExpectedValueIsNotDecodedIntoItsPositionTest {
         return e.diagnostics().get(0);
     }
 
+    /**
+     * The construction cannot be stated: a field of it takes another type. Where the rule stops in
+     * the static direction — a construction of the output's own type is held to its own field
+     * declarations, as it is in a body, so a row stating another type inside one has not written a
+     * value to compare. The comparison (E1905) is for values that build.
+     */
+    private static void refusedToBuild(String rows, String... names) {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(BASE + rows),
+                "the construction misstates its own field");
+        assertEquals(1, e.diagnostics().size(), "one row, one diagnostic: " + e.getMessage());
+        assertEquals("E1317", e.diagnostics().get(0).code(), e.getMessage());
+        for (String name : names) {
+            assertTrue(e.getMessage().contains(name), "`" + name + "` is said: " + e.getMessage());
+        }
+    }
+
     /** The row does not hold, and it is told where the two part and which two types they are. */
     private static void differsBy(String rows, String at, String expected, String actual) {
         Diagnostic d = only(rows);
@@ -104,20 +120,20 @@ class AnExpectedValueIsNotDecodedIntoItsPositionTest {
                 example receiptOf
                     | (1) -> Receipt { total = AmountN(1) }
                 """);
-        differsBy("""
+        refusedToBuild("""
                 example receiptOf
                     | (1) -> Receipt { total = 1 }
-                """, "$.total", "Int", "AmountN");
+                """, "AmountN", "Int");
     }
 
     @Test
     void twoNamesOverOneBaseAreTwoTypesAtAField() {
         // The reading that lost the name lost it for every name over that base, so a row could state
         // one newtype and be compared against another.
-        differsBy("""
+        refusedToBuild("""
                 example receiptOf
                     | (1) -> Receipt { total = OtherAmountN(1) }
-                """, "$.total", "OtherAmountN", "AmountN");
+                """, "AmountN", "OtherAmountN");
     }
 
     @Test
@@ -126,10 +142,10 @@ class AnExpectedValueIsNotDecodedIntoItsPositionTest {
                 example bagOf
                     | (1) -> Bag { items = [AmountN(1)] }
                 """);
-        differsBy("""
+        refusedToBuild("""
                 example bagOf
                     | (1) -> Bag { items = [1] }
-                """, "$.items[0]", "Int", "AmountN");
+                """, "List<AmountN>", "List<Int>");
     }
 
     @Test
@@ -164,10 +180,10 @@ class AnExpectedValueIsNotDecodedIntoItsPositionTest {
                 example bookOf
                     | (1) -> Book { by = Map.fromList([("a", AmountN(1))]) }
                 """);
-        differsBy("""
+        refusedToBuild("""
                 example bookOf
                     | (1) -> Book { by = Map.fromList([("a", 1)]) }
-                """, "$.by[\"a\"]", "Int", "AmountN");
+                """, "Map<String, AmountN>", "Map<String, Int>");
     }
 
     @Test
@@ -176,13 +192,12 @@ class AnExpectedValueIsNotDecodedIntoItsPositionTest {
                 example keyedOf
                     | (1) -> Keyed { by = Map.fromList([(Code("k"), "a")]) }
                 """);
-        // A key the row wrote under no name matches no key the answer holds, so what the two differ
-        // by is which entries are there rather than what one entry says.
-        Diagnostic d = only("""
+        // A key the row writes under no name is not a key of the map the field declares, and the
+        // construction is refused as it is in a body.
+        refusedToBuild("""
                 example keyedOf
                     | (1) -> Keyed { by = Map.fromList([("k", "a")]) }
-                """);
-        assertEquals("E1905", d.code(), d.said().toString());
+                """, "Map<Code, String>", "Map<String, String>");
     }
 
     @Test
@@ -230,11 +245,9 @@ class AnExpectedValueIsNotDecodedIntoItsPositionTest {
         // Where the rule stops in the other direction. `AmountN("x")` states no value at all — its
         // own base takes a number — which is not a disagreement with the behavior but a fixture that
         // could not be built.
-        Diagnostic d = only("""
+        refusedToBuild("""
                 example receiptOf
                     | (1) -> Receipt { total = AmountN("x") }
-                """);
-        assertEquals("E1903", d.code(), d.said().toString());
-        assertInstanceOf(ExampleMessage.TheExpectedValueCouldNotBeBuilt.class, d.said());
+                """, "Int", "String");
     }
 }

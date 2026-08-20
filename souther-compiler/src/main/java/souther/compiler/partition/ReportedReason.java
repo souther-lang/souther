@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.BlockReason;
+
 /**
  * The word an adequacy document writes for a reason a derivation stopped.
  *
@@ -32,6 +34,14 @@ public final class ReportedReason {
                     UndividedPosition.Reason.UNSUPPORTED_TRAVERSAL;
             case BlockReason.UnreadComparisonForm _ ->
                     UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
+            case BlockReason.UnreadValueRule _ -> UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
+            // Its own word, and not the one above. Both are rules this reading did not turn into a
+            // line, and a reader acting on them is doing different work: one wants a reader for a
+            // form that was seen, and one wants the gathering to reach the rules at all. Collapsed
+            // together, a position whose rules nothing had looked at was reported as an expression
+            // the terms do not name, which is a cause it was never observed to have.
+            case BlockReason.ValueRulesNotReached _ ->
+                    UndividedPosition.Reason.RULES_NOT_READ_AT_ALL;
             case BlockReason.UnreadComparisonDomain _ ->
                     UndividedPosition.Reason.UNSUPPORTED_DOMAIN;
             case BlockReason.ComparisonBetweenPositions _ ->

@@ -1,6 +1,9 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.ExampleMessage;
+import souther.compiler.diag.msg.HelperMessage;
+import souther.compiler.diag.msg.Message;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import org.junit.jupiter.api.Test;
@@ -115,9 +118,9 @@ class ATemporalFixtureIsNotWrittenAsTextTest {
         return e.diagnostics().get(0);
     }
 
-    private static void refused(String model, String code, Class<? extends ExampleMessage> said) {
+    private static void refused(String model, String code, Class<? extends Message> said) {
         Diagnostic d = only(model);
-        assertEquals(code, d.code(), "a temporal written as text is a fixture that cannot be built: "
+        assertEquals(code, d.code(), "a temporal written as text states no value of its position: "
                 + d.said());
         assertInstanceOf(said, d.said());
     }
@@ -130,7 +133,7 @@ class ATemporalFixtureIsNotWrittenAsTextTest {
 
                 example stampAt
                     | "text" : ("2026-07-20T09:00") -> Stamp
-                """, "E1903", ExampleMessage.AnInputCouldNotBeBuilt.class);
+                """, "E1812", HelperMessage.WhatIsWrittenHereIsNotWhatItsPositionTakes.class);
     }
 
     @Test
@@ -139,7 +142,7 @@ class ATemporalFixtureIsNotWrittenAsTextTest {
 
                 example markOn
                     | "text" : ("2026-07-20") -> Mark
-                """, "E1903", ExampleMessage.AnInputCouldNotBeBuilt.class);
+                """, "E1812", HelperMessage.WhatIsWrittenHereIsNotWhatItsPositionTakes.class);
     }
 
     @Test
@@ -150,7 +153,7 @@ class ATemporalFixtureIsNotWrittenAsTextTest {
 
                 example hold
                     | "text" : ("2026-07-20T09:00") -> Held
-                """, "E1903", ExampleMessage.AnInputCouldNotBeBuilt.class);
+                """, "E1812", HelperMessage.WhatIsWrittenHereIsNotWhatItsPositionTakes.class);
     }
 
     @Test
@@ -162,7 +165,7 @@ class ATemporalFixtureIsNotWrittenAsTextTest {
 
                 example hold
                     | "text" : (Moment("2026-07-20T09:00")) -> Held
-                """, "E1903", ExampleMessage.AnInputCouldNotBeBuilt.class);
+                """, "E1317", DataMessage.AFieldExpectsAnotherType.class);
     }
 
     @Test
@@ -171,7 +174,7 @@ class ATemporalFixtureIsNotWrittenAsTextTest {
 
                 example keep
                     | "text" : (Stamp { at = "2026-07-20T09:00" }) -> Stamp
-                """, "E1903", ExampleMessage.AnInputCouldNotBeBuilt.class);
+                """, "E1317", DataMessage.AFieldExpectsAnotherType.class);
     }
 
     @Test
@@ -207,7 +210,7 @@ class ATemporalFixtureIsNotWrittenAsTextTest {
 
                 example stampAt
                     | "text" : () with now = "2026-07-20T09:00" -> Stamp
-                """, "E1908", ExampleMessage.TheFakeValueCouldNotBeBuilt.class);
+                """, "E1812", HelperMessage.WhatIsWrittenHereIsNotWhatItsPositionTakes.class);
     }
 
     @Test
@@ -219,7 +222,7 @@ class ATemporalFixtureIsNotWrittenAsTextTest {
 
                 example stampAt
                     | "text" : () -> Stamp
-                """, "E1908", ExampleMessage.TheFakeCouldNotBeBuilt.class);
+                """, "E1812", HelperMessage.WhatIsWrittenHereIsNotWhatItsPositionTakes.class);
     }
 
     @Test
@@ -239,7 +242,7 @@ class ATemporalFixtureIsNotWrittenAsTextTest {
                 example keep
                     | "text" : (Stamp { at = "2026-07-20T09:00" })
                         -> Stamp { at = DateTime("2026-07-20T09:00") }
-                """, "E1903", ExampleMessage.AnInputCouldNotBeBuilt.class);
+                """, "E1317", DataMessage.AFieldExpectsAnotherType.class);
     }
 
     @Test
@@ -251,7 +254,7 @@ class ATemporalFixtureIsNotWrittenAsTextTest {
 
                 example stampAt
                     | "a helper's text" : (text("2026-07-20T09:00")) -> Stamp
-                """, "E1903", ExampleMessage.AnInputCouldNotBeBuilt.class);
+                """, "E1812", HelperMessage.WhatIsWrittenHereIsNotWhatItsPositionTakes.class);
     }
 
     @Test
@@ -262,7 +265,7 @@ class ATemporalFixtureIsNotWrittenAsTextTest {
 
                 example keep
                     | "a helper's text in a field" : (Stamp { at = text("2026-07-20T09:00") }) -> Stamp
-                """, "E1903", ExampleMessage.AnInputCouldNotBeBuilt.class);
+                """, "E1317", DataMessage.AFieldExpectsAnotherType.class);
     }
 
     @Test

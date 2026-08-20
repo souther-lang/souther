@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.HumanRenderer;
@@ -54,7 +56,7 @@ class ExampleMultipleFailuresTest {
 
         List<Diagnostic> ds = e.diagnostics();
         assertEquals(2, ds.size(), "one diagnostic per failing row");
-        assertNotEquals(ds.get(0).region().start().line(), ds.get(1).region().start().line(),
+        assertNotEquals(((Primary.InSource) ds.get(0).primary()).place().region().start().line(), ((Primary.InSource) ds.get(1).primary()).place().region().start().line(),
                 "each points at its own row");
         assertEquals(ds.get(0), e.diagnostic(), "the first is still the one a single-diagnostic caller reads");
     }
@@ -68,8 +70,8 @@ class ExampleMultipleFailuresTest {
             assertEquals("E1903", d.code());
             String rendered = new HumanRenderer(false)
                     .render(d, new SourceContext("probe.sou", TWO_BAD_FIXTURES), Locale.ENGLISH);
-            assertTrue(rendered.contains("must be at least 1 characters"),
-                    "the reason the fixture could not be built, was: " + rendered);
+            assertTrue(rendered.contains("invariant violated"),
+                    "the reason the value did not produce, was: " + rendered);
             assertFalse(rendered.contains("examples do not hold"),
                     "no count-only summary stands in for the reason, was: " + rendered);
         }
