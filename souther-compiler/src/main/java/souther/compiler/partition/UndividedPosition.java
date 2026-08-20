@@ -64,8 +64,8 @@ public record UndividedPosition(TermPath at, Why why) {
          * <p>What stopped it is not here. A verdict says whether anything divides the position; the
          * findings beside it say what was not read and by whose account, and each of those is made
          * by the reader that has the fact — with the rule where there is one. Carried here too, a
-         * report read the cause back off the verdict, which is where the rule had already been lost
-         *.
+         * report read the cause back off the verdict, which is where the rule had already been
+         * lost.
          */
         record CannotDerive() implements Why {}
     }

@@ -209,31 +209,39 @@ public final class GuardThresholds {
         // expansion as being about nothing.
         InputReads inside = e instanceof Core.LetIn let ? reads.and(let.binder(), let.value())
                 : reads;
-        Core.forEachChild(e, child -> compared(behavior, iff, child, read, inside, symbols, out));
+        Core.forEachChild(e, child -> {
+            // Not into a fork of its own. A condition can hold one — `guard (if a < b then ...)` —
+            // and its comparisons are written in that fork rather than in this one, so citing them
+            // here would take the word from one construct and the place from another. The walk that
+            // found this fork reaches that one too, and reads it against itself.
+            if (!(child instanceof Core.If)) {
+                compared(behavior, iff, child, read, inside, symbols, out);
+            }
+        });
     }
 
     /**
-     * Whether the author wrote this comparison in the reach being read.
+     * Whether this comparison is written in code this compile can send a reader to.
      *
-     * <p>A helper is spliced into every body that calls it, so its own comparisons stand in this
-     * tree and are not this behavior's rules to answer for. {@code Int.clamp(0, 100, n) > 70} is
-     * one comparison an author wrote here and two they wrote nowhere near here, and a report
-     * naming the second two tells them to go and edit a function they may not own.
+     * <p>A call is spliced into the body that makes it, so a comparison written in something else
+     * stands in this tree. Where that something else is out of sight — a library this compile has
+     * no file for — the comparison is not a rule anybody reading this behavior can act on:
+     * {@code Int.clamp(0, 100, n) > 70} is one comparison an author wrote and two they cannot open,
+     * and naming the second two tells them to edit a function they do not have.
+     *
+     * <p>A helper of their own is not one of these. It has a file, the report cites it where it is
+     * written, and it is theirs to rewrite — so the line is drawn at what a reader can reach and
+     * not at whether an expansion happened.
+     *
+     * <p>{@link Citation} and not the position, which cannot say this: a spliced node carries the
+     * coordinates of the code it was copied from. {@link Citation.Elsewhere} is exactly "written
+     * where this compile has no file", and it is the same answer
+     * {@link souther.compiler.check.RuleCitation} renders.
      *
      * <p>Asked of the comparison and not of the fork above it. The one the author wrote sits
      * outside an expansion whose insides they did not, so a subtree is the wrong unit — and the
      * walk still goes through the expansion, because that is where a call's argument is bound and
      * a comparison read without it is about nothing.
-     *
-     * <p>{@link Citation} and not the position, which cannot say this: a spliced node carries the
-     * coordinates of the code it was copied from. {@link Citation.Elsewhere} is what already
-     * distinguishes code reached from another declaration from code written where the reader is
-     * standing, and it is the same answer {@link souther.compiler.check.RuleCitation} renders.
-     *
-     * <p>The scope the accounting is already held to. A comparison inside a helper raises no
-     * question there either ({@code AComparisonInsideAHelperRaisesNothingTest}), so widening this
-     * one alone would leave a finding about a rule no accounting has ever heard of. That the two
-     * ought to widen together is a known gap and is not this issue's.
      */
     private static boolean writtenHere(Core.Binary comparison) {
         return !(Citation.of(comparison.pos()) instanceof Citation.Elsewhere);

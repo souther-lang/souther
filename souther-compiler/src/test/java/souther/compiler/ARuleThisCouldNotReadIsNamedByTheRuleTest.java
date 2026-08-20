@@ -127,24 +127,19 @@ class ARuleThisCouldNotReadIsNamedByTheRuleTest {
     }
 
     /**
-     * A comparison written inside a helper is not one of these.
+     * A comparison written in code the author cannot open is not one of these.
      *
-     * <p>A helper is spliced into every body that calls it, so its comparisons stand in this tree
-     * and are not this behavior's rules to answer for. The author wrote {@code > 70} here and the
-     * comparisons inside {@code Int.clamp} nowhere near here, and a report naming the second sends
-     * them to edit a function they may not own.
+     * <p>The author wrote {@code > 70} here and the comparisons inside {@code Int.clamp} in a
+     * library this compile has no file for. A report naming the second sends them to edit a
+     * function they do not have — while a helper of their own has a file, is cited where it is
+     * written, and is theirs to rewrite.
      *
-     * <p>Asked of the comparison and not of the fork it sits under: the one the author wrote is the
-     * operand of a call whose insides they did not write, so a subtree is the wrong unit. What
-     * tells the two apart is the citation, which already says whether code was written where the
-     * reader is standing or reached from somewhere else.
-     *
-     * <p>The accounting beside this still raises questions for the helper's own forks. That is
-     * where it stood before this issue and is not changed here; that the two ought to draw the line
-     * in one place is its own question.
+     * <p>The accounting beside this still raises questions for the library's own forks. That is
+     * where it stood before this change and is not changed here; that the two ought to draw the
+     * line in one place is its own question.
      */
     @Test
-    void aComparisonInsideAnExpandedHelperIsNotOneOfThese() {
+    void aComparisonWrittenOutOfSightIsNotOneOfThese() {
         String model = """
                 module m
 
@@ -238,6 +233,35 @@ class ARuleThisCouldNotReadIsNamedByTheRuleTest {
             }
         });
         return out;
+    }
+
+    /**
+     * A comparison written inside a fork of its own is cited by that fork.
+     *
+     * <p>A condition can hold a fork — {@code guard Int.add(if a < b then 1 else 2, 0) > 0} — and
+     * the comparison inside it is written in the {@code if}, not in the {@code guard} around it.
+     * Walked from the outer fork, the word came from one construct and the place from the other,
+     * and the entry the inner fork made of itself was dropped as a repeat.
+     */
+    @Test
+    void aComparisonInsideAForkOfItsOwnIsCitedByThatFork() {
+        String model = """
+                module m
+
+                data Ok
+                data No
+
+                behavior f : (a: Int, b: Int) -> Ok | No
+                let f (a, b) = {
+                    guard Int.add(if Int.multiply(a, a) < b then 1 else 2, 0) > 0 else No
+                    Ok
+                }
+                """;
+
+        String human = human(model);
+
+        assertTrue(human.lines().anyMatch(line -> line.contains("not read: guard@")), human);
+        assertTrue(human.lines().anyMatch(line -> line.contains("not read: if@")), human);
     }
 
     /** Every rule of the behavior that this could not turn into a line. */
