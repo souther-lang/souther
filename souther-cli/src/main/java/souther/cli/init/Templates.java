@@ -108,8 +108,7 @@ final class Templates {
                     // of the cases it answers with.
                     behavior %s : (title: String, borrowedOn: Date, days: Int, returnedOn: Date)
                         -> Returned | NoTitle | NotALoanPeriod | ReturnedBeforeItWentOut
-                        constructs Returned, Title, LoanDays, DaysLate,
-                                   NoTitle, NotALoanPeriod, ReturnedBeforeItWentOut
+                        constructs Returned, Title, LoanDays, DaysLate
 
                     let daysOut (borrowedOn: Date, returnedOn: Date): Int =
                         Date.daysBetween(borrowedOn, returnedOn)
@@ -166,8 +165,11 @@ final class Templates {
                     | "twenty-nine days is not a loan period" :
                         ("Souther in Action", Date("2026-04-01"), 29, Date("2026-04-10"))
                             -> NotALoanPeriod
-                    | "a book cannot come back before it went out" :
-                        ("Souther in Action", Date("2026-04-10"), 14, Date("2026-04-01"))
+                    | "a book cannot come back the day before it went out" :
+                        ("Souther in Action", Date("2026-04-02"), 14, Date("2026-04-01"))
+                            -> ReturnedBeforeItWentOut
+                    | "nor a week before" :
+                        ("Souther in Action", Date("2026-04-10"), 14, Date("2026-04-03"))
                             -> ReturnedBeforeItWentOut
                 """.formatted(project.moduleName(), BEHAVIOR);
     }
