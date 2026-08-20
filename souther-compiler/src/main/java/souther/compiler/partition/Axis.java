@@ -31,6 +31,12 @@ import java.util.Set;
  * @param classes  exclusive and exhaustive over the term's values, or empty where the model does
  *                 not divide them
  * @param cuts     the values the classes meet at, each carrying every rule that drew it there
+ * @param parted   where the rules part this position's values, which is not the same list. A cut is
+ *                 a value a row can be written against and a bound has one without parting
+ *                 anything; a rule that wrote a multiple of the position parts its values where the
+ *                 position may hold none, and has no cut. What every border on this position owes
+ *                 away from its line is a run of what these leave together, so a border built from
+ *                 the cuts alone read its two sides past the lines that have no value (issue #880)
  * @param pending  where nothing has answered for this position yet, what the structural reading
  *                 found — and so what this position is left with if nothing else answers. Null on
  *                 an axis that already has evidence, which needs no fallback.
@@ -62,13 +68,14 @@ import java.util.Set;
  *                 a rule about what is inside describes that same stop from the other end
  */
 public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
-                   List<Cut> cuts, List<RuleAccounting.Unanswered> unanswered,
+                   List<Cut> cuts, List<Seam> parted, List<RuleAccounting.Unanswered> unanswered,
                    boolean rulesNotReached,
                    StructuralInspection.Pending pending, BlockReason unread) {
 
     public Axis {
         classes = List.copyOf(classes);
         cuts = List.copyOf(cuts);
+        parted = List.copyOf(parted);
         if (unanswered == null) {
             throw new IllegalArgumentException(
                     "a position with no account of what its rules leave standing");
@@ -78,7 +85,7 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
 
     public Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
                 List<Cut> cuts) {
-        this(id, term, type, classes, cuts, List.of(), false, null, null);
+        this(id, term, type, classes, cuts, List.of(), List.of(), false, null, null);
     }
 
     /**
@@ -92,8 +99,8 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
                                  List<RuleAccounting.Unanswered> unanswered,
                                  boolean rulesNotReached,
                                  StructuralInspection.Pending found, BlockReason unread) {
-        return new Axis(id, term, type, List.of(), List.of(), unanswered, rulesNotReached, found,
-                unread);
+        return new Axis(id, term, type, List.of(), List.of(), List.of(), unanswered,
+                rulesNotReached, found, unread);
     }
 
     /**
@@ -107,13 +114,13 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
      * as one the model divides no way.
      */
     public Axis measuredAt(AxisId id, NumericTerm term) {
-        return new Axis(id, term, type, classes, cuts, unanswered, rulesNotReached, pending,
+        return new Axis(id, term, type, classes, cuts, parted, unanswered, rulesNotReached, pending,
                 unread);
     }
 
     /** The same position, with what a body's rules divided it into and the lines they drew. */
-    public Axis carrying(List<PartitionClass> classes, List<Cut> cuts) {
-        return new Axis(id, term, type, classes, cuts, unanswered, rulesNotReached, pending,
+    public Axis carrying(List<PartitionClass> classes, List<Cut> cuts, List<Seam> parted) {
+        return new Axis(id, term, type, classes, cuts, parted, unanswered, rulesNotReached, pending,
                 unread);
     }
 

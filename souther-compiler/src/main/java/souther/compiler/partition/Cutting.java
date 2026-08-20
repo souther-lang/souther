@@ -156,6 +156,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return QuantityKey.of(direction(of));
     }
 
+    /** How much of the quantity this rule wrote, which is what a level of one reads as on the
+     *  other. */
+    java.math.BigDecimal per() {
+        return QuantityKey.per(direction(of));
+    }
+
     /**
      * Where it parts that quantity's values, in the quantity's own units.
      *

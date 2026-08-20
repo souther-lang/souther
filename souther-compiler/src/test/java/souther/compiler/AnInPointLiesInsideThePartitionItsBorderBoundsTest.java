@@ -152,6 +152,62 @@ class AnInPointLiesInsideThePartitionItsBorderBoundsTest {
     }
 
     /**
+     * And two rules that write one quantity at two scales still bound each other.
+     *
+     * <p>{@code 3 * a + 6 * b > 48} and {@code a + 2 * b > 20} run the same way and draw two lines,
+     * at sixteen and at twenty of what they are both a multiple of. Collected in the numbers each
+     * rule carried, the two were sorted against each other as forty-eight and twenty — numbers of
+     * different sizes — and the run between them was written out of one line's units and the other
+     * line's number.
+     */
+    @Test
+    void twoScalesOfOneQuantityBoundEachOther() {
+        Compilation compilation = Compilation.ofSource("""
+                module example.scales
+
+                data Bound = Int
+                    invariant value >= 0
+                    invariant value <= 100
+
+                data No = { why: Int }
+                data Yes = { v: Int }
+                data Result = No | Yes
+
+                behavior f : (a: Bound, b: Bound) -> Result
+                    constructs Yes, No
+
+                let f (a, b) = {
+                    guard Int.add(Int.multiply(3, a.value), Int.multiply(6, b.value)) > 48
+                        else No { why = 0 }
+                    guard Int.add(a.value, Int.multiply(2, b.value)) > 20 else No { why = 1 }
+                    Yes { v = 1 }
+                }
+
+                example f
+                    | "one" : (Bound(1), Bound(1)) -> No { why = 0 }
+                """, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+        Map<String, PartitionEvidence> all = compilation.db()
+                .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
+        assertNotNull(all, "the model under test compiles");
+
+        assertEquals("51 < 3 * a + 6 * b <= 60",
+                borderNamed(all, "3 * a + 6 * b = 48").against(PointRole.IN),
+                "the first line's run stops at the second, said in the first's own units");
+        assertEquals("21 < a + 2 * b <= 300",
+                borderNamed(all, "a + 2 * b = 20").against(PointRole.IN),
+                "and the second's runs on to what the form itself reaches, said in its own units");
+    }
+
+    private static BorderAssessment borderNamed(Map<String, PartitionEvidence> all, String label) {
+        return all.get("f").boundaries().stream()
+                .filter(each -> each.label().equals(label)).findFirst()
+                .orElseThrow(() -> new AssertionError("no border " + label + " in "
+                        + all.get("f").boundaries().stream().map(BorderAssessment::label).toList()));
+    }
+
+    /**
      * The same on the other side: an {@code OUT} point is inside the partition the border keeps out.
      *
      * <p>The border at twenty keeps the second partition out. Five is in the first, two partitions

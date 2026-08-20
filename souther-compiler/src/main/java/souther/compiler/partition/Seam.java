@@ -113,6 +113,26 @@ public record Seam(CutPosition at, Level below, Level above) {
     public record Scale(java.math.BigDecimal per, souther.compiler.check.Carrier onto) {}
 
     /**
+     * The same seam, said in units {@code k} times smaller.
+     *
+     * <p>What one quantity's lines come to for a rule that wrote a multiple of it: the arrangement
+     * is held in the quantity's own units, because that is the only order every rule about it is
+     * on, and each rule reads its rows through the form it was written as. Nothing here needs the
+     * line to be a value of anything — it is a change of unit and not a change of order.
+     */
+    Seam scaledBy(java.math.BigDecimal k) {
+        if (k.compareTo(java.math.BigDecimal.ONE) == 0) {
+            return this;
+        }
+        return new Seam(at.times(k), scaled(below, k), scaled(above, k));
+    }
+
+    private static Level scaled(Level level, java.math.BigDecimal k) {
+        return level == null ? null : new Level.ACount(new souther.compiler.numeric.Count(
+                level.asACount().at().multiply(k)));
+    }
+
+    /**
      * The same place, read on another order.
      *
      * <p>What a line between two positions comes to once the other end of it is known: a distance

@@ -77,6 +77,22 @@ public record CutPosition(Level written, BigDecimal per) {
     }
 
     /**
+     * The same line, said in units {@code k} times smaller.
+     *
+     * <p>A line at a place is at {@code k} times that number where the unit is a {@code k}th of the
+     * one it was said in: what a quantity's own level is, the form that wrote {@code k} of it calls
+     * {@code k} times as much. Multiplied rather than re-divided, so a line at a place no value
+     * stands at travels between the two orders exactly.
+     */
+    public CutPosition times(BigDecimal k) {
+        BigDecimal at = numberOf(written);
+        if (at == null || k.compareTo(BigDecimal.ONE) == 0) {
+            return this;
+        }
+        return new CutPosition(new Level.ACount(new Count(at.multiply(k))), per);
+    }
+
+    /**
      * Whether a value of the quantity is below, at or above where this line falls.
      *
      * <p>Asked by multiplying rather than by dividing, which is what lets a line at a place no value

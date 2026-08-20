@@ -29,6 +29,11 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
 
     private static PartitionEvidence measured(String type, String guards) {
+        return measured(type, guards,
+                "    | \"one\" : (" + (type.equals("Decimal") ? "0.1m" : "1") + ") -> Yes { v = 1 }");
+    }
+
+    private static PartitionEvidence measured(String type, String guards, String rows) {
         Compilation compilation = Compilation.ofSource("""
                 module example.exact
 
@@ -45,8 +50,8 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
                 }
 
                 example f
-                    | "one" : (%s) -> Yes { v = 1 }
-                """.formatted(type, guards, type.equals("Decimal") ? "0.1m" : "1"), "Main");
+                %s
+                """.formatted(type, guards, rows), "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
         Map<String, PartitionEvidence> all = compilation.db()
@@ -105,6 +110,52 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
                 classesOf("Decimal", """
                     guard 3m * n > 1m else No { why = 0 }
                     guard 3m * n > 2m else No { why = 1 }"""));
+    }
+
+    /**
+     * And a row either side of such a line falls in the class its side is.
+     *
+     * <p>Which is what a class is for. Naming two of them is worth nothing if both hold every value:
+     * the classifier answers with the first class that says yes, so two classes that both say yes to
+     * everything are one class counted twice, and a report saying two of two are covered has
+     * measured nothing.
+     */
+    @Test
+    void aRowEitherSideOfSuchALineFallsInTheClassItsSideIs() {
+        PartitionEvidence measured = measured("Decimal", """
+                    guard 3m * n <= 1m else No { why = 0 }""",
+                """
+                    | "under" : (0.30m) -> Yes { v = 1 }
+                    | "over" : (0.34m) -> No { why = 0 }""");
+
+        assertEquals(2, measured.axes().get(0).covered().size(),
+                "three tenths is under a third and thirty-four hundredths is over it: "
+                        + measured.axes().get(0).covered());
+    }
+
+    /**
+     * And a line the position can name does not swallow the values past a line it cannot.
+     *
+     * <p>{@code n > 0.2} and {@code 3 * n > 1} draw two lines through one position, and the classes
+     * between them are three. The second line falls at a third, which no decimal is — and a class
+     * that could not say where it stops ran to the end of the order, so a half was in the class
+     * below the third and in the class above it at once.
+     */
+    @Test
+    void aClassStopsAtALineThePositionCannotName() {
+        List<String> covered = measured("Decimal", """
+                    guard n > 0.2m else No { why = 0 }
+                    guard 3m * n > 1m else No { why = 1 }""",
+                """
+                    | "low" : (0.1m) -> No { why = 0 }
+                    | "mid" : (0.3m) -> No { why = 1 }
+                    | "high" : (0.5m) -> Yes { v = 1 }""")
+                .axes().get(0).covered().stream().sorted().toList();
+
+        assertEquals(3, covered.size(), "one row in each of the three classes: " + covered);
+        assertEquals(List.of("n/0.2 < x and 3 * x <= 1", "n/1 < 3 * x", "n/x <= 0.2"), covered,
+                "and the class between the two lines says where it stops, in the words each line"
+                        + " can be said in");
     }
 
     /**

@@ -109,6 +109,39 @@ public record Band(Seam under, Seam over, Level from, Level to) {
                 side == Towards.ABOVE ? !below : below);
     }
 
+    /**
+     * A range of the position's counts that lies inside this run, for a search to look in.
+     *
+     * <p>An envelope and never the run itself: what is in the run is the run's to say
+     * ({@link #holds}), and this only says where to look. Narrowed inward at a line the quantity
+     * has no value at — the whole number that way is inside the run, where the line is not a number
+     * at all — so a search for a value of the run is handed values of the run.
+     */
+    public souther.compiler.numeric.NumericDomain.Bounds inside(
+            souther.compiler.numeric.Endpoint min, souther.compiler.numeric.Endpoint max) {
+        return new souther.compiler.numeric.NumericDomain.Bounds(
+                under == null ? min : innerOf(under, low(), Towards.ABOVE),
+                over == null ? max : innerOf(over, high(), Towards.BELOW));
+    }
+
+    /**
+     * One end of the run to look in from.
+     *
+     * <p>Where the run reaches, which is a value it holds or the line it stops short of — and where
+     * the line is at no value of the quantity, the whole number that way, which is in the run
+     * because the line is not a number the quantity stands at. Rounded without asking whether the
+     * line is one, a run open at a whole number was looked in from that number and the one value
+     * offered was the one value it does not hold.
+     */
+    private static souther.compiler.numeric.Endpoint innerOf(
+            Seam parted, souther.compiler.numeric.Endpoint reaches, Towards into) {
+        if (reaches != null) {
+            return reaches;
+        }
+        souther.compiler.numeric.Place whole = parted.at().justBeyond(into);
+        return whole == null ? null : souther.compiler.numeric.Endpoint.inclusive(whole);
+    }
+
     /** The line itself, which the run reaches up to and does not hold. Null where the line is at a
      *  place the quantity has no value for, and then nothing here can name where the run stops. */
     private static souther.compiler.numeric.Endpoint atTheLine(Seam parted) {
@@ -157,13 +190,37 @@ public record Band(Seam under, Seam over, Level from, Level to) {
     public String written(BorderQuantity of, Level except) {
         String low = except != null && same(except, first())
                 ? of.writtenAt(except) + " < "
-                : under != null ? of.writtenAt(under.at().written()) + opens(under)
+                : under != null ? said(of, under, Towards.ABOVE)
                         : from == null ? "" : of.writtenAt(from) + " <= ";
         String high = except != null && same(except, last())
                 ? " < " + of.writtenAt(except)
-                : over != null ? closes(over) + of.writtenAt(over.at().written())
+                : over != null ? said(of, over, Towards.BELOW)
                         : to == null ? "" : " <= " + of.writtenAt(to);
         return low.isEmpty() && high.isEmpty() ? "any" : (low + of.left() + high).trim();
+    }
+
+    /**
+     * One end of the run as a report writes it: the line where the quantity has a value there, and
+     * the value beside it where it has none.
+     *
+     * <p>The same reading {@link #lineBelow} gives in the position's own counts. Written off the
+     * level the rule was written with, a run parted by a rule that wrote a multiple of the quantity
+     * asked the quantity to write a number that is not one of its values.
+     */
+    private static String said(BorderQuantity of, Seam parted, Towards side) {
+        Level line = parted.at().asALevelOfTheQuantity();
+        if (line != null) {
+            return side == Towards.ABOVE ? of.writtenAt(line) + opens(parted)
+                    : closes(parted) + of.writtenAt(line);
+        }
+        Level named = parted.below() != null ? parted.below() : parted.above();
+        if (named == null) {
+            return "";
+        }
+        boolean below = named == parted.below();
+        return side == Towards.ABOVE
+                ? of.writtenAt(named) + (below ? " < " : " <= ")
+                : (below ? " <= " : " < ") + of.writtenAt(named);
     }
 
     /** Whether this run has any value in it other than {@code except}, where that can be settled.

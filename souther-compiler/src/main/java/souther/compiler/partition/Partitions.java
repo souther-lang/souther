@@ -381,7 +381,8 @@ public final class Partitions {
                 Axis here2 = axis;
                 keep(out, measured, refine(axis,
                         () -> singledClasses(points, at, here2.type(), only, symbols),
-                        mergedPoints(axis.cuts(), points, at.carrierAt(axis.type(), symbols))),
+                        mergedPoints(axis.cuts(), points, at.carrierAt(axis.type(), symbols)),
+                        axis.parted()),
                         new BodyCutInspection.Evidence(), rules);
                 continue;
             }
@@ -442,8 +443,11 @@ public final class Partitions {
                     () -> Intervals.classesOf(
                             Intervals.of(reachable, within == null ? null : within.min(),
                                     within == null ? null : within.max(), carrier),
-                            measuredAt, read.type(), symbols),
-                    merged(axis.cuts(), reachable, carrier)),
+                            measuredAt, read.type(), symbols,
+                            within == null ? null : within.min(),
+                            within == null ? null : within.max()),
+                    merged(axis.cuts(), reachable, carrier),
+                    reachable.stream().map(Threshold::parts).toList()),
                     reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), rules);
         }
         return new Partitioning(out, base.omitted(), domainsOf(base, out), base.uncertain(),
@@ -486,8 +490,8 @@ public final class Partitions {
      *                  working them out would be a reading whose answer is thrown away
      */
     private static Axis refine(Axis axis, java.util.function.Supplier<List<PartitionClass>> otherwise,
-                               List<Cut> cuts) {
-        return axis.carrying(axis.derivable() ? axis.classes() : otherwise.get(), cuts);
+                               List<Cut> cuts, List<Seam> parted) {
+        return axis.carrying(axis.derivable() ? axis.classes() : otherwise.get(), cuts, parted);
     }
 
     /**
@@ -654,14 +658,18 @@ public final class Partitions {
         // What each border owes away from its line is a run of the arrangement they make together,
         // and a border built without them reads its two sides to the end of the order — so a row in
         // the partition after next answered for a point inside the one this border bounds.
-        List<Seam> parted = new ArrayList<>();
+        // Every place the rules part this position's values: the ones its cuts stand at, and the
+        // ones no cut stands at because the position holds no value there. A border built from the
+        // cuts alone read its two sides past exactly the lines that were left out.
+        List<Seam> parted = new ArrayList<>(axis.parted());
         for (Cut cut : axis.cuts()) {
             BoundaryTarget where = BoundaryTarget.at(
                     new BorderQuantity.OfACoordinate(axis.id(), axis.term(), cut.carrier()),
                     new Level.OnACarrier(cut.carrier(), cut.at()));
             for (OriginRef origin : cut.origins()) {
                 Seam parts = Border.parts(where, origin);
-                if (parts != null) {
+                if (parts != null && parted.stream()
+                        .noneMatch(had -> had.key().equals(parts.key()))) {
                     parted.add(parts);
                 }
             }
@@ -733,8 +741,8 @@ public final class Partitions {
                     uncertain.add(term);
                 }
                 out.add(new Axis(id, term, position.type(), divided.classes(),
-                        divided.cuts().cuts(), divided.unanswered(), divided.rulesNotReached(),
-                        null, null));
+                        divided.cuts().cuts(), List.of(), divided.unanswered(),
+                        divided.rulesNotReached(), null, null));
             }
             // Nothing local divides the position, which is what licenses asking what it is made of.
             // Whether the reading got to the end of the rules is carried rather than acted on here:

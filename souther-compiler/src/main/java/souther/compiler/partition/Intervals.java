@@ -8,6 +8,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
@@ -61,44 +62,60 @@ final class Intervals {
             return c < 0 || (c == 0 && loInclusive && hiInclusive);
         }
 
+        /**
+         * The class this range is, as a report names it.
+         *
+         * <p>Both ends written, each in whatever names it exactly. A line the position has a value
+         * at is written as that value; one it has none at is written as the rule that drew it, in
+         * numbers this language has — {@code 3 * x <= 1} rather than a third rounded to something
+         * it is not. A run with one end of each kind says both and joins them, because an end left
+         * out is a class that reads as holding the values past the next line along.
+         */
         String label(Carrier carrier) {
-            String low = lo == null ? ""
-                    : (loInclusive ? carrier.written(lo) + " <= " : carrier.written(lo) + " < ");
-            String high = hi == null ? ""
-                    : (hiInclusive ? " <= " + carrier.written(hi) : " < " + carrier.written(hi));
-            if (lo == null && hi == null) {
-                // Named by the rules that part it, where the position holds no value at either end
-                // to name it by. `3 * x <= 1` says exactly where the values part and says it in
-                // numbers this language has; the third the line falls at is not one of them, and a
-                // run left unnamed is a class a report cannot tell from the one beside it.
-                String said = of == null ? null : written(of);
-                return said == null ? "any" : said;
+            String low = lo == null ? ruleEnd(of == null ? null : of.under(), Towards.ABOVE)
+                    : carrier.written(lo) + (loInclusive ? " <= x" : " < x");
+            String high = hi == null ? ruleEnd(of == null ? null : of.over(), Towards.BELOW)
+                    : (hiInclusive ? "x <= " : "x < ") + carrier.written(hi);
+            if (low == null && high == null) {
+                return "any";
             }
-            return (low + "x" + high).trim();
+            if (low == null) {
+                return high;
+            }
+            if (high == null) {
+                return low;
+            }
+            // One subject and two relations where both ends can name the same one, which is what
+            // an author reads a range as. Two subjects are two conditions and are said as two.
+            String subject = subjectOf(carrier);
+            return subject == null ? low + " and " + high
+                    : low.substring(0, low.length() - subject.length())
+                            + subject + high.substring(subject.length());
         }
 
-        /** A run as the rules that part it, or null where nothing parts it. */
-        private static String written(Band run) {
-            java.math.BigDecimal[] below = ruleOf(run.under());
-            java.math.BigDecimal[] above = ruleOf(run.over());
-            if (below == null && above == null) {
+        /** What both ends of this run relate a row to, where they relate it to the same thing.
+         *  Null where one end names the position and the other a multiple of it. */
+        private String subjectOf(Carrier carrier) {
+            if (lo != null && hi != null) {
+                return "x";
+            }
+            if (lo != null || hi != null || of == null) {
                 return null;
             }
-            if (below != null && above != null && below[0].compareTo(above[0]) == 0) {
-                return plain(below[1]) + " < " + times(below[0]) + " <= " + plain(above[1]);
-            }
-            if (below == null) {
-                return times(above[0]) + " <= " + plain(above[1]);
-            }
-            if (above == null) {
-                return plain(below[1]) + " < " + times(below[0]);
-            }
-            return plain(below[1]) + " < " + times(below[0]) + " and "
-                    + times(above[0]) + " <= " + plain(above[1]);
+            java.math.BigDecimal[] below = of.under() == null ? null : of.under().at().asARule();
+            java.math.BigDecimal[] above = of.over() == null ? null : of.over().at().asARule();
+            return below != null && above != null && below[0].compareTo(above[0]) == 0
+                    ? times(below[0]) : null;
         }
 
-        private static java.math.BigDecimal[] ruleOf(Seam parted) {
-            return parted == null ? null : parted.at().asARule();
+        /** One end as the rule that drew it, or null where nothing parts the run there. */
+        private static String ruleEnd(Seam parted, Towards side) {
+            java.math.BigDecimal[] rule = parted == null ? null : parted.at().asARule();
+            if (rule == null) {
+                return null;
+            }
+            return side == Towards.ABOVE ? plain(rule[1]) + " < " + times(rule[0])
+                    : times(rule[0]) + " <= " + plain(rule[1]);
         }
 
         private static String times(java.math.BigDecimal by) {
@@ -119,8 +136,8 @@ final class Intervals {
      * dropped — they cut a range no row can reach — and the end itself is outside it as much as
      * anything past it is.
      */
-    static List<Interval> of(List<Threshold> thresholds, Endpoint min, Endpoint max,
-                             Carrier carrier) {
+    static List<Band> of(List<Threshold> thresholds, Endpoint min, Endpoint max,
+                         Carrier carrier) {
         // Keyed by where the values part, and not by the number a rule was written with. `x <= 4`
         // and `x < 5` divide the whole numbers once; keyed by their thresholds they are two splits,
         // and the range between them holds no value any row could be written at — a class a report
@@ -141,11 +158,10 @@ final class Intervals {
         // about the position, and deriving them twice is two chances to answer them differently —
         // which is how a border came to ask for a row inside a partition the classes had already
         // divided further along.
-        List<Interval> out = new ArrayList<>();
+        List<Band> out = new ArrayList<>();
         for (Band run : QuantityArrangement.of(space, parted).bands()) {
-            Interval range = rangeOf(run, min, max);
-            if (range.inhabited()) {
-                out.add(range);
+            if (rangeOf(run, min, max).inhabited()) {
+                out.add(run);
             }
         }
         return out.size() < 2 ? List.of() : List.copyOf(out);
@@ -174,18 +190,23 @@ final class Intervals {
      * not the second: five is not what is written at the position, a string of five characters is,
      * and which values carry a count is asked of what builds them rather than settled here.
      */
-    static List<PartitionClass> classesOf(List<Interval> intervals, NumericTerm of, Type type,
-                                          Symbols symbols) {
+    static List<PartitionClass> classesOf(List<Band> runs, NumericTerm of, Type type,
+                                          Symbols symbols, Endpoint min, Endpoint max) {
         // What the counts in a label stand for. A day count is a carrier and never a name for the
         // line, so the class an author reads is spelled in dates where the position holds them.
         Carrier carrier = of.carrierAt(type, symbols);
+        LevelSpace space = LevelSpace.onACarrier(carrier);
         List<PartitionClass> classes = new ArrayList<>();
-        for (Interval range : intervals) {
-            String label = range.label(carrier);
+        for (Band run : runs) {
+            String label = rangeOf(run, min, max).label(carrier);
             String id = of + "/" + label;
-            Place inside = representative(range, carrier);
+            Place inside = representative(run, carrier, min, max);
+            // The run's own answer about what is in it. Read off a range of the position's counts,
+            // a class whose line falls at a place the position has no value for had no end to state
+            // — so it held every value, and two such classes each held everything the other did.
             Classifier is = v -> switch (of.read(v, carrier)) {
-                case NumericTerm.Reading.Number number -> Membership.of(range.holds(number.value()));
+                case NumericTerm.Reading.Number number -> Membership.of(
+                        run.holds(space, new Level.OnACarrier(carrier, number.value())));
                 case NumericTerm.Reading.Missing missing ->
                         new Membership.Incomplete(missing.code());
                 case NumericTerm.Reading.NotNumber _ -> Membership.NO_MATCH;
@@ -219,10 +240,9 @@ final class Intervals {
      * came back as one holding no value, which is what a whole step would leave and not what the
      * values do.
      */
-    private static Place representative(Interval range, Carrier carrier) {
-        Place between = carrier.somethingInside(
-                range.lo() == null ? null : new Endpoint(range.lo(), range.loInclusive()),
-                range.hi() == null ? null : new Endpoint(range.hi(), range.hiInclusive()));
+    private static Place representative(Band run, Carrier carrier, Endpoint min, Endpoint max) {
+        NumericDomain.Bounds envelope = run.inside(min, max);
+        Place between = carrier.somethingInside(envelope.min(), envelope.max());
         if (between == null) {
             return null;
         }
@@ -231,7 +251,9 @@ final class Intervals {
         // counts is one — asking it for both is how a class open at both ends came to offer the
         // count at one of its ends.
         Place held = carrier.onTheGrid(between);
-        return held != null && range.holds(held) ? held : null;
+        return held != null
+                && run.holds(LevelSpace.onACarrier(carrier), new Level.OnACarrier(carrier, held))
+                ? held : null;
     }
 
     /**
