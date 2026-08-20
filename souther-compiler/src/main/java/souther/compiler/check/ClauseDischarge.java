@@ -17,9 +17,12 @@ import java.util.Optional;
  * saying it was a property of the language, and the two sentences an author was shown — that a guard
  * would discharge this, that nothing would — were both about the checker.
  *
- * <p>One clause is one obligation, so there is one of these per clause and no way to hold a clause
- * with none. The readings under it may be several, which is the other half of the same point: what is
- * written as one thing need not be read as one thing.
+ * <p>One clause is one obligation and one answer, so there is one of these per clause and no way to
+ * hold a clause with none. The answer is where the several live: it may hold several
+ * {@link RequiredPart}s, every one of which has to be established, and a part may admit several
+ * {@link StaticRoute}s, any one of which establishes it. That is the other half of the same point —
+ * what is written as one thing need not be read as one thing — said with the two multiplicities kept
+ * apart, since they are not the same one.
  *
  * <p>One record for both kinds of clause because it is one question — what a construction owes, and
  * what a guard could discharge. What follows from the answer is the reader's: for an invariant it

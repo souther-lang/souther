@@ -349,16 +349,22 @@ final class Predicates {
     }
 
     /**
-     * What a clause owes, and whether any part of it was outside what the check can read.
+     * What a clause owes: its parts in the order they were read, and what the clause itself folded
+     * to.
      *
-     * <p>The two are apart because a clause owing nothing has two reasons: it folded to what it is
-     * read with, or nothing in it could be asked here. A conjunction can be both at once — one
-     * conjunct discharged and the next unreadable — and reporting only the obligations would say the
-     * invariant was proven when half of it was never read.
+     * <p>One list, with what was carried and what was not as two shapes in it. A conjunction can be
+     * both at once — one conjunct discharged and the next unreadable — and a list of what was
+     * carried beside one node for what was not says the invariant was proven where half of it was
+     * never read, keeps only the first of two unreadable parts, and loses the order the author wrote
+     * them in. All three go away by making them variants of one sequence.
      *
-     * @param clauses what is owed, which the reading discharges or refutes
-     * @param unreadable whether a conjunct of it names something the check cannot read here, whose
-     *                   run-time check stands whatever the rest comes out as
+     * <p>{@code folded} is about the clause and not about a part of it. A conjunct folding the way
+     * it is read owes nothing and contributes no part; the clause folds only as all of it does
+     * ({@link Fold#and}), so this is beside the parts rather than one of them.
+     *
+     * @param parts  what the clause asks of a construction, each carried or not
+     * @param folded whether the clause came out one way on its own, before any construction was
+     *               looked at
      */
     record Owed(List<Part> parts, Fold folded) {
 

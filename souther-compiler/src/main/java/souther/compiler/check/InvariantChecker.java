@@ -242,12 +242,13 @@ public final class InvariantChecker {
      * here because the answer is what this check can read, and a second reader working that out from
      * the outside would be deciding it by what it happened to manage.
      *
-     * <p>More than one where more than one is true of it. What is written as one thing can be read as
-     * several — a rule that names a helper is one thing to its author and is whatever that helper
-     * states to this — and the readings need not agree: a bound and a term the check can only compare
-     * are discharged by different guards, and one of them being there says nothing about the other.
-     * Answering with one of them would be picking which half of a clause to describe, and the half not
-     * picked is the one an author is about to be surprised by.
+     * <p>One answer, and the answer has a shape. What is written as one thing can be read as several
+     * — a rule that names a helper is one thing to its author and is whatever that helper states to
+     * this — so the answer may hold several {@link RequiredPart}s, every one of which has to be
+     * established, and a part may admit several {@link StaticRoute}s, any one of which establishes
+     * it. Flattened into one set of readings, a clause needing a bound in one part and a term in
+     * another said that either guard discharges it, and the half an author did not pick is the one
+     * they are about to be surprised by.
      *
      * <p>Where the answers are said is the clause's and is not passed in. A position that can be
      * passed can be passed from the wrong tree — which is what an expansion of the clause is, and
@@ -257,7 +258,7 @@ public final class InvariantChecker {
      *
      * @param clause the conjunct, as written and as this check reads it
      * @param typing what types the read form here — a declaration's fields, a signature's names —
-     *               answering null where this compiler could not type it
+     *               answering {@link TypedClause.Stopped} where typing it did not finish
      * @param locations the names it may read, each standing for itself
      * @param describing what is being read, for the record a fail-open leaves behind
      */
@@ -281,12 +282,12 @@ public final class InvariantChecker {
     }
 
     /**
-     * {@code read} as its reader types it, or null where it could not be typed there.
+     * {@code read} as its reader types it, or that typing it did not finish.
      *
-     * <p>Fail-open, as the walk is. Null is a reading that never began, whichever way it came about:
-     * this catch, or the typing answering null because it caught something of its own
-     * ({@link Clauses#typed}) — which is why the reading below reaches
-     * {@link CapabilityResult.AnalysisStopped} from the null and not only from here. A clause that
+     * <p>Fail-open, as the walk is, and the two ways it can stop answer alike:
+     * {@link TypedClause.Stopped} from this catch, and the same from the typing having caught
+     * something of its own ({@link Clauses#typed}). Which is why the reading below reaches
+     * {@link CapabilityResult.AnalysisStopped} from the answer and not only from here. A clause that
      * could not be typed is not a clause found to be outside the fragment: being inside it is what
      * was never asked.
      */

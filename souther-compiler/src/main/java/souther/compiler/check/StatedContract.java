@@ -113,7 +113,7 @@ public record StatedContract(ValueName.Behavior behavior, List<ContractParam> pa
         return new StatedContract(contract.behavior(), contract.params(), contract.output(), rules);
     }
 
-    /** {@code read} as the check holds it, or null where this compiler could not type it there. */
+    /** {@code read} as the check holds it, or that typing it did not finish there. */
     private static TypedClause typed(souther.compiler.ast.Hir.Expr read, Scope scope,
                                      CheckContext ctx, ValueName.Behavior behavior) {
         try {
