@@ -830,7 +830,8 @@ public final class FieldDomains {
             case ProjectionEvidence.Cause.Unrepresented it ->
                     "2 " + it.rule().named() + " " + it.path();
             case ProjectionEvidence.Cause.Lossy it ->
-                    "3 " + it.rule().named() + " " + it.atom() + " " + it.losses();
+                    "3 " + it.rule().named() + " " + it.atom() + " " + it.unstated();
+            case ProjectionEvidence.Cause.Rounded it -> "4 " + it.atom();
         };
     }
 
@@ -940,14 +941,20 @@ public final class FieldDomains {
                     continue;
                 }
                 for (FactSubject atom : each.atoms()) {
-                    Set<NumericDomain.Loss> losses = constraints.numbers().lossesAt(atom);
-                    if (!losses.isEmpty()) {
-                        lossy.add(new ProjectionEvidence.Cause.Lossy(rule, atom, losses));
-                    }
+                    lossy.add(new ProjectionEvidence.Cause.Lossy(rule, atom,
+                            Set.of(each.rel() == NumericDomain.Rel.NE
+                                    ? ProjectionEvidence.Cause.Unstated.A_HOLE
+                                    : ProjectionEvidence.Cause.Unstated.A_RELATION)));
                 }
             }
         }));
         causes.addAll(lossy);
+        // And whether the ends handed over are the ends the rules drew. Asked of every position the
+        // algebra speaks of, because this is not about any one rule: the reasoning reached the edge
+        // exactly and the writing could not carry it.
+        constraints.numbers().atomsSpokenOf().stream()
+                .filter(atom -> !constraints.numbers().endsAreWrittenExactly(atom))
+                .forEach(atom -> causes.add(new ProjectionEvidence.Cause.Rounded(atom)));
         // In an order that does not move between runs. Parts are keyed by the node the tree holds,
         // which is an identity, and a map keyed on one iterates by where the addresses landed — so
         // a value with two conjuncts short of the bounds printed its two causes in whichever order

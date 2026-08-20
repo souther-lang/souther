@@ -243,68 +243,113 @@ class NumericDomainTest {
         assertTrue(d.isBottom(), "a >= 1 and a <= 0 cannot both hold");
     }
 
-    // --- what an assertion arrived with and the domain did not keep --------------------------------
+    // --- how much of a rule the ranges handed over are able to state -------------------------------
 
+    /** An interval and a difference are both things a range and its differences state in full. */
     @Test
-    void anIntervalAndADifferenceOverWholeNumbersLoseNothing() {
+    void anIntervalAndADifferenceAreStatedByWhatIsHandedOver() {
         NumericDomain<String> d = NumericDomain.<String>top()
                 .assume(atom(A).minus(atom(B)), Rel.LT, whole(A, B))
                 .assume(atom(B).minus(num(1440)), Rel.LE, whole(B))
                 .assume(atom(A).negate(), Rel.LE, whole(A));
 
-        assertTrue(d.projectionIsLossless(), () -> "lost " + d.lossyAtoms());
+        assertTrue(d.projectionEntails(atom(A).minus(atom(B)), Rel.LT));
+        assertTrue(d.projectionEntails(atom(B).minus(num(1440)), Rel.LE));
     }
 
-    /** A loss names the atoms the rule was written about, which is what a reader of it is told. */
-    @Test
-    void aLossNamesTheAtomsTheRuleWasWrittenAbout() {
-        NumericDomain<String> d = NumericDomain.<String>top()
-                .assume(atom(A), Rel.NE, whole(A))
-                .assume(atom(B).minus(num(10)), Rel.LE, whole(B));
-
-        assertEquals(Set.of(A), d.lossyAtoms());
-        assertFalse(d.projectionIsLossless(), "and the domain is not all of what it was told");
-    }
-
-    /** A strict bound over decimals is kept as an end the range stops at without reaching, which is
-     * the whole of what was asserted and so no loss. */
+    /** A strict bound over decimals is an end the range stops at without reaching, which is the
+     * whole of what was asserted. */
     @Test
     void aStrictBoundOnADenseAtomIsKeptAsAnEndTheRangeDoesNotReach() {
         NumericDomain<String> interval = NumericDomain.<String>top()
                 .assume(atom(A).minus(num(3)), Rel.LT, dense(A));
 
         assertEquals(Endpoint.exclusive(Count.of(3)), interval.boundsOf(A).max());
-        assertTrue(interval.projectionIsLossless());
+        assertTrue(interval.projectionEntails(atom(A).minus(num(3)), Rel.LT));
     }
 
-    /** The same over whole numbers keeps everything too: there the strictness became a step, and the
-     * value it steps onto is one the rule admits. */
+    /** The same over whole numbers states it too: there the strictness became a step, and the value
+     * it steps onto is one the rule admits. */
     @Test
-    void aStrictBoundOnAWholeNumberIsNoLoss() {
-        NumericDomain<String> d = NumericDomain.<String>top().assume(atom(A).minus(num(3)), Rel.LT, whole(A));
+    void aStrictBoundOnAWholeNumberIsStatedByTheStepItTook() {
+        NumericDomain<String> d = NumericDomain.<String>top()
+                .assume(atom(A).minus(num(3)), Rel.LT, whole(A));
 
         assertEquals(Endpoint.inclusive(Count.of(2)), d.boundsOf(A).max());
-        assertTrue(d.projectionIsLossless());
+        assertTrue(d.projectionEntails(atom(A).minus(num(3)), Rel.LT));
     }
 
-    /** A disequality is a hole in a range, and a range is all this holds. */
+    /**
+     * A hole with nothing to side it is the one a range genuinely cannot keep.
+     *
+     * <p>And a hole at an edge is not: it moves the edge, and the range then says the whole of it.
+     * Which of the two a disequality is depends on what else is known, so it is asked of what the
+     * rules were found to leave rather than recorded when the rule was read.
+     */
     @Test
-    void aDisequalityIsRecordedAsALoss() {
-        NumericDomain<String> d = NumericDomain.<String>top().assume(atom(A), Rel.NE, whole(A));
+    void aHoleIsStatedByTheRangesOnlyWhereItMovedAnEdge() {
+        NumericDomain<String> loose = NumericDomain.<String>top()
+                .assume(atom(A), Rel.NE, whole(A));
+        assertFalse(loose.projectionEntails(atom(A), Rel.NE),
+                "nothing says which side of nought a is on, so the range keeps the nought");
 
-        assertEquals(Set.of(NumericDomain.Loss.DROPPED_DISEQUALITY), d.lossesAt(A));
+        NumericDomain<String> sided = loose.assume(atom(A), Rel.GE, whole(A));
+        assertEquals(Endpoint.inclusive(Count.of(1)), sided.boundsOf(A).min());
+        assertTrue(sided.projectionEntails(atom(A), Rel.NE),
+                "and here the range states it, because the hole moved the edge onto one");
     }
 
-    /** A form of neither shape proves things and no bound is derived through it. */
+    /**
+     * A rule over two positions narrows both and is still not something two ranges state — the
+     * ranges hold every pair of their own values and the rule refuses some of them.
+     */
     @Test
-    void aFormOfNeitherShapeIsRecordedAsALoss() {
+    void aRuleOverTwoPositionsNarrowsBothAndIsStillNotARange() {
         NumericDomain<String> d = NumericDomain.<String>top()
+                .assume(atom(A).negate(), Rel.LE, whole(A, B))
+                .assume(atom(B).negate(), Rel.LE, whole(A, B))
                 .assume(atom(A).plus(atom(B)).minus(num(10)), Rel.LE, whole(A, B));
 
-        assertEquals(Set.of(A, B), d.lossyAtoms());
-        assertEquals(Set.of(NumericDomain.Loss.KEPT_UNPROJECTABLE), d.lossesAt(A));
+        assertEquals(Endpoint.inclusive(Count.of(10)), d.boundsOf(A).max());
         assertTrue(d.entails(atom(A).plus(atom(B)).minus(num(10)), Rel.LE),
-                "still proves what it was told, and holds no bound from it");
+                "the rules prove it, since one of them is it");
+        assertFalse(d.projectionEntails(atom(A).plus(atom(B)).minus(num(10)), Rel.LE),
+                "and the two ranges do not, since they hold a = 10 beside b = 10");
+    }
+
+    /** Where the ranges are tight enough to hold it, they state it, and nothing is owed. */
+    @Test
+    void aRuleOverTwoPositionsIsStatedWhereTheRangesAlreadyHoldIt() {
+        NumericDomain<String> d = NumericDomain.<String>top()
+                .assume(atom(A).negate(), Rel.LE, whole(A, B))
+                .assume(atom(B).negate(), Rel.LE, whole(A, B))
+                .assume(atom(A).minus(num(3)), Rel.LE, whole(A, B))
+                .assume(atom(B).minus(num(3)), Rel.LE, whole(A, B))
+                .assume(atom(A).plus(atom(B)).minus(num(10)), Rel.LE, whole(A, B));
+
+        assertTrue(d.projectionEntails(atom(A).plus(atom(B)).minus(num(10)), Rel.LE),
+                "a and b are each at most three, so their sum is at most six whatever is picked");
+    }
+
+    // --- and whether the ends are numbers anybody can write -----------------------------------------
+
+    @Test
+    void endsOnWholeNumbersAreWrittenExactly() {
+        NumericDomain<String> d = NumericDomain.<String>top()
+                .assume(atom(A).minus(num(3)), Rel.LE, whole(A));
+        assertTrue(d.endsAreWrittenExactly(A));
+    }
+
+    /** A third is not a decimal, so the number standing for that edge is a hair outside it. */
+    @Test
+    void anEndAtAValueNoDecimalWritesIsRoundedPast() {
+        NumericDomain<String> d = NumericDomain.<String>top()
+                .assume(atom(A).times(java.math.BigDecimal.valueOf(3)).minus(num(1)),
+                        Rel.LE, dense(A));
+        assertFalse(d.endsAreWrittenExactly(A));
+        assertTrue(d.boundsOf(A).max().at() instanceof Count at
+                        && at.at().compareTo(new java.math.BigDecimal("0.3333")) > 0,
+                "and it is rounded the way that widens: " + d.boundsOf(A).max());
     }
 
     // --- what the domain refuses to be told -------------------------------------------------------

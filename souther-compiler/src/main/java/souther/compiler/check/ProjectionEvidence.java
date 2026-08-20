@@ -104,23 +104,71 @@ public sealed interface ProjectionEvidence {
          * holds — except where one side is already out, which is why {@code value >= 1} written
          * beside {@code value /= 0} leaves the bounds stating both.
          *
-         * <p>{@code rule} is this rule and {@code losses} is the atom's. The domain records which
-         * kinds of loss an atom has and not which rule left it with each, so where two rules leave
-         * one atom short in different ways both are named with both kinds. The rule is exact, the
-         * atom is exact, and what was lost is the atom's account of itself.
+         * <p>Both the rule and what went unstated about it are this rule's. Two rules leaving one
+         * position short in different ways are two causes saying two different things, rather than
+         * one account of the position that both are filed under.
          */
-        record Lossy(RuleRef rule, FactSubject atom, Set<NumericDomain.Loss> losses)
-                implements Cause {
+        record Lossy(RuleRef rule, FactSubject atom, Set<Unstated> unstated) implements Cause {
 
             public Lossy {
-                losses = Set.copyOf(losses);
+                unstated = Set.copyOf(unstated);
                 if (rule == null || atom == null) {
-                    throw new IllegalArgumentException("a loss happened to a rule at an atom");
+                    throw new IllegalArgumentException("something went unstated about a rule at an atom");
                 }
-                if (losses.isEmpty()) {
-                    throw new IllegalArgumentException("a loss with nothing lost is not one");
+                if (unstated.isEmpty()) {
+                    throw new IllegalArgumentException("nothing unstated is not a cause");
                 }
             }
+        }
+
+        /**
+         * An end the rules put at a value no decimal writes, so the number handed over is a hair
+         * outside where they stop.
+         *
+         * <p>Its own cause and not one of {@link Lossy}'s kinds, because it is not about a rule. The
+         * reasoning reached the position's edge exactly; what could not carry it is the writing. A
+         * reader placing a row at an edge is the one this is for — the edge it is given is not the
+         * edge the rules drew.
+         *
+         * <p>Rare. An end on a position whose values step is a whole number, and one on a position
+         * whose values fill is a decimal unless a rule divided by something ten is not made of.
+         */
+        record Rounded(FactSubject atom) implements Cause {
+
+            public Rounded {
+                if (atom == null) {
+                    throw new IllegalArgumentException("a rounded end is an end of something");
+                }
+            }
+        }
+
+        /**
+         * What a range at one position could not state of a rule about it.
+         *
+         * <p>Worked out from the rule and from what the rules were found to leave, rather than
+         * recorded as each rule arrived. Recorded, it was a history: a rule that narrowed nothing at
+         * the moment it was read left a mark that stayed after a later rule made it bite, so a range
+         * that had become the whole of what the rules say still carried a note that it was not.
+         */
+        enum Unstated {
+
+            /**
+             * A rule holding the position away from a value inside its range.
+             *
+             * <p>Only where it is inside. A hole at an edge moves the edge and is then something the
+             * range does state — {@code value /= 0} beside {@code value >= 0} leaves the position at
+             * one and nothing is left over.
+             */
+            A_HOLE,
+
+            /**
+             * A rule relating this position to others, which a range at one of them cannot carry.
+             *
+             * <p>Only where the ranges do not already hold it. What such a rule leaves each position
+             * it names is derived and is in the bounds; what a range cannot say is the relation, and
+             * it only needs saying where a value of each range can be picked that together break it.
+             */
+            A_RELATION
         }
     }
 

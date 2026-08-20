@@ -346,6 +346,35 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
     }
 
     /**
+     * An edge the rules put at a value no decimal writes is handed over rounded past it, and the
+     * reading says so.
+     *
+     * <p>{@code 3 * value <= 1} leaves the field at a third, and a third does not terminate — no
+     * decimal a model writes is one. The reasoning reaches the edge exactly; the number standing for
+     * it is a hair outside. That is not a rule the range failed to state, so it is its own cause: a
+     * reader placing a row at this edge is being given an edge the rules did not draw.
+     */
+    @Test
+    void anEdgeNoDecimalWritesIsSaidToBeRounded() {
+        FieldDomains domains = domainsIn("""
+                module example.third
+
+                data D = Decimal
+                    invariant atLeastNone = value >= 0.0m
+                    invariant aThird = 3.0m * value <= 1.0m
+
+                data R =
+                    { d: D
+                    }
+                """, "R");
+
+        assertTrue(domains.projection() instanceof ProjectionEvidence.Approximate approximate
+                        && approximate.causes().stream()
+                                .anyMatch(cause -> cause instanceof ProjectionEvidence.Cause.Rounded),
+                "the edge is a third and no decimal is: " + domains.projection());
+    }
+
+    /**
      * A relation narrows the same either side of a module boundary.
      *
      * <p>A relation is a projection only where both ends brought their ranges. An imported type's own

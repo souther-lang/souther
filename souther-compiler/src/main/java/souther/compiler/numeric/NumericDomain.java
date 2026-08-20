@@ -94,45 +94,18 @@ public final class NumericDomain<A> {
 
     private final List<AffineConstraint<A>> rules;
     private final Map<A, Granularity> kinds;
-    private final Map<A, Set<Loss>> losses;
     private final boolean readARuleNothingSatisfies;
     private ClosedState<A> closed;
 
     private NumericDomain(List<AffineConstraint<A>> rules, Map<A, Granularity> kinds,
-                          Map<A, Set<Loss>> losses, boolean readARuleNothingSatisfies) {
+                          boolean readARuleNothingSatisfies) {
         this.rules = rules;
         this.kinds = kinds;
-        this.losses = losses;
         this.readARuleNothingSatisfies = readARuleNothingSatisfies;
     }
 
     public static <A> NumericDomain<A> top() {
-        return new NumericDomain<>(List.of(), Map.of(), Map.of(), false);
-    }
-
-    /**
-     * A way an assertion arrived holding more than a range can state.
-     *
-     * <p>What the bounds say is sound either way — a range that cannot state a rule is a range wider
-     * than the rule, and a wider bound proves less — but a caller turning a bound into a value
-     * somebody has to write needs to know the edge is where the rules stop and not merely where a
-     * range stops being able to say so.
-     */
-    public enum Loss {
-
-        /** A disequality. {@code x /= 0} is a hole in a range, and a range is all this hands over. */
-        DROPPED_DISEQUALITY,
-
-        /**
-         * A rule relating several positions, which a range at one of them cannot state.
-         *
-         * <p>Not that nothing is derived from it: what such a rule leaves each position it names is
-         * derived and is in the bounds ({@link AffineReduction}). What a range cannot carry is the
-         * relation — every point of the box is inside every position's range, and the rule refuses
-         * some of them. So a reader taking one position's range at a time is reading something true,
-         * and a reader taking a value from each and expecting the whole to satisfy the rules is not.
-         */
-        KEPT_UNPROJECTABLE
+        return new NumericDomain<>(List.of(), Map.of(), false);
     }
 
     /**
@@ -167,8 +140,8 @@ public final class NumericDomain<A> {
                 coefs, Rational.of(f.constant()), rel, knowing.kinds::get);
         return switch (read) {
             // Nothing satisfies it, so nothing satisfies it together with anything else.
-            case AffineConstraint.Read.HoldsNever<A> ignored -> new NumericDomain<>(
-                    List.of(), knowing.kinds, knowing.losses, true);
+            case AffineConstraint.Read.HoldsNever<A> ignored ->
+                    new NumericDomain<>(List.of(), knowing.kinds, true);
             // Every value satisfies it, so there is nothing to keep.
             case AffineConstraint.Read.HoldsAlways<A> ignored -> knowing;
             case AffineConstraint.Read.Stated<A> stated -> knowing.keeping(stated.constraint());
@@ -184,20 +157,11 @@ public final class NumericDomain<A> {
      */
     private NumericDomain<A> keeping(AffineConstraint<A> rule) {
         if (rules.contains(rule)) {
-            return losing(lossOf(rule), rule.form().coefs().keySet());
+            return this;
         }
         List<AffineConstraint<A>> next = new ArrayList<>(rules);
         next.add(rule);
-        return new NumericDomain<>(List.copyOf(next), kinds,
-                with(lossOf(rule), rule.form().coefs().keySet()), false);
-    }
-
-    /** What a range cannot state about the rule, or null where it can state all of it. */
-    private Loss lossOf(AffineConstraint<A> rule) {
-        if (rule instanceof AffineConstraint.Disequality) {
-            return Loss.DROPPED_DISEQUALITY;
-        }
-        return DifferenceBounds.canHold(rule) ? null : Loss.KEPT_UNPROJECTABLE;
+        return new NumericDomain<>(List.copyOf(next), kinds, false);
     }
 
     /**
@@ -250,7 +214,7 @@ public final class NumericDomain<A> {
             next.put(atom, given);
         }
         return next == null ? this
-                : new NumericDomain<>(rules, Map.copyOf(next), losses, readARuleNothingSatisfies);
+                : new NumericDomain<>(rules, Map.copyOf(next), readARuleNothingSatisfies);
     }
 
     // --- what the rules leave, worked out once ----------------------------------------------------
@@ -624,48 +588,22 @@ public final class NumericDomain<A> {
     }
 
     /**
-     * Whether everything the rules say is held in a shape {@link #boundsOf} can state.
+     * Whether both ends of {@code atom}'s range are numbers a model could write.
      *
-     * <p>False where any rule says something a range cannot: see {@link Loss}. A caller turning a
-     * projection into a value somebody has to write has to know which of the two it has.
+     * <p>The one place the exact arithmetic stops, asked about. Almost every end is written exactly
+     * — one on a position whose values step is a whole number — and an end at a value like a third
+     * is not, so what is handed over is rounded past where the rules stop. Sound, and no longer the
+     * rules' own edge, which is a thing a reader placing a row at an edge has to know.
      */
-    public boolean projectionIsLossless() {
-        return losses.isEmpty();
-    }
-
-    /** What a range at one atom cannot state of the rules about it. */
-    public Set<Loss> lossesAt(A atom) {
-        return losses.getOrDefault(atom, Set.of());
-    }
-
-    /** Every atom something is lost about. */
-    public Set<A> lossyAtoms() {
-        return losses.keySet();
-    }
-
-    private NumericDomain<A> losing(Loss loss, Set<A> atoms) {
-        Map<A, Set<Loss>> next = with(loss, atoms);
-        return next == losses ? this
-                : new NumericDomain<>(rules, kinds, next, readARuleNothingSatisfies);
-    }
-
-    private Map<A, Set<Loss>> with(Loss loss, Set<A> atoms) {
-        if (loss == null) {
-            return losses;
+    public boolean endsAreWrittenExactly(A atom) {
+        if (isBottom()) {
+            return true;   // no ends are handed over, so none of them is rounded
         }
-        Map<A, Set<Loss>> next = null;
-        for (A atom : atoms) {
-            if (losses.getOrDefault(atom, Set.of()).contains(loss)) {
-                continue;
-            }
-            if (next == null) {
-                next = new HashMap<>(losses);
-            }
-            Set<Loss> here = java.util.EnumSet.noneOf(Loss.class);
-            here.addAll(next.getOrDefault(atom, Set.of()));
-            here.add(loss);
-            next.put(atom, java.util.Collections.unmodifiableSet(here));
-        }
-        return next == null ? losses : Map.copyOf(next);
+        Box<A> box = closed().box();
+        return writtenExactly(box.leastOf(atom)) && writtenExactly(box.mostOf(atom));
+    }
+
+    private static boolean writtenExactly(RationalCut cut) {
+        return cut == null || cut.at().asWrittenDecimal() != null;
     }
 }
