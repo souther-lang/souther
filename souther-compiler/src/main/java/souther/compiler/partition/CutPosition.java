@@ -114,6 +114,57 @@ public record CutPosition(Level written, BigDecimal per) {
         return mine.multiply(other.per).compareTo(theirs.multiply(per));
     }
 
+    /**
+     * This line as a rule an author could have written it: how much of the quantity, and what it
+     * comes to.
+     *
+     * <p>Reduced, so that the two rules that draw one line write it one way — a third and two
+     * sixths both come back as {@code 3} and {@code 1}. What names a class where the position holds
+     * no value at the line: {@code 3 * d <= 1} says exactly where the values part and says it in
+     * numbers this language has, which dividing them out would not.
+     *
+     * @return the multiple and the number it comes to, or null on an order with no numbers
+     */
+    public BigDecimal[] asARule() {
+        BigDecimal at = numberOf(written);
+        if (at == null) {
+            return null;
+        }
+        int scale = Math.max(Math.max(at.scale(), per.scale()), 0);
+        BigInteger top = at.setScale(scale).unscaledValue();
+        BigInteger bottom = per.setScale(scale).unscaledValue();
+        BigInteger common = top.gcd(bottom);
+        if (common.signum() != 0) {
+            top = top.divide(common);
+            bottom = bottom.divide(common);
+        }
+        return new BigDecimal[] {new BigDecimal(bottom), new BigDecimal(top)};
+    }
+
+    /** The same, asked of a place of the order this line falls on. */
+    public int compare(souther.compiler.numeric.Place at) {
+        return at instanceof Count count
+                ? count.at().multiply(per).compareTo(numberOf(written))
+                : at.compareTo(placeOf(written));
+    }
+
+    /**
+     * A whole number of the quantity's units on one side of this line, for a search to start from.
+     *
+     * <p>Where the line falls between two of them, the whole number that way is past it — a third
+     * rounded up is one and rounded down is nothing, and both are on the side they were rounded to.
+     * A bound and never the answer: what is at a run is the run's to say, and this is only where to
+     * begin looking.
+     *
+     * <p>Null on an order with no numbers, which is never scaled and so never needs this.
+     */
+    public souther.compiler.numeric.Place justBeyond(Towards towards) {
+        BigDecimal at = numberOf(written);
+        return at == null ? null : new Count(at.divide(per, 0,
+                towards == Towards.ABOVE ? java.math.RoundingMode.CEILING
+                        : java.math.RoundingMode.FLOOR));
+    }
+
     private static souther.compiler.numeric.Place placeOf(Level level) {
         return switch (level) {
             case Level.ACount count -> count.at();

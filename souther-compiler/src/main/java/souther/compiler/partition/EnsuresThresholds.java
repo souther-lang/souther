@@ -229,6 +229,13 @@ public final class EnsuresThresholds {
         raises(out, rule, clause, comparison, rule.value(), divided.path(), divided,
                 GuardThresholds.subjectsOf(comparison, reads, symbols, rule.value()),
                 new Required.LineRead.ALineOnThePosition());
+        // And the line itself, where the position has no value beside it for a row to be owed at,
+        // for the reason a body's line is: the classes either side are what the model tells apart,
+        // and the border is drawn on the quantity the rule wrote, which can name where it falls.
+        if (cutting.dividedValue() == null
+                && Border.reaches(cutting.target(), cutting.within())) {
+            out.between().add(new LineDrawn(cutting, origin));
+        }
         // The value the classes meet at, which the reading of the comparison already
         // answered. Taken off the level the rule was written with, a rule that wrote a
         // multiple of the position named a class at a number the position never holds.
@@ -237,7 +244,7 @@ public final class EnsuresThresholds {
             out.singled().add(new GuardThresholds.Guards.Singled(divided, value, origin));
         } else {
             out.thresholds().add(
-                    new Threshold(divided, value, cutting.valueBelongsBelow(), origin));
+                    new Threshold(divided, cutting.seam(), cutting.valueBelongsBelow(), origin));
         }
     }
 

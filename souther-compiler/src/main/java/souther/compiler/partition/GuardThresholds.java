@@ -421,14 +421,22 @@ public final class GuardThresholds {
                 continue;
             }
             made.add(each.comparison());
-            // The value the classes meet at, which the reading of the comparison already
-            // answered. Taken off the level the rule was written with, a rule that wrote a
+            // The value a row is owed against this line, which the reading of the comparison
+            // already answered. Taken off the level the rule was written with, a rule that wrote a
             // multiple of the position named a class at a number the position never holds.
             Place value = cutting.dividedValue();
             if (cutting.singles()) {
                 singled.add(new Guards.Singled(divided, value, origin));
             } else {
-                out.add(new Threshold(divided, value, cutting.valueBelongsBelow(), origin));
+                out.add(new Threshold(divided, cutting.seam(), cutting.valueBelongsBelow(), origin));
+            }
+            // And the line itself, where the position has no value beside it for a row to be owed
+            // at. It divides the position — the classes either side are what the model tells apart
+            // — and the border is drawn on the quantity the rule wrote, which can name where the
+            // line falls. Left out, a rule that cuts at a third had its classes counted and nothing
+            // said about its line at all.
+            if (value == null && Border.reaches(cutting.target(), cutting.within())) {
+                between.add(new LineDrawn(cutting, origin));
             }
             raises(accounting, behavior, iff, each.comparison(), divided.path(), divided,
                     subjectsOf(each.comparison(), reads, symbols, null),

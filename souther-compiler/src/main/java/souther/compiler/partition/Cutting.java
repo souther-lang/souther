@@ -198,16 +198,16 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * twenty; read off the shape, it divided nothing, and a report counted two equivalence
      * partitions where the model states three.
      *
-     * <p>And null where the values part at a place the position holds no value on the threshold's
-     * own side. There is a division there and no number to name a class by — which is what a form
-     * over a carrier whose values fill leaves, since a third is no decimal this language writes.
+     * <p>Whether the line falls on a value of the position is a different question and not this
+     * one. {@code 3 * d <= 1} cuts at a third, which no decimal this language writes, and the
+     * behavior still answers one way below it and another way above — so the position has two
+     * classes and no number to name the line by. Asked here, that answer made an equivalence
+     * partition a thing this compiler can write a boundary for rather than a thing the model
+     * distinguishes (issue #880).
      */
     NumericTerm dividedPosition() {
         java.util.Map<NumericTerm, java.math.BigDecimal> direction = quantity().direction();
-        if (direction.size() != 1 || dividedValue() == null) {
-            return null;
-        }
-        return direction.keySet().iterator().next();
+        return direction.size() == 1 ? direction.keySet().iterator().next() : null;
     }
 
     /**

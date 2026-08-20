@@ -409,7 +409,10 @@ public final class Partitions {
             // which is the thing being fixed here happening again one field over. The end the
             // position stops short of is outside it as much as anything past it is.
             List<Threshold> reachable = here.stream()
-                    .filter(t -> domain == null || domain.admits(t.value()))
+                    // Asked of the place the line falls at, which the position need not hold a
+                    // value at. Read off the value, a line between two of the position's values was
+                    // dropped as one the rules leave nothing at.
+                    .filter(t -> domain == null || admits(domain, t.parts()))
                     // And what the guards above it left. Only a proof drops a line: a comparison
                     // this could not settle keeps its line and its rows, which is the direction that
                     // leaves an author with work rather than with a report about a model of theirs
@@ -607,12 +610,25 @@ public final class Partitions {
 
     /** The cuts a position has, with a rule that drew one already there recorded rather than repeated:
      * an invariant and a guard that state the same bound are one cut and two obligations. */
+    /** Whether the rules leave the quantity anything at the place a line falls. */
+    private static boolean admits(NumericDomain.Bounds within, Seam parts) {
+        return (within.min() == null || parts.at().compare(within.min().at()) <= 0)
+                && (within.max() == null || parts.at().compare(within.max().at()) >= 0);
+    }
+
     private static List<Cut> merged(List<Cut> had, List<Threshold> thresholds, Carrier carrier) {
         Map<String, Cut> byValue = new LinkedHashMap<>();
         for (Cut cut : had) {
             byValue.put(cut.key(), cut);
         }
         for (Threshold each : thresholds) {
+            // A line the position has no value at is not a cut of it. It divides the position all
+            // the same — the classes either side are what the model distinguishes — and there is no
+            // value for a row to be written at, so there is no border here either. The rule's own
+            // border is on the quantity it wrote, which can name the line.
+            if (each.value() == null) {
+                continue;
+            }
             Cut cut = Cut.at(carrier, each.value(), each.origin());
             byValue.merge(cut.key(), cut, (there, _) -> there.and(each.origin()));
         }

@@ -70,10 +70,7 @@ public record Band(Seam under, Seam over, Level from, Level to) {
         if (under == null) {
             return leaves;
         }
-        Level line = under.at().asALevelOfTheQuantity();
-        return line == null ? low()
-                : new souther.compiler.numeric.Endpoint(placeOf(line),
-                        !under.keepsItsOwnValueBelow());
+        return endOf(under, Towards.ABOVE);
     }
 
     /** The line above it, on the same reading. */
@@ -81,10 +78,35 @@ public record Band(Seam under, Seam over, Level from, Level to) {
         if (over == null) {
             return leaves;
         }
-        Level line = over.at().asALevelOfTheQuantity();
-        return line == null ? high()
-                : new souther.compiler.numeric.Endpoint(placeOf(line),
-                        over.keepsItsOwnValueBelow());
+        return endOf(over, Towards.BELOW);
+    }
+
+    /**
+     * A line as the end of the run on one side of it.
+     *
+     * <p>Named by the line itself where the quantity has a value there, and by the value beside it
+     * where it has none: {@code 2 * n <= 9} parts the whole numbers at four and a half, which no
+     * whole number is, and the classes either side of it are still {@code x <= 4} and {@code 4 < x}.
+     * Read only off the line, such a class had no name at all; read only off the values beside it, a
+     * class an author wrote {@code <= 4} for came back spelled {@code < 5}.
+     */
+    private static souther.compiler.numeric.Endpoint endOf(Seam parted, Towards side) {
+        Level line = parted.at().asALevelOfTheQuantity();
+        if (line != null) {
+            return new souther.compiler.numeric.Endpoint(placeOf(line),
+                    side == Towards.ABOVE ? !parted.keepsItsOwnValueBelow()
+                            : parted.keepsItsOwnValueBelow());
+        }
+        // The values either side of the line, which say the same thing where the line has no name of
+        // its own. The one below where the order has it, since that is the number an author reading
+        // a class of whole numbers expects to see.
+        Level named = parted.below() != null ? parted.below() : parted.above();
+        if (named == null) {
+            return null;
+        }
+        boolean below = named == parted.below();
+        return new souther.compiler.numeric.Endpoint(placeOf(named),
+                side == Towards.ABOVE ? !below : below);
     }
 
     /** The line itself, which the run reaches up to and does not hold. Null where the line is at a

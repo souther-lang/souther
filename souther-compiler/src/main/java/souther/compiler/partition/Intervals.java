@@ -32,7 +32,11 @@ import java.util.Set;
 final class Intervals {
 
     /** One range of a position's counts. A null bound is the domain's own edge. */
-    record Interval(Place lo, boolean loInclusive, Place hi, boolean hiInclusive) {
+    record Interval(Place lo, boolean loInclusive, Place hi, boolean hiInclusive, Band of) {
+
+        Interval(Place lo, boolean loInclusive, Place hi, boolean hiInclusive) {
+            this(lo, loInclusive, hi, hiInclusive, null);
+        }
 
         boolean holds(Place v) {
             if (lo != null) {
@@ -63,9 +67,46 @@ final class Intervals {
             String high = hi == null ? ""
                     : (hiInclusive ? " <= " + carrier.written(hi) : " < " + carrier.written(hi));
             if (lo == null && hi == null) {
-                return "any";
+                // Named by the rules that part it, where the position holds no value at either end
+                // to name it by. `3 * x <= 1` says exactly where the values part and says it in
+                // numbers this language has; the third the line falls at is not one of them, and a
+                // run left unnamed is a class a report cannot tell from the one beside it.
+                String said = of == null ? null : written(of);
+                return said == null ? "any" : said;
             }
             return (low + "x" + high).trim();
+        }
+
+        /** A run as the rules that part it, or null where nothing parts it. */
+        private static String written(Band run) {
+            java.math.BigDecimal[] below = ruleOf(run.under());
+            java.math.BigDecimal[] above = ruleOf(run.over());
+            if (below == null && above == null) {
+                return null;
+            }
+            if (below != null && above != null && below[0].compareTo(above[0]) == 0) {
+                return plain(below[1]) + " < " + times(below[0]) + " <= " + plain(above[1]);
+            }
+            if (below == null) {
+                return times(above[0]) + " <= " + plain(above[1]);
+            }
+            if (above == null) {
+                return plain(below[1]) + " < " + times(below[0]);
+            }
+            return plain(below[1]) + " < " + times(below[0]) + " and "
+                    + times(above[0]) + " <= " + plain(above[1]);
+        }
+
+        private static java.math.BigDecimal[] ruleOf(Seam parted) {
+            return parted == null ? null : parted.at().asARule();
+        }
+
+        private static String times(java.math.BigDecimal by) {
+            return by.compareTo(java.math.BigDecimal.ONE) == 0 ? "x" : plain(by) + " * x";
+        }
+
+        private static String plain(java.math.BigDecimal number) {
+            return number.stripTrailingZeros().toPlainString();
         }
     }
 
@@ -90,12 +131,10 @@ final class Intervals {
         LevelSpace space = LevelSpace.onACarrier(carrier);
         List<Seam> parted = new ArrayList<>();
         for (Threshold each : thresholds) {
-            if (!Endpoint.someValueLiesBetween(min, Endpoint.inclusive(each.value()))
-                    || !Endpoint.someValueLiesBetween(Endpoint.inclusive(each.value()), max)) {
-                continue;
-            }
-            parted.add(Seam.of(space, new Level.OnACarrier(carrier, each.value()),
-                    each.valueBelongsBelow() ? Towards.BELOW : Towards.ABOVE));
+            // The division the rule made, taken as it was read rather than rebuilt from a number.
+            // A rule that wrote a multiple of the position parts its values where the position may
+            // hold none, and rebuilding the seam from a value of the position lost exactly those.
+            parted.add(each.parts());
         }
         // The one arrangement, which the points of every border on this position are read off as
         // well. Where the values part, in what order and with what left between them are questions
@@ -124,7 +163,7 @@ final class Intervals {
         Endpoint low = run.lineBelow(min);
         Endpoint high = run.lineAbove(max);
         return new Interval(low == null ? null : low.at(), low == null || low.inclusive(),
-                high == null ? null : high.at(), high == null || high.inclusive());
+                high == null ? null : high.at(), high == null || high.inclusive(), run);
     }
 
     /**
