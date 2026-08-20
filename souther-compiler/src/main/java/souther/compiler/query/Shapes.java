@@ -412,10 +412,8 @@ public final class Shapes {
                     for (Hir.InvariantClause declared : data.invariants()) {
                         for (ClausesForDischarge.ClauseReading written
                                 : declaring.conjunctsOf(declared.expr(), new BindingOwner.OfData(named))) {
-                            for (ClauseDischarge read : InvariantChecker.capabilitiesOf(
-                                    written, named, data, scope.value())) {
-                                clauses.add(read.named(declared.name()));
-                            }
+                            clauses.add(InvariantChecker.capabilityOf(written, named, data,
+                                    scope.value()).named(declared.name()));
                         }
                     }
                     out.put(named, List.copyOf(clauses));

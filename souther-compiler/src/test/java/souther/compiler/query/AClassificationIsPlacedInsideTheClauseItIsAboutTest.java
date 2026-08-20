@@ -76,9 +76,9 @@ class AClassificationIsPlacedInsideTheClauseItIsAboutTest {
      *  {@link Region#encloses} is vacuously true where either side is nowhere. */
     private static void enclosedBy(Region clause, ClauseDischarge answer, String what) {
         assertNotNull(clause, what + ": the clause knows where it is written");
-        assertNotNull(answer.clause(), what + ": the answer says where it is about");
-        assertTrue(Region.encloses(clause, Region.point(answer.clause())),
-                what + ": answered at " + answer.clause() + ", which is not inside " + clause);
+        assertNotNull(answer.owed().clause(), what + ": the answer says where it is about");
+        assertTrue(Region.encloses(clause, Region.point(answer.owed().clause())),
+                what + ": answered at " + answer.owed().clause() + ", which is not inside " + clause);
     }
 
     @Test
@@ -121,9 +121,9 @@ class AClassificationIsPlacedInsideTheClauseItIsAboutTest {
                 boolean inside = false;
                 for (Hir.InvariantClause clause : declared.get(named)) {
                     assertNotNull(clause.region(), "the clause knows where it is written");
-                    inside = inside || Region.encloses(clause.region(), Region.point(answer.clause()));
+                    inside = inside || Region.encloses(clause.region(), Region.point(answer.owed().clause()));
                 }
-                assertTrue(inside, "answered at " + answer.clause()
+                assertTrue(inside, "answered at " + answer.owed().clause()
                         + ", which is inside no clause of " + named);
             }
         });

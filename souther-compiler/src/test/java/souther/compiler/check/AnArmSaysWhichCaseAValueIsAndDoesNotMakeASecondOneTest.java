@@ -209,7 +209,8 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         return new StatedContract(FIND, List.of(), Type.INT,
                 List.of(new StatedContract.StatedRule(new RuleId(FIND, 0, 0, AN_INT),
                         new Guard.Case(CaseSelector.direct(AN_INT)), value, Optional.empty(),
-                        List.of(new StatedContract.Conjunct(POS, states)))));
+                        List.of(new StatedContract.Conjunct(POS,
+                                new souther.compiler.check.TypedClause.Typed(states))))));
     }
 
     private Core.Case arm(Core.ResolvedPattern pattern, Hir.Binder binder) {

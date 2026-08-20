@@ -218,7 +218,7 @@ public final class InvariantChecker {
      * where the clause is written, which is the pre-expansion position; {@code clause} is that clause
      * in the representation the check reads.
      */
-    public static List<ClauseDischarge> capabilitiesOf(ClausesForDischarge.ClauseReading clause,
+    public static ClauseDischarge capabilityOf(ClausesForDischarge.ClauseReading clause,
                                                TypeSymbol named, Hir.Data data, Symbols symbols) {
         InvariantChecker c = new InvariantChecker(symbols, Map.of());
         // Read over the declaration's own fields, each standing for itself: a construction hands one
@@ -226,7 +226,7 @@ public final class InvariantChecker {
         // stand for a value rather than holding one, so they are entered as locations and nothing is
         // seeded of them — what a clause owes is the question, and answering it here would be
         // assuming it.
-        return c.capabilitiesOf(clause, read -> c.clauses.typed(read, named, data),
+        return c.capabilityOf(clause, read -> c.clauses.typed(read, named, data),
                 Denotations.none().locations(c.clauses.bindingsOf(named, data).values(),
                         c.terms::placeSubject, c.terms::placeTerm),
                 data.name());
@@ -242,12 +242,13 @@ public final class InvariantChecker {
      * here because the answer is what this check can read, and a second reader working that out from
      * the outside would be deciding it by what it happened to manage.
      *
-     * <p>More than one where more than one is true of it. What is written as one thing can be read as
-     * several — a rule that names a helper is one thing to its author and is whatever that helper
-     * states to this — and the readings need not agree: a bound and a term the check can only compare
-     * are discharged by different guards, and one of them being there says nothing about the other.
-     * Answering with one of them would be picking which half of a clause to describe, and the half not
-     * picked is the one an author is about to be surprised by.
+     * <p>One answer, and the answer has a shape. What is written as one thing can be read as several
+     * — a rule that names a helper is one thing to its author and is whatever that helper states to
+     * this — so the answer may hold several {@link RequiredPart}s, every one of which has to be
+     * established, and a part may admit several {@link StaticRoute}s, any one of which establishes
+     * it. Flattened into one set of readings, a clause needing a bound in one part and a term in
+     * another said that either guard discharges it, and the half an author did not pick is the one
+     * they are about to be surprised by.
      *
      * <p>Where the answers are said is the clause's and is not passed in. A position that can be
      * passed can be passed from the wrong tree — which is what an expansion of the clause is, and
@@ -257,118 +258,77 @@ public final class InvariantChecker {
      *
      * @param clause the conjunct, as written and as this check reads it
      * @param typing what types the read form here — a declaration's fields, a signature's names —
-     *               answering null where this compiler could not type it
+     *               answering {@link TypedClause.Stopped} where typing it did not finish
      * @param locations the names it may read, each standing for itself
      * @param describing what is being read, for the record a fail-open leaves behind
      */
-    static List<ClauseDischarge> capabilitiesOf(StatedContract.Conjunct conjunct,
+    static ClauseDischarge capabilityOf(StatedContract.Conjunct conjunct,
                                         Denotations locations, Symbols symbols, String describing) {
         return new InvariantChecker(symbols, Map.of())
-                .capabilitiesOf(conjunct.stated(), conjunct.at(), locations, describing);
+                .capabilityOf(conjunct.stated(), conjunct.at(), locations, describing);
     }
 
     /** What turns the read form of a clause into the tree this check walks, which is the reader's to
      * say: a declaration's clause is typed over its fields and a behavior's rule over its signature. */
     @FunctionalInterface
     interface Typing {
-        Core type(Hir.Expr read);
+        TypedClause type(Hir.Expr read);
     }
 
-    private List<ClauseDischarge> capabilitiesOf(ClausesForDischarge.ClauseReading clause,
+    private ClauseDischarge capabilityOf(ClausesForDischarge.ClauseReading clause,
                                          Typing typing, Denotations locations, String describing) {
-        return capabilitiesOf(typed(typing, clause.read(), describing), clause.at(), locations,
+        return capabilityOf(typed(typing, clause.read(), describing), clause.at(), locations,
                 describing);
     }
 
     /**
-     * {@code read} as its reader types it, or null where it could not be typed there.
+     * {@code read} as its reader types it, or that typing it did not finish.
      *
-     * <p>Fail-open, as the walk is, and recorded for the reason the reading below is: a clause this
-     * compiler could not type and an analysis that fell over typing it both come out
-     * {@code runtimeOnly}, and only one of them is something the model says.
+     * <p>Fail-open, as the walk is, and the two ways it can stop answer alike:
+     * {@link TypedClause.Stopped} from this catch, and the same from the typing having caught
+     * something of its own ({@link Clauses#typed}). Which is why the reading below reaches
+     * {@link CapabilityResult.AnalysisStopped} from the answer and not only from here. A clause that
+     * could not be typed is not a clause found to be outside the fragment: being inside it is what
+     * was never asked.
      */
-    private Core typed(Typing typing, Hir.Expr read, String describing) {
+    private TypedClause typed(Typing typing, Hir.Expr read, String describing) {
         try {
             return typing.type(read);
         } catch (RuntimeException why) {
             gaveUp("typing " + describing, why);
-            return null;
+            return new TypedClause.Stopped();
         }
     }
 
-    private List<ClauseDischarge> capabilitiesOf(Core stated, SourcePos at, Denotations locations,
+    /** The obligation {@code at} raises, and what came of reading {@code stated} for it. */
+    private ClauseDischarge capabilityOf(TypedClause stated, SourcePos at, Denotations locations,
                                          String describing) {
-        List<ClauseDischarge> found = new ArrayList<>();
-        for (ClauseDischarge.Kind read : kindsRead(stated, locations, describing)) {
-            found.add(read == ClauseDischarge.Kind.RUNTIME_ONLY
-                    ? ClauseDischarge.runtimeOnly(at, whyUnreadable(stated, locations))
-                    : new ClauseDischarge(at, read, java.util.Optional.empty()));
-        }
-        return List.copyOf(found);
+        return new ClauseDischarge(new DischargeObligation(at),
+                readingOf(stated, locations, describing));
     }
 
-    /** What the check made of {@code stated}, said as the readings it got and nothing about where
-     * they belong. */
-    private List<ClauseDischarge.Kind> kindsRead(Core stated, Denotations locations,
-                                                 String describing) {
-        Predicates.Owed owed;
+    /**
+     * What the check made of {@code stated}: what the walk that reads clauses answered of it, or
+     * that it never got to the end.
+     *
+     * <p>Nothing is worked out here. The fold, the parts and what the walk stopped on are that
+     * walk's own answers, taken from the expression it normalizes and reads. Asked before it — of
+     * the form an author wrote — {@code Int.compare(1, 2) >= 0} is a call and folds to nothing, and
+     * the clause came back as a bound any guard implying it would discharge.
+     */
+    private CapabilityResult readingOf(TypedClause typed, Denotations locations, String describing) {
+        if (!(typed instanceof TypedClause.Typed it)) {
+            return new CapabilityResult.AnalysisStopped("typing " + describing);
+        }
         try {
-            owed = stated == null ? Predicates.Owed.UNREADABLE
-                    : predicates.obligations(stated, Known.top(), locations, false);
+            return CapabilityResult.of(
+                    predicates.obligations(it.value(), Known.top(), locations, false));
         } catch (RuntimeException why) {
-            // Fail-open, as the walk is — and recorded, because a clause this could not read and an
-            // analysis that fell over reading it both come out `runtimeOnly`, and only one of them
-            // is something the model says.
-            gaveUp("capabilitiesOf " + describing, why);
-            owed = Predicates.Owed.UNREADABLE;
+            // Fail-open, as the walk is — and said as a stop rather than as a conclusion, because
+            // what the clause is outside of is what this did not find out.
+            gaveUp("capabilityOf " + describing, why);
+            return new CapabilityResult.AnalysisStopped("capabilityOf " + describing);
         }
-        boolean asABound = false;
-        boolean asATerm = false;
-        for (Predicates.Clause owe : owed.clauses()) {
-            // A clause read both ways is one obligation with two readings of it, not two obligations
-            // — the bound is the stronger of them, and any guard implying it discharges the clause,
-            // so that is what it is here.
-            if (owe.numeric() != null) {
-                asABound = true;
-            } else {
-                asATerm = true;
-            }
-        }
-        // What was not read at all is said even where something else was: a clause half of which
-        // could not be read would otherwise be described entirely by the half that was.
-        return ClauseDischarge.kindsRead(asABound, asATerm, owed.unreadable());
-    }
-
-    /** What in {@code clause} the check cannot read, said so an author can act on it. */
-    private String whyUnreadable(Core clause, Denotations fields) {
-        if (clause == null) {
-            return "it is not a rule this check could read as one expression";
-        }
-        Core blocked = unreadable(clause, fields);
-        if (blocked instanceof Core.PreservedCall call) {
-            return "it calls `" + call.operation().name()
-                    + "`, which the check reads as a value and not as a term";
-        }
-        if (blocked != null) {
-            return "it is not one of the shapes the check reads";
-        }
-        return "it names a term the check cannot name";
-    }
-
-    /** The innermost part of {@code e} the term grammar cannot read, or {@code null} if it reads all
-     * of it. Read under the same fields the clause was, so a field it names is a location and what
-     * is left is the shape. */
-    private Core unreadable(Core e, Denotations fields) {
-        Core[] found = {null};
-        Core.forEachChild(e, child -> {
-            if (found[0] == null) {
-                found[0] = unreadable(child, fields);
-            }
-        });
-        if (found[0] != null) {
-            return found[0];
-        }
-        return terms.bodyKey(e, fields) == null ? e : null;
     }
 
     /**
@@ -569,7 +529,7 @@ public final class InvariantChecker {
             }
             for (TypeOps.Declared declared :
                     own ? c.clauses.declared(named, data) : List.<TypeOps.Declared>of()) {
-                Core stated = c.clauses.typed(declared.clause().expr(), named, data);
+                Core stated = c.clauses.typed(declared.clause().expr(), named, data).orNull();
                 if (stated == null) {
                     read = false;
                     gathering.missed(FieldDomains.THE_VALUE, Borne.BY_EVERY_VALUE);
@@ -919,7 +879,11 @@ public final class InvariantChecker {
     /** What one reading of one part came to, as the reading itself says it. */
     static PartRead partRead(Predicates.Owed said) {
         List<Predicates.Constraint> stated = new ArrayList<>();
-        for (Predicates.Clause c : said.clauses()) {
+        for (Predicates.Part eachC : said.parts()) {
+            if (!(eachC instanceof Predicates.Part.Carried carriedC)) {
+                continue;
+            }
+            Predicates.Clause c = carriedC.clause();
             if (c.numeric() != null) {
                 stated.add(c.numeric());
             }
@@ -1858,7 +1822,11 @@ public final class InvariantChecker {
         for (Clauses.Stated stated : clauses.statedAt(named, type, given).clauses()) {
             Predicates.Owed o = predicates.obligations(stated.expr(), k, at, unnamed, decidesFalse);
             unreadable |= o.unreadable();
-            for (Predicates.Clause one : o.clauses()) {
+            for (Predicates.Part eachOne : o.parts()) {
+            if (!(eachOne instanceof Predicates.Part.Carried carriedOne)) {
+                continue;
+            }
+            Predicates.Clause one = carriedOne.clause();
                 owed.add(new Owing(stated, one));
             }
         }
