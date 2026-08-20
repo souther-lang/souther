@@ -53,8 +53,18 @@ final class Crossing {
         List<Case> refused = new ArrayList<>(declared);
         refused.removeAll(kept);
         BlockReason why = admitted.whyPartial() != null ? stopped(admitted.whyPartial()) : unread;
-        return why == null ? new ReadingResult.Complete(kept, refused)
-                : new ReadingResult.Partial(kept, refused, why);
+        if (why != null) {
+            // A rule left standing is said ahead of what the reading could not hold together, and
+            // both may be true of one position. What a caller does about them is the same — the
+            // values are an upper bound this cannot show is what the rules leave — so the one that
+            // names a limit an author can go and look at is the one worth carrying here. What the
+            // reading could not hold together is said of the position on its own, where it is not
+            // competing with anything.
+            return new ReadingResult.Partial(kept, refused, why);
+        }
+        return admitted.alternativesNotSeparated()
+                ? new ReadingResult.NotSeparated(kept, refused)
+                : new ReadingResult.Complete(kept, refused);
     }
 
     /**

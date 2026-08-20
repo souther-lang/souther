@@ -604,6 +604,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case NOTHING_WAS_READ_ABOUT_THE_CASE -> "nothing was read about this case";
             case THE_FORK_IS_NOT_KNOWN_TO_BE_REACHED ->
                     "this arm is inside another, and what reaches it is not read here";
+            case THE_ALTERNATIVES_WERE_NOT_KEPT_APART ->
+                    "every rule here was read, and what they leave this position together is not"
+                            + " what is held of it";
         };
     }
 
@@ -1717,6 +1720,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
                     About.AQuestionNothingAnswered _,
                     About.APositionWhoseRulesWereNotReached _,
+                    About.APositionReadWiderThanItsRules _,
                     About.APositionPastTheAxisLimit _ -> null;
         };
     }
@@ -1750,6 +1754,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case About.APositionThisCouldNotRead(var it) -> it.at();
             case About.ARuleThisCouldNotRead(var it) -> it.at();
             case About.APositionWhoseRulesWereNotReached(var axis) -> axis.path();
+            // The position, as the two above write it. What is said of it is the kind's; there is
+            // no rule to name and no class this is about, so the position is the whole subject.
+            case About.APositionReadWiderThanItsRules(var it) -> it.at().toString();
             case About.APositionPastTheAxisLimit(var dropped) -> dropped.axis().toString();
             // The rule and what it was left saying. Named by the position alone, two rules nothing
             // took in at one position serialised as two identical objects, and the human line named

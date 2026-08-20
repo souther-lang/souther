@@ -1,0 +1,291 @@
+# ADR-0107: Bound relational reading by syntactic expansion
+
+Status: Accepted
+
+## Context
+
+`AdmissibleValues` stores a `ValueSet` per position, so it can represent only a Cartesian product of
+per-position values. It is what answers `[#what-a-position-admits]` — the rule that a field's
+position admits what the record's clauses leave it, which the spec states with `startsAt < endsAt`,
+a clause relating two fields.
+
+Approximating a choice by its product hull is a safe upper approximation. However, once correlations
+between positions are lost, a later `meet` can make the per-position projections wider than the true
+projections. Projection distributes over union, `π(R ∪ S) = π(R) ∪ π(S)`, but only one way over
+intersection, `π(R ∩ S) ⊆ π(R) ∩ π(S)`. So a choice reaching across positions leaves every
+projection correct, and the next conjunction is where the width arrives. Issue #877 is the defect
+that exposed this: every rule read, and `a` reported as `{"5", "6"}` where only `"5"` can stand.
+
+The goal is not to preserve every reading as an arbitrary relation. Instead, Souther preserves
+correlations as a finite union of Cartesian products when the expansion is small enough, and falls
+back to the existing product-hull domain otherwise.
+
+Three decisions are important here:
+
+1. resource admission is based on syntactic expansion cost;
+2. the reading domain is chosen before evaluation, rather than by dynamic widening during the fold;
+3. exactness flags represent proof guarantees, not semantic truth.
+
+## Decision
+
+### Use syntactic expansion cost for resource admission
+
+Before reading starts, compute an upper bound on DNF expansion using the same `(Core, polarity)`
+recursion followed by `ClauseReading.read`.
+
+The cost is defined as:
+
+- positive `AND`: multiply child costs
+- positive `OR`: add child costs
+- negated `AND`: add child costs
+- negated `OR`: multiply child costs
+- any other expression: `1`
+
+Addition and multiplication saturate at `dnfExpansionLimit + 1`.
+
+The cost of one declaration is the product of the costs of its clauses, because clauses are combined
+by conjunction.
+
+This bounds the whole computation and not only its result. Every partial product of the clause costs
+is at most the declaration's cost, and inside a clause the cost of a subexpression is at most the
+cost of the clause containing it. So a declaration admitted under the limit cannot exceed it at any
+point of the fold, and no second, dynamic control is needed to hold the intermediate combinations
+down.
+
+What the limit governs is the reading of a declaration's `invariant` clauses. That is the whole of
+what this domain is built from: the reading is constructed in one place, from clauses each carrying
+the invariant it came from. A `guard` reaches the check by another path and is not bounded here.
+
+The limit is intentionally based on syntactic expansion, not on the number of semantically distinct
+alternatives after normalization.
+
+Determining the normalized number of alternatives requires performing expansion, normalization, or
+both. Those are precisely the operations whose resource cost the admission check is intended to
+avoid.
+
+Therefore duplicate alternatives do not refund budget. For example:
+
+```text
+A || A || B
+```
+
+has cost `3`, even if normalization could later remove the duplicate `A`.
+
+### Choose the reading domain before the fold
+
+The reading domain is selected once, before evaluation begins.
+
+If the syntactic expansion cost is within `dnfExpansionLimit`, the reading is represented as a finite
+union of Cartesian-product boxes.
+
+If the limit is exceeded, the reading uses ProductHull mode, which corresponds to the existing
+`AdmissibleValues` domain.
+
+So the reading of a declaration is two passes and not one. The first saturates the product of its
+clause costs and settles the domain; the second reads every clause in that domain. Deciding per
+clause inside the existing loop would be deciding after the fold has begun.
+
+The implementation does not switch from the relational domain to ProductHull while folding `join` or
+`meet`.
+
+This eliminates dynamic widening decisions whose result could depend on fold structure or evaluation
+order.
+
+The cost model itself is invariant under reassociation and operand reordering of the same `AND` and
+`OR` structure because it interprets `OR` as addition and `AND` as multiplication over natural
+numbers.
+
+It is intentionally not invariant under Boolean identities such as idempotence, absorption, or
+semantic equivalence in general.
+
+### Treat exactness as a proof state
+
+Exactness does not state semantic truth directly. It states what equality the implementation can
+guarantee, and it is held where the proposition is quantified:
+
+```text
+relationExact()       := tangled.isEmpty()
+projectionExactAt(p)  := !widened.contains(p)
+```
+
+`tangled` is the positions whose correlations the reading is no longer guaranteed to represent, and
+`widened` the positions whose `at(p)` it cannot guarantee is the true projection.
+
+`relationExact()` means:
+
+> The implementation guarantees that the represented relation is equal to the true tuple relation
+> admitted by the rules that were read.
+
+`projectionExactAt(p)` means:
+
+> The implementation guarantees that `at(p)` is equal to the true projection of that relation at
+> position `p`.
+
+Therefore:
+
+```text
+relationExact()       => the represented relation is actually exact
+!relationExact()      => exactness is unknown
+
+projectionExactAt(p)  => the projection at p is actually exact
+!projectionExactAt(p) => exactness at p is unknown
+```
+
+The converses do not hold.
+
+Relational precision is one proposition about a reading and projection precision is one per position,
+so only the first is a single answer. Read as a single answer, the second can say no more than that
+some position is not shown exact — and a caller asking about one of them is handed that sentence
+about each, which is the other quantifier and is false wherever a clause of its own answers for a
+position.
+
+For example, an inexact ProductHull relation can later be intersected with another relation so that
+the resulting relation happens to become exact again. A conservative transition rule may still leave
+`relationExact()` false.
+
+This is intentional. Future analyses may prove additional cases exact by changing `false` to `true`
+without changing the type or its contract.
+
+`Completeness` follows the same proof semantics:
+
+- `Complete` means equality with the true projection is guaranteed.
+- `Wider` means equality cannot be guaranteed.
+
+`Wider` therefore does not imply that the result is strictly wider in reality.
+
+## Consequences
+
+### Relation and projection precision have different lifecycles
+
+Loss of relational correlation does not immediately imply loss of projection precision.
+
+A ProductHull join across multiple positions can produce:
+
+```text
+relationExact()      = false
+projectionExactAt(p) = true, at every p
+```
+
+A later `meet` can make that lost correlation relevant to a projection, at which point projection
+exactness can no longer be guaranteed.
+
+These states must therefore remain separate.
+
+They must not be collapsed into a single set of widening reasons. Doing so would cause a reading to
+report `Wider` as soon as relational correlation is lost, even when all current projections are still
+guaranteed exact.
+
+Internally they are two sets of positions rather than two flags. A flag for the projections cannot
+express the answer at all — its negation is about the reading and the question is about a position —
+and carrying `relationExact` beside them rather than deriving it from `tangled` would let the two
+come apart. Only one representation-level source of lost relational precision exists today, so
+neither set needs to say which it was.
+
+The outward diagnostic remains:
+
+```text
+Completeness =
+    Complete
+  | Wider(NonEmptySet<Widening>)
+
+Widening =
+    RuleUnread(UnreadReason)
+  | AlternativesNotSeparated
+```
+
+`AlternativesNotSeparated` is emitted only when projection exactness can no longer be guaranteed.
+
+### ProductHull remains the compatibility domain
+
+ProductHull mode is intended to preserve the observable behavior of the previous `AdmissibleValues`
+implementation, except for the corrected `Completeness` result required by issue #877.
+
+This equivalence is verified for observable operations such as:
+
+- `at(p)`
+- `guaranteedAt(p)`
+- `speaksFor`
+- `standing`
+- `dropped`
+- bottom / `Nothing` behavior
+
+### `Nothing` remains distinct from an empty union
+
+A reading is modeled as:
+
+```text
+Reading =
+    Nothing(...)
+  | Alternatives(non-empty boxes, ...)
+```
+
+`Nothing` is not represented as an empty union of boxes.
+
+Treating it as an empty relation would allow the implementation to infer stronger cross-position
+impossibility than the current model permits.
+
+Its behavior under `join`, `meet`, `at`, `guaranteedAt`, `standing`, and `dropped` is therefore
+specified separately.
+
+## Rejected alternatives
+
+### Budget by normalized semantic alternatives
+
+Rejected.
+
+A deterministic normalized alternative count can be defined, but obtaining it requires expansion or
+normalization before the resource-admission decision can be made.
+
+That defeats the purpose of the admission check.
+
+### Dynamic widening during `join` or `meet`
+
+Rejected.
+
+Switching domains only after an intermediate number of alternatives exceeds a limit makes precision
+depend on how the fold is structured and evaluated.
+
+The domain is therefore selected before reading starts.
+
+### A single widening-reason set for relation and projection precision
+
+Rejected.
+
+Relational correlation can be lost while every per-position projection remains provably exact.
+
+The two states have different lifecycles and must remain distinct.
+
+## Policy
+
+`dnfExpansionLimit` is 64, and the domain decision applies to the whole declaration: every clause of
+one declaration is read in the same domain.
+
+The limit is a guardrail against pathological expansion and not a precision setting. Measured over
+the compiler's own suite — 68,106 readings, 41,897 clauses — the largest cost any clause reached is
+5, and 99.26% of clauses cost 1. Over the bench corpus, which is whole applications, every one of
+1,874 clauses costs 1. Nothing in this repository is read in ProductHull mode at any limit of 8 or
+more.
+
+So 64 is not an optimum derived from those numbers. It is a conservative value with a wide margin
+over anything observed, and what the design needs is that a finite limit exists, not that it is this
+one. The number is policy and may move; the representation and the exactness contracts above do not
+move with it.
+
+Deciding per clause rather than per declaration was weighed and dropped. Its precision advantage
+over the whole corpus is zero, because no reading exceeds any usable limit, while it would let an
+unrelated clause added to a declaration change how an existing clause is read. Stability is the
+reason, and simplicity of the contract follows from it.
+
+Because the default is never reached by real input, the conformance suite cannot detect a regression
+in ProductHull mode. The fallback is held instead by tests that set the limit themselves:
+
+- at 4, the witness of issue #877 is read in ExactAlternatives and its position is `Complete`;
+- at 3, the same witness is read in ProductHull and does not report `Complete`;
+- at 1, the reading's observable behavior is the previous `AdmissibleValues` implementation's;
+- at 64, every reading of the compiler suite and the bench corpus is in ExactAlternatives;
+- a cost that saturates does not overflow;
+- reordering clauses, and rebracketing the `AND` and `OR` within one, does not change which domain
+  is chosen.
+
+The third is the load-bearing one: it makes "ProductHull is the previous implementation" an
+executable statement rather than a claim in this document.

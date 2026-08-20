@@ -62,7 +62,7 @@ public final class FieldDomains {
      * those is a reading that found no rules.
      */
     public static final FieldDomains NONE =
-            new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), List.of(), List.of(), Map.of(),
+            new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), Set.of(), List.of(), List.of(), Map.of(),
                     Map.of(), new ReadingEvidence(), Map.of(), Set.of(THE_VALUE), NO_POSITIONS,
                     ConstraintState.top(), null, null, null, Map.of(), Set.of(THE_VALUE), Map.of(),
                     Map.of(), Map.of());
@@ -95,6 +95,12 @@ public final class FieldDomains {
      * A position not here is one the reading took every rule about into the set — see
      * {@link #admits}. */
     private final Map<String, UnreadReason> unreadByField;
+
+    /** The positions the reading of values could not show it holds exactly, resolved onto
+     *  paths as the values are. Asked of each position rather than of the reading: the
+     *  proposition is quantified over them, and a position a lost correlation never reached
+     *  keeps its own answer. */
+    private final Set<String> notSeparatedByField;
     /** Where a clause of this value did not reach the readings at all, as the paths the stops
      * happened at — see {@link #admits}. */
     private final Set<String> notGathered;
@@ -126,6 +132,7 @@ public final class FieldDomains {
                          Map<String, NumericDomain.Bounds> heldByField,
                          Map<String, ValueSet> admittedByField,
                          Map<String, UnreadReason> unreadByField,
+                         Set<String> notSeparatedByField,
                          List<InvariantChecker.Direct> directs, List<Unread> unread,
                          Map<RuleRef, Required> raised,
                          Map<RuleRef, Map<Core, Required>> raisedByPart, ReadingEvidence took,
@@ -141,6 +148,7 @@ public final class FieldDomains {
         this.heldByField = heldByField;
         this.admittedByField = admittedByField;
         this.unreadByField = unreadByField;
+        this.notSeparatedByField = notSeparatedByField;
         this.directs = directs;
         this.unread = unread;
         this.raised = raised;
@@ -252,6 +260,7 @@ public final class FieldDomains {
         // and it is the position a reader of a newtype asks about.
         Map<String, ValueSet> admitted = new LinkedHashMap<>();
         Map<String, UnreadReason> unread = new LinkedHashMap<>();
+        Set<String> notSeparated = new LinkedHashSet<>();
         // Every position that answers to either name. A number is called one thing by the interval
         // algebra and another by everything else, and the two are filed as they are found — so a
         // reading keyed by one of the maps would leave a position held only by the other answering
@@ -266,8 +275,13 @@ public final class FieldDomains {
             // what holds of it is what both leave.
             ValueSet here = ValueSet.ANY;
             UnreadReason why = null;
+            // Asked of each name the position answers to, as the values are. What the reading could
+            // not hold together is a fact about the positions a choice reached across, and a
+            // position outside them is left where it was.
+            boolean separated = true;
             for (FactSubject name : named(seeded, field)) {
                 here = here.meet(values.at(name));
+                separated = separated && values.projectionExactAt(name);
                 // The first that stopped it. Two names of one position are two ways the same rules
                 // were filed, so a second reason is another account of a position already known to
                 // be short of its rules rather than a further thing wrong with it.
@@ -278,6 +292,9 @@ public final class FieldDomains {
             admitted.put(field, here);
             if (why != null) {
                 unread.put(field, why);
+            }
+            if (!separated) {
+                notSeparated.add(field);
             }
         });
         // Resolved here rather than handed over as atoms. An atom is a name the seeding gave a shape
@@ -307,7 +324,7 @@ public final class FieldDomains {
         positions.forEach(field ->
                 named(seeded, field).forEach(term -> placeOf.putIfAbsent(term, field)));
         return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), Map.copyOf(admitted),
-                Map.copyOf(unread), seeded.reading().directs(), seeded.reading().unread(),
+                Map.copyOf(unread), Set.copyOf(notSeparated), seeded.reading().directs(), seeded.reading().unread(),
                 seeded.reading().raised(), seeded.reading().raisedByPart(), seeded.took(),
                 seeded.reading().narrowers(),
                 seeded.notGathered(), placeOf,
@@ -700,9 +717,18 @@ public final class FieldDomains {
      */
     public AdmissibleSet admits(String path) {
         ValueSet values = admittedByField.getOrDefault(path, ValueSet.ANY);
+        // What the reading could not hold together, at this position and not at every one of them.
+        // A choice reaching across two positions leaves those two unable to show their projections
+        // once something is met with it; a third the choice never named is answered by its own
+        // clauses and keeps them. Beside whatever the position's own rules came to rather than
+        // instead of it — a rule went unread or it did not, and that question is answered the same
+        // whichever way this one is.
+        Set<AdmissibleSet.Widening> spread = notSeparatedByField.contains(path)
+                ? Set.of(new AdmissibleSet.Widening.AlternativesNotSeparated()) : Set.of();
         UnreadReason here = unreadByField.get(path);
         if (here != null) {
-            return AdmissibleSet.partial(values, here);
+            return AdmissibleSet.wider(values, with(spread,
+                    new AdmissibleSet.Widening.RuleUnread(here)));
         }
         // A clause that never reached the readings cannot have spoiled the position it was about,
         // because no reading here ever saw which position that was. A walk that fell over and a
@@ -713,8 +739,22 @@ public final class FieldDomains {
         // Not `projection`, which is what the bounds state of the rules. A clause the interval
         // algebra holds nothing of may be one this reading took in whole, so borrowing that answer
         // would settle this reading's completeness by a reading that is not this one.
-        return everyRuleReachedAt(path) ? AdmissibleSet.complete(values)
-                : AdmissibleSet.partial(values, UnreadReason.NOT_REACHED);
+        if (!everyRuleReachedAt(path)) {
+            return AdmissibleSet.wider(values, with(spread,
+                    new AdmissibleSet.Widening.RuleUnread(UnreadReason.NOT_REACHED)));
+        }
+        return spread.isEmpty() ? AdmissibleSet.complete(values)
+                : AdmissibleSet.wider(values, spread);
+    }
+
+    /** {@code these} and one more, in the order they are written here: the rule's own reason is
+     *  what an author acts on, and what the reading could not hold together is beside it. */
+    private static Set<AdmissibleSet.Widening> with(Set<AdmissibleSet.Widening> these,
+                                                    AdmissibleSet.Widening one) {
+        Set<AdmissibleSet.Widening> out = new LinkedHashSet<>();
+        out.add(one);
+        out.addAll(these);
+        return out;
     }
 
     /**

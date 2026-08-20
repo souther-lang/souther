@@ -35,6 +35,7 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
                                 List<souther.compiler.partition.UndividedPosition> notDerivable,
                                 List<souther.compiler.inputs.UnreadRule> unread,
                                 List<souther.compiler.inputs.PositionReadingBlocked> blocked,
+                                List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                 List<Unanswered> unanswered,
                                 List<Partitions.OmittedAxis> omitted,
                                 List<Incompleteness> whyUnclassified) {
@@ -50,11 +51,12 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
      */
     public static final PartitionEvidence NONE = new PartitionEvidence(Partitioned.absent(),
             Bounded.absent(), PairSpace.NONE, List.of(), List.of(), List.of(), List.of(),
-            List.of(), List.of());
+            List.of(), List.of(), List.of());
 
     public PartitionEvidence {
         notDerivable = List.copyOf(notDerivable);
         unread = List.copyOf(unread);
+        notSeparated = List.copyOf(notSeparated);
         blocked = List.copyOf(blocked);
         unanswered = List.copyOf(unanswered);
         omitted = List.copyOf(omitted);

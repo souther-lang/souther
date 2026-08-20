@@ -97,13 +97,28 @@ sealed interface PendingPosition {
      * without the rule.
      *
      * <p>Null for a {@link Leaf} too: nothing stopped, so there is nothing to be waiting on.
+     *
+     * <p>Classified rather than filtered, and with no {@code default}. Asked as "is this about the
+     * position", a reason that is neither this nor about a rule answers no and is dropped here with
+     * nothing saying where it went instead — and only one of the two nulls above is proven, so the
+     * question the filter asked was not the question being answered. Each of what a reason may be
+     * answers for itself instead, and a stop added beside them stops the compile here.
+     *
+     * <p>What arrives here is why a derivation stopped, which is the whole of what a
+     * {@link BlockReason} is. A reading that ran to the end of the rules and could not hold what
+     * they say together stopped nothing and is not one of these at all: it is carried as a
+     * qualification of the classes and reported on its own, so it is not a candidate this resolves
+     * and there is nothing here for it to be misfiled as.
      */
     default souther.compiler.inputs.PositionReadingBlocked reportable() {
         if (!(this instanceof Blocked blocked)) {
             return null;
         }
-        return blocked.why() instanceof BlockReason.AboutThePosition why
-                ? new souther.compiler.inputs.PositionReadingBlocked(at(), why) : null;
+        return switch (blocked.why()) {
+            case BlockReason.AboutARule _ -> null;
+            case BlockReason.AboutThePosition why ->
+                    new souther.compiler.inputs.PositionReadingBlocked(at(), why);
+        };
     }
 
     /**

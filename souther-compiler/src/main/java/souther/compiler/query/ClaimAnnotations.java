@@ -76,7 +76,12 @@ public record ClaimAnnotations(List<Said> all) {
 
         /** The rules leave the case standing, and the arm is inside another whose own condition
          *  nothing here reads. */
-        THE_FORK_IS_NOT_KNOWN_TO_BE_REACHED
+        THE_FORK_IS_NOT_KNOWN_TO_BE_REACHED,
+
+        /** Every rule about the position was read, and the reading could not hold what they say
+         *  together — so the case stands in a product and may stand in no value of the type. Not
+         *  {@link #A_RULE_WENT_UNREAD}: there is no rule to go and look at. */
+        THE_ALTERNATIVES_WERE_NOT_KEPT_APART
     }
 
     /**
@@ -166,6 +171,8 @@ public record ClaimAnnotations(List<Said> all) {
             case Unsettlement.ReadingStopped _ -> Why.A_RULE_WENT_UNREAD;
             case Unsettlement.RulesLeaveNothing _ -> Why.THE_RULES_LEAVE_THE_POSITION_NOTHING;
             case Unsettlement.NoSuchDistinction _ -> Why.NOTHING_WAS_READ_ABOUT_THE_CASE;
+            case Unsettlement.AlternativesNotSeparated _ ->
+                    Why.THE_ALTERNATIVES_WERE_NOT_KEPT_APART;
         };
     }
 

@@ -1377,6 +1377,7 @@ public final class Adequacy {
                     case About.ACaseNothingWasSeenToProduce _, About.AClassNoRowIsIn _,
                             About.APositionNoLineDivides _, About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
                             About.APositionWhoseRulesWereNotReached _,
+                            About.APositionReadWiderThanItsRules _,
                             About.AQuestionNothingAnswered _,
                             About.APositionPastTheAxisLimit _ ->
                             throw new IllegalStateException("not a gap a build refuses: " + gap);
@@ -1700,6 +1701,15 @@ public final class Adequacy {
          * worth knowing about the position.
          */
         PARTITION_RULES_NOT_REACHED(null, false),
+        /**
+         * A position whose values are read from a product this reading cannot show the rules admit.
+         *
+         * <p>Its own finding beside the two above, and the one of the three that is not a limit an
+         * author can go looking for a clause behind: every rule arrived and every rule was read.
+         * What it qualifies is the classes rather than their absence, so it is said at positions the
+         * axes measured as readily as at positions they did not.
+         */
+        PARTITION_VALUES_NOT_SEPARATED(null, false),
         /** A position left out because the axis limit was reached. */
         PARTITION_OMITTED(null, false);
 
@@ -1800,6 +1810,8 @@ public final class Adequacy {
                 case About.APositionThisCouldNotRead _ -> Kind.PARTITION_NOT_READ;
                 case About.APositionWhoseRulesWereNotReached _ ->
                         Kind.PARTITION_RULES_NOT_REACHED;
+                case About.APositionReadWiderThanItsRules _ ->
+                        Kind.PARTITION_VALUES_NOT_SEPARATED;
                 case About.AQuestionNothingAnswered _ -> Kind.RULE_UNACCOUNTED;
                 case About.APositionPastTheAxisLimit _ -> Kind.PARTITION_OMITTED;
                 case About.AnArmNoRowGoesThrough _ -> Kind.ARM_UNREACHED;
@@ -1986,6 +1998,14 @@ public final class Adequacy {
                                     new About.APositionThisCouldNotRead(position);
                         }));
             }
+            // And what the reading could not hold together, which is neither of the two above: no
+            // rule is answerable for it and nothing went unreached. Said whatever the axes made of
+            // the position, since what it qualifies is the classes and not their absence.
+            for (souther.compiler.inputs.PositionValuesNotSeparated each : partition.notSeparated()) {
+                out.add(new Finding(behavior.name(), MeasurementStatus.NOT_MEASURED,
+                        Citation.of(behavior.pos()),
+                        new About.APositionReadWiderThanItsRules(each)));
+            }
             // A position the axes did measure, whose rules this reading is short of. A different
             // thing to act on from one nothing divided: the classes beside it are what the model
             // was read to say, and what was left unread may yet refuse one of them. What says how
@@ -2132,6 +2152,7 @@ public final class Adequacy {
                         case About.ACaseNothingWasSeenToProduce _, About.AClassNoRowIsIn _,
                                 About.APositionNoLineDivides _, About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
                                 About.APositionWhoseRulesWereNotReached _,
+                                About.APositionReadWiderThanItsRules _,
                                 About.AQuestionNothingAnswered _,
                                 About.APositionPastTheAxisLimit _ ->
                                 throw new IllegalArgumentException(
@@ -2197,6 +2218,7 @@ public final class Adequacy {
                         About.AClassNoRowIsIn _, About.APositionNoLineDivides _,
                         About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
                         About.APositionWhoseRulesWereNotReached _,
+                        About.APositionReadWiderThanItsRules _,
                         About.AQuestionNothingAnswered _,
                         About.APositionPastTheAxisLimit _ -> { }
             }

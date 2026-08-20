@@ -89,6 +89,8 @@ record ReadPosition(TermPath path, TypeView view, NumericTerm term,
         }
         return switch (reading) {
             case ReadingResult.Complete _ -> new Admits.Admitted();
+            case ReadingResult.NotSeparated _ ->
+                    new Admits.Unsettled(new Unsettlement.AlternativesNotSeparated());
             case ReadingResult.Partial partial ->
                     new Admits.Unsettled(new Unsettlement.ReadingStopped(partial.why()));
             case ReadingResult.Unsupported unsupported ->
