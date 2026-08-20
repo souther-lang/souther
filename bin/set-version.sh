@@ -4,6 +4,9 @@
 #
 #   bin/set-version.sh 0.1.0-SNAPSHOT
 #
+# develop stays on a snapshot: the version a release is cut at is set on main, where the tag goes.
+# docs/releasing.md is the whole of it.
+#
 # The examples pin the version separately, in souther-lang/examples — they are not reactor modules
 # and cannot inherit ${project.version}. Bumping a release means running that repository's
 # bin/set-version.sh too.
