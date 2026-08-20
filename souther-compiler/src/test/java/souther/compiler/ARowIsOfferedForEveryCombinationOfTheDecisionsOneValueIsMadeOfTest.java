@@ -160,4 +160,42 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
         assertTrue(offered.stream().noneMatch(String::isEmpty),
                 "no row is offered under an empty name: " + offered);
     }
+
+    /** A charge one of whose arms says the case cannot arise. */
+    private static final String ABORTING = """
+            module example.aborting
+
+            data Choice = A | B
+            data Other = C | D
+
+            behavior fee : (choice: Choice, other: Other) -> Int
+
+            let fee (choice, other) = {
+                let left = match choice with
+                    | A -> 100
+                    | B -> unreachable "a B never reaches this charge"
+                let right = match other with
+                    | C -> 10
+                    | D -> 20
+
+                left + right
+            }
+            """;
+
+    /**
+     * What the interaction reading will not count as an outcome is still a class the rules admit.
+     *
+     * <p>Two questions with two answers, and they do not have to agree. An arm answering
+     * {@code unreachable} is not a way the charge on the left is settled, so it is not a factor and
+     * the sum is not a group. What the types say the position holds has not changed, so a row at
+     * that class is owed exactly as it was — a model's own claim about what cannot arise must not
+     * take away the row that would show the claim wrong.
+     */
+    @Test
+    void aClassTheBodyDeclaresUnreachableIsStillOwedARow() {
+        String block = block(ABORTING);
+
+        assertTrue(block.contains("(B, "),
+                "the class the body says cannot arise is still one a row is offered at: " + block);
+    }
 }

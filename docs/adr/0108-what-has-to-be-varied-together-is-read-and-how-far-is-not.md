@@ -42,6 +42,20 @@ so Premium against a total under the line is not an infeasible cell; it is not a
 tells this apart from a constraint written by hand to remove a combination a generator would
 otherwise offer.
 
+An outcome is a path to a value and not a branch of the syntax. An arm answering `unreachable`
+answers nothing and aborts, so it is not a way the operand is settled: counted as one, a charge
+whose other arm aborts varies two ways where it varies one, and the group it makes asks for a row at
+a combination whose left half never reaches the operator. An operator that stops as soon as its
+answer is settled does not consume both its sides either — `&&` leaves the right unevaluated
+wherever the left settled it — so its two sides are not a meeting and the combinations of their
+decisions are combinations no path takes. `NormalReturn` is the reading that already tells a body's
+arms apart this way and is what answers it here.
+
+Which is a different question from what the pair space asks for, and the two answers do not have to
+agree. A class the rules admit stays owed a row however the body describes it: a model's own claim
+that a case cannot arise must not take away the row that would show the claim wrong. So the same
+`unreachable` arm is not an outcome of the value and is still a class a row is offered at.
+
 A run of one operator is one meeting of all its values. `a + b + c` is written as one operator
 applied twice and is three values making one number, and reading it as two meetings would ask for
 the product of the first two against the third and then for the product of the first two again —
@@ -95,5 +109,12 @@ the pair space, which is where such a behavior already was.
 A value that can be settled more ways than the reading will tell apart is answered as settled one
 way. The bound is on the product as it is taken, which is measurable before the work rather than
 after it, and going over it asks for nothing rather than for a number of rows nobody would read.
+
+What a stopped search says is left is counted over the group and not over the part of it that was
+built. How many combinations a group has is the product of its factors, which is known before any of
+them are enumerated, so a limit on how many are worth building does not move the number the author
+is told. The count is exact where the enumeration finished and an upper bound where it did not,
+since two factors reading one position have combinations they disagree at; it is said once, at the
+end, and about the cells and the pairs together, because one search stopped.
 
 Spec: `[#example-partition]`, `[#example-adequacy]`

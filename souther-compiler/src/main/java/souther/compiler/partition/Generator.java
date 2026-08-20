@@ -300,27 +300,30 @@ public final class Generator {
         // generation kept, and the caller's list is neither ordered the same nor filtered the same.
         // No more of any one group than could be offered, since the rest would be built to be
         // thrown away.
-        List<Cell> cells = inTurn(InteractionCells.of(groups, axes, MAX_ROWS));
-        int cellsLeft = 0;
-        for (int i = 0; i < cells.size(); i++) {
-            int[] fixed = cells.get(i).at();
-            if (rows.size() >= MAX_ROWS) {
-                // The budget the pairs are held to, and not a second one. What is left is carried
-                // to the count below rather than said again here: one search stopped, once.
-                for (int still = i; still < cells.size(); still++) {
-                    unresolved.add(new UnresolvedCombination(
-                            labels(axes, cells.get(still).at()),
-                            UnresolvedCombination.Reason.SEARCH_LIMIT));
-                }
-                cellsLeft = cells.size() - i;
-                break;
-            }
+        List<InteractionCells.Group> byGroup = InteractionCells.of(groups, axes, MAX_ROWS);
+        int[] answered = new int[byGroup.size()];
+        for (Seeded seeded : inTurn(byGroup)) {
+            int[] fixed = seeded.cell().at();
             if (sits(written, fixed)) {
-                // A cell a row already sits in is a cell nothing is owed for.
+                // A cell a row already sits in is a cell nothing is owed for. Asked before the
+                // budget and not after it: whether a cell is still owed is a fact about the rows
+                // written, and a limit that turned an answered cell into an unresolved one would
+                // make what is owed depend on where the search stopped.
+                answered[seeded.group()]++;
+                continue;
+            }
+            if (rows.size() >= MAX_ROWS) {
+                // The budget the pairs are held to, and not a second one. What is left is counted
+                // below and said once, rather than named here a combination at a time — the ones
+                // the enumeration never reached could not be named, and a list of the rest reads
+                // as the whole of what is left.
                 continue;
             }
             int[] where = assign(axes, pairs, fixed);
             Attempt built = build(subject, axes, where, check);
+            // Answered either way: a cell that could not be built is reported as that, and counting
+            // it again as one the search never got to would say one thing twice.
+            answered[seeded.group()]++;
             if (built.row() == null) {
                 unresolved.add(new UnresolvedCombination(labels(axes, fixed), built.reason(),
                         built.detail(), built.said()));
@@ -333,17 +336,17 @@ public final class Generator {
             written.add(where);
             cover(pairs, singles, axes, where);
         }
-        if (cellsLeft > 0 && pairs.isEmpty() && singles.isEmpty()) {
-            // The pair pass says nothing where it has nothing left to do, and a search that stopped
-            // in the cells stopped all the same.
-            reasons.add(new GenerationReason.SearchLimit(axes.get(0).id().behavior(), cellsLeft));
+        long unreached = 0;
+        for (int g = 0; g < byGroup.size(); g++) {
+            unreached += Math.max(0, byGroup.get(g).size() - answered[g]);
         }
+        int cellsLeft = (int) Math.min(unreached, Integer.MAX_VALUE);
+        int pairsLeft = 0;
         while (!pairs.isEmpty() || !singles.isEmpty()) {
             if (rows.size() >= MAX_ROWS) {
-                int left = pairs.size() + singles.size() + cellsLeft;
-                reasons.add(new GenerationReason.SearchLimit(axes.get(0).id().behavior(), left));
-                // Both sets: the count above is of both, and reporting one of them would promise
-                // more than it names.
+                pairsLeft = pairs.size() + singles.size();
+                // Both sets: the count is of both, and reporting one of them would promise more
+                // than it names.
                 for (Set<Pair> remaining : List.of(pairs, singles)) {
                     for (Pair still : remaining) {
                         unresolved.add(new UnresolvedCombination(labels(axes, still),
@@ -366,6 +369,13 @@ public final class Generator {
                 unresolved.add(new UnresolvedCombination(labels(axes, seed), built.reason(),
                         built.detail(), built.said()));
             }
+        }
+        // Said once, at the end, and about both spaces. A search that ran out on the cells stopped
+        // whether or not the pairs had anything left to do, and two limits reported apart would be
+        // read as two searches.
+        if (cellsLeft + pairsLeft > 0) {
+            reasons.add(new GenerationReason.SearchLimit(axes.get(0).id().behavior(),
+                    cellsLeft + pairsLeft));
         }
         return new GenerationResult(rows, unresolved, reasons);
     }
@@ -659,18 +669,22 @@ public final class Generator {
      * nothing. Taken in turn, every group is offered a cell before any is offered a second, so what
      * a limit cuts off is the depth of the groups rather than all but one of them.
      */
-    private static List<Cell> inTurn(List<List<Cell>> byGroup) {
-        List<Cell> out = new ArrayList<>();
-        int deepest = byGroup.stream().mapToInt(List::size).max().orElse(0);
+    private static List<Seeded> inTurn(List<InteractionCells.Group> byGroup) {
+        List<Seeded> out = new ArrayList<>();
+        int deepest = byGroup.stream().mapToInt(each -> each.cells().size()).max().orElse(0);
         for (int turn = 0; turn < deepest; turn++) {
-            for (List<Cell> group : byGroup) {
-                if (turn < group.size()) {
-                    out.add(group.get(turn));
+            for (int g = 0; g < byGroup.size(); g++) {
+                List<Cell> cells = byGroup.get(g).cells();
+                if (turn < cells.size()) {
+                    out.add(new Seeded(g, cells.get(turn)));
                 }
             }
         }
         return out;
     }
+
+    /** A cell and which group it is one of, which is what says how much of that group is left. */
+    private record Seeded(int group, Cell cell) {}
 
     /** Whether a row already written fixes every position {@code fixed} does, the same way. */
     private static boolean sits(List<int[]> written, int[] fixed) {

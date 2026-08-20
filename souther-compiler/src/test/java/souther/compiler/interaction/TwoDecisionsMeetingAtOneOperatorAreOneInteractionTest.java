@@ -230,4 +230,60 @@ class TwoDecisionsMeetingAtOneOperatorAreOneInteractionTest {
         assertEquals(List.of(List.of(2, 2, 2)), shape(read(THREE, "fee")),
                 "three decisions making one number are three factors of one group");
     }
+
+    /** Three decisions joined by an operator that stops as soon as the answer is settled. */
+    private static final String SHORT_CIRCUIT = """
+            module example.shortcircuit
+
+            behavior pick : (a: Bool, b: Bool, c: Bool) -> Bool
+
+            let pick (a, b, c) =
+                (if a then true else false)
+                    && (if b then true else false)
+                    && (if c then true else false)
+            """;
+
+    /** A charge one of whose arms answers nothing and aborts instead. */
+    private static final String ABORTING = """
+            module example.aborting
+
+            data Choice = A | B
+            data Other = C | D
+
+            behavior fee : (choice: Choice, other: Other) -> Int
+
+            let fee (choice, other) = {
+                let left = match choice with
+                    | A -> 100
+                    | B -> unreachable "a B never reaches this charge"
+                let right = match other with
+                    | C -> 10
+                    | D -> 20
+
+                left + right
+            }
+            """;
+
+    /**
+     * An operator that stops as soon as the answer is settled does not consume both sides. Read as
+     * a meeting it asks for the combinations of decisions the short circuit never reaches: nothing
+     * evaluates the second condition on a path the first settled, so a cell naming both is a cell
+     * the body has no path to.
+     */
+    @Test
+    void anOperatorThatStopsEarlyIsNotAMeetingOfBothItsSides() {
+        assertEquals(List.of(), read(SHORT_CIRCUIT, "pick"),
+                "the second side is not evaluated on every path the first leaves");
+    }
+
+    /**
+     * An arm that answers nothing is not a way the value is settled. Counted as one, the charge on
+     * the left would vary two ways where it varies one, and the group would ask for a row at a
+     * combination whose left half aborts before the sum is reached.
+     */
+    @Test
+    void anArmThatAnswersNothingIsNotAWayTheValueIsSettled() {
+        assertEquals(List.of(), read(ABORTING, "fee"),
+                "one of the two arms answers a value, so the left charge is not a factor");
+    }
 }

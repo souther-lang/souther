@@ -30,7 +30,26 @@ public final class InteractionCells {
     private InteractionCells() {}
 
     /**
-     * The cells of each group, one list per group, over the ordered {@code axes}.
+     * One group's combinations, and how many of them there are.
+     *
+     * <p>The two are not the same number where the enumeration was cut short, which is why the size
+     * is carried rather than read off the list. A caller saying how much of a group it did not get
+     * to has to say it about the group and not about the part of it that was built.
+     *
+     * @param size  how many combinations the group has. What was enumerated where that finished,
+     *              and the product of the factors — an upper bound, since two factors reading one
+     *              position have combinations they disagree at — where it did not
+     * @param cells the ones that were built, in the order the factors are taken
+     */
+    public record Group(int size, List<Generator.Cell> cells) {
+
+        public Group {
+            cells = List.copyOf(cells);
+        }
+    }
+
+    /**
+     * The cells of each group over the ordered {@code axes}.
      *
      * <p>Kept per group rather than run together so a caller with a row budget can spend it across
      * the groups instead of on whichever the walk met first.
@@ -38,20 +57,31 @@ public final class InteractionCells {
      * @param most how many cells of one group are worth building. Beyond what a caller can offer,
      *             enumerating is work whose answer is thrown away
      */
-    public static List<List<Generator.Cell>> of(List<Interaction> groups, List<Axis> axes,
-                                                int most) {
-        List<List<Generator.Cell>> out = new ArrayList<>();
+    public static List<Group> of(List<Interaction> groups, List<Axis> axes, int most) {
+        List<Group> out = new ArrayList<>();
         for (Interaction group : groups) {
             List<List<int[]>> placed = placedBy(group, axes);
             if (placed == null) {
                 continue;
             }
-            List<Generator.Cell> cells = cellsOf(placed, axes.size(), most);
-            if (!cells.isEmpty()) {
-                out.add(cells);
+            Group built = cellsOf(placed, axes.size(), most);
+            if (!built.cells().isEmpty()) {
+                out.add(built);
             }
         }
         return List.copyOf(out);
+    }
+
+    /** How many combinations the factors have between them, as far as an {@code int} says it. */
+    private static int productOf(List<List<int[]>> placed) {
+        long size = 1;
+        for (List<int[]> factor : placed) {
+            size *= factor.size();
+            if (size >= Integer.MAX_VALUE) {
+                return Integer.MAX_VALUE;
+            }
+        }
+        return (int) size;
     }
 
     /**
@@ -96,13 +126,17 @@ public final class InteractionCells {
     }
 
     /** Every way one outcome of each factor can be taken together, where they agree. */
-    private static List<Generator.Cell> cellsOf(List<List<int[]>> placed, int positions, int most) {
+    private static Group cellsOf(List<List<int[]>> placed, int positions, int most) {
+        boolean cut = false;
         List<int[]> out = new ArrayList<>();
         int[] nothing = new int[positions];
         Arrays.fill(nothing, -1);
         out.add(nothing);
         for (List<int[]> factor : placed) {
             List<int[]> next = new ArrayList<>();
+            // Per factor, because it says this factor's expansion stopped. Kept across them only as
+            // the answer to whether anything was left out at all.
+            boolean full = false;
             for (int[] soFar : out) {
                 for (int[] outcome : factor) {
                     int[] both = merged(soFar, outcome);
@@ -113,16 +147,19 @@ public final class InteractionCells {
                         next.add(both);
                     }
                     if (next.size() >= most) {
+                        cut = true;
+                        full = true;
                         break;
                     }
                 }
-                if (next.size() >= most) {
+                if (full) {
                     break;
                 }
             }
             out = next;
         }
-        return out.stream().map(Generator.Cell::new).toList();
+        return new Group(cut ? productOf(placed) : out.size(),
+                out.stream().map(Generator.Cell::new).toList());
     }
 
     /** The two together, or null where they fix one position at two classes. */

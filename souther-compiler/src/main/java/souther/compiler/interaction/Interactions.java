@@ -5,6 +5,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ControlPointId;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.NormalReturn;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.TermPath;
@@ -68,6 +69,9 @@ public final class Interactions {
      * second key.
      */
     private final IdentityHashMap<Core, List<Outcome>> settled = new IdentityHashMap<>();
+
+    /** Which nodes are paths to a value, for the same reason the settlings are kept. */
+    private final IdentityHashMap<Core, Boolean> reaches = new IdentityHashMap<>();
 
     private Interactions(CoverageSites.Plan plan, Symbols symbols) {
         this.plan = plan;
@@ -151,6 +155,7 @@ public final class Interactions {
      */
     private static List<Core> meetingAt(Core node, Set<Core> absorbed) {
         return switch (node) {
+            case Core.Binary binary when shortCircuits(binary.op()) -> null;
             case Core.Binary binary -> {
                 List<Core> operands = new ArrayList<>();
                 List<Core> inner = new ArrayList<>();
@@ -169,6 +174,20 @@ public final class Interactions {
         };
     }
 
+    /**
+     * Whether the operator settles its answer without evaluating both sides.
+     *
+     * <p>{@code &&} stops at a left that is false and {@code ||} at a left that is true, so the two
+     * sides are not consumed into one value: the paths to a value are the left settling the answer
+     * on its own, and the left going through with the right settling it. Which of the left's
+     * outcomes settles it is which value it comes to, and this reading has conditions rather than
+     * values — so the answer is that the operator is settled one way, which asks for nothing. A
+     * product of the two sides would ask for the combinations the short circuit never reaches.
+     */
+    private static boolean shortCircuits(Hir.BinOp op) {
+        return op == Hir.BinOp.AND || op == Hir.BinOp.OR;
+    }
+
     /** The values one run of {@code op} is over, and the nodes the run is written as. */
     private static void run(Core e, Hir.BinOp op, List<Core> operands, List<Core> inner) {
         if (e instanceof Core.Binary binary && binary.op() == op) {
@@ -183,6 +202,34 @@ public final class Interactions {
     /** What a value nothing forks is settled by, which is the same thing however it is written. */
     private static List<Outcome> oneWay() {
         return List.of(new Outcome(List.of()));
+    }
+
+    /**
+     * Whether {@code e} is a path to a value, which is what an outcome has to be.
+     *
+     * <p>The invariant the whole reading turns on. An outcome is a way the operand <em>arrives at a
+     * value</em>, and a branch of the syntax is not that on its own: an arm answering
+     * {@code unreachable} answers nothing and aborts, so counting it as a way the operand is settled
+     * says the value varies where it does not — and the group it makes asks for rows at a
+     * combination the body has no path to, which is the defect this reading exists to remove.
+     *
+     * <p>{@link NormalReturn} is the reading that owns the question and the one the arms of a body
+     * are already told apart by. Answered here for the node the walk is at and for each arm it
+     * enumerates, which are the two places a branch could be taken for a path.
+     *
+     * <p>Kept because it is asked at every node and answers about the whole subtree under it.
+     */
+    private boolean answers(Core e) {
+        if (e == null) {
+            return false;
+        }
+        Boolean already = reaches.get(e);
+        if (already != null) {
+            return already;
+        }
+        boolean answer = NormalReturn.of(e);
+        reaches.put(e, answer);
+        return answer;
     }
 
     /**
@@ -207,11 +254,21 @@ public final class Interactions {
     }
 
     private List<Outcome> reading(Core e, InputReads reads, Map<BindingId, List<Outcome>> bound) {
+        if (!answers(e)) {
+            // Nothing arrives at a value here, so there is no way this is settled to enumerate.
+            return oneWay();
+        }
+        if (e instanceof Core.Binary binary && shortCircuits(binary.op())) {
+            return oneWay();
+        }
         if (e instanceof Core.Match match) {
             TermPath at = reads.pathOf(match.scrutinee(), symbols);
             List<Outcome> out = new ArrayList<>();
             for (int part = 0; part < match.cases().size(); part++) {
                 Core.Case each = match.cases().get(part);
+                if (!answers(each.body())) {
+                    continue;
+                }
                 Condition when = caseCondition(at, each, match, part);
                 for (Outcome inner : outcomesOf(each.body(), reads, bound)) {
                     out.add(prepend(when, inner));
@@ -220,15 +277,16 @@ public final class Interactions {
                     return oneWay();
                 }
             }
-            return out;
+            return out.isEmpty() ? oneWay() : out;
         }
         if (e instanceof Core.If iff) {
             // Numbered where they are written and not where they survive: the arm a fork answers on
-            // is its place among the arms, and a missing one is skipped rather than closing the gap.
+            // is its place among the arms, and one that answers nothing is skipped rather than
+            // closing the gap and letting the next arm be called the first.
             Core[] arms = {iff.then(), iff.els()};
             List<Outcome> out = new ArrayList<>();
             for (int part = 0; part < arms.length; part++) {
-                if (arms[part] == null) {
+                if (!answers(arms[part])) {
                     continue;
                 }
                 Condition when = armCondition(iff, part, reads);
@@ -239,7 +297,7 @@ public final class Interactions {
                     return oneWay();
                 }
             }
-            return out;
+            return out.isEmpty() ? oneWay() : out;
         }
         if (e instanceof Core.Read read) {
             List<Outcome> named = bound.get(read.binding());
