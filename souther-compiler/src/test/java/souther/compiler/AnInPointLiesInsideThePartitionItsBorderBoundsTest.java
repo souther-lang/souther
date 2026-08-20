@@ -249,7 +249,8 @@ class AnInPointLiesInsideThePartitionItsBorderBoundsTest {
 
         assertEquals("0.2 < n and 3 * n <= 1", borderNamed(all, "n = 0.2").against(PointRole.IN),
                 "the run above two tenths stops at the third");
-        assertEquals("0.6 < 3 * n < 1", borderNamed(all, "3 * n = 1").against(PointRole.OUT),
+        assertEquals("0.6 < 3 * n and 3 * n <= 1",
+                borderNamed(all, "3 * n = 1").against(PointRole.OUT),
                 "and the run below the third stops at two tenths, said in the rule's own units");
         // A tenth is below two tenths, which is a partition further out. Read without the line at
         // two tenths, the run below the third reached the end of the order and a tenth answered

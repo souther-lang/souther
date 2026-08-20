@@ -241,6 +241,60 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
     }
 
     /**
+     * A class and the point a border owes inside it are the same run, and are said the same way.
+     *
+     * <p>Which is the whole of why the two measures were put on one arrangement. A reader told that
+     * a class has no row and that a point inside it has none is being told about one run twice, and
+     * two spellings of it are two runs as far as anybody reading can tell.
+     *
+     * <p>Read off the line rather than off the values beside it, the point came back with both its
+     * ends turned round — {@code 1 <= 3 * n < 2} for a run the class calls
+     * {@code 1 < 3 * x <= 2} — because a line the quantity never reaches has no value below it to
+     * be on the low side of.
+     */
+    @Test
+    void aClassAndThePointInsideItAreSaidTheSameWay() {
+        PartitionEvidence measured = measured("Decimal", """
+                    guard 3m * n > 1m else No { why = 0 }
+                    guard 3m * n > 2m else No { why = 1 }""",
+                "    | \"one\" : (0.1m) -> No { why = 0 }");
+        String middle = measured.axes().get(0).classes().get(1);
+
+        assertEquals("n/1 < 3 * x <= 2", middle);
+        assertEquals("1 < 3 * n <= 2",
+                measured.boundaries().stream()
+                        .filter(each -> each.label().equals("3 * n = 1")).findFirst()
+                        .orElseThrow().against(souther.compiler.partition.PointRole.IN),
+                "the run the border at a third bounds is the class between the two lines, said in"
+                        + " the same words: " + middle);
+    }
+
+    /**
+     * And a run over a multiple of the quantity says how much of it, once.
+     *
+     * <p>How much of a quantity a rule is about is the quantity's own answer: twice
+     * {@code 3 * a + 6 * b} is {@code 6 * a + 12 * b}, and nobody outside it can compose that.
+     * Written by putting the multiple in front of whatever the quantity calls itself, a point came
+     * back asking for a row against {@code 2 * 3 * n <= 5} while the class that is the same run
+     * called it {@code 6 * x <= 5}.
+     */
+    @Test
+    void aRunOverAMultipleOfTheQuantitySaysHowMuchOfItOnce() {
+        PartitionEvidence measured = measured("Decimal", """
+                    guard 3m * n > 1m else No { why = 0 }
+                    guard 6m * n > 5m else No { why = 1 }""",
+                "    | \"one\" : (0.1m) -> No { why = 0 }");
+
+        assertEquals("1 < 3 * n and 6 * n <= 5",
+                measured.boundaries().stream()
+                        .filter(each -> each.label().equals("3 * n = 1")).findFirst()
+                        .orElseThrow().against(souther.compiler.partition.PointRole.IN),
+                "and not `2 * 3 * n`, which is the same rule said twice over");
+        assertEquals("n/1 < 3 * x and 6 * x <= 5", measured.axes().get(0).classes().get(1),
+                "which is what the class that is this run says");
+    }
+
+    /**
      * And a line that does fall on a value of the position is still named by that value.
      *
      * <p>{@code 2 * n <= 9} cuts the whole numbers between four and five, and four is a value the

@@ -187,21 +187,46 @@ public record Seam(CutPosition at, Level below, Level above) {
      * one way. Null where the quantity has no numbers, which is never scaled and so always has a
      * value at its lines.
      *
-     * @param subject what a row is called in the words the reader is being given
+     * @param muchOf how the reader writes so much of the quantity, which is the quantity's own
+     *               answer where the reader has one to ask
      */
-    public String asARuleAbout(String subject, Towards side) {
+    public String asARuleAbout(java.util.function.Function<java.math.BigDecimal, String> muchOf,
+                               Towards side) {
         java.math.BigDecimal[] rule = at.asARule();
         if (rule == null) {
             return null;
         }
-        String much = rule[0].compareTo(java.math.BigDecimal.ONE) == 0 ? subject
-                : plain(rule[0]) + " * " + subject;
+        String much = muchOf.apply(rule[0]);
         return side == Towards.ABOVE ? plain(rule[1]) + " < " + much
                 : much + " <= " + plain(rule[1]);
     }
 
     private static String plain(java.math.BigDecimal number) {
         return number.stripTrailingZeros().toPlainString();
+    }
+
+    /**
+     * The line as a value the quantity has there, or null where it has none.
+     *
+     * <p>Apart from {@link CutPosition#asALevelOfTheQuantity}, which says the rule wrote the whole
+     * of the quantity and not that the quantity stands anywhere near the line. The two part company
+     * wherever a line is written in a quantity's own units and the quantity steps or fills past it:
+     * {@code 3 * d > 1} writes one of {@code 3 * d}, whose values are the thirds of a decimal, and
+     * one is not one of them.
+     *
+     * <p>Answered without an order to ask, because the seam already holds the answer: the quantity
+     * has a value at the line exactly where one of the two values beside the line is the line. Asked
+     * the other way, a run beside a line the quantity never reaches was written with both its ends
+     * turned round — {@link #keepsItsOwnValueBelow} is false there for want of a value below rather
+     * than because the line's own value lies above.
+     */
+    public Level attainedLine() {
+        Level line = at.asALevelOfTheQuantity();
+        if (line == null) {
+            return null;
+        }
+        return below != null && below.key().equals(line.key())
+                || above != null && above.key().equals(line.key()) ? line : null;
     }
 
     /**

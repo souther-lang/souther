@@ -102,15 +102,13 @@ final class Intervals {
             if (lo != null || hi != null || of == null) {
                 return null;
             }
-            java.math.BigDecimal[] below = of.under() == null ? null : of.under().at().asARule();
-            java.math.BigDecimal[] above = of.over() == null ? null : of.over().at().asARule();
-            return below != null && above != null && below[0].compareTo(above[0]) == 0
-                    ? times(below[0]) : null;
+            java.math.BigDecimal shared = of.sharedMultiple();
+            return shared == null ? null : times(shared);
         }
 
         /** One end as the rule that drew it, or null where nothing parts the run there. */
         private static String ruleEnd(Seam parted, Towards side) {
-            return parted == null ? null : parted.asARuleAbout("x", side);
+            return parted == null ? null : parted.asARuleAbout(Interval::times, side);
         }
 
         private static String times(java.math.BigDecimal by) {

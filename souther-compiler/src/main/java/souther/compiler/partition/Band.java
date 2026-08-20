@@ -91,7 +91,7 @@ public record Band(Seam under, Seam over, Level from, Level to) {
      * class an author wrote {@code <= 4} for came back spelled {@code < 5}.
      */
     private static souther.compiler.numeric.Endpoint endOf(Seam parted, Towards side) {
-        Level line = parted.at().asALevelOfTheQuantity();
+        Level line = parted.attainedLine();
         if (line != null) {
             return new souther.compiler.numeric.Endpoint(placeOf(line),
                     side == Towards.ABOVE ? !parted.keepsItsOwnValueBelow()
@@ -163,7 +163,7 @@ public record Band(Seam under, Seam over, Level from, Level to) {
     /** The line itself, which the run reaches up to and does not hold. Null where the line is at a
      *  place the quantity has no value for, and then nothing here can name where the run stops. */
     private static souther.compiler.numeric.Endpoint atTheLine(Seam parted) {
-        Level line = parted.at().asALevelOfTheQuantity();
+        Level line = parted.attainedLine();
         return line == null ? null : souther.compiler.numeric.Endpoint.exclusive(placeOf(line));
     }
 
@@ -217,10 +217,15 @@ public record Band(Seam under, Seam over, Level from, Level to) {
         // An end only the rule that drew it can name relates a row to the quantity rather than to
         // the position, so it is a condition of its own beside the rest. Dropped, the run read as
         // reaching past the very line that ends it.
-        String ruleLow = low != null ? null
-                : under.asARuleAbout(of.left(), Towards.ABOVE);
-        String ruleHigh = high != null ? null
-                : over.asARuleAbout(of.left(), Towards.BELOW);
+        String ruleLow = low != null ? null : under.asARuleAbout(of::left, Towards.ABOVE);
+        String ruleHigh = high != null ? null : over.asARuleAbout(of::left, Towards.BELOW);
+        // One subject and two relations where both ends name the same multiple of the quantity,
+        // which is what a reader reads a range as. Said as two conditions, the same run reads as
+        // two facts — and the class that is this run says it the other way, so a reader is told
+        // about one run twice in two voices.
+        if (ruleLow != null && ruleHigh != null && sharedMultiple() != null) {
+            return ruleLow + " <= " + tail(ruleHigh);
+        }
         String plain = (nullToEmpty(low) + of.left() + nullToEmpty(high)).trim();
         boolean anyPlain = low != null && !low.isEmpty() || high != null && !high.isEmpty();
         java.util.List<String> said = new java.util.ArrayList<>();
@@ -236,6 +241,13 @@ public record Band(Seam under, Seam over, Level from, Level to) {
         return said.isEmpty() ? "any" : String.join(" and ", said);
     }
 
+    /** What a condition says after the subject it is about, which is what the compact form keeps
+     *  of the upper end. */
+    private static String tail(String said) {
+        int at = said.indexOf("<=");
+        return said.substring(at + 3);
+    }
+
     private static String nullToEmpty(String said) {
         return said == null ? "" : said;
     }
@@ -249,7 +261,7 @@ public record Band(Seam under, Seam over, Level from, Level to) {
      * asked the quantity to write a number that is not one of its values.
      */
     private static String said(BorderQuantity of, Seam parted, Towards side) {
-        Level line = parted.at().asALevelOfTheQuantity();
+        Level line = parted.attainedLine();
         if (line != null) {
             return side == Towards.ABOVE ? of.writtenAt(line) + opens(parted)
                     : closes(parted) + of.writtenAt(line);
@@ -277,6 +289,30 @@ public record Band(Seam under, Seam over, Level from, Level to) {
 
     private static boolean same(Level one, Level other) {
         return one != null && other != null && one.key().equals(other.key());
+    }
+
+    /**
+     * What both ends of this run relate a row to, where they relate it to the same thing.
+     *
+     * <p>A run written as two conditions reads as two facts, and a run written as one subject
+     * between two relations reads as the range it is. Which is available exactly where neither end
+     * has a value to be named by and both name the same multiple of the quantity — the decision is
+     * the run's, and what each reader calls that multiple is the reader's.
+     *
+     * <p>Null where they do not, and then the two conditions are said as two: a run between a line
+     * on the position and a line on a multiple of it relates a row to both.
+     */
+    public java.math.BigDecimal sharedMultiple() {
+        if (under == null || over == null
+                || under.attainedLine() != null || over.attainedLine() != null
+                || under.below() != null || under.above() != null
+                || over.below() != null || over.above() != null) {
+            return null;
+        }
+        java.math.BigDecimal[] below = under.at().asARule();
+        java.math.BigDecimal[] above = over.at().asARule();
+        return below != null && above != null && below[0].compareTo(above[0]) == 0
+                ? below[0] : null;
     }
 
     /** Whether the line below this run keeps its own value, which decides whether the run starts
