@@ -70,6 +70,9 @@ class AChoiceIsOneConnectiveAndNotATreeTest {
             out.add(state.at(atom));
             out.add(state.speaksFor(atom));
             out.add(state.guaranteedAt(atom));
+            // And whether the reading can promise this position's answer, which is asked of the
+            // position for the reason the values are.
+            out.add(state.projectionExactAt(atom));
         });
         // Neither of these is read by a caller and a conjunction reads both, so a bracketing that
         // told a conjunction something different about its sides would answer differently past it
@@ -81,7 +84,6 @@ class AChoiceIsOneConnectiveAndNotATreeTest {
         // model leaves, so a bracketing that changed them would change what a document says about
         // a model whose author wrote one clause.
         out.add(state.relationExact());
-        out.add(state.projectionsExact());
         return out;
     }
 

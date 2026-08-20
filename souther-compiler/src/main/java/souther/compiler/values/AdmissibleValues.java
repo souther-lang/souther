@@ -80,7 +80,7 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
                                   boolean dropped, boolean nothing,
                                   Map<A, ValueSet> guaranteed, ValueSet defaultGuaranteed,
                                   boolean guaranteedTogether,
-                                  boolean relationExact, boolean projectionsExact) {
+                                  Set<A> tangled, Set<A> widened) {
 
     /**
      * @param values  what each position admits. A position at {@link ValueSet#ANY} is left out, so
@@ -116,16 +116,22 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
      * @param guaranteedTogether whether one value may be taken from each position's guarantee and
      *                the whole of them stand together in this reading. What a conjunction needs of
      *                its sides and what a choice over more than one position does not leave
-     * @param relationExact whether this reading can guarantee that the product it holds is the whole
-     *                of what the rules it read admit. A guarantee and not a fact: the rules below are
-     *                sufficient and not necessary, so false is "not shown" and never "shown
-     *                otherwise", and a sharper reading later answers true where this answers false
-     *                without anything here changing meaning
-     * @param projectionsExact the same of {@link #at}: whether every position's set can be
-     *                guaranteed to be exactly what the read rules leave it. Weaker than the above and
-     *                implied by it — the projection of a union is the union of the projections, so a
-     *                choice across positions loses the relation and keeps these, and it is the next
-     *                conjunction that spends what it lost
+     * @param tangled the positions whose correlations this reading has lost. What is held is one
+     *                set per position, standing for the product of them, and a choice between
+     *                alternatives written at two positions is a union of two products the product
+     *                cannot state. Outside this set the relation factors into a product, which is
+     *                what lets a position no choice reached keep its own answer
+     * @param widened the positions whose {@link #at} cannot be guaranteed to be what the read rules
+     *                leave them. A guarantee and not a fact: the rules below are sufficient and not
+     *                necessary, so absence from this set is what is shown and presence is what is
+     *                not shown either way, and a sharper reading later leaves a position out of it
+     *                without anything here changing meaning.
+     *
+     *                <p>Held per position rather than as one answer for the reading, because the
+     *                proposition is quantified over them. Read off a single flag, the only thing
+     *                that can be said is that some position is not shown exact, and a reader asking
+     *                about one of them is handed that sentence about each — which is the other
+     *                quantifier and is false wherever a clause of its own answers for a position
      */
     public AdmissibleValues {
         Map<A, ValueSet> said = new LinkedHashMap<>();
@@ -152,6 +158,11 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
             guaranteedTogether = true;
         }
         guaranteed = Collections.unmodifiableMap(new LinkedHashMap<>(guaranteed));
+        // Kept in the order they were recorded, as the maps above are: an immutable copy iterates
+        // in an order salted per run of the JVM, and what is written out of a reading has to come
+        // out the same on two compiles of one model.
+        tangled = Collections.unmodifiableSet(new LinkedHashSet<>(tangled));
+        widened = Collections.unmodifiableSet(new LinkedHashSet<>(widened));
     }
 
     /**
@@ -192,6 +203,17 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
      * Telling the two apart wants a reading that remembers why it promises nothing, which is more
      * than a promise and less than this holds.
      */
+    /** Whether {@link #at} at {@code atom} can be guaranteed to be what the read rules leave it. */
+    public boolean projectionExactAt(A atom) {
+        return !widened.contains(atom);
+    }
+
+    /** Whether the product this holds can be guaranteed to be the whole of what the read rules
+     *  admit, which is so exactly where no choice has reached across positions. */
+    public boolean relationExact() {
+        return tangled.isEmpty();
+    }
+
     public ValueSet guaranteedAt(A atom) {
         return guaranteed.getOrDefault(atom, defaultGuaranteed);
     }
@@ -199,7 +221,7 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
     /** Nothing read and nothing missed, which is what a reading starts from. */
     public static <A> AdmissibleValues<A> top() {
         return new AdmissibleValues<>(Map.of(), Map.of(), false, false, Map.of(), ValueSet.ANY, true,
-                true, true);
+                Set.of(), Set.of());
     }
 
     /**
@@ -212,13 +234,13 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
     public AdmissibleValues<A> leavingNothing() {
         return isBottom() ? this
                 : new AdmissibleValues<>(Map.of(), standing, dropped, true, Map.of(), ValueSet.NONE, true,
-                        relationExact, projectionsExact);
+                        tangled, widened);
     }
 
     /** One position said to admit {@code set}, and nothing missed. */
     public static <A> AdmissibleValues<A> at(A atom, ValueSet set) {
         return new AdmissibleValues<>(Map.of(atom, set), Map.of(), false, false,
-                Map.of(atom, set), ValueSet.ANY, true, true, true);
+                Map.of(atom, set), ValueSet.ANY, true, Set.of(), Set.of());
     }
 
     /**
@@ -235,7 +257,7 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
         // ones it does: what a rule this has no word for admits is not known, so a choice offering
         // it as an alternative is offering nothing that can be counted on.
         return new AdmissibleValues<>(Map.of(), spoiled, true, false, Map.of(), ValueSet.NONE, true,
-                true, true);
+                Set.of(), Set.of());
     }
 
     /** What {@code atom} may hold, everything being admitted where nothing was said. */
@@ -292,12 +314,14 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
                 apart ? ValueSet.NONE : defaultGuaranteed.meet(other.defaultGuaranteed),
                 true,
                 // The intersection of two products is a product, and of anything else it need not
-                // be. Where one side is a union this holds as a product, a pair the two of them
-                // refuse between them is one neither intersection excludes — so what the positions
-                // come back holding is wider than the rules are, and neither end can be promised.
-                relationExact && other.relationExact,
-                projectionsExact && other.projectionsExact
-                        && relationExact && other.relationExact);
+                // be. What each side could not state, the conjunction cannot state either.
+                both(tangled, other.tangled),
+                // And a position the two of them are tangled at is where the intersection can come
+                // back wider than the rules are: a pair they refuse between them is one neither
+                // per-position meet excludes. Everywhere else the relation is a product and the
+                // meet of a product is exact at each of its places, so those positions keep what
+                // they had.
+                both(both(widened, other.widened), both(tangled, other.tangled)));
     }
 
     /**
@@ -324,8 +348,7 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
             });
             return new AdmissibleValues<>(both, union(standing, other.standing),
                     dropped || other.dropped, true, Map.of(), ValueSet.NONE, true,
-                    relationExact && other.relationExact,
-                    projectionsExact && other.projectionsExact);
+                    both(tangled, other.tangled), both(widened, other.widened));
         }
         if (isBottom()) {
             return other;
@@ -380,11 +403,27 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
                 guaranteedTogether && other.guaranteedTogether && shapedBy.size() <= 1,
                 // A union of two products is a product where the alternatives are written at no
                 // more than one position between them, which is the same sufficient condition the
-                // promise above is kept by and is measured the same way.
-                relationExact && other.relationExact && shapedBy.size() <= 1,
-                // And the projections survive whatever the alternatives are written at: the
-                // projection of a union is the union of the projections.
-                projectionsExact && other.projectionsExact);
+                // promise above is kept by and is measured the same way. Where it is not, what the
+                // union cannot state is a relation among the positions they are written at, and
+                // outside those the two of them agree on everything by saying nothing.
+                shapedBy.size() <= 1 ? both(tangled, other.tangled)
+                        : both(both(tangled, other.tangled), shapedBy),
+                // The projections survive whatever the alternatives are written at: the projection
+                // of a union is the union of the projections.
+                both(widened, other.widened));
+    }
+
+    /** Every position of either, in the order they were recorded. */
+    private static <A> Set<A> both(Set<A> these, Set<A> those) {
+        if (those.isEmpty()) {
+            return these;
+        }
+        if (these.isEmpty()) {
+            return those;
+        }
+        Set<A> out = new LinkedHashSet<>(these);
+        out.addAll(those);
+        return out;
     }
 
     /** What both sides guarantee, at every position either of them holds a guarantee for, each

@@ -60,6 +60,20 @@ class AProductWiderThanItsRulesIsSaidInTheDocumentTest {
             behavior take : (r: R) -> Taken
             """;
 
+    /** The same, with a third position a clause of its own answers for. */
+    private static final String BESIDE = """
+            module demo
+
+            data Taken
+
+            data R = { a: String, b: String, c: Bool }
+                invariant one = (a == "5" && b == "0") || (a == "6" && b == "1")
+                invariant two = (a == "5" && b == "0") || (a == "6" && b == "0")
+                invariant three = c == true
+
+            behavior take : (r: R) -> Taken
+            """;
+
     private static JsonNode behaviorOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
@@ -102,6 +116,22 @@ class AProductWiderThanItsRulesIsSaidInTheDocumentTest {
             assertFalse(each.has("ruleId"), "no rule is answerable for it: " + each);
             assertFalse(each.has("reason"), "and what would lift it is one thing: " + each);
         }
+    }
+
+    /**
+     * And a position beside them, answered by a clause of its own, is not named.
+     *
+     * <p>What the choice costs is the positions it reached across. Said of the reading rather than
+     * of each position, "not every position is shown exact" is the only thing there is to say, and
+     * every position gets it — which would name `c` for a correlation no clause about it was ever
+     * part of.
+     */
+    @Test
+    void aPositionAnsweredByAClauseOfItsOwnIsNotNamed() {
+        assertEquals(List.of("r.a", "r.b"),
+                ofKind(BESIDE, "partition_values_not_separated").stream()
+                        .map(each -> each.get("subject").asString()).toList(),
+                "c is left where its own clause put it");
     }
 
     /** A model whose clauses the reading holds exactly says none of this. */

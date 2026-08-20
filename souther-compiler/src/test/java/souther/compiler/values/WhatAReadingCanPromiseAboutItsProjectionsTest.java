@@ -27,6 +27,7 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
 
     private static final String A = "a";
     private static final String B = "b";
+    private static final String C = "c";
     private static final Value FIVE = Value.text("5");
     private static final Value SIX = Value.text("6");
     private static final Value ZERO = Value.text("0");
@@ -47,7 +48,7 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
         AdmissibleValues<String> nothing = AdmissibleValues.top();
 
         assertTrue(nothing.relationExact(), "an empty reading is the whole of what it read");
-        assertTrue(nothing.projectionsExact(), "and every position of it is at ANY, exactly");
+        assertTrue(nothing.projectionExactAt(A), "and every position of it is at ANY, exactly");
     }
 
     /** A choice whose alternatives are written at one position between them is a product, so the
@@ -58,7 +59,7 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
 
         assertEquals(ValueSet.oneOf(java.util.Set.of(FIVE, SIX)), either.at(A));
         assertTrue(either.relationExact(), "two values of one position are a product");
-        assertTrue(either.projectionsExact());
+        assertTrue(either.projectionExactAt(A));
     }
 
     /**
@@ -74,7 +75,7 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
 
         assertEquals(ValueSet.oneOf(java.util.Set.of(FIVE, SIX)), one.at(A));
         assertEquals(ValueSet.oneOf(java.util.Set.of(ZERO, ONE)), one.at(B));
-        assertTrue(one.projectionsExact(), "the projection of a union is the union of projections");
+        assertTrue(one.projectionExactAt(A), "the projection of a union is the union of projections");
         assertFalse(one.relationExact(), "which b went with which a is what the product cannot say");
     }
 
@@ -94,7 +95,7 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
         AdmissibleValues<String> both = one.meet(two);
 
         assertEquals(ValueSet.oneOf(java.util.Set.of(FIVE, SIX)), both.at(A), "which is wider than the rules leave it");
-        assertFalse(both.projectionsExact(), "so the reading may not say this is what a holds");
+        assertFalse(both.projectionExactAt(A), "so the reading may not say this is what a holds");
         assertFalse(both.relationExact());
     }
 
@@ -104,7 +105,33 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
         AdmissibleValues<String> both = pair(FIVE, ZERO).meet(says(A, FIVE));
 
         assertTrue(both.relationExact(), "the intersection of two products is a product");
-        assertTrue(both.projectionsExact());
+        assertTrue(both.projectionExactAt(A));
+    }
+
+    /**
+     * A position no lost correlation reaches keeps its promise.
+     *
+     * <p>What a choice across two positions costs is those positions. A third, written about by a
+     * clause of its own, is left where it was: the relation factors into the tangled part and a
+     * product over everything else, and the projection of a product is exact at each of its places.
+     *
+     * <p>The promise is asked of a position for this reason. Held as one answer for the whole
+     * reading, "not every position is shown exact" is the only thing it can say, and a reader
+     * wanting the position gets that sentence about each of them — which is a different claim, and
+     * a false one here.
+     */
+    @Test
+    void aPositionNoLostCorrelationReachesKeepsItsPromise() {
+        AdmissibleValues<String> one = pair(FIVE, ZERO).join(pair(SIX, ONE));
+        AdmissibleValues<String> two = pair(FIVE, ZERO).join(pair(SIX, ZERO));
+        AdmissibleValues<String> apart = AdmissibleValues.at(C, ValueSet.just(ZERO));
+
+        AdmissibleValues<String> all = one.meet(two).meet(apart);
+
+        assertFalse(all.projectionExactAt(A), "a and b are what the choice reached across");
+        assertFalse(all.projectionExactAt(B));
+        assertTrue(all.projectionExactAt(C), "and nothing the choice lost reaches c");
+        assertEquals(ValueSet.just(ZERO), all.at(C));
     }
 
     /** A promise about the relation is a promise about the projections, never the other way. */
@@ -116,7 +143,7 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
                 says(A, FIVE).join(says(A, SIX)),
                 pair(FIVE, ZERO).join(pair(SIX, ONE)),
                 pair(FIVE, ZERO).join(pair(SIX, ONE)).meet(pair(FIVE, ZERO).join(pair(SIX, ZERO))))) {
-            assertTrue(!each.relationExact() || each.projectionsExact(),
+            assertTrue(!each.relationExact() || each.projectionExactAt(A),
                     each + " promises its relation and not its projections");
         }
     }
