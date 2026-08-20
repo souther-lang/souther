@@ -113,6 +113,18 @@ public record Seam(CutPosition at, Level below, Level above) {
     public record Scale(java.math.BigDecimal per, souther.compiler.check.Carrier onto) {}
 
     /**
+     * Whether the line's own value is on the lower side of it.
+     *
+     * <p>What the two operators that part the values in one place disagree about, and the one thing
+     * a run either side has to ask: the run below ends at the value where the line keeps it, and
+     * starts past it where it does not. Read off the two ends rather than carried from the rule,
+     * because two rules that part the values alike are one seam and only one of them was kept.
+     */
+    public boolean keepsItsOwnValueBelow() {
+        return below != null && below.key().equals(at.written().key());
+    }
+
+    /**
      * One value of the quantity that this seam is at, for a reader putting several of them in the
      * order their values are in.
      *

@@ -91,7 +91,7 @@ public record Band(Seam under, Seam over, Level from, Level to) {
     }
 
     private static boolean keepsItsOwnValueBelow(Seam seam) {
-        return seam.below() != null && seam.below().key().equals(seam.at().written().key());
+        return seam.keepsItsOwnValueBelow();
     }
 
     /**

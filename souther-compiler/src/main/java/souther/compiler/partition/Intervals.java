@@ -11,8 +11,6 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -71,9 +69,6 @@ final class Intervals {
         }
     }
 
-    /** A place a rule cuts the position, and which side the count itself falls on. */
-    private record Split(Place value, boolean valueBelongsBelow) {}
-
     /**
      * The ranges {@code thresholds} leave, inside what the position holds.
      *
@@ -93,36 +88,55 @@ final class Intervals {
         // Which subsumes the reason this was keyed by the number rather than by the count's own
         // equality: `0.00` and `0` are one number and part the values in one place.
         LevelSpace space = LevelSpace.onACarrier(carrier);
-        Map<String, Split> distinct = new LinkedHashMap<>();
+        List<Seam> parted = new ArrayList<>();
         for (Threshold each : thresholds) {
             if (!Endpoint.someValueLiesBetween(min, Endpoint.inclusive(each.value()))
                     || !Endpoint.someValueLiesBetween(Endpoint.inclusive(each.value()), max)) {
                 continue;
             }
-            Seam parts = Seam.of(space, new Level.OnACarrier(carrier, each.value()),
-                    each.valueBelongsBelow() ? Towards.BELOW : Towards.ABOVE);
-            distinct.putIfAbsent(parts.key(), new Split(each.value(), each.valueBelongsBelow()));
+            parted.add(Seam.of(space, new Level.OnACarrier(carrier, each.value()),
+                    each.valueBelongsBelow() ? Towards.BELOW : Towards.ABOVE));
         }
-        List<Split> splits = new ArrayList<>(distinct.values());
-        splits.sort(Comparator.comparing(Split::value));
-
+        // The one arrangement, which the points of every border on this position are read off as
+        // well. Where the values part, in what order and with what left between them are questions
+        // about the position, and deriving them twice is two chances to answer them differently —
+        // which is how a border came to ask for a row inside a partition the classes had already
+        // divided further along.
         List<Interval> out = new ArrayList<>();
-        Place lo = min == null ? null : min.at();
-        boolean loInclusive = min == null || min.inclusive();
-        for (Split split : splits) {
-            Interval range = new Interval(lo, loInclusive, split.value(), split.valueBelongsBelow());
+        for (Band run : QuantityArrangement.of(space, parted).bands()) {
+            Interval range = rangeOf(run, min, max);
             if (range.inhabited()) {
                 out.add(range);
             }
-            lo = split.value();
-            loInclusive = !split.valueBelongsBelow();
-        }
-        Interval last = new Interval(lo, loInclusive, max == null ? null : max.at(),
-                max == null || max.inclusive());
-        if (last.inhabited()) {
-            out.add(last);
         }
         return out.size() < 2 ? List.of() : List.copyOf(out);
+    }
+
+    /**
+     * One run of the arrangement as a range of the position's counts.
+     *
+     * <p>The ends the rules leave rather than the ones the seams do: a run with nothing parting it
+     * at one end stops where the position stops, and how far a bound reaches includes whether it
+     * keeps its own value. A run parted at an end stops at the line, on the side the rule that drew
+     * it keeps.
+     */
+    private static Interval rangeOf(Band run, Endpoint min, Endpoint max) {
+        Seam under = run.under();
+        Seam over = run.over();
+        return new Interval(
+                under == null ? (min == null ? null : min.at()) : placeOf(under),
+                under == null ? min == null || min.inclusive() : !under.keepsItsOwnValueBelow(),
+                over == null ? (max == null ? null : max.at()) : placeOf(over),
+                over == null ? max == null || max.inclusive() : over.keepsItsOwnValueBelow());
+    }
+
+    /** Where a seam's line is, as a value of the position it parts. */
+    private static Place placeOf(Seam parted) {
+        if (!(parted.at().written() instanceof Level.OnACarrier on)) {
+            throw new IllegalStateException(
+                    "a position was parted at a level that is not one of its values: " + parted);
+        }
+        return on.at();
     }
 
     /**
