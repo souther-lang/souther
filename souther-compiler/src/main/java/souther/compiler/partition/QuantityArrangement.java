@@ -39,8 +39,32 @@ public record QuantityArrangement(List<Seam> seams, List<Band> bands) {
      * are kept beside it, while what the quantity is divided into is a property of the quantity.
      */
     public static QuantityArrangement of(LevelSpace space, List<Seam> parted) {
+        return of(space, parted, null, null);
+    }
+
+    /**
+     * The same, where the rules leave the quantity only what runs from {@code from} to {@code to}.
+     *
+     * <p>The ends are not seams and never become runs of their own. Nothing outside a bound can be
+     * constructed, so there is no run on the far side of one to cover (ADR-0090); what a bound does
+     * is stop the run beside it, which is why the two either side of a line at ten run from the
+     * bound rather than from the order's own extent.
+     *
+     * @param from the first value the rules leave the quantity, or null where they leave it
+     *             everything that way. A value the quantity takes, and not the number a bound was
+     *             written with: which of those two it is belongs to whoever holds the bound
+     * @param to   the last, on the same reading
+     */
+    public static QuantityArrangement of(LevelSpace space, List<Seam> parted, Level from,
+                                         Level to) {
         Map<String, Seam> distinct = new LinkedHashMap<>();
         for (Seam each : parted) {
+            // A place the rules leave nothing at divides nothing. The values it would tell apart are
+            // values no row can be written at, so it is dropped rather than kept as a run holding
+            // none — which is a class an author would be told to write a row for and could not.
+            if (outside(space, each.somewhere(), from, to)) {
+                continue;
+            }
             distinct.putIfAbsent(each.key(), each);
         }
         List<Seam> ordered = new ArrayList<>(distinct.values());
@@ -49,10 +73,25 @@ public record QuantityArrangement(List<Seam> seams, List<Band> bands) {
         List<Band> bands = new ArrayList<>();
         Seam under = null;
         for (Seam seam : ordered) {
-            bands.add(new Band(under, seam));
+            keep(space, bands, new Band(under, seam, from, to));
             under = seam;
         }
-        bands.add(new Band(under, null));
+        keep(space, bands, new Band(under, null, from, to));
         return new QuantityArrangement(ordered, bands);
+    }
+
+    /** A run, unless what the rules leave has nothing in it. */
+    private static void keep(LevelSpace space, List<Band> bands, Band band) {
+        Level first = band.first();
+        Level last = band.last();
+        if (first != null && last != null && space.compare(first, last) > 0) {
+            return;
+        }
+        bands.add(band);
+    }
+
+    private static boolean outside(LevelSpace space, Level at, Level from, Level to) {
+        return at != null && (from != null && space.compare(at, from) < 0
+                || to != null && space.compare(at, to) > 0);
     }
 }

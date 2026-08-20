@@ -42,8 +42,51 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
 
     /** How the runs read, as the two seams each of them lies between. */
     private static List<String> bandsOf(Seam... parted) {
-        return QuantityArrangement.of(NUMBERS, List.of(parted)).bands().stream()
-                .map(Band::key).toList();
+        return within(null, null, parted);
+    }
+
+    /** The same, where the rules leave the quantity only what lies between two values. */
+    private static List<String> within(String low, String high, Seam... parted) {
+        return QuantityArrangement.of(NUMBERS, List.of(parted),
+                        low == null ? null : at(low), high == null ? null : at(high))
+                .bands().stream().map(Band::key).toList();
+    }
+
+    /**
+     * The outermost runs stop where the rules stop the quantity.
+     *
+     * <p>A bound is not a cut: nothing outside it can be constructed, so there is no run on the far
+     * side to cover (ADR-0090). What it does is end the run beside it — the two either side of a
+     * line at ten run from the bound and not from the order's own extent.
+     */
+    @Test
+    void theOutermostRunsStopWhereTheRulesStopTheQuantity() {
+        assertEquals(List.of("0|10", "11|20", "21|100"), within("0", "100", upTo("10"), upTo("20")));
+    }
+
+    /**
+     * A place the rules leave nothing at parts nothing.
+     *
+     * <p>A cut outside what the quantity is left is not a division of it — the values it would tell
+     * apart are values no row can be written at — so it is dropped rather than kept as a run holding
+     * nothing.
+     */
+    @Test
+    void aCutOutsideWhatTheRulesLeaveDividesNothing() {
+        assertEquals(List.of("0|10", "11|100"), within("0", "100", upTo("10"), upTo("200")));
+    }
+
+    /**
+     * And a run the rules leave no value in is not a run.
+     *
+     * <p>{@code invariant value <= 10} beside a line at ten leaves everything from eleven up with no
+     * value in it. Counted, it is a class an author is told to write a row for and cannot. Judged on
+     * the numbers alone it looks inhabited, because eleven is less than the order's own end; what
+     * settles it is what the quantity is left, which is nothing above ten.
+     */
+    @Test
+    void aRunTheRulesLeaveNoValueInIsNotARun() {
+        assertEquals(List.of("0|10"), within("0", "10", upTo("10")));
     }
 
     /**

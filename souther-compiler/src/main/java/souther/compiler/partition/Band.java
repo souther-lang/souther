@@ -7,10 +7,13 @@ package souther.compiler.partition;
  * The two used to be derived apart, and only the first of them knew about the lines further along —
  * so a row well past the next line answered for a point that was supposed to be inside this run.
  *
- * @param under the seam this run starts above, or null where it runs to the order's own end
+ * @param under the seam this run starts above, or null where nothing parts it there
  * @param over  the seam it stops below, or null on the same reading
+ * @param from  what the rules leave the quantity at the low end, which is where a run with no seam
+ *              under it starts. Null where they leave it everything that way
+ * @param to    the same at the high end
  */
-public record Band(Seam under, Seam over) {
+public record Band(Seam under, Seam over, Level from, Level to) {
 
     /**
      * How this run reads: the first value in it and the last.
@@ -20,8 +23,17 @@ public record Band(Seam under, Seam over) {
      * written as nothing, because there is no value there to name.
      */
     public String key() {
-        return where(under == null ? null : under.above()) + "|"
-                + where(over == null ? null : over.below());
+        return where(first()) + "|" + where(last());
+    }
+
+    /** The first value in this run, or null where the order names none there. */
+    public Level first() {
+        return under == null ? from : under.above();
+    }
+
+    /** The last, on the same reading. */
+    public Level last() {
+        return over == null ? to : over.below();
     }
 
     private static String where(Level at) {
