@@ -700,9 +700,17 @@ public final class FieldDomains {
      */
     public AdmissibleSet admits(String path) {
         ValueSet values = admittedByField.getOrDefault(path, ValueSet.ANY);
+        // What the reading could not hold together is true of every position of the value, so it is
+        // asked once and said at each: a product that is not what the rules admit leaves no
+        // position's projection shown to be theirs. Beside whatever the position's own rules came
+        // to rather than instead of it — a rule went unread or it did not, and that question is
+        // answered the same whichever way this one is.
+        Set<AdmissibleSet.Widening> spread = constraints.values().projectionsExact()
+                ? Set.of() : Set.of(new AdmissibleSet.Widening.AlternativesNotSeparated());
         UnreadReason here = unreadByField.get(path);
         if (here != null) {
-            return AdmissibleSet.partial(values, here);
+            return AdmissibleSet.wider(values, with(spread,
+                    new AdmissibleSet.Widening.RuleUnread(here)));
         }
         // A clause that never reached the readings cannot have spoiled the position it was about,
         // because no reading here ever saw which position that was. A walk that fell over and a
@@ -713,8 +721,22 @@ public final class FieldDomains {
         // Not `projection`, which is what the bounds state of the rules. A clause the interval
         // algebra holds nothing of may be one this reading took in whole, so borrowing that answer
         // would settle this reading's completeness by a reading that is not this one.
-        return everyRuleReachedAt(path) ? AdmissibleSet.complete(values)
-                : AdmissibleSet.partial(values, UnreadReason.NOT_REACHED);
+        if (!everyRuleReachedAt(path)) {
+            return AdmissibleSet.wider(values, with(spread,
+                    new AdmissibleSet.Widening.RuleUnread(UnreadReason.NOT_REACHED)));
+        }
+        return spread.isEmpty() ? AdmissibleSet.complete(values)
+                : AdmissibleSet.wider(values, spread);
+    }
+
+    /** {@code these} and one more, in the order they are written here: the rule's own reason is
+     *  what an author acts on, and what the reading could not hold together is beside it. */
+    private static Set<AdmissibleSet.Widening> with(Set<AdmissibleSet.Widening> these,
+                                                    AdmissibleSet.Widening one) {
+        Set<AdmissibleSet.Widening> out = new LinkedHashSet<>();
+        out.add(one);
+        out.addAll(these);
+        return out;
     }
 
     /**

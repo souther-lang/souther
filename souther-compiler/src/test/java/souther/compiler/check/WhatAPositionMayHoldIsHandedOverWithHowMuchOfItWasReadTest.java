@@ -18,6 +18,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -87,6 +88,32 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
     private static void asFarAsRead(ValueSet values, UnreadReason why, FieldDomains read,
                                     String path) {
         assertEquals(AdmissibleSet.partial(values, why), read.admits(path));
+    }
+
+    /**
+     * A choice reaching across two positions is read one position at a time, so what a second
+     * clause meets it with can leave the values wider than the rules are with every rule read.
+     *
+     * <p>Issue #877. Only {@code (a = "5", b = "0")} satisfies both invariants — {@code (6, 1)} is
+     * refused by {@code two} and {@code (6, 0)} by {@code one} — so {@code a} is left {@code "5"}
+     * and nothing else. The reading meets {@code {5, 6}} with {@code {5, 6}} and comes back with
+     * both, which is sound as an upper bound and is not the whole of what the model leaves.
+     */
+    @Test
+    void aChoiceAcrossTwoPositionsIsNotTheWholeOfWhatTheRulesLeave() {
+        FieldDomains read = of("""
+                module demo
+
+                data R = { a: String, b: String }
+                    invariant one = (a == "5" && b == "0") || (a == "6" && b == "1")
+                    invariant two = (a == "5" && b == "0") || (a == "6" && b == "0")
+                """, "R");
+
+        ValueSet reported = ValueSet.oneOf(Set.of(Value.text("5"), Value.text("6")));
+        assertEquals(reported, read.admits("a").approximation(),
+                "the values are the upper bound they always were");
+        assertNotEquals(AdmissibleSet.complete(reported), read.admits("a"),
+                "and the reading may not call them the whole of what the rules leave");
     }
 
     /** An equality names the one value the position may hold. */
@@ -266,7 +293,13 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                         || Int.abs(a) >= 2
                 """, "R");
 
-        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, "a");
+        // Both stand in the way at once, and each is lifted by its own work: one wants a reader
+        // for `Int.abs`, and one wants the alternatives of the choice kept apart. Said together
+        // rather than by a precedence, so an author looking for either finds it.
+        assertEquals(AdmissibleSet.wider(ValueSet.ANY, Set.of(
+                        new AdmissibleSet.Widening.RuleUnread(UnreadReason.FORM_NOT_READ),
+                        new AdmissibleSet.Widening.AlternativesNotSeparated())),
+                read.admits("a"));
     }
 
     /**

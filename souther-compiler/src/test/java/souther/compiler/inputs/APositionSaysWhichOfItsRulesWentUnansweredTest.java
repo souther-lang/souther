@@ -91,7 +91,7 @@ class APositionSaysWhichOfItsRulesWentUnansweredTest {
 
         assertEquals(List.of(), length.unansweredQuestions(),
                 "both bounds were taken in, by the reading that turns them into ends");
-        assertInstanceOf(AdmissibleSet.Completeness.Partial.class, length.completeness(),
+        assertInstanceOf(AdmissibleSet.Completeness.Wider.class, length.completeness(),
                 "and the reading of values is short of the rules, as it always was");
     }
 

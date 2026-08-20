@@ -1,5 +1,7 @@
 package souther.compiler.values;
 
+import java.util.Set;
+
 /**
  * Which values a position may hold, and how much of what the rules say about it was read.
  *
@@ -47,26 +49,73 @@ public record AdmissibleSet(ValueSet approximation, Completeness completeness) {
         }
     }
 
-    /** How much of what the rules say was read. */
+    /**
+     * Whether the set can be guaranteed to be what the rules leave the position, and what stands in
+     * the way where it cannot.
+     *
+     * <p>A proof state and not a fact about the model. {@link Complete} says this reading can show
+     * the equality; {@link Wider} says it cannot, which leaves open that the values happen to be
+     * exact. So a sharper reading later answers {@code Complete} where this answers {@code Wider}
+     * without either word changing meaning, and nothing downstream has to be told that it did.
+     */
     public sealed interface Completeness {
 
-        /** Every rule reaching the position was taken into the set. */
+        /** The set is what the rules leave the position, and this reading can show it. */
         record Complete() implements Completeness {}
 
         /**
-         * Something about the position went unread, so the set is wider than the rules are.
+         * The set may be wider than the rules leave the position, and these are the reasons this
+         * reading cannot rule that out.
          *
-         * <p>Which of the kinds it was is carried because they are lifted by different work and
-         * reported differently; what a reader does with the set is the same for all of them.
+         * <p>More than one at once. A rule may go unread at a position of a value whose other
+         * clauses the reading also could not hold together, and the two are lifted by different
+         * work — one wants a reader for a form, one wants the alternatives kept apart. Held as a
+         * set so that a reader looking for either finds it, rather than finding whichever a
+         * precedence put first.
          */
-        record Partial(UnreadReason why) implements Completeness {
+        record Wider(Set<Widening> why) implements Completeness {
 
-            public Partial {
+            public Wider {
+                if (why == null || why.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a reading that cannot show the equality knows what stands in the way");
+                }
+                // Kept in the order they were recorded rather than as an immutable copy, whose
+                // iteration order is salted per run of the JVM. What is written out of these has
+                // to come out the same on two compiles of one model.
+                why = java.util.Collections.unmodifiableSet(new java.util.LinkedHashSet<>(why));
+            }
+        }
+    }
+
+    /** One thing standing between a set and the rules it is read from. */
+    public sealed interface Widening {
+
+        /**
+         * A rule about the position went unread, so a value the set holds may yet be refused.
+         *
+         * <p>Which kind of unread it was travels with it: the three are lifted by different work
+         * and a report writes its own word for each.
+         */
+        record RuleUnread(UnreadReason why) implements Widening {
+
+            public RuleUnread {
                 if (why == null) {
-                    throw new IllegalArgumentException("a partial reading knows why it is partial");
+                    throw new IllegalArgumentException("a rule went unread for something");
                 }
             }
         }
+
+        /**
+         * Every rule was read, and the reading could not hold what they say together.
+         *
+         * <p>No rule is answerable for this: a choice reaching across two positions is read one
+         * position at a time, so what a second clause meets it with can leave the values wider than
+         * the rules are with every rule read. Beside {@link RuleUnread} and never instead of it —
+         * nothing went unread, and saying so would send an author looking for a clause this
+         * compiler could not take in.
+         */
+        record AlternativesNotSeparated() implements Widening {}
     }
 
     /** Every rule about the position was read, which is what a reader holding no reading of its own
@@ -80,11 +129,30 @@ public record AdmissibleSet(ValueSet approximation, Completeness completeness) {
 
     /** These values, with something about the position left unread. */
     public static AdmissibleSet partial(ValueSet values, UnreadReason why) {
-        return new AdmissibleSet(values, new Completeness.Partial(why));
+        return new AdmissibleSet(values,
+                new Completeness.Wider(Set.of(new Widening.RuleUnread(why))));
     }
 
-    /** Why the reading is short of the rules, or null where it is not short of them. */
+    /** These values, with {@code why} standing between them and the rules. */
+    public static AdmissibleSet wider(ValueSet values, Set<Widening> why) {
+        return new AdmissibleSet(values, new Completeness.Wider(why));
+    }
+
+    /**
+     * Which rule of the position went unread, or null where none did.
+     *
+     * <p>Null is not {@link Completeness.Complete}. A reading may be unable to show the equality
+     * with every rule read, and a caller asking this to find out whether the set is exact would
+     * read that as a complete reading — {@link #completeness} is the question, and this is only
+     * what to say about the rules.
+     */
     public UnreadReason whyPartial() {
-        return completeness instanceof Completeness.Partial partial ? partial.why() : null;
+        if (!(completeness instanceof Completeness.Wider wider)) {
+            return null;
+        }
+        return wider.why().stream()
+                .filter(Widening.RuleUnread.class::isInstance)
+                .map(each -> ((Widening.RuleUnread) each).why())
+                .findFirst().orElse(null);
     }
 }
