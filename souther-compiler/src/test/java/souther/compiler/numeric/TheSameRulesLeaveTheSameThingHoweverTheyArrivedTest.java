@@ -222,6 +222,41 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
                 d.boundsOf(scaled("a", 2).minus(scaled("b", 2))).max());
     }
 
+    /**
+     * An equality is definitely violated where the rules leave the value out of reach.
+     *
+     * <p>Refuting was a switch of its own over the relations, and it declined to refute an equality
+     * at all. Reading a question the way a rule is read leaves refuting as proving the opposite
+     * comparison, and the opposite of held-at is held-away — so this follows rather than being
+     * decided again.
+     *
+     * <p>It cannot refuse a program that was being accepted: where this is true the equality was not
+     * being discharged either, so what changes is which of the two is said.
+     */
+    @Test
+    void anEqualityIsRefutedWhereTheRulesPutItsValueOutOfReach() {
+        Map<String, Granularity> kinds = whole("x");
+        NumericDomain<String> d = NumericDomain.<String>top()
+                .assume(atom("x").minus(num(3)), Rel.LE, kinds);
+
+        assertTrue(d.refutes(atom("x").minus(num(5)), Rel.EQ), "x is at most three");
+        assertFalse(d.entails(atom("x").minus(num(5)), Rel.EQ), "and was never discharged either");
+        assertFalse(d.refutes(atom("x").minus(num(2)), Rel.EQ), "where two is a value it can take");
+    }
+
+    /** A question about a position this was never told of is one it proves nothing about, rather
+     *  than one it refuses to be asked. */
+    @Test
+    void aQuestionAboutAPositionThisNeverHeardOfIsNotProven() {
+        Map<String, Granularity> kinds = whole("x");
+        NumericDomain<String> d = NumericDomain.<String>top()
+                .assume(atom("x").minus(num(3)), Rel.LE, kinds);
+
+        assertFalse(d.entails(atom("elsewhere").minus(num(5)), Rel.LE));
+        assertFalse(d.refutes(atom("elsewhere").minus(num(5)), Rel.LE));
+        assertTrue(d.boundsOf(atom("elsewhere")).saysNothing());
+    }
+
     // --- and over rules drawn at random ---------------------------------------------------------------
 
     @Test

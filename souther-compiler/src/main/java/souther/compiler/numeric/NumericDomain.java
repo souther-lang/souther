@@ -255,38 +255,96 @@ public final class NumericDomain<A> {
         return entails(f, rel, false);
     }
 
+    /**
+     * Whether the rules prove the comparison, read the one way a comparison is read.
+     *
+     * <p>Through {@link AffineConstraint#of} — the same reading a rule goes through on the way in.
+     * What each of the six relations means was written here as well as there, so the two readings
+     * could differ and did: the one on the way in divides a comparison through by what its weights
+     * share and moves a bound onto a value the sum can take, and the one here did neither. A
+     * question scaled away from the rule it needs was left with a residual nothing could prove, and
+     * a difference asked with weights of two was not recognised as a difference at all.
+     *
+     * <p>So a question is not a second kind of thing. It is a comparison, which is what a rule is,
+     * and it is read into the same three shapes.
+     */
     private boolean entails(LinearForm<A> f, Rel rel, boolean withRules) {
         if (isBottom()) {
             return true;   // an infeasible path discharges anything
         }
-        Goal<A> goal = goalOf(f).goal();
-        return switch (rel) {
-            case LE -> proves(goal, false, withRules);
-            case LT -> proves(goal, true, withRules);
-            case GE -> proves(goal.negated(), false, withRules);
-            case GT -> proves(goal.negated(), true, withRules);
-            case EQ -> proves(goal, false, withRules) && proves(goal.negated(), false, withRules);
-            case NE -> proves(goal, true, withRules) || proves(goal.negated(), true, withRules);
+        Map<A, Rational> coefs = weighed(f);
+        if (!kinds.keySet().containsAll(coefs.keySet())) {
+            // A position this has never been told about is one nothing here bounds, so nothing here
+            // proves about it either. Said before the reading, which would want its spacing.
+            return false;
+        }
+        return switch (AffineConstraint.of(coefs, Rational.of(f.constant()), rel, kinds::get)) {
+            case AffineConstraint.Read.HoldsAlways<A> ignored -> true;
+            case AffineConstraint.Read.HoldsNever<A> ignored -> false;
+            case AffineConstraint.Read.Stated<A> stated -> proven(stated.constraint(), withRules);
         };
     }
 
     /**
+     * Whether the rules prove what one constraint says.
+     *
+     * <p>Held below something is one thing to prove; held at something is the two the constraint
+     * itself names; held away from something is either of two strict ones, since a sum away from a
+     * value is under it or over it.
+     */
+    private boolean proven(AffineConstraint<A> asked, boolean withRules) {
+        if (asked instanceof AffineConstraint.Disequality<A> hole) {
+            return proves(below(hole.form(), hole.at()), true, withRules)
+                    || proves(below(hole.form().negated(), hole.at().negated()), true, withRules);
+        }
+        for (AffineConstraint.HalfSpace<A> half : asked.halfSpaces()) {
+            if (!proves(below(half.form(), half.bound().at()), !half.bound().inclusive(),
+                    withRules)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** {@code form - at}, which is what is bounded to decide whether {@code form <= at}. */
+    private Goal<A> below(CanonicalForm<A> form, Rational at) {
+        return new Goal<>(form.coefs(), at.negated());
+    }
+
+    /**
      * Whether the rules prove {@code ¬(f rel 0)} — the invariant is <em>definitely</em> violated on
-     * this path, which is a compile error rather than an undischarged obligation. The negation flips
-     * both bits of the comparison: {@code ¬(f >= 0)} is {@code f < 0}.
+     * this path, which is a compile error rather than an undischarged obligation.
+     *
+     * <p>Which is proving the opposite comparison, and the opposite of each is one fact written
+     * once. It had been a second switch over the relations, and a third reading of what they mean.
      */
     public boolean refutes(LinearForm<A> f, Rel rel) {
-        if (isBottom() || rel == Rel.EQ) {
-            return false;   // an unreachable path violates nothing; equality is never refuted here
-        }
-        if (rel == Rel.NE) {
-            return entails(f, Rel.EQ);   // proving it equal is proving it not unequal
-        }
-        Goal<A> goal = goalOf(f).goal();
+        return !isBottom() && entails(f, opposite(rel), true);
+    }
+
+    /** The comparison that holds exactly where {@code rel} does not. */
+    private static Rel opposite(Rel rel) {
         return switch (rel) {
-            case GE, GT -> proves(goal, rel == Rel.GE, true);
-            default -> proves(goal.negated(), rel == Rel.LE, true);
+            case LE -> Rel.GT;
+            case LT -> Rel.GE;
+            case GE -> Rel.LT;
+            case GT -> Rel.LE;
+            case EQ -> Rel.NE;
+            case NE -> Rel.EQ;
         };
+    }
+
+    /** A written form's weights, as the exact arithmetic holds them, with the positions it does not
+     *  actually weigh left out. */
+    private Map<A, Rational> weighed(LinearForm<A> f) {
+        Map<A, Rational> coefs = new LinkedHashMap<>();
+        f.coefs().forEach((atom, coef) -> {
+            Rational weight = Rational.of(coef);
+            if (!weight.isZero()) {
+                coefs.put(atom, weight);
+            }
+        });
+        return coefs;
     }
 
     /** A goal as a weighted sum and a constant, which is what a comparison against nought is. */
@@ -324,13 +382,7 @@ public final class NumericDomain<A> {
      * side of nought the question is about.
      */
     private Asked<A> goalOf(LinearForm<A> f) {
-        Map<A, Rational> coefs = new LinkedHashMap<>();
-        f.coefs().forEach((atom, coef) -> {
-            Rational weight = Rational.of(coef);
-            if (!weight.isZero()) {
-                coefs.put(atom, weight);
-            }
-        });
+        Map<A, Rational> coefs = weighed(f);
         Rational constant = Rational.of(f.constant());
         // Canonicalised by the one thing that canonicalises, so a question and a rule that say the
         // same thing are put into the same words by the same code. Doing the division here instead
@@ -365,17 +417,6 @@ public final class NumericDomain<A> {
         // An end at nought the goal cannot reach proves the strict form: nothing the rules admit
         // gets there, which is what `< 0` asks.
         return sign < 0 || (sign == 0 && (!strict || !highest.inclusive()));
-    }
-
-    private static <A> List<AffineConstraint.HalfSpace<A>> asHalfSpaces(AffineConstraint<A> rule) {
-        return switch (rule) {
-            case AffineConstraint.HalfSpace<A> half -> List.of(half);
-            case AffineConstraint.Equality<A> at -> List.of(
-                    new AffineConstraint.HalfSpace<>(at.form(), RationalCut.inclusive(at.at())),
-                    new AffineConstraint.HalfSpace<>(at.form().negated(),
-                            RationalCut.inclusive(at.at().negated())));
-            case AffineConstraint.Disequality<A> hole -> List.of();
-        };
     }
 
     /** {@code goal - (premise.form - premise.bound)}, which is what is left to prove once the
@@ -421,7 +462,7 @@ public final class NumericDomain<A> {
             return best;
         }
         for (AffineConstraint<A> rule : rules) {
-            for (AffineConstraint.HalfSpace<A> premise : asHalfSpaces(rule)) {
+            for (AffineConstraint.HalfSpace<A> premise : rule.halfSpaces()) {
                 RationalCut residual = fromTheBox(subtracting(goal, premise));
                 if (residual != null) {
                     // The goal reaches the sum only where the residual reaches its own end and the

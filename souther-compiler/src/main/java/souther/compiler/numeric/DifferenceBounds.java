@@ -103,24 +103,21 @@ public final class DifferenceBounds<A> {
      * here and {@code 2a - 2b <= 4} a difference: they are the same rules as {@code a <= 5} and
      * {@code a - b <= 2}, and were only ever a different shape because they had been read off the
      * coefficients as they were typed.
+     *
+     * <p>Which half-spaces a constraint states is the constraint's own answer, so an equality being
+     * a bound above and a bound below is not restated here. Either every one of them is an edge or
+     * this holds none of it: half a rule held is a rule nobody holds.
      */
     private static <A> List<Edge<A>> edgesOf(AffineConstraint<A> constraint) {
-        return switch (constraint) {
-            case AffineConstraint.HalfSpace<A> half -> {
-                Edge<A> edge = edgeOf(half.form(), half.bound());
-                yield edge == null ? List.of() : List.of(edge);
+        List<Edge<A>> out = new ArrayList<>();
+        for (AffineConstraint.HalfSpace<A> half : constraint.halfSpaces()) {
+            Edge<A> edge = edgeOf(half.form(), half.bound());
+            if (edge == null) {
+                return List.of();
             }
-            // Held at a value is held no higher and no lower, and both are of this shape wherever
-            // one of them is.
-            case AffineConstraint.Equality<A> at -> {
-                Edge<A> up = edgeOf(at.form(), RationalCut.inclusive(at.at()));
-                Edge<A> down = edgeOf(at.form().negated(),
-                        RationalCut.inclusive(at.at().negated()));
-                yield up == null || down == null ? List.of() : List.of(up, down);
-            }
-            // A hole is not a bound, and which side of it anything lies is not this one's to say.
-            case AffineConstraint.Disequality<A> hole -> List.of();
-        };
+            out.add(edge);
+        }
+        return List.copyOf(out);
     }
 
     private static <A> Edge<A> edgeOf(CanonicalForm<A> form, RationalCut bound) {

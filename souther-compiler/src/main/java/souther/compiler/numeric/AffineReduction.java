@@ -91,7 +91,7 @@ public final class AffineReduction {
         Map<A, RationalCut> atMost = new LinkedHashMap<>();
         for (AffineConstraint<A> each : constraints) {
             List<AffineConstraint.HalfSpace<A>> halves = each instanceof
-                    AffineConstraint.Disequality<A> hole ? sidedBy(hole, from) : asHalfSpaces(each);
+                    AffineConstraint.Disequality<A> hole ? sidedBy(hole, from) : each.halfSpaces();
             if (halves == null) {
                 return new Reduction.NothingIsLeft<>();
             }
@@ -104,23 +104,6 @@ public final class AffineReduction {
             }
         }
         return new Reduction.Tightened<>(atLeast, atMost);
-    }
-
-    /**
-     * The half-spaces a constraint states. An equality is two of them, and a hole is none — which
-     * side of a hole a sum lies is not something the rule says, and is answered where what else is
-     * known can be read.
-     */
-    private static <A> List<AffineConstraint.HalfSpace<A>> asHalfSpaces(
-            AffineConstraint<A> constraint) {
-        return switch (constraint) {
-            case AffineConstraint.HalfSpace<A> half -> List.of(half);
-            case AffineConstraint.Equality<A> at -> List.of(
-                    new AffineConstraint.HalfSpace<>(at.form(), RationalCut.inclusive(at.at())),
-                    new AffineConstraint.HalfSpace<>(at.form().negated(),
-                            RationalCut.inclusive(at.at().negated())));
-            case AffineConstraint.Disequality<A> hole -> List.of();
-        };
     }
 
     /**

@@ -30,6 +30,28 @@ public sealed interface AffineConstraint<A> {
     /** The sum this is about. */
     CanonicalForm<A> form();
 
+    /**
+     * The half-spaces this constraint states.
+     *
+     * <p>Asked of the constraint because it is the constraint's own answer. Three readers wanted it
+     * — the difference bounds, to make edges; the reduction, to read each rule against a box; the
+     * proof, to turn a question into something to bound — and each had written it out, so "an
+     * equality is a bound above and a bound below" was said three times and could have been said
+     * three ways.
+     *
+     * <p>A hole states none. Which side of it a sum lies is not something the rule says: it is
+     * something the rest of what is known says, and it is answered where that can be read.
+     */
+    default java.util.List<HalfSpace<A>> halfSpaces() {
+        return switch (this) {
+            case HalfSpace<A> half -> java.util.List.of(half);
+            case Equality<A> at -> java.util.List.of(
+                    new HalfSpace<>(at.form(), RationalCut.inclusive(at.at())),
+                    new HalfSpace<>(at.form().negated(), RationalCut.inclusive(at.at().negated())));
+            case Disequality<A> hole -> java.util.List.of();
+        };
+    }
+
     /** The sum held no higher than a bound it may or may not reach. */
     record HalfSpace<A>(CanonicalForm<A> form, RationalCut bound) implements AffineConstraint<A> {
 
@@ -67,9 +89,7 @@ public sealed interface AffineConstraint<A> {
          */
         @Override
         public boolean equals(Object other) {
-            return other instanceof Equality<?> it
-                    && (form.equals(it.form()) && at.equals(it.at())
-                            || form.equals(it.form().negated()) && at.equals(it.at().negated()));
+            return other instanceof Equality<?> it && oneRuleEitherWayRound(this, it);
         }
 
         @Override
@@ -104,9 +124,7 @@ public sealed interface AffineConstraint<A> {
         /** Held away from a value, whichever way round it was written; see {@link Equality}. */
         @Override
         public boolean equals(Object other) {
-            return other instanceof Disequality<?> it
-                    && (form.equals(it.form()) && at.equals(it.at())
-                            || form.equals(it.form().negated()) && at.equals(it.at().negated()));
+            return other instanceof Disequality<?> it && oneRuleEitherWayRound(this, it);
         }
 
         @Override
@@ -118,6 +136,32 @@ public sealed interface AffineConstraint<A> {
         public String toString() {
             return form + " /= " + at;
         }
+    }
+
+    /**
+     * Whether two of these say one thing, up to which way round it was written.
+     *
+     * <p>A comparison reduces {@code a >= 3} and {@code -a <= -3} to one half-space by turning one
+     * of them around. Held at a value and held away from one have no direction to turn, so the two
+     * writings are made one here instead — and here rather than in each of them, because it is one
+     * fact about both.
+     *
+     * <p>Not settled by picking a canonical side, which would need an order over the positions that
+     * a caller naming them is under no obligation to have. Two values, identified.
+     */
+    private static boolean oneRuleEitherWayRound(AffineConstraint<?> one, AffineConstraint<?> other) {
+        Rational mine = valueOf(one);
+        Rational theirs = valueOf(other);
+        return one.form().equals(other.form()) && mine.equals(theirs)
+                || one.form().equals(other.form().negated()) && mine.equals(theirs.negated());
+    }
+
+    private static Rational valueOf(AffineConstraint<?> constraint) {
+        return switch (constraint) {
+            case Equality<?> at -> at.at();
+            case Disequality<?> hole -> hole.at();
+            case HalfSpace<?> half -> half.bound().at();
+        };
     }
 
     /** A number the same for a form and its negation, so the two writings hash alike. */
