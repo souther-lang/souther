@@ -295,6 +295,50 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
     }
 
     /**
+     * And a run between a bound and such a line is looked in as closely as one between two lines.
+     *
+     * <p>A run ends where a rule parts the values or where the rules leave the quantity, and how
+     * closely to look for a value of it is a question about whichever two of those it lies between.
+     * Asked of its lines alone, a run with a bound at one end was looked for at whole numbers — and
+     * a class holding a decimal a ten-billionth under a third was reported as one no value of the
+     * position lies inside, which is a false answer about a class an author can write a row in.
+     */
+    @Test
+    void aRunBetweenABoundAndSuchALineIsLookedInAsCloselyAsOneBetweenTwoLines() {
+        for (String facing : List.of("value >= 0.33333333333330m", "value <= 0.33333333333340m")) {
+            Compilation compilation = Compilation.ofSource("""
+                    module example.bounded
+
+                    data Narrow = Decimal
+                        invariant %s
+
+                    data No = { why: Int }
+                    data Yes = { v: Int }
+                    data Result = No | Yes
+
+                    behavior f : (n: Narrow) -> Result
+                        constructs Yes, No
+
+                    let f (n) = {
+                        guard 3m * n.value > 1m else No { why = 0 }
+                        Yes { v = 1 }
+                    }
+
+                    example f
+                        | "one" : (Narrow(0.1m)) -> No { why = 0 }
+                    """.formatted(facing), "Main");
+            compilation.measure(Adequacy.Asked.reportOnly());
+            compilation.answerEverything();
+            String rows = souther.compiler.report.GeneratedRows.of(compilation, "example.bounded",
+                    "f", true, souther.compiler.diag.SourceNameResolver.identity());
+
+            assertFalse(rows.contains("no value this position can hold lies inside this range"),
+                    "a decimal lies between the bound and the third, so the class between them is"
+                            + " not one nothing can be written in (" + facing + "):\n" + rows);
+        }
+    }
+
+    /**
      * And a line that does fall on a value of the position is still named by that value.
      *
      * <p>{@code 2 * n <= 9} cuts the whole numbers between four and five, and four is a value the

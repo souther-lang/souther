@@ -70,7 +70,7 @@ public record Band(Seam under, Seam over, Level from, Level to) {
         if (under == null) {
             return leaves;
         }
-        return endOf(under, Towards.ABOVE);
+        return asAnEnd(under, Towards.ABOVE);
     }
 
     /** The line above it, on the same reading. */
@@ -78,7 +78,7 @@ public record Band(Seam under, Seam over, Level from, Level to) {
         if (over == null) {
             return leaves;
         }
-        return endOf(over, Towards.BELOW);
+        return asAnEnd(over, Towards.BELOW);
     }
 
     /**
@@ -90,7 +90,7 @@ public record Band(Seam under, Seam over, Level from, Level to) {
      * Read only off the line, such a class had no name at all; read only off the values beside it, a
      * class an author wrote {@code <= 4} for came back spelled {@code < 5}.
      */
-    private static souther.compiler.numeric.Endpoint endOf(Seam parted, Towards side) {
+    private static souther.compiler.numeric.Endpoint asAnEnd(Seam parted, Towards side) {
         Level line = parted.attainedLine();
         if (line != null) {
             return new souther.compiler.numeric.Endpoint(placeOf(line),
@@ -114,15 +114,33 @@ public record Band(Seam under, Seam over, Level from, Level to) {
      *
      * <p>Nothing beyond whole numbers where a line names a value of the quantity — the value beside
      * it is what the run starts at, and it has whatever digits it has. Where a line names none, the
-     * digits are what it takes to tell it from the line at the other end: a run between a third and
-     * a third and a hundred-billionth holds a decimal, and it is not one anybody would guess a
-     * scale for.
+     * digits are what it takes to tell that line from whatever ends the run at the other side: a
+     * run between a third and a third and a hundred-billionth holds a decimal, and so does one
+     * between a third and a bound a hundred-billionth under it. Neither is a scale anybody would
+     * guess.
      */
-    public int digitsToLookIn() {
-        if (under == null || over == null) {
-            return 0;
+    public int digitsToLookIn(souther.compiler.numeric.Endpoint min,
+                              souther.compiler.numeric.Endpoint max) {
+        CutPosition low = endOf(under, min);
+        CutPosition high = endOf(over, max);
+        return low == null || high == null ? 0 : low.digitsToTellApartFrom(high);
+    }
+
+    /**
+     * Where this run reaches on one side, as a place on the quantity's order.
+     *
+     * <p>A line where a rule parts the values there and what the rules leave where none does. The
+     * one answer about where a run ends, so that how closely to look for a value of it and where to
+     * look are asked of the same two ends — worked out apart, the second knew that a run reaches
+     * from a bound to a line and the first only ever compared two lines, and a run between a bound
+     * and a line was looked for at no digits at all.
+     */
+    private static CutPosition endOf(Seam parted, souther.compiler.numeric.Endpoint leaves) {
+        if (parted != null) {
+            return parted.at();
         }
-        return under.at().digitsToTellApartFrom(over.at());
+        return leaves == null || !(leaves.at() instanceof souther.compiler.numeric.Count count)
+                ? null : CutPosition.at(new Level.ACount(count));
     }
 
     /**

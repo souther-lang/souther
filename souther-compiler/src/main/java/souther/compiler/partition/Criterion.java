@@ -89,7 +89,7 @@ public sealed interface Criterion {
             // value, and then as many digits as its own two lines are apart. The second is worked
             // out from the run and not guessed: a scale short of what it takes reports a run with a
             // value in it as one nothing can be written in.
-            for (int digits : new int[] {0, band.digitsToLookIn()}) {
+            for (int digits : new int[] {0, band.digitsToLookIn(min, max)}) {
                 souther.compiler.numeric.NumericDomain.Bounds look = band.inside(min, max, digits);
                 souther.compiler.numeric.Place at =
                         carrier.somethingInside(look.min(), look.max());
