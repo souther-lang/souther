@@ -7,6 +7,7 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.NumericDomain.LinearForm;
 
 /**
  * What one comparison cuts, and where — the one place that decides it.
@@ -140,6 +141,51 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     private static ComparisonClaim claimOf(ComparedLine drawn) {
         return drawn.singles() ? new ComparisonClaim.Singled(drawn.holdsAtTheValue())
                 : new ComparisonClaim.Cut(drawn.valueBelongsBelow(), drawn.holdsAtTheValue());
+    }
+
+    /**
+     * What this cuts, as the direction it runs.
+     *
+     * <p>Asked of the quantity rather than of which variant of quantity it is. A rule written
+     * {@code 2 * n > 40} arrives as a form over twice a position and cuts the position, and a
+     * reading that told those apart by the shape it was holding reported the model as drawing one
+     * line through {@code n} where it draws two.
+     */
+    QuantityKey quantity() {
+        return QuantityKey.of(direction(of));
+    }
+
+    /**
+     * Where it parts that quantity's values, in the quantity's own units.
+     *
+     * <p>Found on the order the rule was written on, which is the order that knows which levels the
+     * written form attains — {@code 2 * n <= 9} cuts the even numbers and nine is not one of them,
+     * so the two sides part between eight and ten. Read back afterwards, which is exact: a level the
+     * written form attains is a multiple of how much of the quantity it wrote.
+     */
+    Seam seam() {
+        LinearForm<NumericTerm> direction = direction(of);
+        java.math.BigDecimal per = QuantityKey.per(direction);
+        return Seam.of(of.levels(), at,
+                valueBelongsBelow() ? Towards.BELOW : Towards.ABOVE,
+                new Seam.Scale(per, direction.coefs().size() == 1 ? of.carrier() : null));
+    }
+
+    /**
+     * The form a quantity runs along, whichever of the three it is.
+     *
+     * <p>One position's own values are that position with a coefficient of one; how far two
+     * positions stand apart is their difference; and a form is itself. The three used to be told
+     * apart by every reader that wanted to know what a rule divided, and only one of them was
+     * treated as dividing anything.
+     */
+    private static LinearForm<NumericTerm> direction(BorderQuantity of) {
+        return switch (of) {
+            case BorderQuantity.OfACoordinate one -> LinearForm.atom(one.term());
+            case BorderQuantity.Apart two ->
+                    LinearForm.<NumericTerm>atom(two.on()).minus(LinearForm.atom(two.against()));
+            case BorderQuantity.OverAForm many -> many.form();
+        };
     }
 
     /** The position this cuts, where what it cuts is one position's own values. Null for every other

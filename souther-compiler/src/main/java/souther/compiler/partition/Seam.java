@@ -67,16 +67,16 @@ public record Seam(CutPosition at, Level below, Level above) {
      * a day count printed as the number a model wrote.
      */
     private static Level inUnitsOf(Level level, Scale into) {
-        if (level == null || into == null) {
+        // A rule that wrote the whole of the quantity wrote it in the quantity's own units, so
+        // there is nothing to read back — including where the quantity has no numbers at all. A
+        // rule holds two strings apart and writes the whole of what it cuts, and asking such a
+        // level for its number is what {@link Level#asACount} exists to refuse.
+        if (level == null || into == null || into.per().compareTo(java.math.BigDecimal.ONE) == 0) {
             return level;
         }
-        java.math.BigDecimal at = numberOf(level).divide(into.per());
+        java.math.BigDecimal at = level.asACount().at().divide(into.per());
         return into.onto() == null ? new Level.ACount(new souther.compiler.numeric.Count(at))
                 : new Level.OnACarrier(into.onto(), new souther.compiler.numeric.Count(at));
-    }
-
-    private static java.math.BigDecimal numberOf(Level level) {
-        return level.asACount().at();
     }
 
     /**
