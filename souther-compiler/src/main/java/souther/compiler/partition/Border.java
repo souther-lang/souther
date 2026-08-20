@@ -175,6 +175,46 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
     }
 
     /**
+     * Whether the quantity reaches the line at all, which is the one thing about a border that does
+     * not depend on the lines beside it.
+     *
+     * <p>Asked before the lines of one quantity are collected, because a rule that draws nothing has
+     * to be reported as drawing nothing rather than joining the arrangement: three times a length is
+     * never negative, and a rule comparing one against a negative draws no line for anything to be
+     * beside.
+     */
+    public static boolean reaches(BoundaryTarget target, NumericDomain.Bounds within) {
+        return within == null || within.admits(placeOf(target.at()));
+    }
+
+    /**
+     * Every border the lines of one behavior draw, each told about the others on its own quantity.
+     *
+     * <p>One place, so that a quantity is arranged once however many rules cut it. Grouped by what
+     * the rule cuts and not by how it was written: a form and any positive multiple of it order the
+     * rows the same way, so they are one quantity and their lines are one arrangement.
+     */
+    public static java.util.List<Border> allOf(java.util.List<LineDrawn> drawn) {
+        java.util.Map<String, java.util.List<Seam>> byQuantity = new java.util.LinkedHashMap<>();
+        for (LineDrawn each : drawn) {
+            Seam parts = parts(each.cuts().target(), each.by());
+            if (parts != null) {
+                byQuantity.computeIfAbsent(each.cuts().quantity().key(),
+                        key -> new java.util.ArrayList<>()).add(parts);
+            }
+        }
+        java.util.List<Border> out = new java.util.ArrayList<>();
+        for (LineDrawn each : drawn) {
+            Border made = at(each.cuts().target(), each.by(), each.cuts().within(),
+                    byQuantity.getOrDefault(each.cuts().quantity().key(), java.util.List.of()));
+            if (made != null && out.stream().noneMatch(had -> had.equals(made))) {
+                out.add(made);
+            }
+        }
+        return java.util.List.copyOf(out);
+    }
+
+    /**
      * Where the rule this reading met parts the quantity's values.
      *
      * <p>For a caller collecting every place one quantity is parted before any border is built. A

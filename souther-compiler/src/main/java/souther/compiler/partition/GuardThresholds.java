@@ -72,7 +72,7 @@ public final class GuardThresholds {
      */
     public record Guards(List<Threshold> thresholds,
                          List<UnreadRule> unread, List<Singled> singled,
-                         List<Border> between,
+                         List<LineDrawn> between,
                          List<AtAPosition> accounting) {
 
         public static final Guards NONE =
@@ -122,7 +122,7 @@ public final class GuardThresholds {
         List<UnreadRule> unread = new ArrayList<>();
         List<Guards.AtAPosition> accounting = new ArrayList<>();
         List<Guards.Singled> singled = new ArrayList<>();
-        List<Border> between = new ArrayList<>();
+        List<LineDrawn> between = new ArrayList<>();
         walk(behavior, body, plan, InputReads.of(inputs), symbols, found, unread,
                 singled, between, accounting);
         return new Guards(found, unread, singled, between, accounting);
@@ -131,7 +131,7 @@ public final class GuardThresholds {
     private static void walk(String behavior, Core e, CoverageSites.Plan plan,
                              InputReads reads, Symbols symbols, List<Threshold> out,
                              List<UnreadRule> unread,
-                             List<Guards.Singled> singled, List<Border> between,
+                             List<Guards.Singled> singled, List<LineDrawn> between,
                              List<Guards.AtAPosition> accounting) {
         if (e instanceof Core.If iff) {
             List<Core> read =
@@ -355,7 +355,7 @@ public final class GuardThresholds {
     private static List<Core> read(String behavior, Core.If iff, CoverageSites.Plan plan,
                                    InputReads reads, Symbols symbols,
                                    List<Threshold> out,
-                                   List<Guards.Singled> singled, List<Border> between,
+                                   List<Guards.Singled> singled, List<LineDrawn> between,
                                    List<Guards.AtAPosition> accounting) {
         // The comparisons a line came of, and not the positions they were about. A position carries
         // more than one statement and reading one of them settles nothing about the others.
@@ -395,15 +395,17 @@ public final class GuardThresholds {
                 // Null where the quantity does not reach the line, which is the line and not one of
                 // its points: three times a length is never negative, and a rule comparing one
                 // against a negative draws nothing.
-                Border drawn = Border.at(cutting.target(), origin, cutting.within());
-                if (drawn == null) {
+                // Collected rather than turned into a border here. What a border owes away from
+                // its line is a run of the arrangement every rule about that quantity makes
+                // together, and a border built where its comparison was read knows only its own
+                // line — so a second rule over one form left the first one's run going to the end
+                // of the order, past it.
+                if (!Border.reaches(cutting.target(), cutting.within())) {
                     raisesNoLine(accounting, behavior, iff, each.comparison(), reads,
                             symbols);
                     continue;
                 }
-                if (between.stream().noneMatch(had -> had.equals(drawn))) {
-                    between.add(drawn);
-                }
+                between.add(new LineDrawn(cutting, origin));
                 List<TermPath> named = new ArrayList<>();
                 mentioned(each.comparison().left(), reads, symbols, named);
                 mentioned(each.comparison().right(), reads, symbols, named);

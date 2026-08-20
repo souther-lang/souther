@@ -121,22 +121,10 @@ final class Intervals {
      * it keeps.
      */
     private static Interval rangeOf(Band run, Endpoint min, Endpoint max) {
-        Seam under = run.under();
-        Seam over = run.over();
-        return new Interval(
-                under == null ? (min == null ? null : min.at()) : placeOf(under),
-                under == null ? min == null || min.inclusive() : !under.keepsItsOwnValueBelow(),
-                over == null ? (max == null ? null : max.at()) : placeOf(over),
-                over == null ? max == null || max.inclusive() : over.keepsItsOwnValueBelow());
-    }
-
-    /** Where a seam's line is, as a value of the position it parts. */
-    private static Place placeOf(Seam parted) {
-        if (!(parted.at().written() instanceof Level.OnACarrier on)) {
-            throw new IllegalStateException(
-                    "a position was parted at a level that is not one of its values: " + parted);
-        }
-        return on.at();
+        Endpoint low = run.lineBelow(min);
+        Endpoint high = run.lineAbove(max);
+        return new Interval(low == null ? null : low.at(), low == null || low.inclusive(),
+                high == null ? null : high.at(), high == null || high.inclusive());
     }
 
     /**

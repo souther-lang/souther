@@ -363,7 +363,10 @@ class WhatAClauseDrawsALineOnTest {
 
         assertEquals(List.of(), valuesOf(clauses), "the line is on neither position");
         assertEquals(1, clauses.between().size(), clauses.between().toString());
-        Border line = clauses.between().get(0);
+        // Turned into borders here, because a clause's lines are collected and arranged with a
+        // body's before any of them is a border: what a border owes away from its line is a run of
+        // what every rule about that quantity leaves.
+        Border line = Border.allOf(clauses.between()).get(0);
         assertEquals("book/from = to",
                 line.cut().named() + " = " + line.cut().right());
         assertEquals("from = to", line.label());
@@ -405,7 +408,8 @@ class WhatAClauseDrawsALineOnTest {
                 """, "book");
 
         assertEquals(2, clauses.between().size(), clauses.between().toString());
-        assertEquals(2, clauses.between().stream().map(Border::origin).distinct().count(),
+        assertEquals(2, Border.allOf(clauses.between()).stream()
+                        .map(Border::origin).distinct().count(),
                 "one line, two rules, and a row on it shows which of them was written");
     }
 

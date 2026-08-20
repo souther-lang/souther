@@ -327,7 +327,7 @@ public final class Partitions {
                                               Symbols symbols,
                                               List<UnreadRule> unread,
                                               List<GuardThresholds.Guards.Singled> singled,
-                                              List<Border> between) {
+                                              List<LineDrawn> between) {
         return withThresholds(base, thresholds, symbols, unread, singled, between,
                 souther.compiler.check.PathReachability.Answers.NONE, List.of());
     }
@@ -350,7 +350,7 @@ public final class Partitions {
                                               Symbols symbols,
                                               List<UnreadRule> unread,
                                               List<GuardThresholds.Guards.Singled> singled,
-                                              List<Border> between,
+                                              List<LineDrawn> between,
                                               souther.compiler.check.PathReachability.Answers
                                                       arrives,
                                               List<GuardThresholds.Guards.AtAPosition> compared) {
@@ -448,7 +448,10 @@ public final class Partitions {
                 // Carried across: what a reading could not hold together is a fact about the
                 // declarations, and a body drawing a line on a position does not make the product
                 // it was read from the relation the rules admit.
-                base.notSeparated(), between, compared);
+                // Turned into borders here and nowhere else, so that every rule about one
+                // quantity is arranged together however the rules were written — a body's
+                // condition and a clause cut one form as readily as two conditions do.
+                base.notSeparated(), Border.allOf(between), compared);
     }
 
     /**

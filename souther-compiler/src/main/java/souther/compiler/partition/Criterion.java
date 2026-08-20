@@ -122,11 +122,15 @@ public sealed interface Criterion {
     }
 
     /**
-     * One level this is written around, which every shape has.
+     * The level a search starts from, which every shape has.
+     *
+     * <p><b>Where to start looking and never what satisfies this.</b> Whether a value is at this
+     * item is {@link #holds}, and the two differ for a run: a search for a row inside a run starts
+     * at the line and walks away from it, and the line is the one place in reach that the run does
+     * not hold. Read as the second, a row on the line was offered for a point that lies past it.
      *
      * <p>Apart from {@link #against}, which is what a report writes: a run is not written against a
-     * level and is still arranged around one — the value against the line it lies beside. What reads
-     * this is the search, which starts from a level and works outward whichever shape it is holding.
+     * level and is still arranged around one.
      */
     default Level anchor() {
         if (!(this instanceof Within in)) {
@@ -141,10 +145,11 @@ public sealed interface Criterion {
         if (in.band().last() != null) {
             return in.band().last();
         }
-        // A run with no value at either end is arranged around the place its line falls at, which
-        // is where the values part and is the only thing left that says where the run starts.
+        // And the line itself where the run has no value at either end. A search starts there and
+        // walks away from it — which is why this is not what the run holds: two decimals a rule
+        // holds apart have every distance past the line and no first one.
         Seam edge = in.band().under() != null ? in.band().under() : in.band().over();
-        return edge == null ? null : edge.at().written();
+        return edge == null ? null : edge.at().asALevelOfTheQuantity();
     }
 
     /**

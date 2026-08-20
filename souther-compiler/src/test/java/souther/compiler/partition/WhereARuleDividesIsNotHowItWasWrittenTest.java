@@ -157,6 +157,29 @@ class WhereARuleDividesIsNotHowItWasWrittenTest {
         assertEquals(one.key(), two.key(), "and a third is two sixths");
     }
 
+    /**
+     * Whether a line keeps its own value is asked in the quantity's units, not the rule's.
+     *
+     * <p>{@code 2 * n <= 8} keeps four and {@code 2 * n <= 9} keeps nothing — nine halved is no
+     * whole number, so the line falls between four and five and neither of them is on it. Held
+     * against the level the rule was written with, both answered no: eight is not four. What reads
+     * this is the order two lines at one place are put in, and the run either side of a line, so an
+     * answer from the wrong units puts a value on the wrong side of the line it is on.
+     */
+    @Test
+    void whetherALineKeepsItsOwnValueIsAskedInTheQuantitysUnits() {
+        java.math.BigDecimal two = new java.math.BigDecimal("2");
+        Seam.Scale scale = new Seam.Scale(two, new Carrier.Whole());
+        LevelSpace evens = LevelSpace.steppingBy(two);
+
+        assertEquals(true,
+                Seam.of(evens, count("8"), Towards.BELOW, scale).keepsItsOwnValueBelow(),
+                "`2 * n <= 8` is a line at four, and four is on the lower side of it");
+        assertEquals(false,
+                Seam.of(evens, count("9"), Towards.BELOW, scale).keepsItsOwnValueBelow(),
+                "`2 * n <= 9` is a line between four and five, and neither is on it");
+    }
+
     private static Level count(String number) {
         return new Level.ACount(new Count(new java.math.BigDecimal(number)));
     }

@@ -26,6 +26,81 @@ public record Band(Seam under, Seam over, Level from, Level to) {
         return where(first()) + "|" + where(last());
     }
 
+    /**
+     * Where this run starts, as an end of the position's counts.
+     *
+     * <p>The one answer, read by everything that has to know how far a run reaches: the classes a
+     * position is divided into, and the search that composes a row inside one. Worked out separately
+     * they agreed until a run had no value at the end the line is at — a carrier whose values fill
+     * has every value past a line and no first one — and then one of them read the run as reaching
+     * to the end of the order.
+     *
+     * <p>Inclusive at a value the run holds, exclusive at the line where the order names none there,
+     * and null where nothing stops it that way.
+     */
+    public souther.compiler.numeric.Endpoint low() {
+        if (under == null) {
+            return from == null ? null : souther.compiler.numeric.Endpoint.inclusive(placeOf(from));
+        }
+        return under.above() != null
+                ? souther.compiler.numeric.Endpoint.inclusive(placeOf(under.above()))
+                : atTheLine(under);
+    }
+
+    /** Where it stops, on the same reading. */
+    public souther.compiler.numeric.Endpoint high() {
+        if (over == null) {
+            return to == null ? null : souther.compiler.numeric.Endpoint.inclusive(placeOf(to));
+        }
+        return over.below() != null
+                ? souther.compiler.numeric.Endpoint.inclusive(placeOf(over.below()))
+                : atTheLine(over);
+    }
+
+    /**
+     * The line below this run, as an end of the position's counts, or the end the rules leave where
+     * nothing parts it there.
+     *
+     * <p>Apart from {@link #low}, and both are this run's own answer about where it starts. One
+     * names the first value in it and the other names the line it starts from — on a carrier that
+     * steps the two describe one boundary and only the first exists on every carrier, while a class
+     * is named after the line an author wrote and not after the value beside it.
+     */
+    public souther.compiler.numeric.Endpoint lineBelow(souther.compiler.numeric.Endpoint leaves) {
+        if (under == null) {
+            return leaves;
+        }
+        Level line = under.at().asALevelOfTheQuantity();
+        return line == null ? low()
+                : new souther.compiler.numeric.Endpoint(placeOf(line),
+                        !under.keepsItsOwnValueBelow());
+    }
+
+    /** The line above it, on the same reading. */
+    public souther.compiler.numeric.Endpoint lineAbove(souther.compiler.numeric.Endpoint leaves) {
+        if (over == null) {
+            return leaves;
+        }
+        Level line = over.at().asALevelOfTheQuantity();
+        return line == null ? high()
+                : new souther.compiler.numeric.Endpoint(placeOf(line),
+                        over.keepsItsOwnValueBelow());
+    }
+
+    /** The line itself, which the run reaches up to and does not hold. Null where the line is at a
+     *  place the quantity has no value for, and then nothing here can name where the run stops. */
+    private static souther.compiler.numeric.Endpoint atTheLine(Seam parted) {
+        Level line = parted.at().asALevelOfTheQuantity();
+        return line == null ? null : souther.compiler.numeric.Endpoint.exclusive(placeOf(line));
+    }
+
+    private static souther.compiler.numeric.Place placeOf(Level level) {
+        return switch (level) {
+            case Level.ACount count -> count.at();
+            case Level.OnACarrier on -> on.at();
+        };
+    }
+
     /** The first value in this run, or null where the order names none there. */
     public Level first() {
         return under == null ? from : under.above();
@@ -92,6 +167,19 @@ public record Band(Seam under, Seam over, Level from, Level to) {
 
     private static boolean keepsItsOwnValueBelow(Seam seam) {
         return seam.keepsItsOwnValueBelow();
+    }
+
+    /**
+     * The same run, read on another order.
+     *
+     * <p>Everything that says where the run is moves together: the lines either side of it and the
+     * ends the rules leave. What this exists for is a rule between two positions, whose run is a
+     * run of distances until the other end of it is known.
+     */
+    Band mappedBy(java.util.function.UnaryOperator<Level> onto) {
+        return new Band(under == null ? null : under.mappedBy(onto),
+                over == null ? null : over.mappedBy(onto),
+                from == null ? null : onto.apply(from), to == null ? null : onto.apply(to));
     }
 
     /**

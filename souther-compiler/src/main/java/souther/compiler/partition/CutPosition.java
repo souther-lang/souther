@@ -63,6 +63,20 @@ public record CutPosition(Level written, BigDecimal per) {
     }
 
     /**
+     * This line as a value of the quantity, or null where it is not one.
+     *
+     * <p>The one way to get a level out of a position, and it answers null exactly where the rule
+     * wrote a multiple of the quantity and the line does not land on one of its values — a third is
+     * where {@code 3 * d <= 1} cuts and is no decimal this language writes. Every reader that took
+     * the level the rule was written with for a value of the quantity had it wrong by the multiple:
+     * a run read its own end against it, a line was asked whether it keeps a value it is not at, and
+     * a search was handed a level of one order to look for on another.
+     */
+    public Level asALevelOfTheQuantity() {
+        return per.compareTo(BigDecimal.ONE) == 0 ? written : null;
+    }
+
+    /**
      * Whether a value of the quantity is below, at or above where this line falls.
      *
      * <p>Asked by multiplying rather than by dividing, which is what lets a line at a place no value

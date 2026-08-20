@@ -113,6 +113,21 @@ public record Seam(CutPosition at, Level below, Level above) {
     public record Scale(java.math.BigDecimal per, souther.compiler.check.Carrier onto) {}
 
     /**
+     * The same place, read on another order.
+     *
+     * <p>What a line between two positions comes to once the other end of it is known: a distance
+     * is a place of no carrier until then, and every part of the seam moves together. Mapped end by
+     * end rather than by handing one level to all of them, which left a run with the same value at
+     * both ends and a reader that could no longer tell which side of the line it lay.
+     */
+    Seam mappedBy(java.util.function.UnaryOperator<Level> onto) {
+        Level line = at.asALevelOfTheQuantity();
+        return new Seam(CutPosition.at(line == null ? at.written() : onto.apply(line)),
+                below == null ? null : onto.apply(below),
+                above == null ? null : onto.apply(above));
+    }
+
+    /**
      * Whether the line's own value is on the lower side of it.
      *
      * <p>What the two operators that part the values in one place disagree about, and the one thing
@@ -121,7 +136,7 @@ public record Seam(CutPosition at, Level below, Level above) {
      * because two rules that part the values alike are one seam and only one of them was kept.
      */
     public boolean keepsItsOwnValueBelow() {
-        return below != null && below.key().equals(at.written().key());
+        return below != null && at.compare(below) == 0;
     }
 
     /**
@@ -132,7 +147,7 @@ public record Seam(CutPosition at, Level below, Level above) {
      * steps, and where only one of them exists it is the one that says where the values part.
      */
     Level somewhere() {
-        return below != null ? below : above != null ? above : at.written();
+        return below != null ? below : above != null ? above : at.asALevelOfTheQuantity();
     }
 
     /**

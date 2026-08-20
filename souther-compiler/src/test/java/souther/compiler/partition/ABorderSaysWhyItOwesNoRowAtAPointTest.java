@@ -130,6 +130,44 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
     }
 
     /**
+     * A row on the line is not a row at a point past it, whatever the search had to start from.
+     *
+     * <p>An order with no numbers has one level — where the two are equal — and every value past it
+     * is a run with no first value. So a search for a row in that run has nowhere to start but the
+     * line, and the line is the one place in reach the run does not hold. Read as a level the item
+     * accepts, a pair standing equal came back for a point that lies strictly past them, and the
+     * report went on saying no row was at it.
+     */
+    @Test
+    void aRowOnTheLineIsNotOfferedForAPointPastIt() {
+        String rows = souther.compiler.report.GeneratedRows.of(
+                compiled("""
+                        module example.strings
+
+                        data No = { why: Int }
+                        data Yes = { v: Int }
+                        data Result = No | Yes
+
+                        behavior cmp : (a: String, b: String) -> Result
+                            constructs Yes, No
+
+                        let cmp (a, b) = {
+                            guard a > b else No { why = 0 }
+                            Yes { v = 1 }
+                        }
+
+                        example cmp
+                            | "same" : ("b", "b") -> No { why = 0 }
+                        """),
+                "example.strings", "cmp", true, souther.compiler.diag.SourceNameResolver.identity());
+
+        assertFalse(rows.contains("cmp(\"\", \"\")"),
+                "a pair standing equal is the line itself and is at neither side of it:\n" + rows);
+        assertTrue(rows.contains("no row for `b < a`"),
+                "and what there is to say is that nothing could build one:\n" + rows);
+    }
+
+    /**
      * A side the rules leave one value wide has no point away from the border.
      *
      * <p>The same reason as a bound's far side, one arity up: every value an {@code IN} point could

@@ -103,6 +103,55 @@ class AnInPointLiesInsideThePartitionItsBorderBoundsTest {
     }
 
     /**
+     * And a quantity that is not one position's own values is parted by every rule about it too.
+     *
+     * <p>A line over an arithmetic form divides no position, so it travels beside the partition
+     * rather than on an axis — and it was built where the comparison was read, one rule at a time,
+     * so a second line over the same form was invisible to the first. Nothing about the two lines
+     * being over a form makes them any less two lines: a row where the form comes to ninety is past
+     * the second of them, and answered for the first one's {@code IN} point.
+     */
+    @Test
+    void aSecondLineOverOneFormBoundsTheFirstOnesInPoint() {
+        Compilation compilation = Compilation.ofSource("""
+                module example.form
+
+                data Bound = Int
+                    invariant value >= 0
+                    invariant value <= 100
+
+                data No = { why: Int }
+                data Yes = { v: Int }
+                data Result = No | Yes
+
+                behavior f : (a: Bound, b: Bound) -> Result
+                    constructs Yes, No
+
+                let f (a, b) = {
+                    guard Int.add(Int.multiply(3, a.value), Int.multiply(6, b.value)) > 48
+                        else No { why = 0 }
+                    guard Int.add(Int.multiply(3, a.value), Int.multiply(6, b.value)) > 60
+                        else No { why = 1 }
+                    Yes { v = 1 }
+                }
+
+                example f
+                    | "one" : (Bound(1), Bound(1)) -> Yes { v = 1 }
+                """, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+        Map<String, PartitionEvidence> all = compilation.db()
+                .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
+        assertNotNull(all, "the model under test compiles");
+        BorderAssessment first = all.get("f").boundaries().stream()
+                .filter(each -> each.label().equals("3 * a + 6 * b = 48")).findFirst()
+                .orElseThrow(() -> new AssertionError("no border at 48"));
+
+        assertEquals("51 < 3 * a + 6 * b <= 60", first.against(PointRole.IN),
+                "the run this line bounds stops at the next line, not at the end of the order");
+    }
+
+    /**
      * The same on the other side: an {@code OUT} point is inside the partition the border keeps out.
      *
      * <p>The border at twenty keeps the second partition out. Five is in the first, two partitions
