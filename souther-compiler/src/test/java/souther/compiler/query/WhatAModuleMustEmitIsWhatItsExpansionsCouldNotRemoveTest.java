@@ -16,9 +16,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Which recursive helpers a module has to process and emit, answered from what its expansions did.
  *
  * <p>Every tree the module is made of is expanded somewhere, and each expansion answers with the
- * recursions it could not remove. Joined and closed over the call graph, that is the set. The answer
- * it replaces was a prediction: a walk listing the places a module writes expressions, made before
- * any of those expansions ran, and it did not list {@code ensures}.
+ * recursions it could not remove. Joined, and the bodies of what they name expanded in turn until
+ * nothing new is named, that is the set. The answer it replaces was a prediction: a walk listing the
+ * places a module writes expressions, made before any of those expansions ran, and it did not list
+ * {@code ensures}.
  *
  * <p>The cases below are the ones the prediction was right about — a fold in a {@code let}, in an
  * {@code invariant}, in an example row, a recursion the module declared — and the one it was wrong

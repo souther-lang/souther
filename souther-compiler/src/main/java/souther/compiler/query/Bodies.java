@@ -1498,11 +1498,11 @@ public final class Bodies {
      * expressions is a second statement of what a module is made of, and the one that was here
      * answered that a rule reaching a fold needed nothing.
      *
-     * <p>Wider than {@link RecursiveHelperSigs}, and not a replacement for it. That one answers which
-     * helpers this module has taken on to process and emit, which is what a reader wanting a body
-     * needs; this one answers which names can be typed, which is what a reader holding a call needs.
-     * Kept apart because a signature for a helper nobody called costs an entry in a map, and a body
-     * for one costs a body that does not exist.
+     * <p>Wider than {@link RequiredRecursiveDefs}, and not a replacement for it. That one answers
+     * which helpers this module processes and emits, which is what a reader wanting a body needs;
+     * this one answers which names can be typed, which is what a reader holding a call needs. Kept
+     * apart because a signature for a helper nobody called costs an entry in a map, and a body for
+     * one costs a body that does not exist.
      *
      * <p>Keyed by the policy as {@link Expanding} is: the discharge representation leaves the
      * language's own operations standing rather than expanding them into the fold they become, so its
@@ -1539,8 +1539,8 @@ public final class Bodies {
      *
      * <p>Made of what the expansions did, not of a prediction about what they would do. Every tree
      * this module is made of is expanded somewhere, and each of those expansions answers with the
-     * recursions it could not remove ({@link Expansion}); this is those answers joined, closed over
-     * the call graph, and narrowed to what recurses.
+     * recursions it could not remove ({@link Expansion}); this is those answers joined, and the
+     * bodies of what they name expanded in turn until nothing new is named.
      *
      * <p>The seeds are the trees, and there are two kinds. A definition's body is expanded by {@link
      * LoweredBody}, which answers with what it left standing. A clause — a data's {@code invariant},
@@ -1549,10 +1549,17 @@ public final class Bodies {
      * walk that was here instead listed the places a module writes expressions and did not list
      * {@code ensures}, so a rule reaching a fold asked for no fold.
      *
-     * <p>The closure is the call graph's and is taken once. What a required helper's own body
-     * reaches is an edge of that graph, already there because the graph is built over every
-     * declaration in reach — so a helper reached only through a non-recursive one, and every member
-     * of a mutually-recursive group, arrive without a second round.
+     * <p>The closure is the expansion's, not the call graph's. A body reaches a recursion by
+     * applying it and by reading a value whose own body applies it, and only the first is a call —
+     * so a graph of calls answers about a narrower relation than the one that decides this, and a
+     * recursion behind a value is reached by the expansion and by nothing that could see it. Each
+     * required recursion is therefore expanded in its turn: it is emitted as a method, so its body
+     * is expanded on its own rather than into anything, and what that leaves standing is required
+     * too.
+     *
+     * <p>Being required and having been read are two things. A recursion this module declared is
+     * required before the walk begins, and its body still goes through it — a walk that took its
+     * result set for its work list would never read one.
      *
      * <p>A helper this module declared is here whether or not anything reaches it: its source is
      * this module's to check and to publish, which is not a question about use. Only what it did not

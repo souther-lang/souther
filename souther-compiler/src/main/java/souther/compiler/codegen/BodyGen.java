@@ -1927,13 +1927,16 @@ final class BodyGen {
          * names a standing call can hold follows from the declarations in reach; which methods are
          * emitted follows from what this module turned out to need. Typing against the second
          * answered that a rule reaching a fold had no fold to call, in a module whose only reach to
-         * one was that rule. A name a block captured wins over it, as it did before: the author
-         * wrote that one. */
+         * one was that rule.
+         *
+         * <p>Nothing is taken out of it for what a block captured. The two are looked up by what the
+         * name denotes — a behavior reaches what the author wrote, a helper or a library operation
+         * reaches what a call was left standing on — so one cannot stand where the other is asked
+         * for, and there is no precedence to arrange. Arranged anyway, by removing the captured
+         * spellings from these, a captured name that denoted a helper would have been deleted from
+         * the only map it could have been found in. */
         private Scope scope() {
-            Scope held = bound();
-            Map<String, Type> standing = new HashMap<>(ctx.standingCalls);
-            standing.keySet().removeAll(held.visible().keySet());
-            return held.reaching(standing);
+            return bound().reaching(ctx.standingCalls);
         }
 
         /** Emits a function value from its elaborated node: the parameter and result types are the

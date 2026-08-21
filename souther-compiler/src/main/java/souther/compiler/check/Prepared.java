@@ -442,13 +442,32 @@ public final class Prepared {
         return module();
     }
 
+    /**
+     * Everything this state answers with.
+     *
+     * <p>Not the projection alone. The tree carries what the module declared and what it writes; the
+     * definitions minted for its rows are beside it and are in no tree, so two states whose trees
+     * compare equal can still say different things about the rows. They do, and without touching the
+     * source: a row's operand is wrapped in the type the position it stands at contributes, and that
+     * position comes from a behavior's signature — which an edit to an imported module can change
+     * while this module's text stays as it was.
+     *
+     * <p>A state is a query's answer, and a store decides whether anything downstream has to be
+     * asked again by comparing the answer it recomputed with the one it held. An answer that leaves
+     * out what it answers with is one the store cannot tell has changed.
+     *
+     * <p>The correspondence between an operand and its method is left out on purpose: it is keyed on
+     * operand identity, over the very nodes the tree hands out, so it says nothing a tree and the
+     * definitions built from it do not already say.
+     */
     @Override
     public boolean equals(Object o) {
-        return o instanceof Prepared other && module().equals(other.module());
+        return o instanceof Prepared other && module().equals(other.module())
+                && rowDefs.equals(other.rowDefs);
     }
 
     @Override
     public int hashCode() {
-        return module().hashCode();
+        return module().hashCode() * 31 + rowDefs.hashCode();
     }
 }

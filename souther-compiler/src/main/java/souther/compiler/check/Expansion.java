@@ -15,12 +15,15 @@ import java.util.SequencedSet;
  * came from.
  *
  * <p>Only what this expansion met. A helper left standing has a body of its own that may reach
- * further recursions; following that is the call graph's ({@link HelperGraph#reachedFrom}), and a
- * caller that wants the closure asks for it there. Two answers, because what a tree holds and what
- * is reachable from what it holds are two questions, and only the first is this one's to know.
+ * further recursions; a caller that wants those expands that body and asks it the same question.
+ * Two answers, because what a tree holds and what is reachable from what it holds are two
+ * questions, and only the first is this one's to know — and the second is not a graph's to answer
+ * either, since a body reaches a recursion by reading a value as well as by calling it.
  *
- * <p>{@code standing} is a {@link SequencedSet} because the order is part of what it says: a reader
- * reporting one of a mutually-recursive group reports the one it reached first.
+ * <p>{@code standing} is a {@link SequencedSet} so that a walk over it happens in the order the
+ * expansion met them, which is what keeps a walk driven by several of these from depending on hash
+ * order. It is not what decides how anything is reported: two of these compare as sets, and a reader
+ * that reports in declaration order puts them in it.
  *
  * @param value what the expansion produced
  * @param standing every recursive helper it left a call to, in the order they were met
@@ -29,17 +32,5 @@ public record Expansion<T>(T value, SequencedSet<String> standing) {
 
     public Expansion {
         standing = Collections.unmodifiableSequencedSet(new LinkedHashSet<>(standing));
-    }
-
-    /** An expansion that left nothing standing — what a caller with nothing to expand answers. */
-    public static <T> Expansion<T> of(T value) {
-        return new Expansion<>(value, new LinkedHashSet<>());
-    }
-
-    /** The same value, with {@code more} joined to what this left standing. */
-    public Expansion<T> and(SequencedSet<String> more) {
-        SequencedSet<String> joined = new LinkedHashSet<>(standing);
-        joined.addAll(more);
-        return new Expansion<>(value, joined);
     }
 }
