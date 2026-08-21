@@ -27,14 +27,12 @@ search offered an assignment in the corner, the row was refused at construction,
 candidate was reported as every value having been tried, of a point another pair stands at.
 
 Conditioning the rules on an assignment was not missing. `FieldDomains` has taken a settled map since
-#479, and two searches in `partition` already used it: a record composed field by field, and a
-parameter chosen a position at a time. Both reached past the reading of the input into the reading of
-the declarations, both spelled a position the way the declaration does and translated it themselves,
-and one of them walked the positions again although the walk is what the reading of an input exists
-to own. The third search never found the capability and took the box.
+#479, and two searches in `partition` already used it: a representative value of a declaration
+composed field by field, and a row's value for one parameter chosen a position at a time. The third
+search never found the capability and took the box.
 
 So the capability existed and had no boundary. A search written without one either re-derives it or
-goes without, and the count so far is two and one.
+goes without.
 
 ## Decision
 
@@ -85,11 +83,16 @@ not depend on how much of the budget it spent.
 `Impossible` is sound because of the direction of that inclusion and not because the two are the
 same: nothing here claims the reading is exact.
 
-**Two callers have not moved.** `Partitions.composed` and `Generator.conditioned` still read the
-declarations again themselves. Both want a second answer of the same reading — how much a position
-must hold, beside where its values run — which this boundary does not carry. A test over the compiled
-classes names them, and names them as what has not been moved rather than as exceptions: a third way
-round the boundary fails it.
+**Two other readers condition a declaration, for two different reasons, and neither is this boundary
+not yet reached.** `Partitions.composed` builds a representative value of a declaration reached while
+producing a fixture: there is no behavior, no parameter and no path rooted at one, so its subject is
+the declaration and the declaration's own words are the right ones. `Generator` does have an input for
+its subject, and finds that input's positions with a walk of its own that descends to eight where the
+reading of an input stops at two — deliberately, since one stops where a report stops being about
+something an author would call one input and the other goes on until there is a value to build. Two
+walks answering "which positions are there" differently is a fault of its own, and deciding which
+depth owns which question is not what this boundary settles. A test over the compiled classes names
+both, with the reason each is there.
 
 ## Consequences
 

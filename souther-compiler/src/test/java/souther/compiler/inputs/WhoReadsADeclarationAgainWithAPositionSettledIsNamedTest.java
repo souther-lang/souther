@@ -20,39 +20,45 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
- * The rules reaching a behavior's input are read again, with a position settled, in one place.
+ * Everything that reads a declaration again with one of its positions settled is written down here.
  *
- * <p>Asking what the declarations leave once something is fixed is what every search over an input
- * needs, and each one that reached for it directly brought its own way of naming a position and its
- * own walk to find them. Three of them did: a record composed field by field, a parameter chosen a
- * position at a time, and a form solved for a level — and the third never found the capability at
- * all and walked the box around the positions instead, which is a set the rules have a corner cut
- * out of. That is the shape {@link Quantities} exists to stop, and it stops it only while the way
- * round it is closed.
+ * <p>Asking what the rules leave once something is fixed is what every search that builds a value
+ * needs, and a search that reaches for it directly brings its own way of naming a position. One that
+ * does not find it at all walks the box around the positions instead, which is a set the rules have
+ * a corner cut out of — and that is what {@link Quantities} exists to stop, for a search whose
+ * subject is a behavior's input. It stops it only while what may reach past it is known.
  *
- * <p><b>Read off the compiled classes.</b> What is checked is who calls the conditioning factory,
- * which no way of spelling the call can dress up as something else.
+ * <p><b>A register, and not a list of exceptions.</b> Each name below is here for its own reason,
+ * and the reasons are not the same one. Two of them are where the subject is not an input at all;
+ * one is where the subject is an input and the walk that finds its positions is not this package's.
+ * Adding a name is a new place the question is asked from, which is worth knowing whether or not it
+ * turns out to be right.
+ *
+ * <p><b>Read off the compiled classes.</b> What is checked is who calls the conditioning member,
+ * told apart from reading a declaration for the first time by what it takes rather than by its
+ * name.
  *
  * <p><b>Both directions.</b> A check that only counts trespassers passes when it reads nothing at
  * all, so what is expected to be found is named as well.
- *
- * <p><b>The list below is what has not been moved yet, and not a list of exceptions.</b> Two callers
- * remain, and both want a second answer of the same reading — how much a position must hold, beside
- * where its values run — which is a question this boundary does not carry today. Striking one off is
- * what moving it looks like; adding one is a third way round the boundary and fails here.
  */
-class OnlyTheReadingOfAnInputConditionsItsDeclarationsTest {
+class WhoReadsADeclarationAgainWithAPositionSettledIsNamedTest {
 
     private static final String CONDITIONS = "souther.compiler.check.FieldDomains";
 
-    /** Who may read the declarations again with a position settled. */
+    /** Who reads a declaration again with one of its positions settled, and why each of them does. */
     private static final Set<String> MAY_CONDITION = Set.of(
-            // The reading of an input, which is what the boundary is.
+            // The reading of an input asking on the input's behalf, which is what the boundary is.
             "souther.compiler.inputs.PlacedRules",
-            // A record composed field by field, which also asks how much each field must hold.
+            // A representative value of a declaration, composed field by field. Its subject is the
+            // declaration and not an input — no behavior, no parameter, no path rooted at one — so
+            // the declaration's own words are the right ones and there is nothing to translate.
             "souther.compiler.partition.Partitions",
-            // A parameter chosen a position at a time, which asks the same second question and
-            // walks the positions itself.
+            // A row's value for one parameter, chosen a position at a time. Its subject is an input
+            // and it finds the positions with a walk of its own, which descends four times as far as
+            // the reading of an input does: that reading stops where a report stops being about
+            // something an author would call one input, and this one goes on until there is a value
+            // to build. Two walks answering "which positions are there" differently is a fault of
+            // its own and is not the one the boundary is about.
             "souther.compiler.partition.Generator");
 
     @Test
