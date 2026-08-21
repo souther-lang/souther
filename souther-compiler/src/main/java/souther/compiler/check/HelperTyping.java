@@ -46,7 +46,7 @@ public final class HelperTyping {
      * {@code depends on} checks are the caller's (the helper is inlined there), so they are not
      * repeated here.
      */
-    static void checkHelpers(HelperInliner inliner, Symbols symbols,
+    static void checkHelpers(HelperInliner inliner, Map<String, Hir.FnDef> toCheck, Symbols symbols,
                                      Map<ValueName.Behavior, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns,
                                      Map<String, Hir.Expr> loweredBodies,
                                      TypeChecker.Elaborated elaborated) {
@@ -56,7 +56,7 @@ public final class HelperTyping {
         Map<ValueName, Type> settledTypes = new HashMap<>();
         Map<ValueName, Object> settledConstants = new HashMap<>();
         Preserved standing = Preserved.valuesAlreadySettled(settledTypes::get);
-        for (Hir.FnDef h : valuesBeforeTheValuesThatNameThem(inliner)) {
+        for (Hir.FnDef h : valuesBeforeTheValuesThatNameThem(toCheck)) {
             boolean recursive = recursiveHelperFns.containsKey(h.name());
             // Where this definition stands, or null where it stands nowhere: the one thing every
             // rule below that is about a row's operand asks, read off the definition the rule is
@@ -244,8 +244,7 @@ public final class HelperTyping {
      * written, each copying the other, which is the answer this pass gave before there was an order
      * at all.
      */
-    private static List<Hir.FnDef> valuesBeforeTheValuesThatNameThem(HelperInliner inliner) {
-        Map<String, Hir.FnDef> held = inliner.held();
+    private static List<Hir.FnDef> valuesBeforeTheValuesThatNameThem(Map<String, Hir.FnDef> held) {
         Map<String, Set<String>> names = new LinkedHashMap<>();
         for (Map.Entry<String, Hir.FnDef> e : held.entrySet()) {
             if (!(e.getValue().body() instanceof Hir.FnBody.Written written)) {
