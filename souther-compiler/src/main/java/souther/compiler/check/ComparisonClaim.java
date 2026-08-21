@@ -76,8 +76,8 @@ public sealed interface ComparisonClaim {
         return of(op) instanceof Cut;
     }
 
-    /** Whether {@code op} places anything at all. */
+    /** Whether {@code op} places anything at all, which is what a comparison does. */
     static boolean places(Hir.BinOp op) {
-        return !(of(op) instanceof Nothing);
+        return op.compares();
     }
 }
