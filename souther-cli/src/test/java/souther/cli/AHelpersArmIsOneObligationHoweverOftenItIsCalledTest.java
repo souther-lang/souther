@@ -181,12 +181,19 @@ class AHelpersArmIsOneObligationHoweverOftenItIsCalledTest {
     }
 
     /**
-     * The case a position could not answer. A helper of another module has its body stamped with the
-     * call site, so two copies of one of its arms are written at two different places — and a row
-     * through either is a row through the arm.
+     * And the case that is not one arm, though it is one fork.
+     *
+     * <p>{@code List.filter} writes one fork and both calls are copies of it, so the construct that
+     * wrote them is the same. What each decides is not: the fork applies the closure it was handed,
+     * and these two were handed different ones. So the copies are separately owed, and a row through
+     * the first says nothing about the second.
+     *
+     * <p>Which is the line between this and the arms above. A helper's own fork tests the helper's
+     * own condition however many times it is spliced in; a combinator's tests what its call site
+     * supplied.
      */
     @Test
-    void twoCallsOfOneLibraryHelperOweItsArmsOnceAndCoverThemBetweenThem() throws Exception {
+    void twoCallsOfOneCombinatorOweTheirArmsApart() throws Exception {
         String report = reportOn("""
                 module example.two
 
@@ -209,10 +216,15 @@ class AHelpersArmIsOneObligationHoweverOftenItIsCalledTest {
                     | "one kept" : ([ Item { mark = Kept } ]) -> Count(1)
                 """);
 
-        // The body writes no fork of its own. `List.filter` writes one, and the row keeps its element
-        // at the first call and drops it at the second — so between them both arms were taken.
-        assertTrue(report.contains("branch      2/2"),
-                () -> "one fork, and the row went both ways through it:\n" + report);
+        // The row keeps its element at the first call and drops it at the second, so it takes one
+        // arm of each. The two it did not take are owed, and each is named at the call whose
+        // predicate it belongs to.
+        assertTrue(report.contains("branch      2/4"),
+                () -> "one fork, two calls, and four arms to cover:\n" + report);
+        assertTrue(report.contains("no row goes through `else` (`List.filter`, reached at 15:23)"),
+                () -> "the first call is never denied:\n" + report);
+        assertTrue(report.contains("no row goes through `then` (`List.filter`, reached at 16:23)"),
+                () -> "and the second is never held:\n" + report);
     }
 
     /**

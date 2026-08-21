@@ -308,7 +308,8 @@ class AnArmNothingReachesIsNotOwedARowTest {
                 null, index, index,
                 new CoverageSites.Obligation("classify",
                         CoverageOrigin.written("t", index,
-                                souther.compiler.types.CoverageConstruct.IF), 0));
+                                souther.compiler.types.CoverageConstruct.IF), 0,
+                        java.util.List.of()));
     }
 
     /**
@@ -331,7 +332,7 @@ class AnArmNothingReachesIsNotOwedARowTest {
     void aProvenArmLeavesTheDenominator() {
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured(
                 List.of(arm(0), arm(1)), Set.of(1),
-                proving().asRunWith(Set.of(1)), MeasurementStatus.COMPLETE);
+                proving().asRunWith(Set.of(1)), MeasurementStatus.COMPLETE, "t");
 
         assertEquals(List.of(1), measured.all().stream().map(CoverageSites.Site::index).toList());
         assertEquals(Set.of(1), measured.covered());
@@ -352,7 +353,7 @@ class AnArmNothingReachesIsNotOwedARowTest {
         // fold the measures read, so what a run does to a proof is decided in one place.
         PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(0, 1));
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured(
-                List.of(arm(0), arm(1)), Set.of(0, 1), asRun, MeasurementStatus.COMPLETE);
+                List.of(arm(0), arm(1)), Set.of(0, 1), asRun, MeasurementStatus.COMPLETE, "t");
 
         assertEquals(Set.of(0), measured.contradicted(),
                 "arm 0 was proven unreachable and a row went through it");

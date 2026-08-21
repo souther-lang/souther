@@ -12,24 +12,21 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * What the arms of a library combinator say about the predicates an author handed it, which is
- * nothing — and what they are counted as saying today, which is everything.
+ * A row through one {@code List.filter} establishes nothing about the {@code List.filter} beside it.
  *
- * <p>A row through one {@code List.filter} establishes nothing about the {@code List.filter} beside
- * it. The two are one fork of one declaration inlined twice, and what each decides is the closure it
- * was handed: they part different values and are separately owed. The obligation an arm is counted
- * under is keyed by the construct that wrote the fork, and the fork was written in
- * {@code souther.list} — so both calls come out under one key, and a row that reached either marks
- * both.
+ * <p>The two are one fork of one declaration inlined twice, and what each decides is the closure it
+ * was handed: they part different values and are separately owed. Counted under the construct that
+ * wrote the fork alone — which stands in {@code souther.list} — both calls came out under one key,
+ * and a row that reached either marked both.
+ *
+ * <p>Which is right for the case that key was made for, and only that one. A non-recursive helper is
+ * spliced into each body that calls it and the copies are one arm the author wrote, because the
+ * condition is the helper's own. A combinator's fork applies a closure the call site supplied, so
+ * what tells its copies apart is which predicate each was handed — and that is what an arm is
+ * counted under beside the fork itself.
  *
  * <p>The model below runs the first predicate and never runs the second: {@code b} is empty, so the
- * fork under it is not entered once. It is reported as every arm covered.
- *
- * <p><b>What this test states is the defect and not the rule.</b> It is written so that the numbers
- * cannot move in silence, and the day the obligation an arm is counted under tells the two calls
- * apart, this fails and is rewritten to say the rule instead. Read as an expectation, it says a
- * behavior may be reported complete over a predicate nothing ran, which is what it exists to keep
- * visible until that is untrue.
+ * fork under it is not entered once. It used to be reported as every arm covered.
  */
 class AnArmOfALibraryForkIsNotTheAuthorsPredicateTest {
 
@@ -67,28 +64,60 @@ class AnArmOfALibraryForkIsNotTheAuthorsPredicateTest {
         return twice;
     }
 
-    /**
-     * Four occurrences and two keys: the two calls share both of the fork's arms.
-     *
-     * <p>This is the whole of it. Everything below follows from the quotient being taken over a key
-     * that does not hold which closure the fork was deciding.
-     */
+    /** Four occurrences and four keys: each call's arms are its own to cover. */
     @Test
-    void twoCallsOfOneCombinatorShareTheirArms() {
+    void twoCallsOfOneCombinatorDoNotShareTheirArms() {
         Adequacy.BranchEvidence twice = armsOfTwice();
         assertEquals(4, twice.all().size(), "each call is emitted and probed on its own");
-        assertEquals(2, twice.obligations(),
-                "and the two calls are counted under one pair of keys, which is the defect");
+        assertEquals(4, twice.obligations(),
+                "and each is a thing to cover, since each decides a different predicate");
     }
 
-    /** So the predicate that never ran is reported covered, and nothing is named unreached. */
+    /** So the predicate nothing ran is named, rather than marked by the row beside it. */
     @Test
-    void aPredicateNothingRanIsReportedCovered() {
+    void aPredicateNothingRanIsNamed() {
         Adequacy.BranchEvidence twice = armsOfTwice();
-        assertEquals(twice.obligations(), twice.coveredObligations(),
-                "every key is marked by the row that reached the first call only");
-        assertTrue(twice.unreached().isEmpty(),
-                () -> "and nothing is named unreached, though `y -> y.age.value >= 65` was not"
-                        + " entered once: " + twice.unreached());
+        assertEquals(2, twice.coveredObligations(),
+                "the row reached the first call's two arms and no others");
+        assertEquals(2, twice.unreached().size(),
+                () -> "and the second call's are named: " + twice.unreached());
+    }
+
+    /**
+     * And a helper of the author's own still counts its copies as one.
+     *
+     * <p>The other side of the rule, and the case the key was made for. The condition is the
+     * helper's own comparison however many times it is spliced in, so a row through one call
+     * establishes what a row through the next would.
+     */
+    @Test
+    void aHelpersOwnForkIsOneArmHoweverManyTimesItIsSplicedIn() {
+        Compilation compilation = Compilation.ofSource("""
+                module example.people
+
+                data Age = Int
+                    invariant value >= 0
+                data Person =
+                    { age: Age
+                    }
+                data Verdict = Yes | No
+
+                let grown (n: Age): Bool = if n.value >= 18 then true else false
+
+                behavior both : (a: Person, b: Person) -> Verdict
+                let both (a, b) = if grown(a.age) && grown(b.age) then Yes else No
+
+                example both
+                    | "both grown" : (Person { age = Age(20) }, Person { age = Age(30) }) -> Yes
+                """, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+        Adequacy.BranchEvidence both = compilation.db()
+                .ask(new Adequacy.BranchCoverage(MODULE)).value().get("both");
+        assertNotNull(both, "the model under test compiles");
+
+        assertTrue(both.all().size() > both.obligations(),
+                () -> "the helper is spliced in twice and its arms are one: "
+                        + both.all().size() + " occurrences, " + both.obligations() + " keys");
     }
 }
