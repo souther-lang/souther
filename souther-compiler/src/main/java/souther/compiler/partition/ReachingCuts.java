@@ -1,12 +1,9 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.ComparisonClaim;
-import souther.compiler.ast.Hir;
 import souther.compiler.check.Symbols;
-import souther.compiler.core.Core;
 import souther.compiler.coverage.ComparisonOccurrence;
 import souther.compiler.coverage.CoverageSites;
-import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.NumericDomain;
@@ -89,19 +86,25 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<ReachingCuts.Cut>> byC
      * built out of. Anything else is where the arithmetic stops, and it contributes nothing rather
      * than being guessed at.
      */
-    static void collect(Core condition, List<Cut> before, CoverageSites.Plan plan,
-                        InputReads reads, Symbols symbols, Collected out) {
-        if (condition instanceof Core.Binary joined && combines(joined.op())) {
-            collect(joined.left(), before, plan, reads, symbols, out);
-            // What reaching the right operand says: under `&&` the left held, under `||` it did not.
-            collect(joined.right(),
-                    and(before, stating(joined.left(), joined.op() == Hir.BinOp.AND, reads,
-                            symbols)),
-                    plan, reads, symbols, out);
-            return;
-        }
-        if (condition instanceof Core.Binary comparison) {
-            plan.comparisonAt(comparison).ifPresent(site -> out.reached(site, before));
+    static void collect(Condition condition, List<Cut> before, CoverageSites.Plan plan,
+                        Symbols symbols, Collected out) {
+        switch (condition) {
+            case Condition.Both both -> {
+                collect(both.left(), before, plan, symbols, out);
+                collect(both.right(), and(before, stating(both.left(), true, symbols)), plan,
+                        symbols, out);
+            }
+            case Condition.Either either -> {
+                collect(either.left(), before, plan, symbols, out);
+                collect(either.right(), and(before, stating(either.left(), false, symbols)), plan,
+                        symbols, out);
+            }
+            case Condition.Compares one ->
+                    plan.comparisonAt(one.at()).ifPresent(site -> out.reached(site, before));
+            case Condition.NotRead _ -> {
+                // Nothing runs here as far as this reading is concerned, so nothing is filed and
+                // nothing is established for whatever stands beside it.
+            }
         }
     }
 
@@ -120,23 +123,23 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<ReachingCuts.Cut>> byC
      * cuts and is not approximated into one: {@code A && B} being false says one of them failed and
      * names neither, and narrowing on either would exclude rows that arrive.
      */
-    static List<Cut> stating(Core node, boolean holding, InputReads reads, Symbols symbols) {
-        if (node instanceof Core.Binary joined && combines(joined.op())) {
-            if ((joined.op() == Hir.BinOp.AND) != holding) {
-                return List.of();
+    static List<Cut> stating(Condition node, boolean holding, Symbols symbols) {
+        return switch (node) {
+            // A conjunction coming out true is both its operands true, and a disjunction coming out
+            // false is both false. The other two ways round say a disjunction of things, which is
+            // not a list of cuts and is not approximated into one: `A && B` being false says one of
+            // them failed and names neither, and narrowing on either would exclude rows that arrive.
+            case Condition.Both both when holding ->
+                    and(stating(both.left(), true, symbols), stating(both.right(), true, symbols));
+            case Condition.Either either when !holding ->
+                    and(stating(either.left(), false, symbols),
+                            stating(either.right(), false, symbols));
+            case Condition.Compares one -> {
+                Cut cut = of(one, holding, symbols);
+                yield cut == null ? List.of() : List.of(cut);
             }
-            return and(stating(joined.left(), holding, reads, symbols),
-                    stating(joined.right(), holding, reads, symbols));
-        }
-        if (!(node instanceof Core.Binary comparison)) {
-            return List.of();
-        }
-        Cut one = of(comparison, holding, reads, symbols);
-        return one == null ? List.of() : List.of(one);
-    }
-
-    private static boolean combines(Hir.BinOp op) {
-        return op == Hir.BinOp.AND || op == Hir.BinOp.OR;
+            default -> List.of();
+        };
     }
 
     /**
@@ -147,9 +150,8 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<ReachingCuts.Cut>> byC
      * second reading of what a comparison says is a second thing to keep in step with how a border
      * is drawn, and the two disagreeing is a region that excludes the very level the border is at.
      */
-    private static Cut of(Core.Binary comparison, boolean holding, InputReads reads,
-                          Symbols symbols) {
-        AffineReading read = AffineReading.of(comparison, reads, symbols);
+    private static Cut of(Condition.Compares comparison, boolean holding, Symbols symbols) {
+        AffineReading read = AffineReading.of(comparison.at(), comparison.reads(), symbols);
         if (read == null) {
             return null;
         }

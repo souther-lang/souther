@@ -235,6 +235,75 @@ class ARowForABorderIsSearchedForInTheRegionThatReachesItTest {
         }
     }
 
+    /** The same behavior with {@code helpers} beside it and {@code body} for a body. */
+    private static String checkout(String helpers, String body) {
+        return """
+                module example.checkout
+
+                data Small = Int
+                    invariant value >= 0
+                    invariant value <= 20
+                data Large = Int
+                    invariant value >= 0
+                    invariant value <= 10
+
+                data Rejected = { reason: Int }
+                data Order = { total: Int }
+                data Result = Rejected | Order
+                %s
+                behavior checkout : (x: Small, y: Large) -> Result
+                    constructs Rejected, Order
+                let checkout (x, y) = {
+                %s
+                    Order { total = x.value }
+                }
+
+                example checkout
+                    | "ok" : (Small(1), Large(1)) -> Order { total = 1 }
+                """.formatted(helpers, body);
+    }
+
+    /**
+     * Moving a comparison into a helper does not widen what stands beside it.
+     *
+     * <p>An expanded helper binds the call's argument to its own parameter, so what stands in the
+     * condition is a binding around the comparison rather than the comparison. A reading that
+     * matched on the shape in front of it stopped there — and a rewrite that changes nothing about
+     * what the model says took the region the guard beside it is searched in back out to everything
+     * the positions could ever hold.
+     *
+     * <p>What the helper's own comparison is owed is a separate question and is not asked here: the
+     * plan numbers the conditions of a body and not an expanded helper's, so no row can be shown to
+     * have reached it and no line is drawn on it
+     * ({@code AComparisonInsideAHelperRaisesNothingTest}). Establishing a fact and owing a row at
+     * one are not the same thing, and only the second wants a site.
+     */
+    @Test
+    void movingAComparisonIntoAHelperDoesNotWidenWhatStandsBesideIt() {
+        String inline = checkout("", "    guard y.value <= 6 && %s else Rejected { reason = 5 }"
+                .formatted(THE_FORM));
+        String extracted = checkout("\nlet atMostSix (y: Large): Bool = y.value <= 6\n",
+                "    guard atMostSix(y) && %s else Rejected { reason = 5 }".formatted(THE_FORM));
+
+        for (String level : List.of("x + 2 * y = 16", "x + 2 * y = 17")) {
+            assertEquals(written(built(inline, level).row()),
+                    written(built(extracted, level).row()),
+                    "the same condition, one comparison of it named, at " + level);
+            assertTrue(largeIn(built(extracted, level).row()) <= 6,
+                    "and what the helper says holds where the form's line is searched for");
+        }
+    }
+
+    /** The same, of the operand a disjunction reaches only where the first failed. */
+    @Test
+    void movingTheFirstOperandOfADisjunctionIntoAHelperKeepsWhatItFailing() {
+        String extracted = checkout("\nlet atLeastSeven (y: Large): Bool = y.value >= 7\n",
+                "    guard atLeastSeven(y) || %s else Rejected { reason = 5 }".formatted(THE_FORM));
+
+        assertTrue(largeIn(built(extracted, "x + 2 * y = 16").row()) <= 6,
+                "the second operand runs where the named comparison failed");
+    }
+
     /**
      * The second operand of a disjunction runs where the first failed.
      *
