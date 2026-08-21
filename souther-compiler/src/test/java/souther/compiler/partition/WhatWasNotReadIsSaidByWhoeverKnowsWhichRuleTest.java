@@ -62,7 +62,7 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
 
         PartitionEvidence.NotRead.ARule rule =
                 assertInstanceOf(PartitionEvidence.NotRead.ARule.class, said);
-        assertInstanceOf(souther.compiler.check.RuleRef.Guard.class, rule.rule());
+        assertInstanceOf(souther.compiler.check.RuleRef.Comparison.class, rule.rule());
         assertEquals(List.of(Adequacy.Kind.PARTITION_NOT_READ), kinds(A_RULE));
     }
 

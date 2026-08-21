@@ -58,12 +58,12 @@ public sealed interface RuleRef {
      * @param origin   which construct of which module the author wrote, which is what tells one
      *                 comparison from another wherever it is met
      */
-    record Guard(String behavior, souther.compiler.types.CoverageOrigin origin)
+    record Comparison(String behavior, souther.compiler.types.CoverageOrigin origin)
             implements RuleRef {
 
-        public Guard {
+        public Comparison {
             if (behavior == null || origin == null) {
-                throw new IllegalArgumentException("a guard's rule is one of its comparisons");
+                throw new IllegalArgumentException("a comparison of a body is one of some behavior's");
             }
         }
     }
@@ -123,7 +123,7 @@ public sealed interface RuleRef {
             // author called it. Never rendered to a reader on its own: a rule with no name gets a
             // sentence of its own, and the catalog holds those words in every language. What reaches
             // this is a caller that wanted something to call the rule anyway.
-            case Guard _ -> "the comparison";
+            case Comparison _ -> "the comparison";
         };
     }
 }

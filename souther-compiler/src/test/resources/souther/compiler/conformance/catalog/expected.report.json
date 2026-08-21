@@ -417,7 +417,7 @@
           } ]
         }, {
           "axis" : "出荷する/指示.重量",
-          "origin" : "guard@1:71:5",
+          "origin" : "guard@1:71:17",
           "kind" : "at_value",
           "value" : "30000",
           "items" : [ {

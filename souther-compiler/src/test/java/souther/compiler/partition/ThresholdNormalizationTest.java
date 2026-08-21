@@ -211,8 +211,8 @@ class ThresholdNormalizationTest {
         // evaluated on the way to either arm, and the comparison behind it only on the way to the
         // one where the whole condition held.
         assertEquals(1, compound.thresholds().size(), compound.thresholds().toString());
-        assertEquals(OriginRef.GuardOrigin.Witness.THEN,
-                ((OriginRef.GuardOrigin) compound.thresholds().get(0).origin()).witness());
+        assertEquals(OriginRef.ComparisonOrigin.Witness.THEN,
+                ((OriginRef.ComparisonOrigin) compound.thresholds().get(0).origin()).witness());
     }
 
     @Test
@@ -341,6 +341,6 @@ class ThresholdNormalizationTest {
 
         assertEquals(2, at10.origins().size(), "an invariant and a guard both drew it");
         assertTrue(at10.origins().stream().anyMatch(o -> o instanceof OriginRef.InvariantOrigin));
-        assertTrue(at10.origins().stream().anyMatch(o -> o instanceof OriginRef.GuardOrigin));
+        assertTrue(at10.origins().stream().anyMatch(o -> o instanceof OriginRef.ComparisonOrigin));
     }
 }

@@ -201,7 +201,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     void aFindingNamesTheComparisonThatWentUnread() {
         UnreadRule said = read("p: Pair", "Int.multiply(p.x, p.x) < 10").unread().getFirst();
 
-        assertInstanceOf(RuleRef.Guard.class, said.rule());
+        assertInstanceOf(RuleRef.Comparison.class, said.rule());
         RuleCitation.WrittenAt cited = assertInstanceOf(RuleCitation.WrittenAt.class, said.cited());
         assertEquals(CoverageConstruct.IF, cited.construct(),
                 "a rule with no name is found by the construct it is written in");

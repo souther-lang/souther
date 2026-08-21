@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  */
 class WhichArmWitnessesAComparisonIsPerComparisonTest {
 
-    private static Map<String, OriginRef.GuardOrigin.Witness> witnesses(String condition) {
+    private static Map<String, OriginRef.ComparisonOrigin.Witness> witnesses(String condition) {
         String source = """
                 module example.nested
 
@@ -62,10 +62,10 @@ class WhichArmWitnessesAComparisonIsPerComparisonTest {
         CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
         GuardThresholds.Guards guards = GuardThresholds.of("pick", body, plan,
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("pick"), symbols);
-        Map<String, OriginRef.GuardOrigin.Witness> out = new LinkedHashMap<>();
+        Map<String, OriginRef.ComparisonOrigin.Witness> out = new LinkedHashMap<>();
         for (Threshold each : guards.thresholds()) {
             out.put(each.path().toString(),
-                    ((OriginRef.GuardOrigin) each.origin()).witness());
+                    ((OriginRef.ComparisonOrigin) each.origin()).witness());
         }
         return out;
     }
@@ -73,16 +73,16 @@ class WhichArmWitnessesAComparisonIsPerComparisonTest {
     /** A conjunction: the first is proved by either arm, the rest by the arm it held on. */
     @Test
     void aConjunctionLeavesTheRestToTheArmItHeldOn() {
-        assertEquals(Map.of("r.a", OriginRef.GuardOrigin.Witness.BOTH,
-                        "r.b", OriginRef.GuardOrigin.Witness.THEN),
+        assertEquals(Map.of("r.a", OriginRef.ComparisonOrigin.Witness.BOTH,
+                        "r.b", OriginRef.ComparisonOrigin.Witness.THEN),
                 witnesses("r.a >= 0 && r.b >= 0"));
     }
 
     /** A disjunction: the arm it did not hold on. */
     @Test
     void aDisjunctionLeavesTheRestToTheOtherArm() {
-        assertEquals(Map.of("r.a", OriginRef.GuardOrigin.Witness.BOTH,
-                        "r.b", OriginRef.GuardOrigin.Witness.ELSE),
+        assertEquals(Map.of("r.a", OriginRef.ComparisonOrigin.Witness.BOTH,
+                        "r.b", OriginRef.ComparisonOrigin.Witness.ELSE),
                 witnesses("r.a >= 0 || r.b >= 0"));
     }
 
@@ -92,18 +92,18 @@ class WhichArmWitnessesAComparisonIsPerComparisonTest {
      */
     @Test
     void aDisjunctionInsideAConjunctionKeepsWhatItsPlaceProves() {
-        assertEquals(Map.of("r.a", OriginRef.GuardOrigin.Witness.BOTH,
-                        "r.b", OriginRef.GuardOrigin.Witness.THEN,
-                        "r.c", OriginRef.GuardOrigin.Witness.NEITHER),
+        assertEquals(Map.of("r.a", OriginRef.ComparisonOrigin.Witness.BOTH,
+                        "r.b", OriginRef.ComparisonOrigin.Witness.THEN,
+                        "r.c", OriginRef.ComparisonOrigin.Witness.NEITHER),
                 witnesses("r.a >= 0 && (r.b >= 0 || r.c >= 0)"));
     }
 
     /** And a disjunction under a conjunction leaves its own second operand to neither arm. */
     @Test
     void aConjunctionOverADisjunctionKeepsWhatItsPlaceProves() {
-        assertEquals(Map.of("r.a", OriginRef.GuardOrigin.Witness.BOTH,
-                        "r.b", OriginRef.GuardOrigin.Witness.NEITHER,
-                        "r.c", OriginRef.GuardOrigin.Witness.THEN),
+        assertEquals(Map.of("r.a", OriginRef.ComparisonOrigin.Witness.BOTH,
+                        "r.b", OriginRef.ComparisonOrigin.Witness.NEITHER,
+                        "r.c", OriginRef.ComparisonOrigin.Witness.THEN),
                 witnesses("(r.a >= 0 || r.b >= 0) && r.c >= 0"));
     }
 
@@ -116,18 +116,18 @@ class WhichArmWitnessesAComparisonIsPerComparisonTest {
      */
     @Test
     void aConjunctionInsideADisjunctionKeepsWhatItsPlaceProves() {
-        assertEquals(Map.of("r.a", OriginRef.GuardOrigin.Witness.BOTH,
-                        "r.b", OriginRef.GuardOrigin.Witness.ELSE,
-                        "r.c", OriginRef.GuardOrigin.Witness.NEITHER),
+        assertEquals(Map.of("r.a", OriginRef.ComparisonOrigin.Witness.BOTH,
+                        "r.b", OriginRef.ComparisonOrigin.Witness.ELSE,
+                        "r.c", OriginRef.ComparisonOrigin.Witness.NEITHER),
                 witnesses("r.a >= 0 || (r.b >= 0 && r.c >= 0)"));
     }
 
     /** And a conjunction over a disjunction, where the last operand is the one the failure reaches. */
     @Test
     void aDisjunctionOverAConjunctionKeepsWhatItsPlaceProves() {
-        assertEquals(Map.of("r.a", OriginRef.GuardOrigin.Witness.BOTH,
-                        "r.b", OriginRef.GuardOrigin.Witness.NEITHER,
-                        "r.c", OriginRef.GuardOrigin.Witness.ELSE),
+        assertEquals(Map.of("r.a", OriginRef.ComparisonOrigin.Witness.BOTH,
+                        "r.b", OriginRef.ComparisonOrigin.Witness.NEITHER,
+                        "r.c", OriginRef.ComparisonOrigin.Witness.ELSE),
                 witnesses("(r.a >= 0 && r.b >= 0) || r.c >= 0"));
     }
 }

@@ -27,7 +27,7 @@ import java.util.List;
 final class BoundaryComparisons {
 
     /** One comparison a line may be drawn on, and which arms of the fork prove it was evaluated. */
-    record Placed(Core.Binary comparison, OriginRef.GuardOrigin.Witness witness) {}
+    record Placed(Core.Binary comparison, OriginRef.ComparisonOrigin.Witness witness) {}
 
     /**
      * The comparisons of {@code iff}'s condition, each with what its own place leaves as evidence.
@@ -75,15 +75,15 @@ final class BoundaryComparisons {
      */
     private record Reached(boolean onThen, boolean onElse, boolean trueThen, boolean falseElse) {
 
-        OriginRef.GuardOrigin.Witness witness() {
+        OriginRef.ComparisonOrigin.Witness witness() {
             if (onThen && onElse) {
-                return OriginRef.GuardOrigin.Witness.BOTH;
+                return OriginRef.ComparisonOrigin.Witness.BOTH;
             }
             if (onThen) {
-                return OriginRef.GuardOrigin.Witness.THEN;
+                return OriginRef.ComparisonOrigin.Witness.THEN;
             }
-            return onElse ? OriginRef.GuardOrigin.Witness.ELSE
-                    : OriginRef.GuardOrigin.Witness.NEITHER;
+            return onElse ? OriginRef.ComparisonOrigin.Witness.ELSE
+                    : OriginRef.ComparisonOrigin.Witness.NEITHER;
         }
     }
 

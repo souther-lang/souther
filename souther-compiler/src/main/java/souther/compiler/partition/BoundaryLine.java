@@ -50,7 +50,7 @@ public record BoundaryLine(BoundaryTarget target, Drawing drawing) {
      *                       stays apart from the bare one it narrows
      */
     public record Drawing(RuleRef rule, boolean valueBelongsBelow,
-                          OriginRef.GuardOrigin.Witness witness, boolean holdsAtTheValue,
+                          OriginRef.ComparisonOrigin.Witness witness, boolean holdsAtTheValue,
                           boolean singles, List<TypeSymbol> narrowedWithin) {
 
         public Drawing {
@@ -65,7 +65,7 @@ public record BoundaryLine(BoundaryTarget target, Drawing drawing) {
 
     private static Drawing drawnBy(OriginRef origin) {
         return switch (origin) {
-            case OriginRef.GuardOrigin g -> new Drawing(g.rule(), g.valueBelongsBelow(),
+            case OriginRef.ComparisonOrigin g -> new Drawing(g.rule(), g.valueBelongsBelow(),
                     g.witness(), g.holdsAtTheValue(), g.singles(), List.of());
             case OriginRef.EnsuresOrigin e -> new Drawing(e.rule(), e.valueBelongsBelow(),
                     null, e.holdsAtTheValue(), e.singles(), List.of());

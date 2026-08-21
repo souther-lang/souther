@@ -1221,7 +1221,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             }
             // The comparison, by the behavior it is written in and the construct it was numbered
             // as. The numbering starts at zero in each source, so the source is part of it.
-            case souther.compiler.check.RuleRef.Guard it -> {
+            case souther.compiler.check.RuleRef.Comparison it -> {
                 into.put("declaredIn", it.origin().module());
                 into.put("behavior", it.behavior());
                 into.put("ordinal", it.origin().ordinal());
@@ -1241,7 +1241,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return switch (rule) {
             case souther.compiler.check.RuleRef.Invariant _ -> "invariant";
             case souther.compiler.check.RuleRef.Ensures _ -> "ensures";
-            case souther.compiler.check.RuleRef.Guard _ -> "guard";
+            case souther.compiler.check.RuleRef.Comparison _ -> "guard";
         };
     }
 

@@ -52,7 +52,7 @@ import java.util.List;
  * carries the site its own value is recorded at, which is what a line is measured against. What the
  * shape of the condition does decide is which arm a row that reached the comparison can be in, and
  * that is a question about the classes either side of the line: it is carried as a {@link OriginRef
- * .GuardOrigin.Witness}.
+ * .ComparisonOrigin.Witness}.
  *
  * <p>Three readers are kept apart and are easy to run together. Which comparisons exist is
  * {@link souther.compiler.coverage.ComparisonCatalog}'s answer and which of them a line may be drawn
@@ -69,7 +69,7 @@ public final class GuardThresholds {
      * <p>One walk, because the operator is known once. Which side of the line each arm takes is not
      * recoverable from a {@link Threshold} — {@code x <= c} and {@code x > c} both put {@code c} on
      * the low side and their {@code then} arms are opposite halves — so what a row reaching a
-     * comparison can be in is carried as {@link OriginRef.GuardOrigin.Witness} where the operator
+     * comparison can be in is carried as {@link OriginRef.ComparisonOrigin.Witness} where the operator
      * is still in hand, and which values arrive is asked of the reading of the whole body.
      */
     public record Guards(List<Threshold> thresholds,
@@ -227,7 +227,7 @@ public final class GuardThresholds {
             // behavior and the construct; where a reader is sent is the fork it stands in and the
             // place it is written. Neither comes from the plan: a condition both of whose arms can
             // record nothing is numbered nowhere, and a model states its rules regardless.
-            RuleRef.Guard rule = new RuleRef.Guard(behavior, binary.origin());
+            RuleRef.Comparison rule = new RuleRef.Comparison(behavior, binary.origin());
             souther.compiler.check.RuleCitation cited = citationOf(iff, binary);
             for (TermPath each : named) {
                 // One per position the comparison names, and told from its neighbours by the rule
@@ -397,8 +397,7 @@ public final class GuardThresholds {
         // shape of line a comparison draws is a later question and not one this depends on — read
         // after a constant had been found, the site was a thing only a line against a constant could
         // have, and a comparison of two positions had no way to say what had reached it.
-        CoverageSites.GuardRef guard = BoundaryComparisons.guardOf(plan, iff);
-        if (guard == null) {
+        if (BoundaryComparisons.guardOf(plan, iff) == null) {
             return made;   // no site for this `if`: nothing could answer for it
         }
         for (BoundaryComparisons.Placed each : BoundaryComparisons.of(iff, plan.comparisons())) {
@@ -416,9 +415,9 @@ public final class GuardThresholds {
                 raisesNoLine(accounting, behavior, iff, each.comparison(), reads, symbols);
                 continue;
             }
-            OriginRef.GuardOrigin origin = new OriginRef.GuardOrigin(
-                    new RuleRef.Guard(behavior, each.comparison().origin()),
-                    new OriginRef.GuardOrigin.Read(guard, site, Citation.of(iff.pos())),
+            OriginRef.ComparisonOrigin origin = new OriginRef.ComparisonOrigin(
+                    new RuleRef.Comparison(behavior, each.comparison().origin()),
+                    new OriginRef.ComparisonOrigin.Read(site, citationOf(iff, each.comparison())),
                     cutting.valueBelongsBelow(), each.witness(), cutting.holdsAtTheValue(),
                     cutting.singles());
             NumericTerm divided = cutting.dividedPosition();
@@ -589,7 +588,7 @@ public final class GuardThresholds {
                                Core.Binary comparison, TermPath at, NumericTerm term,
                                Required.ComparisonSubject of, Required.LineRead read) {
         out.add(new Guards.AtAPosition(at, term, RuleAccounting.ofComparison(
-                new RuleRef.Guard(behavior, comparison.origin()),
+                new RuleRef.Comparison(behavior, comparison.origin()),
                 souther.compiler.check.ComparisonClaim.of(comparison.op()), of, read,
                 // A comparison is written rather than named, so a reader is sent where the author
                 // wrote it — the comparison's own place and not the fork's. Two comparisons of one
