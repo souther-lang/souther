@@ -129,9 +129,9 @@ public final class GuardThresholds {
         }
     }
 
-    /** The thresholds one behavior's body compares its parameters against, and both arms of each
-     * comparison. {@code plan} supplies the guard each one belongs to, so a boundary can later ask
-     * whether the comparison ran and an arm can be found by the probe that counts it. */
+    /** The thresholds one behavior's body compares its parameters against. {@code plan} supplies
+     * the site each comparison's own value is recorded at, so a boundary can later ask whether the
+     * comparison ran — which is not something the arms of anything standing round it record. */
 
     /**
      * The same, reading the input's rules here.
@@ -265,23 +265,25 @@ public final class GuardThresholds {
     private static void compared(String behavior, Core e, List<Core> read,
                                  InputReads reads, Symbols symbols, ComparisonCatalog catalog,
                                  List<UnreadRule> out) {
-        // Which nodes are comparisons is the catalog's answer. Asked of the operator here, this was
-        // a second account of it beside the numbering's, and the two were spelled differently.
-        boolean isComparison = catalog.at(e).isPresent();
+        // Which nodes are comparisons and where each is written are the catalog's answers, taken
+        // together and once. Asked of the operator and of the node's position here, this was a
+        // second account of both beside the numbering's, and the two were spelled differently.
+        ComparisonCatalog.Comparison entry = catalog.at(e).orElse(null);
         // By the comparison it is, and not by what it was about: two comparisons at one position are
         // two statements, and this one having been read is no answer about the other.
-        if (isComparison && read.stream().anyMatch(each -> each == e)) {
+        if (entry != null && read.stream().anyMatch(each -> each == e)) {
             return;
         }
-        if (isComparison && e instanceof Core.Binary binary && writtenHere(binary)) {
+        if (entry != null && writtenHere(entry)) {
+            Core.Binary binary = entry.node();
             List<TermPath> named = new ArrayList<>();
             mentioned(binary.left(), reads, symbols, named);
             mentioned(binary.right(), reads, symbols, named);
             BlockReason.AboutARule why = why(binary, reads, symbols);
             // The rule the author wrote, read off the source. Which comparison it is is the
-            // behavior and the construct; where a reader is sent is the fork it stands in and the
-            // place it is written. Neither comes from the plan: a condition both of whose arms can
-            // record nothing is numbered nowhere, and a model states its rules regardless.
+            // behavior and the construct the source wrote; where a reader is sent is where it is
+            // written. Neither comes from the plan: a condition both of whose arms can record
+            // nothing is numbered nowhere, and a model states its rules regardless.
             RuleRef.Comparison rule = new RuleRef.Comparison(behavior, binary.origin());
             souther.compiler.check.RuleCitation cited = citationOf(binary, catalog);
             for (TermPath each : named) {
@@ -330,13 +332,17 @@ public final class GuardThresholds {
      * where this compile has no file", and it is the same answer
      * {@link souther.compiler.check.RuleCitation} renders.
      *
+     * <p>Read off the catalog, which holds where a comparison is written. Taken from the node again
+     * here, this was one more place deciding for itself what the catalog already answers — and the
+     * one deciding whether an author is told to edit a file they do not have.
+     *
      * <p>Asked of the comparison and not of the fork above it. The one the author wrote sits
      * outside an expansion whose insides they did not, so a subtree is the wrong unit — and the
      * walk still goes through the expansion, because that is where a call's argument is bound and
      * a comparison read without it is about nothing.
      */
-    private static boolean writtenHere(Core.Binary comparison) {
-        return !(Citation.of(comparison.pos()) instanceof Citation.Elsewhere);
+    private static boolean writtenHere(ComparisonCatalog.Comparison comparison) {
+        return !(comparison.at() instanceof Citation.Elsewhere);
     }
 
     /**

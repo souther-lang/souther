@@ -110,10 +110,10 @@ public sealed interface OriginRef {
          *              {@code B} false and rows that never reached {@code B}. The comparison and not
          *              the number it is instrumented under — two readers agreeing that they mean one
          *              place should not come down to their having been handed the same int
-         * @param written how a reader finds the rule: the construct it stands in and the place it is
-         *              written. The comparison's own place and not the fork's — a condition holding
-         *              three comparisons is three rules, and a reader sent to the {@code if} is
-         *              given one handle for all of them
+         * @param written how a reader finds the rule, which is where it is written. The
+         *              comparison's own place and not the fork's — a condition holding three
+         *              comparisons is three rules, and a reader sent to the {@code if} is given one
+         *              handle for all of them
          */
         public record Read(souther.compiler.coverage.ComparisonOccurrence comparison,
                            souther.compiler.check.RuleCitation.WrittenAt written) {}
@@ -207,16 +207,16 @@ public sealed interface OriginRef {
      * Where this came from, as a report writes it, with the sources under the names {@code names}
      * gives them and the section it is printed under being about {@code sectionSource}.
      *
-     * <p>A guard has no name, so what identifies it is where it is written — and that is a place, so
-     * it is said the way every other place a report names is said. Its own file where that is not the
-     * section's, and the declaration it is written in where this compile has no source for it. Built
-     * from the place instead, one compile reported a guard of {@code Int.abs} as {@code guard@7:22}
-     * two lines under an arm of that same body saying where it was.
+     * <p>A comparison has no name, so what identifies it is where it is written — and that is a
+     * place, so it is said the way every other place a report names is said. Its own file where that
+     * is not the section's, and the declaration it is written in where this compile has no source for
+     * it. Built from the place instead, one compile reported a comparison of {@code Int.abs} as
+     * {@code comparison@7:22} two lines under an arm of that same body saying where it was.
      *
-     * <p>Which word the place is written under is the construct the author wrote, taken off the
-     * origin the fork carries rather than off the lowered node. Three constructs draw a line this way
-     * and one of them is spelled {@code guard}, so a report that called all three that sent two of
-     * their readers looking for a form that is not there.
+     * <p>One word goes in front of the place, and it says what the rule is. It was the construct the
+     * comparison stood in — three of them draw a line this way and one is spelled {@code guard} — and
+     * a word for the thing around a rule is a word the rule can lose: a comparison given a name a
+     * line above the fork stands in no construct that draws anything.
      *
      * <p>A type and an invariant have names, and a name is the same wherever it is read, so they take
      * no resolver and are given one only because this is one question.
@@ -247,10 +247,10 @@ public sealed interface OriginRef {
         return switch (this) {
             case InvariantOrigin i -> i.rule().named();
             case EnsuresOrigin e -> e.rule().named();
-            // The construct the source wrote, which the rule cannot say: a comparison is written
-            // rather than named, and which fork tests it is a fact about this reading of it. Never
-            // rendered to a reader either way — a rule with no name gets a sentence of its own, and
-            // the catalog holds those words in every language rather than this building one.
+            // What the rule is, since it has no name: a comparison is written rather than called
+            // something. Never rendered to a reader either way — a rule with no name gets a
+            // sentence of its own, and the catalog holds those words in every language rather than
+            // this building one.
             case ComparisonOrigin _ -> "the " + souther.compiler.check.RuleCitation.WHAT_IT_IS;
             // A narrowing is not part of the rule, so it is said here and not by the rule.
             case NarrowedOrigin n -> n.bound().named() + " within "

@@ -1197,7 +1197,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * the two are different questions: a handle finds a rule and an identity distinguishes one.
      */
     private static void ruleId(ObjectNode into, souther.compiler.check.RuleRef rule) {
-        into.put("kind", ruleWord(rule));
+        into.put("kind", schemaRuleKind(rule));
         // Every part of the identity and not the parts that read well. A declaration is its module
         // and its name — two modules may each declare an `Amount` and they are two types — and a
         // construct is numbered from zero in each source, so the module is what tells one behavior's
@@ -1231,20 +1231,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
-     * The word a document writes for which kind of rule an identity is of.
+     * How schema 3 spells which kind of rule an identity is of.
+     *
+     * <p>A wire value and not a word for the rule, which is what the name used to say. What a rule
+     * is called is {@link souther.compiler.check.RuleCitation}'s answer and a reader sees
+     * {@code comparison} there; this is what a document already written against schema 3 groups by,
+     * and the two have to be allowed to disagree because one of them shipped.
      *
      * <p>Here rather than at the one place it is written, for the reason the others are. No
-     * {@code default}, so a rule shape added and not given a word stops the compile rather than
+     * {@code default}, so a rule shape added and not given a spelling stops the compile rather than
      * arriving in a document as one that already existed.
      */
-    public static String ruleWord(souther.compiler.check.RuleRef rule) {
+    public static String schemaRuleKind(souther.compiler.check.RuleRef rule) {
         return switch (rule) {
             case souther.compiler.check.RuleRef.Invariant _ -> "invariant";
             case souther.compiler.check.RuleRef.Ensures _ -> "ensures";
-            // `guard` and not `comparison`, which is what the same rule is called everywhere a
-            // reader sees it. A `const` of schema 3 and a value documents already group by, so the
-            // two disagreeing is a thing to say rather than a thing to fix under a version that
-            // shipped: the rule is a comparison and a fork is what one is sometimes written into.
+            // `guard` and not `comparison`. A `const` of schema 3 (`{ "kind": { "const": "guard" }
+            // }`), so it is the spelling that version has for a rule found by where it is written —
+            // historical from the day a comparison stopped being something a fork owns, and a thing
+            // to change with the schema version rather than under one.
             case souther.compiler.check.RuleRef.Comparison _ -> "guard";
         };
     }

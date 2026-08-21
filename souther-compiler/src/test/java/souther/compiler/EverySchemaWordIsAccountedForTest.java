@@ -364,15 +364,15 @@ class EverySchemaWordIsAccountedForTest {
         souther.compiler.types.TypeSymbol on = souther.compiler.types.TypeSymbols.declared(
                 new souther.compiler.types.TypeKey("m", "L"));
         assertEquals(Set.of(
-                        AdequacyReport.ruleWord(new souther.compiler.check.RuleRef.Invariant(
+                        AdequacyReport.schemaRuleKind(new souther.compiler.check.RuleRef.Invariant(
                                 new souther.compiler.check.Clause.Ref(
                                         new souther.compiler.check.Clause.Id(on, 0),
                                         java.util.Optional.empty()))),
-                        AdequacyReport.ruleWord(new souther.compiler.check.RuleRef.Ensures(
+                        AdequacyReport.schemaRuleKind(new souther.compiler.check.RuleRef.Ensures(
                                 new souther.compiler.check.BehaviorContract.RuleId(
                                         new souther.compiler.types.ValueName.Behavior("m", "f"),
                                         0, 0, on), "Found")),
-                        AdequacyReport.ruleWord(new souther.compiler.check.RuleRef.Comparison("f",
+                        AdequacyReport.schemaRuleKind(new souther.compiler.check.RuleRef.Comparison("f",
                                 new souther.compiler.types.CoverageOrigin("m", 0, 0,
                                         souther.compiler.types.CoverageConstruct.IF)))),
                 allowedAt(schema(), List.of("$defs", "ruleId", "properties", "kind")));

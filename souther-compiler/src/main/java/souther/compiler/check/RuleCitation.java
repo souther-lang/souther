@@ -31,8 +31,8 @@ public sealed interface RuleCitation {
      * for a comparison too — with what it is rather than what it is called — and a total factory
      * over {@code RuleRef} would hand that back as a name, sending an author to look for a clause
      * called {@code the comparison}. Nothing in {@link Named} would refuse it: the string is not
-     * empty. A comparison is found by {@link WrittenAt}, from the construct it stands in and the
-     * place it is written, which is two coordinates this could not invent.
+     * empty. A comparison is found by {@link WrittenAt}, from where it is written, which is a place
+     * this could not invent.
      */
     static Named named(RuleRef.Invariant rule) {
         return new Named(rule.named());
@@ -101,10 +101,10 @@ public sealed interface RuleCitation {
     /**
      * What a report calls a rule that has no name, which is one word.
      *
-     * <p>The construct it stands in and not the rule. A condition holds as many rules as it holds
-     * comparisons, so {@code guard} was one word for all of them — and it was a word about
-     * something the rule has no part of: a comparison given a name a line above the fork that tests
-     * it is the same rule under a construct that is not a fork at all.
+     * <p>One word because there is one thing to say. This was the construct the comparison stood
+     * in, which is not the rule: a condition holds as many rules as it holds comparisons, so
+     * {@code guard} was one word for all of them — and a comparison given a name a line above the
+     * fork that tests it is the same rule with no fork over it to take a word from.
      *
      * <p>English, like every other word a report writes from a rule. What a diagnostic says instead
      * is chosen in the reader's language, from the same fact.
