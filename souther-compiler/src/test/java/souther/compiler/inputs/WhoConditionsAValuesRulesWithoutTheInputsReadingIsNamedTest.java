@@ -30,10 +30,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * subject is a behavior's input. It stops it only while what may reach past it is known.
  *
  * <p><b>A register, and not a list of exceptions.</b> Each name below is here for its own reason,
- * and the reasons are not the same one. Two of them are where the subject is not an input at all;
- * one is where the subject is an input and the walk that finds its positions is not this package's.
- * Adding a name is a new place the question is asked from, which is worth knowing whether or not it
- * turns out to be right.
+ * and the reasons are not the same one: what an input's rules leave it is one question, and what a
+ * declaration leaves a value somebody is building is another. Adding a name is a new place the
+ * question is asked from, which is worth knowing whether or not it turns out to be right.
  *
  * <p><b>Read off the compiled classes.</b> What is checked is who calls the conditioning member,
  * told apart from reading a declaration for the first time by what it takes rather than by its
@@ -54,12 +53,11 @@ class WhoConditionsAValuesRulesWithoutTheInputsReadingIsNamedTest {
             // declaration and not an input — no behavior, no parameter, no path rooted at one — so
             // the declaration's own words are the right ones and there is nothing to translate.
             "souther.compiler.partition.Partitions",
-            // A row's value for one parameter, chosen a position at a time. Its subject is an input
-            // and it finds the positions with a walk of its own, which descends four times as far as
-            // the reading of an input does: that reading stops where a report stops being about
-            // something an author would call one input, and this one goes on until there is a value
-            // to build. Two walks answering "which positions are there" differently is a fault of
-            // its own and is not the one the boundary is about.
+            // A row's value for one parameter, composed a position at a time. Its positions are
+            // where a value has to be built and not what the behavior declares it takes: a class
+            // naming a constructor for a sum puts positions under it that no reading of the
+            // declaration holds, however deep it went. So it has nothing to ask the reading of an
+            // input about, and the rules it settles are the rules of whatever it is building.
             "souther.compiler.partition.Generator");
 
     @Test

@@ -150,16 +150,15 @@ a value proven to exist — what settles that is the row itself, where it is bui
 removes is narrower and is the whole of what was wrong: an assignment the rules are already known to
 refuse, offered as though it were a row.
 
-**Two other readers condition a declaration, for two different reasons, and neither is this boundary
-not yet reached.** `Partitions.composed` builds a representative value of a declaration reached while
-producing a fixture: there is no behavior, no parameter and no path rooted at one, so its subject is
-the declaration and the declaration's own words are the right ones. `Generator` does have an input for
-its subject, and finds that input's positions with a walk of its own that descends to eight where the
-reading of an input stops at two — deliberately, since one stops where a report stops being about
-something an author would call one input and the other goes on until there is a value to build. Two
-walks answering "which positions are there" differently is a fault of its own, and deciding which
-depth owns which question is not what this boundary settles. A test over the compiled classes names
-both, with the reason each is there.
+**Two other readers settle a position of a value's rules, and neither is this boundary not yet
+reached.** Both are building a value rather than measuring an input. `Partitions.composed` builds a
+representative of a declaration reached while producing a fixture: there is no behavior, no parameter
+and no path rooted at one, so its subject is the declaration and the declaration's own words are the
+right ones. `Generator` composes a row's value for one parameter, and its positions are where a value
+has to be built rather than what the behavior declares it takes — a class naming a constructor for a
+sum puts positions under it that no reading of the declaration holds, however deep it went
+(ADR-0109). So neither has an input's reading to ask, and what each settles is the rules of what it
+is building. A test over the compiled classes names both, with the reason each is there.
 
 A proof of emptiness is said in this input's words, which is the whole reason it is not the
 declarations' proof handed on. Where that proof names a position, the path it names is the value's
