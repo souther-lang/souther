@@ -81,8 +81,8 @@ class WhatCanStandUnexpandedIsWiderThanWhatAModuleTookOnTest {
 
         assertTrue(canStand(db, "plain", InliningPolicy.FULL).containsKey("List.foldFrom"),
                 "what can stand: " + canStand(db, "plain", InliningPolicy.FULL).keySet());
-        assertEquals(Set.of(), db.ask(new Bodies.RecursiveHelpers("plain")).value(),
-                "and this module took nothing on");
+        assertEquals(Set.of(), Set.copyOf(db.ask(new Bodies.RequiredRecursiveDefs("plain")).value()),
+                "and this module emits none of it");
     }
 
     /**
@@ -105,7 +105,7 @@ class WhatCanStandUnexpandedIsWiderThanWhatAModuleTookOnTest {
 
         assertTrue(canStand(db, "owned", InliningPolicy.FULL).containsKey("depth"),
                 "what can stand: " + canStand(db, "owned", InliningPolicy.FULL).keySet());
-        assertTrue(db.ask(new Bodies.RecursiveHelpers("owned")).value().contains("depth"));
+        assertTrue(db.ask(new Bodies.RequiredRecursiveDefs("owned")).value().contains("depth"));
     }
 
     /** And a signature is the declaration's own, not something worked out from the call sites. */

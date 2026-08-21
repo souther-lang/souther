@@ -313,13 +313,20 @@ public interface Hir {
      *
      * <p>{@code fns} is what the source wrote, and it stays that at every stage. {@code takenOn} is
      * what the module emits as methods of its own without having written them, which is two kinds of
-     * definition: a recursive helper it reaches, which cannot be inlined and has to be lowered
-     * somewhere, and a definition minted for what a row writes at a position, which has no call site
-     * to be inlined into. The first may be declared by the standard library or by a module that
-     * published it; the second is this module's own and is no {@code let}. Only {@code fns} is
-     * declared here, and no rule reads a name to tell any of them apart — {@code List.foldFrom} is
-     * reached under the library's alias and declared in {@code souther.list}, and a row's method is
-     * spelled in no source at all ({@link FnDef#role}).
+     * definition: a recursion an expansion of this module could not remove, which has to be lowered
+     * somewhere because expanding it would not terminate, and a definition minted for what a row
+     * writes at a position, which has no call site to be inlined into. The first may be declared by
+     * the standard library or by a module that published it; the second is this module's own and is
+     * no {@code let}. Only {@code fns} is declared here, and no rule reads a name to tell any of
+     * them apart — {@code List.foldFrom} is reached under the library's alias and declared in
+     * {@code souther.list}, and a row's method is spelled in no source at all ({@link FnDef#role}).
+     *
+     * <p>{@code takenOn} is written where the module is lowered and nowhere else, and is empty at
+     * every stage before that. What a module emits follows from expanding it, so it is not knowable
+     * earlier: it once carried a prediction, worked out by walking the places a module writes
+     * expressions before any of them had been expanded, and a tree that walk did not know to look at
+     * contributed nothing — which is how a rule reaching a quantifier came to be compiled without
+     * the fold it became.
      *
      * <p>Two components rather than one list a later pass appends to. Appended, every reader asking
      * what the module declared got what it declared before {@link
@@ -331,18 +338,6 @@ public interface Hir {
      * methods its bodies call missing, which is the failure this separation is here to make
      * impossible. The arity says something has to be passed; that it is this module's own is what a
      * reader of the rebuild has to see, which is why every one of them names it.
-     */
-    /**
-     * A module at whatever stage the pass holding it has reached.
-     *
-     * <p>{@code takenOn} is the methods a lowered module emits beyond the ones it declared: a
-     * recursion an expansion of it could not remove, and a value minted for one of its rows. It is
-     * empty at every stage before lowering and is written there and nowhere else. It once carried a
-     * prediction — worked out by walking the places a module writes expressions, before any of those
-     * expressions had been expanded — and a tree that walk did not know to look at contributed
-     * nothing, which is how a rule reaching a quantifier came to be compiled without the fold it
-     * became. What a module emits follows from expanding it, so it is not knowable here until it has
-     * been.
      */
     record Module(String name,
                   List<String> exposing,

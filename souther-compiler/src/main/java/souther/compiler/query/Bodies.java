@@ -1176,24 +1176,6 @@ public final class Bodies {
         return fn;
     }
 
-    /** The helpers a module emits as methods rather than expanding: the ones that recurse (spec
-     * 13.1), including the prelude ones it has taken on as its own. Answered in declaration order:
-     * a check that reports one member of a mutual cycle reports the first, so the order is part of
-     * the answer and is said in the type. */
-    public record RecursiveHelpers(String name) implements Key<SequencedSet<String>> {
-        @Override
-        public String module() {
-            return name;
-        }
-
-        @Override
-        public Answer<SequencedSet<String>> compute(Db db) {
-            Answer<HelperInliner> inliner = expanding(db, name, InliningPolicy.FULL);
-            return inliner.present() ? Answer.of(inliner.value().recursiveHelpers())
-                    : Answer.absent();
-        }
-    }
-
     /**
      * What a body of {@code module} is expanded against: which declaration each name reaches, and
      * which of them recurse.
@@ -1396,18 +1378,22 @@ public final class Bodies {
         @Override
         public Answer<Hir.FnDef> compute(Db db) {
             Answer<Hir.FnDef> def = db.ask(new SettledFn(module, fn));
-            Answer<HelperInliner> inliner = expanding(db, module, InliningPolicy.DISCHARGE);
-            Answer<SequencedSet<String>> recursive = db.ask(new RecursiveHelpers(module));
+            Answer<Expanding.Of> against = db.ask(new Expanding(module, InliningPolicy.DISCHARGE));
             Answer<Map<ValueName.Behavior, Integer>> behaviors =
                     db.ask(new NamedBehaviorArity(module));
-            if (!def.present() || !inliner.present() || !recursive.present()
-                    || !behaviors.present()) {
+            if (!def.present() || !against.present() || !behaviors.present()) {
                 return Answer.absent();
             }
+            // Whether this body is a recursion, asked of the graph of the representation it is being
+            // read in. A recursion is a cycle among the declarations in reach, and which
+            // declarations those are is what the policy decides.
+            HelperInliner inliner = HelperInliner.over(against.value().table(),
+                    against.value().graph());
+            boolean recursive = against.value().graph().recurses(fn);
             try {
                 return Answer.of(Lower.body(def.value(),
-                        inliner.value().namingBehaviors(behaviors.value()),
-                        recursive.value().contains(fn), dependencyParams(db, module, fn)).value());
+                        inliner.namingBehaviors(behaviors.value()),
+                        recursive, dependencyParams(db, module, fn)).value());
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -1584,67 +1570,92 @@ public final class Bodies {
             Answer<Hir.Module> settled = db.ask(new Settled(name));
             Answer<souther.compiler.check.InvariantSettled> settling =
                     db.ask(new Shapes.Settling(name));
-            if (!against.present() || !settled.present() || !settling.present()) {
-                return Answer.absent();
-            }
-            // A row's operand is a definition of this module too — minted for it rather than
-            // written, and expanded the way any body is. Which definitions those are is the row
-            // machinery's to say and is asked there.
             Answer<Set<String>> rows = db.ask(new RowMethods(name));
-            if (!rows.present()) {
+            if (!against.present() || !settled.present() || !settling.present()
+                    || !rows.present()) {
                 return Answer.absent();
             }
-            SequencedSet<String> seeds =
-                    new LinkedHashSet<>(settling.value().standingRecursiveCalls());
-            SequencedSet<String> expanded = new LinkedHashSet<>();
-            for (Hir.FnDef fn : settled.value().fns()) {
-                expanded.add(fn.name());
+            HelperGraph graph = against.value().graph();
+            Set<String> required = new LinkedHashSet<>();
+            Deque<String> pending = new ArrayDeque<>();
+            Set<String> processed = new HashSet<>();
+
+            // What this module declared that recurses. Required whether or not anything reaches it:
+            // its source is this module's to check and to publish, which is not a question about
+            // use. Its body still goes through the walk below — being required is not being read.
+            for (String declared : against.value().table().declarations().keySet()) {
+                if (graph.recurses(declared)) {
+                    require(graph, required, pending, declared);
+                }
             }
-            expanded.addAll(rows.value());
-            for (String fn : expanded) {
-                Answer<Expansion<Hir.FnDef>> body = db.ask(new LoweredBody(name, fn));
+            // The trees that survive to run: a behavior's implementation, a row's operand, and the
+            // clauses. Nothing else is a root. A helper that does not recurse is expanded into
+            // whatever reaches it, so what it leaves standing is answered by that expansion — and a
+            // helper nothing reaches leaves nothing standing anywhere, which is why one that folds
+            // and is never called asks for no fold.
+            for (String standing : settling.value().standingRecursiveCalls()) {
+                require(graph, required, pending, standing);
+            }
+            Set<String> behaviors = Names.behaviorNames(settled.value());
+            Set<String> roots = new LinkedHashSet<>(rows.value());
+            for (Hir.FnDef fn : settled.value().fns()) {
+                if (behaviors.contains(fn.name())) {
+                    roots.add(fn.name());
+                }
+            }
+            for (String root : roots) {
+                Answer<Expansion<Hir.FnDef>> body = db.ask(new LoweredBody(name, root));
                 if (!body.present()) {
                     // Why is the body's to say, and it said it where it went wrong.
                     return Answer.absent();
                 }
-                seeds.addAll(body.value().standing());
-            }
-            HelperGraph graph = against.value().graph();
-            Set<String> reached = graph.reachedFrom(seeds);
-            SequencedSet<String> required = new LinkedHashSet<>();
-            // In the graph's order, which is declaration order: a check reporting one member of a
-            // mutual cycle reports the first, and the order is part of the answer.
-            for (String recursive : graph.recursive()) {
-                if (reached.contains(recursive)
-                        || against.value().table().declarations().containsKey(recursive)) {
-                    required.add(recursive);
+                for (String standing : body.value().standing()) {
+                    require(graph, required, pending, standing);
                 }
             }
-            return Answer.of(Collections.unmodifiableSequencedSet(required));
-        }
-    }
-
-    /** The signatures of a module's recursive helpers — what a self- or mutual call is typed
-     * against, and what every body that calls one reads. */
-    public record RecursiveHelperSigs(String name) implements Key<Map<String, Type>> {
-        @Override
-        public String module() {
-            return name;
-        }
-
-        @Override
-        public Answer<Map<String, Type>> compute(Db db) {
-            Answer<HelperInliner> inliner = expanding(db, name, InliningPolicy.FULL);
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
-            if (!inliner.present() || !scope.present()) {
-                return Answer.absent();
+            // A required definition is emitted as a method, so its own body is expanded on its own
+            // rather than into anything — and what that expansion leaves standing is required too.
+            // Followed here, by expanding it, and not by reading edges off the call graph: a body
+            // reaches a recursion by applying it and by reading a value whose body applies it, and
+            // only the first is a call. Reading the graph instead, a recursion behind a value was
+            // reached by the expansion and by nothing that could see it.
+            while (!pending.isEmpty()) {
+                String next = pending.removeFirst();
+                if (!processed.add(next)) {
+                    continue;
+                }
+                Answer<Expansion<Hir.FnDef>> body = db.ask(new LoweredBody(name, next));
+                if (!body.present()) {
+                    return Answer.absent();
+                }
+                for (String standing : body.value().standing()) {
+                    require(graph, required, pending, standing);
+                }
             }
-            try {
-                return Answer.of(TypeChecker.recursiveHelperSigs(inliner.value(), scope.value()));
-            } catch (CompileException e) {
-                // A recursive helper that does not say what it returns costs the signatures of all of
-                // them, and there is no module to check without them.
-                return Answer.absent(e);
+            // In the graph's order, which is declaration order: a check reporting one member of a
+            // mutual cycle reports the first, and the order is part of the answer. The walk above
+            // finds them in the order it happened to reach them, which is not that.
+            SequencedSet<String> ordered = new LinkedHashSet<>();
+            for (String recursive : graph.recursive()) {
+                if (required.contains(recursive)) {
+                    ordered.add(recursive);
+                }
+            }
+            return Answer.of(Collections.unmodifiableSequencedSet(ordered));
+        }
+
+        /** Takes {@code standing} on, and queues its body to be expanded the first time. */
+        private static void require(HelperGraph graph, Set<String> required, Deque<String> pending,
+                                    String standing) {
+            if (!graph.recurses(standing)) {
+                // An expansion answers with what it left standing, and a call is left standing
+                // because its callee recurses. One that does not is this compiler disagreeing with
+                // itself about why the call is still a call, and nothing here can be right about it.
+                throw new IllegalStateException("`" + standing + "` was left standing by an"
+                        + " expansion and does not recurse");
+            }
+            if (required.add(standing)) {
+                pending.addLast(standing);
             }
         }
     }

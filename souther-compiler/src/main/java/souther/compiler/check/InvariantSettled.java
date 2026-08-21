@@ -170,14 +170,22 @@ public final class InvariantSettled {
         }
     }
 
+    /**
+     * Both of what this answers with. The standing set is not derived from the tree by anything that
+     * reads this — it is what the expansion that produced the tree met on the way — so a state
+     * carrying a different one is a different answer, whatever the trees compare as. Left out, the
+     * store would find a recomputed answer equal to the one it held and leave everything that reads
+     * the standing set on the old one.
+     */
     @Override
     public boolean equals(Object o) {
-        return o instanceof InvariantSettled other && module.equals(other.module);
+        return o instanceof InvariantSettled other && module.equals(other.module)
+                && standing.equals(other.standing);
     }
 
     @Override
     public int hashCode() {
-        return module.hashCode();
+        return module.hashCode() * 31 + standing.hashCode();
     }
 
     @Override

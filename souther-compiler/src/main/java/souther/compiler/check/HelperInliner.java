@@ -188,11 +188,10 @@ public final class HelperInliner {
      * The same, with the definitions other modules publish to this one — each under the qualified name
      * it is reached by here, and each already closed by the module that declares it.
      *
-     * <p>They join the inlining map but not {@code own}, which is what makes a recursive one come back
-     * from {@link #injectedRecursiveHelpers} beside the recursive prelude helpers: neither is this
-     * module's to declare, and both are this module's to emit. A module that reaches one only through
-     * another module's body reaches it here too, because the walk that finds them follows calls rather
-     * than imports.
+     * <p>They join the inlining map but not {@code own}: a definition another module published is
+     * one this module expands and not one it declared. Which of them this module ends up emitting is
+     * no part of this — it follows from what expanding this module's trees leaves standing, and is
+     * answered where that is collected.
      */
     public static HelperInliner forModule(Hir.Module module, Map<String, Hir.FnDef> imported) {
         HelperTable table = HelperTable.of(module, imported, InliningPolicy.FULL);
@@ -202,12 +201,11 @@ public final class HelperInliner {
     /**
      * The inlining an expansion needs, over the helpers alone.
      *
-     * <p>Which helper a call expands to, and which calls are left standing because the helper recurses,
-     * follow from the helpers and nothing else — so a body is expanded without reading the bodies
-     * beside it. What does read the whole module is {@link #injectedRecursiveHelpers}: which prelude
-     * recursive helpers a module emits as its own methods is a fact about the module, not about any
-     * one call, and {@link #forModule} is what answers it. A module that has already taken those on as
-     * its own fns has them here like any other helper, so both say the same thing about it.
+     * <p>Which helper a call expands to, and which calls are left standing because the helper
+     * recurses, follow from the helpers and nothing else — so a body is expanded without reading the
+     * bodies beside it. What a module emits is not read here and is not read anywhere from a table:
+     * it is what its expansions left standing, taken from {@link #leftStanding} by whoever drove
+     * them.
      */
     public static HelperInliner forHelpers(String module, Map<String, Hir.FnDef> own) {
         return forHelpers(module, own, InliningPolicy.FULL);

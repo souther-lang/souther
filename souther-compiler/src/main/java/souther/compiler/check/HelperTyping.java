@@ -367,16 +367,6 @@ public final class HelperTyping {
     }
 
     /**
-     * Signatures of the module's recursive helpers, each a {@link Type.FnOf} from its declared
-     * parameter types to its declared return type. A recursive helper must declare its return type:
-     * the type can't be inferred through the cycle. Registered in a body's environment so a self- or
-     * mutual call type-checks (spec §fn-declaration).
-     */
-    static Map<String, Type> recursiveHelperSigs(HelperInliner inliner, Symbols symbols) {
-        return sigsOf(inliner.recursiveHelpers(), inliner::helper, symbols);
-    }
-
-    /**
      * The same, for the recursive helpers a caller names and reads out of {@code table}.
      *
      * <p>Which recursive helpers a signature is wanted for is the caller's question and there is more
@@ -386,28 +376,45 @@ public final class HelperTyping {
      * of one declaration would agree only until one of them was edited.
      */
     static Map<String, Type> recursiveCallSigs(HelperInliner inliner, Symbols symbols) {
-        return sigsOf(inliner.recursiveInReach(), inliner::helper, symbols);
+        return sigsOf(inliner.recursiveInReach(), inliner::helper, symbols, inliner.moduleName());
     }
 
     /** The same, read off a table rather than off an inliner over it. */
     static Map<String, Type> recursiveCallSigs(HelperTable table,
                                                java.util.Collection<String> names, Symbols symbols) {
-        return sigsOf(names, table::reached, symbols);
+        return sigsOf(names, table::reached, symbols, table.module());
     }
 
+    /**
+     * @param ownModule the module these are being read for. A declaration it wrote is held to
+     *     declaring its types, and is told so at the line it was written on. One it did not write is
+     *     another module's to hold to that, and is reported there while that module is compiled — so
+     *     an unreadable one contributes no signature here rather than a report about a file this
+     *     compile does not own. A call that needed it fails where the call is written, which is in
+     *     this module and is a place its author can act on.
+     */
     private static Map<String, Type> sigsOf(java.util.Collection<String> names,
                                             java.util.function.Function<String, Hir.FnDef> declaring,
-                                            Symbols symbols) {
+                                            Symbols symbols, String ownModule) {
         Map<String, Type> sigs = new HashMap<>();
         for (String name : names) {
             Hir.FnDef h = declaring.apply(name);
+            boolean ours = h.declaredBy(ownModule);
             if (h.declaredReturn() == null) {
+                if (!ours) {
+                    continue;
+                }
                 throw CompileException.of(Diagnostic
                                 .at(h.pos()).say(new NameMessage.ARecursiveHelperMustDeclareItsReturnType(name)).build());
             }
             List<Type> params = new ArrayList<>();
+            boolean readable = true;
             for (Hir.FnParam p : h.params()) {
                 if (p.type() == null) {
+                    if (!ours) {
+                        readable = false;
+                        break;
+                    }
                     throw CompileException.of(Diagnostic.at(p.written().reportedAt())
                             .say(new HelperMessage.AParameterNeedsItsType(name, p.name()))
                             .build());
@@ -415,6 +422,9 @@ public final class HelperTyping {
                 // a recursive helper is a static method taking its parameters as values; a function
                 // parameter is passed as a first-class Fn (a closure), applied inside the method.
                 params.add(TypeOps.resolveParamType(p.type()));
+            }
+            if (!readable) {
+                continue;
             }
             sigs.put(name, Type.fn(params, TypeOps.successType(h.declaredReturn())));
         }

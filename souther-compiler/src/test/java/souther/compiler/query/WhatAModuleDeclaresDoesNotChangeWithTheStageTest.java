@@ -45,12 +45,17 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
             """;
 
     private static final String APP = """
-            module app exposing ( own )
+            module app exposing ( own, Bag, run )
 
             import lib ( flatten )
 
+            data Bag = List<Int>
+
             let own (xs: List<Int>) : List<Int> = List.map({ (x) -> x + 1 }, xs)
             let both (xs: List<List<Int>>) : List<Int> = own(flatten(xs))
+
+            behavior run : (xs: List<List<Int>>) -> Bag constructs Bag
+            let run (xs) = Bag { value = both(xs) }
             """;
 
     private static Db db() {
@@ -193,7 +198,7 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
                         .value().table();
         rowMethods.forEach(method ->
                 assertFalse(table.reaches(method), method + " is reachable by name"));
-        assertEquals(Set.of(), db.ask(new Bodies.RecursiveHelpers("app")).value(),
+        assertEquals(Set.of(), Set.copyOf(db.ask(new Bodies.RequiredRecursiveDefs("app")).value()),
                 "and nothing here recurses, so nothing else needs a method");
         assertEquals(rowMethods,
                 db.ask(new Bodies.Lowering("app")).value().lowered().takenOn().stream()

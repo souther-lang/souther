@@ -38,16 +38,94 @@ class WhatAModuleMustEmitIsWhatItsExpansionsCouldNotRemoveTest {
         return answer.value();
     }
 
-    /** A fold in a `let`. */
+    /**
+     * A fold behind a helper that does not recurse. The helper is expanded into the behavior that
+     * reaches it, so the fold is left standing in the behavior's own tree and the requirement comes
+     * from there — the helper is not a root and does not need to be one.
+     */
     @Test
-    void aFoldInADefinitionIsRequired() {
+    void aFoldBehindAHelperAnEmittedRootReachesIsRequired() {
         Db db = dbOf("inlet", """
                 module inlet
 
+                data Flag = { on: Bool }
+
                 let total (xs: List<Int>) : Bool = List.all(x -> x >= 0, xs)
+
+                behavior mark : (xs: List<Int>) -> Flag constructs Flag
+                let mark (xs) = Flag { on = total(xs) }
                 """);
 
         assertEquals(Set.of("List.foldFrom"), required(db, "inlet"));
+    }
+
+    /**
+     * And the same fold behind a helper nothing reaches asks for nothing. Nothing expands it into a
+     * tree that runs, so no expansion leaves the fold standing anywhere, and a method for it would
+     * be one nothing invokes.
+     *
+     * <p>It is still checked, on its own, against a signature for the fold — what a call can be
+     * typed against is what the declarations in reach say, and what is emitted is what an expansion
+     * left behind. Held together here because the helper being checked and the fold not being
+     * emitted are the same module.
+     */
+    @Test
+    void aFoldBehindAHelperNothingReachesIsNotRequired() {
+        Db db = dbOf("dead", """
+                module dead
+
+                data Count = Int
+
+                let unused (xs: List<Int>) : Bool = List.all(x -> x >= 0, xs)
+
+                behavior countIt : (n: Int) -> Count constructs Count
+                let countIt (n) = Count { value = n }
+                """);
+
+        assertEquals(Set.of(), required(db, "dead"));
+        assertEquals(Set.of(), db.ask(new Bodies.Lowering("dead")).value().lowered().takenOn()
+                        .stream().map(souther.compiler.ast.Hir.FnDef::name)
+                        .collect(java.util.stream.Collectors.toSet()),
+                "and no method is emitted for it");
+    }
+
+    /**
+     * A recursion this module emits is expanded on its own, and what that expansion leaves standing
+     * is required too. It is required from the start — the module declared it — so a walk that took
+     * its result set for its work list would never read its body, and a fold it reaches through a
+     * value it names would be asked for by nobody.
+     *
+     * <p>Through a value on purpose. A body reaches a recursion by applying it and by reading a
+     * value whose body applies it, and only the first is a call: the call graph has no edge here, so
+     * nothing but expanding the body finds this.
+     */
+    @Test
+    void whatARequiredRecursionsOwnBodyReachesIsRequired() {
+        Db db = dbOf("deep", """
+                module deep
+
+                data Node = { kid: Node? }
+                data Count = Int
+
+                let allPositive = List.all(x -> x >= 0, [ 1 ])
+
+                let size (n: Node) : Int =
+                    match n.kid with
+                        | Some k -> (if allPositive then 1 else 0) + size(k)
+                        | None   -> 0
+
+                behavior countIt : (n: Node) -> Count constructs Count
+                let countIt (n) = Count { value = size(n) }
+                """);
+
+        assertEquals(Set.of("size"),
+                db.ask(new Bodies.Expanding("deep", souther.compiler.check.InliningPolicy.FULL))
+                        .value().graph().calls("size"),
+                "`size` calls itself and reads a value; the fold is behind the value and is no call");
+        assertTrue(required(db, "deep").contains("size"), required(db, "deep").toString());
+        assertTrue(required(db, "deep").contains("List.foldFrom"),
+                "the fold `size` reaches is required, and the call graph has no edge to it: "
+                        + required(db, "deep"));
     }
 
     /** And in an `invariant`. */
@@ -123,7 +201,12 @@ class WhatAModuleMustEmitIsWhatItsExpansionsCouldNotRemoveTest {
         Db db = dbOf("inlet", """
                 module inlet
 
+                data Flag = { on: Bool }
+
                 let total (xs: List<Int>) : Bool = List.all(x -> x >= 0, xs)
+
+                behavior mark : (xs: List<Int>) -> Flag constructs Flag
+                let mark (xs) = Flag { on = total(xs) }
                 """);
 
         assertEquals(List.of(), db.ask(new Bodies.Settled("inlet")).value().takenOn(),
@@ -133,6 +216,7 @@ class WhatAModuleMustEmitIsWhatItsExpansionsCouldNotRemoveTest {
                         .map(souther.compiler.ast.Hir.FnDef::name)
                         .collect(java.util.stream.Collectors.toSet()),
                 "and the lowered one carries what its expansions could not remove");
+
     }
 
     /**

@@ -121,12 +121,6 @@ public final class TypeChecker {
                 inliner, recursiveHelperFns, recHelperConstructs, warnings);
     }
 
-    /** The signatures of a module's recursive helpers — what a self- or mutual call is typed
-     * against, and what a body that calls one reads. */
-    public static Map<String, Type> recursiveHelperSigs(HelperInliner inliner, Symbols symbols) {
-        return HelperTyping.recursiveHelperSigs(inliner, symbols);
-    }
-
     /** The signatures every recursive helper a representation can reach would be called under —
      *  what typing a call left standing needs, whether or not this module turned out to reach it. */
     public static Map<String, Type> recursiveCallSigs(HelperTable table,
@@ -221,8 +215,8 @@ public final class TypeChecker {
         }
         // The imported definitions join the table this module's bodies are expanded against: a
         // published helper is expanded at its call sites here exactly as one of this module's own is,
-        // and it is not one of this module's own — which is what keeps a recursive one of them in
-        // `injectedRecursiveHelpers`, to be emitted here rather than declared here.
+        // and it is not one of this module's own — which is why a recursive one of them is emitted
+        // here rather than declared here.
         // A helper is checked standing on its own as well as expanded into what calls it, and both
         // readings answer the same about a behavior's name: it becomes the function value it names,
         // which a helper may then not apply (E1818). Told nothing, the standalone reading would

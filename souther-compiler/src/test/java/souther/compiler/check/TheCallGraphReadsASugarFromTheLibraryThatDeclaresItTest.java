@@ -16,6 +16,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -87,16 +88,25 @@ class TheCallGraphReadsASugarFromTheLibraryThatDeclaresItTest {
         });
     }
 
-    /** And what the sugar rewrites to is a recursion, which is why the edge decides anything. */
+    /**
+     * And why the edge decides anything, for the one sugar the library has: {@code List.fold}
+     * rewrites to a recursion, so a body that folds holds a call nothing can expand away and the
+     * module holding it emits a method.
+     *
+     * <p>Of that sugar and not of every sugar. Nothing in {@link Prelude.Rewrite} says a rewrite
+     * target recurses — one onto an ordinary helper would be a rewrite like any other — so a claim
+     * made of all of them would refuse the next sugar for being unlike this one.
+     */
     @Test
-    void whatASugarRewritesToIsSomethingAModuleWouldHaveToEmit() {
+    void theFoldSugarRewritesToSomethingAModuleWouldHaveToEmit() {
         HelperTable table = HelperTable.of("probe", Map.of(), Map.of(), Map.of(),
                 InliningPolicy.FULL);
         HelperGraph graph = HelperGraph.of(table);
+        Prelude.Rewrite fold = Prelude.rewriteOf("List.fold");
 
-        Prelude.rewrites().forEach((sugar, rewrite) ->
-                assertTrue(graph.recurses(rewrite.target().qualified()),
-                        sugar + " rewrites to " + rewrite.target().qualified()
-                                + ", which a module emits as a method only because it recurses"));
+        assertNotNull(fold, "`List.fold` is sugar for the fold the combinators are derived from");
+        assertEquals("List.foldFrom", fold.target().qualified());
+        assertTrue(graph.recurses("List.foldFrom"),
+                "a module emits it as a method only because it recurses");
     }
 }
