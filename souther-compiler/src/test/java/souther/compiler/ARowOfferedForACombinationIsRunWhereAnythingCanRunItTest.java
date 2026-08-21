@@ -76,19 +76,100 @@ class ARowOfferedForACombinationIsRunWhereAnythingCanRunItTest {
                 "and the generation says once that nothing ran them: " + filling.pairs().reasons());
     }
 
+    /** The same two decisions, in a behavior that depends on another. */
+    private static final String DEPENDING = """
+            module example.postage
+
+            data Membership = Premium | Standard
+
+            data Delivery = Express | Regular
+
+            data Fee = Int
+                invariant value >= 0
+
+            behavior surcharge : (member: Membership) -> Fee
+
+            behavior postageFor : (member: Membership, delivery: Delivery) -> Fee
+                constructs Fee
+                depends on surcharge
+
+            let expressFee (speed: Delivery): Int =
+                match speed with
+                    | Express -> 500
+                    | Regular -> 0
+
+            let baseFee (tier: Membership): Int =
+                match tier with
+                    | Premium -> 0
+                    | Standard -> 500
+
+            let postageFor (member, delivery, surcharge) =
+                Fee(baseFee(member) + expressFee(delivery) + surcharge(member).value)
+            """;
+
+    /**
+     * A behavior nothing can apply for a composed row is unconfirmed, not missed.
+     *
+     * <p>A row composed here names no fakes, so a behavior that depends on another has nothing to
+     * stand in for what it depends on and cannot be applied at all. Read as a run, that is a row
+     * which reached nothing — and every combination would come back as one every candidate missed,
+     * which says the search found something out about the model. It found nothing out.
+     */
+    @Test
+    void aBehaviorNothingCanApplyHasItsRowsOfferedUnconfirmed() {
+        Adequacy.Filling filling = generationOf(DEPENDING, "postageFor", Adequacy.Level.ALL);
+
+        assertFalse(filling.pairs().rows().isEmpty(), "the rows are offered");
+        assertEquals(1, unconfirmed(filling).size(),
+                "and are said to be unconfirmed: " + filling.pairs().reasons());
+    }
+
+    /** The shipping model with two of its four combinations already written. */
+    private static final String WRITTEN = SHIPPING + """
+
+            example shippingFee
+                | (Premium, Express) -> Fee(500)
+                | (Standard, Regular) -> Fee(500)
+            """;
+
+
+    /**
+     * A row the author already wrote is not offered back to them because nothing watched it.
+     *
+     * <p>Where nothing can say what a row did, the two kinds of row part. An author's row is in the
+     * file whatever this establishes about it, so passing over a combination it may fill costs a
+     * combination left owed; offering one costs them work they have already done. A row this search
+     * composed is in nobody's file and gets no such benefit.
+     */
+    @Test
+    void aWrittenRowIsNotOfferedBackWhereNothingCouldWatchIt() {
+        assertEquals(offeredBy(Adequacy.Level.ALL), offeredBy(Adequacy.Level.WITNESS),
+                "what is left to write does not turn on whether the build was measuring");
+    }
+
+    private static List<String> offeredBy(Adequacy.Level level) {
+        return generationOf(WRITTEN, "shippingFee", level).pairs().rows().stream()
+                .map(souther.compiler.partition.Generator.GeneratedRow::description).toList();
+    }
+
     private static List<GenerationReason> unconfirmed(Adequacy.Filling filling) {
         return filling.pairs().reasons().stream()
                 .filter(GenerationReason.RowsNotConfirmed.class::isInstance).toList();
     }
 
     private static Adequacy.Filling generationOf(Adequacy.Level level) {
-        Compilation compilation = Compilation.ofSource(SHIPPING, "Main");
+        return generationOf(SHIPPING, "shippingFee", level);
+    }
+
+    private static Adequacy.Filling generationOf(String source, String behavior,
+                                                 Adequacy.Level level) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.reportOnly(level));
         compilation.answerEverything();
         Map<String, Adequacy.Filling> filled = compilation.db()
                 .ask(new Adequacy.Generated(compilation.modules().get(0))).value();
         assertNotNull(filled, "the model under test compiles and is measured");
-        Adequacy.Filling filling = filled.get("shippingFee");
+        Adequacy.Filling filling = filled.get(behavior);
         assertNotNull(filling, "the behavior under test was generated for");
         assertTrue(filling.pairs().unresolved().stream().noneMatch(each -> each.reason()
                         == souther.compiler.partition.Generator.UnresolvedCombination.Reason

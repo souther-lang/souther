@@ -9,9 +9,9 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ComparisonOutcome;
 import souther.compiler.coverage.ControlClaim;
+import souther.compiler.coverage.Observation;
 import souther.compiler.coverage.ControlPointId;
 import souther.compiler.coverage.CoverageSites;
-import souther.compiler.coverage.Observation;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.interaction.Interaction;
 import souther.compiler.interaction.Interactions;
@@ -75,15 +75,16 @@ class ARowNothingRanFillsNoCombinationTest {
             """;
 
     /**
-     * A row nothing ran leaves every combination owed; the same row, run, fills the one it did.
+     * A row is counted against a combination on what a run says, and on what kind of row it is.
      *
-     * <p>The two halves are one assertion made twice, because either alone says nothing. That the
-     * unseen row leaves the combination owed could be a generator that offers it regardless; that
-     * the seen row takes it away could be a generator that counts any row sitting in the classes.
-     * Together they say the difference is the run.
+     * <p>Three rows, one set of values. Seen doing what the combination names, it fills it. Seen
+     * doing something else, it does not — which is the whole of this issue: the values sit in the
+     * classes either way, and the reading that put them there is what was wrong. And where nothing
+     * could watch it, an author's row is given the benefit of it, because a combination re-offered
+     * over a row already in the file is a specific piece of work handed to someone who has done it.
      */
     @Test
-    void aRowIsCountedAgainstACombinationOnlyWhereARunSaysItFilledIt() {
+    void aRowIsCountedAgainstACombinationOnWhatARunSaysAndOnWhoseRowItIs() {
         Model model = Model.of(SHIPPING, "shippingFee");
         List<InteractionCells.Group> groups =
                 InteractionCells.of(model.groups(), model.subject().axes());
@@ -93,22 +94,25 @@ class ARowNothingRanFillsNoCombinationTest {
         assertFalse(first.claims().isEmpty(), "which a run can be held to");
 
         Map<AxisId, Classification> sitting = at(model.subject().axes(), first);
-
-        List<String> unseen = classesOffered(model, Generator.ObservedRow.unseen(sitting));
-        List<String> seen = classesOffered(model,
-                new Generator.ObservedRow(sitting, doing(first.claims())));
-
         String combination = labelOf(model.subject().axes(), sitting);
-        assertTrue(unseen.contains(combination),
-                "a row nothing ran fills no combination, so this one is still owed: " + unseen);
-        assertFalse(seen.contains(combination),
-                "and the same row, seen doing what the combination names, fills it: " + seen);
+
+        assertFalse(offeredFor(model, new Generator.Watched.Ran(doing(first.claims())))
+                        .contains(combination),
+                "a row seen doing what the combination names fills it");
+        assertTrue(offeredFor(model, new Generator.Watched.Ran(Observation.NONE))
+                        .contains(combination),
+                "a row seen doing something else leaves it owed, sit where its values may");
+        assertFalse(offeredFor(model, new Generator.Watched.Unrecorded()).contains(combination),
+                "and a row of the author's that nothing could watch is given the benefit of it");
     }
 
-    /** What the generator offers, as the classes each row is offered for. */
-    private static List<String> classesOffered(Model model, Generator.ObservedRow written) {
-        return Generator.fill(model.subject(), List.of(written), Generator.CandidateCheck.ANY,
-                        model.groups())
+    /** What the generator offers when this row is already written, as the classes of each. */
+    private static List<String> offeredFor(Model model, Generator.Watched watched) {
+        List<InteractionCells.Group> groups =
+                InteractionCells.of(model.groups(), model.subject().axes());
+        Map<AxisId, Classification> sitting = at(model.subject().axes(), groups.get(0).at(0));
+        return Generator.fill(model.subject(), List.of(new Generator.ObservedRow(sitting, watched)),
+                        Generator.CandidateCheck.ANY, model.groups())
                 .rows().stream().map(Generator.GeneratedRow::description).toList();
     }
 

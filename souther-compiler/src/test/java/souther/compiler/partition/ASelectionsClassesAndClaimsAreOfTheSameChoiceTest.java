@@ -12,6 +12,7 @@ import java.util.OptionalInt;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -104,6 +105,43 @@ class ASelectionsClassesAndClaimsAreOfTheSameChoiceTest {
         assertNull(group.at(1), "the first way of one factor and the second of the other agree "
                 + "on nothing");
         assertNull(group.at(2), "nor the other way round");
+    }
+
+    /**
+     * A witness takes both halves: the row sits where the combination leaves room, and the run did
+     * what it names.
+     *
+     * <p>Either alone is a different statement. A run that did everything the combination names,
+     * paired with a row sitting somewhere the combination excludes, is a witness that some row
+     * filled it and not that this one did — and the value would be handed on to a reader who cannot
+     * tell the difference.
+     */
+    @Test
+    void aWitnessIsOfARowTheCombinationLeavesRoomFor() {
+        InteractionCells.Group group = new InteractionCells.Group(
+                new InteractionCells.Placed(holding(0, 1, 2, 3), List.of(at(9))),
+                List.of(List.of(new InteractionCells.Placed(holding(0, 1), List.of(at(10))),
+                        new InteractionCells.Placed(holding(2, 3), List.of(at(11))))));
+        CellSelection selection = group.at(0);
+
+        assertTrue(selection.certifying(new int[] {1}, lit(9, 10)).isPresent(),
+                "a row the combination leaves room for, seen doing what it names");
+        assertTrue(selection.certifying(new int[] {2}, lit(9, 10)).isEmpty(),
+                "and one sitting where it leaves none is no witness, whatever the run did");
+    }
+
+    /**
+     * A combination of decisions is something a run can be held to.
+     *
+     * <p>Allowed to claim nothing, it would be a combination every run certifies — including one
+     * that did nothing at all. A claim dropped by whatever reads the body would then come back not
+     * as a combination nothing can witness, which is loud, but as one everything does, which is
+     * silent and wrong.
+     */
+    @Test
+    void aCombinationClaimingNothingIsNotOne() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new CellSelection(holding(0, 1), List.of()));
     }
 
     /**

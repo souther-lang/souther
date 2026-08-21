@@ -25,8 +25,10 @@ import java.util.Optional;
  * <p>The same classes an evaluation runs against, reached the same way a written row reaches them —
  * the values are built through this module's own decoders and handed to the answerer this compile
  * emitted. What differs is that there is no row: no expectation to hold the answer to, no fakes, no
- * stand-ins. So a behavior that depends on another cannot be run this way, which is answered rather
- * than raised, and comes back as nothing having run.
+ * stand-ins. So a behavior that depends on another cannot be applied this way, and neither can one
+ * whose implementation is out of reach. Both are said outright by the layer that would have applied
+ * it, and both come back as nothing having run — which is asked of that layer rather than worked out
+ * here from what a behavior declares, there being one question and no reason for two answers to it.
  *
  * <p>A run that aborts still went where it went. An invariant refusing the answer, a budget running
  * out, an {@code unreachable} being reached — each of them happens after the row has passed whatever
@@ -128,17 +130,27 @@ public final class RowTrial {
             return Optional.empty();
         }
         Probe.begin();
-        EvaluationContext.begin(steps.stepLimit(), steps.recursionDepthLimit());
         try {
-            applying.to(over);
-        } catch (RuntimeException | LinkageError | StackOverflowError e) {
-            // It ran and stopped. Where it had got to is what is being asked for.
+            EvaluationContext.begin(steps.stepLimit(), steps.recursionDepthLimit());
+            try {
+                applying.to(over);
+            } catch (ImplementationNotReached | StandinNotBuilt e) {
+                // Not a run at all: nothing was applied. Saying the row did nothing would be saying
+                // it went nowhere, and those are different facts about it — which is the whole of
+                // what this catch is for, and why it names these two and not what they extend.
+                return Optional.empty();
+            } catch (RuntimeException | Error e) {
+                // It ran and stopped. Where it had got to is what is being asked for, and what
+                // stopped it is not: nothing here is judging the row.
+            } finally {
+                EvaluationContext.end();
+            }
+            return Optional.of(Probe.snapshot());
         } finally {
-            EvaluationContext.end();
+            // On every way out, including one nothing here catches. A recording left installed is
+            // where the next reader on this thread would start.
+            Probe.end();
         }
-        Observation seen = Probe.snapshot();
-        Probe.end();
-        return Optional.of(seen);
     }
 
     private RowTrial() {}

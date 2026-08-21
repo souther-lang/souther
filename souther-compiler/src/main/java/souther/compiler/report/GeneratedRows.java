@@ -455,7 +455,7 @@ public final class GeneratedRows {
                             + " combination impossible";
             case SEARCH_LIMIT -> "the search stopped before reaching it";
             case NO_CERTIFIED_WITNESS ->
-                    "every row composed for it ran and went somewhere else, which does not make the"
+                    "no row composed for it was seen reaching it, which does not make the"
                             + " combination unreachable";
             case THE_RULES_LEAVE_NOTHING_THERE ->
                     "the rules leave no value here, and every combination they do leave was tried";

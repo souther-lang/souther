@@ -100,6 +100,22 @@ public final class InteractionCells {
             return cls >= 0 && cls < allowed[axis].length && allowed[axis][cls];
         }
 
+        /**
+         * Whether a row sitting at {@code where} — one class per position, in the order the axes
+         * are ordered — is one this leaves room for.
+         *
+         * <p>A position this says nothing about admits whatever the row has there. What it does not
+         * admit is a class it narrowed away, which is the whole of what a cell is.
+         */
+        public boolean holds(int[] where) {
+            for (int axis = 0; axis < allowed.length; axis++) {
+                if (narrows(axis) && !(axis < where.length && admits(axis, where[axis]))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         public boolean sameAs(Cell other) {
             return Arrays.deepEquals(allowed, other.allowed);
         }

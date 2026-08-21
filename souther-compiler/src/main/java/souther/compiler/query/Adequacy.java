@@ -1319,7 +1319,8 @@ public final class Adequacy {
                     pairs = pairsFor(spec, sig, symbols, bodies.get(spec.name()), plan,
                             byTarget.getOrDefault(spec.name(), Observed.NONE), building,
                             domainOf(readInputs, spec), arrivalsOf(arrives, spec),
-                            statedOf(declared, spec), runningRowsOf(trials, spec.name(), sig));
+                            statedOf(declared, spec), runningRowsOf(trials, spec.name(), sig),
+                            levelOf(db).measuresArms());
                 } catch (LinkageError _) {
                     // The generated classes would not link, so nothing can be built to find out
                     // what a model admits. Saying so is not the same as saying the combinations are
@@ -1589,7 +1590,8 @@ public final class Adequacy {
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
                 FixtureReader.Construction building, InputDomain domain,
                 souther.compiler.check.PathReachability.Answers arrives,
-                souther.compiler.check.StatedContract stated, Generator.Trial trial) {
+                souther.compiler.check.StatedContract stated, Generator.Trial trial,
+                boolean recording) {
             if (observed.someRowsUnseen()) {
                 // Rows exist that nothing read. What they cover is unknown, so what is left uncovered
                 // is unknown too — and a generated row is a specific piece of work handed to a person,
@@ -1617,7 +1619,8 @@ public final class Adequacy {
             // body's combinations the row was seen filling.
             List<Generator.ObservedRow> existing = rows.stream()
                     .map(row -> new Generator.ObservedRow(
-                            RowClasses.of(row, inputs, partitioning.axes()), seenBy(row)))
+                            RowClasses.of(row, inputs, partitioning.axes()),
+                            watched(row, recording)))
                     .toList();
             return Generator.fill(subject, existing, check,
                     souther.compiler.interaction.Interactions.of(body, plan, domain, symbols),
@@ -2588,6 +2591,29 @@ public final class Adequacy {
         return switch (row.run().counting()) {
             case Counting.Read read -> read.observation();
             case Counting.Unread _ -> souther.compiler.coverage.Observation.NONE;
+        };
+    }
+
+    /**
+     * What came of running {@code row}, as something that says which of the two nothings it is.
+     *
+     * <p>A row whose counting was never read, and a compile that records nothing of any row, both
+     * leave an empty account — and neither of them is a row that went nowhere. Handed over as an
+     * account, the difference is gone by the time anything acts on it, and a combination the row
+     * may well fill reads as one it was shown not to.
+     */
+    private static souther.compiler.partition.Generator.Watched watched(RowOutcome row,
+                                                                        boolean recording) {
+        if (!recording) {
+            // The row ran — every row of an evaluated source does — and nothing was recording it.
+            // Answered as that rather than as a run with an empty account of itself, which is what
+            // a row that reached nothing leaves and is a different thing to have found out.
+            return new souther.compiler.partition.Generator.Watched.Unrecorded();
+        }
+        return switch (row.run().counting()) {
+            case Counting.Read read ->
+                    new souther.compiler.partition.Generator.Watched.Ran(read.observation());
+            case Counting.Unread _ -> new souther.compiler.partition.Generator.Watched.NotRun();
         };
     }
 

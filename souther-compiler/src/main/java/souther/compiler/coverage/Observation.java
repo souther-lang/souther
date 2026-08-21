@@ -28,6 +28,20 @@ public record Observation(Set<Integer> taken, Set<ComparisonOutcome> comparisons
     public Observation {
         taken = taken == null ? Set.of() : Set.copyOf(taken);
         comparisons = comparisons == null ? Set.of() : Set.copyOf(comparisons);
+        // Held here and not left to whoever records one. What a recording is written like is a
+        // producer's business and can change; that a way out of a comparison means the comparison
+        // was reached is what every reader of this is entitled to, and a value that broke it would
+        // certify a claim about a place the same value says was never got to.
+        //
+        // Both ways out of one comparison together are not a breach and must not be refused: a
+        // place a run comes back to is evaluated more than once, and a recording that held only
+        // which way it went the first time would be saying less than it saw.
+        for (ComparisonOutcome way : comparisons) {
+            if (!taken.contains(way.at().emissionSite())) {
+                throw new IllegalArgumentException(
+                        "a run that saw " + way + " is one that reached " + way.at());
+            }
+        }
     }
 
     /** Whether the run was recorded at {@code site}. */

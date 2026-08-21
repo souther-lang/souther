@@ -127,22 +127,22 @@ public final class Generator {
      * combination's classes and whose run went elsewhere fills nothing, and looks from the values
      * alone exactly like one that fills it.
      *
-     * @param at   which class of each divided position the row's values fall in
-     * @param seen what the row's run was recorded doing, or {@link Observation#NONE} where nothing
-     *             read it. Nothing read is not nothing done: it certifies no combination, which
-     *             leaves them owed rather than filled
+     * @param at      which class of each divided position the row's values fall in
+     * @param watched what came of running it. A sum and not an account that may be empty: a run
+     *                that recorded nothing and a row nothing recorded are the same empty account
+     *                and are not the same fact, and which of them this is decides what may be
+     *                concluded from the row
      */
-    public record ObservedRow(Map<AxisId, Classification> at,
-                              souther.compiler.coverage.Observation seen) {
+    public record ObservedRow(Map<AxisId, Classification> at, Watched watched) {
 
         public ObservedRow {
             at = Map.copyOf(at);
-            seen = seen == null ? souther.compiler.coverage.Observation.NONE : seen;
+            watched = watched == null ? new Watched.NotRun() : watched;
         }
 
-        /** A row nothing ran, for a caller with no run to read. */
+        /** A row nothing here can say anything about the run of, for a caller with none to read. */
         public static ObservedRow unseen(Map<AxisId, Classification> at) {
-            return new ObservedRow(at, souther.compiler.coverage.Observation.NONE);
+            return new ObservedRow(at, new Watched.NotRun());
         }
     }
 
@@ -195,12 +195,16 @@ public final class Generator {
              * apart from the one above it because they were there, which is not what that says. */
             LINKAGE_FAILED,
             /**
-             * Every row this composed for the combination ran and went somewhere else.
+             * No row composed for the combination was seen reaching it.
+             *
+             * <p>Said that way round because it is what the search establishes. Some of the
+             * assignments tried may have composed nothing at all, so a word about what every row
+             * did would be a word about rows there were none of; what holds of all of them is that
+             * none was a witness.
              *
              * <p>Not a proof that the combination is unreachable, and nothing reads it as one. It
-             * says this many candidates were tried and none of them was a witness, which is a fact
-             * about the candidates — and, where the reading that named the combination is wrong,
-             * about that reading. Either way the combination stays untried rather than being
+             * is a fact about the candidates — and, where the reading that named the combination is
+             * wrong, about that reading. Either way the combination stays untried rather than being
              * counted as offered (ADR-0091).
              */
             NO_CERTIFIED_WITNESS,
@@ -313,9 +317,20 @@ public final class Generator {
      */
     public sealed interface Watched {
 
-        /** It ran, and this is what it was seen doing. Also what a row that aborted part way comes
-         *  back as: it went where it went before it stopped, and that is recorded. */
+        /** It ran, something was recording, and this is what it was seen doing. Also what a row
+         *  that aborted part way comes back as: it went where it went before it stopped, and that
+         *  is recorded. */
         record Ran(souther.compiler.coverage.Observation seen) implements Watched {}
+
+        /**
+         * It ran and nothing was recording, so where it went is not a thing anything here knows.
+         *
+         * <p>What a build that does not measure the arms leaves of every row it evaluates. Told
+         * apart from {@link NotRun} because it is a different fact about the row and from
+         * {@link Ran} of an empty recording because that one is a row that reached nothing: three
+         * states that read alike off an empty account and are not one another.
+         */
+        record Unrecorded() implements Watched {}
 
         /** Nothing ran it. Never a statement about the row. */
         record NotRun() implements Watched {}
@@ -399,7 +414,7 @@ public final class Generator {
         List<GenerationReason> reasons = new ArrayList<>(undecided);
         List<Placement> written = new ArrayList<>();
         for (ObservedRow row : existing) {
-            written.add(new Placement(whereIn(row.at(), axes), row.seen()));
+            written.add(new Placement.Written(whereIn(row.at(), axes), row.watched()));
         }
         // Built here and not handed in: a cell is one class per position of the axes this
         // generation kept, and the caller's list is neither ordered the same nor filtered the same.
@@ -435,17 +450,20 @@ public final class Generator {
                 switch (witnessFor(subject, axes, pairs, selection, check, trial)) {
                     case Witness.None none -> unresolved.add(new UnresolvedCombination(
                             none.classes(), none.reason(), none.detail(), none.said()));
-                    case Witness.Offer offer -> {
+                    case Witness.Certified found -> {
+                        rows.add(found.row());
+                        written.add(new Placement.Composed(found.by().where(),
+                                new Watched.Ran(found.by().seen())));
+                        cover(pairs, singles, axes, found.by().where());
+                    }
+                    case Witness.Unconfirmed offer -> {
                         rows.add(offer.row());
-                        written.add(new Placement(offer.where(), offer.seen()));
+                        written.add(new Placement.Composed(offer.where(), new Watched.NotRun()));
                         cover(pairs, singles, axes, offer.where());
-                        if (offer.seen().taken().isEmpty()
-                                && offer.seen().comparisons().isEmpty()) {
-                            // Nothing watched it, so what it is offered for is what the reading
-                            // says and not what anything saw. Said once for the behavior rather
-                            // than once a row: it is one fact about this generation.
-                            unconfirmed = true;
-                        }
+                        // Nothing watched it, so what it is offered for is what the reading says
+                        // and not what anything saw. Said once for the behavior: it is one fact
+                        // about this generation.
+                        unconfirmed = true;
                     }
                 }
             }
@@ -755,24 +773,28 @@ public final class Generator {
         }
     }
 
-    /** A row this generation is counting against the combinations: where it sits, and what its
-     *  run did. */
-    private record Placement(int[] where, souther.compiler.coverage.Observation seen) {}
-
     /**
-     * Whether {@code cell} leaves room for a row sitting at {@code where}.
+     * A row this generation counts the combinations against: where it sits, what came of running
+     * it, and whose row it is.
      *
-     * <p>A statement about the search space and about nothing else. Being admitted is what makes a
-     * row a candidate for a combination; it is not what makes it one that fills it.
+     * <p>Whose it is, because being unable to say where a row went costs different things for the
+     * two. A row the author wrote is in the file whatever this can establish about it, so passing
+     * over a combination it may fill risks nothing worse than a combination left owed — while
+     * offering one risks handing them work they have already done. A row this search composed is in
+     * nobody's file, so counting one it cannot judge is reading a reading back as evidence for
+     * itself.
      */
-    private static boolean admits(InteractionCells.Cell cell, int[] where) {
-        int positions = cell.allowed().length;
-        for (int i = 0; i < positions; i++) {
-            if (cell.narrows(i) && !(i < where.length && cell.admits(i, where[i]))) {
-                return false;
-            }
-        }
-        return true;
+    private sealed interface Placement {
+
+        int[] where();
+
+        Watched watched();
+
+        /** A row that is in the author's file. */
+        record Written(int[] where, Watched watched) implements Placement {}
+
+        /** A row this search composed on this pass. */
+        record Composed(int[] where, Watched watched) implements Placement {}
     }
 
     /**
@@ -785,15 +807,21 @@ public final class Generator {
      * expected to do that, and every step from the decisions to the classes is a reading that can
      * be wrong — so taking the values for the answer is taking the reading for its own witness.
      *
-     * <p>Which is why a row this generation composed and nothing ran fills nothing. It is admitted
-     * and it is not certified, so the combination stays owed. Counting it would be the same mistake
-     * one step earlier: a row offered on the strength of a reading, then read back as evidence for
-     * the reading that offered it.
+     * <p>Where nothing could say what a row did, the two kinds of row part. An author's row is
+     * given the benefit of it: it is in the file, and a combination re-offered because this could
+     * not read the file's own row is a specific piece of work handed to someone who has done it.
+     * A row this search composed is given none: it exists because a reading said so, and counting
+     * one nothing watched is that reading standing as its own witness.
      */
     private static boolean fills(List<Placement> written, CellSelection selection) {
         for (Placement row : written) {
-            if (admits(selection.cell(), row.where())
-                    && selection.certifying(row.where(), row.seen()).isPresent()) {
+            if (row.watched() instanceof Watched.Ran ran) {
+                // The one thing that says a row filled a combination, asked of a row already in the
+                // file exactly as it is asked of one this search composed.
+                if (selection.certifying(row.where(), ran.seen()).isPresent()) {
+                    return true;
+                }
+            } else if (row instanceof Placement.Written && selection.cell().holds(row.where())) {
                 return true;
             }
         }
@@ -917,18 +945,23 @@ public final class Generator {
 
     // --- looking for a row that fills a combination ----------------------------------------------
 
-    /** What the search for a row filling one combination came to. */
+    /**
+     * What the search for a row filling one combination came to.
+     *
+     * <p>Three answers and not two, because a row seen filling the combination and a row offered
+     * because nothing could watch it are not the same thing to have found. They differ in what may
+     * afterwards be concluded from the row and in whether this generation may say its rows were
+     * confirmed, so which of them it is, is the answer — rather than something read back off an
+     * empty account of the run.
+     */
     private sealed interface Witness {
 
-        /**
-         * A row to offer, where it sits, and what it was seen doing.
-         *
-         * <p>What it was seen doing is empty where nothing ran it, and that travels with the row
-         * rather than being decided again: it is what stops such a row from being read back as
-         * having filled the combination it was composed for.
-         */
-        record Offer(GeneratedRow row, int[] where, souther.compiler.coverage.Observation seen)
-                implements Witness {}
+        /** A row seen filling the combination, carrying the witness — that being the only value
+         *  which says so. */
+        record Certified(GeneratedRow row, CellSelection.CertifiedWitness by) implements Witness {}
+
+        /** A row nothing could watch, offered on the strength of the reading alone. */
+        record Unconfirmed(GeneratedRow row, int[] where) implements Witness {}
 
         /** No row to offer, and why. Never a statement that none exists. */
         record None(List<String> classes, UnresolvedCombination.Reason reason, String detail,
@@ -974,14 +1007,19 @@ public final class Generator {
             GeneratedRow named = new GeneratedRow(labels(axes, cell, at), last.row().inputs());
             switch (trial.run(named.inputs())) {
                 // Nothing can say where it went, so nothing certifies it and nothing refutes it.
-                // Offered as it was before anything ran, with an empty account of itself.
-                case Watched.NotRun _ -> {
-                    return new Witness.Offer(named, at,
-                            souther.compiler.coverage.Observation.NONE);
+                // Offered as it was before anything ran, and said to be. Both of the ways that
+                // happens come here: nothing applied the row, or nothing was recording while it
+                // was applied.
+                case Watched.NotRun _, Watched.Unrecorded _ -> {
+                    return new Witness.Unconfirmed(named, at);
                 }
-                case Watched.Ran(souther.compiler.coverage.Observation seen) -> {
-                    if (selection.certifiedBy(seen)) {
-                        return new Witness.Offer(named, at, seen);
+                case Watched.Ran ran -> {
+                    // Through the one thing that can say a row filled a combination, which is the
+                    // same thing a row already in the file is put through.
+                    Optional<CellSelection.CertifiedWitness> found =
+                            selection.certifying(at, ran.seen());
+                    if (found.isPresent()) {
+                        return new Witness.Certified(named, found.get());
                     }
                     missed = true;
                 }

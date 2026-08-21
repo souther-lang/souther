@@ -29,6 +29,14 @@ public record CellSelection(InteractionCells.Cell cell, List<ControlClaim> claim
 
     public CellSelection {
         claims = List.copyOf(claims);
+        if (claims.isEmpty()) {
+            // A combination of a body's decisions is decisions being settled, so a run that filled
+            // one did something. Allowed to be empty, this would be a combination every run
+            // certifies — including one that did nothing — and a claim dropped upstream would come
+            // back not as a combination nothing can witness but as one everything does.
+            throw new IllegalArgumentException(
+                    "a combination of decisions is something a run can be held to");
+        }
     }
 
     /**
@@ -52,14 +60,15 @@ public record CellSelection(InteractionCells.Cell cell, List<ControlClaim> claim
      * The row at {@code where} as a witness that this combination is filled, where {@code seen} says
      * it filled it.
      *
-     * <p>The only way there is to make one. That a row fills a combination is the one thing here a
-     * reader may act on, and it is a conclusion about a run — so it is a value nothing but this can
-     * produce, out of the run itself. A caller holding the classes a row sits in cannot reach for it,
-     * which is what stops the reading that composed a row from being read back as evidence for
-     * itself.
+     * <p>The only way there is to make one, and it asks both halves. A row fills a combination by
+     * sitting where the combination leaves room and by having been seen doing what it names, and a
+     * value that took the second on trust would say a row filled a combination it is not even in.
+     * A caller holding one half cannot reach for it, which is what stops the reading that composed
+     * a row from being read back as evidence for itself.
      */
     public java.util.Optional<CertifiedWitness> certifying(int[] where, Observation seen) {
-        return certifiedBy(seen) ? java.util.Optional.of(new CertifiedWitness(this, where))
+        return cell.holds(where) && certifiedBy(seen)
+                ? java.util.Optional.of(new CertifiedWitness(this, where, seen))
                 : java.util.Optional.empty();
     }
 
@@ -75,10 +84,12 @@ public record CellSelection(InteractionCells.Cell cell, List<ControlClaim> claim
 
         private final CellSelection of;
         private final int[] where;
+        private final Observation seen;
 
-        private CertifiedWitness(CellSelection of, int[] where) {
+        private CertifiedWitness(CellSelection of, int[] where, Observation seen) {
             this.of = of;
             this.where = where.clone();
+            this.seen = seen;
         }
 
         /** Which combination this fills. */
@@ -89,6 +100,11 @@ public record CellSelection(InteractionCells.Cell cell, List<ControlClaim> claim
         /** Which class of each position the row sits at. */
         public int[] where() {
             return where.clone();
+        }
+
+        /** What the run was seen doing, which is what other combinations are asked of in turn. */
+        public Observation seen() {
+            return seen;
         }
     }
 }
