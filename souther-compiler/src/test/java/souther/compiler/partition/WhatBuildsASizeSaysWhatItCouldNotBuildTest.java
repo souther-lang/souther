@@ -29,7 +29,7 @@ class WhatBuildsASizeSaysWhatItCouldNotBuildTest {
     @Test
     void aStringOfTheSizeAskedForIsBuilt() {
         assertEquals(List.of("\"xxx\""),
-                Witnesses.ofSize(Type.STRING, 3, NONE, Set.of()).values().stream()
+                Witnesses.ofSize(Type.STRING, 3, NONE, souther.compiler.check.ReadAs.THE_COMPILATION_DOES, Set.of()).values().stream()
                         .map(FixtureTemplate::text).toList());
     }
 
@@ -41,10 +41,10 @@ class WhatBuildsASizeSaysWhatItCouldNotBuildTest {
     @Test
     void aSizeOfZeroIsTheEmptyValue() {
         assertEquals(List.of("\"\""),
-                Witnesses.ofSize(Type.STRING, 0, NONE, Set.of()).values().stream()
+                Witnesses.ofSize(Type.STRING, 0, NONE, souther.compiler.check.ReadAs.THE_COMPILATION_DOES, Set.of()).values().stream()
                         .map(FixtureTemplate::text).toList());
         assertEquals(List.of("[]"),
-                Witnesses.ofSize(new Type.ListOf(Type.INT), 0, NONE, Set.of()).values().stream()
+                Witnesses.ofSize(new Type.ListOf(Type.INT), 0, NONE, souther.compiler.check.ReadAs.THE_COMPILATION_DOES, Set.of()).values().stream()
                         .map(FixtureTemplate::text).toList());
     }
 
@@ -57,24 +57,24 @@ class WhatBuildsASizeSaysWhatItCouldNotBuildTest {
      */
     @Test
     void aFloorOfNoneAsksForNothingWhereASizeOfZeroAsksForTheEmptyValue() {
-        assertEquals(List.of(), Witnesses.holding(Type.STRING, 0, NONE, Set.of()));
-        assertTrue(!Witnesses.ofSize(Type.STRING, 0, NONE, Set.of()).values().isEmpty());
+        assertEquals(List.of(), Witnesses.holding(Type.STRING, 0, NONE, souther.compiler.check.ReadAs.THE_COMPILATION_DOES, Set.of()));
+        assertTrue(!Witnesses.ofSize(Type.STRING, 0, NONE, souther.compiler.check.ReadAs.THE_COMPILATION_DOES, Set.of()).values().isEmpty());
     }
 
     /** A count past what a row is worth carrying is one nothing composes, and says which it is. */
     @Test
     void aSizeNoRowWouldCarrySaysNothingComposesOne() {
-        assertEquals(List.of(), Witnesses.ofSize(Type.STRING, 100_000, NONE, Set.of()).values());
+        assertEquals(List.of(), Witnesses.ofSize(Type.STRING, 100_000, NONE, souther.compiler.check.ReadAs.THE_COMPILATION_DOES, Set.of()).values());
         assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                Witnesses.reasonForSize(Type.STRING, 100_000, NONE));
+                Witnesses.reasonForSize(Type.STRING, 100_000, souther.compiler.check.ReadAs.THE_COMPILATION_DOES, NONE));
     }
 
     /** A carrier nothing counts has no size to build at, and says which silence that is. */
     @Test
     void aCarrierNothingCountsSaysNothingComposesOne() {
-        assertEquals(List.of(), Witnesses.ofSize(Type.INT, 3, NONE, Set.of()).values());
+        assertEquals(List.of(), Witnesses.ofSize(Type.INT, 3, NONE, souther.compiler.check.ReadAs.THE_COMPILATION_DOES, Set.of()).values());
         assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                Witnesses.reasonForSize(Type.INT, 3, NONE));
+                Witnesses.reasonForSize(Type.INT, 3, souther.compiler.check.ReadAs.THE_COMPILATION_DOES, NONE));
     }
 
     /**
@@ -90,18 +90,18 @@ class WhatBuildsASizeSaysWhatItCouldNotBuildTest {
     void aSetIsNothingWhereTheTypeHasFewerValuesThanTheCountAsksFor() {
         Type set = new Type.SetOf(Type.BOOL);
 
-        assertEquals(List.of("[true, false]"), Witnesses.ofSize(set, 2, NONE, Set.of()).values().stream()
+        assertEquals(List.of("[true, false]"), Witnesses.ofSize(set, 2, NONE, souther.compiler.check.ReadAs.THE_COMPILATION_DOES, Set.of()).values().stream()
                 .map(FixtureTemplate::text).toList());
-        assertEquals(List.of(), Witnesses.ofSize(set, 3, NONE, Set.of()).values());
+        assertEquals(List.of(), Witnesses.ofSize(set, 3, NONE, souther.compiler.check.ReadAs.THE_COMPILATION_DOES, Set.of()).values());
         assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                Witnesses.reasonForSize(set, 3, NONE));
+                Witnesses.reasonForSize(set, 3, souther.compiler.check.ReadAs.THE_COMPILATION_DOES, NONE));
     }
 
     /** A floor goes on being offered what the type has, which is the value its rule refuses. */
     @Test
     void aFloorIsStillOfferedTheValueTheTypeCanReach() {
         assertEquals(List.of("[true, false]"),
-                Witnesses.holding(new Type.SetOf(Type.BOOL), 3, NONE, Set.of()).stream()
+                Witnesses.holding(new Type.SetOf(Type.BOOL), 3, NONE, souther.compiler.check.ReadAs.THE_COMPILATION_DOES, Set.of()).stream()
                         .map(FixtureTemplate::text).toList());
     }
 
@@ -110,10 +110,10 @@ class WhatBuildsASizeSaysWhatItCouldNotBuildTest {
     void aMapIsNothingWhereItsKeysRunOutBeforeTheCount() {
         Type map = new Type.MapOf(Type.BOOL, Type.INT);
 
-        assertTrue(!Witnesses.ofSize(map, 2, NONE, Set.of()).values().isEmpty(),
+        assertTrue(!Witnesses.ofSize(map, 2, NONE, souther.compiler.check.ReadAs.THE_COMPILATION_DOES, Set.of()).values().isEmpty(),
                 "two keys are two the type has");
-        assertEquals(List.of(), Witnesses.ofSize(map, 3, NONE, Set.of()).values());
+        assertEquals(List.of(), Witnesses.ofSize(map, 3, NONE, souther.compiler.check.ReadAs.THE_COMPILATION_DOES, Set.of()).values());
         assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                Witnesses.reasonForSize(map, 3, NONE));
+                Witnesses.reasonForSize(map, 3, souther.compiler.check.ReadAs.THE_COMPILATION_DOES, NONE));
     }
 }

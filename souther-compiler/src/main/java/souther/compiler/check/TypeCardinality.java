@@ -50,17 +50,18 @@ public final class TypeCardinality {
     private TypeCardinality() {}
 
     /** How many values each declaration {@code declarations} reaches has at most. */
-    public static Cardinalities solve(List<Hir.Def> declarations, Symbols symbols) {
+    public static Cardinalities solve(List<Hir.Def> declarations, Symbols symbols,
+                                      ReadingPolicy policy) {
         Map<TypeSymbol, Hir.Def> declared = reached(declarations, symbols);
         Map<TypeSymbol, Set<TypeSymbol>> edges = new LinkedHashMap<>();
         declared.forEach((name, def) -> edges.put(name, read(def, symbols, declared.keySet())));
         // Fixed before the rising starts. What makes it stop is that there are finitely many answers
         // to rise through, and a count discovered part way would give it somewhere new to go.
-        CardinalityCuts cuts = CardinalityCuts.keeping(asked(declared, symbols));
+        CardinalityCuts cuts = CardinalityCuts.keeping(asked(declared, symbols, policy));
         List<List<TypeSymbol>> components = TypeComponents.of(edges);
         return new Cardinalities(
-                Map.copyOf(pass(components, declared, edges, cuts, symbols, Set.of())),
-                components, declared, edges, cuts, symbols);
+                Map.copyOf(pass(components, declared, edges, cuts, symbols, policy, Set.of())),
+                components, declared, edges, cuts, symbols, policy);
     }
 
     /**
@@ -79,17 +80,19 @@ public final class TypeCardinality {
         private final Map<TypeSymbol, Set<TypeSymbol>> edges;
         private final CardinalityCuts cuts;
         private final Symbols symbols;
+        private final ReadingPolicy policy;
 
         private Cardinalities(Map<TypeSymbol, Cardinality> upper, List<List<TypeSymbol>> components,
                               Map<TypeSymbol, Hir.Def> declared,
                               Map<TypeSymbol, Set<TypeSymbol>> edges, CardinalityCuts cuts,
-                              Symbols symbols) {
+                              Symbols symbols, ReadingPolicy policy) {
             this.upper = upper;
             this.components = components;
             this.declared = declared;
             this.edges = edges;
             this.cuts = cuts;
             this.symbols = symbols;
+            this.policy = policy;
         }
 
         /** How many values every declaration reached has at most. */
@@ -135,7 +138,7 @@ public final class TypeCardinality {
          * was shown by under another.
          */
         Map<TypeSymbol, Cardinality> granting(Set<TypeSymbol> granted) {
-            return pass(components, declared, edges, cuts, symbols, granted);
+            return pass(components, declared, edges, cuts, symbols, policy, granted);
         }
     }
 
@@ -152,6 +155,7 @@ public final class TypeCardinality {
                                                    Map<TypeSymbol, Hir.Def> declared,
                                                    Map<TypeSymbol, Set<TypeSymbol>> edges,
                                                    CardinalityCuts cuts, Symbols symbols,
+                                                   ReadingPolicy policy,
                                                    Set<TypeSymbol> granted) {
         Answers answers = Answers.empty();
         for (List<TypeSymbol> component : components) {
@@ -169,10 +173,10 @@ public final class TypeCardinality {
             if (asked.size() == 1 && !TypeComponents.recurses(component, edges)) {
                 TypeSymbol one = asked.get(0);
                 answers.settle(one, CardinalityTransfer.upperOf(
-                        one, declared.get(one), symbols, answers, granted::contains));
+                        one, declared.get(one), symbols, policy, answers, granted::contains));
                 continue;
             }
-            rise(asked, declared, symbols, cuts, answers, granted);
+            rise(asked, declared, policy, symbols, cuts, answers, granted);
         }
         return answers.everySettled();
     }
@@ -185,6 +189,7 @@ public final class TypeCardinality {
      * place the rising needs it.
      */
     private static void rise(List<TypeSymbol> component, Map<TypeSymbol, Hir.Def> declared,
+                             ReadingPolicy policy,
                              Symbols symbols, CardinalityCuts cuts,
                              Answers answers, Set<TypeSymbol> granted) {
         component.forEach(answers::atBottom);
@@ -194,7 +199,7 @@ public final class TypeCardinality {
             for (TypeSymbol each : component) {
                 Cardinality before = answers.settledAt(each);
                 Cardinality next = round(cuts, CardinalityTransfer.upperOf(
-                        each, declared.get(each), symbols, answers, granted::contains));
+                        each, declared.get(each), symbols, policy, answers, granted::contains));
                 // Written every round, and the rising is over the counts alone. Two readings that
                 // come to none are the same answer to rise through however they were shown, so
                 // comparing the proofs would keep a settled rising moving; and taking the earlier
@@ -350,13 +355,14 @@ public final class TypeCardinality {
      * written at the position, and a count missed here is precision lost and nothing else: the
      * answers still tell apart everything the questions found.
      */
-    private static Set<Long> asked(Map<TypeSymbol, Hir.Def> declared, Symbols symbols) {
+    private static Set<Long> asked(Map<TypeSymbol, Hir.Def> declared, Symbols symbols,
+                                   ReadingPolicy policy) {
         Set<Long> counts = new HashSet<>();
         declared.forEach((name, def) -> {
             if (!(def instanceof Hir.Data data)) {
                 return;
             }
-            OccurrenceCounts held = OccurrenceCounts.of(name, data, symbols);
+            OccurrenceCounts held = OccurrenceCounts.of(name, data, symbols, policy);
             for (String path : data.newtype() ? Set.of(FieldDomains.THE_VALUE)
                     : TypeOps.fieldTypes(data, symbols).keySet()) {
                 long least = held.leastHeldAt(path);

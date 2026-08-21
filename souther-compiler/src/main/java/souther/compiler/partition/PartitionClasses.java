@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.ReadingPolicy;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
@@ -30,9 +31,9 @@ final class PartitionClasses {
     /** The classes a type states, before any rule is crossed with them. What a witness varies over
      *  and what a generator offers for a bare position, which are asked of a type and not of a
      *  position of one. */
-    static List<PartitionClass> of(Type type, Symbols symbols) {
+    static List<PartitionClass> of(Type type, Symbols symbols, ReadingPolicy policy) {
         TypeView view = TypeView.of(type, symbols);
-        return of(Distinctions.ofType(view, symbols), view, symbols);
+        return of(Distinctions.ofType(view, symbols), view, symbols, policy);
     }
 
     /**
@@ -42,7 +43,8 @@ final class PartitionClasses {
      * are still the position's and a row already sitting in one still covers it, so what is absent
      * is the offer of a new row rather than the class.
      */
-    static List<PartitionClass> of(List<Case> cases, TypeView view, Symbols symbols) {
+    static List<PartitionClass> of(List<Case> cases, TypeView view, Symbols symbols,
+                                   ReadingPolicy policy) {
         if (cases.isEmpty()) {
             return List.of();
         }
@@ -54,13 +56,13 @@ final class PartitionClasses {
         List<TypeReachName.Written> writes = new ArrayList<>();
         for (TypeSymbol each : worn) {
             if (!(symbols.scope().reach(each) instanceof TypeReachName.Written written)) {
-                return unwritable(cases, view, symbols, worn, each);
+                return unwritable(cases, view, symbols, policy, worn, each);
             }
             writes.add(written);
         }
         List<PartitionClass> out = new ArrayList<>();
         for (Case one : cases) {
-            out.add(classOf(one, view, worn, writes, symbols));
+            out.add(classOf(one, view, worn, policy, writes, symbols));
         }
         return List.copyOf(out);
     }
@@ -74,6 +76,7 @@ final class PartitionClasses {
      * anything about this generator.
      */
     private static List<PartitionClass> unwritable(List<Case> cases, TypeView view, Symbols symbols,
+                                                   ReadingPolicy policy,
                                                    List<TypeSymbol> worn, TypeSymbol unnamed) {
         String why = notExposed(unnamed);
         List<PartitionClass> out = new ArrayList<>();
@@ -81,7 +84,7 @@ final class PartitionClasses {
         // reads a value into it are the position's either way; only the recipes are dropped, and
         // they are what there is no writing them.
         for (PartitionClass each : of(cases,
-                new TypeView(view.declared(), List.of(), view.shape()), symbols)) {
+                new TypeView(view.declared(), List.of(), view.shape()), symbols, policy)) {
             out.add(PartitionClass.ungeneratable(each.id(), each.label(),
                     Classifier.under(worn, each.classifier()), why).holding(each.denotes()));
         }
@@ -107,11 +110,12 @@ final class PartitionClasses {
      * make later stops this compiling rather than arriving as a class nothing can name.
      */
     private static PartitionClass classOf(Case one, TypeView view, List<TypeSymbol> worn,
+                                          ReadingPolicy policy,
                                           List<TypeReachName.Written> writes, Symbols symbols) {
         return switch (one) {
             case Case.Truth truth -> eitherWay(truth.value(), worn, writes);
-            case Case.Presence presence -> heldOrNot(presence.present(), view, worn, writes, symbols);
-            case Case.SumCase sum -> caseClass(sum, worn, writes, symbols);
+            case Case.Presence presence -> heldOrNot(presence.present(), view, worn, policy, writes, symbols);
+            case Case.SumCase sum -> caseClass(sum, worn, policy, writes, symbols);
             case Case.Named named -> ValueClasses.classAt(named.value(), view, worn, symbols);
         };
     }
@@ -132,6 +136,7 @@ final class PartitionClasses {
 
     /** Whether an optional holds anything, which is the one division its type makes. */
     private static PartitionClass heldOrNot(boolean present, TypeView view, List<TypeSymbol> worn,
+                                            ReadingPolicy policy,
                                             List<TypeReachName.Written> writes, Symbols symbols) {
         if (!present) {
             return PartitionClass.of("None", "None",
@@ -149,7 +154,7 @@ final class PartitionClasses {
                             + " from it disagree about its shape");
         }
         Type element = optional.element();
-        List<FixtureTemplate> some = Partitions.representativesOf(element, symbols);
+        List<FixtureTemplate> some = Partitions.representativesOf(element, symbols, policy);
         Classifier is = Classifier.under(worn,
                 Classifier.byShape(v -> !(v instanceof ObservedValue.Absent)));
         return some.isEmpty()
@@ -160,8 +165,9 @@ final class PartitionClasses {
     }
 
     private static PartitionClass caseClass(Case.SumCase one, List<TypeSymbol> worn,
+                                            ReadingPolicy policy,
                                             List<TypeReachName.Written> writes, Symbols symbols) {
-        return holdingWhatItIs(one, writableCase(one.leaf(), worn, writes, symbols));
+        return holdingWhatItIs(one, writableCase(one.leaf(), worn, policy, writes, symbols));
     }
 
     /**
@@ -180,6 +186,7 @@ final class PartitionClasses {
 
     /** The class itself: what it is called, what it recognises, and what can be written for it. */
     private static PartitionClass writableCase(TypeSymbol leaf, List<TypeSymbol> worn,
+                                               ReadingPolicy policy,
                                                List<TypeReachName.Written> writes,
                                                Symbols symbols) {
         Classifier is = Classifier.under(worn, Classifier.byShape(v -> switch (v) {
@@ -199,7 +206,7 @@ final class PartitionClasses {
                             RepresentativeSource.of(FixtureTemplate.unitCase(names))));
         }
         if (data.newtype()) {
-            List<FixtureTemplate> inner = Partitions.insideTheNewtype(leaf, symbols);
+            List<FixtureTemplate> inner = Partitions.insideTheNewtype(leaf, symbols, policy);
             return inner.isEmpty()
                     ? PartitionClass.ungeneratable(idOfCase(leaf), leaf.name(), is,
                             "nothing here composed a value of what `" + leaf.name() + "` wraps")

@@ -132,6 +132,17 @@ public final class Front {
      */
     public record Policy() implements Input<souther.compiler.examples.EvaluationPolicy> {}
 
+    /**
+     * How much of a declaration's clauses a reading may hold apart.
+     *
+     * <p>Held as an input for the reason the one above is: it belongs to the compilation, and every
+     * reading of one declaration has to be under the same one. Read here and handed to the analysis,
+     * which never makes one — a policy made where it is needed is one that can differ between two
+     * readings of the same declaration, and each would answer a position differently while both
+     * stayed sound.
+     */
+    public record Reading() implements Input<souther.compiler.check.ReadingPolicy> {}
+
     /** One source, parsed, with the text of each declaration kept for publishing. Every position in
      * what comes back names this source, so a writing that later joins another file's module still
      * says where it was written. */

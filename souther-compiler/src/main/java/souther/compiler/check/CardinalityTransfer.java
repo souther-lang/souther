@@ -68,11 +68,12 @@ final class CardinalityTransfer {
      *                very rules the supposing was about.
      */
     static Cardinality upperOf(TypeSymbol named, Hir.Def def, Symbols symbols,
-                               Answers answers, Predicate<TypeSymbol> granted) {
+                               ReadingPolicy policy, Answers answers,
+                               Predicate<TypeSymbol> granted) {
         return switch (def) {
             case Hir.UnitData _ -> Cardinality.atMost(1);
             case Hir.SumData sum -> ofCases(namedCases(sum), answers);
-            case Hir.Data data -> ofData(named, data, symbols, answers, granted);
+            case Hir.Data data -> ofData(named, data, symbols, policy, answers, granted);
         };
     }
 
@@ -118,17 +119,18 @@ final class CardinalityTransfer {
     }
 
     private static Cardinality ofData(TypeSymbol named, Hir.Data data, Symbols symbols,
-                                      Answers answers, Predicate<TypeSymbol> granted) {
+                                      ReadingPolicy policy, Answers answers,
+                                      Predicate<TypeSymbol> granted) {
         // Rules that cannot all hold leave nothing to count, and the ends they would have been
         // counted between are gone with them. Asked before the positions, which have nothing to say
         // about a value the declaration as a whole refuses, and nearer than anything they could say.
         Optional<Emptiness> contradiction =
-                FieldDomains.granting(named, data, symbols, granted).holdsNothing();
+                FieldDomains.granting(named, data, symbols, policy, granted).holdsNothing();
         if (contradiction.isPresent()) {
             return Cardinality.none(contradiction.get());
         }
-        OccurrenceCounts counts = OccurrenceCounts.of(named, data, symbols, granted);
-        OccurrenceValues values = OccurrenceValues.of(named, data, symbols, granted);
+        OccurrenceCounts counts = OccurrenceCounts.of(named, data, symbols, policy, granted);
+        OccurrenceValues values = OccurrenceValues.of(named, data, symbols, policy, granted);
         Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
         if (data.newtype()) {
             // A newtype is one value under a name, so its value sits where it sits: the rules written

@@ -52,7 +52,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
 
     private final Hir.Binders binders = new Hir.Binders(OWNER);
     private final PathEngine engine =
-            new PathEngine(Symbols.none(), Map.of(), Terms.Of.THE_DISCHARGE_TREE);
+            new PathEngine(Symbols.none(), Map.of(), Terms.Of.THE_DISCHARGE_TREE, souther.compiler.check.ReadAs.THE_COMPILATION_DOES);
 
     @Test
     void anArmOverOneCaseIsAboutTheValueItOpened() {
@@ -183,7 +183,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         Hir.Binder x = binders.binder("x", POS);
         Hir.Binder y = binders.binder("y", POS);
         PathEngine reading = new PathEngine(Symbols.none(), Map.of(),
-                Map.of(FIND, statesThatTheIntIsPositive()), Terms.Of.THE_DISCHARGE_TREE);
+                Map.of(FIND, statesThatTheIntIsPositive()), Terms.Of.THE_DISCHARGE_TREE, souther.compiler.check.ReadAs.THE_COMPILATION_DOES);
 
         Denotations outer = reading.enteringArm(
                 arm(new Core.ResolvedPattern.AnyOf(

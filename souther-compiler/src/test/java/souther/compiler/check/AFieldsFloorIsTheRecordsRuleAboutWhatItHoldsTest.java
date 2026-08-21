@@ -41,7 +41,7 @@ class AFieldsFloorIsTheRecordsRuleAboutWhatItHoldsTest {
         TypeSymbol named = TypeSymbols.declared(new TypeKey(module, type));
         Hir.Data data = (Hir.Data) symbols.declarations().declaration(named.key());
         assertNotNull(data, "no `" + type + "` in " + module);
-        return FieldDomains.of(named, data, symbols, settled);
+        return FieldDomains.of(named, data, symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES, settled);
     }
 
     private static final String AGAINST_A_SIBLING = """

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.check.ReadingPolicy;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorChecker;
@@ -403,7 +404,7 @@ public final class Bodies {
             }
             Map<String, ContractDischarge> out = new LinkedHashMap<>();
             stated.value().forEach((behavior, rules) ->
-                    out.put(behavior, ContractDischarge.of(rules, scope.value())));
+                    out.put(behavior, ContractDischarge.of(rules, scope.value(), db.ask(new Front.Reading()).value())));
             return Answer.of(Ordered.map(out));
         }
     }
@@ -1582,6 +1583,7 @@ public final class Bodies {
             List<Diagnostic> warnings = new ArrayList<>();
             try {
                 Core core = TypeChecker.checkBehavior(spec.value(), fn.value(), body.value().writtenBody(),
+                        db.ask(new Front.Reading()).value(),
                         dischargeSource, scope.value(), calleeSigs.value(), reqSigs.value(),
                         inliner.value(), sigs.value(), constructs.value(),
                         warnings);
@@ -1616,6 +1618,7 @@ public final class Bodies {
      */
     private static Map<String, souther.compiler.claims.Claims> judged(
             Db db, String module, Hir.Module settled, Map<String, Core> bodies) {
+        ReadingPolicy policy = db.ask(new Front.Reading()).value();
         Answer<Symbols> scope = Names.derivedSymbols(db, module);
         Answer<Map<String, souther.compiler.inputs.InputDomain>> inputs =
                 db.ask(new souther.compiler.query.Adequacy.Inputs(module));
@@ -1641,7 +1644,8 @@ public final class Bodies {
             out.put(behavior.name(), souther.compiler.claims.Claims.of(
                     souther.compiler.claims.UnreachableClaims.of(body, read, scope.value(), plan),
                     souther.compiler.check.PathReachability.of(
-                            body, (Hir.SpecBehavior) behavior, fn, plan, read, scope.value())));
+                            body, policy, (Hir.SpecBehavior) behavior, fn, plan, read,
+                            scope.value())));
         }
         // In the order the module declares them, which is the order a reader meets the diagnostics
         // these carry. `Map.copyOf` keeps the entries and not the order (see `Ordered`), so a
@@ -1726,6 +1730,7 @@ public final class Bodies {
                 Answer<souther.compiler.check.Prepared> prepared =
                         db.ask(new Shapes.Prepared(name));
                 reported = TypeChecker.checkModule(lowering.value().settled(), scope.value(),
+                        db.ask(new Front.Reading()).value(),
                         signatures.present() ? signatures.value() : null,
                         injected.value(), lowering.value().lowered(),
                         reqSigs.value(), calleeSigs.value(), sigs.value(), published.value(),

@@ -1,9 +1,7 @@
-package souther.compiler;
+package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.query.Adequacy;
-import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.diag.SourceNameResolver;
 
@@ -75,7 +73,12 @@ class AProductWiderThanItsRulesIsSaidInTheDocumentTest {
             """;
 
     private static JsonNode behaviorOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        // Read with no choice held apart, which is the reading this finding comes of. Nothing
+        // written here expands far enough to fall back to it at the limit a compilation sets, so a
+        // test that wants the fallback says so — and this is the one seam where what the fallback
+        // answers has to reach a document.
+        Compilation compilation = Compilation.ofSource(source, "Main")
+                .withReadingPolicy(souther.compiler.check.ReadAs.MERGING_WHAT_A_CHOICE_LEAVES);
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
         return JSON.readTree(AdequacyReport.of(compilation).json(SourceNameResolver.identity()))
@@ -139,5 +142,40 @@ class AProductWiderThanItsRulesIsSaidInTheDocumentTest {
     void aReadingThatHoldsItsClausesSaysNothing() {
         assertTrue(ofKind(HELD, "partition_values_not_separated").isEmpty(),
                 "each clause is written at one position, so the product is what they admit");
+    }
+
+    /**
+     * And with the alternatives held apart, the same model says none of it.
+     *
+     * <p>Which is the whole of what holding them apart buys, arrived at where a consumer reads it:
+     * the reading answers `a` the one value the two clauses leave, so there is no width to qualify
+     * and no entry to write. What the fallback says above is what a reading that could not hold them
+     * owes, and it is reached by nothing an author writes.
+     */
+    @Test
+    void andHeldApartTheSameModelSaysNoneOfIt() {
+        Compilation compilation = Compilation.ofSource(WITNESS, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+        JsonNode behavior = JSON.readTree(
+                        AdequacyReport.of(compilation).json(SourceNameResolver.identity()))
+                .get("modules").get(0).get("behaviors").get(0);
+
+        List<String> said = new ArrayList<>();
+        for (JsonNode each : behavior.get("findings")) {
+            said.add(each.get("kind").asString());
+        }
+        assertFalse(said.contains("partition_values_not_separated"),
+                "every rule is read and what it leaves is held: " + said);
+        assertFalse(said.contains("partition_not_read"), said.toString());
+    }
+
+    /** A test reads under the limit a compilation sets, and says so with the same number. */
+    @Test
+    void whatATestReadsUnderIsWhatACompilationReadsUnder() {
+        Compilation compilation = Compilation.ofSource(WITNESS, "Main");
+
+        assertEquals(souther.compiler.check.ReadAs.THE_COMPILATION_DOES,
+                compilation.db().ask(new Front.Reading()).value());
     }
 }

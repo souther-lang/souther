@@ -55,7 +55,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
         return new Read(FieldDomains.of(name,
-                (Hir.Data) symbols.declarations().declaration(name.key()), symbols), symbols);
+                (Hir.Data) symbols.declarations().declaration(name.key()), symbols, souther.compiler.check.ReadAs.MERGING_WHAT_A_CHOICE_LEAVES), symbols);
     }
 
     private static FieldDomains of(String source, String named) {
@@ -72,7 +72,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
         return FieldDomains.of(name,
-                (Hir.Data) symbols.declarations().declaration(name.key()), symbols);
+                (Hir.Data) symbols.declarations().declaration(name.key()), symbols, souther.compiler.check.ReadAs.MERGING_WHAT_A_CHOICE_LEAVES);
     }
 
     private static final Value A = Value.text("A");

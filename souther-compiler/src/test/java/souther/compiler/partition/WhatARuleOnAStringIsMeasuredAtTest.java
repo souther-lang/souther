@@ -174,8 +174,8 @@ class WhatARuleOnAStringIsMeasuredAtTest {
         GuardThresholds.Guards guards = GuardThresholds.of("f", body, plan,
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("f"), symbols);
         Partitions.Partitioning p = Partitions.withThresholds(
-                Partitions.of(spec.name(), InputDomain.of(spec, sigs.get("f"), symbols), symbols),
-                guards.thresholds(), symbols, List.of(), guards.singled());
+                Partitions.of(spec.name(), InputDomain.of(spec, sigs.get("f"), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES),
+                guards.thresholds(), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES, List.of(), guards.singled());
 
         List<String> classes = new ArrayList<>();
         List<String> stands = new ArrayList<>();
@@ -184,7 +184,7 @@ class WhatARuleOnAStringIsMeasuredAtTest {
             for (PartitionClass each : axis.classes()) {
                 classes.add(each.label());
                 List<FixtureTemplate> made =
-                        Partitions.standingFor(each.representatives(), symbols, java.util.Set.of());
+                        Partitions.standingFor(each.representatives(), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES, java.util.Set.of());
                 stands.add(made.isEmpty() ? "none"
                         : made.stream().map(FixtureTemplate::text)
                                 .map(WhatARuleOnAStringIsMeasuredAtTest::bare).toList().toString());

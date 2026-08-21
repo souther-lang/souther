@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.ReadingPolicy;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.FieldDomains;
@@ -504,7 +505,7 @@ public final class Generator {
         }
         for (Axis axis : subject.axes()) {
             if (axis.term().equals(term)) {
-                return edgeOf(axis, carrier, at, subject.symbols());
+                return edgeOf(axis, carrier, at, subject.symbols(), subject.inputs().policy());
             }
         }
         // No axis at this position, which a behavior whose inputs nothing bounds has none of while
@@ -890,8 +891,8 @@ public final class Generator {
                                    Map<String, RepresentativeSource.Evaluation.Compose> recipes,
                                    CandidateCheck check) {
         Choices choices = choicesOf(subject.types().get(p),
-                TermPath.of(subject.parameters().get(p)), subject.symbols(), decided, settled,
-                recipes);
+                TermPath.of(subject.parameters().get(p)), subject.symbols(),
+                subject.inputs().policy(), decided, settled, recipes);
         if (choices.missingAt() != null) {
             return new Outcome(null, UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                     choices.missingAt());
@@ -940,12 +941,13 @@ public final class Generator {
         TermPath root = TermPath.of(subject.parameters().get(p));
         Type declared = subject.types().get(p);
         positionsUnder(declared, root, subject.symbols(), 0, found, decided.keySet(), recipes);
-        FieldDomains rules = rulesOf(declared, subject.symbols(), under(root, settled));
+        FieldDomains rules = rulesOf(declared, subject.symbols(), subject.inputs().policy(),
+                under(root, settled));
         UnresolvedCombination.Reason held = null;
         for (Position each : found) {
             String field = fieldUnder(root, each.path());
             UnresolvedCombination.Reason here = Partitions.notBuilt(each.type(), subject.symbols(),
-                    field == null ? null : rules.heldAt(field));
+                    subject.inputs().policy(), field == null ? null : rules.heldAt(field));
             // Nothing of the shape having been built outranks some of it having been: the first says
             // the search never had what the rule asks for, and a reader owed one sentence is owed that.
             if (here == UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE) {
@@ -1080,10 +1082,11 @@ public final class Generator {
             return fixed;
         }
         TermPath at = TermPath.of(subject.parameters().get(p));
-        FieldDomains left = rulesOf(subject.types().get(p), subject.symbols(), under(at, settled));
+        FieldDomains left = rulesOf(subject.types().get(p), subject.symbols(),
+                subject.inputs().policy(), under(at, settled));
         String field = fieldUnder(at, position.path());
         return Partitions.displacedRepresentativesOf(position.type(), subject.symbols(),
-                field == null ? null : left.at(field),
+                subject.inputs().policy(), field == null ? null : left.at(field),
                 field == null ? null : left.heldAt(field));
     }
 
@@ -1160,7 +1163,7 @@ public final class Generator {
      * @param decided what the caller fixed: the classes of an axis, or the single value a boundary is
      *                to be reached at
      */
-    private static Choices choicesOf(Type type, TermPath at, Symbols symbols,
+    private static Choices choicesOf(Type type, TermPath at, Symbols symbols, ReadingPolicy policy,
                                      Map<String, List<FixtureTemplate>> decided,
                                      Map<String, Place> settled,
                                      Map<String, RepresentativeSource.Evaluation.Compose> recipes) {
@@ -1169,8 +1172,8 @@ public final class Generator {
         // A position the caller fixed holds nothing back: it was given the value it is to take.
         List<List<FixtureTemplate>> reserves = new ArrayList<>(
                 java.util.Collections.nCopies(paths.size(), List.<FixtureTemplate>of()));
-        String missing = choicesUnder(type, at, symbols, 0, paths, values, reserves,
-                rulesOf(type, symbols, under(at, settled)), at, recipes);
+        String missing = choicesUnder(type, at, symbols, policy, 0, paths, values, reserves,
+                rulesOf(type, symbols, policy, under(at, settled)), at, recipes);
         return missing != null ? Choices.missing(missing)
                 : new Choices(paths, values, reserves, null);
     }
@@ -1186,10 +1189,11 @@ public final class Generator {
      * offered less than its rules allow. Those are the two halves of one floor and they were the two
      * halves this was already asymmetric about.
      */
-    private static FieldDomains rulesOf(Type type, Symbols symbols, Map<String, Count> settled) {
+    private static FieldDomains rulesOf(Type type, Symbols symbols, ReadingPolicy policy,
+                                        Map<String, Count> settled) {
         return type instanceof Type.Ref ref
                 && symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data && !data.newtype()
-                ? FieldDomains.of(ref.name(), data, symbols, settled) : FieldDomains.NONE;
+                ? FieldDomains.of(ref.name(), data, symbols, policy, settled) : FieldDomains.NONE;
     }
 
     /** What a position under a parameter is called where the parameter's own rules name it, or null
@@ -1219,7 +1223,8 @@ public final class Generator {
 
     /** The positions under one parameter, appended in the order they are composed. Returns the path
      * nothing can be written at, where there is one. */
-    private static String choicesUnder(Type type, TermPath at, Symbols symbols, int depth,
+    private static String choicesUnder(Type type, TermPath at, Symbols symbols,
+                                       ReadingPolicy policy, int depth,
                                        List<String> paths, List<List<FixtureTemplate>> values,
                                        List<List<FixtureTemplate>> reserves,
                                        FieldDomains left, TermPath root,
@@ -1233,7 +1238,7 @@ public final class Generator {
                 && !product.fields().isEmpty()) {
             for (Map.Entry<String, Type> field : product.fields().entrySet()) {
                 String missing = choicesUnder(field.getValue(), at.then(field.getKey()), symbols,
-                        depth + 1, paths, values, reserves, left, root, recipes);
+                        policy, depth + 1, paths, values, reserves, left, root, recipes);
                 if (missing != null) {
                     return missing;
                 }
@@ -1242,7 +1247,7 @@ public final class Generator {
         }
         String field = at.fields().isEmpty() ? null : String.join(".", at.fields());
         souther.compiler.numeric.NumericDomain.Bounds here = field == null ? null : left.at(field);
-        List<FixtureTemplate> stands = Partitions.representativesHolding(type, symbols, here,
+        List<FixtureTemplate> stands = Partitions.representativesHolding(type, symbols, policy, here,
                 field == null ? null : left.heldAt(field));
         if (stands.isEmpty()) {
             // Nothing could be written at all: a position of a type nothing stands for. Which is not
@@ -1252,7 +1257,7 @@ public final class Generator {
         }
         paths.add(at.toString());
         values.add(stands);
-        reserves.add(Partitions.inReserve(type, symbols, here));
+        reserves.add(Partitions.inReserve(type, symbols, policy, here));
         return null;
     }
 
@@ -1439,7 +1444,8 @@ public final class Generator {
      * carries a count is {@link Witnesses}'s to answer — asked rather than decided here, so that a
      * value it learns to build is a boundary this reaches without being told again.
      */
-    private static Edge edgeOf(Axis axis, Carrier carrier, Place at, Symbols symbols) {
+    private static Edge edgeOf(Axis axis, Carrier carrier, Place at, Symbols symbols,
+                               ReadingPolicy policy) {
         if (!(axis.term() instanceof NumericTerm.SizeOf)) {
             // Written by the carrier the line was drawn on, and wearing every name the position
             // declares. Read off the boundary's own shape instead, a count on one carrier could be
@@ -1457,9 +1463,9 @@ public final class Generator {
             return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
         Type holder = TypeOps.base(axis.type(), symbols);
-        Witnesses.Sized built = Witnesses.ofSize(holder, size, symbols, Set.of());
+        Witnesses.Sized built = Witnesses.ofSize(holder, size, symbols, policy, Set.of());
         if (built.values().isEmpty()) {
-            return Edge.none(Witnesses.reasonForSize(holder, size, symbols));
+            return Edge.none(Witnesses.reasonForSize(holder, size, policy, symbols));
         }
         List<FixtureTemplate> out = new ArrayList<>();
         for (FixtureTemplate each : built.values()) {

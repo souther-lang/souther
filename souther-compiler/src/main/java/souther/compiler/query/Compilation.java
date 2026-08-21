@@ -52,6 +52,9 @@ public final class Compilation {
         // to what the first compile in this JVM happened to read. A caller with a reason of its own
         // says so with withEvaluationPolicy.
         db.set(new Front.Policy(), souther.compiler.examples.EvaluationPolicy.fromSettings());
+        // The one place a reading policy is made. Everything that reads a declaration is handed
+        // this one, so a declaration read twice in one compilation is read the same way both times.
+        db.set(new Front.Reading(), new souther.compiler.check.ReadingPolicy(64));
     }
 
     /** A compile of several sources identified by their position, the way a build hands them over.
@@ -364,6 +367,18 @@ public final class Compilation {
      */
     public Compilation withEvaluationPolicy(souther.compiler.examples.EvaluationPolicy policy) {
         db.set(new Front.Policy(), policy);
+        return this;
+    }
+
+    /**
+     * The same for how much of a declaration's clauses a reading may hold apart.
+     *
+     * <p>Not a knob a build has. Nothing an author writes reaches the fallback at the default, so
+     * what it is here for is holding a reading to a small limit and watching the fallback answer —
+     * which is the only way that path is reached at all, and it would rot unread otherwise.
+     */
+    Compilation withReadingPolicy(souther.compiler.check.ReadingPolicy policy) {
+        db.set(new Front.Reading(), policy);
         return this;
     }
 

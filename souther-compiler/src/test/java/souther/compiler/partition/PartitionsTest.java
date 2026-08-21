@@ -45,8 +45,8 @@ class PartitionsTest {
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        return Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(behavior), symbols),
-                symbols);
+        return Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(behavior), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES),
+                symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES);
     }
 
     private static Axis axis(Partitions.Partitioning partitioning, String path) {

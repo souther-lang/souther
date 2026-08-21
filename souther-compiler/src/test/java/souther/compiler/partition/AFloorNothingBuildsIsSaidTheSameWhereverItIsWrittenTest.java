@@ -52,10 +52,10 @@ class AFloorNothingBuildsIsSaidTheSameWhereverItIsWrittenTest {
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
         Sig sig = sigs.get(behavior);
-        Partitions.Partitioning partitioning = Partitions.of(spec.name(), InputDomain.of(spec, sig, symbols), symbols);
+        Partitions.Partitioning partitioning = Partitions.of(spec.name(), InputDomain.of(spec, sig, symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES);
         Generator.GenerationResult filled = Generator.fill(new Generator.Subject(
                 new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
-                        sig.inputTypes(), symbols),
+                        sig.inputTypes(), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES),
                 partitioning.axes()), List.of(), REFUSED);
         assertFalse(filled.unresolved().isEmpty(), "nothing was written and nothing said why");
         return filled.unresolved().get(0).reason();

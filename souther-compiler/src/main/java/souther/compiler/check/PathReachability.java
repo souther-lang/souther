@@ -165,7 +165,7 @@ public final class PathReachability {
      * body reads them by, asked here rather than worked out a second way. A trailing parameter
      * stands for a behavior this one depends on and guarantees nothing about a value.
      */
-    public static Answers of(Core body, Hir.SpecBehavior spec, Hir.FnDef fn,
+    public static Answers of(Core body, ReadingPolicy policy, Hir.SpecBehavior spec, Hir.FnDef fn,
                              CoverageSites.Plan plan, InputDomain read, Symbols symbols) {
         if (fn == null || spec == null) {
             return Answers.NONE;
@@ -175,7 +175,7 @@ public final class PathReachability {
             params = params.with(fn.params().get(i).binder(),
                     TypeOps.successType(spec.params().get(i).type()));
         }
-        return of(body, params, plan, read, symbols);
+        return of(body, params, plan, read, symbols, policy);
     }
 
     /**
@@ -186,11 +186,12 @@ public final class PathReachability {
      * answers about what it had reached and no more.
      */
     public static Answers of(Core body, Scope params, CoverageSites.Plan plan, InputDomain read,
-                             Symbols symbols) {
+                             Symbols symbols, ReadingPolicy policy) {
         if (body == null) {
             return Answers.NONE;
         }
-        PathEngine engine = new PathEngine(symbols, Map.of(), Terms.Of.THE_TREE_THAT_RUNS);
+        PathEngine engine =
+                new PathEngine(symbols, Map.of(), Terms.Of.THE_TREE_THAT_RUNS, policy);
         Map<ControlPointId, Reachability> out = new LinkedHashMap<>();
         try {
             PathEngine.Entered in = PathEngine.Entered.nothing();

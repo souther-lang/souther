@@ -65,7 +65,7 @@ class AnUpperBoundIsNotAnAdmissionTest {
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("take")).findFirst().orElseThrow();
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        return InputDomain.of(spec, sigs.get("take"), symbols).positions().stream()
+        return InputDomain.of(spec, sigs.get("take"), symbols, souther.compiler.check.ReadAs.MERGING_WHAT_A_CHOICE_LEAVES).positions().stream()
                 .filter(p -> p.path().toString().equals(path))
                 .findFirst().orElseThrow();
     }

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.check.ReadingPolicy;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.ClauseDischarge;
 import souther.compiler.check.InvariantSettled;
@@ -413,7 +414,7 @@ public final class Shapes {
                         for (ClausesForDischarge.ClauseReading written
                                 : declaring.conjunctsOf(declared.expr(), new BindingOwner.OfData(named))) {
                             clauses.add(InvariantChecker.capabilityOf(written, named, data,
-                                    scope.value()).named(declared.name()));
+                                    scope.value(), db.ask(new Front.Reading()).value()).named(declared.name()));
                         }
                     }
                     out.put(named, List.copyOf(clauses));

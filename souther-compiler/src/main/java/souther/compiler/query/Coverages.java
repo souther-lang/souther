@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.check.ReadingPolicy;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.PathReachability;
 import souther.compiler.check.Sig;
@@ -56,7 +57,7 @@ final class Coverages {
      * and two derivations of them would be two chances to disagree.
      */
     static Partitions.Partitioning partitioningOf(Hir.SpecBehavior behavior, InputDomain inputs,
-                                                  Sig sig, Symbols symbols,
+                                                  Sig sig, Symbols symbols, ReadingPolicy policy,
                                                   Core body, CoverageSites.Plan plan,
                                                   PathReachability.Answers arrives,
                                                   souther.compiler.check.StatedContract stated) {
@@ -64,8 +65,9 @@ final class Coverages {
         // What a row's values are, where they sit and what they are written as, read together:
         // a field under a name is reached by taking the name off, and a walk given the paths
         // alone reaches nothing where the derivation reaches a field.
-        BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols);
-        Partitions.Partitioning partitioning = Partitions.of(behavior.name(), inputs, symbols);
+        BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols, policy);
+        Partitions.Partitioning partitioning =
+                Partitions.of(behavior.name(), inputs, symbols, policy);
         // What the behavior states about its own answer, which is read whether or not anything
         // implements it: a clause is written against the declaration, so an injected behavior draws
         // its lines like any other and there is no body for them to have come out of.
@@ -77,7 +79,7 @@ final class Coverages {
         // below does — applied one producer at a time, a clause and a guard naming one number would
         // divide the position twice.
         return Partitions.withThresholds(partitioning,
-                both(clauses.thresholds(), guards.thresholds()), symbols,
+                both(clauses.thresholds(), guards.thresholds()), symbols, policy,
                 both(clauses.unread(), guards.unread()),
                 both(clauses.singled(), guards.singled()),
                 both(clauses.between(), guards.between()), arrives,
@@ -106,7 +108,7 @@ final class Coverages {
      *                   happen twice.
      */
     static PartitionEvidence of(Hir.SpecBehavior behavior, InputDomain inputs, Sig sig,
-                                Symbols symbols, Core body,
+                                Symbols symbols, ReadingPolicy policy, Core body,
                                 CoverageSites.Plan plan, souther.compiler.query.Adequacy.Observed observed,
                                 List<BorderAssessment> boundaries,
                                 PathReachability.Answers arrives,
@@ -116,9 +118,9 @@ final class Coverages {
         // What a row's values are, where they sit and what they are written as, read together:
         // a field under a name is reached by taking the name off, and a walk given the paths
         // alone reaches nothing where the derivation reaches a field.
-        BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols);
+        BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols, policy);
         Partitions.Partitioning partitioning =
-                partitioningOf(behavior, inputs, sig, symbols, body, plan, arrives, stated);
+                partitioningOf(behavior, inputs, sig, symbols, policy, body, plan, arrives, stated);
 
         List<PartitionEvidence.AxisCoverage> axes = new ArrayList<>();
 

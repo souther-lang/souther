@@ -67,14 +67,15 @@ record StepInputFacts(Map<FactSubject, Bounds> at, Map<FactSubject, Granularity>
      * only three there are, and every one of them lies between the least and the greatest.
      */
     static StepInputFacts of(Reductions.Reducing r, Denotations inside, Terms terms,
-                             Symbols symbols, Set<FactSubject> namedByTheStep) {
+                             Symbols symbols, ReadingPolicy policy,
+                             Set<FactSubject> namedByTheStep) {
         Gathering gathering = new Gathering(terms, namedByTheStep);
         List<Hir.Binder> params = r.step().params();
         for (int i = 0; i < params.size(); i++) {
             if (params.get(i) == r.accumulator()) {
                 continue;
             }
-            guaranteed(params.get(i), handedAt(r, i), inside, terms, symbols, gathering);
+            guaranteed(params.get(i), handedAt(r, i), inside, terms, symbols, policy, gathering);
         }
         writtenOut(r, inside, terms, gathering);
         return gathering.gathered();
@@ -105,13 +106,13 @@ record StepInputFacts(Map<FactSubject, Bounds> at, Map<FactSubject, Granularity>
      * off one and put back on the other, and nothing here reads a declaration.
      */
     private static void guaranteed(Hir.Binder param, Type handed, Denotations inside, Terms terms,
-                                   Symbols symbols, Gathering gathering) {
+                                   Symbols symbols, ReadingPolicy policy, Gathering gathering) {
         FactSubject root = inside.subject(param.id());
         if (root == null || !(handed instanceof Type.Ref ref)
                 || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data)) {
             return;
         }
-        InvariantChecker.Seeded seeded = seededOf(ref.name(), data, symbols);
+        InvariantChecker.Seeded seeded = seededOf(ref.name(), data, symbols, policy);
         if (seeded == null) {
             return;
         }
@@ -123,8 +124,8 @@ record StepInputFacts(Map<FactSubject, Bounds> at, Map<FactSubject, Granularity>
      * this says nothing from, which leaves the walk unbounded rather than bounded by half of what a
      * declaration says. */
     private static InvariantChecker.Seeded seededOf(TypeSymbol named, Hir.Data data,
-                                                    Symbols symbols) {
-        InvariantChecker.Seeded seeded = InvariantChecker.seedFields(named, data, symbols);
+                                                    Symbols symbols, ReadingPolicy policy) {
+        InvariantChecker.Seeded seeded = InvariantChecker.seedFields(named, data, symbols, policy);
         return seeded.everyClauseRead() && !seeded.constraints().isBottom() ? seeded : null;
     }
 

@@ -196,14 +196,16 @@ public final class InvariantChecker {
     private final List<Diagnostic> warnings = new ArrayList<>();
 
     private InvariantChecker(Symbols symbols,
-                             Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants) {
-        this(symbols, dischargeInvariants, Map.of());
+                             Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+                             ReadingPolicy policy) {
+        this(symbols, dischargeInvariants, Map.of(), policy);
     }
 
     private InvariantChecker(Symbols symbols,
                              Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
-                             Map<ValueName.Behavior, StatedContract> contracts) {
-        this.engine = new PathEngine(symbols, dischargeInvariants, contracts);
+                             Map<ValueName.Behavior, StatedContract> contracts,
+                             ReadingPolicy policy) {
+        this.engine = new PathEngine(symbols, dischargeInvariants, contracts, policy);
         // Named here because this check reads them directly and often. They are the engine's, not a
         // second copy: one engine builds them once and everything below sees those.
         this.symbols = engine.symbols();
@@ -219,8 +221,9 @@ public final class InvariantChecker {
      * in the representation the check reads.
      */
     public static ClauseDischarge capabilityOf(ClausesForDischarge.ClauseReading clause,
-                                               TypeSymbol named, Hir.Data data, Symbols symbols) {
-        InvariantChecker c = new InvariantChecker(symbols, Map.of());
+                                               TypeSymbol named, Hir.Data data, Symbols symbols,
+                                               ReadingPolicy policy) {
+        InvariantChecker c = new InvariantChecker(symbols, Map.of(), policy);
         // Read over the declaration's own fields, each standing for itself: a construction hands one
         // value per field, so a clause naming a field names something wherever it is built. These
         // stand for a value rather than holding one, so they are entered as locations and nothing is
@@ -263,8 +266,9 @@ public final class InvariantChecker {
      * @param describing what is being read, for the record a fail-open leaves behind
      */
     static ClauseDischarge capabilityOf(StatedContract.Conjunct conjunct,
-                                        Denotations locations, Symbols symbols, String describing) {
-        return new InvariantChecker(symbols, Map.of())
+                                        Denotations locations, Symbols symbols,
+                                        ReadingPolicy policy, String describing) {
+        return new InvariantChecker(symbols, Map.of(), policy)
                 .capabilityOf(conjunct.stated(), conjunct.at(), locations, describing);
     }
 
@@ -446,8 +450,9 @@ public final class InvariantChecker {
         }
     }
 
-    static Seeded seedFields(TypeSymbol named, Hir.Data data, Symbols symbols) {
-        return seedFields(named, data, symbols, Map.of());
+    static Seeded seedFields(TypeSymbol named, Hir.Data data, Symbols symbols,
+                             ReadingPolicy policy) {
+        return seedFields(named, data, symbols, policy, Map.of());
     }
 
     /**
@@ -458,8 +463,8 @@ public final class InvariantChecker {
      * still take, which is where a row completing that assignment has to look.
      */
     static Seeded seedFields(TypeSymbol named, Hir.Data data, Symbols symbols,
-                             Map<String, Count> settled) {
-        return seedFields(named, data, symbols, settled, Reach.EVERYTHING);
+                             ReadingPolicy policy, Map<String, Count> settled) {
+        return seedFields(named, data, symbols, policy, settled, Reach.EVERYTHING);
     }
 
     /**
@@ -473,8 +478,8 @@ public final class InvariantChecker {
      * says, and it is not that one — see {@link Reach}.
      */
     static Seeded seedFields(TypeSymbol named, Hir.Data data, Symbols symbols,
-                             Map<String, Count> settled, Reach reach) {
-        InvariantChecker c = new InvariantChecker(symbols, Map.of());
+                             ReadingPolicy policy, Map<String, Count> settled, Reach reach) {
+        InvariantChecker c = new InvariantChecker(symbols, Map.of(), policy);
         Map<String, Type> fields = c.clauses.fieldsOf(data);
         Map<String, BindingId> bindings = c.clauses.bindingsOf(named, data);
         Denotations at = Denotations.none()
@@ -591,6 +596,13 @@ public final class InvariantChecker {
             // it meets. Nothing here depends on that order otherwise — both are given the same clauses
             // and neither takes anything from the other.
             StatedByClauses stated = StatedByClauses.top();
+            // How a choice holds what it leaves, settled over the whole declaration before any of
+            // it is read. Its clauses are met, so what they come to together is the product of what
+            // each comes to, and a bound on that bounds every step of the fold — which is why the
+            // question is asked once here rather than of each clause as it arrives.
+            Alternatives alternatives = policy.holdsAlternativesApart(
+                    written.stream().map(Written::clause).toList())
+                    ? Alternatives.APART : Alternatives.MERGED;
             Map<RuleRef, Map<Core, Set<FactSubject>>> adoptedBy = new LinkedHashMap<>();
             for (Written each : written) {
                 // A reading of its own per clause, so what it says it adopted is this clause's and not
@@ -598,7 +610,7 @@ public final class InvariantChecker {
                 // has: a clause the readings took in whole sat beside one they could not, and the
                 // position-wide account said both had gone unread.
                 StatedByClauses one = StatedByClauses
-                        .readingOf(c.terms, at, positions, symbols)
+                        .readingOf(c.terms, at, positions, symbols, alternatives)
                         .read(each.clause(), true,
                                 (part, said) -> adoptedBy
                                         .computeIfAbsent(each.from(), _ -> new java.util.IdentityHashMap<>())
@@ -1380,8 +1392,8 @@ public final class InvariantChecker {
      */
     static Findings analyze(Core body, Map<TypeSymbol, List<Hir.InvariantClause>> invariants,
                             Map<ValueName.Behavior, StatedContract> contracts,
-                            Scope params, Symbols symbols) {
-        InvariantChecker c = new InvariantChecker(symbols, invariants, contracts);
+                            Scope params, Symbols symbols, ReadingPolicy policy) {
+        InvariantChecker c = new InvariantChecker(symbols, invariants, contracts, policy);
         if (body == null) {
             return new Findings(c.errors, c.warnings, Status.ABANDONED);
         }

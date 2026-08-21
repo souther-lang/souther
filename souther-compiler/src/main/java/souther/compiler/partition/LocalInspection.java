@@ -36,9 +36,10 @@ final class LocalInspection {
      * widening that hands the declared ones back belongs to the position, so a reader applying one
      * of its own here would be making that decision a second time and in another place.
      */
-    static LocalPartition of(Position position, Symbols symbols) {
+    static LocalPartition of(Position position, Symbols symbols,
+                             souther.compiler.check.ReadingPolicy policy) {
         List<PartitionClass> classes =
-                PartitionClasses.of(position.obligationCases(), position.view(), symbols);
+                PartitionClasses.of(position.obligationCases(), position.view(), symbols, policy);
         DeclaredBounds.Bounds axis = position.nothingExists() ? null
                 : axisBounds(position.ownEnds(), position.rangeLeft());
         List<Cut> cuts = position.nothingExists() ? List.of()

@@ -52,7 +52,7 @@ class AQuestionExistsBecauseTheModelStatesItAndNotBecauseAReadingSucceededTest {
         TypeSymbol named = TypeSymbols.declared(new TypeKey(module, "Length"));
         Hir.Data data = (Hir.Data) symbols.declarations().declaration(named.key());
         assertNotNull(data, "no `Length` declared");
-        return FieldDomains.of(named, data, symbols);
+        return FieldDomains.of(named, data, symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES);
     }
 
     /** What the one clause of the one declaration raises. */

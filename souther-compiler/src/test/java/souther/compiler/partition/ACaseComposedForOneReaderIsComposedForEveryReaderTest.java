@@ -81,11 +81,11 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
      */
     @Test
     void theSomeOfAnOptionalSumOfRecordsStandsForAComposedCase() {
-        PartitionClass some = PartitionClasses.of(new Type.OptionOf(sum()), symbols).stream()
+        PartitionClass some = PartitionClasses.of(new Type.OptionOf(sum()), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES).stream()
                 .filter(each -> each.id().equals("Some")).findFirst().orElseThrow();
 
         List<FixtureTemplate> stands =
-                Partitions.standingFor(some.representatives(), symbols, Set.of());
+                Partitions.standingFor(some.representatives(), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES, Set.of());
 
         assertTrue(stands.stream().anyMatch(each -> each.text().startsWith("Boxed {")),
                 () -> "`Some` stands for a case of the element: " + stands);
@@ -95,7 +95,7 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
     @Test
     void aCollectionRequiredToHoldOneOfASumOfRecordsIsBuilt() {
         List<FixtureTemplate> held =
-                Witnesses.holding(new Type.ListOf(sum()), 1, symbols, Set.of());
+                Witnesses.holding(new Type.ListOf(sum()), 1, symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES, Set.of());
 
         assertFalse(held.isEmpty(), "a list of one is built from a case of the sum");
     }
@@ -105,7 +105,7 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
     @Test
     void aSetOfTwoIsBuiltFromTwoCasesOfASumOfRecords() {
         List<FixtureTemplate> held =
-                Witnesses.holding(new Type.SetOf(sum()), 2, symbols, Set.of());
+                Witnesses.holding(new Type.SetOf(sum()), 2, symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES, Set.of());
 
         assertFalse(held.isEmpty(), "the two cases are two distinct values");
     }
@@ -113,7 +113,7 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
     /** A name round the sum is a name round what stands for it. */
     @Test
     void aNewtypeOverASumOfRecordsHasARepresentative() {
-        List<FixtureTemplate> stands = Partitions.representativesOf(named("Wrapped"), symbols);
+        List<FixtureTemplate> stands = Partitions.representativesOf(named("Wrapped"), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES);
 
         assertTrue(stands.stream().anyMatch(each -> each.text().startsWith("Wrapped(")),
                 () -> "written under the name the position wears: " + stands);
@@ -125,8 +125,8 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
      *  value for. */
     @Test
     void everyCaseOfTheSumStandsForSomething() {
-        for (PartitionClass each : PartitionClasses.of(sum(), symbols)) {
-            assertFalse(Partitions.representativesOf(named(each.id()), symbols).isEmpty(),
+        for (PartitionClass each : PartitionClasses.of(sum(), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES)) {
+            assertFalse(Partitions.representativesOf(named(each.id()), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES).isEmpty(),
                     () -> "a record case stands for a value: " + each.id());
         }
     }
@@ -142,7 +142,7 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
      */
     @Test
     void aCaseWhoseFieldsConstrainEachOtherIsComposedAgainstThatRule() {
-        List<FixtureTemplate> stands = Partitions.representativesOf(named("Boxed"), symbols);
+        List<FixtureTemplate> stands = Partitions.representativesOf(named("Boxed"), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES);
 
         assertTrue(stands.stream().anyMatch(each -> each.text().equals("Boxed { a = 0, b = 1 }")),
                 () -> "each field against what the rules leave it: " + stands);
@@ -158,7 +158,7 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
      */
     @Test
     void aComposedRecordHoldsWhatItsOwnRuleAsksFor() {
-        List<FixtureTemplate> stands = Partitions.representativesOf(named("Bag"), symbols);
+        List<FixtureTemplate> stands = Partitions.representativesOf(named("Bag"), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES);
 
         assertTrue(stands.stream().anyMatch(each -> each.text().contains("xs = [")
                         && !each.text().contains("xs = []")),

@@ -106,12 +106,12 @@ public sealed interface Rules {
      *
      * @param named the declaration the value is read under, or null where the type names none
      */
-    static Rules of(TypeSymbol named, Symbols symbols) {
+    static Rules of(TypeSymbol named, Symbols symbols, ReadingPolicy policy) {
         if (named == null) {
             return new NoneWritten();
         }
         return switch (symbols.declarations().declaration(named.key())) {
-            case Hir.Data data -> new Read(FieldDomains.of(named, data, symbols));
+            case Hir.Data data -> new Read(FieldDomains.of(named, data, symbols, policy));
             // A sum names which cases a value can be and carries no clause of its own; a unit data
             // has one value and may write no rule about it (spec §unit-data). Both are declarations
             // this looked at and found nothing written on, which is not the same as not having
@@ -130,7 +130,7 @@ public sealed interface Rules {
     }
 
     /** The same, for a position whose type may name no declaration at all. */
-    static Rules of(Type type, Symbols symbols) {
-        return of(type instanceof Type.Ref ref ? ref.name() : null, symbols);
+    static Rules of(Type type, Symbols symbols, ReadingPolicy policy) {
+        return of(type instanceof Type.Ref ref ? ref.name() : null, symbols, policy);
     }
 }
