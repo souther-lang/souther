@@ -92,6 +92,42 @@ public record CanonicalForm<A>(Map<A, Rational> coefs) {
         return AdditiveImage.of(coefs, spacing);
     }
 
+    /**
+     * The same form over positions called something else.
+     *
+     * <p>A renaming and nothing more. What a form says is a relation between the positions it
+     * weighs, and calling them by the names of another vocabulary leaves that relation where it
+     * was — so this is how a rule read of one value is asked about as a rule of the thing that
+     * holds it, rather than being re-derived there.
+     *
+     * <p>Still canonical, because canonical is a fact about the coefficients and this touches none
+     * of them.
+     *
+     * <p><b>The naming has to be one-to-one.</b> Two positions called by one name is not a wider
+     * reading of this rule, it is a different rule: the coefficients would be added together and
+     * {@code a - b <= 0}, which says one is no larger than the other, would come back weighing
+     * nothing at all. Refused rather than merged, for the same reason a second spacing under one
+     * key is refused — the naming and the form disagree about how many positions there are, and
+     * neither of them is this record's to correct.
+     */
+    public <B> CanonicalForm<B> over(Function<A, B> naming) {
+        Map<B, Rational> out = new LinkedHashMap<>();
+        coefs.forEach((atom, coef) -> {
+            B called = naming.apply(atom);
+            if (called == null) {
+                throw new IllegalArgumentException(
+                        "a position with no name in the vocabulary asked for is one this form"
+                                + " cannot be written in: " + atom);
+            }
+            if (out.put(called, coef) != null) {
+                throw new IllegalArgumentException(
+                        "two positions of this form are called `" + called + "`, so the form over"
+                                + " those names weighs fewer positions than this one does");
+            }
+        });
+        return new CanonicalForm<>(out);
+    }
+
     /** This form with every coefficient turned around, which is what reading a comparison the other
      *  way produces. Still canonical: negating leaves what the coefficients share. */
     public CanonicalForm<A> negated() {
