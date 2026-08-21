@@ -7,6 +7,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Towards;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -125,9 +126,9 @@ public final class LevelRealizer {
      * that ran out would take a coverage item away.
      *
      * <p>A side is asked for at the first level past the one it starts from, and then at the next,
-     * for as many as {@link #LEVELS_OF_A_SIDE}. A point is asked for at its own level and nowhere
-     * else: a level further out is a different point of the border, and offering it would answer a
-     * question nobody asked.
+     * for as many as {@link LevelCandidateSource} offers. Which levels those are, and how many, is
+     * that one's answer: whether a row can be composed at one of them is this one's, and the two are
+     * apart so that how long this is willing to look does not read as a fact about the order.
      */
     private Realization ofAForm(Standing.OfAForm over) {
         LevelSpace levels = over.levels();
@@ -142,7 +143,7 @@ public final class LevelRealizer {
         // says whether they step at all.
         boolean whole = levels.neighbour(new Level.ACount(Count.ZERO), Towards.ABOVE).isPresent();
         boolean bounded = true;
-        for (Level level : levelsToTry(levels, over.where())) {
+        for (Level level : LevelCandidateSource.forItem(over.where(), levels)) {
             Search search = new Search(terms, over.of(), whole);
             Map<NumericTerm, Place> found = search.solve(level.asACount());
             if (found != null) {
@@ -158,92 +159,6 @@ public final class LevelRealizer {
                 ? new Realization.Impossible()
                 : new Realization.Unknown(Realization.Unknown.Reason.THE_SEARCH_RAN_OUT);
     }
-
-    /**
-     * The levels a row at this item could stand at, nearest first.
-     *
-     * <p>A point stands at one level and nowhere else. A side is met anywhere past its own end, and
-     * a class of everything but one level is met at either of the two beside it — so both are asked
-     * for at the levels nearest the one they are written against, outward, until the budget runs
-     * out. Which is why a side that came back empty settles nothing while a point may.
-     */
-    private static List<Level> levelsToTry(LevelSpace levels, Criterion where) {
-        Level from = where.anchor();
-        return switch (where) {
-            case Criterion.AtTheLevel _ -> List.of(from);
-            // Inward from whichever end the run has, so the first level offered is one in the run
-            // rather than one past the next line along.
-            case Criterion.Within within -> inside(levels, within);
-            case Criterion.AnythingBut _ -> {
-                List<Level> either = new java.util.ArrayList<>(outward(levels, from, Towards.ABOVE));
-                either.addAll(outward(levels, from, Towards.BELOW));
-                yield either;
-            }
-        };
-    }
-
-    /**
-     * The levels of a run a row could stand at, from the line inward.
-     *
-     * <p>A run is met anywhere in it, and the value against the line is the one level of it that
-     * will not do — so the search starts there and walks away from the line, which is the direction
-     * the point is named for. Walked from the run's far end instead, a row well inside a wide run
-     * was offered where one just inside it says the same thing and is the row an author would have
-     * written.
-     */
-    private static List<Level> inside(LevelSpace levels, Criterion.Within within) {
-        Level from = within.anchor();
-        if (from == null) {
-            return List.of();
-        }
-        List<Level> out = new java.util.ArrayList<>();
-        if (within.holds(levels, from)) {
-            out.add(from);
-        }
-        for (Level at : outward(levels, from, away(within))) {
-            if (within.holds(levels, at)) {
-                out.add(at);
-            }
-        }
-        return out;
-    }
-
-    /** Which way from the line this run lies, which is which end of it the line is at. */
-    private static Towards away(Criterion.Within within) {
-        Band band = within.band();
-        Level except = within.except();
-        if (except != null && band.first() != null
-                && except.key().equals(band.first().key())) {
-            return Towards.ABOVE;
-        }
-        if (except != null && band.last() != null && except.key().equals(band.last().key())) {
-            return Towards.BELOW;
-        }
-        return band.under() != null ? Towards.ABOVE : Towards.BELOW;
-    }
-
-    private static List<Level> outward(LevelSpace levels, Level from, Towards towards) {
-        List<Level> out = new java.util.ArrayList<>();
-        Level at = from;
-        for (int step = 0; step < LEVELS_OF_A_SIDE; step++) {
-            // Some level past this one, which an order whose values fill answers as readily as one
-            // that steps. Asked for the neighbour, a side of a border over decimals had no level to
-            // look at and came back saying the search had stopped without one having run.
-            Optional<Level> past = levels.somethingBeyond(at, towards);
-            if (past.isEmpty()) {
-                break;
-            }
-            at = past.get();
-            out.add(at);
-        }
-        return out;
-    }
-
-    /** How far out a side is looked at before the search gives up on it. A side is met anywhere past
-     *  its own end, so the first level that a row can be written at stands for it; a box that holds
-     *  none of the first few holds one only where the rules are shaped so that the whole search is
-     *  worth its own answer. */
-    private static final int LEVELS_OF_A_SIDE = 8;
 
     /** How many assignments the search will try before it stops and says it did not settle it. */
     private static final int STEPS_A_SEARCH_MAY_TAKE = 200_000;
@@ -385,19 +300,6 @@ public final class LevelRealizer {
         }
 
         /**
-         * One end of what the rules leave a position, as a whole number this can start or stop at.
-         *
-         * <p>Asked only to bound an enumeration, which only a position whose values step has. Where
-         * they fill, what a value inside the ends is is the carrier's answer and whether a solved one
-         * is inside them is the ends' own.
-         *
-         * <p>Rounded inwards and never outwards, and the excluded end excluded. A bound of
-         * {@code > 0} leaves one, not zero; a bound of {@code >= 2.4} over whole numbers leaves
-         * three, not two. Rounded the other way, the search offers a value the position refuses and
-         * the decoder turns the row down — which arrives as every candidate having been rejected,
-         * and reads as the model refusing an edge it admits.
-         */
-        /**
          * What the rules leave this position, narrowed to the values that leave the rest a residue
          * they can reach.
          *
@@ -497,6 +399,19 @@ public final class LevelRealizer {
             return end == null || !(end.at() instanceof Count count) ? null : count.at();
         }
 
+        /**
+         * One end of what the rules leave a position, as a whole number this can start or stop at.
+         *
+         * <p>Asked only to bound an enumeration, which only a position whose values step has. Where
+         * they fill, what a value inside the ends is is the carrier's answer and whether a solved one
+         * is inside them is the ends' own.
+         *
+         * <p>Rounded inwards and never outwards, and the excluded end excluded. A bound of
+         * {@code > 0} leaves one, not zero; a bound of {@code >= 2.4} over whole numbers leaves
+         * three, not two. Rounded the other way, the search offers a value the position refuses and
+         * the decoder turns the row down — which arrives as every candidate having been rejected,
+         * and reads as the model refusing an edge it admits.
+         */
         private java.math.BigDecimal endOf(Endpoint end, boolean low) {
             if (end == null || !(end.at() instanceof Count count)) {
                 return null;
@@ -539,7 +454,8 @@ public final class LevelRealizer {
             case Criterion.Within within -> {
                 Band run = within.band().mappedBy(onto);
                 yield run == null ? null : new Criterion.Within(run,
-                        within.except() == null ? null : onto.apply(within.except()));
+                        within.except() == null ? null : onto.apply(within.except()),
+                        within.away());
             }
             case Criterion.AnythingBut other ->
                     only(new Criterion.AnythingBut(onto.apply(other.excluded())),
@@ -565,19 +481,13 @@ public final class LevelRealizer {
                                       NumericDomain.Bounds bounds) {
         Place offered = switch (where) {
             case Criterion.AtTheLevel at -> placeOf(at.at());
-            case Criterion.Within within -> {
-                // The value beside the line first, which is the row a reader would write, and
-                // otherwise whatever the run has. Both are asked of the run: a search for a value
-                // of it looked in whole numbers alone, and a run between two thirds of a decimal
-                // has none.
-                NumericDomain.Bounds run = new NumericDomain.Bounds(
-                        Endpoint.lower(within.band().low(), bounds.min()),
-                        Endpoint.upper(within.band().high(), bounds.max()));
-                Place beside = within.except() == null ? null
-                        : carrier.somethingOtherThan(List.of(placeOf(within.except())), run);
-                yield beside != null ? beside
-                        : within.somewhereInside(carrier, bounds.min(), bounds.max());
-            }
+            // From the end the line is at, which is what makes the row one beside the boundary
+            // rather than one at the far side of the partition. The point carries which end that is
+            // and is not asked for it again: handed it a second time, a caller could ask for a run
+            // to be read from the end it is not named for, which is the shape of one decision given
+            // from two places.
+            case Criterion.Within within ->
+                    within.somewhereInside(carrier, bounds.min(), bounds.max());
             case Criterion.AnythingBut other ->
                     carrier.somethingOtherThan(List.of(placeOf(other.excluded())), bounds);
         };
@@ -600,7 +510,7 @@ public final class LevelRealizer {
      * two ends and a line, and one comparison cannot say all three.
      */
     private static boolean accepts(Criterion where, Carrier carrier, Place at) {
-        return where.holds(LevelSpace.onACarrier(carrier), new Level.OnACarrier(carrier, at));
+        return where.holds(new Level.OnACarrier(carrier, at));
     }
 
     /**

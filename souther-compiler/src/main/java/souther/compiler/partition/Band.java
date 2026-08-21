@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.numeric.Towards;
+
 /**
  * One run of values a quantity's rules leave between two of the places they part it.
  *
@@ -24,37 +26,6 @@ public record Band(Seam under, Seam over, Level from, Level to) {
      */
     public String key() {
         return where(first()) + "|" + where(last());
-    }
-
-    /**
-     * Where this run starts, as an end of the position's counts.
-     *
-     * <p>The one answer, read by everything that has to know how far a run reaches: the classes a
-     * position is divided into, and the search that composes a row inside one. Worked out separately
-     * they agreed until a run had no value at the end the line is at — a carrier whose values fill
-     * has every value past a line and no first one — and then one of them read the run as reaching
-     * to the end of the order.
-     *
-     * <p>Inclusive at a value the run holds, exclusive at the line where the order names none there,
-     * and null where nothing stops it that way.
-     */
-    public souther.compiler.numeric.Endpoint low() {
-        if (under == null) {
-            return from == null ? null : souther.compiler.numeric.Endpoint.inclusive(placeOf(from));
-        }
-        return under.above() != null
-                ? souther.compiler.numeric.Endpoint.inclusive(placeOf(under.above()))
-                : atTheLine(under);
-    }
-
-    /** Where it stops, on the same reading. */
-    public souther.compiler.numeric.Endpoint high() {
-        if (over == null) {
-            return to == null ? null : souther.compiler.numeric.Endpoint.inclusive(placeOf(to));
-        }
-        return over.below() != null
-                ? souther.compiler.numeric.Endpoint.inclusive(placeOf(over.below()))
-                : atTheLine(over);
     }
 
     /**
@@ -107,82 +78,6 @@ public record Band(Seam under, Seam over, Level from, Level to) {
         boolean below = named == parted.below();
         return new souther.compiler.numeric.Endpoint(placeOf(named),
                 side == Towards.ABOVE ? !below : below);
-    }
-
-    /**
-     * How many digits a search has to look at to find a value of this run.
-     *
-     * <p>Nothing beyond whole numbers where a line names a value of the quantity — the value beside
-     * it is what the run starts at, and it has whatever digits it has. Where a line names none, the
-     * digits are what it takes to tell that line from whatever ends the run at the other side: a
-     * run between a third and a third and a hundred-billionth holds a decimal, and so does one
-     * between a third and a bound a hundred-billionth under it. Neither is a scale anybody would
-     * guess.
-     */
-    public int digitsToLookIn(souther.compiler.numeric.Endpoint min,
-                              souther.compiler.numeric.Endpoint max) {
-        CutPosition low = endOf(under, min);
-        CutPosition high = endOf(over, max);
-        return low == null || high == null ? 0 : low.digitsToTellApartFrom(high);
-    }
-
-    /**
-     * Where this run reaches on one side, as a place on the quantity's order.
-     *
-     * <p>A line where a rule parts the values there and what the rules leave where none does. The
-     * one answer about where a run ends, so that how closely to look for a value of it and where to
-     * look are asked of the same two ends — worked out apart, the second knew that a run reaches
-     * from a bound to a line and the first only ever compared two lines, and a run between a bound
-     * and a line was looked for at no digits at all.
-     */
-    private static CutPosition endOf(Seam parted, souther.compiler.numeric.Endpoint leaves) {
-        if (parted != null) {
-            return parted.at();
-        }
-        return leaves == null || !(leaves.at() instanceof souther.compiler.numeric.Count count)
-                ? null : CutPosition.at(new Level.ACount(count));
-    }
-
-    /**
-     * A range of the position's counts that lies inside this run, for a search to look in.
-     *
-     * <p>An envelope and never the run itself: what is in the run is the run's to say
-     * ({@link #holds}), and this only says where to look. Narrowed inward at a line the quantity
-     * has no value at, to a number of {@code digits} digits past it — two thirds is past no whole
-     * number below one and is past sixty-six hundredths, so a run between two thirds of a decimal
-     * is looked in at the digits it has values at rather than at none.
-     */
-    public souther.compiler.numeric.NumericDomain.Bounds inside(
-            souther.compiler.numeric.Endpoint min, souther.compiler.numeric.Endpoint max,
-            int digits) {
-        return new souther.compiler.numeric.NumericDomain.Bounds(
-                under == null ? min : innerOf(under, low(), Towards.ABOVE, digits),
-                over == null ? max : innerOf(over, high(), Towards.BELOW, digits));
-    }
-
-    /**
-     * One end of the run to look in from.
-     *
-     * <p>Where the run reaches, which is a value it holds or the line it stops short of — and where
-     * the line is at no value of the quantity, the whole number that way, which is in the run
-     * because the line is not a number the quantity stands at. Rounded without asking whether the
-     * line is one, a run open at a whole number was looked in from that number and the one value
-     * offered was the one value it does not hold.
-     */
-    private static souther.compiler.numeric.Endpoint innerOf(
-            Seam parted, souther.compiler.numeric.Endpoint reaches, Towards into, int digits) {
-        if (reaches != null) {
-            return reaches;
-        }
-        souther.compiler.numeric.Place inside = parted.at().justBeyond(into, digits);
-        return inside == null ? null : souther.compiler.numeric.Endpoint.inclusive(inside);
-    }
-
-    /** The line itself, which the run reaches up to and does not hold. Null where the line is at a
-     *  place the quantity has no value for, and then nothing here can name where the run stops. */
-    private static souther.compiler.numeric.Endpoint atTheLine(Seam parted) {
-        Level line = parted.attainedLine();
-        return line == null ? null : souther.compiler.numeric.Endpoint.exclusive(placeOf(line));
     }
 
     private static souther.compiler.numeric.Place placeOf(Level level) {
@@ -298,13 +193,6 @@ public record Band(Seam under, Seam over, Level from, Level to) {
         return null;
     }
 
-    /** Whether this run has any value in it other than {@code except}, where that can be settled.
-     *  A run one value wide whose one value is against the line has nothing away from the line. */
-    public boolean holdsAnythingBut(Level except) {
-        return except == null || first() == null || last() == null
-                || !first().key().equals(last().key()) || !same(except, first());
-    }
-
     private static boolean same(Level one, Level other) {
         return one != null && other != null && one.key().equals(other.key());
     }
@@ -368,47 +256,51 @@ public record Band(Seam under, Seam over, Level from, Level to) {
     }
 
     /**
-     * Whether a value of the quantity lies in this run.
+     * The values this run is, as a set.
      *
-     * <p>Both ends included, because a run is named by the values at its ends and not by the lines
-     * beside it: the first value above a seam is in the run above and the last value below is in the
-     * run below. An end the order supplies rather than a rule leaves that side open.
+     * <p>The one answer about what is in it, which everything that asks goes through — whether a
+     * value is in it, whether it holds anything, and where to look for a row. Worked out again by
+     * each of them, what was in a run and what was looked for in it came apart wherever the run's
+     * ends are lines the quantity stands at no value of (issue #903).
      *
-     * <p>Where a seam names no value on the side facing this run — a carrier whose values fill has
-     * no first value above a line it keeps — the run is open at the line itself, which is where the
-     * seam's own position says the values part.
+     * <p>Both ends included where a value names them, because a run is named by the values at its
+     * ends and not by the lines beside it: the first value above a seam is in the run above and the
+     * last value below is in the run below. Where a seam names no value on the side facing this run
+     * — a carrier whose values fill has no first value above a line it keeps — the run is open at
+     * the line itself, which is where the seam's own position says the values part.
+     *
+     * <p>And the ends the rules leave narrow it further wherever they are the tighter, since a run
+     * is what every one of them leaves.
      */
-    public boolean holds(LevelSpace space, Level value) {
-        return past(space, value, under, Towards.ABOVE) && past(space, value, over, Towards.BELOW)
-                && within(space, value, from, Towards.ABOVE) && within(space, value, to,
-                        Towards.BELOW);
+    public LevelRegion region() {
+        return LevelRegion.of(new LevelInterval(
+                endOf(under, from, Towards.ABOVE), endOf(over, to, Towards.BELOW)));
     }
 
-    /** Whether {@code value} is on this run's side of one of the seams that part it. */
-    private static boolean past(LevelSpace space, Level value, Seam seam, Towards side) {
-        if (seam == null) {
-            return true;
+    /**
+     * One end of this run, from the line that parts it there and the end the rules leave.
+     *
+     * <p>Whichever of the two is the tighter, because a run is on this side of the line and inside
+     * what the rules leave at once. Read as one or the other, a run bounded by a rule and parted by
+     * a line reached past whichever of them was not consulted.
+     */
+    private static Bound endOf(Seam parted, Level leaves, Towards side) {
+        Bound left = leaves == null ? null : Bound.at(leaves, true);
+        if (parted == null) {
+            return left;
         }
-        Level edge = side == Towards.ABOVE ? seam.above() : seam.below();
-        if (edge != null) {
-            return within(space, value, edge, side);
-        }
-        // No value on this side of the line, so the run is open at the line: what parts the values
-        // is the position itself, and every value of the quantity that way is in this run. Asked of
-        // the position, because the rule may have written a multiple of the quantity and the value
-        // is one of the quantity's own — compared as they stand, a line at a third kept every
-        // decimal up to one below it.
-        int order = seam.at().compare(value);
-        return side == Towards.ABOVE ? order > 0 : order < 0;
+        Level edge = side == Towards.ABOVE ? parted.above() : parted.below();
+        // The value beside the line where the quantity has one, and the line itself where it has
+        // none. Written as the line, the run above a seam that keeps its own value would hold that
+        // value; written as the value, a run over an order whose values fill would have no end at
+        // all.
+        Bound atTheLine = edge != null ? Bound.at(edge, true) : new Bound(parted.at(), false);
+        return side == Towards.ABOVE ? Bound.lower(atTheLine, left) : Bound.upper(atTheLine, left);
     }
 
-    /** Whether {@code value} is at {@code edge} or on the {@code side} of it this run lies. */
-    private static boolean within(LevelSpace space, Level value, Level edge, Towards side) {
-        if (edge == null) {
-            return true;
-        }
-        int order = space.compare(value, edge);
-        return side == Towards.ABOVE ? order >= 0 : order <= 0;
+    /** Whether a value of the quantity lies in this run. */
+    public boolean holds(Level value) {
+        return region().contains(value);
     }
 
     private static String where(Level at) {

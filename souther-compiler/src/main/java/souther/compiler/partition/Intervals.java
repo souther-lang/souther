@@ -10,6 +10,7 @@ import souther.compiler.numeric.Place;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Towards;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
@@ -190,7 +191,6 @@ final class Intervals {
         // What the counts in a label stand for. A day count is a carrier and never a name for the
         // line, so the class an author reads is spelled in dates where the position holds them.
         Carrier carrier = of.carrierAt(type, symbols);
-        LevelSpace space = LevelSpace.onACarrier(carrier);
         List<PartitionClass> classes = new ArrayList<>();
         for (Band run : runs) {
             String label = rangeOf(run, min, max).label(carrier);
@@ -201,7 +201,7 @@ final class Intervals {
             // — so it held every value, and two such classes each held everything the other did.
             Classifier is = v -> switch (of.read(v, carrier)) {
                 case NumericTerm.Reading.Number number -> Membership.of(
-                        run.holds(space, new Level.OnACarrier(carrier, number.value())));
+                        run.holds(new Level.OnACarrier(carrier, number.value())));
                 case NumericTerm.Reading.Missing missing ->
                         new Membership.Incomplete(missing.code());
                 case NumericTerm.Reading.NotNumber _ -> Membership.NO_MATCH;
@@ -236,7 +236,9 @@ final class Intervals {
      * values do.
      */
     private static Place representative(Band run, Carrier carrier, Endpoint min, Endpoint max) {
-        return new Criterion.Within(run, null).somewhereInside(carrier, min, max);
+        // A class is the run itself and is named for no line, so it is read from its lower end the
+        // way a range of counts is.
+        return new Criterion.Within(run, null, Towards.ABOVE).somewhereInside(carrier, min, max);
     }
 
     /**

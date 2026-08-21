@@ -9,6 +9,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.NumericDomain.LinearForm;
+import souther.compiler.numeric.Towards;
 
 /**
  * What one comparison cuts, and where — the one place that decides it.

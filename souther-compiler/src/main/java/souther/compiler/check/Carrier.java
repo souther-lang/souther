@@ -12,6 +12,7 @@ import souther.compiler.numeric.Instants;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Times;
+import souther.compiler.numeric.Towards;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -471,22 +472,80 @@ public sealed interface Carrier {
      * <p>Asked of the carrier because the answer is the carrier's arithmetic. It sat on the ends
      * themselves, which is where it could only ever be a number's answer, and a carrier whose values
      * are not numbers had nothing to say through it.
+     *
+     * <p><b>What comes back is a value this carrier holds.</b> Which is one answer and not two:
+     * {@link #onTheGrid} says which places are this carrier's, and a value chosen without asking it
+     * is a value a caller has to check and may find refused — with nothing to tell it whether the
+     * range held another. A caller that filtered afterwards lost the value at the very end of the
+     * order every time a rule reached past it.
+     *
+     * <p>Null is this composing none and never the range holding none. Above a strict bound on a
+     * string it declines deliberately: every string with that one as a prefix is inside, which of
+     * them is a choice, and a choice made here puts a character nobody wrote into a row somebody has
+     * to read.
+     *
+     * <p>From the low end, which is what a range with no end named asks for.
      */
     default Place somethingInside(Endpoint low, Endpoint high) {
+        return somethingInside(low, high, Towards.ABOVE);
+    }
+
+    /**
+     * The same, from whichever end of the range the caller wants the value nearest.
+     *
+     * <p>Which end is a question about the range and is asked here, where the arithmetic that
+     * answers it already is. Decided by the caller instead, a reader that wanted the value beside a
+     * line reached for a second way of getting one — "some value other than the line's" — and the
+     * two ways were one policy said twice, only one of them on purpose. That is the shape a run
+     * bounded at both ends was already lost to once (issue #903).
+     */
+    default Place somethingInside(Endpoint low, Endpoint high, Towards from) {
         if (this instanceof Text) {
-            return someStringInside(low, high);
+            return someStringInside(low, high, from);
         }
         Granularity spacing = spacing();
         if (spacing == Granularity.DISCRETE) {
-            Endpoint lo = whole(low, true);
-            Endpoint hi = whole(high, false);
+            // Held inside what this order reaches before a count is taken from it. A range that runs
+            // past an end of the order starts at a count this carrier holds nothing at, and
+            // {@link #onTheGrid} refuses that count — so a range from before the first time of day
+            // to a second inside the day offered the count it started at, which is no time, while
+            // the first second of the day lay in the range and was never offered. Which is the
+            // range giving up no value where it holds one, and it is this that decides what the
+            // range gives up.
+            OrderedInterval reaches = extent();
+            Endpoint lo = whole(Endpoint.lower(low, reaches.low()), true);
+            Endpoint hi = whole(Endpoint.upper(high, reaches.high()), false);
             if (!Endpoint.someValueLiesBetween(lo, hi)) {
                 return null;
             }
-            return lo != null ? lo.at() : hi != null ? hi.at() : Count.ZERO;
+            // Which end is taken is still the range's own, and only where it has one. Read off the
+            // held ends instead, a range nothing bounds below is bounded by the order and the value
+            // taken is the first count the order has — the least whole number there is, offered as
+            // the row an author should write.
+            Endpoint wanted = from == Towards.ABOVE ? low : high;
+            Endpoint other = from == Towards.ABOVE ? high : low;
+            Endpoint taken = from == Towards.ABOVE ? lo : hi;
+            Endpoint away = from == Towards.ABOVE ? hi : lo;
+            // And zero where nothing bounds it either way, whichever end was asked for: a range with
+            // no end has no end to be near, and the order's own is not one -- reached for there, the
+            // greatest whole number there is would be the row an author is handed.
+            return wanted != null ? taken.at() : other != null ? away.at() : Count.ZERO;
         }
         if (!Endpoint.someValueLiesBetween(low, high)) {
             return null;
+        }
+        if (from == Towards.BELOW) {
+            if (high == null) {
+                return low == null ? Count.ZERO
+                        : low.inclusive() ? low.at() : count(low).plus(1);
+            }
+            if (high.inclusive()) {
+                return high.at();
+            }
+            // Open above, so the place is not the end. Halfway to the other end where there is one,
+            // and a step in where there is not.
+            return low == null ? count(high).minus(1)
+                    : count(low).halfwayTo(count(high), Granularity.DENSE);
         }
         if (low == null) {
             return high == null ? Count.ZERO
@@ -515,18 +574,20 @@ public sealed interface Carrier {
      * reason: the language names no next value, and inventing one tests a rule the model never
      * stated.
      */
-    private static Place someStringInside(Endpoint low, Endpoint high) {
+    private static Place someStringInside(Endpoint low, Endpoint high, Towards from) {
         if (!Endpoint.someValueLiesBetween(low, high)) {
             return null;
         }
-        // An end the range holds is the string taken, whichever end it is. Only the lower one was
-        // looked at, so `"a" < x <= "b"` came back with nothing while holding a value the model
-        // itself wrote two characters away.
-        if (low != null && low.inclusive()) {
-            return low.at();
+        // An end the range holds is the string taken, and the one the caller asked to be near first.
+        // Only the lower one was looked at, so `"a" < x <= "b"` came back with nothing while holding
+        // a value the model itself wrote two characters away.
+        Endpoint first = from == Towards.ABOVE ? low : high;
+        Endpoint second = from == Towards.ABOVE ? high : low;
+        if (first != null && first.inclusive()) {
+            return first.at();
         }
-        if (high != null && high.inclusive()) {
-            return high.at();
+        if (second != null && second.inclusive()) {
+            return second.at();
         }
         // Open above a string, and every string with that one as a prefix is inside. Which of them
         // is a choice, and a choice made here puts a character nobody wrote into a row somebody has
