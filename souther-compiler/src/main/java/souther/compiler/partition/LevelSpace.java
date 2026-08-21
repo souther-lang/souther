@@ -2,10 +2,12 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.BoundaryDomain;
+import souther.compiler.numeric.AdditiveImage;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Rational;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -184,12 +186,18 @@ public interface LevelSpace {
      * {@code 300x + 600y} moves in three hundreds however small a step {@code x} takes.
      */
     static LevelSpace steppingBy(BigDecimal step) {
+        // Which numbers a quantity reaches is arithmetic about the quantity and not about how a
+        // level is written, so it is asked of the one place that answers it. What stays here is the
+        // spelling: a level is a `Count` and a count is a decimal, and two decimals of one value and
+        // two scales are two counts.
+        AdditiveImage reaches =
+                new AdditiveImage.OverWholeNumbers(Rational.of(step));
         return new Counting() {
 
             @Override
             public boolean attainable(Level level) {
-                BigDecimal at = countOf(level).at();
-                return at.remainder(step).signum() == 0;
+                return reaches.contains(
+                        Rational.of(countOf(level).at()));
             }
 
             @Override
@@ -236,21 +244,13 @@ public interface LevelSpace {
      * {@code 3 * a} takes a third of them.
      */
     static LevelSpace overFiniteDecimals(BigDecimal generator) {
+        AdditiveImage reaches = new AdditiveImage.OverFiniteDecimals(Rational.of(generator));
         return new Counting() {
 
-            /**
-             * Whether the generator divides this level over the finite decimals.
-             *
-             * <p>The generator has no factor of two or five left in it, and ten is what a decimal's
-             * scale is made of — so a level {@code n / 10^k} is a multiple of it exactly where the
-             * generator divides {@code n}. Said as that rather than by dividing and seeing whether
-             * the quotient ends: a quotient with no end is the answer here and not a mishap, and a
-             * reader of this should not have to know that an exception is how it arrives.
-             */
             @Override
             public boolean attainable(Level level) {
-                return countOf(level).at().stripTrailingZeros().unscaledValue()
-                        .mod(generator.toBigIntegerExact()).signum() == 0;
+                return reaches.contains(
+                        Rational.of(countOf(level).at()));
             }
 
             /** No nearest one. The values this takes are dense, so past a level it does not take
@@ -297,17 +297,16 @@ public interface LevelSpace {
      * one again. What is left over is what a level has to be a multiple of.
      */
     static BigDecimal generatorOverFiniteDecimals(BigDecimal step) {
-        java.math.BigInteger left = step.stripTrailingZeros().unscaledValue().abs();
-        if (left.signum() == 0) {
+        if (step.signum() == 0) {
             return BigDecimal.ONE;
         }
-        for (java.math.BigInteger unit : List.of(java.math.BigInteger.TWO,
-                java.math.BigInteger.valueOf(5))) {
-            while (left.mod(unit).signum() == 0) {
-                left = left.divide(unit);
-            }
+        Rational left = new AdditiveImage.OverFiniteDecimals(Rational.of(step.abs())).generator();
+        BigDecimal written = left.asWrittenDecimal();
+        if (written == null) {
+            throw new IllegalStateException(
+                    "a divisor of written coefficients is written: " + left);
         }
-        return new BigDecimal(left);
+        return written;
     }
 
     /**
@@ -388,15 +387,18 @@ public interface LevelSpace {
      * it as well: a residue that is not one of these multiples is one no assignment lands on.
      */
     static BigDecimal stepOf(java.util.Collection<BigDecimal> coefs) {
+        Rational divisor = AdditiveImage.divisorOf(
+                coefs.stream().map(Rational::of).toList());
+        // Spelled at the scale the coefficients were written at, which is what it was spelled at
+        // before this asked somewhere else for the number. A divisor of the written coefficients
+        // divides each of them, so writing it out at their scale never rounds — and the scale is
+        // not decoration: a level is a `Count`, two counts are equal by their decimals, and a step
+        // written `2` where it used to be `2.0` is a different key in every map that holds one.
         int scale = 0;
         for (BigDecimal coef : coefs) {
             scale = Math.max(scale, Math.max(coef.scale(), 0));
         }
-        java.math.BigInteger together = java.math.BigInteger.ZERO;
-        for (BigDecimal coef : coefs) {
-            together = together.gcd(coef.setScale(scale).unscaledValue().abs());
-        }
-        return new BigDecimal(together, scale);
+        return divisor.asDecimal(java.math.RoundingMode.UNNECESSARY, scale);
     }
 
     /** The shared half of every space whose levels are numbers: how two of them compare, and that a

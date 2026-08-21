@@ -830,7 +830,8 @@ public final class FieldDomains {
             case ProjectionEvidence.Cause.Unrepresented it ->
                     "2 " + it.rule().named() + " " + it.path();
             case ProjectionEvidence.Cause.Lossy it ->
-                    "3 " + it.rule().named() + " " + it.atom() + " " + it.losses();
+                    "3 " + it.rule().named() + " " + it.atom() + " " + it.unstated();
+            case ProjectionEvidence.Cause.Rounded it -> "4 " + it.atom();
         };
     }
 
@@ -926,13 +927,16 @@ public final class FieldDomains {
         });
         // And what the algebra was given and what it projects does not hold.
         //
-        // Asked of the projection and of nothing else. A form neither an interval nor a difference
-        // holds is kept as written and marked lost for exactly that reason, and asking the whole
-        // state whether it still holds such a form is asking the form to stand on itself — every
-        // rule the projection dropped comes back proven. Asked of every form the algebra was handed
-        // rather than of the losses it recorded at the time: a loss is a fact about the step it
-        // happened at, the domain holds which kinds an atom has and not how many times each
-        // happened, and a second hole at an atom that already has one is a loss nothing can see.
+        // Asked of the projection and of nothing else. Asking the whole state whether it holds a
+        // rule is asking the rule to stand on itself — every rule the ranges could not state comes
+        // back proven — so what is asked is whether the ranges alone hold it.
+        //
+        // And asked of the rules after everything has been worked out, rather than read back from
+        // marks left as each rule arrived. A mark left at that moment is a history: a rule that
+        // narrowed nothing when it was read left one behind after a later rule made it bite, so a
+        // range that had become the whole of what the rules say still carried a note that it was
+        // not. What could not be stated is a property of the rule and of what the rules were found
+        // to leave, and it is worked out from those.
         Set<ProjectionEvidence.Cause.Lossy> lossy = new LinkedHashSet<>();
         readBy.forEach((rule, byPart) -> byPart.values().forEach(read -> {
             for (Predicates.Constraint each : read.stated()) {
@@ -940,14 +944,20 @@ public final class FieldDomains {
                     continue;
                 }
                 for (FactSubject atom : each.atoms()) {
-                    Set<NumericDomain.Loss> losses = constraints.numbers().lossesAt(atom);
-                    if (!losses.isEmpty()) {
-                        lossy.add(new ProjectionEvidence.Cause.Lossy(rule, atom, losses));
-                    }
+                    lossy.add(new ProjectionEvidence.Cause.Lossy(rule, atom,
+                            Set.of(each.rel() == NumericDomain.Rel.NE
+                                    ? ProjectionEvidence.Cause.Unstated.A_HOLE
+                                    : ProjectionEvidence.Cause.Unstated.A_RELATION)));
                 }
             }
         }));
         causes.addAll(lossy);
+        // And whether the ends handed over are the ends the rules drew. Asked of every position the
+        // algebra speaks of, because this is not about any one rule: the reasoning reached the edge
+        // exactly and the writing could not carry it.
+        constraints.numbers().atomsSpokenOf().stream()
+                .filter(atom -> !constraints.numbers().endsAreWrittenExactly(atom))
+                .forEach(atom -> causes.add(new ProjectionEvidence.Cause.Rounded(atom)));
         // In an order that does not move between runs. Parts are keyed by the node the tree holds,
         // which is an identity, and a map keyed on one iterates by where the addresses landed — so
         // a value with two conjuncts short of the bounds printed its two causes in whichever order

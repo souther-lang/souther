@@ -144,10 +144,17 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         assertTrue(domains.projection().isExact(), "and every rule of the record was taken into these");
     }
 
-    /** A rule that skips a value is a hole in a range, and a range is all the domain holds. The bound
-     * stays where the type left it and says it is not the whole story. */
+    /**
+     * A rule that skips a value at the edge of a range moves the edge; a range is all the domain
+     * hands over, and an edge is somewhere a range can go.
+     *
+     * <p>Which side of the hole the value lies is not something the rule says on its own — it is
+     * something the type's own bound says, and the two together leave the field at one or above.
+     * With the edge moved there is nothing left over: every value the range holds is one a row can
+     * write, which is what makes the projection exact rather than merely sound.
+     */
     @Test
-    void aRuleThatSkipsAValueLeavesTheAnswerInexact() {
+    void aRuleThatSkipsAValueAtTheEdgeMovesTheEdge() {
         FieldDomains domains = domainsIn("""
                 module example.skip
 
@@ -160,8 +167,9 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     invariant nonzero = a.value /= 0
                 """, "R");
 
-        assertBounds(domains.at("a"), 0, 10);
-        assertFalse(domains.projection().isExact(), "0 is in these bounds and no row can write it");
+        assertBounds(domains.at("a"), 1, 10);
+        assertTrue(domains.projection().isExact(),
+                "and the range is now the whole of it: every value in it is one a row can write");
     }
 
     /** A length is a whole number like any other, so a rule relating one to a field is in the
@@ -311,13 +319,13 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
     /**
      * A doubt reaches as far as the bound it is about.
      *
-     * <p>`a` has no rule of its own that the domain could not hold. Its upper bound is `b`'s, carried
-     * by the equality, and `b` holds a hole the domain cannot keep — so `a = 10` wants the `b` the
-     * hole refuses. A bound arrives along a path through the differences, and the doubt takes the
-     * same path or it is not about the same bound.
+     * <p>`a` has no rule of its own beyond its type's. Its upper bound is `b`'s, carried by the
+     * equality — and `b`'s own upper bound is ten with ten held away from it, which leaves `b` at
+     * nine. So `a` is at nine as well: the hole moved `b`'s edge and the equality carried the edge,
+     * rather than leaving ten in `a`'s range with a note that something about it was doubtful.
      */
     @Test
-    void aBoundReachedThroughAnotherAtomCarriesThatAtomsDoubt() {
+    void aBoundReachedThroughAnotherAtomTakesThatAtomsMovedEdge() {
         FieldDomains domains = domainsIn("""
                 module example.paired
 
@@ -332,9 +340,38 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     invariant notTen = b.value /= 10
                 """, "R");
 
-        assertBounds(domains.at("a"), 0, 10);
-        assertFalse(domains.projection().isExact(),
-                "a's edge is b's edge, carried by the equality, and b holds a hole this cannot keep");
+        assertBounds(domains.at("a"), 0, 9);
+        assertTrue(domains.projection().isExact(),
+                "and nothing is left over: `a = 9` is written with `b = 9`, which the hole admits");
+    }
+
+    /**
+     * An edge the rules put at a value no decimal writes is handed over rounded past it, and the
+     * reading says so.
+     *
+     * <p>{@code 3 * value <= 1} leaves the field at a third, and a third does not terminate — no
+     * decimal a model writes is one. The reasoning reaches the edge exactly; the number standing for
+     * it is a hair outside. That is not a rule the range failed to state, so it is its own cause: a
+     * reader placing a row at this edge is being given an edge the rules did not draw.
+     */
+    @Test
+    void anEdgeNoDecimalWritesIsSaidToBeRounded() {
+        FieldDomains domains = domainsIn("""
+                module example.third
+
+                data D = Decimal
+                    invariant atLeastNone = value >= 0.0m
+                    invariant aThird = 3.0m * value <= 1.0m
+
+                data R =
+                    { d: D
+                    }
+                """, "R");
+
+        assertTrue(domains.projection() instanceof ProjectionEvidence.Approximate approximate
+                        && approximate.causes().stream()
+                                .anyMatch(cause -> cause instanceof ProjectionEvidence.Cause.Rounded),
+                "the edge is a third and no decimal is: " + domains.projection());
     }
 
     /**

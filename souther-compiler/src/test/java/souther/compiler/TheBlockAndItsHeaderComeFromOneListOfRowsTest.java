@@ -61,7 +61,13 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
             """;
 
     /**
-     * The same model with a rule relating the two fields, which no candidate this composes satisfies.
+     * The same model with a rule the composing cannot reason through, so no candidate it puts
+     * together satisfies it.
+     *
+     * <p>A product of two fields and not a sum. A sum was what this used to say, and a sum is a rule
+     * the interval algebra now narrows both fields through — the composing finds
+     * {@code rate = 0, cap = 10} and the block it produces has rows in it, which is the right answer
+     * and the wrong fixture. What is wanted here is a rule outside what the algebra reasons in.
      *
      * <p>Here for the shape of the block it produces — explanations and no rows — and not for why the
      * search failed. Whether that failure may be read as a fact about the model is #602's question.
@@ -71,7 +77,7 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
 
             behavior fee""", """
                 }
-                invariant together = rate.value + cap.value >= 10
+                invariant together = rate.value * cap.value >= 10
 
             behavior fee""");
 
