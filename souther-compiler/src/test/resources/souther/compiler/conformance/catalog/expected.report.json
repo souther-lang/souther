@@ -417,7 +417,7 @@
           } ]
         }, {
           "axis" : "出荷する/指示.重量",
-          "origin" : "guard@1:71:5",
+          "origin" : "comparison@1:71:17",
           "kind" : "at_value",
           "value" : "30000",
           "items" : [ {
@@ -463,7 +463,7 @@
         "notRead" : [ {
           "position" : "指示.集荷時刻",
           "reason" : "unsupported_syntax",
-          "rule" : "guard@1:54:50",
+          "rule" : "comparison@1:54:50",
           "ruleId" : {
             "kind" : "guard",
             "declaredIn" : "conformance.shipping",
@@ -474,7 +474,7 @@
         }, {
           "position" : "指示.受付日",
           "reason" : "unsupported_syntax",
-          "rule" : "if@1:52:57",
+          "rule" : "comparison@1:52:57",
           "ruleId" : {
             "kind" : "guard",
             "declaredIn" : "conformance.shipping",
@@ -485,7 +485,7 @@
         }, {
           "position" : "指示.締切",
           "reason" : "unsupported_syntax",
-          "rule" : "if@1:52:57",
+          "rule" : "comparison@1:52:57",
           "ruleId" : {
             "kind" : "guard",
             "declaredIn" : "conformance.shipping",

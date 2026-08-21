@@ -282,31 +282,21 @@ class AShortCircuitOperatorsPathsToAValueAreItsOutcomesTest {
     }
 
     /**
-     * A comparison standing where nothing draws a line on it is not one this can name a side of,
-     * so the chain it is in has no paths to enumerate.
+     * Giving the chain a name before the fork does not change what the chain is read as.
      *
-     * <p>Where this reading reaches, and it is a narrower place than the rule it reads. A decision
-     * is what it takes of the inputs and what a run that made it would be seen to have done, and
-     * the second half is a comparison having a place a run is recorded at — which the plan gives a
-     * comparison written in the condition of a fork and gives no other. Named before the fork, the
-     * same three comparisons are the same rule and are read as none.
+     * <p>Which is the whole of what the naming has to answer for. {@code let ok = …} then
+     * {@code if ok} and the chain written in the condition are the same run and the same rules, so
+     * a reading that told them apart would be reading where the comparisons stand rather than what
+     * they say — and it did, because a comparison was numbered only where a fork was written
+     * directly around it.
      *
-     * <p>Held here so that the limit is a thing the reading says rather than a silence: what stops
-     * this is not in this reading at all, and finding that out from the answer alone would mean
-     * taking a group that was never offered for one that was considered and declined.
+     * <p>Held as an equality against the inline form and not as a shape of its own. A count that
+     * happened to match would say nothing about the decisions being the same ones.
      */
     @Test
-    void aComparisonNoLineIsDrawnOnIsNotOneThisCanNameASideOf() {
-        List<Interaction> found = read(NAMED_BEFORE_THE_FORK, "fee");
-
-        assertEquals(List.of(List.of(2, 2)), shape(found),
-                "the fork on the chain varies the two ways its arms do: " + found);
-        assertEquals(List.of("Arm", "Arm"),
-                found.get(0).factors().get(0).outcomes().stream()
-                        .flatMap(outcome -> outcome.holds().stream())
-                        .map(decision -> decision.constrains().getClass().getSimpleName())
-                        .toList(),
-                "and each way it comes out is said of the fork: " + found);
+    void namingAChainBeforeTheForkIsNotWhatItsPathsAre() {
+        assertEquals(outcomes(read(CHAIN, "fee")), outcomes(read(NAMED_BEFORE_THE_FORK, "fee")),
+                "the same three comparisons settle the same four ways under either spelling");
     }
 
     /**

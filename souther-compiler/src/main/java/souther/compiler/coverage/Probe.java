@@ -47,8 +47,8 @@ public final class Probe {
     }
 
     /**
-     * Called by probed code where a comparison of an instrumented condition answered, with the value
-     * it answered.
+     * Called by probed code where a comparison this plan numbers answered, with the value it
+     * answered.
      *
      * <p>Records both facts, because they are one event. That the comparison was reached and the way
      * it came out are read by different measures, and emitting a call each would make "a way recorded

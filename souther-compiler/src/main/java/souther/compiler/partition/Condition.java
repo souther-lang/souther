@@ -80,7 +80,7 @@ sealed interface Condition {
             Condition right = of(binary.right(), reads);
             return binary.op() == Hir.BinOp.AND ? new Both(left, right) : new Either(left, right);
         }
-        if (e instanceof Core.Binary comparison) {
+        if (e instanceof Core.Binary comparison && comparison.op().compares()) {
             return new Compares(comparison, reads);
         }
         return new NotRead(e);
@@ -90,4 +90,8 @@ sealed interface Condition {
     static boolean combines(Hir.BinOp op) {
         return op == Hir.BinOp.AND || op == Hir.BinOp.OR;
     }
+
+    // Which operators compare is `Hir.BinOp#compares` and is asked rather than spelled out again.
+    // Written here as "a binary that is not `&&` or `||`", this said arithmetic was a comparison —
+    // which nothing in a condition is, so it was a spelling that happened to be right.
 }

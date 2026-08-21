@@ -496,7 +496,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
      */
     private static boolean ordersAroundTheCut(OriginRef origin) {
         return switch (origin) {
-            case OriginRef.GuardOrigin g -> !g.singles();
+            case OriginRef.ComparisonOrigin g -> !g.singles();
             case OriginRef.EnsuresOrigin e -> !e.singles();
             case OriginRef.NarrowedOrigin n -> ordersAroundTheCut(n.bound());
             case OriginRef.InvariantOrigin _ -> false;
@@ -512,7 +512,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
             case OriginRef.NarrowedOrigin n -> noSideOf(n.bound());
             // A rule that singles a value out orders nothing around it, so neither neighbour is
             // nearer to being outside than the other.
-            case OriginRef.GuardOrigin _, OriginRef.EnsuresOrigin _ ->
+            case OriginRef.ComparisonOrigin _, OriginRef.EnsuresOrigin _ ->
                     NotOwedReason.THE_RULE_NAMES_A_VALUE_NOT_A_SIDE;
         };
     }
@@ -520,7 +520,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
     /** Whether the threshold's own value satisfies the rule that drew the line. */
     private static boolean holdsAtTheValue(OriginRef origin) {
         return switch (origin) {
-            case OriginRef.GuardOrigin g -> g.holdsAtTheValue();
+            case OriginRef.ComparisonOrigin g -> g.holdsAtTheValue();
             case OriginRef.EnsuresOrigin e -> e.holdsAtTheValue();
             case OriginRef.InvariantOrigin i -> i.holdsAtTheValue();
             case OriginRef.NarrowedOrigin n -> holdsAtTheValue(n.bound());
@@ -530,7 +530,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
     /** Which side of the line the threshold's own value belongs to. */
     private static boolean valueBelongsBelow(OriginRef origin) {
         return switch (origin) {
-            case OriginRef.GuardOrigin g -> g.valueBelongsBelow();
+            case OriginRef.ComparisonOrigin g -> g.valueBelongsBelow();
             case OriginRef.EnsuresOrigin e -> e.valueBelongsBelow();
             case OriginRef.InvariantOrigin _ -> false;
             case OriginRef.NarrowedOrigin n -> valueBelongsBelow(n.bound());

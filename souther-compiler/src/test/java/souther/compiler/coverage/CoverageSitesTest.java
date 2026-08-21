@@ -223,7 +223,9 @@ class CoverageSitesTest {
 
         // The comparison keeps its site either way, which is deliberate and is said where the
         // numbering is: a comparison is numbered wider than what any boundary is later drawn on.
-        assertEquals(List.of("else", "GT"), labels(plan),
+        // It comes first because the walk numbers where the source wrote it, and a condition is
+        // written before the arms it settles.
+        assertEquals(List.of("GT", "else"), labels(plan),
                 "the condition holds on no run, so only the arm it fails into is one to cover");
     }
 
