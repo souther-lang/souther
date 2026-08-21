@@ -72,6 +72,20 @@ class AProductWiderThanItsRulesIsSaidInTheDocumentTest {
             behavior take : (r: R) -> Taken
             """;
 
+    /** The same clauses beside one nothing satisfies with them, so the rules leave no value. */
+    private static final String NONE = """
+            module demo
+
+            data Taken
+
+            data R = { a: String, b: String }
+                invariant one = (a == "5" && b == "0") || (a == "6" && b == "1")
+                invariant two = (a == "5" && b == "0") || (a == "6" && b == "0")
+                invariant apart = a == "9"
+
+            behavior take : (r: R) -> Taken
+            """;
+
     private static JsonNode behaviorOf(String source) {
         // Read with no choice held apart, which is the reading this finding comes of. Nothing
         // written here expands far enough to fall back to it at the limit a compilation sets, so a
@@ -177,5 +191,24 @@ class AProductWiderThanItsRulesIsSaidInTheDocumentTest {
 
         assertEquals(souther.compiler.check.ReadAs.THE_COMPILATION_DOES,
                 compilation.db().ask(new Front.Reading()).value());
+    }
+
+    /**
+     * A declaration the rules leave no value is not told how its values were held.
+     *
+     * <p>What a reading holds once it admits nothing is where the arithmetic had got to, and not the
+     * relation's projections — those are empty wherever the relation is. So whether it is exact is a
+     * question about a projection nobody is being shown, and answering it here would write a note
+     * about the width of a set at a position no value of the type ever stands at.
+     *
+     * <p>Read with the alternatives merged, which is the reading that has anything to say about
+     * width at all. Every clause is read and the positions are the ones the choices reached across,
+     * so this is the same shape that does report — with one more rule beside it that nothing
+     * satisfies.
+     */
+    @Test
+    void aDeclarationTheRulesLeaveNoValueIsNotToldHowItsValuesWereHeld() {
+        assertEquals(List.of(), ofKind(NONE, "partition_values_not_separated"),
+                "no value of this type exists, and that is the answer it is owed");
     }
 }

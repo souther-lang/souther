@@ -317,13 +317,22 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, UnreadReason> standing,
         return guaranteed.getOrDefault(atom, defaultGuaranteed);
     }
 
-    /** Whether {@link #at} at {@code atom} can be guaranteed to be what the read rules leave it. */
+    /**
+     * Whether {@link #at} at {@code atom} can be guaranteed to be what the read rules leave it.
+     *
+     * <p>Asked of a reading that holds alternatives. Where it admits nothing, {@link #at} answers
+     * from what the arithmetic was left holding and not from the relation, whose projections are
+     * all empty — so there is no projection here for an answer to be exact about, and a caller
+     * asking is asking about a position no value ever stands at.
+     */
     public boolean projectionExactAt(A atom) {
         return !widened.contains(atom);
     }
 
     /** Whether what this holds can be guaranteed to be the whole of what the read rules admit,
-     *  which this reading guarantees where no union of alternatives was merged into one. */
+     *  which this reading guarantees where no union of alternatives was merged into one. The same
+     *  proof state as above and about the same readings: one that admits nothing holds no
+     *  relation. */
     public boolean relationExact() {
         return tangled.isEmpty();
     }

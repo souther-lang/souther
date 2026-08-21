@@ -287,10 +287,18 @@ public final class FieldDomains {
             // Asked of each name the position answers to, as the values are. What the reading could
             // not hold together is a fact about the positions a choice reached across, and a
             // position outside them is left where it was.
+            //
+            // Not asked at all where the reading admits nothing. What it holds there is not the
+            // relation's projections — those are empty wherever the relation is — but where the
+            // arithmetic had got to when it learned that no value of this type exists, so whether
+            // it is exact is a question about a projection nobody is being shown. And the answer
+            // owed about such a declaration is that it has no values, which is said elsewhere and
+            // is not made truer by a note about how the values were held.
             boolean separated = true;
             for (FactSubject name : named(seeded, field)) {
                 here = here.meet(values.at(name));
-                separated = separated && values.projectionExactAt(name);
+                separated = separated
+                        && (values.isBottom() || values.projectionExactAt(name));
                 // The first that stopped it. Two names of one position are two ways the same rules
                 // were filed, so a second reason is another account of a position already known to
                 // be short of its rules rather than a further thing wrong with it.
