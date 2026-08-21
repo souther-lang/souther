@@ -31,7 +31,25 @@ import java.util.List;
  * different counts, because two elements of a set may map onto one. Folded together, the count would
  * decide the provenance.
  */
-sealed interface ElementLineage {
+public sealed interface ElementLineage {
+
+    /**
+     * The argument an operation's answer holds the elements of, or null where its elements are not
+     * the argument's own.
+     *
+     * <p>The one thing a reader walking backwards from a value needs, and the only part of a lineage
+     * that can be walked that way as it stands: where the elements are the same values, an element
+     * of the answer is an element of the argument. Where the answer holds what a closure made, the
+     * element came from somewhere and is not it, and this says nothing rather than saying where.
+     *
+     * <p>Asked here and not of the reader that happens to hold the table today. What an operation
+     * does to the values it is given is declared once and read by whoever has a use for it; a caller
+     * reaching through the invariant-discharge check for it would depend on that check to learn what
+     * the library says.
+     */
+    static ArgumentRef holdsTheElementsOf(souther.compiler.types.ValueName operation) {
+        return DischargeRules.holdsTheElementsOf(operation);
+    }
 
     /**
      * Where in what an operation answers the elements this is about stand.

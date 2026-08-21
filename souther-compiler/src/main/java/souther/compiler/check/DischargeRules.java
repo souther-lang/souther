@@ -1111,6 +1111,15 @@ final class DischargeRules {
         return rules;
     }
 
+    /** What {@link ElementLineage#holdsTheElementsOf} answers with, read off the table here. */
+    static ArgumentRef holdsTheElementsOf(ValueName operation) {
+        Built built = Bound.BUILDINGS.get(operation);
+        return built != null && built.outputs().size() == 1
+                && built.lineage() instanceof ElementLineage.SameAs same
+                && same.source().elements() == 1
+                ? same.source().argument() : null;
+    }
+
     /** The container {@code call} built its result from, or null where the check has no rule about
      * what the operation keeps. */
     static Source builtFrom(Core.PreservedCall call) {

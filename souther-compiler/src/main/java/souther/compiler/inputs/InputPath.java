@@ -72,6 +72,43 @@ public final class InputPath {
         return of(e, roots, bound, elements, symbols, callsStand, 0);
     }
 
+    /**
+     * Which position holds the elements {@code container} holds, or null where none does.
+     *
+     * <p>Beside {@link #of} and not the same question. That one answers what an expression names,
+     * and an operation's answer names no position — {@code List.reverse(xs)} is a value, not a place
+     * a row writes at. What is asked here is where the elements of that value are, and the library
+     * says: a {@code reverse} answers the elements it was given and a {@code filter} some of them,
+     * so an element of either is an element of what went in.
+     *
+     * <p>Only where they are the same values. Where an answer holds what a closure made of an
+     * element, what it holds came from a position and is not one — and a line drawn there would be
+     * at a position whose values are not the ones the rule is about, which an author cannot tell
+     * from a line their model states.
+     */
+    private static TermPath containerPath(Core e, Map<BindingId, String> roots,
+                                          Map<BindingId, Core> bound,
+                                          souther.compiler.check.ElementBindings elements,
+                                          Symbols symbols, boolean callsStand, int through) {
+        TermPath named = of(e, roots, bound, elements, symbols, callsStand, through);
+        if (named != null || through >= bound.size() + elements.containers().size() + FOLLOWED) {
+            return named;
+        }
+        Core held = e instanceof Core.Read r ? bound.get(r.binding()) : e;
+        if (!(held instanceof Core.Call call) || !(call.fn() instanceof Core.Reached reached)) {
+            return null;
+        }
+        souther.compiler.check.ArgumentRef holds =
+                souther.compiler.check.ElementLineage.holdsTheElementsOf(reached.denotes());
+        int argument = holds == null ? -1 : holds.positionIn(reached.denotes());
+        return argument < 0 || argument >= call.args().size() ? null
+                : containerPath(call.args().get(argument), roots, bound, elements, symbols,
+                        callsStand, through + 1);
+    }
+
+    /** How many operations deep the elements of one container are followed. */
+    private static final int FOLLOWED = 8;
+
     private static TermPath of(Core e, Map<BindingId, String> roots, Map<BindingId, Core> bound,
                                souther.compiler.check.ElementBindings elements, Symbols symbols,
                                boolean callsStand, int through) {
@@ -99,8 +136,8 @@ public final class InputPath {
                 if (container == null || through >= steps) {
                     yield null;
                 }
-                TermPath at = of(container, roots, bound, elements, symbols, callsStand,
-                        through + 1);
+                TermPath at = containerPath(container, roots, bound, elements, symbols,
+                        callsStand, through + 1);
                 // The container names no position of this behavior's input — it is what another
                 // operation answered, or something this does not read — so neither does an element
                 // of it. Where a reading of provenance goes on from there is not this walk's.
