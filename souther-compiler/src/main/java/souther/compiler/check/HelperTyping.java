@@ -385,6 +385,11 @@ public final class HelperTyping {
      * same either way, so it is worked out once here rather than beside each question — two readings
      * of one declaration would agree only until one of them was edited.
      */
+    static Map<String, Type> recursiveCallSigs(HelperInliner inliner, Symbols symbols) {
+        return sigsOf(inliner.recursiveInReach(), inliner::helper, symbols);
+    }
+
+    /** The same, read off a table rather than off an inliner over it. */
     static Map<String, Type> recursiveCallSigs(HelperTable table,
                                                java.util.Collection<String> names, Symbols symbols) {
         return sigsOf(names, table::reached, symbols);

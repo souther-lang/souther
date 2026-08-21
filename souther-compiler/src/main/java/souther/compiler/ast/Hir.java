@@ -332,6 +332,18 @@ public interface Hir {
      * impossible. The arity says something has to be passed; that it is this module's own is what a
      * reader of the rebuild has to see, which is why every one of them names it.
      */
+    /**
+     * A module at whatever stage the pass holding it has reached.
+     *
+     * <p>{@code takenOn} is the methods a lowered module emits beyond the ones it declared: a
+     * recursion an expansion of it could not remove, and a value minted for one of its rows. It is
+     * empty at every stage before lowering and is written there and nowhere else. It once carried a
+     * prediction — worked out by walking the places a module writes expressions, before any of those
+     * expressions had been expanded — and a tree that walk did not know to look at contributed
+     * nothing, which is how a rule reaching a quantifier came to be compiled without the fold it
+     * became. What a module emits follows from expanding it, so it is not knowable here until it has
+     * been.
+     */
     record Module(String name,
                   List<String> exposing,
                   Map<String, RetType> exposedOutputs,

@@ -125,21 +125,16 @@ public final class Prepared {
         }
         Prepared written = new Prepared(desugared, fns, examples, fakes, List.of(), List.of(),
                 Map.of());
-        HelperInliner inliner = HelperInliner.forModule(written.module(), published);
-        // What this module emits and did not declare: a recursive helper it reaches, which cannot
-        // be expanded into whoever calls it. A row names no more than a body does — its operands are
-        // definitions of this module and the helpers they call are expanded into them — so a row
-        // adds nothing here beyond the recursion any of its calls reaches.
-        Map<String, Hir.FnDef> injected = new LinkedHashMap<>(inliner.injectedRecursiveHelpers());
         // What each row operand computes, emitted beside the module's own so a row runs its operand
         // in the program the behavior it is about is applied in. Which method is whose is kept with
         // the module: it is decided here and read wherever a row is run, never counted out again.
         RowFixtures.Emitted rows = RowFixtures.emitted(written.module(), scope, signatures);
-        // Beside what the module declared, not among it. Both are emitted and only the first was
-        // written here, and a reader asking which is which asks the component it is in rather than
-        // the shape of a name.
-        return injected.isEmpty() && rows.defs().isEmpty() ? written
-                : new Prepared(desugared, fns, examples, fakes, List.copyOf(injected.values()),
+        // Which recursions this module has to emit is not decided here and is not carried from here.
+        // It follows from what expanding this module's trees leaves standing, which none of them has
+        // been through yet — worked out here, it was a prediction about work not yet done, and it
+        // was wrong for every tree the prediction did not know to look at.
+        return rows.defs().isEmpty() ? written
+                : new Prepared(desugared, fns, examples, fakes, List.of(),
                         List.copyOf(rows.defs().values()), rows.methods());
     }
 

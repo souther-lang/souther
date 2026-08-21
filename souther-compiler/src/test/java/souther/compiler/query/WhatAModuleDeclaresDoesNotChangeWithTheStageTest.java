@@ -97,15 +97,19 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
     }
 
     /**
-     * And this module does take helpers on, so no stage passes by having none to confuse a
-     * declaration with. Asked of what the module emits, which is a different question and a different
-     * answer.
+     * And this module does emit helpers it did not declare, so no stage passes by having none to
+     * confuse a declaration with. What it emits is a different question from what it declares, and
+     * it is answered after its trees have been expanded rather than before: a recursion is emitted
+     * here because an expansion of this module could not remove a call to it.
      */
     @Test
-    void theModuleTakesOnHelpersItDidNotDeclare() {
+    void theModuleEmitsHelpersItDidNotDeclare() {
         Db db = db();
         assertEquals(Set.of("List.foldFrom", "lib.flatten"),
-                db.ask(new Bodies.RecursiveHelpers("app")).value());
+                db.ask(new Bodies.RequiredRecursiveDefs("app")).value());
+        assertEquals(Set.of("own", "both"),
+                HelperInliner.helpersOf(db.ask(new Bodies.Settled("app")).value()).keySet(),
+                "and what it declares is unchanged by that");
     }
 
     /**

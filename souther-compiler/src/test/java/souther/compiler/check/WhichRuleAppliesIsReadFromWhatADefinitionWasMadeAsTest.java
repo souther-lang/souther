@@ -64,9 +64,13 @@ class WhichRuleAppliesIsReadFromWhatADefinitionWasMadeAsTest {
                 | "a row applies a recursion" : (In { n = depth(Item { rank = 0 }) }) -> Out { m = 0 }
             """;
 
-    private static Prepared prepared() {
-        Db db = Compilation.ofDocuments(Map.of("rules.sou", RULES, "app.sou", APP),
+    private static Db db() {
+        return Compilation.ofDocuments(Map.of("rules.sou", RULES, "app.sou", APP),
                 Set.of(), ModulePath.EMPTY).db();
+    }
+
+    private static Prepared prepared() {
+        Db db = db();
         Answer<Prepared> answer = db.ask(new Shapes.Prepared("app"));
         assertTrue(answer.present(), "prepared of app: " + answer.reports());
         return answer.value();
@@ -97,10 +101,17 @@ class WhichRuleAppliesIsReadFromWhatADefinitionWasMadeAsTest {
         }
     }
 
+    /**
+     * Asked of the compilation rather than of the prepared tree. A definition another module wrote
+     * becomes one of this module's methods because an expansion here left a call to it standing,
+     * which is settled after this module's trees have been expanded and not before.
+     */
     @Test
     void aDefinitionAnotherModuleWroteIsOrdinaryHoweverThisOneNamesIt() {
-        Prepared state = prepared();
-        Hir.FnDef taken = definition(state, "rules.depth");
+        Answer<Hir.FnDef> answer =
+                db().ask(new souther.compiler.query.Bodies.SettledFn("app", "rules.depth"));
+        assertTrue(answer.present(), "`rules.depth` is a definition `app` emits");
+        Hir.FnDef taken = answer.value();
 
         assertInstanceOf(DefinitionRole.Ordinary.class, taken.role());
         assertFalse(taken.written().authored(),

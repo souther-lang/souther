@@ -4,6 +4,7 @@ import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 import java.util.SequencedSet;
 import java.util.Set;
@@ -19,10 +20,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * it replaces was a prediction: a walk listing the places a module writes expressions, made before
  * any of those expansions ran, and it did not list {@code ensures}.
  *
- * <p>So the two are held against each other here. Where the prediction was right they agree, and the
- * cases below are the ones it was right about — a fold in a {@code let}, in an {@code invariant}, in
- * an example row, a recursion the module declared. Where it was wrong they differ, and the
- * difference is the whole of what this changes.
+ * <p>The cases below are the ones the prediction was right about — a fold in a {@code let}, in an
+ * {@code invariant}, in an example row, a recursion the module declared — and the one it was wrong
+ * about, which is a module whose only reach to a quantifier is a rule. They are here together
+ * because what has to hold is that moving the answer changed nothing except the last.
  */
 class WhatAModuleMustEmitIsWhatItsExpansionsCouldNotRemoveTest {
 
@@ -37,13 +38,9 @@ class WhatAModuleMustEmitIsWhatItsExpansionsCouldNotRemoveTest {
         return answer.value();
     }
 
-    private static SequencedSet<String> predicted(Db db, String module) {
-        return db.ask(new Bodies.RecursiveHelpers(module)).value();
-    }
-
-    /** A fold in a `let`, which the walk did list. */
+    /** A fold in a `let`. */
     @Test
-    void aFoldInADefinitionIsFoundBothWays() {
+    void aFoldInADefinitionIsRequired() {
         Db db = dbOf("inlet", """
                 module inlet
 
@@ -51,12 +48,11 @@ class WhatAModuleMustEmitIsWhatItsExpansionsCouldNotRemoveTest {
                 """);
 
         assertEquals(Set.of("List.foldFrom"), required(db, "inlet"));
-        assertEquals(predicted(db, "inlet"), required(db, "inlet"));
     }
 
-    /** And in an `invariant`, which it also listed. */
+    /** And in an `invariant`. */
     @Test
-    void aFoldInAnInvariantIsFoundBothWays() {
+    void aFoldInAnInvariantIsRequired() {
         Db db = dbOf("ininv", """
                 module ininv
 
@@ -65,12 +61,11 @@ class WhatAModuleMustEmitIsWhatItsExpansionsCouldNotRemoveTest {
                 """);
 
         assertEquals(Set.of("List.foldFrom"), required(db, "ininv"));
-        assertEquals(predicted(db, "ininv"), required(db, "ininv"));
     }
 
     /** And in an example row. */
     @Test
-    void aFoldInARowIsFoundBothWays() {
+    void aFoldInARowIsRequired() {
         Db db = dbOf("inrow", """
                 module inrow
 
@@ -84,7 +79,6 @@ class WhatAModuleMustEmitIsWhatItsExpansionsCouldNotRemoveTest {
                 """);
 
         assertTrue(required(db, "inrow").contains("List.foldFrom"), required(db, "inrow").toString());
-        assertEquals(predicted(db, "inrow"), required(db, "inrow"));
     }
 
     /** A recursion the module declared is its own to check and publish, reached or not. */
@@ -102,10 +96,9 @@ class WhatAModuleMustEmitIsWhatItsExpansionsCouldNotRemoveTest {
                 """);
 
         assertEquals(Set.of("depth"), required(db, "owned"));
-        assertEquals(predicted(db, "owned"), required(db, "owned"));
     }
 
-    /** A module that folds nowhere needs nothing, and neither answer says otherwise. */
+    /** A module that folds nowhere needs nothing. */
     @Test
     void aModuleThatFoldsNowhereRequiresNothing() {
         Db db = dbOf("plain", """
@@ -118,15 +111,36 @@ class WhatAModuleMustEmitIsWhatItsExpansionsCouldNotRemoveTest {
                 """);
 
         assertEquals(Set.of(), required(db, "plain"));
-        assertEquals(predicted(db, "plain"), required(db, "plain"));
+    }
+
+    /**
+     * Nothing is emitted before the module is lowered. What it emits follows from expanding its
+     * trees, so a stage that has not expanded them has nothing to say about it — and the prediction
+     * that used to be written here answered before any of them had run.
+     */
+    @Test
+    void aModuleCarriesNoEmissionListUntilItIsLowered() {
+        Db db = dbOf("inlet", """
+                module inlet
+
+                let total (xs: List<Int>) : Bool = List.all(x -> x >= 0, xs)
+                """);
+
+        assertEquals(List.of(), db.ask(new Bodies.Settled("inlet")).value().takenOn(),
+                "a settled module takes nothing on");
+        assertEquals(Set.of("List.foldFrom"),
+                db.ask(new Bodies.Lowering("inlet")).value().lowered().takenOn().stream()
+                        .map(souther.compiler.ast.Hir.FnDef::name)
+                        .collect(java.util.stream.Collectors.toSet()),
+                "and the lowered one carries what its expansions could not remove");
     }
 
     /**
      * And the case the prediction was wrong about: a rule is the module's only reach to a fold. The
-     * fold is required, and the walk said nothing was.
+     * fold is required, and the walk that listed where a module writes expressions said nothing was.
      */
     @Test
-    void aFoldReachedOnlyFromARuleIsRequiredAndWasNotPredicted() {
+    void aFoldReachedOnlyFromARuleIsRequired() {
         Db db = dbOf("inrule", """
                 module inrule
 
@@ -137,7 +151,5 @@ class WhatAModuleMustEmitIsWhatItsExpansionsCouldNotRemoveTest {
                 """);
 
         assertEquals(Set.of("List.foldFrom"), required(db, "inrule"));
-        assertEquals(Set.of(), predicted(db, "inrule"),
-                "the walk that listed where a module writes expressions did not list `ensures`");
     }
 }

@@ -196,9 +196,7 @@ public final class HelperInliner {
      */
     public static HelperInliner forModule(Hir.Module module, Map<String, Hir.FnDef> imported) {
         HelperTable table = HelperTable.of(module, imported, InliningPolicy.FULL);
-        HelperInliner inliner = new HelperInliner(table, HelperGraph.of(table));
-        inliner.computeTakenOnRecursive(module);
-        return inliner;
+        return new HelperInliner(table, HelperGraph.of(table));
     }
 
     /**
@@ -334,92 +332,28 @@ public final class HelperInliner {
     }
 
     /**
-     * The recursive helpers this module reaches and does not declare, by the qualified name it
-     * reaches each of them by ({@code List.foldFrom}, {@code pricing.sumDown}).
-     *
-     * <p>A recursive helper is not inlined — it would expand forever — so it is emitted as one of
-     * this module's own methods, exactly like a recursive helper the module declared (see {@link
-     * #injectedRecursiveHelpers}). That holds whoever declared it: the standard library, or a module
-     * that published one, or published something that calls one. Only the ones actually reached are
-     * emitted.
-     */
-    private final Set<String> takenOnRecursive = new java.util.LinkedHashSet<>();
-
-    /**
      * Every recursive helper this expansion left a call to standing, by the name it was reached by.
      *
-     * <p>What the expansion did, not what it was predicted to have to do. A call is left standing
-     * because expanding it would not terminate, and the method it stays a call to has to be
-     * somewhere — so the requirement is made at the moment the decision is, by whoever made it,
-     * rather than worked out again from the places a module writes expressions.
+     * <p>What the expansion did. A call is left standing because expanding it would not terminate,
+     * and the method it stays a call to has to be somewhere — so the requirement is made at the
+     * moment the decision is, by whoever made it.
      *
      * <p>In the order they were met, because a reader reporting one of a group reports the one it
      * reached first.
      */
     private final java.util.SequencedSet<String> leftStanding = new java.util.LinkedHashSet<>();
 
-    /**
-     * Walks everything the module writes — its fn bodies, its data invariants, its rows — collecting
-     * the recursive helpers it reaches and does not declare. Those it must emit as methods of its own.
-     *
-     * <p>Reached, which is wider than called. A helper written where a value goes is eta-expanded into
-     * a call, and a value's body stands wherever the value is named, so a helper is reached through
-     * either. Both were once left to a caller that joined the definitions this module's imports
-     * publish into what it has as fns of its own: that join answered yes for every published helper
-     * whether this module reached it or not, and so covered what this walk was not finding.
-     */
-    private void computeTakenOnRecursive(Hir.Module module) {
-        Set<String> named = new LinkedHashSet<>();
-        Deque<Hir.Expr> work = new ArrayDeque<>();
-        for (Hir.FnDef fn : module.fns()) {
-            work.add(fn.writtenBody());
-        }
-        for (Hir.Def d : module.defs()) {
-            if (d instanceof Hir.Data data) {
-                for (Hir.InvariantClause clause : data.invariants()) {
-                    work.add(clause.expr());
-                }
-            }
-        }
-        forEachExampleExpr(module, work::add);
-        followingValues(work, table.reachable(),
-                e -> helpersNamedIn(e, table.reachable(), named));
-        for (String name : graph.reachedFrom(named)) {
-            if (graph.recurses(name) && !table.held().containsKey(name)) {
-                takenOnRecursive.add(name);
-            }
-        }
+    /** Every recursion in reach, which is exactly what {@link #inline} leaves a call standing to —
+     *  this module's own, what its imports publish to it, and the library underneath both. What a
+     *  standing call can be typed against, whatever this module turns out to reach. */
+    public java.util.SequencedSet<String> recursiveInReach() {
+        return graph.recursive();
     }
 
-    /** Every expression an {@code example} or a {@code fake} of {@code module} writes: a row's inputs,
-     * its {@code with} values, its expected result, and a fake table's inputs and outputs. A helper
-     * named in any of them is applied when the row is evaluated, so all of them are read here. */
-    private static void forEachExampleExpr(Hir.Module module, java.util.function.Consumer<Hir.Expr> f) {
-        for (Hir.Example ex : module.examples()) {
-            for (Hir.ExampleRow row : ex.rows()) {
-                row.inputs().forEach(f);
-                for (Hir.With w : row.withs()) {
-                    f.accept(w.value());
-                }
-                f.accept(row.expected());
-            }
-        }
-        for (Hir.Fake fake : module.fakes()) {
-            for (Hir.FakeRow row : fake.rows()) {
-                if (row.inputs() != null) {   // a default row matches anything and writes none
-                    row.inputs().forEach(f);
-                }
-                f.accept(row.output());
-            }
-        }
-    }
-
-
-    /** The recursive helpers this module emits as methods: the ones it declares, plus the ones it
-     * reaches and took on to emit — a library one, or one another module published (spec §fn-declaration). A
-     * call to any of them is left standing by {@link #inline}. The graph's own {@code recursive} set
-     * additionally holds recursive helpers the module does not reach at all, so {@code inline} never
-     * expands one that slips in through a nested body.
+    /** The recursive helpers this module declares. A call to one of them is left standing by
+     * {@link #inline}, as is a call to any recursion in reach — the graph's own {@code recursive}
+     * set is what {@code inline} asks, so one this module does not declare is left standing too and
+     * is answered for by whoever collects what an expansion could not remove.
      *
      * <p>Answered in declaration order, which is the order a check reporting one of them reports in.
      * The order is the graph's and is carried, not rebuilt. */
@@ -430,7 +364,6 @@ public final class HelperInliner {
                 result.add(name);
             }
         }
-        result.addAll(takenOnRecursive);
         return result;
     }
 
@@ -448,20 +381,6 @@ public final class HelperInliner {
      */
     public java.util.SequencedSet<String> leftStanding() {
         return java.util.Collections.unmodifiableSequencedSet(leftStanding);
-    }
-
-    /** The recursive helpers this module reaches and does not declare, renamed to the qualified names
-     * it reaches them by so they are emitted as the module's own methods — a library {@code let
-     * foldFrom} is reached as {@code List.foldFrom}, and its self-call already reads {@code
-     * List.foldFrom}. Which module declared one is not in that name and is read off the declaration
-     * ({@link Hir.FnDef#declaredIn}). */
-    public Map<String, Hir.FnDef> injectedRecursiveHelpers() {
-        Map<String, Hir.FnDef> out = new java.util.LinkedHashMap<>();
-        for (String qualified : takenOnRecursive) {
-            Hir.FnDef def = table.reached(qualified);
-            out.put(qualified, def.reachedAs(qualified));
-        }
-        return out;
     }
 
     /**
@@ -2036,65 +1955,6 @@ public final class HelperInliner {
         return found[0];
     }
 
-    /**
-     * Runs {@code collect} over everything {@code work} reaches, following the values it reads.
-     *
-     * <p>An expression alone stops at the reference. A value is substituted where it is named
-     * (ADR-0072), so the body of a value a body reads stands in that body — what that body names is
-     * named there, and a declaration reached only through a value is reached. The bodies are followed
-     * as far as they name each other, which is how a chain of values holds.
-     *
-     * <p>What is collected is the caller's question and not this walk's: which helpers a row applies
-     * is one question, which declarations a module reaches at all is another. {@code work} is drained,
-     * and what is seeded into it is the caller's too.
-     */
-    static void followingValues(Deque<Hir.Expr> work, Map<String, Hir.FnDef> table,
-                                java.util.function.Consumer<Hir.Expr> collect) {
-        Set<String> read = new LinkedHashSet<>();
-        while (!work.isEmpty()) {
-            Hir.Expr e = work.poll();
-            collect.accept(e);
-            Set<String> named = new LinkedHashSet<>();
-            ValueCycles.valuesRead(e, table, named);
-            for (String value : named) {
-                Hir.FnDef def = table.get(value);
-                if (def != null && def.params().isEmpty()
-                        && def.body() instanceof Hir.FnBody.Written w && read.add(value)) {
-                    work.add(w.expr());
-                }
-            }
-        }
-    }
-
-    /**
-     * The declarations {@code e} names, applied or not.
-     *
-     * <p>Which declarations a module reaches, which is what decides the methods it has to emit. A
-     * recursive helper written where a value goes — {@code apply1(spin, n)} — is reached as surely as
-     * one that is called: the expansion eta-expands it, and what stands there afterwards is a call to
-     * a method that has to be somewhere. Asked of what a name denotes, so a parameter spelled like a
-     * helper is the parameter.
-     */
-    private static void helpersNamedIn(Hir.Expr e, Map<String, Hir.FnDef> table, Set<String> out) {
-        switch (e) {
-            // A sugar is written out before inlining, so a body that folds reaches the recursive
-            // `foldFrom` and not the wrapper it wrote.
-            case Hir.Apply call when calledHelper(call) != null -> {
-                String fn = calledHelper(call);
-                if (table.containsKey(fn)) {
-                    out.add(fn);
-                }
-            }
-            case Hir.Var.Denoting v when v.denotes() instanceof ValueName.Helper
-                    || v.denotes() instanceof ValueName.Stdlib -> {
-                if (table.containsKey(v.reaches())) {
-                    out.add(v.reaches());
-                }
-            }
-            default -> { }
-        }
-        forEachChild(e, c -> helpersNamedIn(c, table, out));
-    }
 
     /**
      * The helpers of {@code table} that {@code e} calls, added to {@code out}.

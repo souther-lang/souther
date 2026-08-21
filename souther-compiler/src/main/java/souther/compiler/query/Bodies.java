@@ -942,10 +942,11 @@ public final class Bodies {
                 return Answer.absent();
             }
             Map<String, Hir.FnDef> helpers = new LinkedHashMap<>(imported.value());
-            // What this module has, both components of it: a body may name a helper it took on to
-            // emit exactly as it names one it declared, and a row may apply either.
+            // What this module declared. A recursion it emits without having declared one is not
+            // here: it is reached under the name of the module that wrote it, which is a name this
+            // table already answers with that declaration, and which of them this module emits is
+            // settled after its trees are expanded rather than being carried here.
             helpers.putAll(HelperInliner.helpersOf(settled.value()));
-            helpers.putAll(HelperInliner.takenOnBy(settled.value()));
             return Answer.of(helpers);
         }
     }
@@ -1322,14 +1323,10 @@ public final class Bodies {
             if (!settled.present()) {
                 return Answer.absent();
             }
-            // Either component: a body is asked for by name, and a helper the module took on to emit
-            // has one to expand exactly as one it declared does.
-            for (List<Hir.FnDef> component : List.of(
-                    settled.value().fns(), settled.value().takenOn())) {
-                for (Hir.FnDef candidate : component) {
-                    if (candidate.name().equals(fn)) {
-                        return Answer.of(candidate);
-                    }
+            // What this module wrote.
+            for (Hir.FnDef candidate : settled.value().fns()) {
+                if (candidate.name().equals(fn)) {
+                    return Answer.of(candidate);
                 }
             }
             // A definition minted for a row, which is no declaration and is in no table.
@@ -1664,13 +1661,16 @@ public final class Bodies {
         @Override
         public Answer<Map<String, DataChecker.Constructs>> compute(Db db) {
             Answer<HelperInliner> inliner = expanding(db, name, InliningPolicy.FULL);
-            Answer<Map<String, Type>> sigs = db.ask(new RecursiveHelperSigs(name));
+            // The recursions this module processes, which is what has bodies here. A signature is a
+            // wider answer — it says what a call could be typed against, including a recursion
+            // nothing here reaches — and a body for one of those is a body nobody wrote.
+            Answer<SequencedSet<String>> required = db.ask(new RequiredRecursiveDefs(name));
             Answer<Symbols> scope = Names.derivedSymbols(db, name);
-            if (!inliner.present() || !sigs.present() || !scope.present()) {
+            if (!inliner.present() || !required.present() || !scope.present()) {
                 return Answer.absent();
             }
             Map<String, Hir.Expr> bodies = new LinkedHashMap<>();
-            for (String helper : sigs.value().keySet()) {
+            for (String helper : required.value()) {
                 Answer<Expansion<Hir.FnDef>> body = db.ask(new LoweredBody(name, helper));
                 if (!body.present()) {
                     return Answer.absent();
@@ -1678,7 +1678,7 @@ public final class Bodies {
                 bodies.put(helper, body.value().value().writtenBody());
             }
             try {
-                return Answer.of(TypeChecker.recursiveHelperConstructs(sigs.value().keySet(), bodies,
+                return Answer.of(TypeChecker.recursiveHelperConstructs(required.value(), bodies,
                         inliner.value(), scope.value()));
             } catch (CompileException e) {
                 return Answer.absent(e);
