@@ -573,6 +573,18 @@ public final class FieldDomains {
         public NumericDomain.Bounds boundsOf(Map<Coordinate, java.math.BigDecimal> form) {
             return boundsOfForm(constraints, atomAt, countAt, form);
         }
+
+        /**
+         * Whether a range is taken of this coordinate here, which is whether a rule about it could
+         * have been read into these at all.
+         *
+         * <p>Asked so that a caller can put the part of a form this can answer for on its own. A
+         * form with one coordinate this never named is one nothing can be said about as a whole, and
+         * said that way the rules relating the coordinates beside it are lost with it.
+         */
+        public boolean names(Coordinate at) {
+            return (at.measured() ? countAt.get(at.path()) : atomAt.get(at.path())) != null;
+        }
     }
 
     /**

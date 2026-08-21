@@ -92,24 +92,13 @@ final class ReadQuantities implements Quantities {
             // identity here rather than the reading.
             return meeting(whereOneTermRuns(only), relatedTo(only));
         }
-        // Every term on its own first, from everything known about that term alone: where it stands
-        // if it has been fixed, what its own position was read to hold, and what the term
-        // guarantees of itself. Composed here rather than left to the reading that relates
-        // positions, which has a name for some of these terms and not for others — asked only
-        // there, a floor on a position the arithmetic has no word for was dropped, a value the
-        // caller had just fixed was forgotten, and one term it could not name took the answer about
-        // every other term of that parameter with it.
-        Reach alone = Reach.of(weighed(form), Rational.of(form.constant()), this::atOneTerm);
-        // And what the rules leave it. One parameter at a time, because a parameter's rules are the
-        // only ones that reach its positions: the part of the form over each is solved against that
-        // parameter's rules, and the answers are added. The parts stay forms — added position by
-        // position, the relation each part carries is the thing that would be lost.
-        Reach related = Reach.of(byParameter(form), Rational.of(form.constant()),
-                parameter -> relationally(parameter, form));
-        // Met and not chosen between. What relates the positions is what the terms alone cannot
-        // say, and what a term is on its own is what the relation need not have been told — so an
-        // answer is at least as tight as either, and never wider than the term's own.
-        return boundsOf(tighter(alone, related));
+        // Added up out of parts, each holding as much as anything here can say about it, and never
+        // met as two totals. Meeting does not distribute over addition — everything each term is on
+        // its own, met against everything the relations leave the whole form, is wider than the sum
+        // of the parts each met on its own — so one part nothing can be said about would take the
+        // rules relating every other part down with it.
+        return boundsOf(Reach.of(partsOf(form), Rational.of(form.constant()),
+                part -> reachOf(part, form)));
     }
 
     @Override
@@ -279,35 +268,78 @@ final class ReadQuantities implements Quantities {
         return out;
     }
 
-    /** Which parameters the form reaches, each contributing its own part once. */
-    private static Map<String, Rational> byParameter(
-            NumericDomain.LinearForm<NumericTerm> form) {
-        Map<String, Rational> parts = new LinkedHashMap<>();
-        form.coefs().keySet().forEach(term -> parts.put(term.path().head(), Rational.ONE));
+    /**
+     * A part of a form that is answered on its own: the terms of one parameter the reading has a
+     * coordinate for, or the ones it has none for.
+     *
+     * <p>The finest unit a relation survives in. What relates two positions is read of the value
+     * they sit in, so a form reaching two parameters has a part in each; and within one, a
+     * coordinate the reading never named is one no relation can be asked about, so what is known of
+     * it is added beside the answer rather than taken into it.
+     */
+    private record Part(String parameter, boolean named) {}
+
+    /** Which part of a form a term belongs to. */
+    private Part partOf(NumericTerm term) {
+        String parameter = term.path().head();
+        FieldDomains.Settled rules = conditioned().get(parameter);
+        return new Part(parameter, rules != null && rules.names(coordinateOf(term)));
+    }
+
+    /** The parts a form is made of, each contributing what it comes to once. */
+    private Map<Part, Rational> partsOf(NumericDomain.LinearForm<NumericTerm> form) {
+        Map<Part, Rational> parts = new LinkedHashMap<>();
+        form.coefs().keySet().forEach(term -> parts.put(partOf(term), Rational.ONE));
         return parts;
     }
 
-    /** What one parameter's rules leave its part of the form, solved as a form. */
-    private Reach relationally(String parameter, NumericDomain.LinearForm<NumericTerm> form) {
-        FieldDomains.Settled rules = conditioned().get(parameter);
-        // Nothing where the reading cannot answer for this part of the form, which is one term of
-        // it being a coordinate it never named. Said as a bound of nothing at all, the terms it
-        // could name would be answered for by a reading that had given up on the form they are in.
-        return rules == null ? Reach.ANYWHERE
-                : reachOf(rules.boundsOf(partOf(parameter, form)));
-    }
-
-    /** That part of the form, in the words the parameter's own rules are read in. */
-    private static Map<FieldDomains.Coordinate, BigDecimal> partOf(
-            String parameter, NumericDomain.LinearForm<NumericTerm> form) {
-        Map<FieldDomains.Coordinate, BigDecimal> out = new LinkedHashMap<>();
+    /**
+     * What one part of a form comes to: its terms on their own, and where the reading can be asked
+     * about them, met with what its rules leave them together.
+     *
+     * <p>Met here and not at the end. What relates the positions is what the terms alone cannot say,
+     * and what a term is on its own is what the relation need not have been told — held together at
+     * the part, both survive whatever the part beside it came to.
+     */
+    private Reach reachOf(Part part, NumericDomain.LinearForm<NumericTerm> form) {
+        Map<NumericTerm, Rational> mine = new LinkedHashMap<>();
         form.coefs().forEach((term, coef) -> {
-            if (term.path().head().equals(parameter)) {
-                out.merge(new FieldDomains.Coordinate(String.join(".", term.path().fields()),
-                        term instanceof NumericTerm.SizeOf), coef, BigDecimal::add);
+            if (partOf(term).equals(part)) {
+                mine.put(term, Rational.of(coef));
             }
         });
-        return out;
+        Reach alone = Reach.of(mine, Rational.ZERO, this::atOneTerm);
+        return part.named() ? tighter(alone, reachOf(relationallyOf(part.parameter(), form)))
+                : alone;
+    }
+
+    /**
+     * What the rules of one parameter leave the part of {@code form} they can be asked about.
+     *
+     * <p>The coordinates this reading names and no others. A form with one it never named is one
+     * nothing can be said about as a whole, and asked that way the rules relating the coordinates
+     * beside it are lost with it.
+     */
+    private NumericDomain.Bounds relationallyOf(String parameter,
+                                                NumericDomain.LinearForm<NumericTerm> form) {
+        FieldDomains.Settled rules = conditioned().get(parameter);
+        if (rules == null) {
+            return null;
+        }
+        Map<FieldDomains.Coordinate, BigDecimal> named = new LinkedHashMap<>();
+        form.coefs().forEach((term, coef) -> {
+            FieldDomains.Coordinate at = coordinateOf(term);
+            if (term.path().head().equals(parameter) && rules.names(at)) {
+                named.merge(at, coef, BigDecimal::add);
+            }
+        });
+        return rules.boundsOf(named);
+    }
+
+    /** The coordinate of one term, in the words the rules of its parameter are read in. */
+    private static FieldDomains.Coordinate coordinateOf(NumericTerm term) {
+        return new FieldDomains.Coordinate(String.join(".", term.path().fields()),
+                term instanceof NumericTerm.SizeOf);
     }
 
     /** The term a form is, where it is one term taken as itself, or null where it is arithmetic. */
@@ -323,15 +355,11 @@ final class ReadQuantities implements Quantities {
      * What the rules relating this term to others leave it, or null where the reading cannot name
      * the coordinate.
      *
-     * <p>The same question {@link #relationally} asks of a form, of a form that is one term. Read as
-     * bounds rather than as something to add up, because nothing is being added.
+     * <p>The same question {@link #relationallyOf} asks of a form, of a form that is one term. Read
+     * as bounds rather than as something to add up, because nothing is being added.
      */
     private NumericDomain.Bounds relatedTo(NumericTerm term) {
-        FieldDomains.Settled rules = conditioned().get(term.path().head());
-        return rules == null ? null : rules.boundsOf(new LinkedHashMap<>(Map.of(
-                new FieldDomains.Coordinate(String.join(".", term.path().fields()),
-                        term instanceof NumericTerm.SizeOf),
-                BigDecimal.ONE)));
+        return relationallyOf(term.path().head(), NumericDomain.LinearForm.atom(term));
     }
 
     /**
@@ -396,12 +424,6 @@ final class ReadQuantities implements Quantities {
      */
     private Reach atOneTerm(NumericTerm term) {
         return reachOf(whereOneTermRuns(term));
-    }
-
-    private static Map<NumericTerm, Rational> weighed(NumericDomain.LinearForm<NumericTerm> form) {
-        Map<NumericTerm, Rational> out = new LinkedHashMap<>();
-        form.coefs().forEach((term, coef) -> out.put(term, Rational.of(coef)));
-        return out;
     }
 
     private static Reach reachOf(NumericDomain.Bounds bounds) {

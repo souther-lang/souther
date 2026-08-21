@@ -111,6 +111,59 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
                 "each of them is at least none, so their sum is");
     }
 
+    /** Two positions the record relates, beside a collection no clause counts. */
+    private static final String RELATED_BESIDE_AN_UNCOUNTED = """
+            module example.beside
+
+            data N = Int
+                invariant atLeastNone = value >= 0
+                invariant atMostFive  = value <= 5
+
+            data P =
+                { xs: List<Int>
+                , x: N
+                , y: N
+                }
+                invariant together = x.value + y.value >= 5
+
+            data Taken
+
+            behavior take : (p: P) -> Taken
+            """;
+
+    /**
+     * And the rule relating two terms survives a third the reading cannot name.
+     *
+     * <p>The part that keeps a relation is the terms the reading has a coordinate for, and the rest
+     * is added beside it. Met as two totals instead — everything each term is on its own against
+     * everything the relations leave the whole form — one unnameable term makes the relational
+     * total say nothing, and the relation between the two terms beside it is lost with it. Meeting
+     * does not distribute over addition, so which unit it happens at is which answer comes out.
+     *
+     * <p>Held here and not at a report, because no report reaches it today. A coordinate the reading
+     * of a value never named is in practice a count nothing takes, and a position whose values are
+     * held inside something the walk does not reach into is set aside before any line is drawn on a
+     * form over it. What is being held is the boundary's own answer, which is what the next reader
+     * of it will get.
+     */
+    @Test
+    void aRuleRelatingTwoTermsSurvivesAThirdThatCannotBeNamed() {
+        Read read = read(RELATED_BESIDE_AN_UNCOUNTED);
+        NumericTerm size = size(read, "xs");
+        NumericTerm x = read.inputs().at(TermPath.of("p").then("x")).term();
+        NumericTerm y = read.inputs().at(TermPath.of("p").then("y")).term();
+        Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
+        coefs.put(size, BigDecimal.ONE);
+        coefs.put(x, BigDecimal.ONE);
+        coefs.put(y, BigDecimal.ONE);
+
+        NumericDomain.Bounds runs = read.quantities()
+                .runsBetween(new NumericDomain.LinearForm<>(BigDecimal.ZERO, coefs));
+
+        assertEquals(Endpoint.inclusive(count(5)), runs.min(),
+                "the two the record relates come to five, and nothing is negative beside them");
+    }
+
     private static NumericTerm size(Read read, String field) {
         TermPath at = TermPath.of("p").then(field);
         return new NumericTerm.SizeOf(souther.compiler.check.NumericMeasures.takenOf(

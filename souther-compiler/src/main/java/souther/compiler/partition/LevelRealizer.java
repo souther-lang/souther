@@ -701,8 +701,12 @@ public final class LevelRealizer {
      * positions is in neither of their ranges, so a walk that held each of them to its own ends has
      * checked nothing about the pair.
      *
-     * <p>Places that are not numbers settle nothing here. A rule relating two strings is one the
-     * arithmetic has no word for, and what it leaves them is not something this can be asked.
+     * <p><b>Places that are not numbers settle nothing here, so a placement made of them is handed
+     * back unheld.</b> A rule relating two strings is one the arithmetic has no word for, and what
+     * it leaves them is not something this can be asked — so what is promised is that a placement
+     * the rules were shown to refuse is not offered, and it is promised where the rules can be asked
+     * about the values in it. Anything more would be a claim about an order this reading does not
+     * reach.
      */
     private boolean theRulesHaveNotRefused(Map<NumericTerm, Place> fixing) {
         Map<NumericTerm, Count> counted = new LinkedHashMap<>();
