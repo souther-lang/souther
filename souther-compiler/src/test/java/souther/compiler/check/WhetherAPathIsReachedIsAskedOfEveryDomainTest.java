@@ -161,29 +161,29 @@ class WhetherAPathIsReachedIsAskedOfEveryDomainTest {
                 "it is the guards that cannot all hold, not the values that fail");
     }
 
-    private static Known reaching(ConstraintState constraints) {
-        return new Known(constraints, List.of(), Set.of(), new Known.Unguarded(ConstraintState.top()));
+    private static Known reaching(ConstraintState<FactSubject> constraints) {
+        return new Known(constraints, List.of(), Set.of(), new Known.Unguarded(ConstraintState.<FactSubject>top()));
     }
 
-    private static ConstraintState numbersAtBottom() {
-        return ConstraintState.top()
+    private static ConstraintState<FactSubject> numbersAtBottom() {
+        return ConstraintState.<FactSubject>top()
                 .taking(LinearForm.constant(BigDecimal.ONE), Rel.LE, Map.of());
     }
 
-    private static ConstraintState factsAtBottom() {
-        return ConstraintState.top().taking(A_PREDICATE, true).taking(A_PREDICATE, false);
+    private static ConstraintState<FactSubject> factsAtBottom() {
+        return ConstraintState.<FactSubject>top().taking(A_PREDICATE, true).taking(A_PREDICATE, false);
     }
 
-    private static ConstraintState valuesAtBottom() {
+    private static ConstraintState<FactSubject> valuesAtBottom() {
         // Met as one reading and handed over as one. Two readings are combined where the
         // clauses of a declaration are read, and never at the state's boundary.
-        return ConstraintState.top().takingValuesRead(
+        return ConstraintState.<FactSubject>top().takingValuesRead(
                 AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("A")))
                         .meet(AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("B")))));
     }
 
-    private static ConstraintState orderedAtBottom() {
-        return ConstraintState.top()
+    private static ConstraintState<FactSubject> orderedAtBottom() {
+        return ConstraintState.<FactSubject>top()
                 .taking(OrderedIntervals.at(A_POSITION,
                         new OrderedInterval(Endpoint.inclusive(Count.of(6)), null)))
                 .taking(OrderedIntervals.at(A_POSITION,

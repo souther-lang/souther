@@ -54,13 +54,13 @@ import java.util.Set;
  * readers of two domains, and each of them answered that there was something wherever the domain it
  * happened to ask had nothing to say.
  */
-record ConstraintState(NumericDomain<FactSubject> numbers, PredicateFacts facts,
-                       AdmissibleValues<FactSubject> values, OrderedIntervals<FactSubject> ordered,
-                       boolean shown) {
+public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> facts,
+                                 AdmissibleValues<A> values, OrderedIntervals<A> ordered,
+                                 boolean shown) {
 
     /** Nothing taken in, so nothing ruled out. */
-    static ConstraintState top() {
-        return new ConstraintState(NumericDomain.top(), PredicateFacts.none(),
+    public static <A> ConstraintState<A> top() {
+        return new ConstraintState<>(NumericDomain.top(), PredicateFacts.none(),
                 AdmissibleValues.top(), OrderedIntervals.top(), false);
     }
 
@@ -78,7 +78,7 @@ record ConstraintState(NumericDomain<FactSubject> numbers, PredicateFacts facts,
      * carried its own reachability beside the domains would be two records to keep in step, and the
      * first domain added without touching the second would put them out of agreement.
      */
-    boolean isBottom() {
+    public boolean isBottom() {
         return shown || numbers.isBottom() || facts.isBottom() || values.isBottom()
                 || ordered.isBottom();
     }
@@ -92,8 +92,8 @@ record ConstraintState(NumericDomain<FactSubject> numbers, PredicateFacts facts,
      * asking whether a path is reached was pulled back to {@code numbers.isBottom()} — which is the
      * reading this question came apart along.
      */
-    ConstraintState shownToHoldNothing() {
-        return shown ? this : new ConstraintState(numbers, facts, values, ordered, true);
+    ConstraintState<A> shownToHoldNothing() {
+        return shown ? this : new ConstraintState<>(numbers, facts, values, ordered, true);
     }
 
     /**
@@ -111,7 +111,7 @@ record ConstraintState(NumericDomain<FactSubject> numbers, PredicateFacts facts,
      *                  off the state's own map, the place named would be the one whose clause was
      *                  read first, and moving a clause would move the refusal
      */
-    Optional<Emptiness> holdsNothing(SequencedMap<FactSubject, String> positions) {
+    public Optional<Emptiness> holdsNothing(SequencedMap<A, String> positions) {
         Emptiness why = isBottom() ? new Emptiness.ConflictingRules() : null;
         // A position whose ends cross, which is nearer than the general form: it says not only that
         // the rules contradict but where they leave nothing.
@@ -121,8 +121,8 @@ record ConstraintState(NumericDomain<FactSubject> numbers, PredicateFacts facts,
         // the alternatives may fail at different positions — and the particular proof is particular
         // by naming a place. Written without one, the sentence read off it would name whatever place
         // the reader happened to be at, which is the declaration's own value.
-        Set<FactSubject> empty = ordered.holdingNothing();
-        for (Map.Entry<FactSubject, String> each : positions.entrySet()) {
+        Set<A> empty = ordered.holdingNothing();
+        for (Map.Entry<A, String> each : positions.entrySet()) {
             if (empty.contains(each.getKey())) {
                 why = Emptiness.preferred(why, new Emptiness.AtAField(each.getValue(),
                         new Emptiness.EmptyOrderedInterval()));
@@ -132,14 +132,63 @@ record ConstraintState(NumericDomain<FactSubject> numbers, PredicateFacts facts,
         return Optional.ofNullable(why);
     }
 
+    /**
+     * Both readings holding at once.
+     *
+     * <p>Every domain, and the same domain on both sides. What a conjunction of two readings leaves
+     * is what each domain's conjunction leaves, because the domains do not talk to each other: a
+     * rule reaches whichever of them has a word for it and stays there, so two readings are said
+     * together by saying each language's half together. And {@code shown} is either side's, an
+     * argument outside the domains being no less an argument for the pair.
+     *
+     * <p>Written here rather than by whoever needs it. A conjunction is what this record means, so a
+     * caller assembling one out of {@link #numbers} and the rest would be deciding for itself which
+     * domains a conjunction reaches — and a domain added later would be left out of every such
+     * caller without a word. Added here, it is in all of them.
+     *
+     * <p>Both sides have to be said in one vocabulary already. Two readings of two values name their
+     * positions the way each value declares them, and met without being renamed first they would
+     * hold each other's rules — which is {@link #renamed} and not this.
+     */
+    public ConstraintState<A> meet(ConstraintState<A> other) {
+        return new ConstraintState<>(numbers.meet(other.numbers), facts.meet(other.facts),
+                values.meet(other.values), ordered.meet(other.ordered), shown || other.shown);
+    }
+
+    /**
+     * The same rules about the same subjects, said in the vocabulary {@code naming} gives them.
+     *
+     * <p>What one reading calls a position is what the value it read declares it. A caller relating
+     * several values has names of its own, and this is how a reading crosses into them — so that two
+     * of them can be met, and so that a rule relating two of them has somewhere to be said at all.
+     *
+     * <p><b>A change of vocabulary and not a fold.</b> {@link NumericDomain#over} adds the
+     * coefficients of two atoms arriving at one name, which is right of a form a caller wrote in two
+     * spellings of one number and wrong of a state: two positions under one name would bound each
+     * other, hold each other's values, and settle each other's predicates. So what is taken is an
+     * {@link InjectiveRenaming} rather than a function, and it is one renaming for all four domains
+     * — a subject may sit in one of them and no other, so a naming that is injective on each domain
+     * read alone can still put two subjects under one name, and only something that sees the whole
+     * vocabulary can refuse that.
+     *
+     * <p>Pass one renaming to every state that will be met. What may not collide is every subject of
+     * the conjunction, not of each reading in turn.
+     */
+    public <B> ConstraintState<B> renamed(InjectiveRenaming<A, B> naming) {
+        // The fold in `over` cannot fire: `naming` refuses a second subject at a name some other
+        // subject already has, so no two atoms of this state reach one name to be added together.
+        return new ConstraintState<>(numbers.over(naming::apply), facts.renamed(naming::apply),
+                values.renamed(naming::apply), ordered.renamed(naming::apply), shown);
+    }
+
     /** This, with {@code f rel 0} taken as holding. */
-    ConstraintState taking(LinearForm<FactSubject> f, Rel rel, Map<FactSubject, Granularity> kinds) {
-        return new ConstraintState(numbers.assume(f, rel, kinds), facts, values, ordered, shown);
+    public ConstraintState<A> taking(LinearForm<A> f, Rel rel, Map<A, Granularity> kinds) {
+        return new ConstraintState<>(numbers.assume(f, rel, kinds), facts, values, ordered, shown);
     }
 
     /** This, with the predicate {@code key} taken as holding, or as failing. */
-    ConstraintState taking(FactSubject key, boolean positive) {
-        return new ConstraintState(numbers, facts.assume(key, positive), values, ordered, shown);
+    ConstraintState<A> taking(A key, boolean positive) {
+        return new ConstraintState<>(numbers, facts.assume(key, positive), values, ordered, shown);
     }
 
     /**
@@ -159,20 +208,20 @@ record ConstraintState(NumericDomain<FactSubject> numbers, PredicateFacts facts,
      * conjunctions firing on a side that read nothing, and lifting it is about which rules went
      * unread rather than about how the alternatives are held.
      */
-    ConstraintState takingValuesRead(AdmissibleValues<FactSubject> read) {
+    ConstraintState<A> takingValuesRead(AdmissibleValues<A> read) {
         // Said once, and what stands here until it is said is what nothing read leaves. Saying it
         // twice would keep the second reading and drop the first without a word, which is the one
         // way this can be got wrong now that it cannot combine two of them. An assertion because a
         // throw would be caught by the fail-open around the reading and leave it silently dropped.
-        assert values.equals(AdmissibleValues.<FactSubject>top())
+        assert values.equals(AdmissibleValues.<A>top())
                 : "the values of a state are read once, and these were read over " + values;
-        return new ConstraintState(numbers, facts, AdmissibleValues.<FactSubject>top().meet(read),
+        return new ConstraintState<>(numbers, facts, AdmissibleValues.<A>top().meet(read),
                 ordered, shown);
     }
 
     /** This, with {@code bounded} taken as holding of the positions it bounds. */
-    ConstraintState taking(OrderedIntervals<FactSubject> bounded) {
-        return new ConstraintState(numbers, facts, values, ordered.meet(bounded), shown);
+    ConstraintState<A> taking(OrderedIntervals<A> bounded) {
+        return new ConstraintState<>(numbers, facts, values, ordered.meet(bounded), shown);
     }
 
     /**
@@ -182,12 +231,12 @@ record ConstraintState(NumericDomain<FactSubject> numbers, PredicateFacts facts,
      * after it was made say the same thing. Written twice, the second would be free to state it
      * under a different spacing and answer a position differently while both stayed sound.
      */
-    static ConstraintState settling(ConstraintState state, FactSubject atom,
-                                    souther.compiler.numeric.Count at,
-                                    souther.compiler.numeric.Granularity spacing) {
+    static <A> ConstraintState<A> settling(ConstraintState<A> state, A atom,
+                                           souther.compiler.numeric.Count at,
+                                           souther.compiler.numeric.Granularity spacing) {
         return state.taking(
-                NumericDomain.LinearForm.<FactSubject>atom(atom)
-                        .minus(NumericDomain.LinearForm.<FactSubject>constant(at.at())),
+                NumericDomain.LinearForm.<A>atom(atom)
+                        .minus(NumericDomain.LinearForm.<A>constant(at.at())),
                 NumericDomain.Rel.EQ, java.util.Map.of(atom, spacing));
     }
 }

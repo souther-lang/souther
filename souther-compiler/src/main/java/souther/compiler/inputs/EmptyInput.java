@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.Emptiness;
 import souther.compiler.numeric.Count;
 
 /**
@@ -10,30 +11,19 @@ import souther.compiler.numeric.Count;
  * much as what a satisfiable system looks like. A reader that took an empty answer for "there is a
  * value" would be reading a fact about this compiler as a fact about the model.
  *
- * <p><b>The one place a proof of emptiness changes vocabulary.</b> What proves it is the reading of
- * the declarations, which names a position the way the declaration does — {@code x} for a field of
- * the record the clause was written on. A caller out here holds {@code p.x}, and the two spellings
- * are the same position or the report names one nobody wrote. So the translation happens where a
- * {@link Quantities} is made and nowhere after it: handed the declaration's proof, every caller
- * would translate it again, and a caller that did not would name a position the model has no such
- * field of.
+ * <p><b>Two kinds of fact and not two proofs of one.</b> A caller may fix a position at something no
+ * value of it is, which is about the assignment and reads nothing; and the rules taken together may
+ * leave no value at all, which is about the rules and reads them. Keeping them apart is the point of
+ * this type: put into one proof, a reader could not tell a model that cannot be satisfied from a
+ * model that can be, asked about somewhere nothing stands.
+ *
+ * <p>Nothing here translates. What the rules leave is proved over this input's own subjects, and the
+ * places that proof names are this input's places, so it crosses no boundary and is carried as it
+ * was written. This was once the seam where a proof about one value's positions was re-spelled into
+ * a path of the input — which is a thing to get wrong once per proof, and a thing nobody has to do
+ * now that the rules of every parameter are said together under names this input can spell.
  */
 public sealed interface EmptyInput {
-
-    /**
-     * Under one position of the input, and what is under it there.
-     *
-     * <p>The path is this input's, which is the whole reason this type exists beside the proof the
-     * declaration reading holds.
-     */
-    record At(TermPath path, EmptyInput under) implements EmptyInput {
-
-        public At {
-            if (path == null || under == null) {
-                throw new IllegalArgumentException("an emptiness under a position names both");
-            }
-        }
-    }
 
     /**
      * One position was fixed at two values.
@@ -51,30 +41,30 @@ public sealed interface EmptyInput {
      * whole of what fixing settles without reading anything. A count is never negative and no clause
      * writes that down, so this is what refuses a count fixed below none — and everything the
      * declarations refuse is theirs to refuse, where they are read, which is why a value outside a
-     * declared bound arrives as {@link ProvedByTheDeclarationsReading} instead.
+     * declared bound arrives as {@link ProvedByTheRules} instead.
+     *
+     * <p>The place is the term's own and is not said again beside it. A term is a position, so a
+     * proof carrying a path of its own here would be one fact in two spellings, free to disagree.
      */
     record OutsideWhereThePositionRuns(NumericTerm term, Count fixed) implements EmptyInput {}
 
     /**
-     * The reading of the declarations proved it, at no position this can name.
+     * The rules of every parameter and everything a caller took in, said together, leave no value.
      *
-     * <p>What proved it is that reading's, and how much of its proof is carried across is a question
-     * about who reads this. Nothing does yet beyond deciding that a branch is closed, so what
-     * crosses is that a proof exists and where in the input it sits, and the rest stays where it was
-     * proved. Widening this is one edit, in the translation above.
+     * <p>One proof and one prover. Every parameter's reading is in the space this was proved over,
+     * so there is no second reading with an answer of its own to compare against — which is what
+     * used to make the report depend on which of two provers was asked first.
+     *
+     * @param why what was shown, and where it sits when the proof can name a place. Carried as it
+     *            was proved: the subjects it is about are this input's, so its places are already
+     *            spelled the way a caller here spells them
      */
-    record ProvedByTheDeclarationsReading() implements EmptyInput {}
+    record ProvedByTheRules(Emptiness why) implements EmptyInput {
 
-    /**
-     * The rules and what a caller took in on the way leave nothing together.
-     *
-     * <p>Apart from the reading's own proof because it is a different fact. What a declaration
-     * refuses it refuses of every value, and this is about a place — a row that would have to be
-     * both inside a region and at a level nothing in that region reaches. Read as the first, an
-     * author would be sent to a declaration that says nothing of the sort.
-     *
-     * <p>Nowhere in particular. What contradicts is the rules taken together, and naming one of
-     * them would be picking whichever the arithmetic happened to close on.
-     */
-    record ProvedByTheRulesTakenTogether() implements EmptyInput {}
+        public ProvedByTheRules {
+            if (why == null) {
+                throw new IllegalArgumentException("an emptiness is the proof of one");
+            }
+        }
+    }
 }

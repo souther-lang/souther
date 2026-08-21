@@ -102,6 +102,28 @@ public record OrderedIntervals<A>(Map<A, OrderedInterval> ranges, boolean nothin
     }
 
     /**
+     * The same bounds on the same positions, under the names {@code naming} gives them.
+     *
+     * <p>The naming has to name two positions two positions. Two of them arriving under one name
+     * would be bounded by each other's rules, which narrows a position by a rule nobody wrote about
+     * it — and this is a state whose whole purpose is deciding that a position holds no value, so a
+     * narrowing invented here refuses a model somebody can write. Not checked here, because what a
+     * naming must not collide over is every subject of every domain of one reading and no domain can
+     * see the others; it is checked where a whole vocabulary is
+     * ({@code souther.compiler.check.InjectiveRenaming}). Every position held here passes through
+     * the naming, so a caller holding one of those sees all of them.
+     *
+     * <p>Apart from {@link NumericDomain#over}, which is a fold and adds the coefficients of two
+     * atoms that arrive at one name. That is right of a form, where a caller may have written two
+     * spellings of one number, and it is not what this is.
+     */
+    public <B> OrderedIntervals<B> renamed(java.util.function.Function<A, B> naming) {
+        Map<B, OrderedInterval> out = new LinkedHashMap<>();
+        ranges.forEach((position, range) -> out.put(naming.apply(position), range));
+        return new OrderedIntervals<>(out, nothing);
+    }
+
+    /**
      * Either reading holding.
      *
      * <p>Over the positions both spoke about, since a position one of them left open is one the two

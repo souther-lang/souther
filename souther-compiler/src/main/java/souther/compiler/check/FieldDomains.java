@@ -64,7 +64,7 @@ public final class FieldDomains {
     public static final FieldDomains NONE =
             new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), Set.of(), List.of(), List.of(), Map.of(),
                     Map.of(), new ReadingEvidence(), Map.of(), Set.of(THE_VALUE), NO_POSITIONS,
-                    ConstraintState.top(), null, null, null, null, Map.of(), Set.of(THE_VALUE),
+                    ConstraintState.<FactSubject>top(), null, null, null, null, Map.of(), Set.of(THE_VALUE),
                     Map.of(), Map.of(), Map.of(), Map.of());
 
     private final Map<String, NumericDomain.Bounds> byField;
@@ -114,7 +114,7 @@ public final class FieldDomains {
     /** Everything the clauses were read as, kept whole. Whether any value of this exists is a
      * question about all of it and is asked of it; the numbers are read out of it where a bound is
      * what a caller is after. */
-    private final ConstraintState constraints;
+    private final ConstraintState<FactSubject> constraints;
     /** What this was read from, so that it can be read again without one declaration's clauses. */
     private final TypeSymbol named;
     private final Hir.Data data;
@@ -146,7 +146,7 @@ public final class FieldDomains {
                          Map<String, List<TypeSymbol>> narrowers,
                          Set<String> notGathered,
                          SequencedMap<FactSubject, String> positions,
-                         ConstraintState constraints, TypeSymbol named,
+                         ConstraintState<FactSubject> constraints, TypeSymbol named,
                          Hir.Data data, Symbols symbols, ReadingPolicy policy,
                          Map<Coordinate, Count> settled,
                          Set<String> unreadOfEveryValue,
@@ -524,7 +524,7 @@ public final class FieldDomains {
      * worked out before the settling.
      */
     public Settled given(Map<Coordinate, Count> fixed) {
-        ConstraintState taken = constraints;
+        ConstraintState<FactSubject> taken = constraints;
         for (Map.Entry<Coordinate, Count> each : fixed.entrySet()) {
             Coordinate where = each.getKey();
             FactSubject atom = where.measured()
@@ -537,7 +537,7 @@ public final class FieldDomains {
                 taken = ConstraintState.settling(taken, atom, each.getValue(), spaced);
             }
         }
-        return new Settled(taken, positions, atomAt, countAt, spacing);
+        return new Settled(taken, positions, atomAt, countAt);
     }
 
     /**
@@ -550,116 +550,60 @@ public final class FieldDomains {
      */
     public static final class Settled {
 
-        private final ConstraintState constraints;
+        private final ConstraintState<FactSubject> constraints;
         private final SequencedMap<FactSubject, String> positions;
         private final Map<String, FactSubject> atomAt;
         private final Map<String, FactSubject> countAt;
-        private final Map<FactSubject, souther.compiler.numeric.Granularity> spacing;
 
-        private Settled(ConstraintState constraints, SequencedMap<FactSubject, String> positions,
-                        Map<String, FactSubject> atomAt, Map<String, FactSubject> countAt,
-                        Map<FactSubject, souther.compiler.numeric.Granularity> spacing) {
+        private Settled(ConstraintState<FactSubject> constraints, SequencedMap<FactSubject, String> positions,
+                        Map<String, FactSubject> atomAt, Map<String, FactSubject> countAt) {
             this.constraints = constraints;
             this.positions = positions;
             this.atomAt = atomAt;
             this.countAt = countAt;
-            this.spacing = spacing;
-        }
-
-        /** Why the rules and what is settled leave no value, or empty where nothing proved they
-         *  leave none. */
-        public Optional<Emptiness> holdsNothing() {
-            return constraints.holdsNothing(positions);
-        }
-
-        /** Where a form over these coordinates runs — see {@link FieldDomains#boundsOf}. */
-        public NumericDomain.Bounds boundsOf(Map<Coordinate, java.math.BigDecimal> form) {
-            return boundsOfForm(constraints, atomAt, countAt, form);
         }
 
         /**
-         * The same rules, with these coordinates held between these ends as well.
-         *
-         * <p>For a caller that knows something about a coordinate this reading does not. What a
-         * position was read to hold is read by a reader of its own, and what a term guarantees of
-         * itself is true whether or not any clause says so — put in here, those facts are solved
-         * together with the rules that relate the coordinates instead of beside them.
-         *
-         * <p>Which is not the same answer. Taking a form's bounds under each of them and meeting
-         * afterwards is wider than taking them under both at once: a rule holding two coordinates at
-         * one apiece says nothing about a third the rules leave unbounded below, and met afterwards
-         * against a floor that reader did have, the rule is gone. Projecting does not distribute
-         * over meeting any more than meeting distributes over addition.
-         *
-         * <p>Ends that are not numbers are left out, since what is being added to is the arithmetic.
-         * A caller holding one of those is holding it about a position no form reaches.
-         */
-        public Settled within(Map<Coordinate, NumericDomain.Bounds> ends) {
-            ConstraintState taken = constraints;
-            for (Map.Entry<Coordinate, NumericDomain.Bounds> each : ends.entrySet()) {
-                FactSubject atom = each.getKey().measured()
-                        ? countAt.get(each.getKey().path()) : atomAt.get(each.getKey().path());
-                if (atom == null || each.getValue() == null) {
-                    continue;
-                }
-                souther.compiler.numeric.Granularity spaced = spacing.get(atom);
-                if (spaced == null) {
-                    continue;
-                }
-                taken = holding(taken, atom, each.getValue().min(), true, spaced);
-                taken = holding(taken, atom, each.getValue().max(), false, spaced);
-            }
-            return taken == constraints ? this
-                    : new Settled(taken, positions, atomAt, countAt, spacing);
-        }
-
-        /** One end taken onto the rules, where it is a number and there is one. */
-        private static ConstraintState holding(ConstraintState state, FactSubject atom,
-                                               Endpoint end, boolean least,
-                                               souther.compiler.numeric.Granularity spaced) {
-            if (end == null || !(end.at() instanceof Count at)) {
-                return state;
-            }
-            NumericDomain.Rel how = least
-                    ? (end.inclusive() ? NumericDomain.Rel.GE : NumericDomain.Rel.GT)
-                    : (end.inclusive() ? NumericDomain.Rel.LE : NumericDomain.Rel.LT);
-            return state.taking(
-                    NumericDomain.LinearForm.<FactSubject>atom(atom)
-                            .minus(NumericDomain.LinearForm.<FactSubject>constant(at.at())),
-                    how, Map.of(atom, spaced));
-        }
-
-        /**
-         * The numeric rules these came to, about the same numbers under a caller's names.
+         * The rules these came to, about the same subjects under a caller's names.
          *
          * <p>For a caller that holds the readings of several values at once and has to say what they
-         * leave together. What a rule says is a relation between numbers, and it says the same thing
-         * whatever the numbers are called — so what is handed over is these rules renamed
-         * ({@link NumericDomain#over}) and never a fresh reading of the declaration.
+         * leave together. What a rule says is a relation between subjects, and it says the same
+         * thing whatever they are called — so what is handed over is these rules renamed and never a
+         * fresh reading of the declaration.
          *
-         * <p><b>Every number a rule is about is carried, whether or not the caller has a coordinate
-         * for it.</b> A reading relates numbers at coordinates and numbers at none, and a rule
+         * <p><b>The whole state and not the numbers alone.</b> Which values a position admits, which
+         * predicates hold and where an ordering stops are as much a part of what the rules leave as
+         * the arithmetic is, and a caller given the numbers alone would have to ask this reading
+         * whether anything is left — which makes two answerers of one question, the weaker of them
+         * the one with a place to name, and which of them speaks settled by the order they are asked
+         * in. Handed over whole, the caller has one state to ask and this has none.
+         *
+         * <p><b>Every subject a rule is about is carried, whether or not the caller has a coordinate
+         * for it.</b> A reading relates subjects at coordinates and subjects at none, and a rule
          * reaching one of the latter still holds two of the former apart: left behind, that rule
-         * would be gone and what the rules leave would come back wider than it is. So a number with
+         * would be gone and what the rules leave would come back wider than it is. So a subject with
          * no coordinate is named by {@code otherwise}, out of the subject itself, and the caller is
          * given something to be equal to rather than something to read — what makes two of them one
-         * number was settled here, and a caller inventing its own answer to that would put two
-         * numbers together or take one apart.
+         * subject was settled here, and a caller inventing its own answer to that would put two
+         * apart or two together.
          *
-         * <p>Only the numbers. What else a reading proved — which values a position admits, which
-         * predicates hold, where an ordering stops — relates the positions of one value and reaches
-         * no vocabulary a caller out here has, so it stays where it was proved and is asked for
-         * there ({@link #holdsNothing}).
+         * <p>The naming is held to naming two subjects two subjects, across every domain at once
+         * ({@link InjectiveRenaming}). A caller whose {@code named} and {@code otherwise} send two
+         * of these subjects to one name is told so rather than handed a state where a predicate of
+         * one position settles another and an ordering of one bounds another.
          */
-        public <B> NumericDomain<B> numbersOver(java.util.function.Function<Coordinate, B> named,
-                                                java.util.function.Function<Object, B> otherwise) {
+        public <B> Carried<B> constraintsOver(java.util.function.Function<Coordinate, B> named,
+                                              java.util.function.Function<Object, B> otherwise) {
             Map<FactSubject, Coordinate> where = new LinkedHashMap<>();
             atomAt.forEach((path, atom) -> at(where, atom, new Coordinate(path, false)));
             countAt.forEach((path, atom) -> at(where, atom, new Coordinate(path, true)));
-            return constraints.numbers().over(atom -> {
+            InjectiveRenaming<FactSubject, B> naming = InjectiveRenaming.of(atom -> {
                 Coordinate coordinate = where.get(atom);
                 return coordinate == null ? otherwise.apply(atom) : named.apply(coordinate);
             });
+            SequencedMap<B, String> carried = new java.util.LinkedHashMap<>();
+            positions.forEach((atom, path) -> carried.put(naming.apply(atom), path));
+            return new Carried<>(constraints.renamed(naming), carried);
         }
 
         /**
@@ -677,6 +621,26 @@ public final class FieldDomains {
                 throw new IllegalStateException("one number is at `" + had.path() + "` and at `"
                         + coordinate.path() + "`, so neither name is the whole of it");
             }
+        }
+    }
+
+    /**
+     * One value's rules in a caller's vocabulary, and where its positions sit in that vocabulary.
+     *
+     * <p>The two together because they are read together and would disagree apart. A proof that
+     * nothing is left names a place by looking a subject up in the positions, so a caller holding a
+     * state renamed one way and positions renamed another would have a proof pointing at a position
+     * the state has no rule about — and nothing would say so, because both halves are well formed.
+     *
+     * @param positions where each position sits, named the way the declaration names it. What a
+     *                  caller out here calls the same place is that caller's to spell, since it is
+     *                  the one that knows what the value it read is a part of
+     */
+    public record Carried<B>(ConstraintState<B> constraints, SequencedMap<B, String> positions) {
+
+        public Carried {
+            positions = java.util.Collections.unmodifiableSequencedMap(
+                    new java.util.LinkedHashMap<>(positions));
         }
     }
 
@@ -1118,7 +1082,7 @@ public final class FieldDomains {
         return boundsOfForm(constraints, atomAt, countAt, form);
     }
 
-    private static NumericDomain.Bounds boundsOfForm(ConstraintState constraints,
+    private static NumericDomain.Bounds boundsOfForm(ConstraintState<FactSubject> constraints,
                                                      Map<String, FactSubject> atomAt,
                                                      Map<String, FactSubject> countAt,
                                                      Map<Coordinate, java.math.BigDecimal> form) {

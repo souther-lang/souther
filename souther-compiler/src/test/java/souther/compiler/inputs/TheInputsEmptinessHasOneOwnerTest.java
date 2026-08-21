@@ -1,0 +1,193 @@
+package souther.compiler.inputs;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.ast.Hir;
+import souther.compiler.check.Emptiness;
+import souther.compiler.check.FieldDomains;
+import souther.compiler.check.Prepared;
+import souther.compiler.check.Sig;
+import souther.compiler.check.Symbols;
+import souther.compiler.numeric.NumericDomain;
+import souther.compiler.query.Bodies;
+import souther.compiler.query.Compilation;
+import souther.compiler.query.ReadAs;
+import souther.compiler.query.Scopes;
+import souther.compiler.query.Shapes;
+
+import java.lang.reflect.Method;
+import java.math.BigDecimal;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * Whether anything is left of an input is answered in one place.
+ *
+ * <p>It used to be answered in two. Each parameter's reading was asked first and the rules of the
+ * whole input second, and the numbers were in both — the second is built by renaming the first's and
+ * meeting them, so a numeric contradiction inside one parameter was proved twice over and the first
+ * answer won because it was asked first. Two readings of one question, one of them strictly weaker,
+ * and the ordering deciding between them.
+ *
+ * <p>So the parameters supply rules and answer nothing. What is checked here is that every shape of
+ * contradiction — whichever domain holds it, whether it is inside one parameter or between two —
+ * comes back from the same reading, and that there is no second reading left to ask.
+ */
+class TheInputsEmptinessHasOneOwnerTest {
+
+    /**
+     * A contradiction neither the numbers nor the ordering has a word for.
+     *
+     * <p>Held by the values and by the predicates, both of them, which is the arrangement and not a
+     * duplication: an equality is a set of admissible values and is a predicate about a position,
+     * and each domain abstracts it in a way that is safe on its own. So dropping either of them from
+     * the conjunction leaves the other answering, and it takes dropping both to lose this.
+     */
+    @Test
+    void aContradictionNoNumberOrOrderingHasAWordFor() {
+        assertEquals(new Emptiness.ConflictingRules(), why("""
+                module example.values
+
+                data Tag = String
+                    invariant both = value == "A" && value /= "A"
+
+                data P = { tag: Tag }
+
+                data Taken
+
+                behavior take : (p: P) -> Taken
+                """));
+    }
+
+    /**
+     * A contradiction the ordering holds, and it names the place.
+     *
+     * <p>Over a date, which the numbers have no word for at all — so this is the ordering answering
+     * on its own, and the place is one only it can spell.
+     */
+    @Test
+    void aContradictionInTheOrderingOfOneParameterNamesItsPosition() {
+        assertEquals(new Emptiness.AtAField("p.when",
+                        new Emptiness.EmptyOrderedInterval()), why("""
+                module example.ordered
+
+                data Day = Date
+                    invariant crossed = value >= Date("2026-01-01") && value < Date("2020-01-01")
+
+                data P = { when: Day }
+
+                data Taken
+
+                behavior take : (p: P) -> Taken
+                """));
+    }
+
+    /**
+     * A contradiction only the numbers can hold, between two positions of one parameter.
+     *
+     * <p>Nothing names a place. An ordering bounds one position against a written value and cannot
+     * say that two of them cross, so there is no position the rules leave empty — and the proof says
+     * so rather than reaching for the parameter to stand in for one.
+     */
+    @Test
+    void aRelationBetweenTwoPositionsOfOneParameter() {
+        assertEquals(new Emptiness.ConflictingRules(), why("""
+                module example.related
+
+                data P = { x: Int, y: Int }
+                    invariant crossed = x > y && y > x
+
+                data Taken
+
+                behavior take : (p: P) -> Taken
+                """));
+    }
+
+    /**
+     * And a contradiction between two parameters, which no reading of either can see.
+     *
+     * <p>The rule relating them is one a caller took in rather than one a declaration wrote, because
+     * a declaration is written about one value and has no way to name two. That is the shape #911
+     * puts a body's conditions into, and it is why the whole input has to be the one that answers:
+     * asked of either parameter's reading, both are perfectly satisfiable.
+     */
+    @Test
+    void aRelationBetweenTwoParameters() {
+        Read read = read("""
+                module example.two
+
+                data P = { x: Int }
+                    invariant atLeast = x >= 1
+
+                data Q = { y: Int }
+                    invariant atLeast = y >= 1
+
+                data Taken
+
+                behavior take : (p: P, q: Q) -> Taken
+                """, "take");
+        Quantities asked = read.inputs().quantities(read.symbols());
+
+        // Neither parameter's rules leave nothing, and neither can be told about the other.
+        assertTrue(asked.emptiness().isEmpty());
+
+        // x + y <= 0, which no declaration could have written and which nothing but the whole input
+        // can hold against the two floors.
+        Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
+        coefs.put(new NumericTerm.ValueOf(TermPath.of("p").then("x")), BigDecimal.ONE);
+        coefs.put(new NumericTerm.ValueOf(TermPath.of("q").then("y")), BigDecimal.ONE);
+        SearchRegion crossed = asked.region().assuming(
+                new NumericDomain.LinearForm<>(BigDecimal.ZERO, coefs), NumericDomain.Rel.LE);
+
+        assertEquals(Optional.of(new EmptyInput.ProvedByTheRules(new Emptiness.ConflictingRules())),
+                crossed.emptiness());
+    }
+
+    /**
+     * A tripwire, and not the proof above it.
+     *
+     * <p>What the tests above establish is that the readings the compiler makes today are all
+     * answered by the one state. They cannot establish it of a reading added tomorrow, and the
+     * failure that would leave is the silent one: a second answerer grows back on what a parameter
+     * hands over, gets asked first because it is nearer, and goes on winning wherever it can say
+     * anything at all — which is exactly what this change removed and nothing else would notice.
+     *
+     * <p>So what a parameter hands over may not answer whether anything is left. It hands over
+     * rules; the question belongs to whatever those rules were said together with.
+     */
+    @Test
+    void whatAParameterHandsOverAnswersNoSuchQuestion() {
+        for (Method each : FieldDomains.Settled.class.getDeclaredMethods()) {
+            assertTrue(each.getReturnType() != Optional.class && each.getReturnType() != boolean.class,
+                    "`" + each.getName() + "` looks like a second answerer of whether anything is"
+                            + " left. A reading of one parameter supplies rules and answers nothing:"
+                            + " ask the state they are said together in");
+        }
+    }
+
+    /** What proves the input holds nothing, read off the one thing that answers. */
+    private static Emptiness why(String source) {
+        Read read = read(source, "take");
+        EmptyInput held = read.inputs().quantities(read.symbols()).emptiness().orElseThrow();
+        return ((EmptyInput.ProvedByTheRules) held).why();
+    }
+
+    private record Read(InputDomain inputs, Symbols symbols) {}
+
+    private static Read read(String source, String behavior) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        String module = compilation.modules().get(0);
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
+                .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        return new Read(InputDomain.of(spec, sigs.get(behavior), symbols,
+                ReadAs.THE_COMPILATION_DOES), symbols);
+    }
+}

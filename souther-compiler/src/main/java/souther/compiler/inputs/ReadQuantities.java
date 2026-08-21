@@ -59,9 +59,9 @@ final class ReadQuantities implements Quantities {
      * question would read them twice a step. Held here rather than shared, since what it is a
      * reading of is what this refinement fixed.
      */
-    private volatile Map<String, FieldDomains.Settled> conditioned;
+    private volatile Map<String, FieldDomains.Carried<InputAtom>> conditioned;
     /**
-     * Every rule reaching this input, about this input's own numbers, in one place.
+     * Every rule reaching this input, about this input's own subjects, in one place.
      *
      * <p>Not one reading per parameter with the answers added afterwards. Adding per-parameter
      * answers is the composition a rule spanning two parameters cannot survive, and where such a
@@ -69,10 +69,20 @@ final class ReadQuantities implements Quantities {
      * input, and where one parameter's positions run is a projection out of it rather than a
      * reading of its own.
      *
+     * <p><b>The whole state and not the numbers of it.</b> Whether anything is left of this input is
+     * one question, and this is the one thing that answers it: a per-parameter reading kept beside
+     * this one could answer it too, over the same numbers renamed, and then which of two proofs is
+     * written would be settled by the order they are asked in — with the weaker of them, the one
+     * that cannot see across two parameters, asked first. The parameters supply rules here and
+     * answer nothing.
+     *
      * <p>Worked out when something is asked and kept, the same as {@link #conditioned}: it is a
      * reading of what this refinement fixed, so it belongs to this value and not to a shared table.
      */
-    private volatile souther.compiler.numeric.NumericDomain<InputAtom> constraints;
+    private volatile souther.compiler.check.ConstraintState<InputAtom> constraints;
+    /** Where each position of the input sits, in the order the parameters and their positions are
+     *  declared. What a proof of emptiness names a place out of. */
+    private volatile java.util.SequencedMap<InputAtom, String> positions;
 
     /** One thing taken in about a form of this input's terms: {@code form rel 0}. */
     private record Assumed(NumericDomain.LinearForm<NumericTerm> form, NumericDomain.Rel rel) {}
@@ -117,13 +127,15 @@ final class ReadQuantities implements Quantities {
         return new ReadQuantities(byParameter, parameters, byPath, Map.of(), symbols, List.of());
     }
 
-    /** Each parameter's rules read with what is fixed under it, once. */
-    private Map<String, FieldDomains.Settled> conditioned() {
-        Map<String, FieldDomains.Settled> read = conditioned;
+    /** Each parameter's rules read with what is fixed under it, once, under this input's names. */
+    private Map<String, FieldDomains.Carried<InputAtom>> conditioned() {
+        Map<String, FieldDomains.Carried<InputAtom>> read = conditioned;
         if (read == null) {
-            Map<String, FieldDomains.Settled> made = new LinkedHashMap<>();
-            byParameter.forEach((parameter, rules) ->
-                    made.put(parameter, rules.given(under(parameter))));
+            Map<String, FieldDomains.Carried<InputAtom>> made = new LinkedHashMap<>();
+            byParameter.forEach((parameter, rules) -> made.put(parameter,
+                    rules.given(under(parameter)).constraintsOver(
+                            at -> called(parameter, at),
+                            subject -> new InputAtom.Anonymous(parameter, subject))));
             read = java.util.Collections.unmodifiableMap(made);
             conditioned = read;
         }
@@ -154,7 +166,7 @@ final class ReadQuantities implements Quantities {
         }
         for (NumericTerm term : form.coefs().keySet()) {
             held(term);
-            if (spacingOf(constraints(), term, called(term)) == null) {
+            if (spacingOf(constraints().numbers(), term, called(term)) == null) {
                 return this;
             }
         }
@@ -168,11 +180,11 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
-     * The rules of every parameter, renamed into this input's numbers and said together.
+     * The rules of every parameter, renamed into this input's vocabulary and said together.
      *
-     * <p>Renamed and not read again ({@link FieldDomains.Settled#numbersOver}). What a rule says is
-     * a relation between numbers, and it says the same thing whatever they are called — so what
-     * reaches here is each parameter's reading, under names this input can spell, and a number it
+     * <p>Renamed and not read again ({@link FieldDomains.Settled#constraintsOver}). What a rule says
+     * is a relation between subjects, and it says the same thing whatever they are called — so what
+     * reaches here is each parameter's reading, under names this input can spell, and a subject it
      * cannot spell under a name of its own so that the rules through it are not lost.
      *
      * <p>Said together, which is what makes this a constraint space rather than a product of them.
@@ -185,18 +197,15 @@ final class ReadQuantities implements Quantities {
      * nothing about a form that also names a third the rules leave unbounded, and met afterwards
      * against a floor this reading did have, the rule is gone.
      */
-    private souther.compiler.numeric.NumericDomain<InputAtom> constraints() {
-        souther.compiler.numeric.NumericDomain<InputAtom> read = constraints;
+    private souther.compiler.check.ConstraintState<InputAtom> constraints() {
+        souther.compiler.check.ConstraintState<InputAtom> read = constraints;
         if (read != null) {
             return read;
         }
-        souther.compiler.numeric.NumericDomain<InputAtom> made =
-                souther.compiler.numeric.NumericDomain.top();
-        for (Map.Entry<String, FieldDomains.Settled> each : conditioned().entrySet()) {
-            String parameter = each.getKey();
-            made = made.meet(each.getValue().numbersOver(
-                    at -> called(parameter, at),
-                    subject -> new InputAtom.Anonymous(parameter, subject)));
+        souther.compiler.check.ConstraintState<InputAtom> made =
+                souther.compiler.check.ConstraintState.top();
+        for (FieldDomains.Carried<InputAtom> each : conditioned().values()) {
+            made = made.meet(each.constraints());
         }
         // And what the caller took in, onto the same rules rather than met against the answer
         // afterwards. A condition relating two positions says nothing about either of them alone,
@@ -204,7 +213,8 @@ final class ReadQuantities implements Quantities {
         for (Assumed each : assumed) {
             Map<InputAtom, souther.compiler.numeric.Granularity> spacing = new LinkedHashMap<>();
             for (NumericTerm term : each.form().coefs().keySet()) {
-                souther.compiler.numeric.Granularity spaced = spacingOf(made, term, called(term));
+                souther.compiler.numeric.Granularity spaced =
+                        spacingOf(made.numbers(), term, called(term));
                 if (spaced == null) {
                     spacing = null;
                     break;
@@ -212,11 +222,38 @@ final class ReadQuantities implements Quantities {
                 spacing.put(called(term), spaced);
             }
             if (spacing != null) {
-                made = made.assume(over(each.form()), each.rel(), spacing);
+                made = made.taking(over(each.form()), each.rel(), spacing);
             }
         }
         read = made;
         constraints = read;
+        return read;
+    }
+
+    /**
+     * Where each position of this input sits, in the order they are declared.
+     *
+     * <p>What a proof of emptiness names a place out of, so the order is the model's and not a
+     * traversal's: the parameters in the order the behavior takes them, and the positions of each in
+     * the order its value declares them. Read off a map salted once per run, which position a
+     * refusal names would move between runs of the same compiler.
+     *
+     * <p>The parameter and the declaration's own path joined, because the two spellings are the same
+     * place or the report names one nobody wrote. A field of the record a clause was written on is
+     * {@code x} there and {@code p.x} here, and this is where it becomes the second.
+     */
+    private java.util.SequencedMap<InputAtom, String> positions() {
+        java.util.SequencedMap<InputAtom, String> read = positions;
+        if (read != null) {
+            return read;
+        }
+        java.util.SequencedMap<InputAtom, String> made = new LinkedHashMap<>();
+        conditioned().forEach((parameter, carried) -> carried.positions().forEach(
+                // What a newtype wraps has no path of its own, so the place is the parameter.
+                (atom, path) -> made.put(atom, FieldDomains.THE_VALUE.equals(path)
+                        ? parameter : parameter + "." + path)));
+        read = java.util.Collections.unmodifiableSequencedMap(made);
+        positions = read;
         return read;
     }
 
@@ -311,7 +348,7 @@ final class ReadQuantities implements Quantities {
         // parameter are said together and what each number is on its own is said onto them, so what
         // a form runs between is read off that space rather than assembled out of per-parameter
         // answers — assembling is what a rule spanning two parameters cannot survive.
-        souther.compiler.numeric.NumericDomain<InputAtom> rules = constraints();
+        souther.compiler.numeric.NumericDomain<InputAtom> rules = constraints().numbers();
         for (NumericTerm term : form.coefs().keySet()) {
             rules = holding(rules, term);
         }
@@ -399,23 +436,15 @@ final class ReadQuantities implements Quantities {
         for (Map.Entry<NumericTerm, Fixed> each : inOrder()) {
             NumericDomain.Bounds own = each.getKey().ownBounds();
             if (own != null && !own.admits(each.getValue().least())) {
-                return Optional.of(at(each.getKey().path(),
-                        new EmptyInput.OutsideWhereThePositionRuns(each.getKey(),
-                                each.getValue().least())));
+                return Optional.of(new EmptyInput.OutsideWhereThePositionRuns(each.getKey(),
+                        each.getValue().least()));
             }
         }
-        for (Map.Entry<String, FieldDomains.Settled> each : conditioned().entrySet()) {
-            Optional<EmptyInput> here = holdsNothing(each.getKey(), each.getValue());
-            if (here.isPresent()) {
-                return here;
-            }
-        }
-        // And what the rules leave once they are all said together, which is the only place a
-        // contradiction between two parameters — or between a declaration and something a caller
-        // took in — can be seen at all. Last, so that a proof one parameter's own reading can name a
-        // place for is the one a caller hears about.
-        return constraints().isBottom()
-                ? Optional.of(new EmptyInput.ProvedByTheRulesTakenTogether()) : Optional.empty();
+        // And what the rules leave once they are all said together, which is the one thing that
+        // answers it. Every parameter's reading is in here, renamed, so there is nothing a
+        // per-parameter reading could add — and a contradiction between two parameters, or between a
+        // declaration and something a caller took in, can be seen nowhere else.
+        return constraints().holdsNothing(positions()).map(EmptyInput.ProvedByTheRules::new);
     }
 
     /**
@@ -428,50 +457,6 @@ final class ReadQuantities implements Quantities {
         List<Map.Entry<NumericTerm, Fixed>> out = new java.util.ArrayList<>(fixed.entrySet());
         out.sort(java.util.Comparator.comparing(each -> each.getKey().toString()));
         return out;
-    }
-
-    /**
-     * The same, of one parameter's rules read with whatever is fixed under it.
-     *
-     * <p>The proof the declarations hold, said in this input's words. Where it names a position, the
-     * path it names is that value's own — {@code x} for a field of the record the clause was written
-     * on — and the caller's is the parameter and that path together. Left in the declaration's
-     * words, a report would name a field of nothing; said as the parameter alone, it would name the
-     * whole of what the behavior takes for a contradiction at one field of it.
-     *
-     * <p>One step and no further. A proof names one place once, so what sits under the step is not
-     * another path of this value; what it can be is a proof about some other value, whose places are
-     * that value's own and are not this input's to spell. So the where is carried across and the why
-     * stays where it was proved.
-     */
-    private Optional<EmptyInput> holdsNothing(String parameter, FieldDomains.Settled rules) {
-        return rules.holdsNothing().map(why -> at(where(parameter, why),
-                new EmptyInput.ProvedByTheDeclarationsReading()));
-    }
-
-    /** The dot a path's steps are joined by, which is how one is taken apart again. */
-    private static final java.util.regex.Pattern STEPS = java.util.regex.Pattern.compile("\\.");
-
-    /** Where in this input the proof sits: the parameter, and the position under it the proof names
-     *  where it names one. */
-    private static TermPath where(String parameter, souther.compiler.check.Emptiness why) {
-        TermPath at = TermPath.of(parameter);
-        if (!(why instanceof souther.compiler.check.Emptiness.AtAField field)
-                || field.path().isEmpty()) {
-            return at;
-        }
-        // Taken apart the way it was put together, and keeping what is between two dots even where
-        // there is nothing there: a path is a list of steps joined by a dot, so a reading that drops
-        // an empty step would answer about a different position than the one named.
-        for (String step : STEPS.split(field.path(), -1)) {
-            at = at.then(step);
-        }
-        return at;
-    }
-
-    /** An emptiness said to sit at {@code path}. */
-    private static EmptyInput at(TermPath path, EmptyInput under) {
-        return new EmptyInput.At(path, under);
     }
 
     /**

@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BinaryOperator;
+import java.util.stream.Collectors;
 
 /**
  * Which values each position may hold, over all the rules a reading took in.
@@ -434,6 +435,53 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
     /** Whether nothing satisfies these rules, at a position or otherwise. */
     public boolean isBottom() {
         return held instanceof Held.Nothing;
+    }
+
+    /**
+     * The same reading of the same positions, under the names {@code naming} gives them.
+     *
+     * <p>The naming has to name two positions two positions. Two of them arriving under one name
+     * would hold each other's values — narrowed against each other where both were read, and given
+     * the other's where one was not — which is the reading admitting or refusing values on the
+     * strength of a rule written about somewhere else. Not checked here, because what a naming must
+     * not collide over is every subject of every domain of one reading and no domain can see the
+     * others; it is checked where a whole vocabulary is
+     * ({@code souther.compiler.check.InjectiveRenaming}). Every position held here passes through
+     * the naming, so a caller holding one of those sees all of them.
+     *
+     * <p>Every place a position is filed under, and not the alternatives alone. A position sits in
+     * the boxes, in what was read of it on its own, in what stands unread, in what is guaranteed, and
+     * in the two sets recording how it got there — a renaming that reached some of those would leave
+     * the rest filed under names nothing else in the state uses, which reads as a position nobody
+     * said anything about.
+     */
+    public <B> AdmissibleValues<B> renamed(java.util.function.Function<A, B> naming) {
+        Held<B> renamedHeld = switch (held) {
+            case Held.Nothing<A> _ -> new Held.Nothing<B>();
+            case Held.Alternatives<A> alternatives -> new Held.Alternatives<>(
+                    alternatives.boxes().stream()
+                            .map(box -> new Box<>(renamedKeys(box.at(), naming)))
+                            .collect(Collectors.toCollection(LinkedHashSet::new)));
+        };
+        return new AdmissibleValues<>(renamedHeld, renamedKeys(perPosition, naming),
+                renamedKeys(standing, naming), dropped,
+                renamedKeys(guaranteed, naming), defaultGuaranteed, guaranteedTogether,
+                renamedNames(tangled, naming), renamedNames(widened, naming));
+    }
+
+    /** The same map, filed under what {@code naming} calls each of its keys. */
+    private static <A, B, V> Map<B, V> renamedKeys(Map<A, V> of,
+                                                   java.util.function.Function<A, B> naming) {
+        Map<B, V> out = new LinkedHashMap<>();
+        of.forEach((position, value) -> out.put(naming.apply(position), value));
+        return out;
+    }
+
+    /** The same set, of what {@code naming} calls each of its positions. */
+    private static <A, B> Set<B> renamedNames(Set<A> of, java.util.function.Function<A, B> naming) {
+        Set<B> out = new LinkedHashSet<>();
+        of.forEach(position -> out.add(naming.apply(position)));
+        return out;
     }
 
     /** Both readings holding at once. */
