@@ -36,10 +36,18 @@ class BodyForInvariantDischargeTest {
             """;
 
     private static Hir.Expr body(Key<Hir.FnDef> key) {
+        return db().ask(key).value().writtenBody();
+    }
+
+    /** The same, for a body that answers with what its expansion could not remove beside it. */
+    private static Hir.Expr lowered(Key<souther.compiler.check.Expansion<Hir.FnDef>> key) {
+        return db().ask(key).value().value().writtenBody();
+    }
+
+    private static Db db() {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("a.sou", SOURCE);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        return c.db().ask(key).value().writtenBody();
+        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY).db();
     }
 
     private static List<String> calls(Hir.Expr e) {
@@ -71,7 +79,7 @@ class BodyForInvariantDischargeTest {
 
     @Test
     void theEmittedBodyHasExpandedTheOperationAway() {
-        List<String> fns = calls(body(new Bodies.LoweredBody("m.a", "shift")));
+        List<String> fns = calls(lowered(new Bodies.LoweredBody("m.a", "shift")));
         assertFalse(fns.contains("List.map"),
                 "the backend emits folds, not operations: " + fns);
     }

@@ -57,7 +57,7 @@ public final class Lower {
      * parameter, not a same-named user helper), which is what {@code recursive} says. A helper that is
      * neither is fully inlined at its call sites and never emitted, so nothing asks for it here.
      */
-    public static Hir.FnDef body(Hir.FnDef fn, HelperInliner inliner, boolean recursive) {
+    public static Expansion<Hir.FnDef> body(Hir.FnDef fn, HelperInliner inliner, boolean recursive) {
         return body(fn, inliner, recursive, Set.of());
     }
 
@@ -66,12 +66,15 @@ public final class Lower {
      * on} — the names that arrive as the {@code let}'s trailing parameters (spec §depends-on). A
      * helper has none, and neither has a recursive helper's own body.
      */
-    public static Hir.FnDef body(Hir.FnDef fn, HelperInliner inliner, boolean recursive,
-                                 Set<String> dependencies) {
+    public static Expansion<Hir.FnDef> body(Hir.FnDef fn, HelperInliner inliner, boolean recursive,
+                                            Set<String> dependencies) {
         Hir.Expr expanded = recursive
                 ? inliner.inlineRecursiveBody(fn)
                 : inliner.inline(fn.writtenBody(), dependencies(fn, dependencies), inliner.bodyOf(fn.name()));
-        return fn.withBody(new Hir.FnBody.Written(desugar(expanded)));
+        // What this expansion could not remove travels with what it produced. The inliner was made
+        // for this body, so what it left standing is this body's and nothing else's.
+        return new Expansion<>(fn.withBody(new Hir.FnBody.Written(desugar(expanded))),
+                inliner.leftStanding());
     }
 
     /** Which bindings the {@code depends on} names are: the trailing parameters that carry them. A

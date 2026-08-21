@@ -121,10 +121,12 @@ public final class TypeChecker {
                 inliner, recursiveHelperFns, recHelperConstructs, warnings);
     }
 
-    /** The signatures of a module's recursive helpers — what a self- or mutual call is typed
-     * against, and what a body that calls one reads. */
-    public static Map<String, Type> recursiveHelperSigs(HelperInliner inliner, Symbols symbols) {
-        return HelperTyping.recursiveHelperSigs(inliner, symbols);
+    /** The signatures every recursive helper a representation can reach would be called under —
+     *  what typing a call left standing needs, whether or not this module turned out to reach it. */
+    public static Map<String, Type> recursiveCallSigs(HelperTable table,
+                                                      java.util.Collection<String> names,
+                                                      Symbols symbols) {
+        return HelperTyping.recursiveCallSigs(table, names, symbols);
     }
 
     /** What each recursive helper constructs, transitively. A recursive helper is not inlined, so its
@@ -191,6 +193,20 @@ public final class TypeChecker {
         // declared it or took it on to emit, and one missing here is a helper checked against a body
         // it does not have.
         Map<String, Hir.Expr> loweredBodies = new HashMap<>();
+        // Which definitions this module processes, read off what it lowered rather than off what it
+        // was predicted to have to lower. A recursion an expansion of this module left standing is
+        // one this module emits, so it is one this module checks — and the two answers were allowed
+        // to differ while the second was a walk over the places a module writes expressions.
+        // Which definitions this module checks standing on their own: every helper it declared,
+        // whether or not anything survives to call it, and what it emits beyond them. The second is
+        // read off what it lowered rather than off what it was predicted to have to lower — a
+        // recursion an expansion of this module left standing is one this module emits, so it is one
+        // this module checks, and the two answers were allowed to differ while the second was a walk
+        // over the places a module writes expressions. A helper is a fn whose name is no behavior's,
+        // which is the reading both of these are keyed by.
+        Map<String, Hir.FnDef> toCheck =
+                new java.util.LinkedHashMap<>(HelperInliner.helpersOf(module));
+        toCheck.putAll(HelperInliner.takenOnBy(lowered));
         for (Hir.FnDef fn : lowered.fns()) {
             loweredBodies.put(fn.name(), fn.writtenBody());
         }
@@ -199,8 +215,8 @@ public final class TypeChecker {
         }
         // The imported definitions join the table this module's bodies are expanded against: a
         // published helper is expanded at its call sites here exactly as one of this module's own is,
-        // and it is not one of this module's own — which is what keeps a recursive one of them in
-        // `injectedRecursiveHelpers`, to be emitted here rather than declared here.
+        // and it is not one of this module's own — which is why a recursive one of them is emitted
+        // here rather than declared here.
         // A helper is checked standing on its own as well as expanded into what calls it, and both
         // readings answer the same about a behavior's name: it becomes the function value it names,
         // which a helper may then not apply (E1818). Told nothing, the standalone reading would
@@ -446,7 +462,7 @@ public final class TypeChecker {
         // settled with the rest — and held to the position it stands at by the type its wrapper
         // declares, which is the same check every other definition of this module gets. There is
         // nothing left here for a reading of its own to ask.
-        collect(errors, abandoned, () -> HelperTyping.checkHelpers(inliner, symbols, reqSigs,
+        collect(errors, abandoned, () -> HelperTyping.checkHelpers(inliner, toCheck, symbols, reqSigs,
                 recursiveHelperFns, loweredBodies, elaborated));
         // Recursion is total by default (spec §fn-declaration): a non-`partial` recursive helper must
         // be structurally recursive, so its examples terminate at compile time.

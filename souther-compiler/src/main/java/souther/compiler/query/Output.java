@@ -79,7 +79,7 @@ public final class Output {
                         shipped(in), in.scope(), in.typePackages(), in.sigs(), in.imported(),
                         in.injected(),
                         in.callees(), in.requirements(), in.checked(), in.dischargeClauses(),
-                        in.checks());
+                        in.checks(), in.standingCalls());
                 stamp(db, emitted);
                 return Answer.of(Ordered.map(emitted.byBinaryName()));
             } catch (CompileException e) {
@@ -123,7 +123,8 @@ public final class Output {
                       Bodies.Elaborated checked,
                       Map<TypeSymbol, List<Hir.InvariantClause>> dischargeClauses,
                       Map<ValueName.Behavior, EnsuresEnforcement> checks,
-                      Set<String> rowMethods) {}
+                      Set<String> rowMethods,
+                      Map<String, souther.compiler.types.Type> standingCalls) {}
 
         static Inputs inputs(Db db, String name) {
             Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
@@ -147,10 +148,16 @@ public final class Output {
             Answer<Map<TypeSymbol, List<Hir.InvariantClause>>> dischargeClauses =
                     db.ask(new Shapes.InvariantsForDischarge(name));
             Answer<Map<String, BehaviorContract>> contracts = db.ask(new Bodies.Contracts(name));
+            // What a call left standing is typed against — the same answer the check typed it
+            // against. The emitter re-types the expressions it emits (a clause, a rule), so a
+            // signature table of its own would be a second reading of what a name means, and the two
+            // would agree only until one of them was edited.
+            Answer<Map<String, souther.compiler.types.Type>> standing =
+                    db.ask(new Bodies.RecursiveCallSigs(name, souther.compiler.check.InliningPolicy.FULL));
             if (!checked.present() || !lowering.present() || !scope.present() || !imported.present()
                     || !signatures.present() || !injected.present() || !callees.present()
                     || !prepared.present() || !requirements.present() || !dischargeClauses.present()
-                    || !contracts.present()) {
+                    || !contracts.present() || !standing.present()) {
                 return null;
             }
             return new Inputs(lowering.value().lowered(), scope.value(),
@@ -158,7 +165,7 @@ public final class Output {
                     injected.value(),
                     callees.value(), requirements.value(), checked.value(), dischargeClauses.value(),
                     checksOf(lowering.value().lowered(), injected.value(), contracts.value()),
-                    Set.copyOf(prepared.value().operandMethods().values()));
+                    Set.copyOf(prepared.value().operandMethods().values()), standing.value());
         }
 
         /**
@@ -379,7 +386,7 @@ public final class Output {
                         in.lowered(), in.scope(), in.typePackages(), in.sigs(), in.imported(),
                         in.injected(),
                         in.callees(), in.requirements(), in.checked(), in.dischargeClauses(),
-                        in.checks(), instrumentation);
+                        in.checks(), in.standingCalls(), instrumentation);
                 Classes.stamp(db, name, emitted);
                 // The classes and what they implement, from the one emission that decided both.
                 return Answer.of(new EvaluationArtifact(Ordered.map(emitted.byBinaryName()),

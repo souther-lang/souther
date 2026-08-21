@@ -44,6 +44,16 @@ public final class Prepared {
     private final List<Rows> examples;
     private final List<FakeTable> fakes;
     private final List<Hir.FnDef> takenOn;
+    /**
+     * The definitions minted for this module's row operands.
+     *
+     * <p>Their own component, and not among what the module took on. A row's operand is a value this
+     * compilation writes for it, reached from a row and from nothing a source can spell — so it is
+     * not a declaration a name resolves to, and a table of what names reach has no business holding
+     * one. Carried here beside the correspondence they were built with, which is the one walk that
+     * knows both.
+     */
+    private final List<Hir.FnDef> rowDefs;
     /** Which method each row operand's value runs as, by the operand — the correspondence the
      *  emission constructed, held so the reader that invokes a method never counts the rows for
      *  itself. Keyed on operand identity, over the very nodes {@link Rows#read} answers with. */
@@ -52,14 +62,20 @@ public final class Prepared {
     private volatile Hir.Module projected;
 
     private Prepared(Desugared.Module desugared, List<Desugared.Fn> fns, List<Rows> examples,
-                     List<FakeTable> fakes, List<Hir.FnDef> takenOn,
+                     List<FakeTable> fakes, List<Hir.FnDef> takenOn, List<Hir.FnDef> rowDefs,
                      Map<Hir.Expr, String> operandMethods) {
         this.desugared = desugared;
         this.fns = List.copyOf(fns);
         this.examples = List.copyOf(examples);
         this.fakes = List.copyOf(fakes);
         this.takenOn = List.copyOf(takenOn);
+        this.rowDefs = List.copyOf(rowDefs);
         this.operandMethods = operandMethods;
+    }
+
+    /** The definitions this module's row operands are, in the order they were emitted. */
+    public List<Hir.FnDef> rowDefs() {
+        return rowDefs;
     }
 
     /**
@@ -107,24 +123,19 @@ public final class Prepared {
         for (Hir.Fake table : desugared.module().fakes()) {
             fakes.add(new FakeTable(HelperNames.qualifyImportsIn(table, self)));
         }
-        Prepared written = new Prepared(desugared, fns, examples, fakes, List.of(), Map.of());
-        HelperInliner inliner = HelperInliner.forModule(written.module(), published);
-        // What this module emits and did not declare: a recursive helper it reaches, which cannot
-        // be expanded into whoever calls it. A row names no more than a body does — its operands are
-        // definitions of this module and the helpers they call are expanded into them — so a row
-        // adds nothing here beyond the recursion any of its calls reaches.
-        Map<String, Hir.FnDef> injected = new LinkedHashMap<>(inliner.injectedRecursiveHelpers());
+        Prepared written = new Prepared(desugared, fns, examples, fakes, List.of(), List.of(),
+                Map.of());
         // What each row operand computes, emitted beside the module's own so a row runs its operand
         // in the program the behavior it is about is applied in. Which method is whose is kept with
         // the module: it is decided here and read wherever a row is run, never counted out again.
         RowFixtures.Emitted rows = RowFixtures.emitted(written.module(), scope, signatures);
-        rows.defs().forEach(injected::putIfAbsent);
-        // Beside what the module declared, not among it. Both are emitted and only the first was
-        // written here, and a reader asking which is which asks the component it is in rather than
-        // the shape of a name.
-        return injected.isEmpty() ? written
-                : new Prepared(desugared, fns, examples, fakes, List.copyOf(injected.values()),
-                        rows.methods());
+        // Which recursions this module has to emit is not decided here and is not carried from here.
+        // It follows from what expanding this module's trees leaves standing, which none of them has
+        // been through yet — worked out here, it was a prediction about work not yet done, and it
+        // was wrong for every tree the prediction did not know to look at.
+        return rows.defs().isEmpty() ? written
+                : new Prepared(desugared, fns, examples, fakes, List.of(),
+                        List.copyOf(rows.defs().values()), rows.methods());
     }
 
     /** What the module is called. */
@@ -431,13 +442,32 @@ public final class Prepared {
         return module();
     }
 
+    /**
+     * Everything this state answers with.
+     *
+     * <p>Not the projection alone. The tree carries what the module declared and what it writes; the
+     * definitions minted for its rows are beside it and are in no tree, so two states whose trees
+     * compare equal can still say different things about the rows. They do, and without touching the
+     * source: a row's operand is wrapped in the type the position it stands at contributes, and that
+     * position comes from a behavior's signature — which an edit to an imported module can change
+     * while this module's text stays as it was.
+     *
+     * <p>A state is a query's answer, and a store decides whether anything downstream has to be
+     * asked again by comparing the answer it recomputed with the one it held. An answer that leaves
+     * out what it answers with is one the store cannot tell has changed.
+     *
+     * <p>The correspondence between an operand and its method is left out on purpose: it is keyed on
+     * operand identity, over the very nodes the tree hands out, so it says nothing a tree and the
+     * definitions built from it do not already say.
+     */
     @Override
     public boolean equals(Object o) {
-        return o instanceof Prepared other && module().equals(other.module());
+        return o instanceof Prepared other && module().equals(other.module())
+                && rowDefs.equals(other.rowDefs);
     }
 
     @Override
     public int hashCode() {
-        return module().hashCode();
+        return module().hashCode() * 31 + rowDefs.hashCode();
     }
 }

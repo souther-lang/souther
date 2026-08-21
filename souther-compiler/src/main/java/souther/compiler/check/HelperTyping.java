@@ -46,7 +46,7 @@ public final class HelperTyping {
      * {@code depends on} checks are the caller's (the helper is inlined there), so they are not
      * repeated here.
      */
-    static void checkHelpers(HelperInliner inliner, Symbols symbols,
+    static void checkHelpers(HelperInliner inliner, Map<String, Hir.FnDef> toCheck, Symbols symbols,
                                      Map<ValueName.Behavior, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns,
                                      Map<String, Hir.Expr> loweredBodies,
                                      TypeChecker.Elaborated elaborated) {
@@ -56,7 +56,7 @@ public final class HelperTyping {
         Map<ValueName, Type> settledTypes = new HashMap<>();
         Map<ValueName, Object> settledConstants = new HashMap<>();
         Preserved standing = Preserved.valuesAlreadySettled(settledTypes::get);
-        for (Hir.FnDef h : valuesBeforeTheValuesThatNameThem(inliner)) {
+        for (Hir.FnDef h : valuesBeforeTheValuesThatNameThem(toCheck)) {
             boolean recursive = recursiveHelperFns.containsKey(h.name());
             // Where this definition stands, or null where it stands nowhere: the one thing every
             // rule below that is about a row's operand asks, read off the definition the rule is
@@ -244,8 +244,7 @@ public final class HelperTyping {
      * written, each copying the other, which is the answer this pass gave before there was an order
      * at all.
      */
-    private static List<Hir.FnDef> valuesBeforeTheValuesThatNameThem(HelperInliner inliner) {
-        Map<String, Hir.FnDef> held = inliner.held();
+    private static List<Hir.FnDef> valuesBeforeTheValuesThatNameThem(Map<String, Hir.FnDef> held) {
         Map<String, Set<String>> names = new LinkedHashMap<>();
         for (Map.Entry<String, Hir.FnDef> e : held.entrySet()) {
             if (!(e.getValue().body() instanceof Hir.FnBody.Written written)) {
@@ -368,22 +367,54 @@ public final class HelperTyping {
     }
 
     /**
-     * Signatures of the module's recursive helpers, each a {@link Type.FnOf} from its declared
-     * parameter types to its declared return type. A recursive helper must declare its return type:
-     * the type can't be inferred through the cycle. Registered in a body's environment so a self- or
-     * mutual call type-checks (spec §fn-declaration).
+     * The same, for the recursive helpers a caller names and reads out of {@code table}.
+     *
+     * <p>Which recursive helpers a signature is wanted for is the caller's question and there is more
+     * than one answer to it: what a module has taken on to emit is one, and what could stand
+     * unexpanded anywhere in a representation is another and is wider. What a signature is is the
+     * same either way, so it is worked out once here rather than beside each question — two readings
+     * of one declaration would agree only until one of them was edited.
      */
-    static Map<String, Type> recursiveHelperSigs(HelperInliner inliner, Symbols symbols) {
+    static Map<String, Type> recursiveCallSigs(HelperInliner inliner, Symbols symbols) {
+        return sigsOf(inliner.recursiveInReach(), inliner::helper, symbols, inliner.moduleName());
+    }
+
+    /** The same, read off a table rather than off an inliner over it. */
+    static Map<String, Type> recursiveCallSigs(HelperTable table,
+                                               java.util.Collection<String> names, Symbols symbols) {
+        return sigsOf(names, table::reached, symbols, table.module());
+    }
+
+    /**
+     * @param ownModule the module these are being read for. A declaration it wrote is held to
+     *     declaring its types, and is told so at the line it was written on. One it did not write is
+     *     another module's to hold to that, and is reported there while that module is compiled — so
+     *     an unreadable one contributes no signature here rather than a report about a file this
+     *     compile does not own. A call that needed it fails where the call is written, which is in
+     *     this module and is a place its author can act on.
+     */
+    private static Map<String, Type> sigsOf(java.util.Collection<String> names,
+                                            java.util.function.Function<String, Hir.FnDef> declaring,
+                                            Symbols symbols, String ownModule) {
         Map<String, Type> sigs = new HashMap<>();
-        for (String name : inliner.recursiveHelpers()) {
-            Hir.FnDef h = inliner.helper(name);
+        for (String name : names) {
+            Hir.FnDef h = declaring.apply(name);
+            boolean ours = h.declaredBy(ownModule);
             if (h.declaredReturn() == null) {
+                if (!ours) {
+                    continue;
+                }
                 throw CompileException.of(Diagnostic
                                 .at(h.pos()).say(new NameMessage.ARecursiveHelperMustDeclareItsReturnType(name)).build());
             }
             List<Type> params = new ArrayList<>();
+            boolean readable = true;
             for (Hir.FnParam p : h.params()) {
                 if (p.type() == null) {
+                    if (!ours) {
+                        readable = false;
+                        break;
+                    }
                     throw CompileException.of(Diagnostic.at(p.written().reportedAt())
                             .say(new HelperMessage.AParameterNeedsItsType(name, p.name()))
                             .build());
@@ -391,6 +422,9 @@ public final class HelperTyping {
                 // a recursive helper is a static method taking its parameters as values; a function
                 // parameter is passed as a first-class Fn (a closure), applied inside the method.
                 params.add(TypeOps.resolveParamType(p.type()));
+            }
+            if (!readable) {
+                continue;
             }
             sigs.put(name, Type.fn(params, TypeOps.successType(h.declaredReturn())));
         }

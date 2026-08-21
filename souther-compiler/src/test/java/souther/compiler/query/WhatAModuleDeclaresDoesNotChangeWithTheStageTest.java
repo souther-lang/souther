@@ -15,6 +15,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -44,12 +45,17 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
             """;
 
     private static final String APP = """
-            module app exposing ( own )
+            module app exposing ( own, Bag, run )
 
             import lib ( flatten )
 
+            data Bag = List<Int>
+
             let own (xs: List<Int>) : List<Int> = List.map({ (x) -> x + 1 }, xs)
             let both (xs: List<List<Int>>) : List<Int> = own(flatten(xs))
+
+            behavior run : (xs: List<List<Int>>) -> Bag constructs Bag
+            let run (xs) = Bag { value = both(xs) }
             """;
 
     private static Db db() {
@@ -96,15 +102,19 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
     }
 
     /**
-     * And this module does take helpers on, so no stage passes by having none to confuse a
-     * declaration with. Asked of what the module emits, which is a different question and a different
-     * answer.
+     * And this module does emit helpers it did not declare, so no stage passes by having none to
+     * confuse a declaration with. What it emits is a different question from what it declares, and
+     * it is answered after its trees have been expanded rather than before: a recursion is emitted
+     * here because an expansion of this module could not remove a call to it.
      */
     @Test
-    void theModuleTakesOnHelpersItDidNotDeclare() {
+    void theModuleEmitsHelpersItDidNotDeclare() {
         Db db = db();
         assertEquals(Set.of("List.foldFrom", "lib.flatten"),
-                db.ask(new Bodies.RecursiveHelpers("app")).value());
+                db.ask(new Bodies.RequiredRecursiveDefs("app")).value());
+        assertEquals(Set.of("own", "both"),
+                HelperInliner.helpersOf(db.ask(new Bodies.Settled("app")).value()).keySet(),
+                "and what it declares is unchanged by that");
     }
 
     /**
@@ -137,17 +147,18 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
     }
 
     /**
-     * What a module takes on is a method per row operand, and the helper the row names is not among
-     * them: the operand is a definition of this module and the call in it is expanded into it, the
-     * way a call in a body is.
+     * A row is emitted as a method per operand, and the helper the row names is not one of them: the
+     * operand is a definition of this module and the call in it is expanded into it, the way a call
+     * in a body is. So nothing is taken on for a row at all.
      *
-     * <p>The two are told apart by what each was made as. A row's method is declared by this module
-     * and is no {@code let} anybody wrote, so {@link Hir.FnDef#declaredIn} does not separate it from
-     * a declaration and the shape of its name does not separate it from a definition another module
-     * wrote — which is the confusion this axis exists to remove.
+     * <p>The row's own methods are a family of their own and not among what the module holds. A row
+     * operand is reached from a row and from nothing a source can spell, so it is no declaration a
+     * name resolves to — and it is told from one by what it was made as. Its declaration cannot tell
+     * them apart: this module is what declared it, so {@link Hir.FnDef#declaredIn} says the same of
+     * both, and the shape of its name says nothing either.
      */
     @Test
-    void whatIsTakenOnForARowIsTheRowsOwnMethodAndNotTheHelperItNames() {
+    void aRowIsEmittedAsItsOwnMethodsAndNothingIsTakenOnForIt() {
         Db db = Compilation.ofDocuments(Map.of("rules.sou", """
                 module rules exposing ( doubled )
 
@@ -175,15 +186,25 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
         // off the correspondence the preparation constructed rather than spelled here.
         Set<String> rowMethods = Set.copyOf(state.operandMethods().values());
         assertEquals(2, rowMethods.size(), "one input and one expectation, each emitted for the row");
-        assertEquals(rowMethods, HelperInliner.takenOnBy(prepared).keySet(),
-                "`rules.doubled` is expanded into the operand, not taken on beside it");
-        assertEquals(Set.of(), db.ask(new Bodies.RecursiveHelpers("app")).value(),
+        assertEquals(Set.of(), HelperInliner.takenOnBy(prepared).keySet(),
+                "`rules.doubled` is expanded into the operand, and nothing is taken on beside it");
+        assertEquals(rowMethods, db.ask(new Bodies.RowFixtureDefs("app")).value().keySet(),
+                "the operands' methods are their own family");
+        // And not in the table a call expands against. Nothing a source can write reaches one, so a
+        // name has nothing to resolve to there — and every rule keyed on what that table holds had a
+        // synthetic method among its subjects while it did.
+        souther.compiler.check.HelperTable table =
+                db.ask(new Bodies.Expanding("app", souther.compiler.check.InliningPolicy.FULL))
+                        .value().table();
+        rowMethods.forEach(method ->
+                assertFalse(table.reaches(method), method + " is reachable by name"));
+        assertEquals(Set.of(), Set.copyOf(db.ask(new Bodies.RequiredRecursiveDefs("app")).value()),
                 "and nothing here recurses, so nothing else needs a method");
         assertEquals(rowMethods,
                 db.ask(new Bodies.Lowering("app")).value().lowered().takenOn().stream()
                         .map(Hir.FnDef::name).collect(java.util.stream.Collectors.toSet()));
         // Each of them says what it is. The declaration cannot: this module is what declared them.
-        HelperInliner.takenOnBy(prepared).values().forEach(fn -> {
+        db.ask(new Bodies.RowFixtureDefs("app")).value().values().forEach(fn -> {
             assertTrue(fn.declaredBy("app"), fn.name() + " is emitted into `app`'s own program");
             assertInstanceOf(DefinitionRole.RowValue.class, fn.role(), fn.name());
         });

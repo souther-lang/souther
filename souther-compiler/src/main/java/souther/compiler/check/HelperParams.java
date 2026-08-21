@@ -64,7 +64,10 @@ final class HelperParams {
         Set<String> recursive = inliner.recursiveHelpers();
         Map<String, Type> recursiveHelperFns;
         try {
-            recursiveHelperFns = HelperTyping.recursiveHelperSigs(inliner, symbols);
+            // Every recursion in reach, not only what this module declares: settling reads a body
+            // with its calls expanded, and a call the expansion left standing has to be typeable
+            // there whether or not this module has taken the callee on.
+            recursiveHelperFns = HelperTyping.recursiveCallSigs(inliner, symbols);
         } catch (CompileException _) {
             // One recursive helper that does not declare its types costs the signatures of all of
             // them, which is not observable: the check builds this same map outside its recovery, so
