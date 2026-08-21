@@ -11,6 +11,7 @@ import souther.compiler.check.StatedContract;
 import souther.compiler.check.ContractDischarge;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.HelperInliner;
+import souther.compiler.check.Expansion;
 import souther.compiler.check.HelperGraph;
 import souther.compiler.check.HelperNames;
 import souther.compiler.check.HelperTable;
@@ -1306,23 +1307,28 @@ public final class Bodies {
      * <p>What it reads is the fn itself and the helpers around it, so editing another body in the same
      * module does not expand this one again.
      */
-    public record LoweredBody(String module, String fn) implements Key<Hir.FnDef> {
+    public record LoweredBody(String module, String fn) implements Key<Expansion<Hir.FnDef>> {
 
         @Override
-        public Answer<Hir.FnDef> compute(Db db) {
+        public Answer<Expansion<Hir.FnDef>> compute(Db db) {
             Answer<Hir.FnDef> def = db.ask(new SettledFn(module, fn));
-            Answer<HelperInliner> inliner = expanding(db, module, InliningPolicy.FULL);
-            Answer<SequencedSet<String>> recursive = db.ask(new RecursiveHelpers(module));
+            Answer<Expanding.Of> against = db.ask(new Expanding(module, InliningPolicy.FULL));
             Answer<Map<ValueName.Behavior, Integer>> behaviors =
                     db.ask(new NamedBehaviorArity(module));
-            if (!def.present() || !inliner.present() || !recursive.present()
-                    || !behaviors.present()) {
+            if (!def.present() || !against.present() || !behaviors.present()) {
                 return Answer.absent();
             }
+            // Whether this body is a recursion, asked of the graph rather than of the set the module
+            // took on. The two agree for every fn that has a body here, and the graph does not have
+            // to be told what the module reaches — which is what makes what the module reaches
+            // askable in terms of this.
+            boolean recursive = against.value().graph().recurses(fn);
             try {
+                HelperInliner inliner = HelperInliner.over(against.value().table(),
+                        against.value().graph());
                 return Answer.of(Lower.body(def.value(),
-                        inliner.value().namingBehaviors(behaviors.value()),
-                        recursive.value().contains(fn), dependencyParams(db, module, fn)));
+                        inliner.namingBehaviors(behaviors.value()),
+                        recursive, dependencyParams(db, module, fn)));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -1354,7 +1360,7 @@ public final class Bodies {
             try {
                 return Answer.of(Lower.body(def.value(),
                         inliner.value().namingBehaviors(behaviors.value()),
-                        recursive.value().contains(fn), dependencyParams(db, module, fn)));
+                        recursive.value().contains(fn), dependencyParams(db, module, fn)).value());
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -1408,13 +1414,13 @@ public final class Bodies {
                     if (!taken.add(fn.name())) {
                         continue;
                     }
-                    Answer<Hir.FnDef> body = db.ask(new LoweredBody(name, fn.name()));
+                    Answer<Expansion<Hir.FnDef>> body = db.ask(new LoweredBody(name, fn.name()));
                     if (!body.present()) {
                         // Why is the body's to say, and it said it. A module with a body that does
                         // not expand has none to emit.
                         return Answer.absent();
                     }
-                    fns.add(body.value());
+                    fns.add(body.value().value());
                 }
                 lowered.add(fns);
             }
@@ -1513,11 +1519,11 @@ public final class Bodies {
             }
             Map<String, Hir.Expr> bodies = new LinkedHashMap<>();
             for (String helper : sigs.value().keySet()) {
-                Answer<Hir.FnDef> body = db.ask(new LoweredBody(name, helper));
+                Answer<Expansion<Hir.FnDef>> body = db.ask(new LoweredBody(name, helper));
                 if (!body.present()) {
                     return Answer.absent();
                 }
-                bodies.put(helper, body.value().writtenBody());
+                bodies.put(helper, body.value().value().writtenBody());
             }
             try {
                 return Answer.of(TypeChecker.recursiveHelperConstructs(sigs.value().keySet(), bodies,
@@ -1593,7 +1599,7 @@ public final class Bodies {
         public Answer<Core> compute(Db db) {
             Answer<Hir.SpecBehavior> spec = db.ask(new Spec(module, behavior));
             Answer<Hir.FnDef> fn = db.ask(new SettledFn(module, behavior));
-            Answer<Hir.FnDef> body = db.ask(new LoweredBody(module, behavior));
+            Answer<Expansion<Hir.FnDef>> body = db.ask(new LoweredBody(module, behavior));
             Answer<Symbols> scope = Names.derivedSymbols(db, module);
             // What this body names, and not what its module happens to have callable in it: a
             // signature it never names is no part of what it is checked against, and depending on
@@ -1628,7 +1634,8 @@ public final class Bodies {
                     : null;
             List<Diagnostic> warnings = new ArrayList<>();
             try {
-                Core core = TypeChecker.checkBehavior(spec.value(), fn.value(), body.value().writtenBody(),
+                Core core = TypeChecker.checkBehavior(spec.value(), fn.value(),
+                        body.value().value().writtenBody(),
                         db.ask(new Front.Reading()).value(),
                         dischargeSource, scope.value(), calleeSigs.value(), reqSigs.value(),
                         inliner.value(), sigs.value(), constructs.value(),
