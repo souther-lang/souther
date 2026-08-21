@@ -10,7 +10,8 @@ written over values it does not hold is reported as unread rather than dropped. 
 declaration it is written on. Revised again for #868: a rule left unread is a rule about where the
 values stop, and is answered per rule rather than per position. Revised again for #870: a border is
 what owes the four coverage items of domain testing, and a point it owes none of says which of three
-things settled that.
+things settled that. Revised again for #907: whether a range is the whole of what the rules leave a
+position is settled by a certificate, and having none of them is not the range being wider.
 
 ## Context
 
@@ -131,6 +132,37 @@ position; a row at its edge is a whole value with that edge in it, and a rule ab
 can refuse to be part of one. A pattern on a label narrows no minute and still leaves every minute
 beside it with edges nothing has shown reachable — the two labels a record cannot both carry are as
 good a reason for that as a rule about the minutes themselves.
+
+Whether the rules were all read is one of three things an edge stands on, and it had been standing
+in for all three. A rule that never reached the reading is one of them; whether an end could be
+written down as a number is another; and the third is whether the range the reading did produce is
+the whole of what the rules leave that position. The third is the one this got wrong. It was decided
+by asking, of each rule, whether the range alone entailed it — which establishes it soundly, since
+ranges entailing every rule are the feasible set, and is not what being the whole of it means. A
+range can be exactly what the rules leave a position while stating no rule that relates it to
+another.
+
+So it is a certificate: something established it, and what did the establishing is carried. Having
+none is that nothing established it, which is the only thing a reader may act on. An edge nothing
+licenses is an edge nothing licenses, and it is never a claim that the range is wider than the model
+— the same distinction ADR-0091 draws about a combination nothing has settled, and the same reason.
+
+The certificate this compiler constructs is the ranges together with the relations its closure holds
+between them. Which is what the inference already used and did not say: a difference of two positions
+is held exactly by the closed relations, so `a - b <= 2` beside two positions running 0 to 7 comes
+back proven while the two ranges by themselves hold `a` at 7 beside `b` at 0. Naming it is what makes
+its hypotheses askable. Two of them are: every position the rules relate to each other has its values
+spaced the same way, since the step from a system to one of its ranges is a theorem about a system of
+one kind of value; and the box no relation can still narrow, which is a property of every closed
+state and is asserted where one is made rather than asked here. Positions no rule mentions together
+are two systems written down beside each other and are not held to the first — which a record with a
+whole number in one field and a decimal in another is.
+
+The three are asked of what owns each. Whether every rule reached the reading is the reading's, and
+is asked of the value rather than of the position for the reason above. Whether the ranges are the
+whole of what the rules leave is the algebra's, because the derivation is there and so is the theorem
+the answer rests on. Whether an end was written down as the number the rules stopped at is the
+handover's. An edge stands where all three hold.
 
 That question reaches as far as the construction it can refuse and no further. Down the fields a value
 must have, at any depth, since a rule four records down refuses the outermost construction exactly as
@@ -411,5 +443,26 @@ threshold beside `kind == Domestic` was one of the many this did not read, and i
 
 Keeping a rule per cut means the same value can be owed three times. That is the point: an invariant
 and two guards that name 100000 are three rules, and a row that meets one of them has met one.
+
+Naming the certificate changed no edge. Over the compiler's own suite, 10,994 readings and 4,156 edge
+assessments: every reading the closure could certify was one the older test already passed, so the
+theorem bought nothing it was not already quietly relying on. What it removes is a claim, not a
+limit — a range the certificate cannot reach used to be reported as wider than the model.
+
+Nothing was added to certify more. An edge could also be settled by a point checked against every
+rule, which is a proof about one value rather than about a range, and it was measured before it was
+written: of the 4,156 assessments, 68 were on a range no certificate reaches, and 60 of those already
+had a row — one built through the module's decoders, or one already sitting there. The remaining
+eight were held up by a rule that never reached the reading, which no point can lift. So the search
+that builds rows is where an edge this cannot certify gets settled, and it is settled there for 73
+per cent of every edge in the corpus. A second solver beside it would have had nothing to answer.
+
+This decision is reconsidered where a proof about one end appears — a point of that kind, an end
+rounded on a cut, or any reason to certify one end of a position and not the other. The certificate
+here holds of a whole value, so nothing needs an edge to carry its own evidence, and none does: the
+evidence exists on the cuts one reading draws and is collapsed to a boolean by its only reader, while
+the cuts a threshold adds afterwards never carry it at all. Making only the first kind finer would
+leave the two kinds of cut answering different questions. What comes first is one evidence model
+every cut has, and then the finer answer on top of it.
 
 Spec: `[#example-partition]`, `[#example-adequacy]`
