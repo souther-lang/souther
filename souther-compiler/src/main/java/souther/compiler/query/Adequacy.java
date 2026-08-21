@@ -1494,6 +1494,7 @@ public final class Adequacy {
                     case souther.compiler.partition.GenerationReason.PositionWithheld _,
                             souther.compiler.partition.GenerationReason.SearchLimit _,
                             souther.compiler.partition.GenerationReason.RowsNotConfirmed _,
+                            souther.compiler.partition.GenerationReason.CombinationsWithheld _,
                             souther.compiler.partition.GenerationReason.RowsNotRead _ -> null;
                 };
                 if (said != null) {
@@ -1582,7 +1583,7 @@ public final class Adequacy {
                     .run(inputs.stream()
                             .map(souther.compiler.partition.FixtureTemplate::value).toList())
                     .<Generator.Watched>map(Generator.Watched.Ran::new)
-                    .orElseGet(Generator.Watched.NotRun::new);
+                    .orElseGet(Generator.Watched.NoAccount::new);
         }
 
         private static Generator.GenerationResult pairsFor(
@@ -2606,14 +2607,14 @@ public final class Adequacy {
                                                                         boolean recording) {
         if (!recording) {
             // The row ran — every row of an evaluated source does — and nothing was recording it.
-            // Answered as that rather than as a run with an empty account of itself, which is what
-            // a row that reached nothing leaves and is a different thing to have found out.
-            return new souther.compiler.partition.Generator.Watched.Unrecorded();
+            // Answered as having no account rather than as a run with an empty one, which is what a
+            // row that reached nothing leaves and is a different thing to have found out.
+            return new souther.compiler.partition.Generator.Watched.NoAccount();
         }
         return switch (row.run().counting()) {
             case Counting.Read read ->
                     new souther.compiler.partition.Generator.Watched.Ran(read.observation());
-            case Counting.Unread _ -> new souther.compiler.partition.Generator.Watched.NotRun();
+            case Counting.Unread _ -> new souther.compiler.partition.Generator.Watched.NoAccount();
         };
     }
 

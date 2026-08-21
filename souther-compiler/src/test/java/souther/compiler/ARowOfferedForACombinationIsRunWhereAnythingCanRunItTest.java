@@ -147,6 +147,30 @@ class ARowOfferedForACombinationIsRunWhereAnythingCanRunItTest {
                 "what is left to write does not turn on whether the build was measuring");
     }
 
+    /**
+     * A combination held back over a row already written is said, not passed over.
+     *
+     * <p>The row is not offered, which is right: it may be work the author has done. What is not
+     * right is silence, because silence here reads as a combination covered — and nothing
+     * established that. So the generation says how many it held back and why, and an author reading
+     * it can tell "all done" from "nothing here could tell".
+     *
+     * <p>The measuring build holds nothing back: there the written rows either fill the
+     * combinations or leave them owed, and either way something was established.
+     */
+    @Test
+    void aCombinationHeldBackOverAWrittenRowIsSaid() {
+        assertEquals(1, withheld(generationOf(WRITTEN, "shippingFee", Adequacy.Level.WITNESS)).size(),
+                "a build that could watch nothing says what it held back");
+        assertEquals(List.of(), withheld(generationOf(WRITTEN, "shippingFee", Adequacy.Level.ALL)),
+                "and one that could watch holds nothing back");
+    }
+
+    private static List<GenerationReason> withheld(Adequacy.Filling filling) {
+        return filling.pairs().reasons().stream()
+                .filter(GenerationReason.CombinationsWithheld.class::isInstance).toList();
+    }
+
     private static List<String> offeredBy(Adequacy.Level level) {
         return generationOf(WRITTEN, "shippingFee", level).pairs().rows().stream()
                 .map(souther.compiler.partition.Generator.GeneratedRow::description).toList();

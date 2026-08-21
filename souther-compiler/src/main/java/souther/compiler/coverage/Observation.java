@@ -22,7 +22,9 @@ import java.util.Set;
  */
 public record Observation(Set<Integer> taken, Set<ComparisonOutcome> comparisons) {
 
-    /** A run nothing was recorded of, which is what a caller with no measuring build has. */
+    /** An empty snapshot: a run recorded as having passed nowhere. Not the same as having no
+     *  account of a run at all, which is not something this can say and is said where a run is
+     *  handed over. */
     public static final Observation NONE = new Observation(Set.of(), Set.of());
 
     public Observation {

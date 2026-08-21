@@ -124,9 +124,12 @@ public final class RowTrial {
                 over.add(new Handed(built, () -> fixtures.neutral(built, at, what)));
             }
             applying = applies.applying(List.of());
-        } catch (RuntimeException | LinkageError | StackOverflowError e) {
-            // Nothing was applied. Which of the things that can go wrong before an application it
-            // was is not this search's business: none of them is a fact about where a row goes.
+        } catch (StandinNotBuilt | LinkageError e) {
+            // Nothing was applied, and these are the two ways that happens before an application:
+            // a stand-in that could not be made, and this compiler's own output not linking. Named
+            // rather than taken by category — anything else out of here is this compiler failing at
+            // something it does not have a word for, and turning that into a fact about where a row
+            // went is how a defect in the runner comes back as a defect in the model.
             return Optional.empty();
         }
         Probe.begin();
@@ -134,14 +137,19 @@ public final class RowTrial {
             EvaluationContext.begin(steps.stepLimit(), steps.recursionDepthLimit());
             try {
                 applying.to(over);
-            } catch (ImplementationNotReached | StandinNotBuilt e) {
-                // Not a run at all: nothing was applied. Saying the row did nothing would be saying
-                // it went nowhere, and those are different facts about it — which is the whole of
-                // what this catch is for, and why it names these two and not what they extend.
+            } catch (ImplementationNotReached e) {
+                // Not a run at all: the implementation could not be reached to apply. Saying the
+                // row did nothing would be saying it went nowhere, and those are different facts.
                 return Optional.empty();
-            } catch (RuntimeException | Error e) {
+            } catch (InvocationFailure e) {
                 // It ran and stopped. Where it had got to is what is being asked for, and what
                 // stopped it is not: nothing here is judging the row.
+                //
+                // This one and no wider. What the applied code ends with arrives as this, so a
+                // throwable that is not one is this compiler failing to reach or drive its own
+                // output — and swallowed here it would come back as a candidate that ran and
+                // missed, which is a statement about the model. The seam says which failures it
+                // has ({@link Answerer.Applying#to}) and those are the ones read.
             } finally {
                 EvaluationContext.end();
             }

@@ -102,8 +102,8 @@ class ARowNothingRanFillsNoCombinationTest {
         assertTrue(offeredFor(model, new Generator.Watched.Ran(Observation.NONE))
                         .contains(combination),
                 "a row seen doing something else leaves it owed, sit where its values may");
-        assertFalse(offeredFor(model, new Generator.Watched.Unrecorded()).contains(combination),
-                "and a row of the author's that nothing could watch is given the benefit of it");
+        assertFalse(offeredFor(model, new Generator.Watched.NoAccount()).contains(combination),
+                "and a row of the author's nothing could watch is withheld over, not counted");
     }
 
     /** What the generator offers when this row is already written, as the classes of each. */

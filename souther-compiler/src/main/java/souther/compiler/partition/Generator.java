@@ -137,12 +137,12 @@ public final class Generator {
 
         public ObservedRow {
             at = Map.copyOf(at);
-            watched = watched == null ? new Watched.NotRun() : watched;
+            watched = watched == null ? new Watched.NoAccount() : watched;
         }
 
         /** A row nothing here can say anything about the run of, for a caller with none to read. */
         public static ObservedRow unseen(Map<AxisId, Classification> at) {
-            return new ObservedRow(at, new Watched.NotRun());
+            return new ObservedRow(at, new Watched.NoAccount());
         }
     }
 
@@ -304,16 +304,16 @@ public final class Generator {
         Watched run(List<FixtureTemplate> inputs);
 
         /** Nothing runs here — what a caller with no runtime to run against uses. */
-        Trial NOTHING_RUNS = _ -> new Watched.NotRun();
+        Trial NOTHING_RUNS = _ -> new Watched.NoAccount();
     }
 
     /**
      * What came of running one composed row.
      *
-     * <p>A sum, so that a caller has to say which of the two it has. Not having run a row and having
-     * run one that reached nothing are the same value read from a set of places and are not the same
-     * fact: the first leaves every combination as untried as it was, and the second is a row that
-     * missed.
+     * <p>A sum, so that a caller has to say which of them it has. Having no account of a row and
+     * having one that shows it reached nothing are the same emptiness read off a set of places and
+     * are not the same fact: the first leaves every combination as untried as it was, and the second
+     * is a row that missed.
      */
     public sealed interface Watched {
 
@@ -323,17 +323,15 @@ public final class Generator {
         record Ran(souther.compiler.coverage.Observation seen) implements Watched {}
 
         /**
-         * It ran and nothing was recording, so where it went is not a thing anything here knows.
+         * Nothing here can say what it did.
          *
-         * <p>What a build that does not measure the arms leaves of every row it evaluates. Told
-         * apart from {@link NotRun} because it is a different fact about the row and from
-         * {@link Ran} of an empty recording because that one is a row that reached nothing: three
-         * states that read alike off an empty account and are not one another.
+         * <p>Three things come to this and they are one arm because nothing tells them apart by
+         * acting differently: nothing ran the row, something ran it and nothing was recording, and
+         * something ran it and the recording was never read. What none of them is, is a run that
+         * reached nothing — that is {@link Ran} of an empty account, and it is the one difference
+         * anything here turns on.
          */
-        record Unrecorded() implements Watched {}
-
-        /** Nothing ran it. Never a statement about the row. */
-        record NotRun() implements Watched {}
+        record NoAccount() implements Watched {}
     }
 
     // --- filling the pairs ----------------------------------------------------------------------
@@ -428,6 +426,7 @@ public final class Generator {
         // already sits in costs no row and does not stand in for one that would have.
         boolean anyLeft = true;
         boolean unconfirmed = false;
+        int withheld = 0;
         while (anyLeft && rows.size() < MAX_ROWS) {
             anyLeft = false;
             for (int g = 0; g < byGroup.size() && rows.size() < MAX_ROWS; g++) {
@@ -442,9 +441,15 @@ public final class Generator {
                     // combination the body has a path to and there is nothing to ask for.
                     continue;
                 }
-                if (fills(written, selection)) {
-                    // A combination a row was seen filling is one nothing is owed for. Sitting in
-                    // its classes is not that, and is not enough.
+                Standing standing = standingOf(written, selection);
+                if (standing instanceof Standing.Filled) {
+                    continue;   // a row was seen filling it, so nothing is owed
+                }
+                if (standing instanceof Standing.MayBeWritten) {
+                    // Not filled and not offered: a row in the file sits where one filling this
+                    // would, and nothing could say whether it does. Counted so that it is said —
+                    // an author told nothing here would read it as a combination covered.
+                    withheld++;
                     continue;
                 }
                 switch (witnessFor(subject, axes, pairs, selection, check, trial)) {
@@ -458,7 +463,7 @@ public final class Generator {
                     }
                     case Witness.Unconfirmed offer -> {
                         rows.add(offer.row());
-                        written.add(new Placement.Composed(offer.where(), new Watched.NotRun()));
+                        written.add(new Placement.Composed(offer.where(), new Watched.NoAccount()));
                         cover(pairs, singles, axes, offer.where());
                         // Nothing watched it, so what it is offered for is what the reading says
                         // and not what anything saw. Said once for the behavior: it is one fact
@@ -510,6 +515,10 @@ public final class Generator {
         }
         if (unconfirmed) {
             reasons.add(new GenerationReason.RowsNotConfirmed(axes.get(0).id().behavior()));
+        }
+        if (withheld > 0) {
+            reasons.add(new GenerationReason.CombinationsWithheld(axes.get(0).id().behavior(),
+                    withheld));
         }
         return new GenerationResult(rows, unresolved, reasons);
     }
@@ -798,34 +807,54 @@ public final class Generator {
     }
 
     /**
-     * Whether a row already counted fills {@code selection} — sits in its classes, and was seen
-     * doing what it names.
+     * Where one combination stands before anything is composed for it.
      *
-     * <p>Both, and the second is what settles it. A combination is a path through the body and an
-     * outcome at each of the decisions that meet on it, so what fills one is a run that took that
-     * path and settled them those ways. A row whose values sit in the classes is a row the reading
-     * expected to do that, and every step from the decisions to the classes is a reading that can
-     * be wrong — so taking the values for the answer is taking the reading for its own witness.
+     * <p>Three answers because two questions are being asked of the rows, and folding them into one
+     * is what this issue is about. Whether a combination is filled is a question about evidence, and
+     * only a run answers it. Whether a row for it is worth putting in front of an author is a
+     * question about what is already in their file, and a row they have written answers that
+     * whatever anything can establish about it — re-offering a combination over such a row hands
+     * back work already done.
      *
-     * <p>Where nothing could say what a row did, the two kinds of row part. An author's row is
-     * given the benefit of it: it is in the file, and a combination re-offered because this could
-     * not read the file's own row is a specific piece of work handed to someone who has done it.
-     * A row this search composed is given none: it exists because a reading said so, and counting
-     * one nothing watched is that reading standing as its own witness.
+     * <p>Kept apart because the second is not the first. A combination withheld is not one anything
+     * showed to be filled, so it is not counted as such and it is not passed over in silence: it is
+     * said, and what it says is that a row in the file may fill it and nothing here could tell.
      */
-    private static boolean fills(List<Placement> written, CellSelection selection) {
+    private sealed interface Standing {
+
+        /** A row was seen filling it. The witness is what says so and the only thing that can. */
+        record Filled(CellSelection.CertifiedWitness by) implements Standing {}
+
+        /** A row already in the author's file sits where one filling this would, and nothing could
+         *  say whether it does. Not evidence, and not silence either. */
+        record MayBeWritten() implements Standing {}
+
+        /** Nothing here says anything about it. */
+        record Owed() implements Standing {}
+    }
+
+    /**
+     * Where {@code selection} stands against the rows counted so far.
+     *
+     * <p>Evidence first and on its own terms: a row of either kind, seen doing what the combination
+     * names and sitting where it leaves room, fills it — one question put to one thing that can
+     * answer it. Only where nothing was established does whose row it is come into it, and then it
+     * decides what to offer rather than what is true.
+     */
+    private static Standing standingOf(List<Placement> written, CellSelection selection) {
+        boolean maybe = false;
         for (Placement row : written) {
             if (row.watched() instanceof Watched.Ran ran) {
-                // The one thing that says a row filled a combination, asked of a row already in the
-                // file exactly as it is asked of one this search composed.
-                if (selection.certifying(row.where(), ran.seen()).isPresent()) {
-                    return true;
+                Optional<CellSelection.CertifiedWitness> found =
+                        selection.certifying(row.where(), ran.seen());
+                if (found.isPresent()) {
+                    return new Standing.Filled(found.get());
                 }
             } else if (row instanceof Placement.Written && selection.cell().holds(row.where())) {
-                return true;
+                maybe = true;
             }
         }
-        return false;
+        return maybe ? new Standing.MayBeWritten() : new Standing.Owed();
     }
 
     /** Every position fixed: the seed's two as the seed says, and each of the rest at whichever class
@@ -1010,7 +1039,7 @@ public final class Generator {
                 // Offered as it was before anything ran, and said to be. Both of the ways that
                 // happens come here: nothing applied the row, or nothing was recording while it
                 // was applied.
-                case Watched.NotRun _, Watched.Unrecorded _ -> {
+                case Watched.NoAccount _ -> {
                     return new Witness.Unconfirmed(named, at);
                 }
                 case Watched.Ran ran -> {
