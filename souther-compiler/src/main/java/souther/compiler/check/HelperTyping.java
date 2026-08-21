@@ -374,9 +374,29 @@ public final class HelperTyping {
      * mutual call type-checks (spec §fn-declaration).
      */
     static Map<String, Type> recursiveHelperSigs(HelperInliner inliner, Symbols symbols) {
+        return sigsOf(inliner.recursiveHelpers(), inliner::helper, symbols);
+    }
+
+    /**
+     * The same, for the recursive helpers a caller names and reads out of {@code table}.
+     *
+     * <p>Which recursive helpers a signature is wanted for is the caller's question and there is more
+     * than one answer to it: what a module has taken on to emit is one, and what could stand
+     * unexpanded anywhere in a representation is another and is wider. What a signature is is the
+     * same either way, so it is worked out once here rather than beside each question — two readings
+     * of one declaration would agree only until one of them was edited.
+     */
+    static Map<String, Type> recursiveCallSigs(HelperTable table,
+                                               java.util.Collection<String> names, Symbols symbols) {
+        return sigsOf(names, table::reached, symbols);
+    }
+
+    private static Map<String, Type> sigsOf(java.util.Collection<String> names,
+                                            java.util.function.Function<String, Hir.FnDef> declaring,
+                                            Symbols symbols) {
         Map<String, Type> sigs = new HashMap<>();
-        for (String name : inliner.recursiveHelpers()) {
-            Hir.FnDef h = inliner.helper(name);
+        for (String name : names) {
+            Hir.FnDef h = declaring.apply(name);
             if (h.declaredReturn() == null) {
                 throw CompileException.of(Diagnostic
                                 .at(h.pos()).say(new NameMessage.ARecursiveHelperMustDeclareItsReturnType(name)).build());

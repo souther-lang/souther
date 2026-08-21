@@ -127,6 +127,14 @@ public final class TypeChecker {
         return HelperTyping.recursiveHelperSigs(inliner, symbols);
     }
 
+    /** The signatures every recursive helper a representation can reach would be called under —
+     *  what typing a call left standing needs, whether or not this module turned out to reach it. */
+    public static Map<String, Type> recursiveCallSigs(HelperTable table,
+                                                      java.util.Collection<String> names,
+                                                      Symbols symbols) {
+        return HelperTyping.recursiveCallSigs(table, names, symbols);
+    }
+
     /** What each recursive helper constructs, transitively. A recursive helper is not inlined, so its
      * constructions are attributed to the behavior that calls it (spec §blocks). */
     public static Map<String, DataChecker.Constructs> recursiveHelperConstructs(

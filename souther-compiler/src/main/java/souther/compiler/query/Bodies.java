@@ -1423,6 +1423,52 @@ public final class Bodies {
         }
     }
 
+    /**
+     * The signatures every recursive helper this representation can reach would be called under.
+     *
+     * <p>What typing a call left standing needs, and nothing about what this module turned out to
+     * reach. A call is left standing because its callee recurses — which is a fact about the
+     * declarations in reach and is what {@link HelperGraph#recursive()} answers — so the names a body
+     * of this module could hold a standing call to are those, whether or not any body holds one. Read
+     * off the table rather than found by walking the module: a walk over the places a module writes
+     * expressions is a second statement of what a module is made of, and the one that was here
+     * answered that a rule reaching a fold needed nothing.
+     *
+     * <p>Wider than {@link RecursiveHelperSigs}, and not a replacement for it. That one answers which
+     * helpers this module has taken on to process and emit, which is what a reader wanting a body
+     * needs; this one answers which names can be typed, which is what a reader holding a call needs.
+     * Kept apart because a signature for a helper nobody called costs an entry in a map, and a body
+     * for one costs a body that does not exist.
+     *
+     * <p>Keyed by the policy as {@link Expanding} is: the discharge representation leaves the
+     * language's own operations standing rather than expanding them into the fold they become, so its
+     * table holds none of the library and its recursive set is not the emitted representation's.
+     */
+    public record RecursiveCallSigs(String name, InliningPolicy policy)
+            implements Key<Map<String, Type>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, Type>> compute(Db db) {
+            Answer<Expanding.Of> against = db.ask(new Expanding(name, policy));
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            if (!against.present() || !scope.present()) {
+                return Answer.absent();
+            }
+            try {
+                return Answer.of(TypeChecker.recursiveCallSigs(against.value().table(),
+                        against.value().graph().recursive(), scope.value()));
+            } catch (CompileException e) {
+                // A recursive helper that does not say what it returns costs the signatures of all of
+                // them, and there is no module to check without them.
+                return Answer.absent(e);
+            }
+        }
+    }
+
     /** The signatures of a module's recursive helpers — what a self- or mutual call is typed
      * against, and what every body that calls one reads. */
     public record RecursiveHelperSigs(String name) implements Key<Map<String, Type>> {
