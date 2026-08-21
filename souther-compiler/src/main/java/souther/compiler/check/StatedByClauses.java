@@ -146,7 +146,7 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
                     // Each language says whether it gave up on the leaf. The reading of values
                     // carries it; the reading of order has nothing to hand back but its ranges, and
                     // a leaf it read leaves at least one.
-                    Adoption.at(mentions, said.values().keySet(), said.dropped()),
+                    Adoption.at(mentions, said.adoptedAt(), said.dropped()),
                     Adoption.at(mentions, range.ranges().keySet(), range.ranges().isEmpty()));
         }
 
