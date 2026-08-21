@@ -35,15 +35,32 @@ import java.util.Map;
  * do with it — including the ones a reader gives up in favour of what is under them, and the ones
  * dropped past a budget.
  *
+ * <p>Which is a claim about the reading and not about the step it is made of. What stands directly
+ * under a type is one fact and is {@link StructuralDescent}'s; how far to follow it, and what is
+ * read where it lands, are this reading's. A reader wanting the step alone
+ * takes it from there, and takes none of the meaning here with it.
+ *
+ * <p><b>Where a value is built is not one of these positions.</b> The generator refines a declared
+ * position by the construction recipe a class chose for it and walks what is under <em>that</em> —
+ * under a sum the declaration puts nothing, and a recipe naming one of its cases puts the fields of
+ * that case there. Those paths are spelled the same way and are about something else, so they are
+ * never looked up here, and this reading never grows to hold them.
+ *
  * <p>Nothing a body writes reaches this. A {@code guard}'s line, a {@code match} arm and an
  * {@code unreachable} are statements about the same positions and are read against this rather than
  * into it — which is what keeps a body from moving the denominator it is measured by.
  */
 public final class InputDomain {
 
-    /** How deep a product is taken apart. Two levels reach a field of a record a parameter holds,
-     * which is where domain rules are written; below that a report stops being about anything the
-     * author would recognise as one input. */
+    /** How deep <em>this reading</em> takes a product apart. Two levels reach a field of a record a
+     * parameter holds, which is where domain rules are written; below that a report stops being
+     * about anything the author would recognise as one input.
+     *
+     * <p>An answer about reports and not about types. What is under a position this stops at is
+     * still there and is still {@link StructuralDescent}'s to say — a value has to be built at
+     * positions four levels down, and that reader asks for what it needs rather than being told the
+     * model puts nothing there. Written as a property of the walk, it was the second thing every
+     * such reader had to work around. */
     public static final int MAX_DEPTH = 2;
 
     /** Nothing to read: a behavior whose signature is not in hand. */
@@ -135,8 +152,14 @@ public final class InputDomain {
         return positions;
     }
 
-    /** The position at {@code path}, or null where the input has none there — a path below where
-     *  the walk stops, or one that is not a position of this behavior at all. */
+    /**
+     * The position at {@code path}, or null where this reading has none there.
+     *
+     * <p>Null for two unlike paths: one below where this reading stops, and one that is not a
+     * position of this behavior at all. Neither is a path a value is built at — those are the
+     * generator's and are not looked up here, because a construction recipe puts positions under a
+     * sum where the declaration has none and no reading of the declaration would ever hold them.
+     */
     public Position at(TermPath path) {
         return byPath.get(path);
     }
