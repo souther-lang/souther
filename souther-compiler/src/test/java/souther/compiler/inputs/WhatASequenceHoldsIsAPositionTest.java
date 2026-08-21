@@ -102,21 +102,62 @@ class WhatASequenceHoldsIsAPositionTest {
     }
 
     /**
-     * And nothing here says the model divides it no way.
+     * And nothing is left short of rules that were never written.
      *
-     * <p>This reading reached the position and not the rules written about what a list holds: those
-     * are written as a quantifier over a clause, or inside a closure a combinator is handed, and
-     * neither is placed at a position by anything here. So the position is one whose rules were not
-     * reached, which is a different answer from one nothing divides — and it is the answer that has
-     * to hold until something does place them.
+     * <p>The list below carries no clause about what it holds, so there is nothing for a reading to
+     * have missed there and the elements are as read as any other position. Said unconditionally,
+     * every element of every list came back as one nothing had read — which stops an absence being
+     * reported wherever it is true, and reads to an author as a measurement that could not look.
      */
     @Test
-    void theRulesWrittenAboutWhatAListHoldsAreNotReachedHere() {
-        assertTrue(at("people[*]").rulesNotReached(),
-                "the rules about what the list holds are not reached by this reading");
-        assertTrue(at("people[*].age").rulesNotReached(),
-                "nor at a field of what it holds");
+    void nothingIsShortOfARuleThatWasNeverWritten() {
+        assertFalse(at("people[*]").rulesNotReached(),
+                "no clause of this list says anything about what it holds");
+        assertFalse(at("people[*].age").rulesNotReached(), "nor at a field of what it holds");
         assertFalse(at("people").rulesNotReached(),
-                "while the list's own rules are reached, as any other position's are");
+                "and the list's own rules are reached, as any other position's are");
+    }
+
+    /**
+     * Where a clause does state something of every element, that is what is short.
+     *
+     * <p>A relation over every element is held as a quantifier over the clause it was written in,
+     * and nothing here places one at the position it is about — so the position's rules were not
+     * reached, and an absence may not follow from finding no division at it.
+     */
+    @Test
+    void aClauseStatedOfEveryElementIsWhatGoesUnreached() {
+        Compilation compilation = Compilation.ofSource("""
+                module example.roster
+
+                data Age = Int
+                data Person =
+                    { age: Age
+                    }
+                data Roster = List<Person>
+                    invariant grown = List.all(p -> p.age.value >= 18, value)
+                data Size = Int
+
+                behavior roster : (people: Roster) -> Size
+                    constructs Size
+                let roster (people) = Size(List.length(people))
+                """, "Main");
+        compilation.answerEverything();
+        InputDomain read = compilation.db().ask(new Adequacy.Inputs(MODULE)).value().get("roster");
+        assertNotNull(read, "the model under test compiles");
+
+        assertTrue(read.at(pathTo("people", "[*]")).rulesNotReached(),
+                "the clause states something of every element and nothing placed it there");
+        assertFalse(read.positions().get(0).rulesNotReached(),
+                "while the list itself was read: the clause is written about it");
+    }
+
+    /** {@code head} with the steps spelled, for a lookup by the coordinate a report names. */
+    private static TermPath pathTo(String head, String... steps) {
+        TermPath at = TermPath.of(head);
+        for (String step : steps) {
+            at = step.equals("[*]") ? at.element() : at.then(step);
+        }
+        return at;
     }
 }

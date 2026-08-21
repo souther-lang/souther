@@ -103,6 +103,22 @@ public record TermPath(String head, List<Step> steps) {
     }
 
     /**
+     * The sequence this position is inside, or this path where it is inside none.
+     *
+     * <p>Up to the first element step, which is the container a clause of the value can name — what
+     * is written about what a list holds is written about the list. A position two sequences deep
+     * answers with the outer one, since that is where the naming stops either way.
+     */
+    public TermPath containingSequence() {
+        for (int i = 0; i < steps.size(); i++) {
+            if (steps.get(i) instanceof Step.Element) {
+                return new TermPath(head, steps.subList(0, i));
+            }
+        }
+        return this;
+    }
+
+    /**
      * The dotted field name the clauses of a value name this position by, or null where no clause
      * can name it.
      *

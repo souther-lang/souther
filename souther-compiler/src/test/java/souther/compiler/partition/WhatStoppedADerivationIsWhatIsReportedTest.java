@@ -148,8 +148,11 @@ class WhatStoppedADerivationIsWhatIsReportedTest {
         assertEquals(List.of(), whyAt(measured, "items"),
                 () -> "nothing stopped the reading of the list: " + whyAt(measured, "items"));
         assertTrue(absent(measured, "items"), "and the model divides it no way");
-        assertTrue(couldNotDerive(measured, "items[*].charge"),
-                "while what it holds is a position of its own, whose rules nothing here reached");
+        // And what it holds is a position of its own, answering for itself. Nothing is written
+        // about the elements here — the guard is on how many there are — so it divides no way
+        // either, which is a conclusion about the model and not about this reading.
+        assertTrue(absent(measured, "items[*].charge"),
+                "the elements carry no rule, so nothing divides them");
     }
 
     /**

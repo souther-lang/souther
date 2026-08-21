@@ -83,15 +83,18 @@ record PlacedRules(TypeSymbol value, Rules rules) {
      */
     AdmissibleSet admits(TermPath path) {
         String where = path.fieldKey();
-        // A position inside a sequence is named by no clause read here, and that is not the same
-        // answer as a clause that named it and said nothing. What states something of every element
-        // is held as a quantifier over the clause it was written in, and nothing here places one at
-        // the position the quantifier is about — so this reading did not reach the rules of the
-        // position rather than reading them and finding none.
-        return where == null
-                ? AdmissibleSet.partial(souther.compiler.values.ValueSet.ANY,
-                        souther.compiler.values.UnreadReason.NOT_REACHED)
-                : rules.admits(where);
+        if (where != null) {
+            return rules.admits(where);
+        }
+        // Inside a sequence. Where a clause of the value states something about what the container
+        // holds and nothing placed it, this reading did not reach the rules of the position — which
+        // is not the same answer as reading them and finding none. Where the container carries no
+        // such clause there was nothing to reach, and every value is admitted as it is anywhere
+        // else nothing is written.
+        return everyRuleReachedAt(path)
+                ? AdmissibleSet.complete(souther.compiler.values.ValueSet.ANY)
+                : AdmissibleSet.partial(souther.compiler.values.ValueSet.ANY,
+                        souther.compiler.values.UnreadReason.NOT_REACHED);
     }
 
     /**
@@ -139,13 +142,20 @@ record PlacedRules(TypeSymbol value, Rules rules) {
      */
     boolean everyRuleReachedAt(TermPath path) {
         String where = path.fieldKey();
-        // False inside a sequence, and not because a rule was found wanting. What is written about
-        // the elements of a container is read as a quantifier over the clause holding it, and this
-        // gathering has no way to place one at the position it is about — so the rules of the
-        // position were not reached. Answered as reached, a position nothing has read would come
-        // back as one the model divides no way, which is the sentence this whole protocol is
-        // against.
-        return where != null && rules.everyRuleReachedAt(where);
+        if (where != null) {
+            return rules.everyRuleReachedAt(where);
+        }
+        // Inside a sequence, where no clause of the value is written and so none can go unplaced on
+        // its own account. What can is a clause written about the container: a relation stated of
+        // every element is held as a quantifier over the clause holding it, and this gathering
+        // places none of it at the position it is about.
+        //
+        // So the answer is the container's, and whether the container has a rule nothing accounted
+        // for. Said unconditionally, every element of every list came back as a position nothing
+        // had read — including in models whose lists carry no clause at all, where there is nothing
+        // for a reading to have missed.
+        return everyRuleReachedAt(path.containingSequence())
+                && unanswered(path.containingSequence()).isEmpty();
     }
 
     /** The ends the clauses reaching this value place on the coordinates at {@code path}, which is
