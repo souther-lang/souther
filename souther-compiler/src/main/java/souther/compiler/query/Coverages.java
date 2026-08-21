@@ -58,7 +58,9 @@ final class Coverages {
      */
     static Partitions.Partitioning partitioningOf(Hir.SpecBehavior behavior, InputDomain inputs,
                                                   Sig sig, Symbols symbols, ReadingPolicy policy,
-                                                  Core body, CoverageSites.Plan plan,
+                                                  Core body,
+                                                  souther.compiler.check.ElementBindings elements,
+                                                  CoverageSites.Plan plan,
                                                   PathReachability.Answers arrives,
                                                   souther.compiler.check.StatedContract stated) {
         List<String> parameters = behavior.params().stream().map(Hir.Param::name).toList();
@@ -73,7 +75,7 @@ final class Coverages {
         // its lines like any other and there is no body for them to have come out of.
         EnsuresThresholds.Clauses clauses = EnsuresThresholds.of(stated, inputs, symbols);
         GuardThresholds.Guards guards = body == null ? GuardThresholds.Guards.NONE
-                : GuardThresholds.of(behavior.name(), body, plan, inputs, symbols);
+                : GuardThresholds.of(behavior.name(), body, plan, inputs, symbols, elements);
         // Both producers of one kind of line, put together before the position is divided. Two
         // rules at one value are one cut and stay separate obligations, which is what the merge
         // below does — applied one producer at a time, a clause and a guard naming one number would
@@ -109,6 +111,7 @@ final class Coverages {
      */
     static PartitionEvidence of(Hir.SpecBehavior behavior, InputDomain inputs, Sig sig,
                                 Symbols symbols, ReadingPolicy policy, Core body,
+                                souther.compiler.check.ElementBindings elements,
                                 CoverageSites.Plan plan, souther.compiler.query.Adequacy.Observed observed,
                                 List<BorderAssessment> boundaries,
                                 PathReachability.Answers arrives,
@@ -120,7 +123,8 @@ final class Coverages {
         // alone reaches nothing where the derivation reaches a field.
         BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols, policy);
         Partitions.Partitioning partitioning =
-                partitioningOf(behavior, inputs, sig, symbols, policy, body, plan, arrives, stated);
+                partitioningOf(behavior, inputs, sig, symbols, policy, body, elements, plan,
+                        arrives, stated);
 
         List<PartitionEvidence.AxisCoverage> axes = new ArrayList<>();
 

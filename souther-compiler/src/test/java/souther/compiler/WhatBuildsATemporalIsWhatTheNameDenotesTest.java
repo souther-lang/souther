@@ -79,7 +79,7 @@ class WhatBuildsATemporalIsWhatTheNameDenotesTest {
                 compilation.db().allReports().stream().map(Object::toString).toList(),
                 "the model compiles");
         List<Core> out = new ArrayList<>();
-        collect(compilation.db().ask(new Bodies.CheckedBehavior("demo", behavior)).value(), out);
+        collect(compilation.db().ask(new Bodies.CheckedBehavior("demo", behavior)).value().body(), out);
         return out;
     }
 

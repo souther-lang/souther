@@ -42,7 +42,8 @@ public final class InputPath {
      * binding a body gave it.
      */
     public static TermPath of(Core e, InputDomain read, Symbols symbols) {
-        return of(e, read.parameterReads(), Map.of(), symbols, false);
+        return of(e, read.parameterReads(), Map.of(),
+                souther.compiler.check.ElementBindings.NONE, symbols, false);
     }
 
     /**
@@ -66,26 +67,48 @@ public final class InputPath {
      *                   representation it does not read
      */
     public static TermPath of(Core e, Map<BindingId, String> roots, Map<BindingId, Core> bound,
-                              Symbols symbols, boolean callsStand) {
-        return of(e, roots, bound, symbols, callsStand, 0);
+                              souther.compiler.check.ElementBindings elements, Symbols symbols,
+                              boolean callsStand) {
+        return of(e, roots, bound, elements, symbols, callsStand, 0);
     }
 
     private static TermPath of(Core e, Map<BindingId, String> roots, Map<BindingId, Core> bound,
-                               Symbols symbols, boolean callsStand, int through) {
+                               souther.compiler.check.ElementBindings elements, Symbols symbols,
+                               boolean callsStand, int through) {
         return switch (e) {
             case Core.Read r -> {
                 String parameter = roots.get(r.binding());
                 if (parameter != null) {
                     yield TermPath.of(parameter);
                 }
+                // Three ways a name reaches a position and no more. It is a parameter; or it holds
+                // what something else was, which is followed; or an operation of the language handed
+                // it an element of a container, and then it is at the container's position, inside
+                // it. The third is the one no walk over the tree that runs could work out — what
+                // handed it is gone by then — and it is read from what was recorded where the
+                // operation still stood.
                 Core held = bound.get(r.binding());
                 // A binding holds one value, so following it cannot come back to itself; the count
                 // is what says so to a reader rather than a claim in a comment.
-                yield held == null || through >= bound.size() ? null
-                        : of(held, roots, bound, symbols, callsStand, through + 1);
+                int steps = bound.size() + elements.containers().size();
+                if (held != null) {
+                    yield through >= steps ? null
+                            : of(held, roots, bound, elements, symbols, callsStand, through + 1);
+                }
+                Core container = elements.containerOf(r.binding());
+                if (container == null || through >= steps) {
+                    yield null;
+                }
+                TermPath at = of(container, roots, bound, elements, symbols, callsStand,
+                        through + 1);
+                // The container names no position of this behavior's input — it is what another
+                // operation answered, or something this does not read — so neither does an element
+                // of it. Where a reading of provenance goes on from there is not this walk's.
+                yield at == null ? null : at.element();
             }
             case Core.FieldAccess fa -> {
-                TermPath base = of(fa.target(), roots, bound, symbols, callsStand, through);
+                TermPath base =
+                        of(fa.target(), roots, bound, elements, symbols, callsStand, through);
                 if (base == null) {
                     yield null;
                 }
