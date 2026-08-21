@@ -33,7 +33,7 @@ class AnOperatorThatStopsEarlyIsNotStrictInBothItsSidesTest {
             data Amount = Int
             data Answer = Int
 
-            behavior pick : (a: Amount) -> Answer
+            behavior pick : (a: Amount, flag: Bool) -> Answer
                 constructs Answer
 
             """;
@@ -45,7 +45,8 @@ class AnOperatorThatStopsEarlyIsNotStrictInBothItsSidesTest {
      * it: the fork arrives wherever its condition does, and both arms answer.
      */
     private static boolean arrives(String condition) {
-        String source = TYPES + "let pick (a) = Answer(if " + condition + " then 1 else 2)\n";
+        String source = TYPES
+                + "let pick (a, flag) = Answer(if " + condition + " then 1 else 2)\n";
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         Bodies.Elaborated checked = compilation.db()
@@ -99,6 +100,20 @@ class AnOperatorThatStopsEarlyIsNotStrictInBothItsSidesTest {
     void aPositionComparedAgainstItselfStandsBehindNeitherWay() {
         assertFalse(arrives("a.value == a.value && unreachable \"always reached\""));
         assertFalse(arrives("a.value /= a.value || unreachable \"always reached\""));
+    }
+
+    /**
+     * A position holding a truth comes out both ways, and is not a comparison.
+     *
+     * <p>What stands behind a way is a value of what the expression is over, and that is not a
+     * question about which node kind is written. A rule asked only of comparisons would answer that
+     * {@code flag && abort} arrives nowhere, when every run with a false {@code flag} arrives — the
+     * same failure the operator itself had, one shape along.
+     */
+    @Test
+    void aPositionHoldingATruthComesOutBothWays() {
+        assertTrue(arrives("flag && unreachable \"no true flag reaches here\""));
+        assertTrue(arrives("flag || unreachable \"no false flag reaches here\""));
     }
 
     /**

@@ -195,6 +195,38 @@ class CoverageSitesTest {
                 plan.probesOf(inner), "the emitter still finds it, and finds nothing to light");
     }
 
+    /**
+     * An arm the condition never sends a run down is not an arm to cover.
+     *
+     * <p>Nothing whole is greater than the largest whole number, so the condition comes out false on
+     * every run and the first arm is one nobody enters. Numbered, it is a gap that stays open for
+     * ever — a row is owed for a combination the body has no run at — which is the same fault as
+     * counting an arm behind an abort and is caught by the same reading.
+     *
+     * <p>Read from the reading and not worked out here. Which arms a condition can reach is what the
+     * reading of what the body does already answers, and a second account of it in the numbering
+     * would be two answers to keep in step.
+     */
+    @Test
+    void anArmTheConditionNeverComesOutTheWayOfIsNotAnArmToCover() {
+        CoverageSites.Plan plan = planOf("""
+                module example.pinned
+
+                data Score = Int
+
+                behavior scoreFor : (a: Int) -> Score
+                    constructs Score
+
+                let scoreFor (a) =
+                    if a > 9223372036854775807 then Score(1) else Score(2)
+                """);
+
+        // The comparison keeps its site either way, which is deliberate and is said where the
+        // numbering is: a comparison is numbered wider than what any boundary is later drawn on.
+        assertEquals(List.of("else", "GT"), labels(plan),
+                "the condition holds on no run, so only the arm it fails into is one to cover");
+    }
+
     private static Core.Match innerMatch(Core arm) {
         Core at = arm;
         while (!(at instanceof Core.Match)) {

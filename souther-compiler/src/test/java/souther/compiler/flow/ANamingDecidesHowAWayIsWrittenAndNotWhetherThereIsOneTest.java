@@ -10,9 +10,7 @@ import souther.compiler.query.Compilation;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -22,20 +20,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Swapping the naming moves what a way is called and nothing else.
  *
- * <p>The claim the whole separation rests on. Before it, a comparison the numbering could not place
- * was answered as a comparison with no value, so everything standing under it was read as reaching
- * nothing — a limit of what could be written down turning into a claim about what the body does.
+ * <p>The claim the whole separation rests on, and it is a structure rather than a hope: what the body
+ * does is read with no naming at all, and a naming reaches only the list of ways. Checked all the
+ * same, because the structure is one a later change could give up without anything else noticing.
  *
- * <p>So two readings of one body are taken here and what they agree about is checked rather than
- * described: every node arrives in one exactly where it arrives in the other, and a truth one of them
- * worked out is a truth the reading with no numbering behind it worked out too. A naming may leave a
- * way {@link Completeness#PARTIAL} and it may see that two conditions on a way settle one decision
- * opposite ways and drop it — the second is why a truth may be missing where the reading answers that
- * it has nothing to say, and never why one may be there that the body has not got.
+ * <p>Three namings beside the plain one, and each of them is a way a naming can fall short. One names
+ * everything and so refuses ways nothing else refuses. One names nothing and so leaves every way
+ * partial. One counts two forks on the same name as one decision, which is what the coverage
+ * numbering does and is where this went wrong before: a body whose two arms contradict left that
+ * naming with no way at all, and the reading answered that no value arrives — while the reading with
+ * no numbering behind it, which does not follow that correlation, answered that one does.
  *
- * <p>Two namings beside the plain one, so both directions are covered: one that names everything and
- * so refuses more ways than the coverage numbering ever will, and one that names nothing and so
- * leaves every way partial.
+ * <p>And the list is held to the other half rather than allowed to speak for it. An enumeration of
+ * the ways to a truth that holds none of them says the value is never settled that way, so it is only
+ * ever answered where the reading of what the body does agrees.
  */
 class ANamingDecidesHowAWayIsWrittenAndNotWhetherThereIsOneTest {
 
@@ -122,10 +120,23 @@ class ANamingDecidesHowAWayIsWrittenAndNotWhetherThereIsOneTest {
 
             let shippingFee (total, member, delivery) =
                 Fee(baseFee(total, member) + expressFee(delivery))
-            """);
+            """,
+            """
+            module example.opposed
 
-    /** What a reading says about one node, in the words every reading of it has. */
-    private record Says(boolean arrives, Set<Truth> comesTo) { }
+            data On
+            data Off
+            data Flag = On | Off
+
+            behavior pick : (a: Flag) -> Int
+
+            let pick (a) =
+                if ((match a with | On -> true | Off -> false)
+                        && (match a with | On -> false | Off -> true))
+                        || unreachable "the operator above never comes to false"
+                    then 1
+                    else 2
+            """);
 
     @Test
     void everyBodyIsReadTheSameWhateverItsWaysAreCalled() {
@@ -151,38 +162,36 @@ class ANamingDecidesHowAWayIsWrittenAndNotWhetherThereIsOneTest {
         private int valued;
     }
 
-    /** Every node of {@code body}, read three ways and compared. */
+    /** Every node of {@code body}, read four ways and compared. */
     private void compare(Core body, Read read) {
         ValueArrivals<AnonymousPath> plain = ValueArrivals.ofBody(body, Anonymous.NAMING);
-        List<ValueArrivals<Marks>> others =
-                List.of(ValueArrivals.ofBody(body, new Marking(true)),
-                        ValueArrivals.ofBody(body, new Marking(false)));
+        List<ValueArrivals<Marks>> others = List.of(
+                ValueArrivals.ofBody(body, new Marking(Marking.Words.EVERY, false)),
+                ValueArrivals.ofBody(body, new Marking(Marking.Words.NONE, false)),
+                ValueArrivals.ofBody(body, new Marking(Marking.Words.EVERY, true)));
         List<Core> all = new ArrayList<>();
         each(body, all);
         read.nodes += all.size();
         for (Core node : all) {
-            Says loose = says(plain.at(node));
-            if (loose.comesTo().contains(Truth.TRUE) || loose.comesTo().contains(Truth.FALSE)) {
+            Comes loose = plain.comesAt(node);
+            if (!loose.known().isEmpty()) {
                 read.valued++;
             }
             for (ValueArrivals<Marks> other : others) {
-                Says tight = says(other.at(node));
-                assertEquals(loose.arrives(), tight.arrives(),
-                        "a naming decided whether a " + node.getClass().getSimpleName()
-                                + " arrives at a value");
-                for (Truth each : tight.comesTo()) {
-                    assertTrue(each == Truth.UNREAD || loose.comesTo().contains(each),
-                            "a naming worked out a value nothing else could: " + each + " at a "
-                                    + node.getClass().getSimpleName());
+                assertEquals(loose.truths(), other.comesAt(node).truths(),
+                        "a naming moved what the body does at a "
+                                + node.getClass().getSimpleName());
+                for (boolean want : List.of(true, false)) {
+                    if (other.waysTo(node, want) instanceof Ways.Known<Marks> known
+                            && known.paths().isEmpty()) {
+                        assertFalse(loose.mayCome(want),
+                                "an enumeration holding no way said a value the body comes to is "
+                                        + "never settled that way, at a "
+                                        + node.getClass().getSimpleName());
+                    }
                 }
             }
         }
-    }
-
-    private static <P> Says says(Set<Arrival<P>> arrivals) {
-        Set<Truth> comesTo = new LinkedHashSet<>();
-        arrivals.forEach(each -> comesTo.add(each.value()));
-        return new Says(!arrivals.isEmpty(), comesTo);
     }
 
     private static void each(Core node, List<Core> into) {
@@ -221,20 +230,28 @@ class ANamingDecidesHowAWayIsWrittenAndNotWhetherThereIsOneTest {
     private record Marks(List<String> of) { }
 
     /**
-     * A naming with words for everything, or for nothing.
+     * A naming with words for everything or for nothing, telling decisions apart by the node or by
+     * the name the node is about.
      *
-     * <p>The first is stricter than the coverage numbering, which has words for a fork the plan named
-     * and for a comparison it could place and for nothing else: every way that one refuses this
-     * refuses too, and it refuses ways besides. The second is the other end — every way partial,
-     * nothing ever refused — and between them they move every part of a naming that can move.
+     * <p>Four namings out of two choices, and each choice is a way a naming falls short. Words for
+     * nothing leaves every way partial and refuses none. Words for everything refuses ways the
+     * coverage numbering never sees. Telling two forks on one name apart is what a naming keyed on
+     * the node does; running them together is what a naming keyed on the position does, and that is
+     * the coverage numbering — two {@code match a} in one body are two places and one decision, so a
+     * way through opposite arms of them is no way and comes out.
      */
     private static final class Marking implements Naming<Marks> {
 
-        private final boolean names;
+        /** Whether this naming has words for a condition at all. */
+        private enum Words { EVERY, NONE }
+
+        private final Words words;
+        private final boolean byName;
         private final IdentityHashMap<Core, Integer> numbered = new IdentityHashMap<>();
 
-        private Marking(boolean names) {
-            this.names = names;
+        private Marking(Words words, boolean byName) {
+            this.words = words;
+            this.byName = byName;
         }
 
         @Override
@@ -263,25 +280,28 @@ class ANamingDecidesHowAWayIsWrittenAndNotWhetherThereIsOneTest {
         }
 
         @Override
-        public Marks side(Core.Binary comparison, boolean held) {
-            return mark(comparison, "cmp", held ? 1 : 0);
+        public Marks side(Core value, boolean held) {
+            return mark(value, value instanceof Core.Binary comparison ? comparison.left() : value,
+                    "cmp", held ? 1 : 0);
         }
 
         @Override
         public Marks matchCase(Core.Match match, int part) {
-            return mark(match, "case", part);
+            return mark(match, match.scrutinee(), "case", part);
         }
 
         @Override
         public Marks forkArm(Core fork, int part) {
-            return mark(fork, "arm", part);
+            return mark(fork, fork instanceof Core.If iff ? iff.cond() : fork, "arm", part);
         }
 
-        private Marks mark(Core at, String what, int part) {
-            if (!names) {
+        private Marks mark(Core at, Core about, String what, int part) {
+            if (words == Words.NONE) {
                 return null;
             }
-            int which = numbered.computeIfAbsent(at, ignored -> numbered.size());
+            String which = byName && about instanceof Core.Read read
+                    ? read.binding().toString()
+                    : String.valueOf(numbered.computeIfAbsent(at, ignored -> numbered.size()));
             return new Marks(List.of(what + "@" + which + "/" + part));
         }
 
