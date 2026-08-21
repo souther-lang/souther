@@ -78,6 +78,54 @@ class ARowOfferedAtAPointIsOneTheRulesHaveNotRefusedTest {
         assertFalse(report.contains("every value tried at p.x + p.y = 10000 was refused"), report);
     }
 
+    /**
+     * Two positions held a distance apart, whose ranges overlap where the pair cannot stand.
+     *
+     * <p>A line between two positions is met by fixing both at once, and each is fixed inside its
+     * own ends — which is every range the pair could have and not the rule that relates them. Their
+     * sum being seven leaves each of them between two and five, so a place both admit is easy to
+     * find and the pair standing at it adds to four.
+     */
+    private static final String SUMMING_TO_SEVEN = """
+            module example.seven
+
+            data N = Int
+                invariant atLeastNone = value >= 0
+                invariant atMostFive  = value <= 5
+
+            data P = { x: N, y: N }
+                invariant seven = x.value + y.value == 7
+
+            data No = { why: Int }
+            data Yes = { v: Int }
+            data Result = No | Yes
+
+            behavior f : (p: P) -> Result
+                constructs Yes, No
+            let f (p) = {
+                guard p.x.value > p.y.value else No { why = 0 }
+                Yes { v = 1 }
+            }
+
+            example f
+                | "over" : (P { x = N(5), y = N(2) }) -> Yes { v = 1 }
+            """;
+
+    /**
+     * And a pair the rules refuse is not offered as a row either.
+     *
+     * <p>The line here is where the two are equal, and no pair adding to seven stands on it. What
+     * may not happen is a pair inside both ranges being offered all the same and coming back refused
+     * where it is built, which reads as the point having been tried.
+     */
+    @Test
+    void aPairTheRulesRefuseIsNotOfferedAsARowEither() {
+        String report = report(SUMMING_TO_SEVEN);
+
+        assertFalse(report.contains("every value tried at f/p.x = p.y was refused"), report);
+        assertFalse(report.contains("every value tried at p.x = p.y was refused"), report);
+    }
+
     private static String report(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());

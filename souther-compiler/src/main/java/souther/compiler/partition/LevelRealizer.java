@@ -100,7 +100,14 @@ public final class LevelRealizer {
         Map<NumericTerm, Place> fixing = new LinkedHashMap<>();
         fixing.put(two.on(), at);
         fixing.put(two.against(), common);
-        return new Realization.Found(fixing);
+        // And the pair against the rules, which is the same last step a form's assignment gets and
+        // for the same reason: a place inside each position's own ends can still be one no value of
+        // the record has beside the other, and two ranges cannot hold what relates them. Offered
+        // without it, a pair the rules already refuse is a row asked for and refused where it is
+        // built.
+        return theRulesHaveNotRefused(fixing)
+                ? new Realization.Found(fixing)
+                : new Realization.Unknown(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE);
     }
 
     /**
@@ -381,13 +388,11 @@ public final class LevelRealizer {
          * to nothing it had not already checked.
          */
         private boolean theRulesHaveNotRefused() {
-            java.util.Map<NumericTerm, Count> all = new LinkedHashMap<>();
+            java.util.Map<NumericTerm, Place> all = new LinkedHashMap<>();
             for (int j = 0; j < terms.size(); j++) {
-                if (at[j] instanceof Count count) {
-                    all.put(terms.get(j).getKey(), count);
-                }
+                all.put(terms.get(j).getKey(), at[j]);
             }
-            return rules.given(all).emptiness().isEmpty();
+            return LevelRealizer.this.theRulesHaveNotRefused(all);
         }
 
         /**
@@ -649,6 +654,33 @@ public final class LevelRealizer {
 
     private NumericDomain.Bounds bounds(NumericTerm term) {
         return bounds(rules, term);
+    }
+
+    /**
+     * Whether the rules, with every position of an item fixed at what was chosen, were not shown to
+     * leave nothing.
+     *
+     * <p>Not that a value exists. Nothing here builds one, and an emptiness nobody proved is not a
+     * value proven to exist — what settles that is the row itself, where it is built. What this
+     * refuses is narrower and is the whole of what a search over ranges gets wrong: an assignment
+     * the rules are already known to refuse, offered as a row and then reported as though the point
+     * had nothing at it.
+     *
+     * <p>Of the whole assignment, because that is what an assignment is. A relation between two
+     * positions is in neither of their ranges, so a walk that held each of them to its own ends has
+     * checked nothing about the pair.
+     *
+     * <p>Places that are not numbers settle nothing here. A rule relating two strings is one the
+     * arithmetic has no word for, and what it leaves them is not something this can be asked.
+     */
+    private boolean theRulesHaveNotRefused(Map<NumericTerm, Place> fixing) {
+        Map<NumericTerm, Count> counted = new LinkedHashMap<>();
+        fixing.forEach((term, at) -> {
+            if (at instanceof Count count) {
+                counted.put(term, count);
+            }
+        });
+        return counted.isEmpty() || rules.given(counted).emptiness().isEmpty();
     }
 
     /** The same, of the rules as some of the positions have been fixed. */
