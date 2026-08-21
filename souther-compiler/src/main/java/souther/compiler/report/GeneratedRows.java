@@ -369,8 +369,9 @@ public final class GeneratedRows {
                 case GenerationReason.CombinationsWithheld withheld -> String.format(
                         "// %d %s for `%s` offered no row: one already written sits where a row"
                                 + " filling it would, and nothing ran to say whether it does%n",
-                        withheld.combinations(), withheld.behavior(),
-                        withheld.combinations() == 1 ? "combination" : "combinations");
+                        withheld.combinations(),
+                        withheld.combinations() == 1 ? "combination" : "combinations",
+                        withheld.behavior());
                 case GenerationReason.RowsNotConfirmed unconfirmed -> String.format(
                         "// rows offered for `%s` were not run, so which combination each reaches"
                                 + " is read off the body rather than observed%n",
