@@ -219,12 +219,18 @@ final class ReadQuantities implements Quantities {
         if (had != null) {
             return had;
         }
+        // What the term guarantees of itself, before anything is looked up. A count is a whole
+        // number whatever it is a count of ({@link NumericTerm#carrierAt}), and asking the position
+        // for it would make a fact the term owns depend on whether the walk that reads this input
+        // reached the place the term sits at — a path two levels down has no position, and the floor
+        // under a count there would be dropped for having nowhere to ask.
+        if (term instanceof NumericTerm.SizeOf) {
+            return souther.compiler.numeric.Granularity.DISCRETE;
+        }
         Position at = byPath.get(term.path());
         if (at == null || symbols == null) {
             return null;
         }
-        // Asked of the term and not of the position: a size is a whole number whatever it is a size
-        // of, so a rule about the length of a string is counted where the string is not.
         souther.compiler.check.Carrier carrier = term.carrierAt(at.type(), symbols);
         return carrier == null ? null : carrier.spacing();
     }
@@ -252,11 +258,25 @@ final class ReadQuantities implements Quantities {
         return only == null ? projected : meeting(projected, whereOneTermRuns(only));
     }
 
-    /** A form of this input's terms, as one over the numbers the rules are about. */
+    /**
+     * A form of this input's terms, as one over the numbers the rules are about.
+     *
+     * <p><b>Added and not overwritten, because this is a fold and not a renaming.</b> A term carries
+     * which measure was written and a number does not, so two terms can be one number — and where a
+     * form weighs both of them, what that number is weighed by is the two coefficients together.
+     * Written as a renaming, {@code List.length(p.xs) + Set.size(p.xs)} would come back weighing
+     * that count once, which is a form the caller did not write and a range that is not the one they
+     * asked about.
+     *
+     * <p>The other way round from {@link souther.compiler.numeric.NumericDomain#over}, and the two
+     * are not the same act. Carrying a rule across may not put two positions under one name — that
+     * would say they are one number, which nobody said. Reading a caller's form may, because the
+     * caller wrote two spellings of a number this input has one of.
+     */
     private static NumericDomain.LinearForm<InputAtom> over(
             NumericDomain.LinearForm<NumericTerm> form) {
         Map<InputAtom, BigDecimal> coefs = new LinkedHashMap<>();
-        form.coefs().forEach((term, coef) -> coefs.put(called(term), coef));
+        form.coefs().forEach((term, coef) -> coefs.merge(called(term), coef, BigDecimal::add));
         return new NumericDomain.LinearForm<>(form.constant(), coefs);
     }
 

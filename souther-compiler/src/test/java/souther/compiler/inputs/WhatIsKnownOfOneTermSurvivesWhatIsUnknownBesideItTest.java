@@ -21,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * What is known of one term is not given up for what is unknown beside it.
@@ -110,6 +111,103 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
 
         assertEquals(Endpoint.inclusive(count(0)), runs.min(),
                 "each of them is at least none, so their sum is");
+    }
+
+    /** A collection under more steps than the walk that reads an input goes down. */
+    private static final String DEEPER_THAN_THE_WALK = """
+            module example.deep
+
+            data N = Int
+                invariant atLeastNone = value >= 0
+                invariant atMostFive  = value <= 5
+
+            data Inner = { xs: List<Int> }
+            data Mid = { inner: Inner }
+
+            data P = { m: Mid, n: N, ys: List<Int> }
+
+            data Taken
+
+            behavior take : (p: P) -> Taken
+            """;
+
+    /**
+     * A count under more steps than the walk goes down is still never negative.
+     *
+     * <p>Owned is not the same as known about. The walk that reads an input's positions stops where
+     * a report stops being about anything an author would call one input, and nothing stops a rule
+     * from naming what is under that — so a term down there is answered for with what it guarantees
+     * of itself and nothing else.
+     *
+     * <p>What it guarantees is the term's to say and not the position's. A count is a whole number
+     * whatever it is a count of, and a reading that asked the position how its values are spaced
+     * would have nowhere to ask here and would drop the floor for it — leaving a sum of two things
+     * each at least none with no floor at all.
+     */
+    @Test
+    void aCountUnderMoreStepsThanTheWalkGoesDownKeepsItsFloor() {
+        Read read = read(DEEPER_THAN_THE_WALK);
+        TermPath deep = TermPath.of("p").then("m").then("inner").then("xs");
+        assertNull(read.inputs().at(deep), "the walk does not reach this far");
+        NumericTerm buried = new NumericTerm.SizeOf(
+                souther.compiler.check.NumericMeasures.takenOf(
+                        read.inputs().at(TermPath.of("p").then("ys")).type(), read.symbols()),
+                deep);
+        NumericTerm n = read.inputs().at(TermPath.of("p").then("n")).term();
+        Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
+        coefs.put(n, BigDecimal.ONE);
+        coefs.put(buried, BigDecimal.ONE);
+
+        NumericDomain.Bounds runs = read.quantities()
+                .runsBetween(new NumericDomain.LinearForm<>(BigDecimal.ZERO, coefs));
+
+        assertEquals(Endpoint.inclusive(count(0)), runs.min(),
+                "each of them is at least none, so their sum is");
+    }
+
+    /** A collection a clause counts, so what its count runs between has both ends. */
+    private static final String COUNTED = """
+            module example.counted
+
+            data P = { xs: List<Int> }
+                invariant few = List.length(xs) <= 5
+
+            data Taken
+
+            behavior take : (p: P) -> Taken
+            """;
+
+    /**
+     * Two spellings of one count weigh it twice.
+     *
+     * <p>A term carries which measure was written and a number does not, so a form can name one
+     * number twice. What it is weighed by is then the two coefficients together — read as a
+     * renaming, the form would come back weighing that count once, which is a range for a form the
+     * caller did not write.
+     *
+     * <p>No model reaches this today: which measure is taken of a position is settled by its type,
+     * so a body has one to write. It is held here because the reading turns a finer key into a
+     * coarser one, and a translation that loses a key has to say what it does with the two values
+     * rather than keeping whichever arrived last.
+     */
+    @Test
+    void twoSpellingsOfOneCountWeighItTwice() {
+        Read read = read(COUNTED);
+        NumericTerm one = size(read, "xs");
+        NumericTerm other = new NumericTerm.SizeOf(
+                souther.compiler.types.ValueName.Stdlib.operation("Set", "size"),
+                TermPath.of("p").then("xs"));
+        Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
+        coefs.put(one, BigDecimal.ONE);
+        coefs.put(other, BigDecimal.ONE);
+
+        NumericDomain.Bounds twice = read.quantities()
+                .runsBetween(new NumericDomain.LinearForm<>(BigDecimal.ZERO, coefs));
+
+        assertEquals(Endpoint.inclusive(count(5)), read.quantities().runsBetween(one).max(),
+                "the clause counts it at five");
+        assertEquals(Endpoint.inclusive(count(10)), twice.max(),
+                "and a form naming it twice runs to twice that");
     }
 
     /** Two positions the record relates, beside a collection no clause counts. */
