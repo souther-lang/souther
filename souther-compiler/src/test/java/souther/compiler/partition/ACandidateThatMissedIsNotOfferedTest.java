@@ -226,8 +226,10 @@ class ACandidateThatMissedIsNotOfferedTest {
             assertNotNull(body, "the behavior under test has a body");
             return new Model(new Generator.Subject(
                     new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
-                            sig.inputTypes(), symbols),
-                    Partitions.of(spec.name(), inputs, symbols).axes()),
+                            sig.inputTypes(), symbols,
+                            souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                    Partitions.of(spec.name(), inputs, symbols,
+                            souther.compiler.query.ReadAs.THE_COMPILATION_DOES).axes()),
                     Interactions.of(body, CoverageSites.of(checked.behaviorBodies()), inputs,
                             symbols));
         }

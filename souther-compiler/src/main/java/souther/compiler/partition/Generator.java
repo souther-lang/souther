@@ -442,11 +442,11 @@ public final class Generator {
                     // combination the body has a path to and there is nothing to ask for.
                     continue;
                 }
-                Standing standing = standingOf(written, selection);
-                if (standing instanceof Standing.Filled) {
+                CombinationStanding standing = standingOf(written, selection);
+                if (standing instanceof CombinationStanding.Filled) {
                     continue;   // a row was seen filling it, so nothing is owed
                 }
-                if (standing instanceof Standing.MayBeWritten) {
+                if (standing instanceof CombinationStanding.MayBeWritten) {
                     // Not filled and not offered: a row in the file sits where one filling this
                     // would, and nothing could say whether it does. Counted so that it is said —
                     // an author told nothing here would read it as a combination covered.
@@ -810,6 +810,10 @@ public final class Generator {
     /**
      * Where one combination stands before anything is composed for it.
      *
+     * <p>Named at length because {@link Standing} beside it is where a value stands against a line,
+     * and a nested type sharing that word would answer to it inside this file and to the other one
+     * everywhere else.
+     *
      * <p>Three answers because two questions are being asked of the rows, and folding them into one
      * is what this issue is about. Whether a combination is filled is a question about evidence, and
      * only a run answers it. Whether a row for it is worth putting in front of an author is a
@@ -821,17 +825,17 @@ public final class Generator {
      * showed to be filled, so it is not counted as such and it is not passed over in silence: it is
      * said, and what it says is that a row in the file may fill it and nothing here could tell.
      */
-    private sealed interface Standing {
+    private sealed interface CombinationStanding {
 
         /** A row was seen filling it. The witness is what says so and the only thing that can. */
-        record Filled(CellSelection.CertifiedWitness by) implements Standing {}
+        record Filled(CellSelection.CertifiedWitness by) implements CombinationStanding {}
 
         /** A row already in the author's file sits where one filling this would, and nothing could
          *  say whether it does. Not evidence, and not silence either. */
-        record MayBeWritten() implements Standing {}
+        record MayBeWritten() implements CombinationStanding {}
 
         /** Nothing here says anything about it. */
-        record Owed() implements Standing {}
+        record Owed() implements CombinationStanding {}
     }
 
     /**
@@ -842,20 +846,20 @@ public final class Generator {
      * answer it. Only where nothing was established does whose row it is come into it, and then it
      * decides what to offer rather than what is true.
      */
-    private static Standing standingOf(List<Placement> written, CellSelection selection) {
+    private static CombinationStanding standingOf(List<Placement> written, CellSelection selection) {
         boolean maybe = false;
         for (Placement row : written) {
             if (row.watched() instanceof Watched.Ran ran) {
                 Optional<CellSelection.CertifiedWitness> found =
                         selection.certifying(row.where(), ran.seen());
                 if (found.isPresent()) {
-                    return new Standing.Filled(found.get());
+                    return new CombinationStanding.Filled(found.get());
                 }
             } else if (row instanceof Placement.Written && selection.cell().holds(row.where())) {
                 maybe = true;
             }
         }
-        return maybe ? new Standing.MayBeWritten() : new Standing.Owed();
+        return maybe ? new CombinationStanding.MayBeWritten() : new CombinationStanding.Owed();
     }
 
     /** Every position fixed: the seed's two as the seed says, and each of the rest at whichever class
