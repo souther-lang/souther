@@ -156,6 +156,146 @@ class ARowForABorderIsSearchedForInTheRegionThatReachesItTest {
                 | "ok" : (Small(1), Large(1)) -> Order { total = 1 }
             """;
 
+    /** A behavior over the same two bounded positions, with {@code body} for a body. */
+    private static String checkout(String body) {
+        return """
+                module example.checkout
+
+                data Small = Int
+                    invariant value >= 0
+                    invariant value <= 20
+                data Large = Int
+                    invariant value >= 0
+                    invariant value <= 10
+
+                data Rejected = { reason: Int }
+                data Order = { total: Int }
+                data Result = Rejected | Order
+
+                behavior checkout : (x: Small, y: Large) -> Result
+                    constructs Rejected, Order
+                let checkout (x, y) = {
+                %s
+                    Order { total = x.value }
+                }
+
+                example checkout
+                    | "ok" : (Small(1), Large(1)) -> Order { total = 1 }
+                """.formatted(body);
+    }
+
+    /** The form's own line, which every model below draws. */
+    private static final String THE_FORM =
+            "Int.add(x.value, Int.multiply(2, y.value)) <= 16";
+
+    /**
+     * The bounds written as one condition rather than as four guards.
+     *
+     * <p>The same model. Running conditions together with {@code &&} and writing them one after
+     * another state the same thing, and a coverage answer that moved between them would be a fact
+     * about how the author spelled the condition.
+     */
+    @Test
+    void spellingTheConditionsAsOneChainDoesNotMoveTheAnswer() {
+        // The bounds on the guards and nowhere else, the same as `ON_GUARDS`. Declared on the types
+        // as well, the region would have nothing to add and this would pass without being read.
+        String chained = """
+                module example.checkout
+
+                data Small = Int
+                data Large = Int
+
+                data Rejected = { reason: Int }
+                data Order = { total: Int }
+                data Result = Rejected | Order
+
+                behavior checkout : (x: Small, y: Large) -> Result
+                    constructs Rejected, Order
+                let checkout (x, y) = {
+                    guard x.value >= 0
+                        && x.value <= 20
+                        && y.value >= 0
+                        && y.value <= 10
+                        && Int.add(x.value, Int.multiply(2, y.value)) <= 16
+                        else Rejected { reason = 5 }
+                    Order { total = x.value }
+                }
+
+                example checkout
+                    | "ok" : (Small(1), Large(1)) -> Order { total = 1 }
+                """;
+
+        for (String level : List.of("x + 2 * y = 16", "x + 2 * y = 17")) {
+            assertEquals(owed(pointAt(ON_GUARDS, level)).attempt().getClass(),
+                    owed(pointAt(chained, level)).attempt().getClass(),
+                    "one chain and four guards say the same thing, at " + level);
+            assertInstanceOf(ItemAssessment.Attempt.Built.class,
+                    owed(pointAt(chained, level)).attempt(),
+                    "and both of them find a row at " + level);
+        }
+    }
+
+    /**
+     * The second operand of a disjunction runs where the first failed.
+     *
+     * <p>A condition stops as soon as it is settled, so the form's line is only ever reached by rows
+     * with {@code y} at six or under — the same region the guard above it gave, arriving by the
+     * other operator.
+     */
+    @Test
+    void theSecondOperandOfADisjunctionStandsWhereTheFirstFailed() {
+        String either = checkout(
+                "    guard y.value >= 7 || %s else Rejected { reason = 5 }".formatted(THE_FORM));
+
+        assertTrue(largeIn(built(either, "x + 2 * y = 16").row()) <= 6,
+                "nothing with y at seven or above reaches the second operand");
+    }
+
+    /**
+     * And a comparison nested under both operators takes what each of them left.
+     *
+     * <p>{@code A && (B || C)} puts {@code C} where {@code A} held and {@code B} did not, which no
+     * reading of the fork's arms says: the fork's {@code else} arm holds rows that failed
+     * {@code A}, rows that failed both {@code B} and {@code C}, and rows that never reached
+     * {@code C} at all.
+     */
+    @Test
+    void aComparisonUnderBothOperatorsTakesWhatEachOfThemLeft() {
+        String nested = checkout("""
+                    guard x.value <= 20 && (y.value >= 7 || %s)
+                        else Rejected { reason = 5 }""".formatted(THE_FORM));
+
+        assertTrue(largeIn(built(nested, "x + 2 * y = 16").row()) <= 6,
+                "nothing with y at seven or above reaches the third comparison");
+    }
+
+    /**
+     * A condition the arithmetic cannot read narrows nothing.
+     *
+     * <p>The direction the whole region depends on. A product of two positions is outside what the
+     * form reading takes in, so nothing is established by passing it — and a region narrowed on it
+     * would be narrower than the rows that arrive, which is what turns a search that finds nothing
+     * into a claim that nothing is there.
+     */
+    @Test
+    void aConditionNothingCouldReadNarrowsNothing() {
+        String alone = checkout("    guard %s else Rejected { reason = 5 }".formatted(THE_FORM));
+        String under = checkout("""
+                    guard Int.multiply(x.value, y.value) <= 50 else Rejected { reason = 1 }
+                    guard %s else Rejected { reason = 5 }""".formatted(THE_FORM));
+
+        for (String level : List.of("x + 2 * y = 16", "x + 2 * y = 17")) {
+            assertEquals(written(built(alone, level).row()), written(built(under, level).row()),
+                    "an unread condition above changes nothing at " + level);
+        }
+    }
+
+    /** The row one point was answered with, where one was built at all. */
+    private static ItemAssessment.Attempt.Built built(String source, String level) {
+        return assertInstanceOf(ItemAssessment.Attempt.Built.class,
+                owed(pointAt(source, level)).attempt(), "a row was composed at " + level);
+    }
+
     /**
      * A level the region has an answer at, composed.
      *
@@ -224,8 +364,13 @@ class ARowForABorderIsSearchedForInTheRegionThatReachesItTest {
 
     /** What the row puts in the second position, as a number. */
     private static long largeIn(souther.compiler.partition.Generator.GeneratedRow row) {
-        String text = row.inputs().get(1).text();
-        return Long.parseLong(text.substring(text.indexOf('(') + 1, text.lastIndexOf(')')));
+        return numberIn(row.inputs().get(1).text());
+    }
+
+    /** The number a written newtype holds. */
+    private static long numberIn(String written) {
+        return Long.parseLong(
+                written.substring(written.indexOf('(') + 1, written.lastIndexOf(')')));
     }
 
     private static String written(souther.compiler.partition.Generator.GeneratedRow row) {

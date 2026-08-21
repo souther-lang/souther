@@ -449,10 +449,21 @@ final class Coverages {
      *                  had happened.
      * @param probe     null where the module's classes or the runtime are not there to build against
      */
+    /**
+     * @param reaching what a row had already satisfied when each comparison ran. Threaded here as
+     *                 well as into {@link #assessBetween} because which shape of quantity a rule
+     *                 cuts says nothing about where a row for it may be written — and a region put
+     *                 into one of the two paths would leave the other searching over everything its
+     *                 position could ever hold. No input is known where it changes an answer down
+     *                 this path: the points of a line at one position all sit beside the line, and a
+     *                 line the region excludes is one the reading of what arrives has already taken
+     *                 the obligation away for. That is a second route to the same answer and not a
+     *                 reason to leave a path short of what it is owed
+     */
     static List<BorderAssessment> assess(
             Axis axis, BehaviorInputs where, souther.compiler.query.Adequacy.Observed observed,
             boolean armsAsked, boolean knownWritable, Probe probe,
-            souther.compiler.inputs.Quantities rules,
+            souther.compiler.inputs.Quantities rules, ReachingCuts reaching,
             souther.compiler.numeric.NumericDomain.Bounds within) {
         // Keyed by the line rather than by the reading of it. A guard inside a non-recursive helper
         // is read once per call of that helper, and the rows do not owe the same border twice for
@@ -462,7 +473,7 @@ final class Coverages {
         for (Border each : Partitions.bordersOf(axis, where.symbols(), within)) {
             out.merge(BoundaryLine.of(each),
                     assessed(each, shapeOf(each, where, knownWritable, probe, realizer,
-                                    regionFor(each, rules, ReachingCuts.NONE)),
+                                    regionFor(each, rules, reaching)),
                             observed, armsAsked),
                     Coverages::whicheverSawMore);
         }

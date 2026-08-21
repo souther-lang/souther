@@ -1,9 +1,11 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.ComparisonClaim;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ComparisonOccurrence;
+import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
@@ -67,6 +69,77 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<ReachingCuts.Cut>> byC
     }
 
     /**
+     * Each comparison of {@code condition}, filed under what a row had already satisfied when it
+     * ran.
+     *
+     * <p><b>In the order a condition is evaluated in, which is what makes this per comparison and
+     * not per fork.</b> A condition stops as soon as it is settled: under {@code A && B} the second
+     * comparison runs only where the first held, and under {@code A || B} only where it did not. So
+     * what has been established by the time a comparison runs differs between the comparisons of one
+     * condition, and a reading that handed every comparison of a fork the same thing would be
+     * answering about the fork.
+     *
+     * <p>That is not a missing case, it is the case. Sequential guards and the same conditions run
+     * together with {@code &&} state the same model, and a coverage answer that differed between
+     * them would be a fact about how the author spelled the condition — the guard at the end of a
+     * chain would be searched for over everything its positions could ever hold, which is the
+     * defect this whole type exists to remove, arriving by way of a rewrite that changes nothing.
+     *
+     * <p>Descends through {@code &&} and {@code ||} and nothing else, which is what a condition is
+     * built out of. Anything else is where the arithmetic stops, and it contributes nothing rather
+     * than being guessed at.
+     */
+    static void collect(Core condition, List<Cut> before, CoverageSites.Plan plan,
+                        InputReads reads, Symbols symbols, Collected out) {
+        if (condition instanceof Core.Binary joined && combines(joined.op())) {
+            collect(joined.left(), before, plan, reads, symbols, out);
+            // What reaching the right operand says: under `&&` the left held, under `||` it did not.
+            collect(joined.right(),
+                    and(before, stating(joined.left(), joined.op() == Hir.BinOp.AND, reads,
+                            symbols)),
+                    plan, reads, symbols, out);
+            return;
+        }
+        if (condition instanceof Core.Binary comparison) {
+            plan.comparisonAt(comparison).ifPresent(site -> out.reached(site, before));
+        }
+    }
+
+    /**
+     * What {@code node} coming out {@code holding} says about this input, where anything can be
+     * said.
+     *
+     * <p>One rule for two questions, because they are one question. What reaching the right operand
+     * of a condition establishes and what reaching an arm of the fork establishes are both "this
+     * subtree came out this way, so what follows" — written apart, the two agreed by having been
+     * derived alike, and the day one of them learned to read a new shape of condition would be the
+     * day they stopped agreeing.
+     *
+     * <p>A conjunction coming out true is both its operands true, and a disjunction coming out false
+     * is both false. The other two ways round say a disjunction of things, which is not a list of
+     * cuts and is not approximated into one: {@code A && B} being false says one of them failed and
+     * names neither, and narrowing on either would exclude rows that arrive.
+     */
+    static List<Cut> stating(Core node, boolean holding, InputReads reads, Symbols symbols) {
+        if (node instanceof Core.Binary joined && combines(joined.op())) {
+            if ((joined.op() == Hir.BinOp.AND) != holding) {
+                return List.of();
+            }
+            return and(stating(joined.left(), holding, reads, symbols),
+                    stating(joined.right(), holding, reads, symbols));
+        }
+        if (!(node instanceof Core.Binary comparison)) {
+            return List.of();
+        }
+        Cut one = of(comparison, holding, reads, symbols);
+        return one == null ? List.of() : List.of(one);
+    }
+
+    private static boolean combines(Hir.BinOp op) {
+        return op == Hir.BinOp.AND || op == Hir.BinOp.OR;
+    }
+
+    /**
      * What {@code comparison} states about this input, coming out {@code holding} — or null where
      * the arithmetic reads nothing here.
      *
@@ -74,7 +147,8 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<ReachingCuts.Cut>> byC
      * second reading of what a comparison says is a second thing to keep in step with how a border
      * is drawn, and the two disagreeing is a region that excludes the very level the border is at.
      */
-    static Cut of(Core.Binary comparison, boolean holding, InputReads reads, Symbols symbols) {
+    private static Cut of(Core.Binary comparison, boolean holding, InputReads reads,
+                          Symbols symbols) {
         AffineReading read = AffineReading.of(comparison, reads, symbols);
         if (read == null) {
             return null;
@@ -138,13 +212,13 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<ReachingCuts.Cut>> byC
         }
     }
 
-    /** How a caller adds one to what it is carrying, keeping what was already there. */
-    static List<Cut> and(List<Cut> assumed, Cut one) {
-        if (one == null) {
+    /** What a caller is carrying, with more added, keeping what was already there. */
+    private static List<Cut> and(List<Cut> assumed, List<Cut> more) {
+        if (more.isEmpty()) {
             return assumed;
         }
         List<Cut> out = new java.util.ArrayList<>(assumed);
-        out.add(one);
+        out.addAll(more);
         return List.copyOf(out);
     }
 

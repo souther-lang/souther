@@ -169,8 +169,13 @@ public final class GuardThresholds {
                              List<ReachingCuts.Cut> assumed, ReachingCuts.Collected cuts) {
         List<Placed> comparisons = e instanceof Core.If iff ? comparisonsIn(iff.cond()) : List.of();
         if (e instanceof Core.If iff) {
+            // What a row had already satisfied when each of this condition's comparisons ran,
+            // filed where it was assumed. Asked of the condition rather than of the fork: a
+            // condition stops as soon as it is settled, so what stands when the second comparison
+            // runs is not what stood when the first did.
+            ReachingCuts.collect(iff.cond(), assumed, plan, reads, symbols, cuts);
             List<Core> read = read(behavior, iff, plan, reads, symbols, quantities, out, singled,
-                    between, accounting, comparisons, assumed, cuts);
+                    between, accounting, comparisons);
             // Every comparison this condition holds that nothing turned into a line — asked of the
             // comparisons and not of the positions. One position carries more than one statement,
             // and a line read at it says nothing about the rest: kept per position, a threshold on
@@ -198,10 +203,10 @@ public final class GuardThresholds {
                     between, accounting, assumed, cuts);
             walk(behavior, iff.then(), plan, inside, symbols, quantities, out, unread, singled,
                     between, accounting,
-                    taking(comparisons, true, assumed, inside, symbols), cuts);
+                    taking(iff.cond(), true, assumed, inside, symbols), cuts);
             walk(behavior, iff.els(), plan, inside, symbols, quantities, out, unread, singled,
                     between, accounting,
-                    taking(comparisons, false, assumed, inside, symbols), cuts);
+                    taking(iff.cond(), false, assumed, inside, symbols), cuts);
             return;
         }
         Core.forEachChild(e, child -> walk(behavior, child, plan, inside, symbols, quantities,
@@ -210,25 +215,23 @@ public final class GuardThresholds {
 
     /**
      * What stands inside one arm of a fork: what stood above it, and what that arm proves of the
-     * comparisons the condition is made of.
+     * condition.
      *
-     * <p>Each comparison on its own terms. A conjunction's {@code then} arm proves every one of them
-     * held and its {@code else} arm proves nothing about any of them; a disjunction is the other way
-     * round. Read off the arm instead of off each comparison's place in the condition, an arm would
-     * carry a condition half the rows in it never failed — and a region built out of that excludes
-     * rows that reach the guard, which is the direction that takes a coverage item away.
+     * <p>Asked of {@link ReachingCuts#stating}, which is the same rule that says what reaching the
+     * right operand of a condition establishes. Both are "this subtree came out this way, so what
+     * follows", and written apart they would agree by having been derived alike — until one of them
+     * learned to read a shape of condition the other did not.
      */
-    private static List<ReachingCuts.Cut> taking(List<Placed> comparisons, boolean onThen,
+    private static List<ReachingCuts.Cut> taking(Core condition, boolean onThen,
                                                  List<ReachingCuts.Cut> assumed, InputReads reads,
                                                  Symbols symbols) {
-        List<ReachingCuts.Cut> out = assumed;
-        for (Placed each : comparisons) {
-            if (onThen ? each.trueThen() : each.falseElse()) {
-                out = ReachingCuts.and(out,
-                        ReachingCuts.of(each.comparison(), onThen, reads, symbols));
-            }
+        List<ReachingCuts.Cut> arm = ReachingCuts.stating(condition, onThen, reads, symbols);
+        if (arm.isEmpty()) {
+            return assumed;
         }
-        return out;
+        List<ReachingCuts.Cut> out = new ArrayList<>(assumed);
+        out.addAll(arm);
+        return List.copyOf(out);
     }
 
     /**
@@ -429,8 +432,8 @@ public final class GuardThresholds {
                                    souther.compiler.inputs.Quantities quantities,
                                    List<Threshold> out,
                                    List<Guards.Singled> singled, List<LineDrawn> between,
-                                   List<Guards.AtAPosition> accounting, List<Placed> comparisons,
-                                   List<ReachingCuts.Cut> assumed, ReachingCuts.Collected cuts) {
+                                   List<Guards.AtAPosition> accounting,
+                                   List<Placed> comparisons) {
         // The comparisons a line came of, and not the positions they were about. A position carries
         // more than one statement and reading one of them settles nothing about the others.
         List<Core> made = new ArrayList<>();
@@ -449,9 +452,6 @@ public final class GuardThresholds {
             // is made of.
             souther.compiler.coverage.ComparisonOccurrence site =
                     plan.requireComparisonAt(each.comparison());
-            // What a row had to satisfy to arrive here, filed where it was assumed. A border read
-            // off this comparison is searched for inside it.
-            cuts.reached(site, assumed);
             // What the comparison cuts is one question with one answer ({@link Cutting}). What is
             // added here is what meeting the line takes, which is a guard's own answer and no other
             // rule's.
@@ -661,20 +661,8 @@ public final class GuardThresholds {
                 iff.origin().kind(), Citation.of(comparison.pos()));
     }
 
-    /**
-     * One comparison of a condition, and what its place in that condition settles.
-     *
-     * <p>Which arms prove it was evaluated, and which arms prove what it came to. The two are not
-     * one answer: under {@code A && B} the {@code else} arm holds rows that reached {@code B} and
-     * rows that never did, so it proves {@code B} was evaluated nowhere and proves {@code A} false
-     * nowhere either. A reader that took the first for the second would assume, of every row in an
-     * arm, a condition half of them never failed.
-     *
-     * @param trueThen  whether reaching the {@code then} arm proves this comparison held
-     * @param falseElse whether reaching the {@code else} arm proves it did not
-     */
-    private record Placed(Core.Binary comparison, OriginRef.GuardOrigin.Witness witness,
-                          boolean trueThen, boolean falseElse) {}
+    /** One comparison of a condition, and which arms of the {@code if} prove it was evaluated. */
+    private record Placed(Core.Binary comparison, OriginRef.GuardOrigin.Witness witness) {}
 
     /**
      * The comparisons a condition is made of, each with what its own place leaves as evidence.
@@ -757,8 +745,7 @@ public final class GuardThresholds {
             return;
         }
         if (e instanceof Core.Binary comparison && !combines(comparison.op())) {
-            out.add(new Placed(comparison, reached.witness(), reached.trueThen(),
-                    reached.falseElse()));
+            out.add(new Placed(comparison, reached.witness()));
         }
     }
 

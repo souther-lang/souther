@@ -752,7 +752,7 @@ public final class Adequacy {
                 }
                 out.addAll(Coverages.assess(axis, inputs, observed, armsAsked,
                         partitioning.edgeIsKnownWritable(axis.term()), probe,
-                        partitioning.quantities(),
+                        partitioning.quantities(), partitioning.reaching(),
                         partitioning.quantities().runsBetween(axis.term())));
             }
             out.addAll(Coverages.assessBetween(partitioning, inputs, observed, armsAsked, probe));
