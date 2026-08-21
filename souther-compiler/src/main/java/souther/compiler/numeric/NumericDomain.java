@@ -319,8 +319,17 @@ public final class NumericDomain<A> {
         }
         Map<A, Granularity> ofGroup = new LinkedHashMap<>();
         for (A atom : List.copyOf(reaches.keySet())) {
-            Granularity had = ofGroup.putIfAbsent(groupOf(reaches, atom), kinds.get(atom));
-            if (had != null && had != kinds.get(atom)) {
+            Granularity how = kinds.get(atom);
+            if (how == null) {
+                // Every atom of every rule is spaced, since a rule arrives through `assume` and that
+                // refuses one whose spacing it was not given. Said rather than read as an absence:
+                // put in the map as one, a null makes every later member of the group match it, and
+                // a mixed group comes back alike — which promises an edge the theorem does not
+                // reach, and does it silently.
+                throw new IllegalStateException("no granularity given for atom `" + atom + "`");
+            }
+            Granularity had = ofGroup.putIfAbsent(groupOf(reaches, atom), how);
+            if (had != null && had != how) {
                 return false;
             }
         }

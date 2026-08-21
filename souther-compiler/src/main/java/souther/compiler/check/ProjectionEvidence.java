@@ -153,6 +153,18 @@ public sealed interface ProjectionEvidence {
         }
 
         /**
+         * Some rule did not follow from what was derived, and this reading names none of them.
+         *
+         * <p>The algebra holds the rules as it read them and the reading holds the names an author
+         * would recognise, so the one that could not prove a rule is not the one that can say which.
+         * Normally it does not have to: the reading walks its own constraints and files each one it
+         * finds unstated. This is the two lists having drifted apart — which is this compiler and
+         * not the model, and is reported rather than thrown, since declining to promise an edge is
+         * the answer that stays sound either way.
+         */
+        record ARuleTheReadingCannotName() implements Cause {}
+
+        /**
          * The rules leave no value at all here, so there is no range to be the whole of anything.
          *
          * <p>What is handed over at every position of a value nothing satisfies is unbounded both

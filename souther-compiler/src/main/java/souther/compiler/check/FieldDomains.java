@@ -841,7 +841,15 @@ public final class FieldDomains {
      * clause placing an end at 0 beside one that takes the 0 away leaves a position whose first
      * value is 1, and the end as written is not where the position starts.
      */
-    /** That the reading names the rule the algebra could not prove, since only the reading can. */
+    /**
+     * That the reading names the rule the algebra could not prove, since only the reading can.
+     *
+     * <p>An assertion beside the cause that is filed when it does not hold, and not instead of it.
+     * The two lists are walked by different code — the algebra's own rules, and the constraints each
+     * reading handed over — and a drift between them shows up nowhere else, which is worth stopping
+     * a build over where assertions are on. Where they are off there is still an answer, because
+     * declining to promise an edge is sound whatever went wrong.
+     */
     private static void assertSomethingWentUnstated(Set<ProjectionEvidence.Cause.Lossy> lossy) {
         assert !lossy.isEmpty()
                 : "the algebra proved no rule of its own and this reading names none";
@@ -858,6 +866,7 @@ public final class FieldDomains {
             case ProjectionEvidence.Cause.Rounded it -> "4 " + it.atom();
             case ProjectionEvidence.Cause.NothingIsLeft _ -> "5";
             case ProjectionEvidence.Cause.PositionsSpacedDifferently _ -> "6";
+            case ProjectionEvidence.Cause.ARuleTheReadingCannotName _ -> "7";
         };
     }
 
@@ -987,11 +996,6 @@ public final class FieldDomains {
         constraints.numbers().atomsSpokenOf().stream()
                 .filter(atom -> !constraints.numbers().endsAreWrittenExactly(atom))
                 .forEach(atom -> causes.add(new ProjectionEvidence.Cause.Rounded(atom)));
-        // In an order that does not move between runs. Parts are keyed by the node the tree holds,
-        // which is an identity, and a map keyed on one iterates by where the addresses landed — so
-        // a value with two conjuncts short of the bounds printed its two causes in whichever order
-        // this run happened to give them. Sorted rather than kept in insertion order, because the
-        // causes come from three producers and there is no one order they arrive in.
         // And what the algebra made of the ranges it derived. Asked of it rather than worked out
         // here, refusals included: the derivation is there and so is the theorem an answer rests on,
         // and a reason recovered on this side of the boundary from what was left over names the
@@ -1009,13 +1013,24 @@ public final class FieldDomains {
             // handed them over. Asserted rather than defended against, because the two walk
             // different lists — the algebra's own rules, and the constraints each reading handed
             // over — and a list that has drifted shows up nowhere else.
-            case souther.compiler.numeric.ProjectionCertification.NotEveryRuleIsProven _ ->
-                    assertSomethingWentUnstated(lossy);
+            case souther.compiler.numeric.ProjectionCertification.NotEveryRuleIsProven _ -> {
+                assertSomethingWentUnstated(lossy);
+                if (lossy.isEmpty()) {
+                    causes.add(new ProjectionEvidence.Cause.ARuleTheReadingCannotName());
+                }
+            }
         }
+        // In an order that does not move between runs. Parts are keyed by the node the tree holds,
+        // which is an identity, and a map keyed on one iterates by where the addresses landed — so
+        // a value with two conjuncts short of the bounds printed its two causes in whichever order
+        // this run happened to give them. Sorted rather than kept in insertion order, because the
+        // causes come from several producers and there is no one order they arrive in.
         causes.sort(java.util.Comparator.comparing(FieldDomains::orderOf));
-        return certification.certificate() != null && causes.isEmpty()
-                ? new ProjectionEvidence.CertifiedExact(certification.certificate())
-                : new ProjectionEvidence.NotCertified(causes);
+        if (certification instanceof souther.compiler.numeric.ProjectionCertification.Certified(
+                var by) && causes.isEmpty()) {
+            return new ProjectionEvidence.CertifiedExact(by);
+        }
+        return new ProjectionEvidence.NotCertified(causes);
     }
 
 }

@@ -12,6 +12,11 @@ package souther.compiler.numeric;
  * was not met or a proof that did not come, and what a reader may do with any of them is decline to
  * promise an edge.
  *
+ * <p>No way to ask this for the certificate alone. Read as "the certificate, or nothing", it is the
+ * answer this replaced — the reason dropped at the boundary again, one method further along, for
+ * whichever caller reaches for the shorter question. A caller wanting the certificate takes the arm
+ * that has one.
+ *
  * <p>Asked in an order, because one of them settles the others. Where nothing is left there is no
  * box to be the whole of anything, and listing what else could not be shown about a value nobody can
  * build gives an author nothing to do. The other two stand together: a rule the proof could not
@@ -55,9 +60,4 @@ public sealed interface ProjectionCertification {
      * can say it says it, and this says only that there was one.
      */
     record NotEveryRuleIsProven() implements ProjectionCertification {}
-
-    /** The certificate, where there is one. */
-    default ProjectionCertificate certificate() {
-        return this instanceof Certified it ? it.by() : null;
-    }
 }

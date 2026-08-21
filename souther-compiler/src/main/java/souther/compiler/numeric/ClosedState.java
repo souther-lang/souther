@@ -133,9 +133,21 @@ public final class ClosedState<A> {
      * taking a range as the whole of what the rules leave a position is depending on it whether or
      * not the rounds settled.
      */
+    /**
+     * The box carried along the differences, over the positions it has bounds for.
+     *
+     * <p>One expression rather than two. The check that a box about to be handed back is a fixed
+     * point and the answer a reader asks for are the same carry, and a second spelling of it is a
+     * second chance to disagree about which positions it is over — where they disagreed, one of them
+     * would be checking a property the other does not have.
+     */
+    private static <A> Box<A> carriedAlong(Box<A> box, DifferenceBounds<A> differences) {
+        return throughDifferences(box, differences, box.positions());
+    }
+
     private static <A> ClosedState<A> settled(Box<A> box, DifferenceBounds<A> differences,
                                               Status status) {
-        assert box.equals(throughDifferences(box, differences, box.positions()))
+        assert box.equals(carriedAlong(box, differences))
                 : "a difference still narrows the box that is about to be handed back";
         return new ClosedState<>(box, differences, false, status);
     }
@@ -252,7 +264,7 @@ public final class ClosedState<A> {
      * a fixed point.
      */
     Box<A> boxCarriedAlongTheDifferences() {
-        return throughDifferences(box(), differences, box.positions());
+        return carriedAlong(box(), differences);
     }
 
     /** Whether the rounds settled. Metadata about the derivation; see {@link Status}. */
