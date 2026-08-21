@@ -55,7 +55,7 @@ class TheBoxAClosedStateHandsBackIsClosedUnderItsDifferencesTest {
         int settled = 0;
         int exhausted = 0;
         for (int round = 0; round < CASES; round++) {
-            ClosedState<String> closed = ClosedState.of(read(aSystem(dice)),
+            ClosedState<String> closed = ClosedState.of(read(aSystem(dice), Granularity.DISCRETE),
                     atom -> Granularity.DISCRETE);
             if (closed.holdsNothing()) {
                 continue;
@@ -106,7 +106,7 @@ class TheBoxAClosedStateHandsBackIsClosedUnderItsDifferencesTest {
     void carryingTheBoxAlongTheDifferencesAgainMovesNothing() {
         Random dice = new Random(1016);
         for (int round = 0; round < CASES; round++) {
-            ClosedState<String> closed = ClosedState.of(read(aSystem(dice)),
+            ClosedState<String> closed = ClosedState.of(read(aSystem(dice), Granularity.DISCRETE),
                     atom -> Granularity.DISCRETE);
             if (closed.holdsNothing()) {
                 continue;
@@ -138,7 +138,8 @@ class TheBoxAClosedStateHandsBackIsClosedUnderItsDifferencesTest {
         system.add(new Written(halving("y", "x"), Rational.ZERO, Rel.LE));
         system.add(new Written(apart("z", "x"), Rational.of(-1), Rel.LE));
 
-        ClosedState<String> closed = ClosedState.of(read(system), atom -> Granularity.DENSE);
+        ClosedState<String> closed =
+                ClosedState.of(read(system, Granularity.DENSE), atom -> Granularity.DENSE);
 
         assertEquals(ClosedState.Status.BUDGET_EXHAUSTED, closed.status(),
                 "the point of this system is that the rounds do not settle it");
@@ -218,11 +219,18 @@ class TheBoxAClosedStateHandsBackIsClosedUnderItsDifferencesTest {
         return out;
     }
 
-    private static List<AffineConstraint<String>> read(List<Written> written) {
+    /**
+     * The rules read, spaced the way the state that closes them will be told they are.
+     *
+     * <p>Given the spacing rather than assuming one. Reading a rule moves its bound onto a value the
+     * form can take, so a system read as whole numbers and closed as decimals is two answers about
+     * two systems — which the constructed one below is, being about a descent only decimals have.
+     */
+    private static List<AffineConstraint<String>> read(List<Written> written, Granularity spacing) {
         List<AffineConstraint<String>> out = new ArrayList<>();
         for (Written each : written) {
             AffineConstraint.Read<String> read = AffineConstraint.of(
-                    each.coefs(), each.constant(), each.rel(), atom -> Granularity.DISCRETE);
+                    each.coefs(), each.constant(), each.rel(), atom -> spacing);
             if (read instanceof AffineConstraint.Read.Stated<String> stated) {
                 out.add(stated.constraint());
             }

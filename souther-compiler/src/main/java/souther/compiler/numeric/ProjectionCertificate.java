@@ -31,9 +31,16 @@ public sealed interface ProjectionCertificate {
      * follow from the box and the relations are rules those two together are the feasible set of:
      * nothing they admit is refused by any rule, and nothing the rules admit was dropped on the way.
      * But a reader takes one position's bounds at a time and not the relations beside them, so being
-     * the feasible set has to come back to a position — and that is the closure theorem. A
-     * difference-bound system closed on itself has every end of every position reached by some point
-     * of it, so intersecting the box with the relations projects back onto exactly the box.
+     * the feasible set has to come back to a position — and that is the closure theorem: a
+     * difference-bound system closed on itself projects onto exactly the interval each position's
+     * own bounds describe, so intersecting the box with the relations gives the box back.
+     *
+     * <p>Which is the bounds being tight and not every one of them standing on a point. An end the
+     * rules put a value at is one some point of the system carries; an end they hold a position away
+     * from is where the position stops without arriving, and over values that fill there is no
+     * greatest one below it to arrive at. {@code x < 1} leaves exactly the values under one and no
+     * point of it has {@code x} at one, and the bound is the whole of what the rules leave all the
+     * same. Reading tightness as attainment is how an edge nobody can stand on gets promised.
      *
      * <p>The theorem is about a system whose positions are all of one kind. Where they all step, the
      * closed edges are whole numbers and the corner an end is read at is a point; where they all
