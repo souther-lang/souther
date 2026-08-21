@@ -257,6 +257,36 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
         assertTrue(d.boundsOf(atom("elsewhere")).saysNothing());
     }
 
+    /**
+     * A position's bound is one answer, including where the rounds run out.
+     *
+     * <p>The box is the reduction run until it stops moving or until the budget stops it. A reader
+     * that took one more rule off a goal about a single position would be going one round past
+     * whatever the closure was allowed — and where the budget bites, it did: a chain longer than the
+     * rounds left `boundsOf(x)` with no bound while the same position asked as a form found one.
+     * Two answers about one position, and the budget bounding neither.
+     *
+     * <p>Built one link longer than the budget on purpose, from the budget, so it stays the case
+     * that tells them apart if the budget changes.
+     */
+    @Test
+    void aPositionsBoundIsOneAnswerEvenWhereTheRoundsRunOut() {
+        int chain = ClosedState.ROUNDS + 1;
+        Map<String, Granularity> kinds = new LinkedHashMap<>();
+        for (int i = 0; i <= chain; i++) {
+            kinds.put("x" + i, Granularity.DISCRETE);
+        }
+        NumericDomain<String> d = NumericDomain.<String>top()
+                .assume(atom("x" + chain).minus(num(1)), Rel.LE, kinds);
+        for (int i = 0; i < chain; i++) {
+            // Not a difference, so it carries one link per round rather than through the closure.
+            d = d.assume(atom("x" + i).minus(scaled("x" + (i + 1), 2)), Rel.LE, kinds);
+        }
+
+        assertEquals(d.boundsOf("x0"), d.boundsOf(atom("x0")),
+                "the same position, asked as a position and as a form");
+    }
+
     // --- and over rules drawn at random ---------------------------------------------------------------
 
     @Test

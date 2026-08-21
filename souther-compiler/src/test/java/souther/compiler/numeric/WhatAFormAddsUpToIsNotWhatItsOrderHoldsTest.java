@@ -145,19 +145,22 @@ class WhatAFormAddsUpToIsNotWhatItsOrderHoldsTest {
     // --- positions that are not all of one kind --------------------------------------------------
 
     /**
-     * The case the partition layer never faces, because a border's quantity is over one carrier.
-     * Nothing stops a guard relating an {@code Int} to a {@code Decimal}, and the true image is
-     * neither of the two shapes — so it answers with a set holding it and says so.
+     * A form over positions of both kinds fills, and its divisor generates the same set as it would
+     * over positions that all fill.
+     *
+     * <p>One that fills is enough. A finite decimal may be chosen with as many places as the value
+     * being reached asks for, so {@code x + 3y} with {@code x} whole reaches a tenth — at
+     * {@code x = -2, y = 0.7} — even though {@code x} alone never leaves the whole numbers.
      */
     @Test
-    void aFormOverBothAnswersWiderAndSaysSo() {
+    void oneFillingPositionMakesTheWholeSumFill() {
         Map<String, Granularity> kinds = new LinkedHashMap<>();
         kinds.put("x", Granularity.DISCRETE);
         kinds.put("y", Granularity.DENSE);
         AdditiveImage image = AdditiveImage.of(form("x", 1, "y", 3), kinds::get);
-        assertTrue(image.contains(ratio(1, 10)),
-                "`x + 3y` reaches no tenth, and this says it might — the wider answer, which is the"
-                        + " safe one, since everything an image is asked gets safer as it grows");
+        assertTrue(image.contains(ratio(1, 10)), "at x = -2, y = 0.7");
+        assertEquals(Rational.of(-2).plus(Rational.of(3).times(ratio(7, 10))), ratio(1, 10),
+                "which is not a claim about the image but arithmetic anyone can do");
         assertFalse(over(form("x", 1, "y", 3), Granularity.DISCRETE).contains(ratio(1, 10)),
                 "where the exact answer over whole numbers refuses it");
     }

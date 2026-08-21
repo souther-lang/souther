@@ -448,17 +448,23 @@ public final class NumericDomain<A> {
      * together through this. What the box already holds of them is not this step: the rules that
      * narrow it have each been read into it on their own.
      *
-     * <p>Nothing this adds is needed for a bound on a single position, and nothing it adds is wrong
-     * there. The reduction already reads every rule against the box at each position it names, and
-     * runs until the box stops moving — which is this step at one position, taken as far as it goes.
-     * So {@link #boundsOf(Object)} reads the box and agrees with this.
+     * <p>A goal naming one position does not come here at all: the box is this step at one position
+     * already, so {@link #boundsOf(Object)} and this are the same answer by construction rather than
+     * by both happening to converge. They did not, where the rounds ran out — see below.
      *
      * @param withRules false to ask what the ranges say on their own, which is a different question
      *                  from what the rules say, and is the one an audit of the ranges wants
      */
     private RationalCut highestProven(Goal<A> goal, boolean withRules) {
         RationalCut best = fromTheBox(goal);
-        if (!withRules) {
+        if (!withRules || goal.coefs().size() <= 1) {
+            // A goal naming one position is answered by the box and by nothing else, because the box
+            // *is* this step at one position, run until it stops moving or until the rounds run out.
+            // Taking one more here would be one round past whatever the closure was allowed, and
+            // where the rounds do run out that showed: a chain longer than the budget left
+            // `boundsOf(x)` with no bound while `boundsOf` of the same position as a form, and
+            // `entails`, went one link further and found one. Two answers about one position, and
+            // the budget bounding neither.
             return best;
         }
         for (AffineConstraint<A> rule : rules) {

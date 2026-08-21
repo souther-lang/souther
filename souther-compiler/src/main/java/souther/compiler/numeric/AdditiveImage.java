@@ -21,8 +21,13 @@ import java.util.function.Function;
  * things this is asked — whether a value is reached, where a cut has to move to, whether an equality
  * can hold — get safer as the image gets bigger: a value outside a superset is outside the image, a
  * cut not moved is a cut that refuses nothing, and an equality refused because its value is outside
- * even the superset is an equality nothing satisfies. So a form whose positions are not all made of
- * the same thing answers with the coarser of the two, and nothing has to be told that it did.
+ * even the superset is an equality nothing satisfies. Which is why nothing here is asked to say how
+ * exact it is.
+ *
+ * <p>A form whose positions are not all made of the same thing needs no coarser answer, as it turns
+ * out. One position that fills is enough to make the whole sum fill: whole numbers are finite
+ * decimals, and a finite decimal may be chosen with as many places as the value being reached asks
+ * for, so the divisor generates the same set either way.
  */
 public sealed interface AdditiveImage {
 
@@ -78,10 +83,10 @@ public sealed interface AdditiveImage {
         if (!anyFills) {
             return new OverWholeNumbers(divisor);
         }
-        // Whole numbers are finite decimals, so a form with some of each adds up inside the finite
-        // decimals the whole form's divisor generates. Not exactly that set — `x + 3y` with `x` whole
-        // and `y` a decimal reaches no tenth, though the divisor is one — and wider is the safe way
-        // to be wrong here, so that is the answer rather than a narrower one it cannot stand behind.
+        // Whole numbers are finite decimals, so one position that fills makes the whole sum fill,
+        // and the divisor generates the same set as it would over positions that all fill. `x + 3y`
+        // with `x` whole and `y` a decimal does reach a tenth — at `x = -2, y = 0.7` — because the
+        // decimal may be chosen with as many places as the value asks for.
         return new OverFiniteDecimals(divisor);
     }
 
