@@ -27,8 +27,8 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
 
     @Override
     public SearchRegion given(Map<NumericTerm, Count> fixed) {
-        Quantities taken = within.given(fixed);
-        return taken == within ? this : new ReadRegion((ReadQuantities) taken);
+        ReadQuantities taken = within.fixing(fixed);
+        return taken == within ? this : new ReadRegion(taken);
     }
 
     @Override

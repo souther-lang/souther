@@ -348,6 +348,18 @@ final class ReadQuantities implements Quantities {
 
     @Override
     public Quantities given(Map<NumericTerm, Count> more) {
+        return fixing(more);
+    }
+
+    /**
+     * The same, answered as this reading rather than as one of the faces it wears.
+     *
+     * <p>What refining hands back is the state, and {@link Quantities} and {@link SearchRegion} are
+     * two ways of asking it. Typed by either of them, the other has to put back what it knows —
+     * which is a cast, and a cast is a check the compiler is not doing. The two faces stay apart
+     * because they answer different questions; what they refine is one thing and is typed as one.
+     */
+    ReadQuantities fixing(Map<NumericTerm, Count> more) {
         if (more.isEmpty()) {
             return this;
         }

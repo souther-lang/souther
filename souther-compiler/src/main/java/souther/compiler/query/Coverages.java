@@ -448,17 +448,15 @@ final class Coverages {
      *                  differently and a measure that took one boolean for both could not say which
      *                  had happened.
      * @param probe     null where the module's classes or the runtime are not there to build against
-     */
-    /**
-     * @param reaching what a row had already satisfied when each comparison ran. Threaded here as
-     *                 well as into {@link #assessBetween} because which shape of quantity a rule
-     *                 cuts says nothing about where a row for it may be written — and a region put
-     *                 into one of the two paths would leave the other searching over everything its
-     *                 position could ever hold. No input is known where it changes an answer down
-     *                 this path: the points of a line at one position all sit beside the line, and a
-     *                 line the region excludes is one the reading of what arrives has already taken
-     *                 the obligation away for. That is a second route to the same answer and not a
-     *                 reason to leave a path short of what it is owed
+     * @param reaching  what a row had already satisfied when each comparison ran. Threaded here as
+     *                  well as into {@link #assessBetween} because which shape of quantity a rule
+     *                  cuts says nothing about where a row for it may be written — and a region put
+     *                  into one of the two paths would leave the other searching over everything its
+     *                  position could ever hold. No input is known where it changes an answer down
+     *                  this path: the points of a line at one position all sit beside the line, and
+     *                  a line the region excludes is one the reading of what arrives has already
+     *                  taken the obligation away for. That is a second route to the same answer and
+     *                  not a reason to leave a path short of what it is owed.
      */
     static List<BorderAssessment> assess(
             Axis axis, BehaviorInputs where, souther.compiler.query.Adequacy.Observed observed,
