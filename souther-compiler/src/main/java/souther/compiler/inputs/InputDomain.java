@@ -212,6 +212,11 @@ public final class InputDomain {
                 walk(path.then(field.getKey()), field.getValue(), depth + 1, symbols, placed, found);
             }
         }
+        // Beside the position and not instead of it: what the list holds is read, and the list is
+        // still a position with a length of its own that this reading has already answered for.
+        if (structure instanceof StructuralInspection.Inside inside) {
+            walk(path.element(), inside.element(), depth + 1, symbols, placed, found);
+        }
     }
 
     /**

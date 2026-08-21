@@ -69,10 +69,10 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
     /**
      * And a position finding names no rule, because nothing observed one.
      *
-     * <p>The threshold is on an element of the list, and the elements cannot be reached
-     * reached. What stopped this is the reach and not any one clause, so what is said is the position
-     * and the limit — and the shape has nowhere to put a rule, which is what stops one being
-     * invented.
+     * <p>The threshold is on an element of the list. What is written about an element is written
+     * inside a closure a combinator was handed, and this reading places none of it at a position —
+     * so what stopped this is the reading and not any one clause, and what is said is the position
+     * alone. The shape has nowhere to put a rule, which is what stops one being invented.
      */
     @Test
     void aPositionTheReadingDidNotReachNamesNoRule() {
@@ -80,7 +80,7 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
 
         assertTrue(said.stream().anyMatch(each ->
                         each instanceof PartitionEvidence.NotRead.APosition
-                                && each.reason() == UndividedPosition.Reason.UNSUPPORTED_TRAVERSAL),
+                                && each.reason() == UndividedPosition.Reason.RULES_NOT_READ_AT_ALL),
                 said::toString);
         assertFalse(said.stream().anyMatch(each -> each instanceof PartitionEvidence.NotRead.ARule),
                 said::toString);
@@ -98,7 +98,7 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
     void theTwoAreWrittenApart() {
         assertTrue(human(A_RULE).contains("not read: if@"), human(A_RULE));
         assertFalse(human(A_RULE).contains("not read: n "), human(A_RULE));
-        assertTrue(human(A_POSITION).contains("not read: items ("), human(A_POSITION));
+        assertTrue(human(A_POSITION).contains("not read: items[*].charge ("), human(A_POSITION));
     }
 
     private static List<Adequacy.Kind> kinds(String model) {

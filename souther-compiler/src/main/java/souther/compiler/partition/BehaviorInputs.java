@@ -71,7 +71,14 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
         }
         ObservedValue value = row.inputs().get(at);
         Type here = types.get(at);
-        for (String field : path.fields()) {
+        for (TermPath.Step step : path.steps()) {
+            // Which element of a list a row wrote is not something a coordinate names, so there is
+            // no one value here to have observed. Answered as a position this reading reaches no
+            // value at, which is what a caller already has to handle.
+            if (!(step instanceof TermPath.Step.Field named)) {
+                return null;
+            }
+            String field = named.name();
             if (value.unread() != null) {
                 return value;
             }

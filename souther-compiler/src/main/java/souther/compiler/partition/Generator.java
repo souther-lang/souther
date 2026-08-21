@@ -658,7 +658,7 @@ public final class Generator {
     /** The type declared at a position this subject has no axis for, which is a bare parameter and
      *  nothing else: a field of one is reached through a type this cannot name here. */
     private static Type declaredAt(Subject subject, TermPath path) {
-        if (!path.fields().isEmpty()) {
+        if (!path.steps().isEmpty()) {
             return null;
         }
         int at = subject.parameters().indexOf(path.head());
@@ -1540,9 +1540,11 @@ public final class Generator {
     }
 
     /** What a position under a parameter is called where the parameter's own rules name it, or null
-     * where the position is the parameter itself. */
+     * where the position is the parameter itself and where no rule of the parameter can name it
+     * ({@link TermPath#fieldKey}). */
     private static String fieldUnder(TermPath path) {
-        return path.fields().isEmpty() ? null : String.join(".", path.fields());
+        String where = path.fieldKey();
+        return where == null || where.isEmpty() ? null : where;
     }
 
     /** The settled positions of one parameter, named the way the reading of that parameter names

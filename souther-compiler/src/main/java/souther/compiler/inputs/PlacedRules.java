@@ -53,9 +53,16 @@ record PlacedRules(TypeSymbol value, Rules rules) {
         return rules.bounds();
     }
 
-    /** What is left for the position at {@code path}, which is read from the value this is of. */
+    /**
+     * What is left for the position at {@code path}, which is read from the value this is of.
+     *
+     * <p>Nothing at a position inside a sequence, and nothing at the value's own path. The clauses
+     * read here relate the fields of a record ({@link TermPath#fieldKey}), and neither of those is
+     * one of them.
+     */
     NumericDomain.Bounds at(TermPath path) {
-        return path.fields().isEmpty() ? null : bounds().at(String.join(".", path.fields()));
+        String where = path.fieldKey();
+        return where == null || where.isEmpty() ? null : bounds().at(where);
     }
 
     /**
@@ -63,7 +70,8 @@ record PlacedRules(TypeSymbol value, Rules rules) {
      * in, which is not the same as what {@link #at} projects onto it.
      */
     NumericDomain.Bounds leftAt(TermPath path, boolean measured) {
-        return bounds().leftAt(String.join(".", path.fields()), measured);
+        String where = path.fieldKey();
+        return where == null ? null : bounds().leftAt(where, measured);
     }
 
     /**
@@ -74,7 +82,16 @@ record PlacedRules(TypeSymbol value, Rules rules) {
      * answer where {@link #at} is.
      */
     AdmissibleSet admits(TermPath path) {
-        return rules.admits(String.join(".", path.fields()));
+        String where = path.fieldKey();
+        // A position inside a sequence is named by no clause read here, and that is not the same
+        // answer as a clause that named it and said nothing. What states something of every element
+        // is held as a quantifier over the clause it was written in, and nothing here places one at
+        // the position the quantifier is about — so this reading did not reach the rules of the
+        // position rather than reading them and finding none.
+        return where == null
+                ? AdmissibleSet.partial(souther.compiler.values.ValueSet.ANY,
+                        souther.compiler.values.UnreadReason.NOT_REACHED)
+                : rules.admits(where);
     }
 
     /**
@@ -88,7 +105,10 @@ record PlacedRules(TypeSymbol value, Rules rules) {
      * for a range.
      */
     List<RuleAccounting.Unanswered> unanswered(TermPath path) {
-        String where = String.join(".", path.fields());
+        String where = path.fieldKey();
+        if (where == null) {
+            return List.of();
+        }
         List<RuleAccounting.Unanswered> out = new ArrayList<>();
         bounds().accounting().values().forEach(accounting ->
                 accounting.unansweredQuestions().stream()
@@ -118,14 +138,21 @@ record PlacedRules(TypeSymbol value, Rules rules) {
      * another reason won it.
      */
     boolean everyRuleReachedAt(TermPath path) {
-        return rules.everyRuleReachedAt(String.join(".", path.fields()));
+        String where = path.fieldKey();
+        // False inside a sequence, and not because a rule was found wanting. What is written about
+        // the elements of a container is read as a quantifier over the clause holding it, and this
+        // gathering has no way to place one at the position it is about — so the rules of the
+        // position were not reached. Answered as reached, a position nothing has read would come
+        // back as one the model divides no way, which is the sentence this whole protocol is
+        // against.
+        return where != null && rules.everyRuleReachedAt(where);
     }
 
     /** The ends the clauses reaching this value place on the coordinates at {@code path}, which is
      *  a different question from what {@link #at} leaves them. */
     List<FieldDomains.Placed> placedAt(TermPath path) {
-        return path.fields().isEmpty() ? List.of()
-                : bounds().placedAt(String.join(".", path.fields()));
+        String where = path.fieldKey();
+        return where == null || where.isEmpty() ? List.of() : bounds().placedAt(where);
     }
 
     /**
@@ -136,13 +163,14 @@ record PlacedRules(TypeSymbol value, Rules rules) {
      * not given twice by anybody, and a newtype's own clause is where the question started.
      */
     List<FieldDomains.Unread> unreadAt(TermPath path) {
-        return bounds().unreadAt(String.join(".", path.fields()));
+        String where = path.fieldKey();
+        return where == null ? List.of() : bounds().unreadAt(where);
     }
 
     /** Which declarations' clauses are holding the end at {@code path}, on the side asked for. */
     List<TypeSymbol> narrowedBy(TermPath path, boolean lower) {
-        return path.fields().isEmpty() ? List.of()
-                : bounds().narrowedBy(String.join(".", path.fields()), lower);
+        String where = path.fieldKey();
+        return where == null || where.isEmpty() ? List.of() : bounds().narrowedBy(where, lower);
     }
 
     /**
