@@ -396,6 +396,38 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
             behavior take : (p: P) -> Taken
             """;
 
+    /**
+     * And the proof does not say which of two impossible values was fixed first.
+     *
+     * <p>Two counts fixed below nothing are two contradictions, and which of them a caller hears
+     * about is not something the model says: the same pair fixed the other way round is the same
+     * pair. Kept as the first one the fixing happened to meet, the answer carries how the question
+     * was asked — and the algebra says of what is proved empty exactly what it says of what is left.
+     */
+    @Test
+    void theProofDoesNotSayWhichImpossibleValueWasFixedFirst() {
+        Read read = read(COUNTED, "take");
+        Quantities asked = read.inputs().quantities(read.symbols());
+        NumericTerm accounts = size(read, "accounts");
+        NumericTerm contacts = size(read, "contacts");
+
+        Quantities one = asked.given(accounts, count(-1)).given(contacts, count(-1));
+        Quantities other = asked.given(contacts, count(-1)).given(accounts, count(-1));
+        Quantities together = asked.given(fixing(accounts, -1, contacts, -1));
+
+        assertEquals(one.emptiness(), other.emptiness());
+        assertEquals(one.emptiness(), together.emptiness());
+    }
+
+    /** And the same of one position fixed at two values, whichever way round they arrived. */
+    @Test
+    void theProofDoesNotSayWhichOfTwoValuesAtOnePositionCameFirst() {
+        Quantities asked = quantities();
+
+        assertEquals(asked.given(X, count(1)).given(X, count(2)).emptiness(),
+                asked.given(X, count(2)).given(X, count(1)).emptiness());
+    }
+
     private static NumericTerm size(Read read, String field) {
         TermPath at = TermPath.of("p").then(field);
         return new NumericTerm.SizeOf(souther.compiler.check.NumericMeasures.takenOf(

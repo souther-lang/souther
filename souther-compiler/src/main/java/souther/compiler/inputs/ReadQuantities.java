@@ -10,6 +10,7 @@ import souther.compiler.numeric.Reach;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -30,8 +31,15 @@ final class ReadQuantities implements Quantities {
      *  its own term runs between, and the reading that relates positions has a name for some of
      *  those terms and not for others. */
     private final Map<TermPath, Position> byPath;
-    private final Map<NumericTerm, Count> fixed;
-    private final EmptyInput proved;
+    /**
+     * What each term has been fixed at, as the least and the greatest of the values fixed there.
+     *
+     * <p>A pair and not a value, because what a caller settles has to accumulate the same way
+     * whichever order it arrives in. Fixing one position twice is fixing it at nothing, and holding
+     * the last value to arrive — or the first — would make which of the two a proof names depend on
+     * the order the question was asked in. Where a term has been fixed once the two are the same.
+     */
+    private final Map<NumericTerm, Fixed> fixed;
     /**
      * The rules read with everything fixed, worked out when something is asked and not before.
      *
@@ -42,9 +50,22 @@ final class ReadQuantities implements Quantities {
      */
     private volatile Map<String, FieldDomains.Settled> conditioned;
 
+    /** The values fixed at one term, kept as their least and greatest so that what was fixed does
+     *  not depend on the order it arrived in. */
+    private record Fixed(Count least, Count most) {
+
+        Fixed and(Count also) {
+            return new Fixed(least.compareTo(also) <= 0 ? least : also,
+                    most.compareTo(also) >= 0 ? most : also);
+        }
+
+        boolean isOne() {
+            return least.equals(most);
+        }
+    }
+
     private ReadQuantities(Map<String, PlacedRules> byParameter, Set<String> parameters,
-                           Map<TermPath, Position> byPath, Map<NumericTerm, Count> fixed,
-                           EmptyInput proved) {
+                           Map<TermPath, Position> byPath, Map<NumericTerm, Fixed> fixed) {
         // In the order the behavior declares its parameters. A proof of emptiness names one of them
         // and a report is a document compared against the one written last time, so an order read
         // off a hash would move which parameter is named between runs.
@@ -52,14 +73,17 @@ final class ReadQuantities implements Quantities {
                 new LinkedHashMap<>(byParameter));
         this.parameters = Set.copyOf(parameters);
         this.byPath = Map.copyOf(byPath);
-        this.fixed = Map.copyOf(fixed);
-        this.proved = proved;
+        // Kept in the order the fixings arrived, so that the order they are answered in is chosen
+        // here rather than inherited. An immutable copy iterates in an order salted once per JVM
+        // run, which is a fine order and not one anybody chose — read off it, which of two
+        // contradictions a proof names would move between runs of the same compiler.
+        this.fixed = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(fixed));
     }
 
     /** Before anything is fixed. */
     static ReadQuantities of(Map<String, PlacedRules> byParameter, Set<String> parameters,
                              Map<TermPath, Position> byPath) {
-        return new ReadQuantities(byParameter, parameters, byPath, Map.of(), null);
+        return new ReadQuantities(byParameter, parameters, byPath, Map.of());
     }
 
     /** Each parameter's rules read with what is fixed under it, once. */
@@ -106,35 +130,46 @@ final class ReadQuantities implements Quantities {
         if (more.isEmpty()) {
             return this;
         }
-        Map<NumericTerm, Count> both = new LinkedHashMap<>(fixed);
-        EmptyInput found = proved;
+        Map<NumericTerm, Fixed> both = new LinkedHashMap<>(fixed);
         for (Map.Entry<NumericTerm, Count> each : more.entrySet()) {
             NumericTerm term = held(each.getKey());
-            Count at = each.getValue();
-            Count had = both.put(term, at);
-            // A position holds one value, so fixing it twice fixes it at nothing. Proved without
-            // reading anything: what contradicts is the pair, and the rules were never asked.
-            if (had != null && !had.equals(at)) {
-                found = first(found, new EmptyInput.TwoValuesAtOnePosition(term, had, at));
-            }
+            both.merge(term, new Fixed(each.getValue(), each.getValue()),
+                    (had, one) -> had.and(one.least()));
         }
-        ReadQuantities wider = new ReadQuantities(byParameter, parameters, byPath, both, found);
-        return wider.provingWhatIsFixedIsReachable(more);
+        return new ReadQuantities(byParameter, parameters, byPath, both);
     }
 
     /**
      * Why nothing is left, or empty where nothing proved it.
      *
-     * <p>Read off what is held rather than worked out again per caller. Which route proved it — a
-     * pair of assignments that cannot both stand, a value outside where its own position runs, or
-     * the declarations read with everything fixed — is not a distinction anybody here may act on: a
-     * caller that could tell them apart would be reading how the question was asked rather than what
-     * the model says.
+     * <p><b>Worked out from what is fixed, and not from how it came to be fixed.</b> Two positions
+     * fixed at values neither can take are two contradictions, and which of them a caller hears
+     * about is not something the model says — kept as the first one a fixing happened to meet, the
+     * answer would carry the order the questions were asked in. So nothing is remembered along the
+     * way: the same accumulation answers the same thing, whichever way round it was reached and
+     * whether it arrived in one call or four.
+     *
+     * <p>Looked for in one order, which is a settled order and not a preference. A position fixed at
+     * two values contradicts without anything being read; a value the term itself cannot take
+     * contradicts against what the term guarantees; and what the declarations refuse is theirs to
+     * refuse. The terms are taken in the order they are written down, so two contradictions of one
+     * kind are told apart by where they sit rather than by when they were found.
      */
     @Override
     public Optional<EmptyInput> emptiness() {
-        if (proved != null) {
-            return Optional.of(proved);
+        for (Map.Entry<NumericTerm, Fixed> each : inOrder()) {
+            if (!each.getValue().isOne()) {
+                return Optional.of(new EmptyInput.TwoValuesAtOnePosition(each.getKey(),
+                        each.getValue().least(), each.getValue().most()));
+            }
+        }
+        for (Map.Entry<NumericTerm, Fixed> each : inOrder()) {
+            NumericDomain.Bounds own = each.getKey().ownBounds();
+            if (own != null && !own.admits(each.getValue().least())) {
+                return Optional.of(at(each.getKey().path(),
+                        new EmptyInput.OutsideWhereThePositionRuns(each.getKey(),
+                                each.getValue().least())));
+            }
         }
         for (Map.Entry<String, FieldDomains.Settled> each : conditioned().entrySet()) {
             Optional<EmptyInput> here = holdsNothing(each.getKey(), each.getValue());
@@ -143,6 +178,18 @@ final class ReadQuantities implements Quantities {
             }
         }
         return Optional.empty();
+    }
+
+    /**
+     * What is fixed, in the order the terms are written down.
+     *
+     * <p>Any order settled by the terms themselves would do; what may not decide it is the order the
+     * fixings arrived in, which is the caller's business and not the model's.
+     */
+    private List<Map.Entry<NumericTerm, Fixed>> inOrder() {
+        List<Map.Entry<NumericTerm, Fixed>> out = new java.util.ArrayList<>(fixed.entrySet());
+        out.sort(java.util.Comparator.comparing(each -> each.getKey().toString()));
+        return out;
     }
 
     /**
@@ -190,40 +237,6 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
-     * Whether each value just fixed is one the term itself can take.
-     *
-     * <p>Against what the term guarantees of its own values and against nothing else, which is what
-     * makes this the whole of what fixing can settle without reading anything. A count is never
-     * negative and no clause writes that down, so this is the only thing that refuses a count fixed
-     * below none — and everything the declarations refuse is theirs to refuse, where they are read.
-     *
-     * <p>Not asked of what the rules leave the position, which is the same question one moment
-     * later: the reading with this very value settled in it either pins the position to it or holds
-     * nothing at all, so a check against that could never fail and would read the declarations to
-     * find out.
-     */
-    private ReadQuantities provingWhatIsFixedIsReachable(Map<NumericTerm, Count> just) {
-        if (proved != null) {
-            return this;   // the first proof stands, and this would be a second account of it
-        }
-        for (Map.Entry<NumericTerm, Count> each : just.entrySet()) {
-            NumericDomain.Bounds own = each.getKey().ownBounds();
-            if (own != null && !own.admits(each.getValue())) {
-                return new ReadQuantities(byParameter, parameters, byPath, fixed,
-                        at(each.getKey().path(), new EmptyInput.OutsideWhereThePositionRuns(
-                                each.getKey(), each.getValue())));
-            }
-        }
-        return this;
-    }
-
-    /** The first proof found stands. A second is another account of an input already known to hold
-     *  nothing rather than a further thing wrong with it. */
-    private static EmptyInput first(EmptyInput had, EmptyInput found) {
-        return had != null ? had : found;
-    }
-
-    /**
      * The term, where what it sits under is something this behavior takes.
      *
      * <p><b>Owned is not the same as known about.</b> The walk that reads an input's positions stops
@@ -260,9 +273,10 @@ final class ReadQuantities implements Quantities {
             // of a position is a coordinate of its own, and a fixing that named only the value left
             // a rule over two counts unconditioned while the same rule was read whole when the
             // counts were asked about.
-            if (term.path().head().equals(parameter)) {
-                out.put(new FieldDomains.Coordinate(String.join(".", term.path().fields()),
-                        term instanceof NumericTerm.SizeOf), at);
+            // Only where one value was fixed there. A position fixed at two settles nothing the
+            // declarations could be told, and what it contradicts is said here rather than by them.
+            if (term.path().head().equals(parameter) && at.isOne()) {
+                out.put(coordinateOf(term), at.least());
             }
         });
         return out;
@@ -381,10 +395,13 @@ final class ReadQuantities implements Quantities {
         if (intrinsic != null) {
             runs = meeting(runs, intrinsic);
         }
-        Count fixedAt = fixed.get(term);
+        Fixed fixedAt = fixed.get(term);
+        // Where two values were fixed there, between them: the rules leave nothing at all, which
+        // {@link #emptiness} says, and a range that crossed itself is not something to hand a
+        // caller that has not asked.
         return fixedAt == null ? runs
-                : meeting(runs, new NumericDomain.Bounds(Endpoint.inclusive(fixedAt),
-                        Endpoint.inclusive(fixedAt)));
+                : meeting(runs, new NumericDomain.Bounds(Endpoint.inclusive(fixedAt.least()),
+                        Endpoint.inclusive(fixedAt.most())));
     }
 
     /** The tighter end on each side, where an absent bound is no bound and never the tighter. */

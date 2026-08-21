@@ -20,7 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
- * Everything that reads a declaration again with one of its positions settled is written down here.
+ * Everything that settles a position of a value's rules without going through this reading is
+ * written down here.
  *
  * <p>Asking what the rules leave once something is fixed is what every search that builds a value
  * needs, and a search that reaches for it directly brings its own way of naming a position. One that
@@ -41,11 +42,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * <p><b>Both directions.</b> A check that only counts trespassers passes when it reads nothing at
  * all, so what is expected to be found is named as well.
  */
-class WhoReadsADeclarationAgainWithAPositionSettledIsNamedTest {
+class WhoConditionsAValuesRulesWithoutTheInputsReadingIsNamedTest {
 
     private static final String CONDITIONS = "souther.compiler.check.FieldDomains";
 
-    /** Who reads a declaration again with one of its positions settled, and why each of them does. */
+    /** Who settles a position of a value's rules, and why each of them does. */
     private static final Set<String> MAY_CONDITION = Set.of(
             // The reading of an input asking on the input's behalf, which is what the boundary is.
             "souther.compiler.inputs.PlacedRules",
@@ -62,7 +63,7 @@ class WhoReadsADeclarationAgainWithAPositionSettledIsNamedTest {
             "souther.compiler.partition.Generator");
 
     @Test
-    void nothingElseReadsTheDeclarationsAgainWithAPositionSettled() throws IOException {
+    void nothingElseSettlesAPositionOfAValuesRules() throws IOException {
         Set<String> found = new TreeSet<>();
         for (Path each : classes()) {
             ClassModel model = ClassFile.of().parse(Files.readAllBytes(each));
@@ -84,19 +85,19 @@ class WhoReadsADeclarationAgainWithAPositionSettledIsNamedTest {
                 }
             }
         }
-        assertFalse(found.isEmpty(), "nothing reads the declarations again at all; this check is "
-                + "reading no calls");
+        assertFalse(found.isEmpty(),
+                "nothing settles a position at all; this check is reading no calls");
         assertEquals(new TreeSet<>(MAY_CONDITION), found,
-                "who reads a value's declarations again with one of its positions settled");
+                "who settles a position of a value's rules");
     }
 
     /**
-     * Which of the reading's members hand back a reading conditioned on an assignment.
+     * Which of the reading's members hand back rules with a position settled.
      *
      * <p>Told apart by what they take and not by their name. Reading a declaration and reading it
-     * again with a position settled are both called {@code of}, and the second is the one that takes
-     * the settlings — so a check on the name alone would report every reader of a declaration as one
-     * that conditions it.
+     * with a position settled are both called {@code of}, and the second is the one that takes the
+     * settlings — so a check on the name alone would report every reader of a declaration as one
+     * that settles a position of it.
      */
     private static boolean conditions(String member, java.lang.constant.MethodTypeDesc taken) {
         if (member.equals("given")) {

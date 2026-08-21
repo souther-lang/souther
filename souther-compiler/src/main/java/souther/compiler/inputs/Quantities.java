@@ -23,16 +23,23 @@ import java.util.Optional;
  * up are the search's, and keeping them apart is why a quantity added later costs nothing here.
  *
  * <p><b>Reached through {@link InputDomain} and nowhere else, and never wider than a term's own.</b>
- * Every term is answered for on its own first — where it stands if it has been fixed, what its own
- * position was read to hold, and what the term guarantees of itself — and what the rules relating
- * the terms leave the form is met onto that. Meeting only narrows, so a border can go away for
- * being asked about properly and can never appear.
+ * A form is added up out of parts, and a part is the finest unit a relation survives in: the terms
+ * of one parameter the reading of its declarations has a coordinate for, and the terms it has none
+ * for. What a part comes to is what its terms are on their own — where each stands if it has been
+ * fixed, what its own position was read to hold, and what the term guarantees of itself — and,
+ * where the reading can be asked at all, those facts solved together with the rules that relate
+ * them and the form projected out of that. Parts are added, and adding only ever makes an answer
+ * out of answers, so a border can go away for being asked about properly and can never appear.
  *
- * <p>Composed that way round because the reading that relates positions has a name for some terms
- * and not for others, and answers a form one parameter at a time. Asked only there, a floor on a
- * position the arithmetic has no word for is dropped, a value the caller has just fixed is
- * forgotten, and one term it cannot name takes the answer about every other term of that parameter
- * with it.
+ * <p>Composed that way because neither meeting nor projecting distributes. Everything each term is
+ * on its own, met against everything the relations leave the whole form, is wider than the sum of
+ * the parts each met on its own — so one term the reading cannot name would take the rules relating
+ * every other term of that parameter with it. And what the rules leave a form, met afterwards
+ * against what each of its coordinates is known to be, is wider than what the rules and those facts
+ * leave it together — so a rule holding two coordinates at one apiece says nothing as soon as a
+ * third is one the rules leave unbounded. Both are the same mistake: an answer assembled at a
+ * coarser unit than the facts are held at loses whichever fact the coarse mechanism has no room
+ * for.
  *
  * <p><b>Whose positions, and owned is not the same as known about.</b> A term is queryable where
  * what it sits under is something this behavior takes. The walk that reads an input's positions
