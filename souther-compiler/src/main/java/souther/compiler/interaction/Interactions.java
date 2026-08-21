@@ -143,6 +143,9 @@ public final class Interactions {
      * <p>{@code Known} holding nothing is an answer and not an absence. It says the value is never
      * settled that way, which is how an arm no row reaches is told from an arm this reading has
      * nothing to say about — the first is not walked and the second is walked under the arm itself.
+     * Which is why a value with no arrivals at all never gets this far: it would be read here as
+     * settled to neither truth and take both arms away, and no arrivals is not something this
+     * reading proves.
      */
     private sealed interface Ways {
 
@@ -609,6 +612,20 @@ public final class Interactions {
             return already;
         }
         List<Arrival> answer = reading(e, reads, bound);
+        if (answer.isEmpty()) {
+            // No arrival is not a proof that no value arrives, and this is not the reading that
+            // could give one. Two parts of a value whose every settling contradicts the other's
+            // leave nothing here — under {@code (if a then x else abort) + (if a then abort else y)}
+            // each part answers on its own and no run has both answering — and whether that is the
+            // body having no path or this reading not following one is a question about path
+            // correlation that nothing here asks.
+            //
+            // So it is normalised away rather than published. Handed on, it would reach the reader
+            // that asks which ways a value comes to a truth, where an empty enumeration is an
+            // answer and says the value never comes to it — a claim this reading has not made and
+            // one that would take both arms of a fork on such a value away.
+            answer = oneWay();
+        }
         settled.put(e, answer);
         return answer;
     }
@@ -643,7 +660,7 @@ public final class Interactions {
                     return oneWay();
                 }
             }
-            return out.isEmpty() ? oneWay() : out;
+            return out;
         }
         if (e instanceof Core.If iff) {
             // Numbered where they are written and not where they survive: the arm a fork answers on
@@ -666,7 +683,7 @@ public final class Interactions {
                     return oneWay();
                 }
             }
-            return out.isEmpty() ? oneWay() : out;
+            return out;
         }
         if (e instanceof Core.IfConstructed constructed) {
             // A fork, and not a value made of its arms — a product over them would say it is
@@ -690,7 +707,7 @@ public final class Interactions {
                     return oneWay();
                 }
             }
-            return out.isEmpty() ? oneWay() : out;
+            return out;
         }
         if (e instanceof Core.Read read) {
             List<Arrival> named = bound.get(read.binding());
@@ -760,7 +777,7 @@ public final class Interactions {
                 return oneWay();
             }
         }
-        return out.isEmpty() ? oneWay() : out;
+        return out;
     }
 
     /** Each arrival held to what already holds along the way to it, into {@code out}. */
