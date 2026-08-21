@@ -116,6 +116,47 @@ class ARowForABorderIsSearchedForInTheRegionThatReachesItTest {
             """;
 
     /**
+     * A line inside the arm a condition fails on, which is the other half of the same reading.
+     *
+     * <p>Reaching the {@code else} arm proves the condition did not hold, so the region there is
+     * where {@code y} is under seven rather than where it is past six. A reading that took the arm
+     * for the condition — or the condition for the arm — would narrow this one the wrong way round,
+     * and the row it offered would be refused for the opposite reason.
+     *
+     * <p>Written so that the answer differs. A search of the declared box solves this line by trying
+     * the positions in the order the form names them, which takes {@code y} at its largest first —
+     * so a line whose arm wants a large {@code y} is answered the same either way, and a test built
+     * on one would pass without the region being read at all.
+     */
+    private static final String INSIDE_THE_OTHER_ARM = """
+            module example.checkout
+
+            data Small = Int
+                invariant value >= 0
+                invariant value <= 20
+            data Large = Int
+                invariant value >= 0
+                invariant value <= 10
+
+            data Rejected = { reason: Int }
+            data Order = { total: Int }
+            data Result = Rejected | Order
+
+            behavior checkout : (x: Small, y: Large) -> Result
+                constructs Rejected, Order
+            let checkout (x, y) =
+                if y.value >= 7 then Order { total = x.value }
+                else {
+                    guard Int.add(x.value, Int.multiply(2, y.value)) <= 16
+                        else Rejected { reason = 5 }
+                    Order { total = 1 }
+                }
+
+            example checkout
+                | "ok" : (Small(1), Large(1)) -> Order { total = 1 }
+            """;
+
+    /**
      * A level the region has an answer at, composed.
      *
      * <p>{@code x = 1, y = 8} is at {@code x + 2y = 17} and passes every guard above the one that
@@ -162,6 +203,23 @@ class ARowForABorderIsSearchedForInTheRegionThatReachesItTest {
                     "the guard above holds y at six, and " + written(built.row())
                             + " never reaches the line at " + level);
         }
+    }
+
+    /**
+     * A row for a line in the arm a condition fails on stands where that condition fails.
+     *
+     * <p>The same rule as the arm above it, read the other way round. Nothing in this arm holds
+     * {@code y} at six or under, and a row that does never arrives at the guard.
+     */
+    @Test
+    void aRowForALineInsideTheOtherArmStandsWhereThatConditionFails() {
+        ItemAssessment.Attempt.Built built = assertInstanceOf(ItemAssessment.Attempt.Built.class,
+                owed(pointAt(INSIDE_THE_OTHER_ARM, "x + 2 * y = 16")).attempt(),
+                "a row at the level exists in the arm the condition fails on");
+
+        assertTrue(largeIn(built.row()) <= 6,
+                "nothing at seven or above reaches this arm, and " + written(built.row())
+                        + " was offered for a line inside it");
     }
 
     /** What the row puts in the second position, as a number. */

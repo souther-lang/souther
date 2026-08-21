@@ -17,6 +17,7 @@ import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.Criterion;
+import souther.compiler.partition.ReachingCuts;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.PointRole;
@@ -93,7 +94,11 @@ final class Coverages {
                 // producers. Carried rather than derived from the lines that came back: a
                 // comparison this could not read draws no line, and that is when its questions
                 // stand.
-                both(clauses.accounting(), guards.accounting()));
+                both(clauses.accounting(), guards.accounting()),
+                // What a row had to satisfy to arrive at each comparison, from the walk that
+                // assumed it. A clause of a declaration is not written at a place in a body and has
+                // nothing on the way to it, so only the guards have any of this.
+                guards.reaching());
     }
 
     /** The two producers' lines, in one list. */
@@ -457,11 +462,32 @@ final class Coverages {
         for (Border each : Partitions.bordersOf(axis, where.symbols(), within)) {
             out.merge(BoundaryLine.of(each),
                     assessed(each, shapeOf(each, where, knownWritable, probe, realizer,
-                                    rules.region()),
+                                    regionFor(each, rules, ReachingCuts.NONE)),
                             observed, armsAsked),
                     Coverages::whicheverSawMore);
         }
         return List.copyOf(out.values());
+    }
+
+    /**
+     * Where a row for one border may be written.
+     *
+     * <p>Beside the border and not part of it. What a border is is what the rows are owed at, and it
+     * is the same border wherever a row for it is looked for — put inside, two readings of one line
+     * reached under different conditions would be two obligations, and a count of what an author
+     * owes would move with how much of a body this compiler managed to read.
+     *
+     * <p>What the declarations leave, for a line a declaration draws. An invariant is about the
+     * values and holds wherever one stands, so there is nothing on the way to it; a guard is at a
+     * place in a body, and a row that never arrives there is no row at its line whatever it holds.
+     * Read off which kind of rule it is rather than off whether anything was collected: a guard
+     * nothing narrows and a clause are then the same region for the same stated reason.
+     */
+    private static souther.compiler.inputs.SearchRegion regionFor(
+            Border border, souther.compiler.inputs.Quantities rules, ReachingCuts reaching) {
+        return border.origin().comparisonAt()
+                .map(site -> reaching.narrowing(rules.region(), site))
+                .orElseGet(rules::region);
     }
 
     /**
@@ -730,7 +756,8 @@ final class Coverages {
         for (Border each : partitioning.between()) {
             out.merge(BoundaryLine.of(each),
                     assessed(each, shapeOf(each, where, false, probe, realizer,
-                                    partitioning.quantities().region()), observed,
+                                    regionFor(each, partitioning.quantities(),
+                                            partitioning.reaching())), observed,
                             armsAsked),
                     Coverages::whicheverSawMore);
         }

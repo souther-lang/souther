@@ -82,7 +82,8 @@ public final class Partitions {
                                List<souther.compiler.inputs.PositionReadingBlocked> blocked,
                                List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                List<Border> between,
-                               List<GuardThresholds.Guards.AtAPosition> compared) {
+                               List<GuardThresholds.Guards.AtAPosition> compared,
+                               ReachingCuts reaching) {
         public Partitioning {
             compared = List.copyOf(compared);
             axes = List.copyOf(axes);
@@ -200,7 +201,7 @@ public final class Partitions {
         }
         return new Partitioning(kept, omitted, quantities, uncertain, undividedIn(measured),
                 List.copyOf(unread), blockedIn(measured), List.copyOf(notSeparated),
-                List.of(), List.of());
+                List.of(), List.of(), ReachingCuts.NONE);
     }
 
     /**
@@ -368,6 +369,27 @@ public final class Partitions {
                                               souther.compiler.check.PathReachability.Answers
                                                       arrives,
                                               List<GuardThresholds.Guards.AtAPosition> compared) {
+        return withThresholds(base, thresholds, symbols, policy, unread, singled, between, arrives,
+                compared, ReachingCuts.NONE);
+    }
+
+    /**
+     * The same, told what a row has already had to satisfy by the time it reaches each comparison.
+     *
+     * <p>Carried and not re-derived, which is the whole discipline {@link ReachingCuts} is written
+     * around: what a region may assume is what the walk of the body actually took in, and a reading
+     * that recovered it from where a comparison sits would be free to name a condition nothing here
+     * could read.
+     */
+    public static Partitioning withThresholds(Partitioning base, List<Threshold> thresholds,
+                                              Symbols symbols, ReadingPolicy policy,
+                                              List<UnreadRule> unread,
+                                              List<GuardThresholds.Guards.Singled> singled,
+                                              List<LineDrawn> between,
+                                              souther.compiler.check.PathReachability.Answers
+                                                      arrives,
+                                              List<GuardThresholds.Guards.AtAPosition> compared,
+                                              ReachingCuts reaching) {
         // Both producers of one kind of evidence. What a body compared and what a type's own rules
         // bound are read by different readers and answer the same question, so a position either of
         // them wrote about and neither could turn into a line is named once, whichever wrote it.
@@ -476,7 +498,8 @@ public final class Partitions {
                 // came from. A line that divides a position leaves its division on the axis and,
                 // where the position has no value beside it, its border over here — and the two
                 // sides of that border are runs of what all of them leave.
-                base.notSeparated(), Border.allOf(between, partedByQuantity(out)), compared);
+                base.notSeparated(), Border.allOf(between, partedByQuantity(out)), compared,
+                reaching);
     }
 
     /**
