@@ -343,7 +343,7 @@ public final class Bodies {
             Answer<Lower.Lowered> lowering = db.ask(new Lowering(name));
             Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> signatures = db.ask(new Signatures(name));
-            Answer<Map<String, Type>> helpers = db.ask(new RecursiveHelperSigs(name));
+            Answer<Map<String, Type>> helpers = db.ask(new RecursiveCallSigs(name, InliningPolicy.FULL));
             if (!lowering.present() || !scope.present() || !signatures.present()
                     || !helpers.present()) {
                 return Answer.absent();
@@ -631,7 +631,7 @@ public final class Bodies {
             Answer<souther.compiler.check.Expandable> expandable = db.ask(new Shapes.Expandable(name));
             Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> signatures = db.ask(new Signatures(name));
-            Answer<Map<String, Type>> helpers = db.ask(new RecursiveHelperSigs(name));
+            Answer<Map<String, Type>> helpers = db.ask(new RecursiveCallSigs(name, InliningPolicy.FULL));
             if (!expandable.present() || !scope.present() || !signatures.present()
                     || !helpers.present()) {
                 return Answer.absent();
@@ -1602,7 +1602,7 @@ public final class Bodies {
                     db.ask(new CalleeSigsForBody(module, behavior));
             Answer<Map<ValueName.Behavior, ReqSig>> reqSigs = db.ask(new ReqSigs(module));
             Answer<HelperInliner> inliner = expanding(db, module, InliningPolicy.FULL);
-            Answer<Map<String, Type>> sigs = db.ask(new RecursiveHelperSigs(module));
+            Answer<Map<String, Type>> sigs = db.ask(new RecursiveCallSigs(module, InliningPolicy.FULL));
             Answer<Map<String, DataChecker.Constructs>> constructs =
                     db.ask(new RecursiveHelperConstructs(module));
             Answer<Hir.FnDef> discharge = db.ask(new BodyForInvariantDischarge(module, behavior));
@@ -1754,7 +1754,7 @@ public final class Bodies {
             Answer<Map<String, Sig>> signatures = db.ask(new Signatures(name));
             Answer<Set<ValueName.Behavior>> injected = db.ask(new ImportedInjected(name));
             Answer<Map<ValueName.Behavior, ReqSig>> reqSigs = db.ask(new ReqSigs(name));
-            Answer<Map<String, Type>> sigs = db.ask(new RecursiveHelperSigs(name));
+            Answer<Map<String, Type>> sigs = db.ask(new RecursiveCallSigs(name, InliningPolicy.FULL));
             Answer<Map<ValueName.Behavior, ReqSig>> calleeSigs = db.ask(new CalleeSigs(name));
             Answer<Map<String, Hir.FnDef>> published = db.ask(new ImportedDefinitions(name));
             if (!lowering.present() || !scope.present()

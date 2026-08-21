@@ -44,6 +44,16 @@ final class CodegenContext {
      * by helper name. A call to one is an {@code invokestatic}, not an inlined body. */
     final Map<String, Hir.FnDef> emittedHelpers;
 
+    /**
+     * What a call this module leaves standing is typed against, by the name it is reached by.
+     *
+     * <p>The same answer the check typed those calls against, handed over rather than worked out
+     * again. The emitter re-types the expressions it emits — a clause, a rule — and a table built
+     * here out of what this module happens to emit would answer for the methods written rather than
+     * for the names a call can hold, which is a narrower question and not the one being asked.
+     */
+    final Map<String, Type> standingCalls;
+
     /** Synthetic {@code Fn} classes generated for escaping lambdas (spec §blocks), merged into the
      * module output once every behavior is generated. */
     private final Map<GeneratedClass, byte[]> synthClasses = new LinkedHashMap<>();
@@ -316,7 +326,7 @@ final class CodegenContext {
 
     CodegenContext(String pkg, Symbols symbols, Map<String, List<GeneratedClass>> caseToSums,
                    Map<String, String> typePackage, boolean exposeAll, Set<String> exposed,
-                   Map<String, Hir.FnDef> emittedHelpers) {
+                   Map<String, Hir.FnDef> emittedHelpers, Map<String, Type> standingCalls) {
         this.pkg = pkg;
         this.symbols = symbols;
         this.caseToSums = caseToSums;
@@ -324,6 +334,7 @@ final class CodegenContext {
         this.exposeAll = exposeAll;
         this.exposed = exposed;
         this.emittedHelpers = emittedHelpers;
+        this.standingCalls = standingCalls;
     }
 
     /** {@code ACC_PUBLIC} when the name is exposed (or the module exposes all), else 0. */

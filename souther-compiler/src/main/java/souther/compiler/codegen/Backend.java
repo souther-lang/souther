@@ -144,9 +144,11 @@ public final class Backend {
                                                Map<String, List<BehaviorRequirement>> requirements,
                                                Bodies.Elaborated checked,
                                                Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
-                                               Map<ValueName.Behavior, EnsuresEnforcement> checks) {
+                                               Map<ValueName.Behavior, EnsuresEnforcement> checks,
+                                               Map<String, Type> standingCalls) {
         return generate(module, symbols, typePackage, sigs, importedSigs, importedInjected, calleeSigs,
-                requirements, checked, dischargeInvariants, checks, Instrumentation.NONE);
+                requirements, checked, dischargeInvariants, checks, standingCalls,
+                Instrumentation.NONE);
     }
 
     /**
@@ -172,10 +174,12 @@ public final class Backend {
                                                Bodies.Elaborated checked,
                                                Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
+                                               Map<String, Type> standingCalls,
                                                Instrumentation instrumentation) {
         try {
             return generating(module, symbols, typePackage, sigs, importedSigs, importedInjected,
-                    calleeSigs, requirements, checked, dischargeInvariants, checks, instrumentation);
+                    calleeSigs, requirements, checked, dischargeInvariants, checks, standingCalls,
+                    instrumentation);
         } catch (IllegalArgumentException e) {
             // Something the writer would not hold, from a member no definition here claimed — a
             // synthesised class, a shared one. It belongs to the module, which is as near as anything
@@ -194,6 +198,7 @@ public final class Backend {
                                                   Bodies.Elaborated checked,
                                                   Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
                                                   Map<ValueName.Behavior, EnsuresEnforcement> checks,
+                                                  Map<String, Type> standingCalls,
                                                   Instrumentation instrumentation) {
         Map<String, List<GeneratedClass>> caseToSums = new HashMap<>();
         for (Hir.Def def : module.defs()) {
@@ -222,7 +227,7 @@ public final class Backend {
             }
         }
         CodegenContext ctx = new CodegenContext(module.name(), symbols, caseToSums, typePackage,
-                module.exposing().isEmpty(), exposed, recHelpers);
+                module.exposing().isEmpty(), exposed, recHelpers, standingCalls);
         ctx.setDischargeInvariants(dischargeInvariants);
         ctx.setEnsuresChecks(checks);
         ctx.setCoveragePlan(instrumentation.coverage());

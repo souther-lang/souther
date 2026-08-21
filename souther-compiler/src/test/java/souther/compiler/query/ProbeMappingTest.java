@@ -63,7 +63,7 @@ class ProbeMappingTest {
         IllegalStateException stopped = assertThrows(IllegalStateException.class,
                 () -> Backend.generate(in.lowered(), in.scope(), in.typePackages(), in.sigs(),
                         in.imported(), in.injected(), in.callees(), in.requirements(), in.checked(),
-                        in.dischargeClauses(), in.checks(),
+                        in.dischargeClauses(), in.checks(), in.standingCalls(),
                         Instrumentation.NONE.measuring(somewhereElse)));
 
         assertTrue(stopped.getMessage().contains("no probe was planned"), stopped.getMessage());
@@ -97,7 +97,7 @@ class ProbeMappingTest {
         IllegalStateException stopped = assertThrows(IllegalStateException.class,
                 () -> Backend.generate(in.lowered(), in.scope(), in.typePackages(), in.sigs(),
                         in.imported(), in.injected(), in.callees(), in.requirements(), in.checked(),
-                        in.dischargeClauses(), in.checks(),
+                        in.dischargeClauses(), in.checks(), in.standingCalls(),
                         Instrumentation.NONE.measuring(overcounted)));
 
         assertTrue(stopped.getMessage().contains("nothing emitted"), stopped.getMessage());
