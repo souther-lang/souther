@@ -57,6 +57,19 @@ public sealed interface GenerationReason {
     record NothingToBuildAgainst(String behavior) implements GenerationReason {}
 
     /**
+     * Rows were offered for combinations of the body's decisions that nothing ran to confirm.
+     *
+     * <p>Which is not that they are wrong. A row is composed by narrowing each position to the
+     * classes the combination leaves it, and whether such a row reaches the meeting is settled by
+     * running it; where nothing could, what the row is offered for is what the reading says.
+     *
+     * <p>Said because silence about it reads as confirmation. The rows are worth offering either
+     * way — this is the account a generation could always give of them — but an author acting on
+     * one is acting on a reading, and that is theirs to know.
+     */
+    record RowsNotConfirmed(String behavior) implements GenerationReason {}
+
+    /**
      * The generated classes would not link, so the decoders could not be reached.
      *
      * <p>What the JVM raised is a {@code LinkageError}, and which of its causes it was is not

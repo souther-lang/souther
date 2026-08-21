@@ -361,6 +361,13 @@ public final class GeneratedRows {
                         "// generation stopped for `%s`: the generated classes would not link, so"
                                 + " the decoders a candidate is built through were out of reach%n",
                         failed.behavior());
+                // Not a stop. The rows above it are there and are worth writing; what is said is
+                // that nothing ran them, so what each is offered for is a reading of the body
+                // rather than something anything watched.
+                case GenerationReason.RowsNotConfirmed unconfirmed -> String.format(
+                        "// rows offered for `%s` were not run, so which combination each reaches"
+                                + " is read off the body rather than observed%n",
+                        unconfirmed.behavior());
                 // The reasons it rests on rather than a word of its own. What was not read is a
                 // measurement's answer and is already said in those words; saying it again in the
                 // generator's would be the same fact under two spellings, read side by side.
@@ -447,6 +454,9 @@ public final class GeneratedRows {
                     "every value tried was refused at construction, which does not make the"
                             + " combination impossible";
             case SEARCH_LIMIT -> "the search stopped before reaching it";
+            case NO_CERTIFIED_WITNESS ->
+                    "every row composed for it ran and went somewhere else, which does not make the"
+                            + " combination unreachable";
             case THE_RULES_LEAVE_NOTHING_THERE ->
                     "the rules leave no value here, and every combination they do leave was tried";
             case NOTHING_TO_BUILD_AGAINST ->

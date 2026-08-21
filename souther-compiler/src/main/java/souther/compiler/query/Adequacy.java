@@ -1488,6 +1488,7 @@ public final class Adequacy {
                     // with. They are said in their own words elsewhere and answer nothing here.
                     case souther.compiler.partition.GenerationReason.PositionWithheld _,
                             souther.compiler.partition.GenerationReason.SearchLimit _,
+                            souther.compiler.partition.GenerationReason.RowsNotConfirmed _,
                             souther.compiler.partition.GenerationReason.RowsNotRead _ -> null;
                 };
                 if (said != null) {
