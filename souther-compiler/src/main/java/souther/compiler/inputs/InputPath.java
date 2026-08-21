@@ -69,7 +69,27 @@ public final class InputPath {
     public static TermPath of(Core e, Map<BindingId, String> roots, Map<BindingId, Core> bound,
                               souther.compiler.check.ElementBindings elements, Symbols symbols,
                               boolean callsStand) {
-        return of(e, roots, bound, elements, symbols, callsStand, 0);
+        return of(e, roots, bound, elements, symbols, callsStand, 0, false);
+    }
+
+    /**
+     * The position {@code e}'s value came from, or null where it came from none.
+     *
+     * <p>Beside {@link #of} and licensing less. That one answers which position an expression names,
+     * and what a row writes at a position is what a rule about it is about; this answers where a
+     * value came from, and a value made from a position is not that position — a rule about it is
+     * not a rule about the values there, and nothing here says what it comes to for them.
+     *
+     * <p>So what this is for is saying that a rule was written. An author who filters what a
+     * {@code map} answered wrote a comparison, and a reading that could place it nowhere said
+     * nothing at all — which reads as a model with no rule there rather than a rule this could not
+     * follow.
+     */
+    public static TermPath cameFrom(Core e, Map<BindingId, String> roots,
+                                    Map<BindingId, Core> bound,
+                                    souther.compiler.check.ElementBindings elements,
+                                    Symbols symbols, boolean callsStand) {
+        return of(e, roots, bound, elements, symbols, callsStand, 0, true);
     }
 
     /**
@@ -89,13 +109,39 @@ public final class InputPath {
     private static TermPath containerPath(Core e, Map<BindingId, String> roots,
                                           Map<BindingId, Core> bound,
                                           souther.compiler.check.ElementBindings elements,
-                                          Symbols symbols, boolean callsStand, int through) {
-        TermPath named = of(e, roots, bound, elements, symbols, callsStand, through);
+                                          Symbols symbols, boolean callsStand, int through,
+                                          boolean made) {
+        TermPath named = of(e, roots, bound, elements, symbols, callsStand, through, made);
         if (named != null || through >= bound.size() + elements.containers().size() + FOLLOWED) {
             return named;
         }
-        Core held = e instanceof Core.Read r ? bound.get(r.binding()) : e;
-        if (!(held instanceof Core.Call call) || !(call.fn() instanceof Core.Reached reached)) {
+        if (e instanceof Core.Read r) {
+            // Through a binding an expansion wrote, where the operation it removed answered the
+            // elements it was given. The operation is gone from this tree, so what says so was
+            // written where it still stood.
+            souther.compiler.types.BindingId same =
+                    elements.provenance().sameElementsAs(r.binding());
+            // And through one whose elements were made from another's, where what is being asked is
+            // where a value came from. Never where the question is which position it is: a value
+            // made from a position is not that position.
+            if (same == null && made) {
+                same = elements.provenance().madeFrom(r.binding());
+            }
+            if (same != null) {
+                return containerPath(new Core.Read(r.name(), same, r.type(), r.pos()),
+                        roots, bound, elements, symbols, callsStand, through + 1, made);
+            }
+            // Or through what the binding holds. Looked up over the whole body and not down the
+            // path to here: a container built by one operation and handed to the next is bound
+            // beside the closure that reads it rather than above it.
+            Core held = bound.containsKey(r.binding()) ? bound.get(r.binding())
+                    : elements.boundTo(r.binding());
+            return held == null ? null
+                    : containerPath(held, roots, bound, elements, symbols, callsStand,
+                        through + 1, made);
+        }
+        // Or through an operation the language keeps standing that answers what it was given.
+        if (!(e instanceof Core.Call call) || !(call.fn() instanceof Core.Reached reached)) {
             return null;
         }
         souther.compiler.check.ArgumentRef holds =
@@ -103,7 +149,7 @@ public final class InputPath {
         int argument = holds == null ? -1 : holds.positionIn(reached.denotes());
         return argument < 0 || argument >= call.args().size() ? null
                 : containerPath(call.args().get(argument), roots, bound, elements, symbols,
-                        callsStand, through + 1);
+                        callsStand, through + 1, made);
     }
 
     /** How many operations deep the elements of one container are followed. */
@@ -111,7 +157,7 @@ public final class InputPath {
 
     private static TermPath of(Core e, Map<BindingId, String> roots, Map<BindingId, Core> bound,
                                souther.compiler.check.ElementBindings elements, Symbols symbols,
-                               boolean callsStand, int through) {
+                               boolean callsStand, int through, boolean made) {
         return switch (e) {
             case Core.Read r -> {
                 String parameter = roots.get(r.binding());
@@ -128,24 +174,34 @@ public final class InputPath {
                 // A binding holds one value, so following it cannot come back to itself; the count
                 // is what says so to a reader rather than a claim in a comment.
                 int steps = bound.size() + elements.containers().size();
+                if (through >= steps) {
+                    yield null;
+                }
                 if (held != null) {
-                    yield through >= steps ? null
-                            : of(held, roots, bound, elements, symbols, callsStand, through + 1);
+                    TermPath through_ =
+                            of(held, roots, bound, elements, symbols, callsStand, through + 1, made);
+                    if (through_ != null) {
+                        yield through_;
+                    }
+                    // What it holds names no position, and it may still be an element of one. Two
+                    // walks over one collection joined into one leave a binding that is both: it
+                    // holds what the first walk made, and it is what the second was handed. Stopping
+                    // at the first left every rule inside the second reading as being about nothing.
                 }
                 Core container = elements.containerOf(r.binding());
-                if (container == null || through >= steps) {
+                if (container == null) {
                     yield null;
                 }
                 TermPath at = containerPath(container, roots, bound, elements, symbols,
-                        callsStand, through + 1);
+                        callsStand, through + 1, made);
                 // The container names no position of this behavior's input — it is what another
                 // operation answered, or something this does not read — so neither does an element
                 // of it. Where a reading of provenance goes on from there is not this walk's.
                 yield at == null ? null : at.element();
             }
             case Core.FieldAccess fa -> {
-                TermPath base =
-                        of(fa.target(), roots, bound, elements, symbols, callsStand, through);
+                TermPath base = of(fa.target(), roots, bound, elements, symbols, callsStand,
+                        through, made);
                 if (base == null) {
                     yield null;
                 }

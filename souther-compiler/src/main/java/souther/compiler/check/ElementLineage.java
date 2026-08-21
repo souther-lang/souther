@@ -52,6 +52,19 @@ public sealed interface ElementLineage {
     }
 
     /**
+     * The argument an operation's answer holds elements <em>made from</em>, or null where its
+     * elements are not made from an argument's.
+     *
+     * <p>Beside {@link #holdsTheElementsOf} and licensing less. That one says a reader that reached
+     * an element of the answer has reached an element of the argument; this says only that the value
+     * came from there. What a rule about it means for the position it came from is a question about
+     * the closure that made it, and knowing where it came from does not answer it.
+     */
+    static ArgumentRef derivesItsElementsFrom(souther.compiler.types.ValueName operation) {
+        return DischargeRules.derivesItsElementsFrom(operation);
+    }
+
+    /**
      * Where in what an operation answers the elements this is about stand.
      *
      * <p>An operation answers one value and that value may hold more than one run of elements.

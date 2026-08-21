@@ -34,13 +34,29 @@ import java.util.Map;
  * container is not always one — it can be what another operation answered, which is where a reading
  * of provenance goes on rather than stopping ({@link ElementLineage}).
  */
-public record ElementBindings(Map<BindingId, Core> containers) {
+public record ElementBindings(Map<BindingId, Core> containers, Map<BindingId, Core> held,
+                              ElementProvenance provenance) {
 
     /** Nothing was read, which is what a body with no combinator in it comes to. */
-    public static final ElementBindings NONE = new ElementBindings(Map.of());
+    public static final ElementBindings NONE =
+            new ElementBindings(Map.of(), Map.of(), ElementProvenance.NONE);
 
     public ElementBindings {
         containers = Map.copyOf(containers);
+        held = Map.copyOf(held);
+    }
+
+    /**
+     * What {@code binding} was bound to, wherever in the body it was bound.
+     *
+     * <p>Over the whole body and not down the path to a reader, which is what a walk answering
+     * "what does this name mean here" has to be. A binding tells itself from every other, so there
+     * is no shadowing for a lookup by one to get wrong — and what a rule about an element needs is
+     * often bound in a sibling of where the rule stands: a container built by one operation and
+     * handed to the next is bound beside the closure that reads it, not above it.
+     */
+    public Core boundTo(BindingId binding) {
+        return binding == null ? null : held.get(binding);
     }
 
     /** The container an element at {@code binding} was taken from, or null where the binding holds
@@ -64,13 +80,19 @@ public record ElementBindings(Map<BindingId, Core> containers) {
      * value some other binding holds, and the parameter an element arrives on is that value's, not
      * this call's to name.
      */
-    public static ElementBindings of(Core body) {
+    public static ElementBindings of(Core body, ElementProvenance provenance) {
         Map<BindingId, Core> found = new LinkedHashMap<>();
-        walk(body, found);
-        return found.isEmpty() ? NONE : new ElementBindings(found);
+        Map<BindingId, Core> held = new LinkedHashMap<>();
+        walk(body, found, held);
+        return found.isEmpty() && provenance.isEmpty() ? NONE
+                : new ElementBindings(found, held, provenance);
     }
 
-    private static void walk(Core e, Map<BindingId, Core> found) {
+    private static void walk(Core e, Map<BindingId, Core> found, Map<BindingId, Core> held) {
+        if (e instanceof Core.LetIn let && let.binder() != null
+                && let.binder().binding() != null) {
+            held.putIfAbsent(let.binder().binding(), let.value());
+        }
         if (e instanceof Core.Call call
                 && call.fn() instanceof Core.Reached reached) {
             Combinators.Combinator handed = Combinators.of(reached.denotes());
@@ -87,6 +109,6 @@ public record ElementBindings(Map<BindingId, Core> containers) {
                 }
             }
         }
-        Core.forEachChild(e, child -> walk(child, found));
+        Core.forEachChild(e, child -> walk(child, found, held));
     }
 }

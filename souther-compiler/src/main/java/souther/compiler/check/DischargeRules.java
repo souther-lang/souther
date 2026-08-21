@@ -1111,6 +1111,18 @@ final class DischargeRules {
         return rules;
     }
 
+    /** What {@link ElementLineage#derivesItsElementsFrom} answers with, read off the table here. */
+    static ArgumentRef derivesItsElementsFrom(ValueName operation) {
+        Built built = Bound.BUILDINGS.get(operation);
+        if (built == null || built.outputs().size() != 1) {
+            return null;
+        }
+        ElementLineage lineage = built.lineage();
+        return (lineage instanceof ElementLineage.ClosureResult
+                || lineage instanceof ElementLineage.InsideClosureResult)
+                && lineage.source().elements() == 1 ? lineage.source().argument() : null;
+    }
+
     /** What {@link ElementLineage#holdsTheElementsOf} answers with, read off the table here. */
     static ArgumentRef holdsTheElementsOf(ValueName operation) {
         Built built = Bound.BUILDINGS.get(operation);

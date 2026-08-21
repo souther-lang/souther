@@ -107,12 +107,19 @@ class AClosuresParameterIsThePositionItWasHandedTest {
     }
 
     /**
-     * What a combinator is handed out of another operation's answer is not one of these.
+     * What a combinator is handed out of another operation's answer is not one of these, and the
+     * rule written about it is still named.
      *
-     * <p>The container is what a {@code map} answered, so an element of it is not a position of
-     * this behavior's input — it is a value derived from one, and what a rule about it means for the
-     * input is a question nothing here answers. Reported as a position, the line would be drawn
-     * where no row can reach it and the report would name a coordinate the model does not have.
+     * <p>The container is what a {@code map} answered, so an element of it is not a position of this
+     * behavior's input — it is a value made from one, and what a rule about it means for the input
+     * is a question nothing here answers. No line is drawn: reported as a position, it would be
+     * drawn where no row can reach it and the report would name a coordinate the model does not
+     * have.
+     *
+     * <p>But the rule is not silent. An author who filters what a {@code map} answered wrote a
+     * comparison, and a reading that placed it nowhere said nothing at all — which reads as a model
+     * that states no rule there. What is said instead is where the values came from, and that what
+     * the rule says about them here is not worked out.
      */
     @Test
     void anElementOfWhatAnotherOperationAnsweredNamesNoPosition() {
@@ -135,8 +142,11 @@ class AClosuresParameterIsThePositionItWasHandedTest {
         assertEquals(List.of(), scored.axes().stream()
                         .map(PartitionEvidence.AxisCoverage::path).toList(),
                 "no line is drawn on a position this behavior's input does not have");
-        assertTrue(scored.notRead().stream()
-                        .noneMatch(each -> each.at().startsWith("people[*]")),
-                () -> "and no rule is filed against one either: " + scored.notRead());
+        assertEquals(List.of("people[*]"), scored.notRead().stream()
+                        .filter(each -> each.reason()
+                                == UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE)
+                        .map(PartitionEvidence.NotRead::at).toList(),
+                () -> "and the rule is named, at the position its values came from: "
+                        + scored.notRead());
     }
 }

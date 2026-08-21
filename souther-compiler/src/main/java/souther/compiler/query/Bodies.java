@@ -1822,7 +1822,8 @@ public final class Bodies {
                 // after which nothing in the tree says which container an element came from. It
                 // renames no binding, so what is read now is as true of what it answers with.
                 return Answer.of(new CheckedBody(GrowingFold.rewrite(core),
-                        souther.compiler.check.ElementBindings.of(core)), reports);
+                        souther.compiler.check.ElementBindings.of(core,
+                                body.value().provenance())), reports);
             } catch (Unanswerable _) {
                 // The name it rested on was reported where it was written. This body has no meaning
                 // to emit, which the absence says, and nothing further to add.

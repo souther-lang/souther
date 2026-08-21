@@ -75,20 +75,20 @@ class AnElementReachedThroughAnOperationIsStillThePositionsTest {
     }
 
     /**
-     * Not through one the library writes as a body, whose name the tree no longer holds.
+     * And through one the library writes as a body, whose name the tree no longer holds.
      *
      * <p>{@code List.distinct} answers the elements it was given, as {@code List.reverse} does, and
      * the library says so of both. What differs is that one is written as a walk and is spliced into
-     * whatever calls it, so by the time this reads the tree there is no operation left to ask about
-     * — and an element of what it answered is at a position this cannot name.
+     * whatever calls it — so by the time this reads the tree there is no operation left to ask
+     * about, and what it answered would be at a position nothing could name.
      *
-     * <p>Nothing is claimed, which is the answer that costs least. What it costs is the line the
-     * model does draw, and lifting it wants the relation recorded before the splice rather than
-     * recognised after it.
+     * <p>Which is why the relation is written where the operation still stands. An expansion knows
+     * what it is expanding and which of its arguments held the container, and both ends survive it
+     * as bindings; recognising it afterwards would read the shape a splice happens to leave.
      */
     @Test
-    void butNotThroughOneTheLibraryWritesAsABody() {
-        assertEquals(List.of(),
+    void andThroughOneTheLibraryWritesAsABody() {
+        assertEquals(List.of("people[*].age"),
                 axesOf("List.filter(p -> p.age >= 18, List.distinct(people))"));
     }
 

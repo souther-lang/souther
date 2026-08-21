@@ -183,6 +183,23 @@ public final class GuardThresholds {
     }
 
     /**
+     * The positions the values a comparison is over came from, for a comparison that names none.
+     *
+     * <p>Beside {@link #mentioned} and asking the other question. That one says which positions the
+     * terms <em>are</em>; this says where they came from, which is only ever asked once the first
+     * has come back with nothing.
+     */
+    private static void cameFrom(Core.Binary comparison, InputReads reads, Symbols symbols,
+                                 List<TermPath> out) {
+        for (Core side : List.of(comparison.left(), comparison.right())) {
+            TermPath at = reads.cameFrom(side, symbols);
+            if (at != null && !out.contains(at)) {
+                out.add(at);
+            }
+        }
+    }
+
+    /**
      * Every position a condition compares, however the condition is written.
      *
      * <p>Names them and no more. Whether a line can be drawn on one is {@link #termOf}'s narrower
@@ -215,6 +232,21 @@ public final class GuardThresholds {
             // record nothing is numbered nowhere, and a model states its rules regardless.
             RuleRef.Guard rule = new RuleRef.Guard(behavior, binary.origin());
             souther.compiler.check.RuleCitation cited = citationOf(iff, binary);
+            // A comparison naming no position of the input, whose terms came from one. An operation
+            // made the value it compares out of what stands there, so the rule is about that
+            // position's values and this cannot say what it says about them — which is not the same
+            // as a body that wrote no rule, and used to read as one.
+            if (named.isEmpty()) {
+                cameFrom(binary, reads, symbols, named);
+                for (TermPath each : named) {
+                    UnreadRule derived = new UnreadRule(rule, cited, each,
+                            new BlockReason.RuleAboutADerivedValue());
+                    if (out.stream().noneMatch(had -> had.sameAs(derived))) {
+                        out.add(derived);
+                    }
+                }
+                return;
+            }
             for (TermPath each : named) {
                 // One per position the comparison names, and told from its neighbours by the rule
                 // as well as the place. Kept by position alone, the second comparison of one
