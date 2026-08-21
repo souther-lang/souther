@@ -1,4 +1,4 @@
-# ADR-0109: Relational knowledge about an input is asked through one boundary
+# ADR-0110: Relational knowledge about an input is asked through one boundary
 
 Status: Accepted. Fixes where a question about several input positions at once is answered.
 
