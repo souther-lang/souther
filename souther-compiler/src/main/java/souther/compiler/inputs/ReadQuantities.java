@@ -219,19 +219,19 @@ final class ReadQuantities implements Quantities {
         if (had != null) {
             return had;
         }
-        // What the term guarantees of itself, before anything is looked up. A count is a whole
-        // number whatever it is a count of ({@link NumericTerm#carrierAt}), and asking the position
-        // for it would make a fact the term owns depend on whether the walk that reads this input
-        // reached the place the term sits at — a path two levels down has no position, and the floor
-        // under a count there would be dropped for having nowhere to ask.
-        if (term instanceof NumericTerm.SizeOf) {
-            return souther.compiler.numeric.Granularity.DISCRETE;
-        }
-        Position at = byPath.get(term.path());
-        if (at == null || symbols == null) {
+        if (symbols == null) {
             return null;
         }
-        souther.compiler.check.Carrier carrier = term.carrierAt(at.type(), symbols);
+        // Asked of the term, which is what knows. A count is a whole number whatever it is a count
+        // of and a position measured by its own values is spaced by its type, and both of those are
+        // {@link NumericTerm#carrierAt}'s one answer — so the position is looked up to be handed
+        // over rather than to decide anything. Asked of the position instead, a fact the term owns
+        // would depend on whether the walk that reads this input reached the place the term sits
+        // at, and a count under more steps than that walk goes down would lose the floor every
+        // count has.
+        Position at = byPath.get(term.path());
+        souther.compiler.check.Carrier carrier =
+                term.carrierAt(at == null ? null : at.type(), symbols);
         return carrier == null ? null : carrier.spacing();
     }
 
