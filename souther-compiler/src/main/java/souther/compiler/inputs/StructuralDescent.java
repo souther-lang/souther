@@ -10,11 +10,11 @@ import java.util.Map;
 /**
  * What stands directly under a type, and nothing else.
  *
- * <p>The one place a product's fields are enumerated. Two readers want to know what is under a
- * type — what positions a behavior's input has, and where a value has to be built — and they had a
- * recursion each, kept in step by hand and already out of step about how deep to go, about whether a
- * shape outside the readable set is refused, and about whether a path is a {@link TermPath} or a
- * string. A third reader wanting the same fact would have written a third.
+ * <p>The one step two readers of one structure take. What positions a behavior's input has and
+ * where a value has to be built are different questions about the same fields, and each had a
+ * recursion of its own, kept in step by hand and already out of step about how deep to go, about
+ * whether a shape outside the readable set is refused, and about whether a path is a
+ * {@link TermPath} or a string. A third reader of that question would have written a third.
  *
  * <p><b>One step and no walk.</b> What is under a type is a fact about the type. How far down to
  * follow it, where to stop because the caller has already settled something, and what type stands at
