@@ -165,17 +165,18 @@ public final class CoverageSites {
                        IdentityHashMap<Core, Integer> byComparison,
                        IdentityHashMap<Core, ControlPointId.ArmOccurrence[]> armsByNode,
                        IdentityHashMap<Core, Integer> controlByComparison,
-                       java.util.Set<Core> mayRepeat) {
+                       java.util.Set<Core> mayRepeat,
+                       IdentityHashMap<Core, ForkOccurrence> forkByNode) {
 
         public static final Plan NONE = new Plan(List.of(), List.of(), new IdentityHashMap<>(),
                 new IdentityHashMap<>(), new IdentityHashMap<>(), new IdentityHashMap<>(),
-                java.util.Set.of());
+                java.util.Set.of(), new IdentityHashMap<>());
 
         /** The same plan built without the control layer, for a caller assembling one by hand. */
         public Plan(List<Site> sites, List<GuardRef> guards, IdentityHashMap<Core, int[]> byNode,
                     IdentityHashMap<Core, Integer> byComparison) {
             this(sites, guards, byNode, byComparison, new IdentityHashMap<>(),
-                    new IdentityHashMap<>(), java.util.Set.of());
+                    new IdentityHashMap<>(), java.util.Set.of(), new IdentityHashMap<>());
         }
 
         /**
@@ -204,6 +205,11 @@ public final class CoverageSites {
          */
         public ControlPointId.ArmOccurrence[] armsOf(Core node) {
             return armsByNode.get(node);
+        }
+
+        /** Which fork {@code node} is, or null where this plan made no arms for it. */
+        public ForkOccurrence forkAt(Core node) {
+            return forkByNode.get(node);
         }
 
         /** Which way {@code comparison} coming out {@code result} is, or empty where this plan
@@ -312,7 +318,8 @@ public final class CoverageSites {
             walk.behavior(body.getKey(), body.getValue());
         }
         return new Plan(List.copyOf(walk.sites), List.copyOf(walk.guards), walk.byNode,
-                walk.byComparison, walk.armsByNode, walk.controlByComparison, walk.mayRepeat);
+                walk.byComparison, walk.armsByNode, walk.controlByComparison, walk.mayRepeat,
+                walk.forkByNode);
     }
 
     private static final class Walk {
@@ -323,6 +330,7 @@ public final class CoverageSites {
         private final IdentityHashMap<Core, Integer> byComparison = new IdentityHashMap<>();
         private final IdentityHashMap<Core, ControlPointId.ArmOccurrence[]> armsByNode =
                 new IdentityHashMap<>();
+        private final IdentityHashMap<Core, ForkOccurrence> forkByNode = new IdentityHashMap<>();
         private final IdentityHashMap<Core, Integer> controlByComparison = new IdentityHashMap<>();
         private final IdentityHashMap<Core, Boolean> answering = new IdentityHashMap<>();
         /** The nodes one run can pass more than once. Kept by identity, like everything else here:
@@ -379,6 +387,20 @@ public final class CoverageSites {
                     // rewrites and carries whatever position it was built from, so quoting it sends
                     // an author somewhere else in the file.
                     Citation.of(owner.pos()), origin);
+        }
+
+        /**
+         * The arms of one fork, and the fork they are arms of.
+         *
+         * <p>Both written here, in one act. What names the fork is the first of its arms, and it is
+         * a name rather than a lookup for exactly that reason: made apart, the fork's identity would
+         * be something each reader worked out again from whatever component it had to hand.
+         */
+        private void arms(Core fork, ControlPointId.ArmOccurrence[] arms) {
+            armsByNode.put(fork, arms);
+            if (arms.length > 0) {
+                forkByNode.put(fork, new ForkOccurrence(arms[0].controlId()));
+            }
         }
 
         /** The probe numbers of {@code arms}, in their order, {@link #NO_SITE} where an arm has
@@ -514,7 +536,7 @@ public final class CoverageSites {
                             armOf(FAILED, iff, iff.origin(), 1, iff.els(), inside);
                     walk(iff.els(), inside);
                     byNode.put(iff, probesOf(then, els));
-                    armsByNode.put(iff, new ControlPointId.ArmOccurrence[] {then, els});
+                    arms(iff, new ControlPointId.ArmOccurrence[] {then, els});
                     if (then.isMeasured() || els.isMeasured()) {
                         guards.add(new GuardRef(behavior, iff.origin(),
                                 then.probe().orElse(NO_SITE), els.probe().orElse(NO_SITE),
@@ -532,7 +554,7 @@ public final class CoverageSites {
                         walk(arm.body(), inside);
                     }
                     byNode.put(m, probesOf(arms));
-                    armsByNode.put(m, arms);
+                    arms(m, arms);
                 }
                 case Core.IfConstructed ic -> {
                     ic.construct().values().forEach(given -> walk(given.value(), inside));
@@ -548,7 +570,7 @@ public final class CoverageSites {
                         walk(arm.body(), inside);
                     }
                     byNode.put(ic, probesOf(arms));
-                    armsByNode.put(ic, arms);
+                    arms(ic, arms);
                 }
             }
         }

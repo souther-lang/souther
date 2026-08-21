@@ -47,4 +47,48 @@ public record CellSelection(InteractionCells.Cell cell, List<ControlClaim> claim
     public boolean certifiedBy(Observation seen) {
         return claims.stream().allMatch(claim -> claim.satisfiedBy(seen));
     }
+
+    /**
+     * The row at {@code where} as a witness that this combination is filled, where {@code seen} says
+     * it filled it.
+     *
+     * <p>The only way there is to make one. That a row fills a combination is the one thing here a
+     * reader may act on, and it is a conclusion about a run — so it is a value nothing but this can
+     * produce, out of the run itself. A caller holding the classes a row sits in cannot reach for it,
+     * which is what stops the reading that composed a row from being read back as evidence for
+     * itself.
+     */
+    public java.util.Optional<CertifiedWitness> certifying(int[] where, Observation seen) {
+        return certifiedBy(seen) ? java.util.Optional.of(new CertifiedWitness(this, where))
+                : java.util.Optional.empty();
+    }
+
+    /**
+     * A row seen doing what one combination names.
+     *
+     * <p>Its own type because what it says is not what its parts say. The classes and the run are
+     * both readable elsewhere; that the two together fill a combination is the conclusion, and
+     * having it be a value means a reader either has it or does not, rather than deciding it again
+     * from whatever it has to hand.
+     */
+    public static final class CertifiedWitness {
+
+        private final CellSelection of;
+        private final int[] where;
+
+        private CertifiedWitness(CellSelection of, int[] where) {
+            this.of = of;
+            this.where = where.clone();
+        }
+
+        /** Which combination this fills. */
+        public CellSelection of() {
+            return of;
+        }
+
+        /** Which class of each position the row sits at. */
+        public int[] where() {
+            return where.clone();
+        }
+    }
 }

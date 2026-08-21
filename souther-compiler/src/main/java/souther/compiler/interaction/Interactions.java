@@ -486,7 +486,8 @@ public final class Interactions {
             return null;
         }
         if (at == null) {
-            return new Decision(forkArm(match, part), claim);
+            Condition fork = forkArm(match, part);
+            return fork == null ? null : new Decision(fork, claim);
         }
         List<String> names = arm.pattern().selectors().stream()
                 .map(selector -> selector.name().name()).toList();
@@ -513,8 +514,9 @@ public final class Interactions {
             return null;
         }
         TermPath read = reads.pathOf(iff.cond(), symbols);
-        return new Decision(read == null ? forkArm(iff, part)
-                : new Condition.Case(read, part == 0 ? "true" : "false"), claim);
+        Condition what = read == null ? forkArm(iff, part)
+                : new Condition.Case(read, part == 0 ? "true" : "false");
+        return what == null ? null : new Decision(what, claim);
     }
 
     /**
@@ -554,17 +556,19 @@ public final class Interactions {
         return souther.compiler.coverage.ControlClaim.of(arms[part]).orElse(null);
     }
 
-    /** The fork itself, for a decision this reading cannot name a position for. */
+    /** The fork itself, for a decision this reading cannot name a position for, or null where the
+     *  plan named no fork here. */
     private Condition forkArm(Core fork, int part) {
-        ControlPointId.ArmOccurrence[] arms = plan.armsOf(fork);
-        return new Condition.Arm(arms == null || arms.length == 0 ? -1 : arms[0].controlId(), part);
+        souther.compiler.coverage.ForkOccurrence named = plan.forkAt(fork);
+        return named == null ? null : new Condition.Arm(named, part);
     }
 
     /** A fork coming out one way and nothing said about which position, or null where no run
      *  through the arm could be recorded. */
     private Decision forkDecision(Core fork, int part) {
         souther.compiler.coverage.ControlClaim claim = armClaim(fork, part);
-        return claim == null ? null : new Decision(forkArm(fork, part), claim);
+        Condition what = forkArm(fork, part);
+        return claim == null || what == null ? null : new Decision(what, claim);
     }
 
     private static TermPath firstOf(TermPath left, TermPath right) {
@@ -620,8 +624,8 @@ public final class Interactions {
                         each instanceof Condition.Case other && other.at().equals(one.at());
                 case Condition.Side one -> each instanceof Condition.Side other
                         && other.comparison().equals(one.comparison());
-                case Condition.Arm one ->
-                        each instanceof Condition.Arm other && other.control() == one.control();
+                case Condition.Arm one -> each instanceof Condition.Arm other
+                        && other.fork().equals(one.fork());
             };
             if (same) {
                 return true;

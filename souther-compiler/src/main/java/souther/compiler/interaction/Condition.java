@@ -1,6 +1,7 @@
 package souther.compiler.interaction;
 
 import souther.compiler.coverage.ComparisonOccurrence;
+import souther.compiler.coverage.ForkOccurrence;
 import souther.compiler.inputs.TermPath;
 
 /**
@@ -50,14 +51,19 @@ public sealed interface Condition {
      * into this outcome; whether the outcomes are two is decided by the fork having two arms, and
      * running them together would report a factor the body has as one it does not.
      *
-     * @param control which fork, among the places of this plan
-     * @param part    which arm of it
+     * <p>Nothing can place one of these at a class of a position, so a group made of one is not a
+     * group anything offers. That it is here at all is what says so: the walk found a decision it
+     * could not name, and a reading that left it out instead would offer the group with one of the
+     * ways it can be settled quietly missing.
+     *
+     * @param fork which fork, as the plan named it
+     * @param part which arm of it
      */
-    record Arm(int control, int part) implements Condition {
+    record Arm(ForkOccurrence fork, int part) implements Condition {
 
         @Override
         public String toString() {
-            return "arm " + control + "/" + part;
+            return fork + "/" + part;
         }
     }
 }

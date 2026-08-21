@@ -792,7 +792,8 @@ public final class Generator {
      */
     private static boolean fills(List<Placement> written, CellSelection selection) {
         for (Placement row : written) {
-            if (admits(selection.cell(), row.where()) && selection.certifiedBy(row.seen())) {
+            if (admits(selection.cell(), row.where())
+                    && selection.certifying(row.where(), row.seen()).isPresent()) {
                 return true;
             }
         }

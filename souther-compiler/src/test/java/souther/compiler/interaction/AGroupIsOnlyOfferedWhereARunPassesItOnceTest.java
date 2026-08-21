@@ -148,25 +148,26 @@ class AGroupIsOnlyOfferedWhereARunPassesItOnceTest {
         /** The same plan, answering that a run may come back to anywhere. What the walk cannot be
          *  made to produce today, which is why it is stated rather than arranged. */
         CoverageSites.Plan planWhereEverythingRepeats() {
+            AbstractSet<Core> everywhere = new AbstractSet<>() {
+
+                @Override
+                public boolean contains(Object node) {
+                    return true;
+                }
+
+                @Override
+                public Iterator<Core> iterator() {
+                    return java.util.Collections.emptyIterator();
+                }
+
+                @Override
+                public int size() {
+                    return 0;
+                }
+            };
             return new CoverageSites.Plan(plan.sites(), plan.guards(), plan.byNode(),
                     plan.byComparison(), plan.armsByNode(), plan.controlByComparison(),
-                    new AbstractSet<>() {
-
-                        @Override
-                        public boolean contains(Object node) {
-                            return true;
-                        }
-
-                        @Override
-                        public Iterator<Core> iterator() {
-                            return java.util.Collections.emptyIterator();
-                        }
-
-                        @Override
-                        public int size() {
-                            return 0;
-                        }
-                    });
+                    everywhere, plan.forkByNode());
         }
     }
 }

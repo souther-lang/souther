@@ -107,6 +107,33 @@ class ASelectionsClassesAndClaimsAreOfTheSameChoiceTest {
     }
 
     /**
+     * A witness is made out of a run, and out of nothing else.
+     *
+     * <p>What a witness says is that this row filled this combination, which is the one conclusion
+     * here a reader may act on. A caller holding the classes a row sits in cannot reach for one, so
+     * the reading that composed a row cannot come back as evidence for itself.
+     */
+    @Test
+    void aWitnessIsMadeOnlyFromARunThatDidWhatTheCombinationNames() {
+        InteractionCells.Group group = new InteractionCells.Group(
+                new InteractionCells.Placed(holding(0, 1, 2, 3), List.of(at(9))),
+                List.of(List.of(new InteractionCells.Placed(holding(0, 1), List.of(at(10))),
+                        new InteractionCells.Placed(holding(2, 3), List.of(at(11))))));
+        CellSelection selection = group.at(0);
+        int[] where = {0};
+
+        assertTrue(selection.certifying(where, lit(9, 10)).isPresent(),
+                "a run that did both makes one");
+        assertTrue(selection.certifying(where, lit(9, 11)).isEmpty(),
+                "a run that settled the factor the other way makes none");
+        assertTrue(selection.certifying(where, lit(10)).isEmpty(),
+                "nor one that never took the way in");
+        assertEquals(selection,
+                selection.certifying(where, lit(9, 10)).orElseThrow().of(),
+                "and the one it makes says which combination it filled");
+    }
+
+    /**
      * A combination is certified by a run that did everything it names, and by nothing less.
      *
      * <p>What is missing is answered rather than only whether anything is: a row that did not take
