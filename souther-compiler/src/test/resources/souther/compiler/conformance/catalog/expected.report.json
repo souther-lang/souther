@@ -1,5 +1,5 @@
 {
-  "schemaVersion" : 3,
+  "schemaVersion" : 4,
   "compilerVersion" : "<version>",
   "status" : "complete",
   "adequacy" : "satisfied",
@@ -465,7 +465,7 @@
           "reason" : "unsupported_syntax",
           "rule" : "comparison@1:52:57",
           "ruleId" : {
-            "kind" : "guard",
+            "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
             "behavior" : "出荷する",
             "ordinal" : 4,
@@ -476,7 +476,7 @@
           "reason" : "unsupported_syntax",
           "rule" : "comparison@1:52:57",
           "ruleId" : {
-            "kind" : "guard",
+            "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
             "behavior" : "出荷する",
             "ordinal" : 4,
@@ -487,7 +487,7 @@
           "reason" : "unsupported_syntax",
           "rule" : "comparison@1:54:50",
           "ruleId" : {
-            "kind" : "guard",
+            "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
             "behavior" : "出荷する",
             "ordinal" : 5,
@@ -518,7 +518,7 @@
         "disposition" : "reported",
         "subject" : "指示.受付日",
         "ruleId" : {
-          "kind" : "guard",
+          "kind" : "comparison",
           "declaredIn" : "conformance.shipping",
           "behavior" : "出荷する",
           "ordinal" : 4,
@@ -530,7 +530,7 @@
         "disposition" : "reported",
         "subject" : "指示.締切",
         "ruleId" : {
-          "kind" : "guard",
+          "kind" : "comparison",
           "declaredIn" : "conformance.shipping",
           "behavior" : "出荷する",
           "ordinal" : 4,
@@ -542,7 +542,7 @@
         "disposition" : "reported",
         "subject" : "指示.集荷時刻",
         "ruleId" : {
-          "kind" : "guard",
+          "kind" : "comparison",
           "declaredIn" : "conformance.shipping",
           "behavior" : "出荷する",
           "ordinal" : 5,
