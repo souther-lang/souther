@@ -1300,6 +1300,10 @@ public final class Adequacy {
             Map<String, Filling> out = new LinkedHashMap<>();
             FixtureReader.Construction building = constructing(db, name,
                     prepared.value().forExamples(), symbols);
+            // One for the module, so the classes a candidate is built and applied in are defined
+            // once however many behaviors are searched.
+            souther.compiler.examples.RowTrial.Trials trials = trialling(db, name,
+                    prepared.value().forExamples(), symbols);
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
                 if (!(behavior instanceof Hir.SpecBehavior spec)) {
                     continue;
@@ -1315,7 +1319,7 @@ public final class Adequacy {
                     pairs = pairsFor(spec, sig, symbols, bodies.get(spec.name()), plan,
                             byTarget.getOrDefault(spec.name(), Observed.NONE), building,
                             domainOf(readInputs, spec), arrivalsOf(arrives, spec),
-                            statedOf(declared, spec));
+                            statedOf(declared, spec), runningRowsOf(trials, spec.name(), sig));
                 } catch (LinkageError _) {
                     // The generated classes would not link, so nothing can be built to find out
                     // what a model admits. Saying so is not the same as saying the combinations are
@@ -1559,12 +1563,33 @@ public final class Adequacy {
                     stopped.stream().distinct().toList());
         }
 
+        /**
+         * A way to run this behavior's composed rows, said in the generator's words.
+         *
+         * <p>Two seams and one adaptation, the way the check that a value can be built already is.
+         * What runs a row is the evaluation's business and speaks in what a fixture states; what a
+         * generator has is a template it composed. Neither has to know the other's word for a row.
+         */
+        private static Generator.Trial runningRowsOf(
+                souther.compiler.examples.RowTrial.Trials trials, String behavior, Sig sig) {
+            if (trials == null) {
+                return Generator.Trial.NOTHING_RUNS;
+            }
+            souther.compiler.examples.RowTrial.Application application =
+                    trials.forBehavior(behavior, sig);
+            return inputs -> application
+                    .run(inputs.stream()
+                            .map(souther.compiler.partition.FixtureTemplate::value).toList())
+                    .<Generator.Watched>map(Generator.Watched.Ran::new)
+                    .orElseGet(Generator.Watched.NotRun::new);
+        }
+
         private static Generator.GenerationResult pairsFor(
                 Hir.SpecBehavior spec, Sig sig, Symbols symbols, souther.compiler.core.Core body,
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
                 FixtureReader.Construction building, InputDomain domain,
                 souther.compiler.check.PathReachability.Answers arrives,
-                souther.compiler.check.StatedContract stated) {
+                souther.compiler.check.StatedContract stated, Generator.Trial trial) {
             if (observed.someRowsUnseen()) {
                 // Rows exist that nothing read. What they cover is unknown, so what is left uncovered
                 // is unknown too — and a generated row is a specific piece of work handed to a person,
@@ -1595,7 +1620,8 @@ public final class Adequacy {
                             RowClasses.of(row, inputs, partitioning.axes()), seenBy(row)))
                     .toList();
             return Generator.fill(subject, existing, check,
-                    souther.compiler.interaction.Interactions.of(body, plan, domain, symbols));
+                    souther.compiler.interaction.Interactions.of(body, plan, domain, symbols),
+                    trial);
         }
     }
 
@@ -1626,6 +1652,38 @@ public final class Adequacy {
         // value builds at this module's boundary is the decoder's answer, and nothing here runs.
         return FixtureReader.constructing(written, symbols, classes,
                 Output.evaluationLoader(db), values == null ? Map.of() : values);
+    }
+
+    /**
+     * A way to run rows against this module's own classes, or nothing where none can be run.
+     *
+     * <p>Nothing where the compile is not measuring, which is the one condition worth stating
+     * outright. Classes emitted without the calls that record where a run went give a run nothing
+     * was recorded of, and that reads exactly like a run that went nowhere — so a search told to
+     * confirm its candidates against them would find every one of them missing and offer nothing at
+     * all. Where they are absent the search says its rows went unconfirmed, which is what happened.
+     *
+     * <p>A budget is installed here, unlike where values are only built. A row this composed is a
+     * row nobody wrote, so a model that does not finish on one is this search's to stop.
+     */
+    static souther.compiler.examples.RowTrial.Trials trialling(Db db, String module,
+            souther.compiler.check.Prepared.ExampleExecution written, Symbols symbols) {
+        if (!levelOf(db).measuresArms()) {
+            return null;
+        }
+        souther.compiler.generated.EvaluationArtifact artifact =
+                db.ask(new Output.EvaluationLinked(module, coverageAsked(db))).value();
+        if (artifact == null || artifact.implementations() == null) {
+            return null;
+        }
+        Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(module)).value();
+        souther.compiler.examples.EvaluationPolicy steps = db.ask(new Front.Policy()).value();
+        if (steps == null) {
+            return null;
+        }
+        return souther.compiler.examples.RowTrial.over(written, symbols, artifact.classes(),
+                Output.evaluationLoader(db), values == null ? Map.of() : values,
+                artifact.implementations(), steps);
     }
 
     /**

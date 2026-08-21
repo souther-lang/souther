@@ -1,0 +1,145 @@
+package souther.compiler.examples;
+
+import souther.compiler.ast.Hir;
+import souther.compiler.check.BoundaryInput;
+import souther.compiler.check.Sig;
+import souther.compiler.check.Symbols;
+import souther.compiler.coverage.Observation;
+import souther.compiler.coverage.Probe;
+import souther.compiler.evaluate.EvaluationContext;
+import souther.compiler.generated.GeneratedImplementations;
+import souther.compiler.generated.MemoryClassLoader;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+/**
+ * Running a row nobody has written yet, to see where it goes.
+ *
+ * <p>What a generator cannot do for itself and cannot be told. Which combination of a body's
+ * decisions a composed row sits in is settled by running it: everything up to that point is a
+ * reading of the body, and a reading is what may be wrong.
+ *
+ * <p>The same classes an evaluation runs against, reached the same way a written row reaches them —
+ * the values are built through this module's own decoders and handed to the answerer this compile
+ * emitted. What differs is that there is no row: no expectation to hold the answer to, no fakes, no
+ * stand-ins. So a behavior that depends on another cannot be run this way, which is answered rather
+ * than raised, and comes back as nothing having run.
+ *
+ * <p>A run that aborts still went where it went. An invariant refusing the answer, a budget running
+ * out, an {@code unreachable} being reached — each of them happens after the row has passed whatever
+ * it passed, and what was recorded up to that point is what the row did. So the recording is read on
+ * every way out and the failure itself is dropped: nothing here is judging the row, and a generator
+ * has no expectation for it to have failed against.
+ */
+public final class RowTrial {
+
+    /**
+     * A way to run one row's inputs and see what it did.
+     *
+     * <p>Empty is an ordinary answer and not a failure. Nothing having run a row leaves every
+     * combination as untried as it was; a row that ran and reached nothing is a row that missed, and
+     * the two must not come back as one value.
+     */
+    @FunctionalInterface
+    public interface Application {
+
+        /** What running {@code inputs} was seen doing, or empty where nothing could run them. */
+        Optional<Observation> run(List<Hir.Expr> inputs);
+    }
+
+    /** A way to run rows of any behavior of one module. */
+    @FunctionalInterface
+    public interface Trials {
+
+        /** A way to run rows of {@code behavior}. */
+        Application forBehavior(String behavior, Sig sig);
+    }
+
+    /**
+     * A way to run rows against one module's generated classes.
+     *
+     * <p>One loader for the module, defined once here. The values a row hands over have to be
+     * instances of the classes the answerer applies, so building them and applying them are two ends
+     * of one loader rather than two loaders that agree — and the classes are defined once however
+     * many behaviors are searched.
+     *
+     * <p>The classes have to be the measuring ones. A run of classes emitted without the calls that
+     * record where it went is a run nothing was recorded of, which reads exactly like a run that
+     * went nowhere — so a caller with unmeasured classes must not build one of these, and every
+     * combination would otherwise come back missed.
+     *
+     * @param steps how many counted points a row may pass, and how deep a recursive helper may go.
+     *              A composed row is not a row anyone wrote, so a model that loops on it is this
+     *              search's problem to stop rather than an author's to be told about
+     */
+    public static Trials over(souther.compiler.check.Prepared.ExampleExecution module,
+                              Symbols symbols, Map<String, byte[]> classes, ClassLoader parent,
+                              Map<String, Hir.FnDef> values, GeneratedImplementations generated,
+                              EvaluationPolicy steps) {
+        MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
+        Answerer answerer = Answering.generatedHere().over(generated, loader);
+        return (behavior, sig) -> inputs -> {
+            if (!(answerer.of(behavior) instanceof Answerer.Answer.Something applies)) {
+                return Optional.empty();   // nothing applies this behavior, so nothing ran
+            }
+            // One reader per row, the way a written row has one: what a reading builds up while it
+            // expands a value is that row's, and a reader kept between them would be a session
+            // spanning every candidate of every combination.
+            return went(new FixtureReader(module, symbols, values, loader), applies, behavior, sig,
+                    inputs, steps);
+        };
+    }
+
+    /**
+     * One row, built and applied, and what the probe saw while it was.
+     *
+     * <p>The recording is begun and read on this thread because the run is on this thread. Both it
+     * and the budget are let go on every way out, a worker being something the next row would
+     * otherwise start inside of.
+     */
+    private static Optional<Observation> went(FixtureReader fixtures,
+                                              Answerer.Answer.Something applies, String behavior,
+                                              Sig sig, List<Hir.Expr> inputs,
+                                              EvaluationPolicy steps) {
+        List<BoundaryInput> ins = sig.ins();
+        if (inputs.size() != ins.size()) {
+            return Optional.empty();   // not a row of this behavior, so this is not the thing to run
+        }
+        Answerer.Applying applying;
+        List<Handed> over;
+        try {
+            // Built and gathered before anything is recorded. A value that could not be made is a
+            // row that never ran, and recording the building would put whatever a fixture's own
+            // helpers passed through into what the row is said to have done.
+            over = new ArrayList<>(ins.size());
+            for (int i = 0; i < ins.size(); i++) {
+                Object built = fixtures.built(inputs.get(i), ins.get(i));
+                BoundaryInput at = ins.get(i);
+                String what = "input " + (i + 1) + " of `" + behavior + "`";
+                over.add(new Handed(built, () -> fixtures.neutral(built, at, what)));
+            }
+            applying = applies.applying(List.of());
+        } catch (RuntimeException | LinkageError | StackOverflowError e) {
+            // Nothing was applied. Which of the things that can go wrong before an application it
+            // was is not this search's business: none of them is a fact about where a row goes.
+            return Optional.empty();
+        }
+        Probe.begin();
+        EvaluationContext.begin(steps.stepLimit(), steps.recursionDepthLimit());
+        try {
+            applying.to(over);
+        } catch (RuntimeException | LinkageError | StackOverflowError e) {
+            // It ran and stopped. Where it had got to is what is being asked for.
+        } finally {
+            EvaluationContext.end();
+        }
+        Observation seen = Probe.snapshot();
+        Probe.end();
+        return Optional.of(seen);
+    }
+
+    private RowTrial() {}
+}
