@@ -39,10 +39,17 @@ import java.util.Set;
  * questions: {@code InputReads} says which position a name points at, and the bindings here say
  * what the value at a name was settled by.
  *
+ * <p>A path to a value and what the value is are two questions, and this answers both. The second is
+ * about the reading rather than about the body and is what an operator stopping as soon as its
+ * answer is settled turns on: which of its left's paths go on to the right is which value each of
+ * them comes to. Answered by the same walk that answers the first, because two walks over one tree
+ * are two answers that have to agree and one place for them to stop agreeing.
+ *
  * <p>Under-reading is the safe direction. A group nothing formed is an obligation nobody is asked
  * for, which is where a product over the input positions already leaves things; a group formed too
  * eagerly asks for rows that establish nothing. Both limits below take that direction: a value that
- * can be settled more ways than the reading will tell apart is answered as settled one way.
+ * can be settled more ways than the reading will tell apart is answered as settled one way, and a
+ * position reached more ways than it will read at once is read the one way it used to be.
  */
 public final class Interactions {
 
@@ -58,6 +65,38 @@ public final class Interactions {
      */
     private static final int MOST_OUTCOMES = 64;
 
+    /**
+     * How many path contexts one position of the body will be read under.
+     *
+     * <p>A second amplification and not the one above. {@link #MOST_OUTCOMES} bounds the outcomes
+     * of one value, which is a product taken at one node; this bounds how many ways in one position
+     * is read under, which is a product taken along the way down to it. A condition that fails four
+     * ways standing inside another one is a meeting read sixteen times, so the two multiply with the
+     * nesting of the body and neither bound holds what the other does.
+     *
+     * <p>The contexts that survive and not the alternatives the syntax offers. A way in settling a
+     * decision that the way in above it settled the other way is no path at all, and letting it take
+     * a share here would move where the bound falls with how the body is written rather than with
+     * how much there is to read.
+     *
+     * <p>Counted and not estimated, which is why the walk carries the contexts of a position
+     * together. How many of them survive is a fact about the position and about all the ways down to
+     * it at once — a walk arriving one way at a time cannot know what the ways beside it came to,
+     * and multiplying what it does know stands in for the answer without being it: uneven arms make
+     * that product larger than the number of contexts there are, and a position under the bound is
+     * given up on as though it were over.
+     *
+     * <p>Held by induction rather than by a running count. A position is read under at most this
+     * many contexts, and what an arm below it is read under is either those held to the ways the
+     * condition comes out — checked against the bound where it is built — or, over the bound, one
+     * per context, which is what there already were.
+     *
+     * <p>Over the bound an arm is read the one way a fork whose condition this reading cannot value
+     * is read, which is where every fork was before the ways in were told apart. Going over asks
+     * for no more than was asked for then.
+     */
+    private static final int MOST_WAYS_IN = 16;
+
     private final CoverageSites.Plan plan;
     private final Symbols symbols;
 
@@ -68,7 +107,54 @@ public final class Interactions {
      * walk had when it got there, so the environments are a function of the position and not a
      * second key.
      */
-    private final IdentityHashMap<Core, List<Outcome>> settled = new IdentityHashMap<>();
+    private final IdentityHashMap<Core, List<Arrival>> settled = new IdentityHashMap<>();
+
+    /**
+     * A path to a value, and what this reading knows the value at the end of it to be.
+     *
+     * <p>Two questions, and the second is about the reading rather than about the body. An operator
+     * that stops as soon as its answer is settled needs it: which of the left's paths go on to the
+     * right is which value each of them comes to, and a reading holding conditions alone has no way
+     * to ask.
+     *
+     * @param by         the conditions that hold along the path, which is what {@link Outcome} is
+     * @param knownTruth what the value is, where this reading can say
+     */
+    private record Arrival(Outcome by, Truth knownTruth) { }
+
+    /**
+     * What this reading knows a path's value to be.
+     *
+     * <p>{@link #UNKNOWN} is not a third truth and not a path that arrives nowhere. The path is
+     * there and it comes to a value; what is missing is this reading's answer for which of the two
+     * it came to. A value nothing here forks arrives just as much as one it does.
+     */
+    private enum Truth { TRUE, FALSE, UNKNOWN }
+
+    /**
+     * The ways a value is settled to one truth, or that this reading cannot enumerate them.
+     *
+     * <p>All of them or none of them, and the type is what holds it to that. A list with paths
+     * missing from it reads as a whole one: what takes it will steer no row down the paths it does
+     * not hold and offer no group under them, which is the reading saying the body has not got them.
+     * So one arrival whose truth is unread makes the whole enumeration {@link Unknown} rather than
+     * quietly dropping itself out of a {@link Known} one.
+     *
+     * <p>{@code Known} holding nothing is an answer and not an absence. It says the value is never
+     * settled that way, which is how an arm no row reaches is told from an arm this reading has
+     * nothing to say about — the first is not walked and the second is walked under the arm itself.
+     * Which is why a value with no arrivals at all never gets this far: it would be read here as
+     * settled to neither truth and take both arms away, and no arrivals is not something this
+     * reading proves.
+     */
+    private sealed interface Ways {
+
+        /** These paths to that truth, and no others. */
+        record Known(List<List<Decision>> paths) implements Ways { }
+
+        /** Which paths come to that truth is not something this reading can say. */
+        record Unknown() implements Ways { }
+    }
 
     /** Which nodes are paths to a value, for the same reason the settlings are kept. */
     private final IdentityHashMap<Core, Boolean> reaches = new IdentityHashMap<>();
@@ -78,17 +164,36 @@ public final class Interactions {
         this.symbols = symbols;
     }
 
-    /** The groups of {@code body}, in the order the walk meets them. */
+    /**
+     * The groups of {@code body}, in the order the walk meets them.
+     *
+     * <p>By the meeting first and by the way in second. A meeting reached several ways is one place
+     * in the body and as many groups, and they are written down together because that is when the
+     * walk is there. A generation spending a row budget over these takes them in this order, so
+     * which of them a budget that runs out reaches is said by where the meeting is written and not
+     * by which way round a fork above it a row goes.
+     */
     public static List<Interaction> of(Core body, CoverageSites.Plan plan, InputDomain inputs,
                                        Symbols symbols) {
         List<Interaction> found = new ArrayList<>();
         new Interactions(plan, symbols).walk(body, InputReads.of(inputs), Map.of(),
-                java.util.Collections.newSetFromMap(new IdentityHashMap<>()), List.of(), found);
+                java.util.Collections.newSetFromMap(new IdentityHashMap<>()),
+                List.of(List.of()), found);
         return List.copyOf(found);
     }
 
-    private void walk(Core node, InputReads reads, Map<BindingId, List<Outcome>> bound,
-                      Set<Core> absorbed, List<Decision> reach, List<Interaction> found) {
+    /**
+     * @param reaches every way in this position is reached by, together rather than one at a time,
+     *                because how many there are is what {@link #MOST_WAYS_IN} bounds and no one of
+     *                them can say. Empty where nothing reaches here, and never longer than the bound
+     */
+    private void walk(Core node, InputReads reads, Map<BindingId, List<Arrival>> bound,
+                      Set<Core> absorbed, List<List<Decision>> reaches, List<Interaction> found) {
+        if (reaches.isEmpty()) {
+            // Every way that would have led here settles a decision one of the ways above it
+            // settled the other way, so no run arrives and there is nothing in here to offer.
+            return;
+        }
         if (!answers(node)) {
             // The same invariant the outcomes are read under, and the walk is where it is decided
             // whether there is a group here at all. A subtree that arrives at no value is one no
@@ -102,10 +207,10 @@ public final class Interactions {
             // A name given to a decision is still that decision, and a name given to a position is
             // still that position. Both environments widen here and neither answers the other's
             // question. Nothing about getting here changes: a binding is not a fork.
-            walk(let.value(), reads, bound, absorbed, reach, found);
-            Map<BindingId, List<Outcome>> inner = new HashMap<>(bound);
-            inner.put(let.binder().binding(), outcomesOf(let.value(), reads, bound));
-            walk(let.body(), reads.and(let.binder(), let.value()), inner, absorbed, reach, found);
+            walk(let.value(), reads, bound, absorbed, reaches, found);
+            Map<BindingId, List<Arrival>> inner = new HashMap<>(bound);
+            inner.put(let.binder().binding(), arrivalsOf(let.value(), reads, bound));
+            walk(let.body(), reads.and(let.binder(), let.value()), inner, absorbed, reaches, found);
             return;
         }
         List<Core> meeting = absorbed.contains(node) ? null : meetingAt(node, absorbed);
@@ -130,11 +235,17 @@ public final class Interactions {
             // Asked at the meeting and nowhere else, which is enough because a place a run may come
             // back to has everything inside it in the same position: a meeting this is false of
             // names a way in and factors that are all false of it too.
+            //
+            // What varies here is read once and the ways in are as many as they are: an operand is
+            // settled the same ways whichever way round the forks above a row went, so the factors
+            // are no part of what a way in decides and are not read again per way.
             if (factors.size() > 1 && !plan.mayRepeat(node)) {
-                found.add(new Interaction(reach, factors));
+                for (List<Decision> reach : reaches) {
+                    found.add(new Interaction(reach, factors));
+                }
             }
         }
-        descend(node, reads, bound, absorbed, reach, found);
+        descend(node, reads, bound, absorbed, reaches, found);
     }
 
     /**
@@ -151,43 +262,56 @@ public final class Interactions {
      * because that is the assumption this walk was making about all of them and it was wrong for
      * two.
      */
-    private void descend(Core node, InputReads reads, Map<BindingId, List<Outcome>> bound,
-                         Set<Core> absorbed, List<Decision> reach, List<Interaction> found) {
+    private void descend(Core node, InputReads reads, Map<BindingId, List<Arrival>> bound,
+                         Set<Core> absorbed, List<List<Decision>> reaches,
+                         List<Interaction> found) {
         switch (node) {
             // A way in nobody can name stops the walk into that arm, whether what could not be named
             // is the position the decision is about or the place a run that took it would be seen at.
             // A group found in there would be under a condition nothing can steer a row into or hold
             // a run to, and offering it asks for a row that may never arrive.
             case Core.If iff -> {
-                walk(iff.cond(), reads, bound, absorbed, reach, found);
+                walk(iff.cond(), reads, bound, absorbed, reaches, found);
                 Core[] arms = {iff.then(), iff.els()};
                 for (int part = 0; part < arms.length; part++) {
-                    Decision went = armCondition(iff, part, reads);
-                    if (went != null) {
-                        walk(arms[part], reads, bound, absorbed, and(reach, went), found);
-                    }
+                    // As many ways in as the condition has of coming out that way, held to every
+                    // context the fork itself is reached under: a row that failed the first
+                    // comparison and one that held it and failed the second both arrive here, and
+                    // they arrive by different paths.
+                    walk(arms[part], reads, bound, absorbed,
+                            waysInTo(iff, part, reads, bound, reaches), found);
                 }
             }
             case Core.Match match -> {
                 TermPath at = reads.pathOf(match.scrutinee(), symbols);
-                walk(match.scrutinee(), reads, bound, absorbed, reach, found);
+                walk(match.scrutinee(), reads, bound, absorbed, reaches, found);
                 for (int part = 0; part < match.cases().size(); part++) {
                     Core.Case each = match.cases().get(part);
                     Decision went = caseCondition(at, each, match, part);
-                    if (went != null) {
-                        walk(each.body(), reads, bound, absorbed, and(reach, went), found);
+                    if (went == null) {
+                        continue;
                     }
+                    // One way in and never more, so nothing here can go over the bound.
+                    walk(each.body(), reads, bound, absorbed,
+                            heldTo(reaches, List.of(List.of(went))), found);
                 }
             }
             case Core.Binary binary when shortCircuits(binary.op()) -> {
-                walk(binary.left(), reads, bound, absorbed, reach, found);
+                walk(binary.left(), reads, bound, absorbed, reaches, found);
                 // The right runs only where the left did not settle the answer, and which of the
-                // left's outcomes that is takes reading a value rather than a condition. Where the
-                // left is one this can say a side of, that side is what getting here takes; where
-                // it is not, there is nothing to say and the walk does not go in.
-                Decision went = settledBy(binary.left(), binary.op() == Hir.BinOp.AND, reads);
-                if (went != null) {
-                    walk(binary.right(), reads, bound, absorbed, and(reach, went), found);
+                // left's paths those are is which value each of them comes to. Where the reading
+                // cannot enumerate them the walk does not go in: a way in it could name only some
+                // of says a row reaches here when it may not.
+                //
+                // Over the bound the walk does not go in either. There is no arm here to fall back
+                // on — what leads to the right of one of these is the left having come out a way,
+                // and nothing records a value coming out a way.
+                if (waysTo(binary.left(), binary.op() == Hir.BinOp.AND, reads, bound)
+                        instanceof Ways.Known through) {
+                    List<List<Decision>> ways = heldTo(reaches, through.paths());
+                    if (ways.size() <= MOST_WAYS_IN) {
+                        walk(binary.right(), reads, bound, absorbed, ways, found);
+                    }
                 }
             }
             case Core.IfConstructed constructed -> {
@@ -196,7 +320,7 @@ public final class Interactions {
                 // is not walked: a row cannot be steered to either of them, and one offered for a
                 // group in there would be offered for a combination it may not sit in.
                 for (Core.FieldValue given : constructed.construct().values()) {
-                    walk(given.value(), reads, bound, absorbed, reach, found);
+                    walk(given.value(), reads, bound, absorbed, reaches, found);
                 }
             }
             case Core.Block ignored -> {
@@ -205,8 +329,8 @@ public final class Interactions {
                 // behavior, so a group in there has no way in this can name.
             }
             case Core.LetIn let -> {
-                walk(let.value(), reads, bound, absorbed, reach, found);
-                walk(let.body(), reads.and(let.binder(), let.value()), bound, absorbed, reach,
+                walk(let.value(), reads, bound, absorbed, reaches, found);
+                walk(let.body(), reads.and(let.binder(), let.value()), bound, absorbed, reaches,
                         found);
             }
             case Core.Int ignored -> { }
@@ -219,37 +343,126 @@ public final class Interactions {
             case Core.OptionNone ignored -> { }
             case Core.Unreachable ignored -> { }
             // Everything the node is made of is evaluated, and under what the node itself was.
-            case Core.Neg neg -> walkAll(some(neg.operand()), reads, bound, absorbed, reach, found);
+            case Core.Neg neg ->
+                    walkAll(some(neg.operand()), reads, bound, absorbed, reaches, found);
             case Core.FieldAccess access ->
-                    walkAll(some(access.target()), reads, bound, absorbed, reach, found);
-            case Core.TupleGet get -> walkAll(some(get.tuple()), reads, bound, absorbed, reach, found);
+                    walkAll(some(access.target()), reads, bound, absorbed, reaches, found);
+            case Core.TupleGet get ->
+                    walkAll(some(get.tuple()), reads, bound, absorbed, reaches, found);
             case Core.OptionSome option ->
-                    walkAll(some(option.value()), reads, bound, absorbed, reach, found);
-            case Core.Binary binary ->
-                    walkAll(some(binary.left(), binary.right()), reads, bound, absorbed, reach, found);
-            case Core.Call call -> walkAll(call.args(), reads, bound, absorbed, reach, found);
+                    walkAll(some(option.value()), reads, bound, absorbed, reaches, found);
+            case Core.Binary binary -> walkAll(some(binary.left(), binary.right()), reads, bound,
+                    absorbed, reaches, found);
+            case Core.Call call ->
+                    walkAll(call.args(), reads, bound, absorbed, reaches, found);
             case Core.PreservedCall call ->
-                    walkAll(call.args(), reads, bound, absorbed, reach, found);
-            case Core.Apply apply -> walkAll(apply.args(), reads, bound, absorbed, reach, found);
-            case Core.ListLit list -> walkAll(list.elements(), reads, bound, absorbed, reach, found);
-            case Core.Tuple tuple -> walkAll(tuple.elements(), reads, bound, absorbed, reach, found);
+                    walkAll(call.args(), reads, bound, absorbed, reaches, found);
+            case Core.Apply apply ->
+                    walkAll(apply.args(), reads, bound, absorbed, reaches, found);
+            case Core.ListLit list ->
+                    walkAll(list.elements(), reads, bound, absorbed, reaches, found);
+            case Core.Tuple tuple ->
+                    walkAll(tuple.elements(), reads, bound, absorbed, reaches, found);
             case Core.Construct construct -> walkAll(
                     construct.values().stream().map(Core.FieldValue::value).toList(),
-                    reads, bound, absorbed, reach, found);
+                    reads, bound, absorbed, reaches, found);
         }
     }
 
-    private void walkAll(List<Core> parts, InputReads reads, Map<BindingId, List<Outcome>> bound,
-                         Set<Core> absorbed, List<Decision> reach, List<Interaction> found) {
+    private void walkAll(List<Core> parts, InputReads reads, Map<BindingId, List<Arrival>> bound,
+                         Set<Core> absorbed, List<List<Decision>> reaches,
+                         List<Interaction> found) {
         for (Core each : parts) {
-            walk(each, reads, bound, absorbed, reach, found);
+            walk(each, reads, bound, absorbed, reaches, found);
         }
     }
 
-    /** The way in, and one more thing that holds along it. */
-    private static List<Decision> and(List<Decision> reach, Decision went) {
-        List<Decision> both = new ArrayList<>(reach);
-        both.add(went);
+    /**
+     * The path contexts arm {@code part} is read under, each held to what already held above it.
+     *
+     * <p>Every way the condition comes out that way against every context the fork is reached
+     * under, which is the number this position is read under and is where it is checked against
+     * the bound. Counted here and nowhere else: this is the one place the contexts of a position
+     * are all in hand at once.
+     *
+     * <p>Empty where no row reaches the arm at all, which is a different answer from the one way in
+     * this falls back to where the condition's ways cannot be enumerated — and a different answer
+     * again from the arm having no way in that can be named, which is also empty and is where the
+     * walk stops for the reason it always did.
+     */
+    private List<List<Decision>> waysInTo(Core.If iff, int part, InputReads reads,
+                                          Map<BindingId, List<Arrival>> bound,
+                                          List<List<Decision>> reaches) {
+        List<List<Decision>> ways = heldTo(reaches, waysInFor(iff, part, reads, bound));
+        if (ways.size() <= MOST_WAYS_IN) {
+            return ways;
+        }
+        // Over the bound, and read the one way it was read before the ways in were told apart. The
+        // fallback is one way in per context, so what comes back is no longer than what came in and
+        // the bound holds by induction rather than by anything counted along the way.
+        return heldTo(reaches, fallbackWayIn(iff, part, reads));
+    }
+
+    /**
+     * The ways the condition comes out for arm {@code part}, or the arm itself where it cannot say.
+     *
+     * <p>The reach is no part of this. What the condition can come out as is a fact about the
+     * condition, and holding it to what already held is the caller's, which the outcomes of a value
+     * and the walk into an arm do differently.
+     */
+    private List<List<Decision>> waysInFor(Core.If iff, int part, InputReads reads,
+                                           Map<BindingId, List<Arrival>> bound) {
+        if (waysTo(iff.cond(), part == 0, reads, bound) instanceof Ways.Known known) {
+            return known.paths();
+        }
+        return fallbackWayIn(iff, part, reads);
+    }
+
+    /** The arm itself as the one way in, for a condition this reading cannot value. */
+    private List<List<Decision>> fallbackWayIn(Core.If iff, int part, InputReads reads) {
+        Decision back = armFallback(iff, part, reads);
+        return back == null ? List.of() : List.of(List.of(back));
+    }
+
+    /**
+     * Each way in held to each context it is reached under, leaving out the ones that contradict.
+     *
+     * <p>Where the ways in are counted from. A way settling a decision that the context it would
+     * extend settled the other way is no path, so it is not here — and a bound taken over what is
+     * here is a bound on paths rather than on what the syntax offered.
+     */
+    private static List<List<Decision>> heldTo(List<List<Decision>> reaches,
+                                               List<List<Decision>> ways) {
+        List<List<Decision>> out = new ArrayList<>();
+        for (List<Decision> reach : reaches) {
+            for (List<Decision> way : ways) {
+                List<Decision> merged = merge(reach, way);
+                if (merged != null) {
+                    out.add(merged);
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Both sets of conditions, or null where between them they settle one decision two ways.
+     *
+     * <p>One rule for every place two of these are put together: the parts of a value, a way in
+     * held to the way in above it, the left of an operator that stops early held to what runs after
+     * it. A decision read twice is one decision, and one settled two ways is no path.
+     */
+    private static List<Decision> merge(List<Decision> holds, List<Decision> more) {
+        List<Decision> both = new ArrayList<>(holds);
+        for (Decision each : more) {
+            if (both.contains(each)) {
+                continue;
+            }
+            if (disagrees(both, each)) {
+                return null;
+            }
+            both.add(each);
+        }
         return both;
     }
 
@@ -306,14 +519,22 @@ public final class Interactions {
      * Whether the operator settles its answer without evaluating both sides.
      *
      * <p>{@code &&} stops at a left that is false and {@code ||} at a left that is true, so the two
-     * sides are not consumed into one value: the paths to a value are the left settling the answer
-     * on its own, and the left going through with the right settling it. Which of the left's
-     * outcomes settles it is which value it comes to, and this reading has conditions rather than
-     * values — so the answer is that the operator is settled one way, which asks for nothing. A
-     * product of the two sides would ask for the combinations the short circuit never reaches.
+     * sides are not consumed into one value and a product of them would ask for the combinations
+     * the short circuit never reaches. Not a meeting, and it has paths to a value all the same:
+     * the left settling the answer on its own, and the left going through with the right settling
+     * it. Which of the left's paths go through is which value each comes to, which is why the
+     * reading answers that as well as the conditions.
      */
     private static boolean shortCircuits(Hir.BinOp op) {
         return op == Hir.BinOp.AND || op == Hir.BinOp.OR;
+    }
+
+    /** Whether the operator answers with which way two values came out against each other. */
+    private static boolean compares(Hir.BinOp op) {
+        return switch (op) {
+            case EQ, NE, LT, LE, GT, GE -> true;
+            case AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
+        };
     }
 
     /** The values one run of {@code op} is over, and the nodes the run is written as. */
@@ -328,8 +549,8 @@ public final class Interactions {
     }
 
     /** What a value nothing forks is settled by, which is the same thing however it is written. */
-    private static List<Outcome> oneWay() {
-        return List.of(new Outcome(List.of()));
+    private static List<Arrival> oneWay() {
+        return List.of(new Arrival(new Outcome(List.of()), Truth.UNKNOWN));
     }
 
     /**
@@ -363,35 +584,68 @@ public final class Interactions {
     /**
      * The ways {@code e} can be settled, as the conditions that hold when it is.
      *
-     * <p>Three shapes are read off the node and the rest is one rule rather than a case each: a
+     * <p>A projection of {@link #arrivalsOf} and not a second reading of the tree. What a value
+     * comes to is asked of the same walk that asks under what conditions, because two walks over
+     * one tree are two answers that have to agree and one place for them to stop agreeing.
+     */
+    private List<Outcome> outcomesOf(Core e, InputReads reads,
+                                     Map<BindingId, List<Arrival>> bound) {
+        return arrivalsOf(e, reads, bound).stream().map(Arrival::by).toList();
+    }
+
+    /**
+     * The paths {@code e} arrives at a value by, each saying what it comes to where that is known.
+     *
+     * <p>Four shapes are read off the node and the rest is one rule rather than a case each: a
      * value built out of several is settled every way its parts are settled together, which is
      * their product. That is a rule about every other node and not an arm nobody filled in — what
-     * it does not cover is exactly what forks and what names.
+     * it does not cover is exactly what forks, what stops early, what names, and what comes out one
+     * of two ways against another value.
      */
-    private List<Outcome> outcomesOf(Core e, InputReads reads, Map<BindingId, List<Outcome>> bound) {
+    private List<Arrival> arrivalsOf(Core e, InputReads reads,
+                                     Map<BindingId, List<Arrival>> bound) {
         if (e == null) {
             return oneWay();
         }
-        List<Outcome> already = settled.get(e);
+        List<Arrival> already = settled.get(e);
         if (already != null) {
             return already;
         }
-        List<Outcome> answer = reading(e, reads, bound);
+        List<Arrival> answer = reading(e, reads, bound);
+        if (answer.isEmpty()) {
+            // No arrival is not a proof that no value arrives, and this is not the reading that
+            // could give one. Two parts of a value whose every settling contradicts the other's
+            // leave nothing here — under {@code (if a then x else abort) + (if a then abort else y)}
+            // each part answers on its own and no run has both answering — and whether that is the
+            // body having no path or this reading not following one is a question about path
+            // correlation that nothing here asks.
+            //
+            // So it is normalised away rather than published. Handed on, it would reach the reader
+            // that asks which ways a value comes to a truth, where an empty enumeration is an
+            // answer and says the value never comes to it — a claim this reading has not made and
+            // one that would take both arms of a fork on such a value away.
+            answer = oneWay();
+        }
         settled.put(e, answer);
         return answer;
     }
 
-    private List<Outcome> reading(Core e, InputReads reads, Map<BindingId, List<Outcome>> bound) {
+    private List<Arrival> reading(Core e, InputReads reads, Map<BindingId, List<Arrival>> bound) {
         if (!answers(e)) {
             // Nothing arrives at a value here, so there is no way this is settled to enumerate.
             return oneWay();
         }
+        if (e instanceof Core.Bool literal) {
+            // One path, and the reading knows where it goes. Nothing about the inputs is on it.
+            return List.of(new Arrival(new Outcome(List.of()),
+                    literal.value() ? Truth.TRUE : Truth.FALSE));
+        }
         if (e instanceof Core.Binary binary && shortCircuits(binary.op())) {
-            return oneWay();
+            return through(binary, reads, bound);
         }
         if (e instanceof Core.Match match) {
             TermPath at = reads.pathOf(match.scrutinee(), symbols);
-            List<Outcome> out = new ArrayList<>();
+            List<Arrival> out = new ArrayList<>();
             for (int part = 0; part < match.cases().size(); part++) {
                 Core.Case each = match.cases().get(part);
                 if (!answers(each.body())) {
@@ -401,37 +655,35 @@ public final class Interactions {
                 if (when == null) {
                     continue;
                 }
-                for (Outcome inner : outcomesOf(each.body(), reads, bound)) {
-                    out.add(prepend(when, inner));
-                }
+                under(List.of(when), arrivalsOf(each.body(), reads, bound), out);
                 if (out.size() > MOST_OUTCOMES) {
                     return oneWay();
                 }
             }
-            return out.isEmpty() ? oneWay() : out;
+            return out;
         }
         if (e instanceof Core.If iff) {
             // Numbered where they are written and not where they survive: the arm a fork answers on
             // is its place among the arms, and one that answers nothing is skipped rather than
             // closing the gap and letting the next arm be called the first.
             Core[] arms = {iff.then(), iff.els()};
-            List<Outcome> out = new ArrayList<>();
+            List<Arrival> out = new ArrayList<>();
             for (int part = 0; part < arms.length; part++) {
                 if (!answers(arms[part])) {
                     continue;
                 }
-                Decision when = armCondition(iff, part, reads);
-                if (when == null) {
-                    continue;
-                }
-                for (Outcome inner : outcomesOf(arms[part], reads, bound)) {
-                    out.add(prepend(when, inner));
+                // One way in per way the condition comes out that way, and the arm is settled every
+                // way it is settled under each of them. Held under the outcome bound and not the
+                // one on the ways in: this is a product taken at one node, which is what that bound
+                // is about.
+                for (List<Decision> way : waysInFor(iff, part, reads, bound)) {
+                    under(way, arrivalsOf(arms[part], reads, bound), out);
                 }
                 if (out.size() > MOST_OUTCOMES) {
                     return oneWay();
                 }
             }
-            return out.isEmpty() ? oneWay() : out;
+            return out;
         }
         if (e instanceof Core.IfConstructed constructed) {
             // A fork, and not a value made of its arms — a product over them would say it is
@@ -441,7 +693,7 @@ public final class Interactions {
             List<Core> arms = new ArrayList<>();
             arms.add(constructed.then());
             constructed.els().forEach(each -> arms.add(each.body()));
-            List<Outcome> out = new ArrayList<>();
+            List<Arrival> out = new ArrayList<>();
             for (int part = 0; part < arms.size(); part++) {
                 if (!answers(arms.get(part))) {
                     continue;
@@ -450,32 +702,114 @@ public final class Interactions {
                 if (when == null) {
                     continue;
                 }
-                for (Outcome inner : outcomesOf(arms.get(part), reads, bound)) {
-                    out.add(prepend(when, inner));
-                }
+                under(List.of(when), arrivalsOf(arms.get(part), reads, bound), out);
                 if (out.size() > MOST_OUTCOMES) {
                     return oneWay();
                 }
             }
-            return out.isEmpty() ? oneWay() : out;
+            return out;
         }
         if (e instanceof Core.Read read) {
-            List<Outcome> named = bound.get(read.binding());
+            List<Arrival> named = bound.get(read.binding());
             return named != null ? named : oneWay();
         }
         if (e instanceof Core.LetIn let) {
-            Map<BindingId, List<Outcome>> inner = new HashMap<>(bound);
-            inner.put(let.binder().binding(), outcomesOf(let.value(), reads, bound));
-            return outcomesOf(let.body(), reads.and(let.binder(), let.value()), inner);
+            Map<BindingId, List<Arrival>> inner = new HashMap<>(bound);
+            inner.put(let.binder().binding(), arrivalsOf(let.value(), reads, bound));
+            return arrivalsOf(let.body(), reads.and(let.binder(), let.value()), inner);
         }
-        List<Outcome> out = oneWay();
+        List<Arrival> out = oneWay();
         for (Core child : childrenOf(e)) {
-            out = product(out, outcomesOf(child, reads, bound));
+            out = product(out, arrivalsOf(child, reads, bound));
+            if (out.size() > MOST_OUTCOMES) {
+                return oneWay();
+            }
+        }
+        // A comparison whose two ways can both be named is a value this reading knows the truth of,
+        // said of the position the comparison is about because that is what a row is steered by.
+        //
+        // Both ways or neither. With one of them the other's absence reads as a truth the value
+        // never comes to, and a fork on it would be told one of its arms is never reached.
+        //
+        // Asked where nothing under the comparison was already saying the value varies, so that
+        // what is read here is added to the reading and nothing is taken out of it: under
+        // {@code a > f(b)} the fold has the ways {@code f(b)} is settled, and they are about
+        // positions this would say nothing about.
+        if (out.size() == 1 && e instanceof Core.Binary comparison && compares(comparison.op())) {
+            Decision held = sideDecision(comparison, true, reads);
+            Decision failed = sideDecision(comparison, false, reads);
+            if (held != null && failed != null) {
+                List<Decision> under = out.get(0).by().holds();
+                List<Decision> whenHeld = merge(under, List.of(held));
+                List<Decision> whenFailed = merge(under, List.of(failed));
+                if (whenHeld != null && whenFailed != null) {
+                    return List.of(new Arrival(new Outcome(whenHeld), Truth.TRUE),
+                            new Arrival(new Outcome(whenFailed), Truth.FALSE));
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The paths to the value of an operator that stops as soon as its answer is settled.
+     *
+     * <p>Not a product of the two sides. {@code &&} comes to false wherever the left does and never
+     * looks at the right, and comes to whatever the right does wherever the left went through — so
+     * the paths are the left's settling ones as they stand, and the left's going-through ones each
+     * extended by every path of the right.
+     *
+     * <p>A left path this reading cannot value stops where a settling one stops. Whether the right
+     * ran at all is what the left's value would have said, so nothing is known about what comes
+     * after it and the path is left saying what it already says.
+     */
+    private List<Arrival> through(Core.Binary binary, InputReads reads,
+                                  Map<BindingId, List<Arrival>> bound) {
+        Truth goesOn = binary.op() == Hir.BinOp.AND ? Truth.TRUE : Truth.FALSE;
+        List<Arrival> out = new ArrayList<>();
+        for (Arrival left : arrivalsOf(binary.left(), reads, bound)) {
+            if (left.knownTruth() != goesOn) {
+                out.add(left);
+                continue;
+            }
+            under(left.by().holds(), arrivalsOf(binary.right(), reads, bound), out);
             if (out.size() > MOST_OUTCOMES) {
                 return oneWay();
             }
         }
         return out;
+    }
+
+    /** Each arrival held to what already holds along the way to it, into {@code out}. */
+    private static void under(List<Decision> holds, List<Arrival> arrivals, List<Arrival> out) {
+        for (Arrival each : arrivals) {
+            List<Decision> both = merge(holds, each.by().holds());
+            if (both != null) {
+                out.add(new Arrival(new Outcome(both), each.knownTruth()));
+            }
+        }
+    }
+
+    /**
+     * The ways {@code e} is settled to {@code want}, or that this reading cannot enumerate them.
+     *
+     * <p>All of them or none. One arrival whose truth is unread is a path that may be among the
+     * ways to either truth, so no list of them is complete while it is there — and an incomplete
+     * list is worse here than no list, because whatever takes one reads the paths it does not hold
+     * as paths the body has not got.
+     */
+    private Ways waysTo(Core e, boolean want, InputReads reads,
+                        Map<BindingId, List<Arrival>> bound) {
+        List<List<Decision>> paths = new ArrayList<>();
+        for (Arrival each : arrivalsOf(e, reads, bound)) {
+            if (each.knownTruth() == Truth.UNKNOWN) {
+                return new Ways.Unknown();
+            }
+            if ((each.knownTruth() == Truth.TRUE) == want) {
+                paths.add(each.by().holds());
+            }
+        }
+        return new Ways.Known(paths);
     }
 
     /** Which case of the union this arm is, said of the position matched on where there is one, or
@@ -495,20 +829,16 @@ public final class Interactions {
     }
 
     /**
-     * Which way the fork came out, said of the comparison where the plan numbered one.
+     * That a run went down arm {@code part}, where nothing said which comparison sent it there.
      *
-     * <p>The comparison and not the arm, where there is one. A condition stops as soon as it is
-     * settled, so under {@code A && B} the arm taken when the condition fails is reached both by a
-     * value that made {@code B} false and by one that never evaluated {@code B}: a row is steered
-     * by getting the comparison to answer, which no arm records.
+     * <p>What the walk falls back on. Where the condition's ways can be enumerated they are what
+     * names the way in, on the comparisons a row is steered by; this is the answer for a condition
+     * whose value this reading cannot say, and it is the answer every fork used to get.
+     *
+     * <p>An arm places at no class of any input, so a group offered under one of these goes. That
+     * it is here at all is what says the reading found a way in it could not name.
      */
-    private Decision armCondition(Core.If iff, int part, InputReads reads) {
-        Decision said = settledBy(iff.cond(), part == 0, reads);
-        if (said != null) {
-            return said;
-        }
-        // The condition is a value rather than a comparison, so nothing recorded the way it came
-        // out — what a run that went this way is seen to have done is that it took this arm.
+    private Decision armFallback(Core.If iff, int part, InputReads reads) {
         souther.compiler.coverage.ControlClaim claim = armClaim(iff, part);
         if (claim == null) {
             return null;
@@ -520,20 +850,16 @@ public final class Interactions {
     }
 
     /**
-     * That {@code test} came out {@code held}, said of the position it is about, or null where this
-     * reading cannot say which position that is.
+     * That {@code comparison} came out {@code held}, said of the position it is about, or null
+     * where this reading cannot say which position that is or where no run could be shown to have
+     * reached it.
      *
-     * <p>Asked of a fork's condition and of the left of an operator that stops early, which are the
-     * same question: both are a value whose coming out one way is what a row has to arrange.
+     * <p>The comparison and not the arm. A condition stops as soon as it is settled, so under
+     * {@code A && B} the arm taken when the condition fails is reached both by a value that made
+     * {@code B} false and by one that never evaluated {@code B}: a row is steered by getting the
+     * comparison to answer, which no arm records.
      */
-    private Decision settledBy(Core test, boolean held, InputReads reads) {
-        if (!(test instanceof Core.Binary comparison)) {
-            // The condition is a value rather than a comparison, and nothing records a value coming
-            // out one way. Whether the arm below says it is the caller's question: under a fork
-            // there is an arm to be held to, and on the left of an operator that stops early there
-            // is not.
-            return null;
-        }
+    private Decision sideDecision(Core.Binary comparison, boolean held, InputReads reads) {
         souther.compiler.coverage.ComparisonOccurrence site =
                 plan.comparisonAt(comparison).orElse(null);
         TermPath at = firstOf(reads.pathOf(comparison.left(), symbols),
@@ -575,37 +901,24 @@ public final class Interactions {
         return left != null ? left : right;
     }
 
-    private static Outcome prepend(Decision when, Outcome outcome) {
-        List<Decision> holds = new ArrayList<>();
-        holds.add(when);
-        holds.addAll(outcome.holds());
-        return new Outcome(holds);
-    }
-
     /**
      * Every way the two can be settled together, which is not every pairing of them.
      *
      * <p>A binding read twice is one decision read twice, and pairing its outcomes without asking
      * whether the two agree would report a value settled nine ways that is settled three.
+     *
+     * <p>What the parts of a value come to is not what the value comes to. A thing built out of
+     * several is the constructor's answer and no path of it carries a truth of its own, so these
+     * arrive with nothing said about which of the two they are — which is what a comparison over
+     * the whole of it goes on to say, where it can.
      */
-    private static List<Outcome> product(List<Outcome> left, List<Outcome> right) {
-        List<Outcome> out = new ArrayList<>();
-        for (Outcome one : left) {
-            for (Outcome other : right) {
-                List<Decision> holds = new ArrayList<>(one.holds());
-                boolean agree = true;
-                for (Decision each : other.holds()) {
-                    if (holds.contains(each)) {
-                        continue;
-                    }
-                    if (disagrees(holds, each)) {
-                        agree = false;
-                        break;
-                    }
-                    holds.add(each);
-                }
-                if (agree) {
-                    out.add(new Outcome(holds));
+    private static List<Arrival> product(List<Arrival> left, List<Arrival> right) {
+        List<Arrival> out = new ArrayList<>();
+        for (Arrival one : left) {
+            for (Arrival other : right) {
+                List<Decision> holds = merge(one.by().holds(), other.by().holds());
+                if (holds != null) {
+                    out.add(new Arrival(new Outcome(holds), Truth.UNKNOWN));
                 }
                 if (out.size() > MOST_OUTCOMES) {
                     return out;
@@ -615,19 +928,30 @@ public final class Interactions {
         return out;
     }
 
-    /** Whether {@code added} settles a decision the outcome already settles the other way. */
+    /**
+     * Whether {@code added} settles a decision the conditions already settle the other way.
+     *
+     * <p>The same decision and a different way out of it, which is two things and not one. A
+     * decision named twice and settled the same way is one run doing one thing twice over —
+     * {@code if a then (if a then …)} is written as two forks and no row takes one of them without
+     * the other — and reading that as a contradiction would take away a path the body has.
+     *
+     * <p>Which decision it is is not which place a run is recorded at. Two forks on one flag are
+     * two places and one decision, so what is compared is what the condition is about and never the
+     * claim beside it.
+     */
     private static boolean disagrees(List<Decision> holds, Decision added) {
         for (Decision already : holds) {
             Condition each = already.constrains();
-            boolean same = switch (added.constrains()) {
-                case Condition.Case one ->
-                        each instanceof Condition.Case other && other.at().equals(one.at());
+            boolean otherWay = switch (added.constrains()) {
+                case Condition.Case one -> each instanceof Condition.Case other
+                        && other.at().equals(one.at()) && !other.name().equals(one.name());
                 case Condition.Side one -> each instanceof Condition.Side other
-                        && other.comparison().equals(one.comparison());
+                        && other.comparison().equals(one.comparison()) && other.held() != one.held();
                 case Condition.Arm one -> each instanceof Condition.Arm other
-                        && other.fork().equals(one.fork());
+                        && other.fork().equals(one.fork()) && other.part() != one.part();
             };
-            if (same) {
+            if (otherWay) {
                 return true;
             }
         }
