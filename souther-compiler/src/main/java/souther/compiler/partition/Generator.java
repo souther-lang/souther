@@ -384,7 +384,13 @@ public final class Generator {
         List<GenerationReason> undecided = new ArrayList<>();
         List<Axis> axes = new ArrayList<>();
         for (Axis axis : ordered) {
-            if (readEverywhere(axis, existing)) {
+            // A class at a position inside a sequence is met by a list holding an element in it,
+            // and nothing here builds a list whose elements differ — so every class of one would be
+            // answered with the same row. What the rows already written cover there is still
+            // counted; what is not offered is work this cannot compose.
+            if (axis.path().insideASequence()) {
+                undecided.add(new GenerationReason.ElementNotComposed(axis.id()));
+            } else if (readEverywhere(axis, existing)) {
                 axes.add(axis);
             } else {
                 undecided.add(new GenerationReason.PositionWithheld(axis.id()));
@@ -399,7 +405,7 @@ public final class Generator {
         Set<Pair> pairs = pairsOf(axes);
         Set<Pair> singles = singlesOf(axes);
         for (ObservedRow row : existing) {
-            cover(pairs, singles, axes, whereIn(row.at(), axes));
+            cover(pairs, singles, axes, reachedIn(row.at(), axes));
         }
 
         List<GeneratedRow> rows = new ArrayList<>();
@@ -746,32 +752,76 @@ public final class Generator {
         return true;
     }
 
-    /** Which class each ordered axis fell in for one row, or -1 where the row did not say. */
+    /**
+     * Which one class each ordered axis fell in for one row, or -1 where the row named no single
+     * one — because it could not be read there, or because its values fell in more than one.
+     *
+     * <p>Where a row sits, which is what a cell to be filled beside it is worked out from. A row
+     * whose list holds elements either side of a line sits in no one cell at that position, and
+     * choosing one of them would place the next row against an element this picked.
+     */
     private static int[] whereIn(Map<AxisId, Classification> row, List<Axis> axes) {
+        List<int[]> reached = reachedIn(row, axes);
         int[] at = new int[axes.size()];
         for (int i = 0; i < axes.size(); i++) {
-            at[i] = -1;
-            if (row.get(axes.get(i).id()) instanceof Classification.Classified in) {
-                for (int c = 0; c < axes.get(i).classes().size(); c++) {
-                    if (axes.get(i).classes().get(c).id().equals(in.classId())) {
-                        at[i] = c;
-                        break;
-                    }
-                }
-            }
+            at[i] = reached.get(i).length == 1 ? reached.get(i)[0] : -1;
         }
         return at;
     }
 
-    private static void cover(Set<Pair> pairs, Set<Pair> singles, List<Axis> axes, int[] where) {
-        for (int i = 0; i < axes.size(); i++) {
-            if (where[i] < 0) {
-                continue;
+    /**
+     * Which classes each ordered axis fell in for one row, empty where the row did not say.
+     *
+     * <p>More than one where the position is inside a sequence: a row whose list holds elements
+     * either side of a line stands in both classes there, and picking one of them would report what
+     * the row covers off an element this chose.
+     */
+    private static List<int[]> reachedIn(Map<AxisId, Classification> row, List<Axis> axes) {
+        List<int[]> at = new ArrayList<>();
+        for (Axis axis : axes) {
+            List<Integer> here = new ArrayList<>();
+            if (row.get(axis.id()) instanceof Classification.Classified in) {
+                for (int c = 0; c < axis.classes().size(); c++) {
+                    if (in.classIds().contains(axis.classes().get(c).id())) {
+                        here.add(c);
+                    }
+                }
             }
-            singles.remove(Pair.alone(i, where[i]));
-            for (int j = i + 1; j < axes.size(); j++) {
-                if (where[j] >= 0) {
-                    pairs.remove(new Pair(i, where[i], j, where[j]));
+            int[] found = new int[here.size()];
+            for (int k = 0; k < here.size(); k++) {
+                found[k] = here.get(k);
+            }
+            at.add(found);
+        }
+        return at;
+    }
+
+    /**
+     * What one row covers, over every class it reached at every position.
+     *
+     * <p>A row reaching more than one class at a position covers each of them, and meets each of
+     * them against whatever the position beside it holds. Read as one class it would cover the
+     * first of them and leave the rest owed, which is a row the author already wrote being asked
+     * for again.
+     */
+    /** The same, of a row this generation composed, which sits in one class per position. */
+    private static void cover(Set<Pair> pairs, Set<Pair> singles, List<Axis> axes, int[] where) {
+        List<int[]> each = new ArrayList<>(where.length);
+        for (int at : where) {
+            each.add(at < 0 ? new int[0] : new int[] {at});
+        }
+        cover(pairs, singles, axes, each);
+    }
+
+    private static void cover(Set<Pair> pairs, Set<Pair> singles, List<Axis> axes,
+                              List<int[]> where) {
+        for (int i = 0; i < axes.size(); i++) {
+            for (int one : where.get(i)) {
+                singles.remove(Pair.alone(i, one));
+                for (int j = i + 1; j < axes.size(); j++) {
+                    for (int other : where.get(j)) {
+                        pairs.remove(new Pair(i, one, j, other));
+                    }
                 }
             }
         }

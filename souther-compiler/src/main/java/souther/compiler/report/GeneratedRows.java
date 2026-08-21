@@ -350,6 +350,10 @@ public final class GeneratedRows {
                         "// no rows offered at `%s`: a row's value there could not be read, so a"
                                 + " row written for it may be one that is already here%n",
                         withheld.axis());
+                case GenerationReason.ElementNotComposed inside -> String.format(
+                        "// no rows offered at `%s`: a row is owed a list holding an element in"
+                                + " each class, and nothing here composes one%n",
+                        inside.axis());
                 case GenerationReason.SearchLimit limit -> String.format(
                         "// generation stopped for `%s`: %d %s past the row limit%n",
                         limit.behavior(), limit.combinations(),

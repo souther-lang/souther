@@ -1521,6 +1521,7 @@ public final class Adequacy {
                     // Reasons about this search rather than about there being nothing to search
                     // with. They are said in their own words elsewhere and answer nothing here.
                     case souther.compiler.partition.GenerationReason.PositionWithheld _,
+                            souther.compiler.partition.GenerationReason.ElementNotComposed _,
                             souther.compiler.partition.GenerationReason.SearchLimit _,
                             souther.compiler.partition.GenerationReason.RowsNotConfirmed _,
                             souther.compiler.partition.GenerationReason.CombinationsWithheld _,

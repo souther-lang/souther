@@ -230,14 +230,21 @@ final class Coverages {
             return byRow.isEmpty();
         }
 
-        /** Which class a row fell in at one position, or null where it did not say. */
-        static String classIn(Map<AxisId, Classification> where, Axis axis) {
-            return where.get(axis.id()) instanceof Classification.Classified in ? in.classId() : null;
+        /**
+         * Which classes a row fell in at one position, or nothing where it did not say.
+         *
+         * <p>More than one where the position is inside a sequence and the row's elements did not
+         * fall together. Nothing where the row could not be read there, which is a different answer
+         * from a row whose list held no element — that one is read and falls in no class.
+         */
+        static List<String> classesIn(Map<AxisId, Classification> where, Axis axis) {
+            return where.get(axis.id()) instanceof Classification.Classified in ? in.classIds()
+                    : null;
         }
 
         /** How many rows could not say where they were at this position. */
         int couldNotSay(Axis axis) {
-            return (int) byRow.stream().filter(where -> classIn(where, axis) == null).count();
+            return (int) byRow.stream().filter(where -> classesIn(where, axis) == null).count();
         }
 
         /**
@@ -305,13 +312,23 @@ final class Coverages {
         for (Map<AxisId, Classification> where : readings.byRow()) {
             for (int i = 0; i < axes.size(); i++) {
                 for (int j = i + 1; j < axes.size(); j++) {
-                    String left = Readings.classIn(where, axes.get(i));
-                    String right = Readings.classIn(where, axes.get(j));
-                    if (left != null && right != null) {
-                        // Which positions, and not only which classes. A class id is unique within
-                        // its axis and not across axes — three `Flag` inputs all have a `Yes` — so a
-                        // key of two class names alone collapses every pair one row covers into one.
-                        covered.add(i + "/" + left + " " + j + "/" + right);
+                    List<String> left = Readings.classesIn(where, axes.get(i));
+                    List<String> right = Readings.classesIn(where, axes.get(j));
+                    if (left == null || right == null) {
+                        continue;
+                    }
+                    // Every pairing the row reaches. A row whose list holds elements either side of
+                    // a line stands in both classes there, so it meets each of them against
+                    // whatever the position beside it holds — one row and several cells, which is
+                    // what it did.
+                    for (String one : left) {
+                        for (String other : right) {
+                            // Which positions, and not only which classes. A class id is unique
+                            // within its axis and not across axes — three `Flag` inputs all have a
+                            // `Yes` — so a key of two class names alone collapses every pair one row
+                            // covers into one.
+                            covered.add(i + "/" + one + " " + j + "/" + other);
+                        }
                     }
                 }
             }
@@ -384,9 +401,9 @@ final class Coverages {
         }
         Set<String> covered = new LinkedHashSet<>();
         for (Map<AxisId, Classification> where : readings.byRow()) {
-            String in = Readings.classIn(where, axis);
+            List<String> in = Readings.classesIn(where, axis);
             if (in != null) {
-                covered.add(in);
+                covered.addAll(in);
             }
         }
         return new PartitionEvidence.AxisCoverage(axis.id().toString(), axis.term().toString(),

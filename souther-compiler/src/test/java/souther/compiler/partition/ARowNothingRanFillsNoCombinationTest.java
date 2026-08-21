@@ -140,7 +140,7 @@ class ARowNothingRanFillsNoCombinationTest {
     private static String labelOf(List<Axis> axes, Map<AxisId, Classification> sitting) {
         List<String> parts = axes.stream()
                 .map(axis -> axis.term() + "="
-                        + ((Classification.Classified) sitting.get(axis.id())).classId())
+                        + String.join("|", ((Classification.Classified) sitting.get(axis.id())).classIds()))
                 .toList();
         return String.join(" x ", parts);
     }

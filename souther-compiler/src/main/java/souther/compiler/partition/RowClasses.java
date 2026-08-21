@@ -6,6 +6,7 @@ import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowOutcome;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,11 +51,47 @@ public final class RowClasses {
      * had to guess.
      */
     private static Classification classify(RowOutcome row, BehaviorInputs where, Axis axis) {
-        ObservedValue value = where.valueAt(row, axis.path());
-        if (value == null && where.indexOf(axis.path()) < 0) {
+        List<ObservedValue> values = where.valuesAt(row, axis.path());
+        if (values == null) {
             return Classification.unreadable(Incompleteness.Code.VALUE_UNREADABLE,
                     axis.id().behavior(), axis.id().term());
         }
+        // Every value the row put here, and every class any of them is in. One at most positions;
+        // as many as the row wrote at a position inside a sequence, where they need not fall
+        // together — and where one of them being unreadable leaves the classes the others reached
+        // standing, since each is a value of its own.
+        List<String> in = new ArrayList<>();
+        Incompleteness.Code stopped = null;
+        for (ObservedValue value : values) {
+            Classification each = classifyOne(row, where, axis, value);
+            switch (each) {
+                case Classification.Classified found -> found.classIds().forEach(id -> {
+                    if (!in.contains(id)) {
+                        in.add(id);
+                    }
+                });
+                case Classification.Unclassified why -> {
+                    if (stopped == null) {
+                        stopped = why.reason().code();
+                    }
+                }
+            }
+        }
+        if (!in.isEmpty()) {
+            return Classification.in(in);
+        }
+        if (stopped != null) {
+            return Classification.unreadable(stopped, axis.id().behavior(), axis.id().term());
+        }
+        // Read, and in no class. A row whose list holds no element is one: there was nothing at
+        // this position to be in a class, which is not a reading that stopped.
+        return values.isEmpty() ? Classification.in(List.of())
+                : classifyOne(row, where, axis, values.get(0));
+    }
+
+    /** Where one value at the position falls, or why no class could say. */
+    private static Classification classifyOne(RowOutcome row, BehaviorInputs where, Axis axis,
+                                              ObservedValue value) {
         // Kept rather than returned on, and not acted on either. A class may read less of a value
         // than the one after it, so one saying it could not read says nothing about the rest —
         // including that the rest cannot hold it. An incompleteness is what is left once no class
