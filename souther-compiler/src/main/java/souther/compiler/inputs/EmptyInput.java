@@ -64,4 +64,17 @@ public sealed interface EmptyInput {
      * proved. Widening this is one edit, in the translation above.
      */
     record ProvedByTheDeclarationsReading() implements EmptyInput {}
+
+    /**
+     * The rules and what a caller took in on the way leave nothing together.
+     *
+     * <p>Apart from the reading's own proof because it is a different fact. What a declaration
+     * refuses it refuses of every value, and this is about a place — a row that would have to be
+     * both inside a region and at a level nothing in that region reaches. Read as the first, an
+     * author would be sent to a declaration that says nothing of the sort.
+     *
+     * <p>Nowhere in particular. What contradicts is the rules taken together, and naming one of
+     * them would be picking whichever the arithmetic happened to close on.
+     */
+    record ProvedByTheRulesTakenTogether() implements EmptyInput {}
 }

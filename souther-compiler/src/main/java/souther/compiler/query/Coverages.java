@@ -17,6 +17,7 @@ import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.Criterion;
+import souther.compiler.partition.ReachingCuts;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.PointRole;
@@ -93,7 +94,11 @@ final class Coverages {
                 // producers. Carried rather than derived from the lines that came back: a
                 // comparison this could not read draws no line, and that is when its questions
                 // stand.
-                both(clauses.accounting(), guards.accounting()));
+                both(clauses.accounting(), guards.accounting()),
+                // What a row had to satisfy to arrive at each comparison, from the walk that
+                // assumed it. A clause of a declaration is not written at a place in a body and has
+                // nothing on the way to it, so only the guards have any of this.
+                guards.reaching());
     }
 
     /** The two producers' lines, in one list. */
@@ -443,24 +448,57 @@ final class Coverages {
      *                  differently and a measure that took one boolean for both could not say which
      *                  had happened.
      * @param probe     null where the module's classes or the runtime are not there to build against
+     * @param reaching  what a row had already satisfied when each comparison ran. Threaded here as
+     *                  well as into {@link #assessBetween} because which shape of quantity a rule
+     *                  cuts says nothing about where a row for it may be written — and a region put
+     *                  into one of the two paths would leave the other searching over everything its
+     *                  position could ever hold. No model was found where it moves an answer down
+     *                  this path, and no test holds it: the points of a line at one position all sit
+     *                  beside the line, and every line tried that the region excludes turned out to
+     *                  be one {@link souther.compiler.check.PathReachability} had already taken the
+     *                  obligation away for. Whether those two always coincide is not established
+     *                  here — they are different readings — so what this says is that a path is not
+     *                  left short of what it is owed, and not that the region is idle here.
      */
     static List<BorderAssessment> assess(
             Axis axis, BehaviorInputs where, souther.compiler.query.Adequacy.Observed observed,
             boolean armsAsked, boolean knownWritable, Probe probe,
-            souther.compiler.inputs.Quantities rules,
+            souther.compiler.inputs.Quantities rules, ReachingCuts reaching,
             souther.compiler.numeric.NumericDomain.Bounds within) {
         // Keyed by the line rather than by the reading of it. A guard inside a non-recursive helper
         // is read once per call of that helper, and the rows do not owe the same border twice for
         // having been offered it twice; what each reading saw is merged below.
         java.util.SequencedMap<BoundaryLine, BorderAssessment> out = new java.util.LinkedHashMap<>();
-        LevelRealizer realizer = new LevelRealizer(rules);
+        LevelRealizer realizer = new LevelRealizer();
         for (Border each : Partitions.bordersOf(axis, where.symbols(), within)) {
             out.merge(BoundaryLine.of(each),
-                    assessed(each, shapeOf(each, where, knownWritable, probe, realizer),
+                    assessed(each, shapeOf(each, where, knownWritable, probe, realizer,
+                                    regionFor(each, rules, reaching)),
                             observed, armsAsked),
                     Coverages::whicheverSawMore);
         }
         return List.copyOf(out.values());
+    }
+
+    /**
+     * Where a row for one border may be written.
+     *
+     * <p>Beside the border and not part of it. What a border is is what the rows are owed at, and it
+     * is the same border wherever a row for it is looked for — put inside, two readings of one line
+     * reached under different conditions would be two obligations, and a count of what an author
+     * owes would move with how much of a body this compiler managed to read.
+     *
+     * <p>What the declarations leave, for a line a declaration draws. An invariant is about the
+     * values and holds wherever one stands, so there is nothing on the way to it; a guard is at a
+     * place in a body, and a row that never arrives there is no row at its line whatever it holds.
+     * Read off which kind of rule it is rather than off whether anything was collected: a guard
+     * nothing narrows and a clause are then the same region for the same stated reason.
+     */
+    private static souther.compiler.inputs.SearchRegion regionFor(
+            Border border, souther.compiler.inputs.Quantities rules, ReachingCuts reaching) {
+        return border.origin().comparisonAt()
+                .map(site -> reaching.narrowing(rules.region(), site))
+                .orElseGet(rules::region);
     }
 
     /**
@@ -544,7 +582,8 @@ final class Coverages {
      */
     private static OneShapeOfBorder shapeOf(Border border, BehaviorInputs where,
                                             boolean knownWritable, Probe probe,
-                                            LevelRealizer realizer) {
+                                            LevelRealizer realizer,
+                                            souther.compiler.inputs.SearchRegion within) {
         BorderQuantity quantity = border.cut().of();
         java.util.Optional<souther.compiler.coverage.ComparisonOccurrence> site =
                 border.origin().comparisonAt();
@@ -565,7 +604,7 @@ final class Coverages {
                 // the realizer. What it composes is a candidate and no part of the item: another row
                 // in the same side is at the point as much as this one would be, so what the row is
                 // offered for goes in beside it rather than being read back off it.
-                return switch (realizer.realize(quantity.standingAt(criterion))) {
+                return switch (realizer.realize(quantity.standingAt(criterion), within)) {
                     case Realization.Found found ->
                             whatCameOfIt(probe.attempt(label, quantity.carrier(), found.fixing()));
                     // And the two ways of finding nothing are not one answer. A walk of the whole
@@ -724,10 +763,12 @@ final class Coverages {
         // line twice for having been offered it twice — nor may one reading of it take back what
         // another established.
         java.util.SequencedMap<BoundaryLine, BorderAssessment> out = new LinkedHashMap<>();
-        LevelRealizer realizer = new LevelRealizer(partitioning.quantities());
+        LevelRealizer realizer = new LevelRealizer();
         for (Border each : partitioning.between()) {
             out.merge(BoundaryLine.of(each),
-                    assessed(each, shapeOf(each, where, false, probe, realizer), observed,
+                    assessed(each, shapeOf(each, where, false, probe, realizer,
+                                    regionFor(each, partitioning.quantities(),
+                                            partitioning.reaching())), observed,
                             armsAsked),
                     Coverages::whicheverSawMore);
         }

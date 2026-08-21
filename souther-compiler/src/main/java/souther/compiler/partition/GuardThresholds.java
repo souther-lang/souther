@@ -73,10 +73,12 @@ public final class GuardThresholds {
     public record Guards(List<Threshold> thresholds,
                          List<UnreadRule> unread, List<Singled> singled,
                          List<LineDrawn> between,
-                         List<AtAPosition> accounting) {
+                         List<AtAPosition> accounting,
+                         ReachingCuts reaching) {
 
         public static final Guards NONE =
-                new Guards(List.of(), List.of(), List.of(), List.of(), List.of());
+                new Guards(List.of(), List.of(), List.of(), List.of(), List.of(),
+                        ReachingCuts.NONE);
 
         /**
          * One comparison's accounting, and the position a reader is sent to for it.
@@ -152,9 +154,10 @@ public final class GuardThresholds {
         List<Guards.AtAPosition> accounting = new ArrayList<>();
         List<Guards.Singled> singled = new ArrayList<>();
         List<LineDrawn> between = new ArrayList<>();
+        ReachingCuts.Collected cuts = new ReachingCuts.Collected();
         walk(behavior, body, plan, InputReads.of(inputs), symbols, quantities,
-                found, unread, singled, between, accounting);
-        return new Guards(found, unread, singled, between, accounting);
+                found, unread, singled, between, accounting, List.of(), cuts);
+        return new Guards(found, unread, singled, between, accounting, cuts.made());
     }
 
     private static void walk(String behavior, Core e, CoverageSites.Plan plan,
@@ -162,10 +165,22 @@ public final class GuardThresholds {
                              List<Threshold> out,
                              List<UnreadRule> unread,
                              List<Guards.Singled> singled, List<LineDrawn> between,
-                             List<Guards.AtAPosition> accounting) {
+                             List<Guards.AtAPosition> accounting,
+                             List<ReachingCuts.Cut> assumed, ReachingCuts.Collected cuts) {
+        // One reading of this condition, folded by everything that asks about it. Made here so the
+        // comparisons, what stands where each of them runs, and what each arm proves are three
+        // answers about one structure rather than three walks that agree by having been written
+        // alike.
+        Condition asked = e instanceof Core.If iff ? Condition.of(iff.cond(), reads) : null;
+        List<Placed> comparisons = asked == null ? List.of() : comparisonsIn(asked, plan);
         if (e instanceof Core.If iff) {
+            // What a row had already satisfied when each of this condition's comparisons ran,
+            // filed where it was assumed. Asked of the condition rather than of the fork: a
+            // condition stops as soon as it is settled, so what stands when the second comparison
+            // runs is not what stood when the first did.
+            ReachingCuts.collect(asked, assumed, plan, symbols, cuts);
             List<Core> read = read(behavior, iff, plan, reads, symbols, quantities, out, singled,
-                    between, accounting);
+                    between, accounting, comparisons);
             // Every comparison this condition holds that nothing turned into a line — asked of the
             // comparisons and not of the positions. One position carries more than one statement,
             // and a line read at it says nothing about the rest: kept per position, a threshold on
@@ -185,8 +200,42 @@ public final class GuardThresholds {
         // walk that did not follow the binding would find its comparisons about nothing.
         InputReads inside = e instanceof Core.LetIn let ? reads.and(let.binder(), let.value())
                 : reads;
+        if (e instanceof Core.If iff) {
+            // The arms under what each of them proves of the condition, and the condition itself
+            // under what stood above the fork. A comparison inside a condition is not below the
+            // fork: it runs to decide it.
+            walk(behavior, iff.cond(), plan, inside, symbols, quantities, out, unread, singled,
+                    between, accounting, assumed, cuts);
+            walk(behavior, iff.then(), plan, inside, symbols, quantities, out, unread, singled,
+                    between, accounting,
+                    taking(asked, true, assumed, symbols), cuts);
+            walk(behavior, iff.els(), plan, inside, symbols, quantities, out, unread, singled,
+                    between, accounting,
+                    taking(asked, false, assumed, symbols), cuts);
+            return;
+        }
         Core.forEachChild(e, child -> walk(behavior, child, plan, inside, symbols, quantities,
-                out, unread, singled, between, accounting));
+                out, unread, singled, between, accounting, assumed, cuts));
+    }
+
+    /**
+     * What stands inside one arm of a fork: what stood above it, and what that arm proves of the
+     * condition.
+     *
+     * <p>Asked of {@link ReachingCuts#stating}, which is the same rule that says what reaching the
+     * right operand of a condition establishes. Both are "this subtree came out this way, so what
+     * follows", and written apart they would agree by having been derived alike — until one of them
+     * learned to read a shape of condition the other did not.
+     */
+    private static List<ReachingCuts.Cut> taking(Condition condition, boolean onThen,
+                                                 List<ReachingCuts.Cut> assumed, Symbols symbols) {
+        List<ReachingCuts.Cut> arm = ReachingCuts.stating(condition, onThen, symbols);
+        if (arm.isEmpty()) {
+            return assumed;
+        }
+        List<ReachingCuts.Cut> out = new ArrayList<>(assumed);
+        out.addAll(arm);
+        return List.copyOf(out);
     }
 
     /**
@@ -387,7 +436,8 @@ public final class GuardThresholds {
                                    souther.compiler.inputs.Quantities quantities,
                                    List<Threshold> out,
                                    List<Guards.Singled> singled, List<LineDrawn> between,
-                                   List<Guards.AtAPosition> accounting) {
+                                   List<Guards.AtAPosition> accounting,
+                                   List<Placed> comparisons) {
         // The comparisons a line came of, and not the positions they were about. A position carries
         // more than one statement and reading one of them settles nothing about the others.
         List<Core> made = new ArrayList<>();
@@ -399,7 +449,7 @@ public final class GuardThresholds {
         if (guard == null) {
             return made;   // no site for this `if`: nothing could answer for it
         }
-        for (Placed each : comparisonsIn(iff.cond())) {
+        for (Placed each : comparisons) {
             // The plan numbered every comparison of an instrumented condition before anything read a
             // line off one, so this is here. Required rather than looked up leniently: a line whose
             // comparison has no site is this reader and the plan disagreeing about what a condition
@@ -409,9 +459,9 @@ public final class GuardThresholds {
             // What the comparison cuts is one question with one answer ({@link Cutting}). What is
             // added here is what meeting the line takes, which is a guard's own answer and no other
             // rule's.
-            Cutting cutting = Cutting.of(behavior, each.comparison(), reads, symbols, quantities);
+            Cutting cutting = Cutting.of(behavior, each.comparison(), each.reads(), symbols, quantities);
             if (cutting == null) {
-                raisesNoLine(accounting, behavior, iff, each.comparison(), reads, symbols);
+                raisesNoLine(accounting, behavior, iff, each.comparison(), each.reads(), symbols);
                 continue;
             }
             OriginRef.GuardOrigin origin = new OriginRef.GuardOrigin(
@@ -433,22 +483,22 @@ public final class GuardThresholds {
                 // line — so a second rule over one form left the first one's run going to the end
                 // of the order, past it.
                 if (!Border.reaches(cutting.target(), cutting.within())) {
-                    raisesNoLine(accounting, behavior, iff, each.comparison(), reads,
+                    raisesNoLine(accounting, behavior, iff, each.comparison(), each.reads(),
                             symbols);
                     continue;
                 }
                 between.add(new LineDrawn(cutting, origin));
                 List<TermPath> named = new ArrayList<>();
-                mentioned(each.comparison().left(), reads, symbols, named);
-                mentioned(each.comparison().right(), reads, symbols, named);
+                mentioned(each.comparison().left(), each.reads(), symbols, named);
+                mentioned(each.comparison().right(), each.reads(), symbols, named);
                 if (named.isEmpty()) {
                     continue;   // a comparison about no position of the input raises nothing
                 }
                 // Filed at the position the reading names first, which is the one a line between two
                 // would be read `on`. One comparison is one line however many positions it mentions.
                 raises(accounting, behavior, iff, each.comparison(), named.get(0),
-                        comparedTerm(each.comparison(), reads, symbols),
-                        subjectsOf(each.comparison(), reads, symbols, null),
+                        comparedTerm(each.comparison(), each.reads(), symbols),
+                        subjectsOf(each.comparison(), each.reads(), symbols, null),
                         new Required.LineRead.ALineBetweenTwoPositions());
                 continue;
             }
@@ -477,7 +527,7 @@ public final class GuardThresholds {
                 between.add(new LineDrawn(cutting, origin));
             }
             raises(accounting, behavior, iff, each.comparison(), divided.path(), divided,
-                    subjectsOf(each.comparison(), reads, symbols, null),
+                    subjectsOf(each.comparison(), each.reads(), symbols, null),
                     new Required.LineRead.ALineOnThePosition());
         }
         return made;
@@ -615,8 +665,16 @@ public final class GuardThresholds {
                 iff.origin().kind(), Citation.of(comparison.pos()));
     }
 
-    /** One comparison of a condition, and which arms of the {@code if} prove it was evaluated. */
-    private record Placed(Core.Binary comparison, OriginRef.GuardOrigin.Witness witness) {}
+    /**
+     * One comparison of a condition, which arms of the {@code if} prove it was evaluated, and where
+     * the names in it point.
+     *
+     * <p>The reading travels with the comparison because it is not the same at every one of them: a
+     * comparison inside an expanded helper is about the argument the call handed it, and read
+     * against the names outside the binding it is about nothing at all.
+     */
+    private record Placed(Core.Binary comparison, InputReads reads,
+                          OriginRef.GuardOrigin.Witness witness) {}
 
     /**
      * The comparisons a condition is made of, each with what its own place leaves as evidence.
@@ -632,12 +690,28 @@ public final class GuardThresholds {
      * evaluated at all on a given arm, and whether reaching that arm forces the subtree's own value
      * — because it is the second that says whether the operand to its left was true, which is what
      * decides whether the operand to its right ran.
+     *
+     * <p><b>The ones the plan numbered, which is not all of them.</b> Meeting a guard's line takes
+     * getting the comparison to answer, and whether it answered is what a site records — so a
+     * comparison with no site is one no row could ever be shown to have reached, and a border drawn
+     * on it would owe a row nothing can measure.
+     *
+     * <p>Which is where a comparison inside a helper called in a condition falls today: the plan
+     * numbers the conditions of a body and an expanded helper's comparison is not one of them, so it
+     * raises nothing ({@code AComparisonInsideAHelperRaisesNothingTest}). That is a gap of its own
+     * and not this reading's to close.
+     *
+     * <p>It does not follow that such a comparison says nothing. What a condition <em>establishes</em>
+     * is a fact about the model and wants no instrumentation — a helper returning true is its body
+     * holding — so {@link ReachingCuts} takes it in over the whole reading and only this, which is
+     * about what a row is owed, asks the plan.
      */
-    private static List<Placed> comparisonsIn(Core condition) {
+    private static List<Placed> comparisonsIn(Condition condition, CoverageSites.Plan plan) {
         List<Placed> out = new ArrayList<>();
         // At the top there is nothing above to have stopped the condition, and the arm taken is the
         // condition's own value.
         placed(condition, new Reached(true, true, true, true), out);
+        out.removeIf(each -> plan.comparisonAt(each.comparison()).isEmpty());
         return out;
     }
 
@@ -676,13 +750,15 @@ public final class GuardThresholds {
         }
     }
 
-    private static boolean combines(Hir.BinOp op) {
-        return op == Hir.BinOp.AND || op == Hir.BinOp.OR;
-    }
-
-    private static void placed(Core e, Reached reached, List<Placed> out) {
-        if (e instanceof Core.Binary binary && combines(binary.op())) {
-            boolean and = binary.op() == Hir.BinOp.AND;
+    private static void placed(Condition e, Reached reached, List<Placed> out) {
+        if (e instanceof Condition.Compares one) {
+            out.add(new Placed(one.at(), one.reads(), reached.witness()));
+            return;
+        }
+        if (e instanceof Condition.Both || e instanceof Condition.Either) {
+            boolean and = e instanceof Condition.Both;
+            Condition leftOf = and ? ((Condition.Both) e).left() : ((Condition.Either) e).left();
+            Condition rightOf = and ? ((Condition.Both) e).right() : ((Condition.Either) e).right();
             // A conjunction's value being true makes both its operands true; a disjunction's being
             // false makes both false. Neither says anything the other way round.
             Reached left = new Reached(reached.onThen(), reached.onElse(),
@@ -694,12 +770,8 @@ public final class GuardThresholds {
                     and && reached.onThen() && reached.trueThen(),
                     !and && reached.onElse() && reached.falseElse(),
                     and && reached.trueThen(), !and && reached.falseElse());
-            placed(binary.left(), left, out);
-            placed(binary.right(), right, out);
-            return;
-        }
-        if (e instanceof Core.Binary comparison && !combines(comparison.op())) {
-            out.add(new Placed(comparison, reached.witness()));
+            placed(leftOf, left, out);
+            placed(rightOf, right, out);
         }
     }
 
