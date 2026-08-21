@@ -314,13 +314,14 @@ public final class Generator {
                 if (taken[g] >= group.size()) {
                     continue;
                 }
-                InteractionCells.Cell cell = group.at(taken[g]++);
+                CellSelection selection = group.at(taken[g]++);
                 anyLeft = true;
-                if (cell == null) {
+                if (selection == null) {
                     // The factors this choice takes leave a position nothing, so it is not a
                     // combination the body has a path to and there is nothing to ask for.
                     continue;
                 }
+                InteractionCells.Cell cell = selection.cell();
                 if (sits(written, cell)) {
                     // A cell a row already sits in is a cell nothing is owed for.
                     continue;
