@@ -274,13 +274,16 @@ public final class LevelRealizer {
                 if (!left.admits(new Count(solved))) {
                     return false;
                 }
+                at[i] = new Count(solved);
                 // And the rules with every position of the form fixed, which is the one place a
                 // whole assignment exists to be held against them. A value inside each position's
-                // own ends can still be one no value of the record has beside the others.
-                if (fixing(here, terms.get(i).getKey(), solved) == null) {
+                // own ends can still be one no value of the record has beside the others, and this
+                // is the step that is not given up: what is handed back is an assignment the rules
+                // were not shown to refuse.
+                if (!theRulesHaveNotRefused()) {
+                    at[i] = null;
                     return false;
                 }
-                at[i] = new Count(solved);
                 return true;
             }
             java.math.BigDecimal low = endOf(left.min(), true);
@@ -305,7 +308,7 @@ public final class LevelRealizer {
                 if (inside == null || !(inside instanceof Count taken)) {
                     return false;
                 }
-                souther.compiler.inputs.Quantities next = fixing(here, terms.get(i).getKey(), taken.at());
+                souther.compiler.inputs.Quantities next = narrowing(here, terms.get(i).getKey(), taken.at());
                 if (next == null) {
                     return false;
                 }
@@ -318,7 +321,7 @@ public final class LevelRealizer {
                 // nothing beside is skipped here rather than offered and refused where the row is
                 // built: refused there, one candidate coming back rejected is reported as every
                 // value having been tried.
-                souther.compiler.inputs.Quantities next = fixing(here, terms.get(i).getKey(), x);
+                souther.compiler.inputs.Quantities next = narrowing(here, terms.get(i).getKey(), x);
                 if (next == null) {
                     continue;
                 }
@@ -336,25 +339,55 @@ public final class LevelRealizer {
         /**
          * The rules with one more position fixed, or null where they are then left nothing.
          *
-         * <p>Null is a proof and not a guess. What is skipped on it is an assignment the
-         * declarations refuse, so a walk that skips every one of them and finds nothing has still
-         * walked everything there was.
+         * <p>Narrowing, and only that. Null is a proof and the value is skipped on it, so a walk
+         * that skips every one of them has still walked everything there was.
          *
-         * <p><b>Asked while it is worth asking.</b> Each of these reads the declarations reaching
-         * the positions again, and a box wide enough to walk for a hundred thousand steps is wide
-         * enough to read them a hundred thousand times. Past {@link #HOW_OFTEN_THE_RULES_ARE_ASKED_AGAIN}
+         * <p><b>Asked while it is worth asking.</b> Each of these reads the declarations reaching the
+         * positions again, and a box wide enough to walk for a hundred thousand steps is wide enough
+         * to read them a hundred thousand times. Past {@link #HOW_OFTEN_THE_RULES_ARE_ASKED_AGAIN}
          * the walk carries on against what the rules left before anything was fixed, which is wider
          * and is sound: it offers assignments this would have skipped, and skips none it would have
          * kept.
+         *
+         * <p>What giving this up may not give up is the answer. An assignment out of the wider box
+         * that nothing held against the rules is one the record can refuse, and offered as a row it
+         * comes back refused where it is built — which is the defect this reading exists to remove,
+         * arriving by way of a budget. So the last step is {@link #theRulesHaveNotRefused} and is
+         * not budgeted.
          */
-        private souther.compiler.inputs.Quantities fixing(souther.compiler.inputs.Quantities here, NumericTerm term,
-                                 java.math.BigDecimal at) {
+        private souther.compiler.inputs.Quantities narrowing(souther.compiler.inputs.Quantities here, NumericTerm term,
+                                    java.math.BigDecimal at) {
             if (asked >= HOW_OFTEN_THE_RULES_ARE_ASKED_AGAIN) {
                 return here;
             }
             asked++;
             souther.compiler.inputs.Quantities next = here.given(term, new Count(at));
             return next.emptiness().isPresent() ? null : next;
+        }
+
+        /**
+         * Whether the rules, with every position of the form fixed at what the walk chose, were not
+         * shown to leave nothing.
+         *
+         * <p>Not that a value exists. Nothing here builds one, and the rules leaving something is
+         * not the same as something being writable — what settles that is the row itself, where it
+         * is built. What this refuses is narrower and is the whole of what was wrong: an assignment
+         * the rules are already known to refuse, offered as a row and reported as though the point
+         * had nothing at it.
+         *
+         * <p>Asked of the whole assignment and not of the last position, because that is what an
+         * assignment is. Where the narrowing above ran out, the values chosen before this one were
+         * never put to the rules at all, so asking about the last of them alone would hold the walk
+         * to nothing it had not already checked.
+         */
+        private boolean theRulesHaveNotRefused() {
+            java.util.Map<NumericTerm, Count> all = new LinkedHashMap<>();
+            for (int j = 0; j < terms.size(); j++) {
+                if (at[j] instanceof Count count) {
+                    all.put(terms.get(j).getKey(), count);
+                }
+            }
+            return rules.given(all).emptiness().isEmpty();
         }
 
         /**

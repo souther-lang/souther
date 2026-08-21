@@ -53,18 +53,44 @@ never appear. A count is never negative and no clause writes that down, which is
 with the term's own guarantee is part of the meaning rather than an optimisation — a value fixed
 below none is proved impossible where no reading of the clauses refuses it.
 
-A term is queryable where its path is one of this input's. Which numbers a path is measured at is not
-settled by the reading of the declarations alone: a bare list nothing bounds becomes an axis about
-its length where a body measures it. A term at a path the input does not have is the caller's
-mistake and is refused as one — answered as an emptiness it would be a bug wearing the words of a
-contradiction in the model, and answered as unbounded it would be one wearing the words of a model
-that says nothing.
+A term is queryable where what it sits under is something the behavior takes. **Owned is not the
+same as known about.** The walk that reads an input's positions stops two levels down, where a report
+stops being about anything an author would call one input, and nothing stops a rule from naming what
+is under that — the reader that turns an expression into a path follows as many fields as are
+written. Such a term is this input's and is answered for, with whatever it guarantees of itself and
+nothing the declarations relate it to, because the reading has no position there for a relation to be
+about. The reading already has a word for that position: *the walk stopped before reaching what is
+under it*. Ownership settled by which positions the walk found instead, an ordinary rule naming a
+field of a field of a field stopped a measurement rather than being measured.
+
+What is refused is a term under something the behavior does not take, which no reading of this input
+could ever answer for — as an emptiness it would be a bug wearing the words of a contradiction in the
+model, and as unbounded it would be one wearing the words of a model that says nothing. Whether a
+path names a field the type actually has is settled where the term is made, and not here: a path is a
+location and the declarations are what say what is at one.
 
 Rules reach an input from the declarations of its parameters and from nowhere else, so two parameters
 are related by nothing. A form spanning both is answered by solving each parameter's part of it
 against that parameter's rules and adding the results: the parts stay forms and only the answers are
 added. That composition depends on nothing relating two parameters, and a behavior whose own clauses
 relate them is the day it changes.
+
+**One coordinate, read and written.** A position is measured at its own value or at a count taken of
+it, and the two are different numbers under one path. Reading was given that pair and settling was
+not, so a rule over two counts was read whole when it was asked about and left unconditioned the
+moment one of them was fixed — a contract with an exception in it on the day it was written. Both
+sides name a coordinate, and a settling of one is stated in a single place
+(`ConstraintState.settling`), so a reading made with a position settled and a reading settled after
+it was made say the same thing rather than two things that happen to agree.
+
+**Settling does not read the clauses again.** A settling is an equality on one atom taken onto
+everything else the clauses came to, which is what the reading does with one at the end of its own
+work — so arriving there directly is arriving where the reading already is. Read again instead, a
+search fixing a position per step down a box read every rule of every declaration per step: twenty
+thousand readings for one behavior, against twenty-seven for the same answer. What a settling hands
+back answers about the constraints and not about a reading, and what a reading derives beside them —
+which values a position may hold, what it must hold, which rule placed an end — is neither recomputed
+nor offered, so nothing can read a settled state for an answer worked out before the settling.
 
 **A capability, not an answer.** Asking the declarations a further question takes a way of reading
 them, and what a question is answered with is compared as a value by whatever decides that a compile
@@ -73,15 +99,24 @@ holds what the behavior takes and nothing that reads it. It is built once per wa
 one per comparison would read every parameter of a behavior once per comparison written about it.
 
 **Knowledge, not search.** What is answered is what the rules leave. Where a row goes, how long to
-look for one, and what follows from having given up stay in `LevelRealizer`. A search reads the rules
-again as it fixes positions and skips what they leave nothing beside; past a budget it carries on
-against what they left before anything was fixed, which is wider and refuses nothing it would have
-kept. Exhausting a superset with no solution is still a proof, so what the search may conclude does
-not depend on how much of the budget it spent.
+look for one, and what follows from having given up stay in `LevelRealizer`. It walks what
+`Quantities` soundly leaves, which the actual set is a subset of; `Impossible` is sound by the
+direction of that inclusion and not because the two are the same.
 
-`LevelRealizer` walks what `Quantities` soundly leaves, which the actual set is a subset of.
-`Impossible` is sound because of the direction of that inclusion and not because the two are the
-same: nothing here claims the reading is exact.
+**Narrowing may be given up and the answer may not.** A search reads the rules again as it fixes
+positions and skips what they leave nothing beside. Past a budget it carries on against what they
+left before anything was fixed, which is wider and refuses nothing it would have kept — that is
+giving up precision. What it may not give up is what it hands back: an assignment out of the wider
+box that nothing held against the rules is one the record can refuse, and offered as a row it comes
+back refused where it is built, which a report says as every value having been tried of a point some
+other pair stands at. So the narrowing is budgeted and the last step is not. A complete assignment is
+put to the rules whatever the budget did, and what is handed back is one they were not shown to
+refuse.
+
+Not one they were shown to leave. Nothing here builds a value, and an emptiness nobody proved is not
+a value proven to exist — what settles that is the row itself, where it is built. What the last step
+removes is narrower and is the whole of what was wrong: an assignment the rules are already known to
+refuse, offered as though it were a row.
 
 **Two other readers condition a declaration, for two different reasons, and neither is this boundary
 not yet reached.** `Partitions.composed` builds a representative value of a declaration reached while
@@ -93,6 +128,13 @@ something an author would call one input and the other goes on until there is a 
 walks answering "which positions are there" differently is a fault of its own, and deciding which
 depth owns which question is not what this boundary settles. A test over the compiled classes names
 both, with the reason each is there.
+
+A proof of emptiness is said in this input's words, which is the whole reason it is not the
+declarations' proof handed on. Where that proof names a position, the path it names is the value's
+own — `x` for a field of the record the clause was written on — and the caller's is the parameter and
+that path together. The where is carried across and the why stays where it was proved: one step and
+no further, because what sits under the step is a proof about some other value whose places are not
+this input's to spell.
 
 ## Consequences
 

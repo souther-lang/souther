@@ -217,6 +217,138 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
         assertEquals(java.util.Optional.empty(), asked.given(size, count(1)).emptiness());
     }
 
+    /**
+     * Two counts the record relates, so that fixing one says something about the other.
+     *
+     * <p>A count is a number of a position and not a position, and the two are filed under different
+     * names by the reading that makes them. A fixing that reached only the first left a rule over two
+     * counts unconditioned while the same rule was read whole when it was asked about — so the answer
+     * to "where does this run" knew the relation and the answer to "what is left once that is fixed"
+     * did not.
+     */
+    private static final String COUNTED = """
+            module example.counted
+
+            data Possible =
+                { accounts: List<Int>
+                , contacts: List<Int>
+                }
+                invariant oneOfThem =
+                    List.length(accounts) + List.length(contacts) >= 1
+
+            data Taken
+
+            behavior take : (p: Possible) -> Taken
+            """;
+
+    @Test
+    void fixingOneCountNarrowsTheCountItIsRelatedTo() {
+        Read read = read(COUNTED, "take");
+        Quantities asked = read.inputs().quantities(read.symbols());
+        NumericTerm accounts = size(read, "accounts");
+        NumericTerm contacts = size(read, "contacts");
+
+        assertEquals(new Count(BigDecimal.ZERO),
+                asked.runsBetween(contacts).min().at(), "nothing bounds it on its own");
+        assertEquals(new Count(BigDecimal.ONE),
+                asked.given(accounts, count(0)).runsBetween(contacts).min().at());
+    }
+
+    @Test
+    void twoCountsTheRuleRefusesTogetherLeaveNothing() {
+        Read read = read(COUNTED, "take");
+        Quantities asked = read.inputs().quantities(read.symbols());
+        NumericTerm accounts = size(read, "accounts");
+        NumericTerm contacts = size(read, "contacts");
+
+        assertTrue(asked.given(accounts, count(0)).given(contacts, count(0))
+                .emptiness().isPresent());
+    }
+
+    /** And the algebra holds of a count as much as of a value, which is where the two came apart. */
+    @Test
+    void theAlgebraHoldsOfACountToo() {
+        Read read = read(COUNTED, "take");
+        Quantities asked = read.inputs().quantities(read.symbols());
+        NumericTerm accounts = size(read, "accounts");
+        NumericTerm contacts = size(read, "contacts");
+        Quantities one = asked.given(accounts, count(0)).given(contacts, count(2));
+        Quantities other = asked.given(contacts, count(2)).given(accounts, count(0));
+        Quantities together = asked.given(fixing(accounts, 0, contacts, 2));
+
+        assertEquals(together.runsBetween(contacts), one.runsBetween(contacts));
+        assertEquals(together.runsBetween(accounts), other.runsBetween(accounts));
+        assertEquals(one.runsBetween(accounts), other.runsBetween(accounts));
+        assertEquals(one.emptiness(), other.emptiness());
+        assertEquals(together.emptiness(), one.emptiness());
+    }
+
+    /**
+     * Settling a position does not read the declarations again, whenever it is asked about.
+     *
+     * <p>A settling is an equality on one number taken onto everything else the clauses came to,
+     * and the reading states it that way itself at the end of its own work. So the clauses have
+     * been read when the input was read, and a caller fixing a position — or fixing four of them
+     * one at a time and asking after each — is arriving where the reading already is rather than
+     * paying for it again.
+     *
+     * <p>Counted rather than timed. What is held is the shape of the thing: a search that fixes a
+     * position per step down a box would read a declaration per step, and how fast one reading is
+     * would decide whether that mattered.
+     */
+    @Test
+    void settlingAPositionDoesNotReadTheDeclarationsAgain() {
+        Read read = read(SOURCE, "take");
+        Quantities asked = read.inputs().quantities(read.symbols());
+        long before = souther.compiler.check.FieldDomains.readingsMade();
+
+        Quantities twice = asked.given(X, count(1)).given(Y, count(1));
+        twice.runsBetween(sum());
+        twice.runsBetween(Y);
+        twice.emptiness();
+
+        assertEquals(before, souther.compiler.check.FieldDomains.readingsMade());
+    }
+
+    /**
+     * And what it answers is what reading them again with the same thing settled would answer.
+     *
+     * <p>Which is why not reading them again is allowed. The two are one statement or they are two,
+     * and stating a settling in two places is how they would come apart — so what the cheap way says
+     * is held against what the reading itself says, at a position and over a form and about whether
+     * anything is left.
+     */
+    @Test
+    void whatASettlingLeavesIsWhatReadingItInWouldLeave() {
+        Read read = read(SOURCE, "take");
+        souther.compiler.types.TypeSymbol name = souther.compiler.types.TypeSymbols.declared(
+                new souther.compiler.types.TypeKey(read.symbols().module(), "P"));
+        Hir.Data data = (Hir.Data) read.symbols().declarations().declaration(name.key());
+        souther.compiler.check.FieldDomains whole = souther.compiler.check.FieldDomains.of(
+                name, data, read.symbols(), ReadAs.THE_COMPILATION_DOES);
+
+        for (int at = 0; at <= 5; at++) {
+            Map<String, Count> settled = Map.of("x", count(at));
+            souther.compiler.check.FieldDomains readIn = souther.compiler.check.FieldDomains.of(
+                    name, data, read.symbols(), ReadAs.THE_COMPILATION_DOES, settled);
+            souther.compiler.check.FieldDomains.Settled taken = whole.given(Map.of(
+                    new souther.compiler.check.FieldDomains.Coordinate("x", false), count(at)));
+
+            assertEquals(readIn.holdsNothing().isPresent(), taken.holdsNothing().isPresent(),
+                    "whether anything is left, with x at " + at);
+            assertEquals(readIn.leftAt("y", false), taken.boundsOf(Map.of(
+                            new souther.compiler.check.FieldDomains.Coordinate("y", false),
+                            BigDecimal.ONE)),
+                    "where y runs, with x at " + at);
+        }
+    }
+
+    private static NumericTerm size(Read read, String field) {
+        TermPath at = TermPath.of("p").then(field);
+        return new NumericTerm.SizeOf(souther.compiler.check.NumericMeasures.takenOf(
+                read.inputs().at(at).type(), read.symbols()), at);
+    }
+
     /** A collection nothing bounds, so only what a count guarantees of itself is left to refuse
      *  one. */
     private static final String BAG = """

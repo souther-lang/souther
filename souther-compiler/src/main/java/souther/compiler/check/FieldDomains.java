@@ -65,7 +65,7 @@ public final class FieldDomains {
             new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), Set.of(), List.of(), List.of(), Map.of(),
                     Map.of(), new ReadingEvidence(), Map.of(), Set.of(THE_VALUE), NO_POSITIONS,
                     ConstraintState.top(), null, null, null, null, Map.of(), Set.of(THE_VALUE),
-                    Map.of(), Map.of(), Map.of(), InvariantChecker.Reach.EVERYTHING);
+                    Map.of(), Map.of(), Map.of(), Map.of());
 
     private final Map<String, NumericDomain.Bounds> byField;
     /** The ends the record's own clauses place, which is a different question from the range they
@@ -119,7 +119,7 @@ public final class FieldDomains {
     private final TypeSymbol named;
     private final Hir.Data data;
     private final Symbols symbols;
-    private final Map<String, Count> settled;
+    private final Map<Coordinate, Count> settled;
     /** What this value was read under, so that reading it again for what one rule did reads it the
      *  same way. A second reading of one declaration under another policy would answer a position
      *  differently while both stayed sound, and what moved would be read as what the rule did. */
@@ -131,10 +131,9 @@ public final class FieldDomains {
     /** What the reading that builds the bounds made of each part of each rule. Per part, because a
      *  rule is represented where every part of it is. */
     private final Map<RuleRef, Map<Core, InvariantChecker.PartRead>> readBy;
-    /** How far the clauses were followed, so that reading this again with a position settled reads
-     *  it the same way. A second reading that followed further would answer a position differently
-     *  while both stayed sound, and what moved would be read as what the settling did. */
-    private final InvariantChecker.Reach reach;
+    /** How each atom's values are spaced, so that settling one afterwards states the same equality
+     *  the reading would have stated for it. */
+    private final Map<FactSubject, souther.compiler.numeric.Granularity> spacing;
 
     private FieldDomains(Map<String, NumericDomain.Bounds> byField,
                          Map<String, NumericDomain.Bounds> heldByField,
@@ -149,11 +148,11 @@ public final class FieldDomains {
                          SequencedMap<FactSubject, String> positions,
                          ConstraintState constraints, TypeSymbol named,
                          Hir.Data data, Symbols symbols, ReadingPolicy policy,
-                         Map<String, Count> settled,
+                         Map<Coordinate, Count> settled,
                          Set<String> unreadOfEveryValue,
                          Map<String, FactSubject> atomAt, Map<String, FactSubject> countAt,
                          Map<RuleRef, Map<Core, InvariantChecker.PartRead>> readBy,
-                         InvariantChecker.Reach reach) {
+                         Map<FactSubject, souther.compiler.numeric.Granularity> spacing) {
         this.byField = byField;
         this.heldByField = heldByField;
         this.admittedByField = admittedByField;
@@ -177,7 +176,7 @@ public final class FieldDomains {
         this.atomAt = atomAt;
         this.countAt = countAt;
         this.readBy = readBy;
-        this.reach = reach;
+        this.spacing = spacing;
     }
 
     /**
@@ -211,6 +210,21 @@ public final class FieldDomains {
         return constraints.holdsNothing(positions);
     }
 
+    /**
+     * How many readings of a declaration have been made, for a test holding this to when it reads.
+     *
+     * <p>Counted rather than timed. What a caller is held to is that fixing a position reads
+     * nothing and asking a question reads once, which is a shape and not a speed — and a
+     * measurement of the second would pass on an implementation that had the first wrong.
+     */
+    private static final java.util.concurrent.atomic.AtomicLong READINGS =
+            new java.util.concurrent.atomic.AtomicLong();
+
+    /** How many times a declaration has been read into one of these. */
+    public static long readingsMade() {
+        return READINGS.get();
+    }
+
     /** What {@code data}, declared as {@code named}, leaves its fields able to hold. */
     public static FieldDomains of(TypeSymbol named, Hir.Data data, Symbols symbols,
                                   ReadingPolicy policy) {
@@ -227,7 +241,16 @@ public final class FieldDomains {
      */
     public static FieldDomains of(TypeSymbol named, Hir.Data data, Symbols symbols,
                                   ReadingPolicy policy, Map<String, Count> settled) {
-        return of(named, data, symbols, policy, settled, InvariantChecker.Reach.EVERYTHING);
+        return of(named, data, symbols, policy, atValues(settled),
+                InvariantChecker.Reach.EVERYTHING);
+    }
+
+    /** Settlings written as paths, read as the positions' own values. What a caller spelling a
+     *  path means is the value there; a count taken of one is a coordinate it has to name. */
+    private static Map<Coordinate, Count> atValues(Map<String, Count> settled) {
+        Map<Coordinate, Count> out = new LinkedHashMap<>();
+        settled.forEach((path, at) -> out.put(new Coordinate(path, false), at));
+        return out;
     }
 
     /**
@@ -248,12 +271,13 @@ public final class FieldDomains {
 
     /** The same, reading only as far as {@code reach} says — see {@link #narrowedBy}. */
     private static FieldDomains of(TypeSymbol named, Hir.Data data, Symbols symbols,
-                                   ReadingPolicy policy, Map<String, Count> settled,
+                                   ReadingPolicy policy, Map<Coordinate, Count> settled,
                                    InvariantChecker.Reach reach) {
         // A newtype is read the same way, and only its bounds are not worth handing back: its value
         // is the same position it is, so there are no siblings to relate. Everything else is the same
         // question — its own rules can hold a hole no range keeps, and they can contradict, and both
         // answers were being given away by treating it as a value with nothing to say.
+        READINGS.incrementAndGet();
         InvariantChecker.Seeded seeded =
                 InvariantChecker.seedFields(named, data, symbols, policy, settled, reach);
         Map<String, NumericDomain.Bounds> out = new LinkedHashMap<>();
@@ -353,7 +377,7 @@ public final class FieldDomains {
                 seeded.notGathered(), placeOf,
                 seeded.constraints(), named, data, symbols, policy, settled,
                 seeded.unreadOfEveryValue(), seeded.atoms(), seeded.held(),
-                seeded.readBy(), reach);
+                seeded.readBy(), seeded.spacing());
     }
 
     /**
@@ -484,25 +508,71 @@ public final class FieldDomains {
     }
 
     /**
-     * The same rules, read again with these positions settled at these values.
+     * The same rules with these coordinates settled at these values, for the questions that read
+     * the constraints themselves.
      *
-     * <p>Projecting a range and completing an assignment are two questions of one rule set, and this
-     * is the second asked of a reading that has already answered the first. What a caller settles is
-     * accumulated onto what was settled before and the declaration is read once from the top, rather
-     * than a settled reading being settled again: read the second way, a projection taken on the way
-     * would be conditioned in place of the rules it came from, and which order the positions were
-     * fixed in would decide the answer.
+     * <p><b>The clauses are not read again.</b> A settling is an equality on an atom taken onto
+     * everything else the clauses came to, which is exactly what the reading does with one at the
+     * end of its own work ({@link ConstraintState#settling}) — so stating it here and stating it
+     * there are the same statement, and reading a declaration once per settled position is paying
+     * for the clauses over again to arrive where this already is.
      *
-     * <p>{@link #NONE} settles to itself. There is no declaration under it to read again, which is
-     * what it says of every position already.
+     * <p>What comes back answers about the constraints and not about a reading. Where a form runs
+     * and whether anything is left are read off the rules themselves; what a reading derives beside
+     * them — which values a position may hold, what it must hold, which rule placed an end — is not
+     * recomputed and is not offered, so nothing can read a settled state for an answer that was
+     * worked out before the settling.
      */
-    public FieldDomains given(Map<String, Count> fixed) {
-        if (data == null || fixed.isEmpty()) {
-            return this;
+    public Settled given(Map<Coordinate, Count> fixed) {
+        ConstraintState taken = constraints;
+        for (Map.Entry<Coordinate, Count> each : fixed.entrySet()) {
+            Coordinate where = each.getKey();
+            FactSubject atom = where.measured()
+                    ? countAt.get(where.path()) : atomAt.get(where.path());
+            souther.compiler.numeric.Granularity spaced =
+                    atom == null ? null : spacing.get(atom);
+            // A coordinate no range is taken of here settles nothing, which is less than the caller
+            // said and is the safe direction: what is left is wider than what they asked about.
+            if (spaced != null) {
+                taken = ConstraintState.settling(taken, atom, each.getValue(), spaced);
+            }
         }
-        Map<String, Count> both = new LinkedHashMap<>(settled);
-        both.putAll(fixed);
-        return of(named, data, symbols, policy, Map.copyOf(both), reach);
+        return new Settled(taken, positions, atomAt, countAt);
+    }
+
+    /**
+     * The rules of one value with some of its coordinates settled.
+     *
+     * <p>Not a {@link FieldDomains}. What a reading of a declaration hands over is derived from the
+     * constraints and would have to be derived again under a settling; what a caller settling one
+     * wants is the constraints themselves. Kept apart so that the derived answers cannot be read
+     * off a state they were not worked out under.
+     */
+    public static final class Settled {
+
+        private final ConstraintState constraints;
+        private final SequencedMap<FactSubject, String> positions;
+        private final Map<String, FactSubject> atomAt;
+        private final Map<String, FactSubject> countAt;
+
+        private Settled(ConstraintState constraints, SequencedMap<FactSubject, String> positions,
+                        Map<String, FactSubject> atomAt, Map<String, FactSubject> countAt) {
+            this.constraints = constraints;
+            this.positions = positions;
+            this.atomAt = atomAt;
+            this.countAt = countAt;
+        }
+
+        /** Why the rules and what is settled leave no value, or empty where nothing proved they
+         *  leave none. */
+        public Optional<Emptiness> holdsNothing() {
+            return constraints.holdsNothing(positions);
+        }
+
+        /** Where a form over these coordinates runs — see {@link FieldDomains#boundsOf}. */
+        public NumericDomain.Bounds boundsOf(Map<Coordinate, java.math.BigDecimal> form) {
+            return boundsOfForm(constraints, atomAt, countAt, form);
+        }
     }
 
     /**
@@ -940,6 +1010,13 @@ public final class FieldDomains {
      * there is no relation to project and the caller is left with whatever it knows beside this.
      */
     public NumericDomain.Bounds boundsOf(Map<Coordinate, java.math.BigDecimal> form) {
+        return boundsOfForm(constraints, atomAt, countAt, form);
+    }
+
+    private static NumericDomain.Bounds boundsOfForm(ConstraintState constraints,
+                                                     Map<String, FactSubject> atomAt,
+                                                     Map<String, FactSubject> countAt,
+                                                     Map<Coordinate, java.math.BigDecimal> form) {
         if (form.isEmpty()) {
             return null;
         }

@@ -24,7 +24,8 @@ import java.util.Set;
 final class ReadQuantities implements Quantities {
 
     private final Map<String, PlacedRules> byParameter;
-    private final Set<TermPath> paths;
+    /** What the behavior takes, which is what a path of this input starts at. */
+    private final Set<String> parameters;
     private final Map<NumericTerm, Count> fixed;
     private final EmptyInput proved;
     /**
@@ -35,26 +36,26 @@ final class ReadQuantities implements Quantities {
      * question would read them twice a step. Held here rather than shared, since what it is a
      * reading of is what this refinement fixed.
      */
-    private volatile Map<String, PlacedRules> conditioned;
+    private volatile Map<String, FieldDomains.Settled> conditioned;
 
-    private ReadQuantities(Map<String, PlacedRules> byParameter, Set<TermPath> paths,
+    private ReadQuantities(Map<String, PlacedRules> byParameter, Set<String> parameters,
                            Map<NumericTerm, Count> fixed, EmptyInput proved) {
         this.byParameter = Map.copyOf(byParameter);
-        this.paths = Set.copyOf(paths);
+        this.parameters = Set.copyOf(parameters);
         this.fixed = Map.copyOf(fixed);
         this.proved = proved;
     }
 
     /** Before anything is fixed. */
-    static ReadQuantities of(Map<String, PlacedRules> byParameter, Set<TermPath> paths) {
-        return new ReadQuantities(byParameter, paths, Map.of(), null);
+    static ReadQuantities of(Map<String, PlacedRules> byParameter, Set<String> parameters) {
+        return new ReadQuantities(byParameter, parameters, Map.of(), null);
     }
 
     /** Each parameter's rules read with what is fixed under it, once. */
-    private Map<String, PlacedRules> conditioned() {
-        Map<String, PlacedRules> read = conditioned;
+    private Map<String, FieldDomains.Settled> conditioned() {
+        Map<String, FieldDomains.Settled> read = conditioned;
         if (read == null) {
-            Map<String, PlacedRules> made = new LinkedHashMap<>();
+            Map<String, FieldDomains.Settled> made = new LinkedHashMap<>();
             byParameter.forEach((parameter, rules) ->
                     made.put(parameter, rules.given(under(parameter))));
             read = Map.copyOf(made);
@@ -100,7 +101,7 @@ final class ReadQuantities implements Quantities {
                 found = first(found, new EmptyInput.TwoValuesAtOnePosition(term, had, at));
             }
         }
-        ReadQuantities wider = new ReadQuantities(byParameter, paths, both, found);
+        ReadQuantities wider = new ReadQuantities(byParameter, parameters, both, found);
         return wider.provingWhatIsFixedIsReachable(more);
     }
 
@@ -118,7 +119,7 @@ final class ReadQuantities implements Quantities {
         if (proved != null) {
             return Optional.of(proved);
         }
-        for (Map.Entry<String, PlacedRules> each : conditioned().entrySet()) {
+        for (Map.Entry<String, FieldDomains.Settled> each : conditioned().entrySet()) {
             Optional<EmptyInput> here = holdsNothing(each.getKey(), each.getValue());
             if (here.isPresent()) {
                 return here;
@@ -130,13 +131,40 @@ final class ReadQuantities implements Quantities {
     /**
      * The same, of one parameter's rules read with whatever is fixed under it.
      *
-     * <p>The proof the declarations hold, translated onto this input's paths. Where it names a field
-     * of the value, the path it names is that value's own and the caller's is the parameter and the
-     * field together.
+     * <p>The proof the declarations hold, said in this input's words. Where it names a position, the
+     * path it names is that value's own — {@code x} for a field of the record the clause was written
+     * on — and the caller's is the parameter and that path together. Left in the declaration's
+     * words, a report would name a field of nothing; said as the parameter alone, it would name the
+     * whole of what the behavior takes for a contradiction at one field of it.
+     *
+     * <p>One step and no further. A proof names one place once, so what sits under the step is not
+     * another path of this value; what it can be is a proof about some other value, whose places are
+     * that value's own and are not this input's to spell. So the where is carried across and the why
+     * stays where it was proved.
      */
-    private Optional<EmptyInput> holdsNothing(String parameter, PlacedRules rules) {
-        return rules.bounds().holdsNothing().map(_ -> at(TermPath.of(parameter),
+    private Optional<EmptyInput> holdsNothing(String parameter, FieldDomains.Settled rules) {
+        return rules.holdsNothing().map(why -> at(where(parameter, why),
                 new EmptyInput.ProvedByTheDeclarationsReading()));
+    }
+
+    /** The dot a path's steps are joined by, which is how one is taken apart again. */
+    private static final java.util.regex.Pattern STEPS = java.util.regex.Pattern.compile("\\.");
+
+    /** Where in this input the proof sits: the parameter, and the position under it the proof names
+     *  where it names one. */
+    static TermPath where(String parameter, souther.compiler.check.Emptiness why) {
+        TermPath at = TermPath.of(parameter);
+        if (!(why instanceof souther.compiler.check.Emptiness.AtAField field)
+                || field.path().isEmpty()) {
+            return at;
+        }
+        // Taken apart the way it was put together, and keeping what is between two dots even where
+        // there is nothing there: a path is a list of steps joined by a dot, so a reading that drops
+        // an empty step would answer about a different position than the one named.
+        for (String step : STEPS.split(field.path(), -1)) {
+            at = at.then(step);
+        }
+        return at;
     }
 
     /** An emptiness said to sit at {@code path}. */
@@ -145,20 +173,26 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
-     * Whether each value just fixed is one its own position runs to.
+     * Whether each value just fixed is one the term itself can take.
      *
-     * <p>Asked against what the position runs between, which takes in what the term guarantees of
-     * itself. Sound whatever else is true: a value outside an over-approximation is outside the
-     * rules, so this proves emptiness and never supposes it.
+     * <p>Against what the term guarantees of its own values and against nothing else, which is what
+     * makes this the whole of what fixing can settle without reading anything. A count is never
+     * negative and no clause writes that down, so this is the only thing that refuses a count fixed
+     * below none — and everything the declarations refuse is theirs to refuse, where they are read.
+     *
+     * <p>Not asked of what the rules leave the position, which is the same question one moment
+     * later: the reading with this very value settled in it either pins the position to it or holds
+     * nothing at all, so a check against that could never fail and would read the declarations to
+     * find out.
      */
     private ReadQuantities provingWhatIsFixedIsReachable(Map<NumericTerm, Count> just) {
         if (proved != null) {
             return this;   // the first proof stands, and this would be a second account of it
         }
         for (Map.Entry<NumericTerm, Count> each : just.entrySet()) {
-            NumericDomain.Bounds runs = runsBetween(each.getKey());
-            if (runs != null && !runs.admits(each.getValue())) {
-                return new ReadQuantities(byParameter, paths, fixed,
+            NumericDomain.Bounds own = each.getKey().ownBounds();
+            if (own != null && !own.admits(each.getValue())) {
+                return new ReadQuantities(byParameter, parameters, fixed,
                         at(each.getKey().path(), new EmptyInput.OutsideWhereThePositionRuns(
                                 each.getKey(), each.getValue())));
             }
@@ -173,33 +207,45 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
-     * The term, where its path is one of this input's.
+     * The term, where what it sits under is something this behavior takes.
      *
-     * <p>Asked of the path and not of the terms the declarations named. Which numbers a position is
-     * measured at is not settled by that reading alone — a bare list nothing bounds becomes an axis
-     * about its length where a body measures it — and such a term is this input's as much as any
-     * other. A term at a path this input does not have is a caller's mistake: answered as an
-     * emptiness it would be a bug wearing the words of a contradiction in the model, and answered as
-     * unbounded it would be one wearing the words of a model that says nothing.
+     * <p><b>Owned is not the same as known about.</b> The walk that reads an input's positions stops
+     * two levels down, where a report stops being about anything an author would call one input, and
+     * nothing stops a rule from naming what is under that. A term at such a path is this input's and
+     * is answered for — with whatever the term guarantees of itself and nothing the declarations
+     * relate it to, because the reading has no position there for a relation to be about. Refused
+     * instead, an ordinary rule naming a field of a field of a field stopped a measurement rather
+     * than being measured.
+     *
+     * <p>What is refused is a term under something this behavior does not take, which no reading of
+     * this input could ever have an answer for. Answered as an emptiness it would be a bug wearing
+     * the words of a contradiction in the model; answered as unbounded it would be one wearing the
+     * words of a model that says nothing.
+     *
+     * <p>Whether the path names a field the type actually has is settled where the term is made.
+     * What arrives here is a term some reading of an expression produced, and this neither checks
+     * nor could check it: a path is a location and the declarations are what say what is at one.
      */
     private NumericTerm held(NumericTerm term) {
-        if (!paths.contains(term.path())) {
+        if (!parameters.contains(term.path().head())) {
             throw new IllegalArgumentException(
-                    "`" + term.path() + "` is not a position of this input, so there is nothing"
-                            + " here to answer about " + term);
+                    "`" + term.path() + "` is under nothing this behavior takes, so there is"
+                            + " nothing here to answer about " + term);
         }
         return term;
     }
 
     /** What is fixed under one parameter, named the way that parameter's own rules name it. */
-    private Map<String, Count> under(String parameter) {
-        Map<String, Count> out = new LinkedHashMap<>();
+    private Map<FieldDomains.Coordinate, Count> under(String parameter) {
+        Map<FieldDomains.Coordinate, Count> out = new LinkedHashMap<>();
         fixed.forEach((term, at) -> {
-            // The value's own positions, and only the numbers among them. A count taken of a
-            // position is not a position the declarations settle, so fixing one narrows nothing
-            // there — which is less than the caller said and is the safe direction.
-            if (term.path().head().equals(parameter) && term instanceof NumericTerm.ValueOf) {
-                out.put(String.join(".", term.path().fields()), at);
+            // Which number of the position was settled, and not only which position. A count taken
+            // of a position is a coordinate of its own, and a fixing that named only the value left
+            // a rule over two counts unconditioned while the same rule was read whole when the
+            // counts were asked about.
+            if (term.path().head().equals(parameter)) {
+                out.put(new FieldDomains.Coordinate(String.join(".", term.path().fields()),
+                        term instanceof NumericTerm.SizeOf), at);
             }
         });
         return out;
@@ -215,9 +261,9 @@ final class ReadQuantities implements Quantities {
 
     /** What one parameter's rules leave its part of the form, solved as a form. */
     private Reach relationally(String parameter, NumericDomain.LinearForm<NumericTerm> form) {
-        PlacedRules rules = conditioned().get(parameter);
+        FieldDomains.Settled rules = conditioned().get(parameter);
         return rules == null ? Reach.ANYWHERE
-                : reachOf(rules.bounds().boundsOf(partOf(parameter, form)));
+                : reachOf(rules.boundsOf(partOf(parameter, form)));
     }
 
     /** That part of the form, in the words the parameter's own rules are read in. */
