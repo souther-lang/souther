@@ -252,7 +252,7 @@ public final class NumericDomain<A> {
      * has.
      *
      * <p>For naming what could not be stated, and not for deciding whether a range is the whole of
-     * what the rules leave a position. That decision is {@link #projectionCertificate()}, which is
+     * what the rules leave a position. That decision is {@link #projectionCertification()}, which is
      * this asked of every rule at once <em>and</em> the hypotheses the step from here to a range
      * needs. Asked one rule at a time this answers about the rule; it does not answer about the
      * range.
@@ -265,27 +265,30 @@ public final class NumericDomain<A> {
     }
 
     /**
-     * Why the ranges handed over are the whole of what the rules leave each position, where anything
-     * establishes it.
+     * Whether each position's box is the whole of what the rules leave it, and what settled that.
      *
-     * <p>Empty is not "they are wider". It is that nothing here showed they are not, which is the
-     * only thing a caller may act on — see {@link ProjectionCertificate}.
+     * <p>About the box this derives in exact arithmetic, and not about the number a caller is handed
+     * at an end of it. A bound at a value no decimal writes is written out rounded outward, and
+     * whether that happened is a question about the writing which the caller that does the writing
+     * asks. What is certified here stops at the box.
      *
-     * <p>Empty where the rules leave nothing at all. There are no ranges then: what is handed over
-     * at every position is unbounded both ways, and a value nothing can be built at is not one whose
-     * edges may be promised. Saying so here rather than letting the emptiness discharge every rule
-     * and come back certified, which is what asking each rule on its own does.
+     * <p>A refusal is not "the box is wider". It is that nothing here showed it is the whole of it,
+     * which is the only thing a caller may act on — see {@link ProjectionCertification}.
      */
-    public java.util.Optional<ProjectionCertificate> projectionCertificate() {
-        if (isBottom() || !everyRelatedPositionIsSpacedAlike()) {
-            return java.util.Optional.empty();
+    public ProjectionCertification projectionCertification() {
+        if (isBottom()) {
+            return new ProjectionCertification.NothingIsLeft();
+        }
+        if (!everyRelatedPositionIsSpacedAlike()) {
+            return new ProjectionCertification.PositionsSpacedDifferently();
         }
         for (AffineConstraint<A> rule : rules) {
             if (!proven(rule, false)) {
-                return java.util.Optional.empty();
+                return new ProjectionCertification.NotEveryRuleIsProven();
             }
         }
-        return java.util.Optional.of(new ProjectionCertificate.ByBoxAndClosedDifferences());
+        return new ProjectionCertification.Certified(
+                new ProjectionCertificate.ByBoxAndClosedDifferences());
     }
 
     /**
@@ -540,8 +543,10 @@ public final class NumericDomain<A> {
      * already, so {@link #boundsOf(Object)} and this are the same answer by construction rather than
      * by both happening to converge. They did not, where the rounds ran out — see below.
      *
-     * @param withRules false to ask what the ranges say on their own, which is a different question
-     *                  from what the rules say, and is the one an audit of the ranges wants
+     * @param withRules false to ask what the box and the closed relations between its positions say,
+     *                  leaving the rules beside them out. A different question from what the rules
+     *                  say, and the one an account of what was derived wants — and not the product
+     *                  of the ranges either, which holds less than this does
      */
     private RationalCut highestProven(Goal<A> goal, boolean withRules) {
         RationalCut best = fromTheBox(goal);

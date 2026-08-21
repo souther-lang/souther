@@ -8,7 +8,6 @@ import souther.compiler.numeric.NumericDomain.Rel;
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -30,8 +29,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class TheClosureTheoremIsAskedOfPositionsTheRulesRelateTest {
 
-    private static final Optional<ProjectionCertificate> CERTIFIED =
-            Optional.of(new ProjectionCertificate.ByBoxAndClosedDifferences());
+    private static final ProjectionCertification CERTIFIED =
+            new ProjectionCertification.Certified(
+                    new ProjectionCertificate.ByBoxAndClosedDifferences());
+
+    /** The refusal this is about, asked for by name rather than as the absence of a certificate. */
+    private static final ProjectionCertification SPACED_DIFFERENTLY =
+            new ProjectionCertification.PositionsSpacedDifferently();
 
     /** Two kinds in one value, related by nothing, is two systems and both are certified. */
     @Test
@@ -39,7 +43,7 @@ class TheClosureTheoremIsAskedOfPositionsTheRulesRelateTest {
         NumericDomain<String> domain = bounded(Map.of(
                 "whole", Granularity.DISCRETE, "part", Granularity.DENSE));
 
-        assertEquals(CERTIFIED, domain.projectionCertificate());
+        assertEquals(CERTIFIED, domain.projectionCertification());
     }
 
     /** A rule relating them makes them one system, and the theorem is not about a mixed one. */
@@ -49,7 +53,7 @@ class TheClosureTheoremIsAskedOfPositionsTheRulesRelateTest {
                 Map.of("whole", Granularity.DISCRETE, "part", Granularity.DENSE),
                 "whole", "part");
 
-        assertEquals(Optional.empty(), domain.projectionCertificate());
+        assertEquals(SPACED_DIFFERENTLY, domain.projectionCertification());
     }
 
     /** And the same relation between two positions of one kind is. */
@@ -59,7 +63,7 @@ class TheClosureTheoremIsAskedOfPositionsTheRulesRelateTest {
                 Map.of("whole", Granularity.DISCRETE, "other", Granularity.DISCRETE),
                 "whole", "other");
 
-        assertEquals(CERTIFIED, domain.projectionCertificate());
+        assertEquals(CERTIFIED, domain.projectionCertification());
     }
 
     /**
@@ -78,7 +82,7 @@ class TheClosureTheoremIsAskedOfPositionsTheRulesRelateTest {
         NumericDomain<String> domain = relating(kinds, "whole", "between");
         domain = domain.assume(difference("between", "part"), Rel.LE, kinds);
 
-        assertEquals(Optional.empty(), domain.projectionCertificate());
+        assertEquals(SPACED_DIFFERENTLY, domain.projectionCertification());
     }
 
     // --- the systems ------------------------------------------------------------------------------

@@ -4,7 +4,6 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.ProjectionCertificate;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -75,21 +74,6 @@ public sealed interface ProjectionEvidence {
                         "nothing in the way is `CertifiedExact`, which says what certified it");
             }
         }
-    }
-
-    /**
-     * The evidence, from what the algebra certified and from what the reading found in the way.
-     *
-     * <p>One place decides the shape. The certificate is the algebra's answer about the ranges it
-     * derived; the causes are everything else a value's ranges have to get past — a rule that never
-     * reached the algebra, one it could make nothing of, an end that could not be written down. A
-     * certificate is not enough on its own and never stands in for those, which is what putting the
-     * two together here rather than at each caller keeps true.
-     */
-    static ProjectionEvidence of(Optional<ProjectionCertificate> certificate, List<Cause> causes) {
-        return certificate.isPresent() && causes.isEmpty()
-                ? new CertifiedExact(certificate.get())
-                : new NotCertified(causes);
     }
 
     /**

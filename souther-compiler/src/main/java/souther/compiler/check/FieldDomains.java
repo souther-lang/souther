@@ -841,6 +841,12 @@ public final class FieldDomains {
      * clause placing an end at 0 beside one that takes the 0 away leaves a position whose first
      * value is 1, and the end as written is not where the position starts.
      */
+    /** That the reading names the rule the algebra could not prove, since only the reading can. */
+    private static void assertSomethingWentUnstated(Set<ProjectionEvidence.Cause.Lossy> lossy) {
+        assert !lossy.isEmpty()
+                : "the algebra proved no rule of its own and this reading names none";
+    }
+
     /** What a cause is filed under, so that two runs print them the same way round. */
     private static String orderOf(ProjectionEvidence.Cause cause) {
         return switch (cause) {
@@ -947,9 +953,11 @@ public final class FieldDomains {
         });
         // And what the algebra was given and what it projects does not hold.
         //
-        // Asked of the projection and of nothing else. Asking the whole state whether it holds a
-        // rule is asking the rule to stand on itself — every rule the ranges could not state comes
-        // back proven — so what is asked is whether the ranges alone hold it.
+        // Asked of what was derived and of nothing else. Asking the whole state whether it holds a
+        // rule is asking the rule to stand on itself — every rule that went unstated comes back
+        // proven — so what is asked is whether the box and the relations its closure holds between
+        // its positions state it, which is less than the rules and more than the ranges by
+        // themselves.
         //
         // And asked of the rules after everything has been worked out, rather than read back from
         // marks left as each rule arrived. A mark left at that moment is a history: a rule that
@@ -984,29 +992,30 @@ public final class FieldDomains {
         // a value with two conjuncts short of the bounds printed its two causes in whichever order
         // this run happened to give them. Sorted rather than kept in insertion order, because the
         // causes come from three producers and there is no one order they arrive in.
-        // And whether anything establishes that the ranges are the whole of what the rules leave
-        // each position. Asked of the algebra, which is where the derivation is and so where the
-        // theorem the answer rests on can be stated with its hypotheses. Asking each rule against
-        // the ranges is one half of that theorem and was standing in for the whole of it.
-        java.util.Optional<souther.compiler.numeric.ProjectionCertificate> certificate =
-                constraints.numbers().projectionCertificate();
-        if (certificate.isEmpty()) {
-            if (constraints.numbers().isBottom()) {
-                causes.add(new ProjectionEvidence.Cause.NothingIsLeft());
-            } else if (lossy.isEmpty()) {
-                // Every rule was stated and the certificate still did not come, so what stopped it
-                // is the hypothesis about how the positions are spaced.
-                causes.add(new ProjectionEvidence.Cause.PositionsSpacedDifferently());
-            }
+        // And what the algebra made of the ranges it derived. Asked of it rather than worked out
+        // here, refusals included: the derivation is there and so is the theorem an answer rests on,
+        // and a reason recovered on this side of the boundary from what was left over names the
+        // wrong one wherever two things are in the way at once.
+        souther.compiler.numeric.ProjectionCertification certification =
+                constraints.numbers().projectionCertification();
+        switch (certification) {
+            case souther.compiler.numeric.ProjectionCertification.Certified _ -> { }
+            case souther.compiler.numeric.ProjectionCertification.NothingIsLeft _ ->
+                    causes.add(new ProjectionEvidence.Cause.NothingIsLeft());
+            case souther.compiler.numeric.ProjectionCertification.PositionsSpacedDifferently _ ->
+                    causes.add(new ProjectionEvidence.Cause.PositionsSpacedDifferently());
+            // Which rule it was is this side's to say, and it is already said: the algebra holds the
+            // rules as it read them, and the name an author would recognise is on the reading that
+            // handed them over. Asserted rather than defended against, because the two walk
+            // different lists — the algebra's own rules, and the constraints each reading handed
+            // over — and a list that has drifted shows up nowhere else.
+            case souther.compiler.numeric.ProjectionCertification.NotEveryRuleIsProven _ ->
+                    assertSomethingWentUnstated(lossy);
         }
-        // A certificate is every rule proven from the ranges and their relations, so a rule this
-        // found unstated is one it could not have been given. Said as an assertion because the two
-        // walk different lists — the algebra's own rules, and the constraints each reading handed
-        // over — and a list that has drifted shows up nowhere else.
-        assert certificate.isEmpty() || lossy.isEmpty()
-                : "certified while `" + lossy + "` went unstated";
         causes.sort(java.util.Comparator.comparing(FieldDomains::orderOf));
-        return ProjectionEvidence.of(certificate, causes);
+        return certification.certificate() != null && causes.isEmpty()
+                ? new ProjectionEvidence.CertifiedExact(certification.certificate())
+                : new ProjectionEvidence.NotCertified(causes);
     }
 
 }

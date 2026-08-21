@@ -63,8 +63,9 @@ class WhatCertifiesARangeIsMoreThanTheRangesThemselvesTest {
         assertEquals(carriedAt("a", aDifference()), admittedAt(domain, "a"));
         assertEquals(carriedAt("b", aDifference()), admittedAt(domain, "b"));
         assertEquals(
-                java.util.Optional.of(new ProjectionCertificate.ByBoxAndClosedDifferences()),
-                domain.projectionCertificate());
+                new ProjectionCertification.Certified(
+                        new ProjectionCertificate.ByBoxAndClosedDifferences()),
+                domain.projectionCertification());
     }
 
     /**
@@ -84,7 +85,8 @@ class WhatCertifiesARangeIsMoreThanTheRangesThemselvesTest {
         assertEquals(Set.of(3),
                 difference(admittedAt(domain, "a"), carriedAt("a", aHole())),
                 "the 3 is the whole of what the bounds admit and no point carries");
-        assertEquals(java.util.Optional.empty(), domain.projectionCertificate());
+        assertEquals(new ProjectionCertification.NotEveryRuleIsProven(),
+                domain.projectionCertification());
     }
 
     // --- the systems ------------------------------------------------------------------------------
