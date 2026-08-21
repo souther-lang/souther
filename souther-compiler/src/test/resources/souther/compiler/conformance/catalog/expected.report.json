@@ -155,6 +155,7 @@
         "status" : "complete",
         "arms" : 2,
         "covered" : 2,
+        "countedTogether" : [ ],
         "unreached" : [ ]
       },
       "findings" : [ ]
@@ -282,6 +283,7 @@
         "reason" : "no_body",
         "arms" : 0,
         "covered" : 0,
+        "countedTogether" : [ ],
         "unreached" : [ ]
       },
       "findings" : [ {
@@ -503,6 +505,7 @@
         "status" : "complete",
         "arms" : 10,
         "covered" : 10,
+        "countedTogether" : [ ],
         "unreached" : [ ]
       },
       "findings" : [ {

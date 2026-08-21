@@ -825,7 +825,7 @@ public final class Adequacy {
      */
     public record BranchEvidence(List<souther.compiler.coverage.CoverageSites.Site> all,
                                  Set<Integer> covered, Set<Integer> contradicted,
-                                 MeasurementStatus status, Reason reason) {
+                                 MeasurementStatus status, Reason reason, String writtenIn) {
 
         /**
          * Why a behavior's arms have no number, in the order the measurement asks.
@@ -861,7 +861,7 @@ public final class Adequacy {
         }
 
         public static BranchEvidence unavailable(Reason reason) {
-            return new BranchEvidence(List.of(), Set.of(), Set.of(), reason.status(), reason);
+            return new BranchEvidence(List.of(), Set.of(), Set.of(), reason.status(), reason, "");
         }
 
         /**
@@ -873,7 +873,7 @@ public final class Adequacy {
          */
         public static BranchEvidence measured(List<souther.compiler.coverage.CoverageSites.Site> all,
                                               Set<Integer> covered, souther.compiler.check.PathReachability.Answers.AsRun reachable,
-                                              MeasurementStatus status) {
+                                              MeasurementStatus status, String writtenIn) {
             List<souther.compiler.coverage.CoverageSites.Site> owed = all.stream()
                     .filter(site -> !reachable.answers().nothingArrivesAt(site.index())).toList();
             Set<Integer> counted = new LinkedHashSet<>(covered);
@@ -883,7 +883,8 @@ public final class Adequacy {
             // over. What is wrong is this analysis, not the model's rows, and a number given as though
             // nothing had happened is the one thing that must not come out of it.
             return new BranchEvidence(owed, counted, reachable.provedWrong(),
-                    reachable.provedWrong().isEmpty() ? status : MeasurementStatus.PARTIAL, null);
+                    reachable.provedWrong().isEmpty() ? status : MeasurementStatus.PARTIAL, null,
+                    writtenIn);
         }
 
         public BranchEvidence {
@@ -946,6 +947,38 @@ public final class Adequacy {
                 }
             }
             return hit;
+        }
+
+        /**
+         * The arms this counts as one that it cannot show are one.
+         *
+         * <p>What tells two copies of a fork apart is the predicate each was handed, and a fork
+         * whose condition compares nothing an author wrote hands this nothing to tell them by — a
+         * {@code filter} over a {@code Bool} field is one. Such occurrences are counted together,
+         * which is the answer that risks the least: split, each would be owed a row establishing
+         * what the row beside it already does, and a specific piece of work that is already done is
+         * worse to be told than nothing.
+         *
+         * <p>So it is said instead. A count that quietly holds two predicates where it says one is
+         * the shape of a measure reporting a behavior complete over something nothing ran, and
+         * naming them is what keeps that from being silent.
+         *
+         * <p>Only for a fork some other module wrote. A fork of this module's own is spliced from a
+         * body the author can read, and its copies are one arm they wrote — which is what the key
+         * says and is not a thing this could not tell.
+         */
+        public List<souther.compiler.types.CoverageOrigin> countedTogether() {
+            List<souther.compiler.types.CoverageOrigin> out = new ArrayList<>();
+            byObligation().forEach((key, occurrences) -> {
+                // Of the fork and not of its arms. Both arms of one fork are counted together or
+                // neither is, so saying it per arm says one thing twice.
+                if (occurrences.size() > 1 && key.decides().isEmpty()
+                        && !key.origin().module().equals(writtenIn)
+                        && !out.contains(key.origin())) {
+                    out.add(key.origin());
+                }
+            });
+            return List.copyOf(out);
         }
 
         /**
@@ -1044,7 +1077,7 @@ public final class Adequacy {
                 out.put(behavior.name(), BranchEvidence.measured(arms, covered,
                         reachable == null ? NOTHING_PROVEN
                                 : reachable.getOrDefault(behavior.name(), NOTHING_PROVEN),
-                        partial ? MeasurementStatus.PARTIAL : MeasurementStatus.COMPLETE));
+                        partial ? MeasurementStatus.PARTIAL : MeasurementStatus.COMPLETE, name));
             }
             return Answer.of(Ordered.map(out));
         }
