@@ -64,6 +64,41 @@ class APositionIsReadUnderBoundedlyManyWaysInTest {
         return out.toString();
     }
 
+    /**
+     * Four conditions of two ways each, and a fifth that half of what they leave cannot reach.
+     *
+     * <p>The last one asks again what the first one asked, so eight of the sixteen contexts settle
+     * it the way it needs and eight settle it the other way. Sixteen contexts reach the meeting —
+     * eight of them twice over and eight of them not at all — which is the bound exactly.
+     */
+    private static final String UNEVEN = """
+            module example.uneven
+
+            data Switch = On | Off
+
+            behavior fee : (a: Switch, b: Switch, c: Switch, d: Switch, e: Switch, f: Switch,
+                            g: Switch, h: Switch, i: Switch, j: Switch, x: Int, y: Int) -> Int
+
+            let fee (a, b, c, d, e, f, g, h, i, j, x, y) =
+                if (match a with | On -> true | Off -> false)
+                        || (match b with | On -> true | Off -> false) then
+                    if (match c with | On -> true | Off -> false)
+                            || (match d with | On -> true | Off -> false) then
+                        if (match e with | On -> true | Off -> false)
+                                || (match f with | On -> true | Off -> false) then
+                            if (match g with | On -> true | Off -> false)
+                                    || (match h with | On -> true | Off -> false) then
+                                if (match a with | On -> true | Off -> false)
+                                        && ((match i with | On -> true | Off -> false)
+                                            || (match j with | On -> true | Off -> false)) then
+                                    (if x > 1 then 1 else 0) + (if y > 1 then 10 else 0)
+                                else 0
+                            else 0
+                        else 0
+                    else 0
+                else 0
+            """;
+
     private static List<Interaction> read(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
@@ -98,6 +133,32 @@ class APositionIsReadUnderBoundedlyManyWaysInTest {
         assertTrue(found.stream().allMatch(group -> group.factors().size() == 2),
                 "and the meeting under them is the same one: " + found);
         assertEquals(false, namesAnArm(found), "each said on the comparisons: " + found);
+    }
+
+    /**
+     * What is counted is the contexts that reach the position, not the ways one of them is offered
+     * multiplied by how many there are.
+     *
+     * <p>The number this bounds is a fact about the position and about every way down to it at
+     * once. Half the contexts here cannot settle the last condition the way its arm needs, so the
+     * ways they would have taken are no paths and the meeting is reached sixteen times — exactly
+     * what the bound allows. Counted one context at a time it reads as eight contexts each
+     * offered two ways, calls it thirty-two, and gives up on a position that was under the bound:
+     * the arm falls back to naming itself, which places at no class, and every group under it goes.
+     *
+     * <p>So the ways in are carried together. A walk arriving one way at a time cannot know what
+     * the ways beside it came to, and a number that stands in for the answer is wrong exactly where
+     * the arms are uneven — which is where a condition asks again about something already decided,
+     * and that is not a rare way to write.
+     */
+    @Test
+    void theContextsThatReachAPositionAreWhatIsCounted() {
+        List<Interaction> found = read(UNEVEN, "fee");
+
+        assertEquals(16, found.size(),
+                "eight of the sixteen contexts reach the last condition, each two ways: " + found);
+        assertEquals(false, namesAnArm(found),
+                "and the bound is not reached, so every way in is said on the decisions: " + found);
     }
 
     /**

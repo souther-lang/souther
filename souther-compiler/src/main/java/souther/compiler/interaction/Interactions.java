@@ -70,14 +70,26 @@ public final class Interactions {
      *
      * <p>A second amplification and not the one above. {@link #MOST_OUTCOMES} bounds the outcomes
      * of one value, which is a product taken at one node; this bounds how many ways in one position
-     * is walked under, which is a product taken along the way down to it. A condition that fails
-     * four ways standing inside another one is a meeting read sixteen times, so the two multiply
-     * with the nesting of the body and neither bound holds what the other does.
+     * is read under, which is a product taken along the way down to it. A condition that fails four
+     * ways standing inside another one is a meeting read sixteen times, so the two multiply with the
+     * nesting of the body and neither bound holds what the other does.
      *
-     * <p>What is counted is the contexts that survive and not the alternatives the syntax offers. A
-     * way in settling a decision that the way in above it settled the other way is no path at all,
-     * and letting it take a share here would move where the bound falls with how the body is
-     * written rather than with how much there is to read.
+     * <p>The contexts that survive and not the alternatives the syntax offers. A way in settling a
+     * decision that the way in above it settled the other way is no path at all, and letting it take
+     * a share here would move where the bound falls with how the body is written rather than with
+     * how much there is to read.
+     *
+     * <p>Counted and not estimated, which is why the walk carries the contexts of a position
+     * together. How many of them survive is a fact about the position and about all the ways down to
+     * it at once — a walk arriving one way at a time cannot know what the ways beside it came to,
+     * and multiplying what it does know stands in for the answer without being it: uneven arms make
+     * that product larger than the number of contexts there are, and a position under the bound is
+     * given up on as though it were over.
+     *
+     * <p>Held by induction rather than by a running count. A position is read under at most this
+     * many contexts, and what an arm below it is read under is either those held to the ways the
+     * condition comes out — checked against the bound where it is built — or, over the bound, one
+     * per context, which is what there already were.
      *
      * <p>Over the bound an arm is read the one way a fork whose condition this reading cannot value
      * is read, which is where every fork was before the ways in were told apart. Going over asks
@@ -149,22 +161,36 @@ public final class Interactions {
         this.symbols = symbols;
     }
 
-    /** The groups of {@code body}, in the order the walk meets them. */
+    /**
+     * The groups of {@code body}, in the order the walk meets them.
+     *
+     * <p>By the meeting first and by the way in second. A meeting reached several ways is one place
+     * in the body and as many groups, and they are written down together because that is when the
+     * walk is there. A generation spending a row budget over these takes them in this order, so
+     * which of them a budget that runs out reaches is said by where the meeting is written and not
+     * by which way round a fork above it a row goes.
+     */
     public static List<Interaction> of(Core body, CoverageSites.Plan plan, InputDomain inputs,
                                        Symbols symbols) {
         List<Interaction> found = new ArrayList<>();
         new Interactions(plan, symbols).walk(body, InputReads.of(inputs), Map.of(),
-                java.util.Collections.newSetFromMap(new IdentityHashMap<>()), List.of(), found, 1);
+                java.util.Collections.newSetFromMap(new IdentityHashMap<>()),
+                List.of(List.of()), found);
         return List.copyOf(found);
     }
 
     /**
-     * @param contexts how many ways in this position is being read under, which is the product of
-     *                 the ways the walk took to get here and is what {@link #MOST_WAYS_IN} bounds
+     * @param reaches every way in this position is reached by, together rather than one at a time,
+     *                because how many there are is what {@link #MOST_WAYS_IN} bounds and no one of
+     *                them can say. Empty where nothing reaches here, and never longer than the bound
      */
     private void walk(Core node, InputReads reads, Map<BindingId, List<Arrival>> bound,
-                      Set<Core> absorbed, List<Decision> reach, List<Interaction> found,
-                      int contexts) {
+                      Set<Core> absorbed, List<List<Decision>> reaches, List<Interaction> found) {
+        if (reaches.isEmpty()) {
+            // Every way that would have led here settles a decision one of the ways above it
+            // settled the other way, so no run arrives and there is nothing in here to offer.
+            return;
+        }
         if (!answers(node)) {
             // The same invariant the outcomes are read under, and the walk is where it is decided
             // whether there is a group here at all. A subtree that arrives at no value is one no
@@ -178,11 +204,10 @@ public final class Interactions {
             // A name given to a decision is still that decision, and a name given to a position is
             // still that position. Both environments widen here and neither answers the other's
             // question. Nothing about getting here changes: a binding is not a fork.
-            walk(let.value(), reads, bound, absorbed, reach, found, contexts);
+            walk(let.value(), reads, bound, absorbed, reaches, found);
             Map<BindingId, List<Arrival>> inner = new HashMap<>(bound);
             inner.put(let.binder().binding(), arrivalsOf(let.value(), reads, bound));
-            walk(let.body(), reads.and(let.binder(), let.value()), inner, absorbed, reach, found,
-                    contexts);
+            walk(let.body(), reads.and(let.binder(), let.value()), inner, absorbed, reaches, found);
             return;
         }
         List<Core> meeting = absorbed.contains(node) ? null : meetingAt(node, absorbed);
@@ -207,11 +232,17 @@ public final class Interactions {
             // Asked at the meeting and nowhere else, which is enough because a place a run may come
             // back to has everything inside it in the same position: a meeting this is false of
             // names a way in and factors that are all false of it too.
+            //
+            // What varies here is read once and the ways in are as many as they are: an operand is
+            // settled the same ways whichever way round the forks above a row went, so the factors
+            // are no part of what a way in decides and are not read again per way.
             if (factors.size() > 1 && !plan.mayRepeat(node)) {
-                found.add(new Interaction(reach, factors));
+                for (List<Decision> reach : reaches) {
+                    found.add(new Interaction(reach, factors));
+                }
             }
         }
-        descend(node, reads, bound, absorbed, reach, found, contexts);
+        descend(node, reads, bound, absorbed, reaches, found);
     }
 
     /**
@@ -229,56 +260,54 @@ public final class Interactions {
      * two.
      */
     private void descend(Core node, InputReads reads, Map<BindingId, List<Arrival>> bound,
-                         Set<Core> absorbed, List<Decision> reach, List<Interaction> found,
-                         int contexts) {
+                         Set<Core> absorbed, List<List<Decision>> reaches,
+                         List<Interaction> found) {
         switch (node) {
             // A way in nobody can name stops the walk into that arm, whether what could not be named
             // is the position the decision is about or the place a run that took it would be seen at.
             // A group found in there would be under a condition nothing can steer a row into or hold
             // a run to, and offering it asks for a row that may never arrive.
             case Core.If iff -> {
-                walk(iff.cond(), reads, bound, absorbed, reach, found, contexts);
+                walk(iff.cond(), reads, bound, absorbed, reaches, found);
                 Core[] arms = {iff.then(), iff.els()};
                 for (int part = 0; part < arms.length; part++) {
-                    // As many ways in as the condition has of coming out that way, and the arm is
-                    // read under each: a row that failed the first comparison and one that held it
-                    // and failed the second both arrive here, and they arrive by different paths.
-                    List<List<Decision>> ways = waysInTo(iff, part, reads, bound, reach, contexts);
-                    for (List<Decision> way : ways) {
-                        walk(arms[part], reads, bound, absorbed, way, found,
-                                contexts * ways.size());
-                    }
+                    // As many ways in as the condition has of coming out that way, held to every
+                    // context the fork itself is reached under: a row that failed the first
+                    // comparison and one that held it and failed the second both arrive here, and
+                    // they arrive by different paths.
+                    walk(arms[part], reads, bound, absorbed,
+                            waysInTo(iff, part, reads, bound, reaches), found);
                 }
             }
             case Core.Match match -> {
                 TermPath at = reads.pathOf(match.scrutinee(), symbols);
-                walk(match.scrutinee(), reads, bound, absorbed, reach, found, contexts);
+                walk(match.scrutinee(), reads, bound, absorbed, reaches, found);
                 for (int part = 0; part < match.cases().size(); part++) {
                     Core.Case each = match.cases().get(part);
                     Decision went = caseCondition(at, each, match, part);
                     if (went == null) {
                         continue;
                     }
-                    List<Decision> way = merge(reach, List.of(went));
-                    if (way != null) {
-                        walk(each.body(), reads, bound, absorbed, way, found, contexts);
-                    }
+                    // One way in and never more, so nothing here can go over the bound.
+                    walk(each.body(), reads, bound, absorbed,
+                            heldTo(reaches, List.of(List.of(went))), found);
                 }
             }
             case Core.Binary binary when shortCircuits(binary.op()) -> {
-                walk(binary.left(), reads, bound, absorbed, reach, found, contexts);
+                walk(binary.left(), reads, bound, absorbed, reaches, found);
                 // The right runs only where the left did not settle the answer, and which of the
                 // left's paths those are is which value each of them comes to. Where the reading
                 // cannot enumerate them the walk does not go in: a way in it could name only some
                 // of says a row reaches here when it may not.
+                //
+                // Over the bound the walk does not go in either. There is no arm here to fall back
+                // on — what leads to the right of one of these is the left having come out a way,
+                // and nothing records a value coming out a way.
                 if (waysTo(binary.left(), binary.op() == Hir.BinOp.AND, reads, bound)
                         instanceof Ways.Known through) {
-                    List<List<Decision>> ways = compatible(reach, through.paths());
-                    if (contexts * ways.size() <= MOST_WAYS_IN) {
-                        for (List<Decision> way : ways) {
-                            walk(binary.right(), reads, bound, absorbed, way, found,
-                                    contexts * ways.size());
-                        }
+                    List<List<Decision>> ways = heldTo(reaches, through.paths());
+                    if (ways.size() <= MOST_WAYS_IN) {
+                        walk(binary.right(), reads, bound, absorbed, ways, found);
                     }
                 }
             }
@@ -288,7 +317,7 @@ public final class Interactions {
                 // is not walked: a row cannot be steered to either of them, and one offered for a
                 // group in there would be offered for a combination it may not sit in.
                 for (Core.FieldValue given : constructed.construct().values()) {
-                    walk(given.value(), reads, bound, absorbed, reach, found, contexts);
+                    walk(given.value(), reads, bound, absorbed, reaches, found);
                 }
             }
             case Core.Block ignored -> {
@@ -297,9 +326,9 @@ public final class Interactions {
                 // behavior, so a group in there has no way in this can name.
             }
             case Core.LetIn let -> {
-                walk(let.value(), reads, bound, absorbed, reach, found, contexts);
-                walk(let.body(), reads.and(let.binder(), let.value()), bound, absorbed, reach,
-                        found, contexts);
+                walk(let.value(), reads, bound, absorbed, reaches, found);
+                walk(let.body(), reads.and(let.binder(), let.value()), bound, absorbed, reaches,
+                        found);
             }
             case Core.Int ignored -> { }
             case Core.Decimal ignored -> { }
@@ -312,41 +341,46 @@ public final class Interactions {
             case Core.Unreachable ignored -> { }
             // Everything the node is made of is evaluated, and under what the node itself was.
             case Core.Neg neg ->
-                    walkAll(some(neg.operand()), reads, bound, absorbed, reach, found, contexts);
+                    walkAll(some(neg.operand()), reads, bound, absorbed, reaches, found);
             case Core.FieldAccess access ->
-                    walkAll(some(access.target()), reads, bound, absorbed, reach, found, contexts);
+                    walkAll(some(access.target()), reads, bound, absorbed, reaches, found);
             case Core.TupleGet get ->
-                    walkAll(some(get.tuple()), reads, bound, absorbed, reach, found, contexts);
+                    walkAll(some(get.tuple()), reads, bound, absorbed, reaches, found);
             case Core.OptionSome option ->
-                    walkAll(some(option.value()), reads, bound, absorbed, reach, found, contexts);
+                    walkAll(some(option.value()), reads, bound, absorbed, reaches, found);
             case Core.Binary binary -> walkAll(some(binary.left(), binary.right()), reads, bound,
-                    absorbed, reach, found, contexts);
+                    absorbed, reaches, found);
             case Core.Call call ->
-                    walkAll(call.args(), reads, bound, absorbed, reach, found, contexts);
+                    walkAll(call.args(), reads, bound, absorbed, reaches, found);
             case Core.PreservedCall call ->
-                    walkAll(call.args(), reads, bound, absorbed, reach, found, contexts);
+                    walkAll(call.args(), reads, bound, absorbed, reaches, found);
             case Core.Apply apply ->
-                    walkAll(apply.args(), reads, bound, absorbed, reach, found, contexts);
+                    walkAll(apply.args(), reads, bound, absorbed, reaches, found);
             case Core.ListLit list ->
-                    walkAll(list.elements(), reads, bound, absorbed, reach, found, contexts);
+                    walkAll(list.elements(), reads, bound, absorbed, reaches, found);
             case Core.Tuple tuple ->
-                    walkAll(tuple.elements(), reads, bound, absorbed, reach, found, contexts);
+                    walkAll(tuple.elements(), reads, bound, absorbed, reaches, found);
             case Core.Construct construct -> walkAll(
                     construct.values().stream().map(Core.FieldValue::value).toList(),
-                    reads, bound, absorbed, reach, found, contexts);
+                    reads, bound, absorbed, reaches, found);
         }
     }
 
     private void walkAll(List<Core> parts, InputReads reads, Map<BindingId, List<Arrival>> bound,
-                         Set<Core> absorbed, List<Decision> reach, List<Interaction> found,
-                         int contexts) {
+                         Set<Core> absorbed, List<List<Decision>> reaches,
+                         List<Interaction> found) {
         for (Core each : parts) {
-            walk(each, reads, bound, absorbed, reach, found, contexts);
+            walk(each, reads, bound, absorbed, reaches, found);
         }
     }
 
     /**
      * The path contexts arm {@code part} is read under, each held to what already held above it.
+     *
+     * <p>Every way the condition comes out that way against every context the fork is reached
+     * under, which is the number this position is read under and is where it is checked against
+     * the bound. Counted here and nowhere else: this is the one place the contexts of a position
+     * are all in hand at once.
      *
      * <p>Empty where no row reaches the arm at all, which is a different answer from the one way in
      * this falls back to where the condition's ways cannot be enumerated — and a different answer
@@ -355,15 +389,15 @@ public final class Interactions {
      */
     private List<List<Decision>> waysInTo(Core.If iff, int part, InputReads reads,
                                           Map<BindingId, List<Arrival>> bound,
-                                          List<Decision> reach, int contexts) {
-        List<List<Decision>> ways = compatible(reach, waysInFor(iff, part, reads, bound));
-        if (contexts * ways.size() <= MOST_WAYS_IN) {
+                                          List<List<Decision>> reaches) {
+        List<List<Decision>> ways = heldTo(reaches, waysInFor(iff, part, reads, bound));
+        if (ways.size() <= MOST_WAYS_IN) {
             return ways;
         }
         // Over the bound, and read the one way it was read before the ways in were told apart. The
-        // fallback is never itself over the bound: it is one way in, and what is already spent is
-        // held under the bound by this same test.
-        return compatible(reach, fallbackWayIn(iff, part, reads));
+        // fallback is one way in per context, so what comes back is no longer than what came in and
+        // the bound holds by induction rather than by anything counted along the way.
+        return heldTo(reaches, fallbackWayIn(iff, part, reads));
     }
 
     /**
@@ -387,14 +421,22 @@ public final class Interactions {
         return back == null ? List.of() : List.of(List.of(back));
     }
 
-    /** Each way in held to what already held, leaving out the ones that contradict it. */
-    private static List<List<Decision>> compatible(List<Decision> reach,
-                                                   List<List<Decision>> ways) {
+    /**
+     * Each way in held to each context it is reached under, leaving out the ones that contradict.
+     *
+     * <p>Where the ways in are counted from. A way settling a decision that the context it would
+     * extend settled the other way is no path, so it is not here — and a bound taken over what is
+     * here is a bound on paths rather than on what the syntax offered.
+     */
+    private static List<List<Decision>> heldTo(List<List<Decision>> reaches,
+                                               List<List<Decision>> ways) {
         List<List<Decision>> out = new ArrayList<>();
-        for (List<Decision> way : ways) {
-            List<Decision> merged = merge(reach, way);
-            if (merged != null) {
-                out.add(merged);
+        for (List<Decision> reach : reaches) {
+            for (List<Decision> way : ways) {
+                List<Decision> merged = merge(reach, way);
+                if (merged != null) {
+                    out.add(merged);
+                }
             }
         }
         return out;
