@@ -93,14 +93,42 @@ class AThresholdOnAnElementIsMetByARowTest {
                 () -> "rewriting the comparison moved the line: " + owedFor(">="));
     }
 
-    /** And the point at the threshold is one no row among these reaches. */
+    /**
+     * And the point at the threshold is one these rows were read against and do not reach.
+     *
+     * <p>Missed and not undecided. The rows write their items plainly and one of them writes none
+     * at all, so what is owed here is a row an author can go and write — told that a value could
+     * not be read, they would go looking for what is wrong with the rows they have.
+     */
     @Test
-    void thePointAtTheThresholdIsOwedAndUnmet() {
+    void thePointAtTheThresholdIsOwedAndMissed() {
         List<BorderAssessment.Point> at = pointsFor(">=").stream()
                 .filter(point -> "21000".equals(point.against())).toList();
 
         assertEquals(1, at.size(), () -> "one point at the threshold: " + owedFor(">="));
-        assertNotEquals(new ItemAssessment.Coverage.Hit(), at.get(0).owed().coverage(),
-                "no row among these writes an item charged exactly 21000");
+        assertEquals(new ItemAssessment.Coverage.Missed(), at.get(0).owed().coverage(),
+                "every row was read here, and none writes an item charged exactly 21000");
+    }
+
+    /**
+     * And a row whose list holds an item at the threshold reaches it.
+     *
+     * <p>The other half, so that "missed" is not what this reports of every row. One element among
+     * several standing at the point is the row standing there.
+     */
+    @Test
+    void aRowHoldingAnItemAtTheThresholdReachesThePoint() {
+        Compilation compilation = Compilation.ofSource(MODEL.replace("OP", ">=")
+                .replace("Item { charge = 1000 }", "Item { charge = 21000 }"), "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+        List<BorderAssessment> lines = compilation.db().ask(new Adequacy.Boundaries(MODULE))
+                .value().get("countOverThreshold");
+        BorderAssessment.Point at = BorderAssessment.pointsOf(lines).stream()
+                .filter(point -> point.role().againstTheLine()).filter(point -> point.owed() != null)
+                .filter(point -> "21000".equals(point.against())).findFirst().orElseThrow();
+
+        assertEquals(new ItemAssessment.Coverage.Hit(), at.owed().coverage(),
+                "the row holds an item at the threshold, among others");
     }
 }

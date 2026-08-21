@@ -610,6 +610,57 @@ final class Coverages {
     }
 
     /**
+     * One row's values, read one element at a time where a position holds several.
+     *
+     * <p>Which paths a line is over is the quantity's, asked as it reads them, so how many elements
+     * there are is not known until it has. The count is taken as the reading goes and the reading is
+     * run again for each, until one stands or they are used up — the paths a criterion reads do not
+     * turn on which element is being offered, so the count is the same every time round.
+     */
+    private static final class ElementsOfARow implements BorderQuantity.Observation {
+
+        private final BehaviorInputs where;
+        private final RowOutcome row;
+        private int at;
+        private int most = 1;
+        private boolean wroteNothing;
+
+        ElementsOfARow(BehaviorInputs where, RowOutcome row) {
+            this.where = where;
+            this.row = row;
+        }
+
+        @Override
+        public souther.compiler.observe.ObservedValue at(souther.compiler.inputs.TermPath path) {
+            List<souther.compiler.observe.ObservedValue> values = where.valuesAt(row, path);
+            if (values == null) {
+                return null;   // the walk and the type disagree, which is the quantity's to report
+            }
+            most = Math.max(most, values.size());
+            if (values.isEmpty()) {
+                // The row wrote no element here, so nothing of it stands anywhere on this line.
+                // That is a row that was read and does not reach the point, and reporting it as a
+                // value nothing could read leaves the point undecided over a row that plainly
+                // settles it.
+                wroteNothing = true;
+                return null;
+            }
+            return values.get(Math.min(at, values.size() - 1));
+        }
+
+        /** Moves to the next element, or false where every one has been offered. */
+        boolean another() {
+            at++;
+            return at < most;
+        }
+
+        /** Whether the row wrote nothing at some position this line is over. */
+        boolean wroteNothing() {
+            return wroteNothing;
+        }
+    }
+
+    /**
      * Whether any row stands at one item of a border.
      *
      * <p>One walk for every kind of line. What a row put at the item is the quantity's to read — it
@@ -627,14 +678,24 @@ final class Coverages {
                                      site) {
         boolean unreadable = false;
         for (RowOutcome row : rows) {
-            switch (quantity.standsAt(criterion, path -> where.valueAt(row, path))) {
-                case UNREADABLE -> unreadable = true;
-                case NO -> { }
-                case YES -> {
-                    if (site.stream().allMatch(seenBy(row)::reached)) {
-                        return Met.YES;
-                    }
+            // A row has more than one value at a position inside a sequence, and standing at a point
+            // is one element standing there. Asked for one value, such a row answered with none and
+            // every point on such a line came back undecided — a measurement that could not look,
+            // said of a row that wrote the values plainly.
+            ElementsOfARow reading = new ElementsOfARow(where, row);
+            boolean stands = false;
+            do {
+                switch (quantity.standsAt(criterion, reading)) {
+                    // A row that wrote nothing at a position this line is over did not stand there,
+                    // and said so: it is the reading arriving and finding none, not a reading that
+                    // could not look.
+                    case UNREADABLE -> unreadable = unreadable || !reading.wroteNothing();
+                    case NO -> { }
+                    case YES -> stands = true;
                 }
+            } while (!stands && reading.another());
+            if (stands && site.stream().allMatch(seenBy(row)::reached)) {
+                return Met.YES;
             }
         }
         return unreadable ? Met.UNREADABLE : Met.NO;
