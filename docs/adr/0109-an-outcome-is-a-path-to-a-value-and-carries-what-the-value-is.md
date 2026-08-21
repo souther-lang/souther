@@ -58,8 +58,8 @@ is told from an arm nothing can be said about.
 
 That enumeration is what names a way in, and it is one rule read by three: the outcomes of a fork's
 value, the walk into a fork's arm, and the walk into the right of an operator that stops early. A
-way in this reading carries is a conjunction, so an arm reached several ways is walked once per way
-and the group inside it is offered once per way. Two paths and not one alternative — under `A && B`
+way in this reading carries is a conjunction, so an arm reached several ways is walked once with
+those ways carried together, and a group found inside it is offered once per way. Two paths and not one alternative — under `A && B`
 a row that made the first comparison fail never evaluated the second — and a group naming both
 would name a combination no row sits in.
 
