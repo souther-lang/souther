@@ -6,7 +6,6 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rational;
 import souther.compiler.numeric.RationalCut;
-import souther.compiler.numeric.Reach;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
@@ -25,6 +24,10 @@ import java.util.Set;
 final class ReadQuantities implements Quantities {
 
     private final Map<String, PlacedRules> byParameter;
+    /** What says how the values of a position are spaced, which the arithmetic needs of every
+     *  number it is told a bound on. Held rather than asked for per question: the reading of an
+     *  input is what a caller has, and where a position's values step is a fact about its type. */
+    private final souther.compiler.check.Symbols symbols;
     /** What the behavior takes, which is what a path of this input starts at. */
     private final Set<String> parameters;
     /** Every position that was read, by where it sits. What one of them was read to hold is what
@@ -49,6 +52,19 @@ final class ReadQuantities implements Quantities {
      * reading of is what this refinement fixed.
      */
     private volatile Map<String, FieldDomains.Settled> conditioned;
+    /**
+     * Every rule reaching this input, about this input's own numbers, in one place.
+     *
+     * <p>Not one reading per parameter with the answers added afterwards. Adding per-parameter
+     * answers is the composition a rule spanning two parameters cannot survive, and where such a
+     * rule comes from is not this layer's business — what is here is a constraint space over the
+     * input, and where one parameter's positions run is a projection out of it rather than a
+     * reading of its own.
+     *
+     * <p>Worked out when something is asked and kept, the same as {@link #conditioned}: it is a
+     * reading of what this refinement fixed, so it belongs to this value and not to a shared table.
+     */
+    private volatile souther.compiler.numeric.NumericDomain<InputAtom> constraints;
 
     /** The values fixed at one term, kept as their least and greatest so that what was fixed does
      *  not depend on the order it arrived in. */
@@ -65,7 +81,9 @@ final class ReadQuantities implements Quantities {
     }
 
     private ReadQuantities(Map<String, PlacedRules> byParameter, Set<String> parameters,
-                           Map<TermPath, Position> byPath, Map<NumericTerm, Fixed> fixed) {
+                           Map<TermPath, Position> byPath, Map<NumericTerm, Fixed> fixed,
+                           souther.compiler.check.Symbols symbols) {
+        this.symbols = symbols;
         // In the order the behavior declares its parameters. A proof of emptiness names one of them
         // and a report is a document compared against the one written last time, so an order read
         // off a hash would move which parameter is named between runs.
@@ -82,8 +100,9 @@ final class ReadQuantities implements Quantities {
 
     /** Before anything is fixed. */
     static ReadQuantities of(Map<String, PlacedRules> byParameter, Set<String> parameters,
-                             Map<TermPath, Position> byPath) {
-        return new ReadQuantities(byParameter, parameters, byPath, Map.of());
+                             Map<TermPath, Position> byPath,
+                             souther.compiler.check.Symbols symbols) {
+        return new ReadQuantities(byParameter, parameters, byPath, Map.of(), symbols);
     }
 
     /** Each parameter's rules read with what is fixed under it, once. */
@@ -99,30 +118,166 @@ final class ReadQuantities implements Quantities {
         return read;
     }
 
+    /**
+     * The rules of every parameter, renamed into this input's numbers and said together.
+     *
+     * <p>Renamed and not read again ({@link FieldDomains.Settled#numbersOver}). What a rule says is
+     * a relation between numbers, and it says the same thing whatever they are called — so what
+     * reaches here is each parameter's reading, under names this input can spell, and a number it
+     * cannot spell under a name of its own so that the rules through it are not lost.
+     *
+     * <p>Said together, which is what makes this a constraint space rather than a product of them.
+     * Two parameters are related by nothing the declarations say, so meeting their rules leaves
+     * every answer where it was; what it does is leave somewhere for a rule that relates them to be
+     * said at all.
+     *
+     * <p>And what each number is on its own goes in here rather than being met on afterwards.
+     * Projecting does not distribute over meeting: a rule holding two numbers at one apiece says
+     * nothing about a form that also names a third the rules leave unbounded, and met afterwards
+     * against a floor this reading did have, the rule is gone.
+     */
+    private souther.compiler.numeric.NumericDomain<InputAtom> constraints() {
+        souther.compiler.numeric.NumericDomain<InputAtom> read = constraints;
+        if (read != null) {
+            return read;
+        }
+        souther.compiler.numeric.NumericDomain<InputAtom> made =
+                souther.compiler.numeric.NumericDomain.top();
+        for (Map.Entry<String, FieldDomains.Settled> each : conditioned().entrySet()) {
+            String parameter = each.getKey();
+            made = made.meet(each.getValue().numbersOver(
+                    at -> called(parameter, at),
+                    subject -> new InputAtom.Anonymous(parameter, subject)));
+        }
+        read = made;
+        constraints = read;
+        return read;
+    }
+
+    /** What this input calls the number at one of a parameter's coordinates. */
+    private static InputAtom called(String parameter, FieldDomains.Coordinate at) {
+        return new InputAtom.Named(parameter, at.path(), at.measured());
+    }
+
+    /** The same, of a term this input holds. One number under one name whichever side it arrives
+     *  from — the reading of a declaration, or a form a caller wrote. */
+    private static InputAtom.Named called(NumericTerm term) {
+        FieldDomains.Coordinate at = coordinateOf(term);
+        return new InputAtom.Named(term.path().head(), at.path(), at.measured());
+    }
+
+    /**
+     * The rules with what one term is on its own taken in.
+     *
+     * <p>Three things, and none of them is a clause: a value the caller fixed it at, what the
+     * position measured at it was read to hold, and what the term guarantees of itself. All three
+     * are true whether or not any clause ever named the coordinate, and they are put onto the rules
+     * rather than met against the answer so that they are solved together with the relations.
+     *
+     * <p>Ends that are not numbers are left out, because what is being added to is the arithmetic. A
+     * position ordered by its own values has ends that are values — a string stops at {@code "A"} —
+     * and that end survives where a form is one term taken as itself ({@link #runsBetween}), which
+     * is the only shape such a position is ever asked in.
+     */
+    private souther.compiler.numeric.NumericDomain<InputAtom> holding(
+            souther.compiler.numeric.NumericDomain<InputAtom> rules, NumericTerm term) {
+        NumericDomain.Bounds runs = whereOneTermRuns(term);
+        if (runs == null || (asCut(runs.min()) == null && asCut(runs.max()) == null)) {
+            return rules;
+        }
+        InputAtom atom = called(term);
+        souther.compiler.numeric.Granularity spaced = spacingOf(rules, term, atom);
+        if (spaced == null) {
+            return rules;
+        }
+        return rules.assuming(atom, numbersOf(runs), Map.of(atom, spaced));
+    }
+
+    /** A range with only the ends the arithmetic has a number for. */
+    private static NumericDomain.Bounds numbersOf(NumericDomain.Bounds runs) {
+        return new NumericDomain.Bounds(
+                asCut(runs.min()) == null ? null : runs.min(),
+                asCut(runs.max()) == null ? null : runs.max());
+    }
+
+    /**
+     * How the values of one term are spaced.
+     *
+     * <p>What the rules already record about it where they record anything, and what its type says
+     * where they do not. Asked of the rules first because that is where the two could disagree, and
+     * one number spaced two ways is the naming and the typing disagreeing rather than something to
+     * pick the safer of.
+     *
+     * <p>Null where nothing says. A bound may not be taken in on a number whose spacing is guessed —
+     * a strict bound is either wrongly sharpened on it or silently left blunt — so what is not
+     * known is left out, and what the rules leave is then wider rather than wrong.
+     */
+    private souther.compiler.numeric.Granularity spacingOf(
+            souther.compiler.numeric.NumericDomain<InputAtom> rules, NumericTerm term,
+            InputAtom atom) {
+        souther.compiler.numeric.Granularity had = rules.spacingOf(atom);
+        if (had != null) {
+            return had;
+        }
+        if (symbols == null) {
+            return null;
+        }
+        // Asked of the term, which is what knows. A count is a whole number whatever it is a count
+        // of and a position measured by its own values is spaced by its type, and both of those are
+        // {@link NumericTerm#carrierAt}'s one answer — so the position is looked up to be handed
+        // over rather than to decide anything. Asked of the position instead, a fact the term owns
+        // would depend on whether the walk that reads this input reached the place the term sits
+        // at, and a count under more steps than that walk goes down would lose the floor every
+        // count has.
+        Position at = byPath.get(term.path());
+        souther.compiler.check.Carrier carrier =
+                term.carrierAt(at == null ? null : at.type(), symbols);
+        return carrier == null ? null : carrier.spacing();
+    }
+
     @Override
     public NumericDomain.Bounds runsBetween(NumericDomain.LinearForm<NumericTerm> form) {
         if (form.coefs().isEmpty()) {
             return null;
         }
         form.coefs().keySet().forEach(this::held);
+        // Projected out of the rules, which is one question with one answer. The rules of every
+        // parameter are said together and what each number is on its own is said onto them, so what
+        // a form runs between is read off that space rather than assembled out of per-parameter
+        // answers — assembling is what a rule spanning two parameters cannot survive.
+        souther.compiler.numeric.NumericDomain<InputAtom> rules = constraints();
+        for (NumericTerm term : form.coefs().keySet()) {
+            rules = holding(rules, term);
+        }
+        NumericDomain.Bounds projected = rules.boundsOf(over(form));
         // One term taken as itself, which is the arithmetic being the identity rather than a second
         // answer to the same question. It is also the only shape a position the arithmetic cannot
         // count is ever asked in — a form adds its terms together and two strings have no sum — so
         // this is where a floor written as a value rather than as a number survives at all.
         NumericTerm only = onlyTermOf(form);
-        if (only != null) {
-            // The relation still applies: what the rules leave one position under what is fixed is
-            // the question a search asks between two steps, and it is the arithmetic that is the
-            // identity here rather than the reading.
-            return meeting(whereOneTermRuns(only), relatedTo(only));
-        }
-        // Added up out of parts, each holding as much as anything here can say about it, and never
-        // met as two totals. Meeting does not distribute over addition — everything each term is on
-        // its own, met against everything the relations leave the whole form, is wider than the sum
-        // of the parts each met on its own — so one part nothing can be said about would take the
-        // rules relating every other part down with it.
-        return boundsOf(Reach.of(partsOf(form), Rational.of(form.constant()),
-                part -> reachOf(part, form)));
+        return only == null ? projected : meeting(projected, whereOneTermRuns(only));
+    }
+
+    /**
+     * A form of this input's terms, as one over the numbers the rules are about.
+     *
+     * <p><b>Added and not overwritten, because this is a fold and not a renaming.</b> A term carries
+     * which measure was written and a number does not, so two terms can be one number — and where a
+     * form weighs both of them, what that number is weighed by is the two coefficients together.
+     * Written as a renaming, {@code List.length(p.xs) + Set.size(p.xs)} would come back weighing
+     * that count once, which is a form the caller did not write and a range that is not the one they
+     * asked about.
+     *
+     * <p>The other way round from {@link souther.compiler.numeric.NumericDomain#over}, and the two
+     * are not the same act. Carrying a rule across may not put two positions under one name — that
+     * would say they are one number, which nobody said. Reading a caller's form may, because the
+     * caller wrote two spellings of a number this input has one of.
+     */
+    private static NumericDomain.LinearForm<InputAtom> over(
+            NumericDomain.LinearForm<NumericTerm> form) {
+        Map<InputAtom, BigDecimal> coefs = new LinkedHashMap<>();
+        form.coefs().forEach((term, coef) -> coefs.merge(called(term), coef, BigDecimal::add));
+        return new NumericDomain.LinearForm<>(form.constant(), coefs);
     }
 
     @Override
@@ -136,7 +291,7 @@ final class ReadQuantities implements Quantities {
             both.merge(term, new Fixed(each.getValue(), each.getValue()),
                     (had, one) -> had.and(one.least()));
         }
-        return new ReadQuantities(byParameter, parameters, byPath, both);
+        return new ReadQuantities(byParameter, parameters, byPath, both, symbols);
     }
 
     /**
@@ -282,80 +437,6 @@ final class ReadQuantities implements Quantities {
         return out;
     }
 
-    /**
-     * A part of a form that is answered on its own: the terms of one parameter the reading has a
-     * coordinate for, or the ones it has none for.
-     *
-     * <p>The finest unit a relation survives in. What relates two positions is read of the value
-     * they sit in, so a form reaching two parameters has a part in each; and within one, a
-     * coordinate the reading never named is one no relation can be asked about, so what is known of
-     * it is added beside the answer rather than taken into it.
-     */
-    private record Part(String parameter, boolean named) {}
-
-    /** Which part of a form a term belongs to. */
-    private Part partOf(NumericTerm term) {
-        String parameter = term.path().head();
-        FieldDomains.Settled rules = conditioned().get(parameter);
-        return new Part(parameter, rules != null && rules.names(coordinateOf(term)));
-    }
-
-    /** The parts a form is made of, each contributing what it comes to once. */
-    private Map<Part, Rational> partsOf(NumericDomain.LinearForm<NumericTerm> form) {
-        Map<Part, Rational> parts = new LinkedHashMap<>();
-        form.coefs().keySet().forEach(term -> parts.put(partOf(term), Rational.ONE));
-        return parts;
-    }
-
-    /**
-     * What one part of a form comes to: its terms on their own, and where the reading can be asked
-     * about them, met with what its rules leave them together.
-     *
-     * <p>Met here and not at the end. What relates the positions is what the terms alone cannot say,
-     * and what a term is on its own is what the relation need not have been told — held together at
-     * the part, both survive whatever the part beside it came to.
-     */
-    private Reach reachOf(Part part, NumericDomain.LinearForm<NumericTerm> form) {
-        Map<NumericTerm, Rational> mine = new LinkedHashMap<>();
-        form.coefs().forEach((term, coef) -> {
-            if (partOf(term).equals(part)) {
-                mine.put(term, Rational.of(coef));
-            }
-        });
-        Reach alone = Reach.of(mine, Rational.ZERO, this::atOneTerm);
-        return part.named() ? tighter(alone, reachOf(relationallyOf(part.parameter(), form)))
-                : alone;
-    }
-
-    /**
-     * What the rules of one parameter leave the part of {@code form} they can be asked about.
-     *
-     * <p>The coordinates this reading names and no others. A form with one it never named is one
-     * nothing can be said about as a whole, and asked that way the rules relating the coordinates
-     * beside it are lost with it.
-     */
-    private NumericDomain.Bounds relationallyOf(String parameter,
-                                                NumericDomain.LinearForm<NumericTerm> form) {
-        FieldDomains.Settled rules = conditioned().get(parameter);
-        if (rules == null) {
-            return null;
-        }
-        Map<FieldDomains.Coordinate, BigDecimal> named = new LinkedHashMap<>();
-        // And what each of those terms is on its own, put in rather than met on afterwards. The
-        // rules relate the coordinates and a term guarantees things about itself that no clause
-        // writes down; solved together they hold each other up, and taken apart and met the rule
-        // over two of them says nothing as soon as a third is one the rules leave unbounded.
-        Map<FieldDomains.Coordinate, NumericDomain.Bounds> ends = new LinkedHashMap<>();
-        form.coefs().forEach((term, coef) -> {
-            FieldDomains.Coordinate at = coordinateOf(term);
-            if (term.path().head().equals(parameter) && rules.names(at)) {
-                named.merge(at, coef, BigDecimal::add);
-                ends.putIfAbsent(at, whereOneTermRuns(term));
-            }
-        });
-        return rules.within(ends).boundsOf(named);
-    }
-
     /** The coordinate of one term, in the words the rules of its parameter are read in. */
     private static FieldDomains.Coordinate coordinateOf(NumericTerm term) {
         return new FieldDomains.Coordinate(String.join(".", term.path().fields()),
@@ -369,17 +450,6 @@ final class ReadQuantities implements Quantities {
         }
         Map.Entry<NumericTerm, BigDecimal> one = form.coefs().entrySet().iterator().next();
         return one.getValue().compareTo(BigDecimal.ONE) == 0 ? one.getKey() : null;
-    }
-
-    /**
-     * What the rules relating this term to others leave it, or null where the reading cannot name
-     * the coordinate.
-     *
-     * <p>The same question {@link #relationallyOf} asks of a form, of a form that is one term. Read
-     * as bounds rather than as something to add up, because nothing is being added.
-     */
-    private NumericDomain.Bounds relatedTo(NumericTerm term) {
-        return relationallyOf(term.path().head(), NumericDomain.LinearForm.atom(term));
     }
 
     /**
@@ -445,48 +515,9 @@ final class ReadQuantities implements Quantities {
      * position the reading measured by its own value is a different quantity — answered with the
      * position's, a body measuring the length of a string would be told where the string stops.
      */
-    private Reach atOneTerm(NumericTerm term) {
-        return reachOf(whereOneTermRuns(term));
-    }
-
-    private static Reach reachOf(NumericDomain.Bounds bounds) {
-        return bounds == null ? Reach.ANYWHERE
-                : Reach.between(asCut(bounds.min()), asCut(bounds.max()));
-    }
-
     private static RationalCut asCut(Endpoint end) {
         return end == null || !(end.at() instanceof Count at) ? null
                 : new RationalCut(Rational.of(at.at()), end.inclusive());
     }
 
-    private static Reach tighter(Reach one, Reach other) {
-        return new Reach(RationalCut.tighterLower(one.least(), other.least()),
-                RationalCut.tighterUpper(one.most(), other.most()));
-    }
-
-    private static NumericDomain.Bounds boundsOf(Reach runs) {
-        if (runs.least() == null && runs.most() == null) {
-            return null;
-        }
-        return new NumericDomain.Bounds(written(runs.least(), false), written(runs.most(), true));
-    }
-
-    private static Endpoint written(RationalCut cut, boolean upper) {
-        if (cut == null) {
-            return null;
-        }
-        BigDecimal exactly = cut.at().asWrittenDecimal();
-        if (exactly != null) {
-            return new Endpoint(new Count(exactly), cut.inclusive());
-        }
-        // Rounded the way that widens, so what is handed over admits everything the rules admit and
-        // a hair besides. Refusing a value the rules leave is the failure nothing downstream sees.
-        return new Endpoint(new Count(cut.at().asDecimal(
-                upper ? java.math.RoundingMode.CEILING : java.math.RoundingMode.FLOOR,
-                DIGITS_WHEN_IT_IS_NOT_A_DECIMAL)), true);
-    }
-
-    /** How far a derived end is written out where the division that makes it does not end. Any
-     *  number of them is sound while the rounding goes outward. */
-    private static final int DIGITS_WHEN_IT_IS_NOT_A_DECIMAL = 32;
 }

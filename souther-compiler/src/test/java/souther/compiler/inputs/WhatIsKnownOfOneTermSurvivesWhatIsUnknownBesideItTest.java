@@ -21,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * What is known of one term is not given up for what is unknown beside it.
@@ -31,14 +32,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * the reading that relates positions, the other three are answered only where that reading happens
  * to have a name for the coordinate — and where it does not, an answer that was in hand is dropped.
  *
- * <p>Which it does for whole reasons at a time. A form is one question per parameter, so a
- * coordinate the reading cannot name takes the answer about every other coordinate of that
- * parameter down with it: two positions each known to be at least none add up to something with no
- * floor.
+ * <p>And it gives them up for whole reasons at a time. The clauses relating positions are read one
+ * value at a time, so a coordinate that reading cannot name is one it can say nothing about — and an
+ * answer that gave up on its account would give up on every coordinate beside it too: two positions
+ * each known to be at least none would add up to something with no floor.
  *
- * <p>So what each term runs between is composed first, from everything about that term alone, and
- * what the rules relating them leave the form is met onto it. Meeting only narrows, so an answer is
- * never wider than the term's own — which is the direction the whole boundary is written in.
+ * <p>So all four go in beside each other and the answer is read out of the four together. Taking one
+ * in only narrows, so what comes back is never wider than what the term alone says — which is the
+ * direction the whole boundary is written in. What these hold to is the answer and not the way it is
+ * arrived at: a fact in hand may not be dropped because the mechanism asked for it declined.
  */
 class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
 
@@ -111,6 +113,103 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
                 "each of them is at least none, so their sum is");
     }
 
+    /** A collection under more steps than the walk that reads an input goes down. */
+    private static final String DEEPER_THAN_THE_WALK = """
+            module example.deep
+
+            data N = Int
+                invariant atLeastNone = value >= 0
+                invariant atMostFive  = value <= 5
+
+            data Inner = { xs: List<Int> }
+            data Mid = { inner: Inner }
+
+            data P = { m: Mid, n: N, ys: List<Int> }
+
+            data Taken
+
+            behavior take : (p: P) -> Taken
+            """;
+
+    /**
+     * A count under more steps than the walk goes down is still never negative.
+     *
+     * <p>Owned is not the same as known about. The walk that reads an input's positions stops where
+     * a report stops being about anything an author would call one input, and nothing stops a rule
+     * from naming what is under that — so a term down there is answered for with what it guarantees
+     * of itself and nothing else.
+     *
+     * <p>What it guarantees is the term's to say and not the position's. A count is a whole number
+     * whatever it is a count of, and a reading that asked the position how its values are spaced
+     * would have nowhere to ask here and would drop the floor for it — leaving a sum of two things
+     * each at least none with no floor at all.
+     */
+    @Test
+    void aCountUnderMoreStepsThanTheWalkGoesDownKeepsItsFloor() {
+        Read read = read(DEEPER_THAN_THE_WALK);
+        TermPath deep = TermPath.of("p").then("m").then("inner").then("xs");
+        assertNull(read.inputs().at(deep), "the walk does not reach this far");
+        NumericTerm buried = new NumericTerm.SizeOf(
+                souther.compiler.check.NumericMeasures.takenOf(
+                        read.inputs().at(TermPath.of("p").then("ys")).type(), read.symbols()),
+                deep);
+        NumericTerm n = read.inputs().at(TermPath.of("p").then("n")).term();
+        Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
+        coefs.put(n, BigDecimal.ONE);
+        coefs.put(buried, BigDecimal.ONE);
+
+        NumericDomain.Bounds runs = read.quantities()
+                .runsBetween(new NumericDomain.LinearForm<>(BigDecimal.ZERO, coefs));
+
+        assertEquals(Endpoint.inclusive(count(0)), runs.min(),
+                "each of them is at least none, so their sum is");
+    }
+
+    /** A collection a clause counts, so what its count runs between has both ends. */
+    private static final String COUNTED = """
+            module example.counted
+
+            data P = { xs: List<Int> }
+                invariant few = List.length(xs) <= 5
+
+            data Taken
+
+            behavior take : (p: P) -> Taken
+            """;
+
+    /**
+     * Two spellings of one count weigh it twice.
+     *
+     * <p>A term carries which measure was written and a number does not, so a form can name one
+     * number twice. What it is weighed by is then the two coefficients together — read as a
+     * renaming, the form would come back weighing that count once, which is a range for a form the
+     * caller did not write.
+     *
+     * <p>No model reaches this today: which measure is taken of a position is settled by its type,
+     * so a body has one to write. It is held here because the reading turns a finer key into a
+     * coarser one, and a translation that loses a key has to say what it does with the two values
+     * rather than keeping whichever arrived last.
+     */
+    @Test
+    void twoSpellingsOfOneCountWeighItTwice() {
+        Read read = read(COUNTED);
+        NumericTerm one = size(read, "xs");
+        NumericTerm other = new NumericTerm.SizeOf(
+                souther.compiler.types.ValueName.Stdlib.operation("Set", "size"),
+                TermPath.of("p").then("xs"));
+        Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
+        coefs.put(one, BigDecimal.ONE);
+        coefs.put(other, BigDecimal.ONE);
+
+        NumericDomain.Bounds twice = read.quantities()
+                .runsBetween(new NumericDomain.LinearForm<>(BigDecimal.ZERO, coefs));
+
+        assertEquals(Endpoint.inclusive(count(5)), read.quantities().runsBetween(one).max(),
+                "the clause counts it at five");
+        assertEquals(Endpoint.inclusive(count(10)), twice.max(),
+                "and a form naming it twice runs to twice that");
+    }
+
     /** Two positions the record relates, beside a collection no clause counts. */
     private static final String RELATED_BESIDE_AN_UNCOUNTED = """
             module example.beside
@@ -134,11 +233,12 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
     /**
      * And the rule relating two terms survives a third the reading cannot name.
      *
-     * <p>The part that keeps a relation is the terms the reading has a coordinate for, and the rest
-     * is added beside it. Met as two totals instead — everything each term is on its own against
-     * everything the relations leave the whole form — one unnameable term makes the relational
-     * total say nothing, and the relation between the two terms beside it is lost with it. Meeting
-     * does not distribute over addition, so which unit it happens at is which answer comes out.
+     * <p>A term the reading has no coordinate for is one no relation can be asked about, and that is
+     * the whole of what it costs. Asked as two totals instead — everything each term is on its own,
+     * against everything the relations leave the whole form — the unnameable term makes the
+     * relational total say nothing and takes the relation between the two beside it with it. Meeting
+     * does not distribute over addition, so the unit an answer is assembled at is which answer comes
+     * out.
      *
      * <p>Held here and not at a report, because no report reaches it today. A coordinate the reading
      * of a value never named is in practice a count nothing takes, and a position whose values are

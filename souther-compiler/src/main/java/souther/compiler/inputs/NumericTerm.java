@@ -76,9 +76,19 @@ public sealed interface NumericTerm {
      * <p>A size is a whole number whatever it is a size of, so the term answers this and not the
      * position: a rule about the length of a string is counted as an {@code Int} at a position no
      * line is drawn on.
+     *
+     * <p>Which is why {@code positionType} may be absent. A caller reading a term under more steps
+     * than the walk that finds an input's positions goes down has no position to ask, and a size
+     * there is a whole number all the same — asked for the type first, a caller would either have
+     * nothing to pass or would write out the rule above a second time, at whichever call site
+     * noticed. What is null there is a term measured by its own values, which is the one case the
+     * position was the answer to.
      */
     default Carrier carrierAt(Type positionType, Symbols symbols) {
-        return this instanceof SizeOf ? Carrier.WHOLE : Carrier.ofValue(positionType, symbols);
+        if (this instanceof SizeOf) {
+            return Carrier.WHOLE;
+        }
+        return positionType == null ? null : Carrier.ofValue(positionType, symbols);
     }
 
     /**

@@ -630,15 +630,53 @@ public final class FieldDomains {
         }
 
         /**
-         * Whether a range is taken of this coordinate here, which is whether a rule about it could
-         * have been read into these at all.
+         * The numeric rules these came to, about the same numbers under a caller's names.
          *
-         * <p>Asked so that a caller can put the part of a form this can answer for on its own. A
-         * form with one coordinate this never named is one nothing can be said about as a whole, and
-         * said that way the rules relating the coordinates beside it are lost with it.
+         * <p>For a caller that holds the readings of several values at once and has to say what they
+         * leave together. What a rule says is a relation between numbers, and it says the same thing
+         * whatever the numbers are called — so what is handed over is these rules renamed
+         * ({@link NumericDomain#over}) and never a fresh reading of the declaration.
+         *
+         * <p><b>Every number a rule is about is carried, whether or not the caller has a coordinate
+         * for it.</b> A reading relates numbers at coordinates and numbers at none, and a rule
+         * reaching one of the latter still holds two of the former apart: left behind, that rule
+         * would be gone and what the rules leave would come back wider than it is. So a number with
+         * no coordinate is named by {@code otherwise}, out of the subject itself, and the caller is
+         * given something to be equal to rather than something to read — what makes two of them one
+         * number was settled here, and a caller inventing its own answer to that would put two
+         * numbers together or take one apart.
+         *
+         * <p>Only the numbers. What else a reading proved — which values a position admits, which
+         * predicates hold, where an ordering stops — relates the positions of one value and reaches
+         * no vocabulary a caller out here has, so it stays where it was proved and is asked for
+         * there ({@link #holdsNothing}).
          */
-        public boolean names(Coordinate at) {
-            return (at.measured() ? countAt.get(at.path()) : atomAt.get(at.path())) != null;
+        public <B> NumericDomain<B> numbersOver(java.util.function.Function<Coordinate, B> named,
+                                                java.util.function.Function<Object, B> otherwise) {
+            Map<FactSubject, Coordinate> where = new LinkedHashMap<>();
+            atomAt.forEach((path, atom) -> at(where, atom, new Coordinate(path, false)));
+            countAt.forEach((path, atom) -> at(where, atom, new Coordinate(path, true)));
+            return constraints.numbers().over(atom -> {
+                Coordinate coordinate = where.get(atom);
+                return coordinate == null ? otherwise.apply(atom) : named.apply(coordinate);
+            });
+        }
+
+        /**
+         * One number filed at one coordinate.
+         *
+         * <p>Refused rather than overwritten where a subject arrives at two of them. Two coordinates
+         * that are one number is this reading saying something a caller has two names for, and
+         * whichever of them went unnamed would be a coordinate the constraints say nothing about —
+         * so what the caller was told the rules leave there would be everything.
+         */
+        private static void at(Map<FactSubject, Coordinate> where, FactSubject atom,
+                               Coordinate coordinate) {
+            Coordinate had = where.put(atom, coordinate);
+            if (had != null && !had.equals(coordinate)) {
+                throw new IllegalStateException("one number is at `" + had.path() + "` and at `"
+                        + coordinate.path() + "`, so neither name is the whole of it");
+            }
         }
     }
 
