@@ -24,16 +24,6 @@ public sealed interface GenerationReason {
      */
     record PositionWithheld(AxisId axis) implements GenerationReason {}
 
-    /**
-     * A position inside a sequence, where no value can be composed at a class.
-     *
-     * <p>Its own reason and not {@link PositionWithheld}. That one is a position nothing is known
-     * about; here the rows are read perfectly well and what is missing is the composing — a row
-     * putting a value in a class at an element is a list holding one, and nothing builds a list
-     * whose elements differ. Offered anyway, every class of such a position is answered with the
-     * same row, which is one piece of work presented as several.
-     */
-    record ElementNotComposed(AxisId axis) implements GenerationReason {}
 
     /**
      * Rows exist that nothing read, so nothing was offered at all.

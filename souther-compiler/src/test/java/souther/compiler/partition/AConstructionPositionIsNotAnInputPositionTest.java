@@ -77,7 +77,7 @@ class AConstructionPositionIsNotAnInputPositionTest {
     private static ConstructionPlan plan(Read read,
             Map<String, RepresentativeSource.Evaluation.Compose> recipes) {
         return ConstructionPlan.of(read.sig().inputTypes().get(0),
-                TermPath.of(read.spec().params().get(0).name()), read.symbols(), Set.of(), recipes);
+                TermPath.of(read.spec().params().get(0).name()), read.symbols(), Set.of(), recipes, _ -> 0);
     }
 
     private static List<String> slots(ConstructionPlan plan) {

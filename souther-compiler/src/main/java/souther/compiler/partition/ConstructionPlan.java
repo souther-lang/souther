@@ -42,7 +42,7 @@ record ConstructionPlan(Node root) {
     private static final int MAX_DEPTH = 8;
 
     /** One position of the value being built. */
-    sealed interface Node {
+    sealed interface Node permits Slot, Built, Held {
 
         /** Where it is. */
         TermPath at();
@@ -54,6 +54,38 @@ record ConstructionPlan(Node root) {
 
     /** A position the search chooses a value for. */
     record Slot(TermPath at, Type type) implements Node {}
+
+    /**
+     * A sequence composed out of what stands at its element.
+     *
+     * <p>Only where a class is to be put there. A list nothing is being placed inside is a value
+     * like any other and is chosen whole, which is what keeps the rules about how many it holds
+     * with the one reader that has them — so this is the shape of a list a row is being built
+     * <em>into</em>, and not the shape of every list.
+     *
+     * <p>One element and not however many. What a class at an element asks for is a list holding a
+     * value in it; what the other elements are is a separate question, and answering it here would
+     * decide it for every rule at once. A list of one holds an element in the class and nothing
+     * else, which is the least a row can be and still meet what was asked.
+     *
+     * @param worn  the newtype names the position is written under, outermost first
+     * @param under the element's own position
+     * @param least how many the rules say the list holds at the fewest, which is one where they say
+     *              nothing. The element being placed is one of them and the rest are values of the
+     *              element's type: a class at an element asks for a list holding a value in it, and
+     *              a list that met that and broke the rule about how many it holds is not a row
+     */
+    record Held(TermPath at, Type type, List<TypeOps.Layer> worn, Node under, int least)
+            implements Node {
+
+        Held {
+            worn = List.copyOf(worn);
+            if (least < 1) {
+                throw new IllegalArgumentException(
+                        "a list built around an element holds it: " + least);
+            }
+        }
+    }
 
     /**
      * A position composed out of the ones under it.
@@ -84,8 +116,9 @@ record ConstructionPlan(Node root) {
      *                three levels inside it would have offered is nothing this row asks
      */
     static ConstructionPlan of(Type declared, TermPath at, Symbols symbols, Set<String> decided,
-                               Map<String, RepresentativeSource.Evaluation.Compose> recipes) {
-        return new ConstructionPlan(node(declared, at, symbols, 0, decided, recipes));
+                               Map<String, RepresentativeSource.Evaluation.Compose> recipes,
+                               java.util.function.ToIntFunction<TermPath> least) {
+        return new ConstructionPlan(node(declared, at, symbols, 0, decided, recipes, least));
     }
 
     /** Every position a value is chosen at, in the order they are composed. */
@@ -99,12 +132,14 @@ record ConstructionPlan(Node root) {
         switch (node) {
             case Slot slot -> out.add(slot);
             case Built built -> built.under().values().forEach(each -> collect(each, out));
+            case Held held -> collect(held.under(), out);
         }
     }
 
     private static Node node(Type declared, TermPath at, Symbols symbols, int depth,
                              Set<String> decided,
-                             Map<String, RepresentativeSource.Evaluation.Compose> recipes) {
+                             Map<String, RepresentativeSource.Evaluation.Compose> recipes,
+                             java.util.function.ToIntFunction<TermPath> least) {
         // Before the recipe, because a position the caller fixed takes the value it was given
         // whatever a class would have built there.
         if (decided.contains(at.toString())) {
@@ -113,6 +148,16 @@ record ConstructionPlan(Node root) {
         RepresentativeSource.Evaluation.Compose recipe = recipes.get(at.toString());
         Type building = refined(declared, recipe);
         TypeView view = TypeView.of(building, symbols);
+        // A sequence with something to be placed inside it. Built out of its element rather than
+        // chosen whole, since what is being asked for is a list holding a value in a class and no
+        // proposal of a whole list can be asked to hold one.
+        if (view.shape() instanceof souther.compiler.check.Shape.Sequence sequence
+                && depth < MAX_DEPTH && placesSomethingInside(at, decided)) {
+            return new Held(at, building, view.wrappers(),
+                    node(sequence.element(), at.element(), symbols, depth + 1, decided, recipes,
+                            least),
+                    Math.max(1, least.applyAsInt(at)));
+        }
         StructuralDescent.Children children = StructuralDescent.of(view.shape());
         // A record with no fields composes nothing out of anything, so it is a value to be chosen
         // like any other and not a position made of positions.
@@ -121,8 +166,19 @@ record ConstructionPlan(Node root) {
         }
         Map<String, Node> under = new LinkedHashMap<>();
         children.under().forEach((field, type) -> under.put(field,
-                node(type, at.then(field), symbols, depth + 1, decided, recipes)));
+                node(type, at.then(field), symbols, depth + 1, decided, recipes, least)));
         return new Built(at, building, children.of(), view.wrappers(), recipe, under);
+    }
+
+    /** Whether the caller fixed a value at some position inside the sequence at {@code at}. */
+    private static boolean placesSomethingInside(TermPath at, Set<String> decided) {
+        String inside = at.element().toString();
+        for (String each : decided) {
+            if (each.equals(inside) || each.startsWith(inside + ".")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

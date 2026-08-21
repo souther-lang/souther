@@ -384,13 +384,7 @@ public final class Generator {
         List<GenerationReason> undecided = new ArrayList<>();
         List<Axis> axes = new ArrayList<>();
         for (Axis axis : ordered) {
-            // A class at a position inside a sequence is met by a list holding an element in it,
-            // and nothing here builds a list whose elements differ — so every class of one would be
-            // answered with the same row. What the rows already written cover there is still
-            // counted; what is not offered is work this cannot compose.
-            if (axis.path().insideASequence()) {
-                undecided.add(new GenerationReason.ElementNotComposed(axis.id()));
-            } else if (readEverywhere(axis, existing)) {
+            if (readEverywhere(axis, existing)) {
                 axes.add(axis);
             } else {
                 undecided.add(new GenerationReason.PositionWithheld(axis.id()));
@@ -1294,9 +1288,15 @@ public final class Generator {
         // may take, the search that chooses them one at a time, and the composing of what was chosen
         // all read this, so there is no second reading of the declarations for one of them to
         // disagree with.
-        ConstructionPlan plan = ConstructionPlan.of(subject.types().get(p),
-                TermPath.of(subject.parameters().get(p)), subject.symbols(), decided.keySet(),
-                recipes);
+        TermPath root = TermPath.of(subject.parameters().get(p));
+        // How many the rules say a list at a position holds at the fewest, read from the same
+        // reading of the parameter the values are chosen against. A list built around an element
+        // has to meet that too: a row holding an element in the class and breaking the rule about
+        // how many the list holds is not a row.
+        FieldDomains under = rulesOf(subject.types().get(p), subject.symbols(),
+                subject.inputs().policy(), under(root, settled));
+        ConstructionPlan plan = ConstructionPlan.of(subject.types().get(p), root, subject.symbols(),
+                decided.keySet(), recipes, path -> leastHeld(under, path));
         Choices choices = choicesOf(subject, p, plan, decided, settled);
         if (choices.missingAt() != null) {
             return new Outcome(null, UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
@@ -1328,6 +1328,23 @@ public final class Generator {
         // difference between a fact about the model and a fact about this.
         UnresolvedCombination.Reason held = heldBack(subject, p, plan, settled);
         return held == null ? product : new Outcome(null, held, null);
+    }
+
+    /** How many the rules say the list at {@code path} holds at the fewest, or zero where they say
+     *  nothing about how many. */
+    private static int leastHeld(FieldDomains rules, TermPath path) {
+        String field = fieldUnder(path);
+        FieldDomains.Held held = field == null ? null : rules.heldAt(field);
+        if (held == null || held.bounds() == null) {
+            return 0;
+        }
+        souther.compiler.numeric.Endpoint floor = held.bounds().min();
+        if (floor == null || !(floor.at() instanceof souther.compiler.numeric.Count count)) {
+            return 0;
+        }
+        java.math.BigDecimal at = floor.inclusive() ? count.at()
+                : count.at().add(java.math.BigDecimal.ONE);
+        return at.signum() <= 0 ? 0 : at.min(java.math.BigDecimal.valueOf(64)).intValue();
     }
 
     /**
@@ -1444,7 +1461,7 @@ public final class Generator {
             if (!budget.spend()) {
                 return null;
             }
-            FixtureTemplate whole = compose(plan.root(), chosen, subject.symbols());
+            FixtureTemplate whole = compose(plan.root(), chosen, subject.symbols(), subject.inputs().policy());
             return whole != null && check.refuse(p, whole).isEmpty() ? whole : null;
         }
         ConstructionPlan.Slot position = positions.get(index);
@@ -1665,7 +1682,7 @@ public final class Generator {
             for (int i = 0; i < positions; i++) {
                 chosen.put(at.get(i), values.get(i).get(assignment[i]));
             }
-            FixtureTemplate built = compose(plan.root(), chosen, subject.symbols());
+            FixtureTemplate built = compose(plan.root(), chosen, subject.symbols(), subject.inputs().policy());
             if (built != null && check.refuse(p, built).isEmpty()) {
                 return new Outcome(built, null, null);
             }
@@ -1706,19 +1723,59 @@ public final class Generator {
      * Composed without that, the row carries a value of a type the parameter does not declare.
      */
     private static FixtureTemplate compose(ConstructionPlan.Node node,
-                                           Map<String, FixtureTemplate> chosen, Symbols symbols) {
+                                           Map<String, FixtureTemplate> chosen, Symbols symbols,
+                                           ReadingPolicy policy) {
         return switch (node) {
             case ConstructionPlan.Slot slot -> chosen.get(slot.at().toString());
-            case ConstructionPlan.Built built -> composed(built, chosen, symbols);
+            case ConstructionPlan.Built built -> composed(built, chosen, symbols, policy);
+            case ConstructionPlan.Held held -> held(held, chosen, symbols, policy);
         };
+    }
+
+    /**
+     * The list of one this plan builds around what stands at its element.
+     *
+     * <p>Under the names the position is written with, as a record is: a row at a
+     * {@code data Basket = List<Item>} carries {@code Basket([...])}, and a list composed without
+     * them is of a type the parameter does not declare.
+     */
+    private static FixtureTemplate held(ConstructionPlan.Held plan,
+                                        Map<String, FixtureTemplate> chosen, Symbols symbols,
+                                        ReadingPolicy policy) {
+        FixtureTemplate element = compose(plan.under(), chosen, symbols, policy);
+        if (element == null) {
+            return null;
+        }
+        // The one placed in the class, and enough beside it for the collection to be one the rules
+        // admit. What may stand beside it is the carrier's business — a list may hold the same
+        // value again and a set may not — so the collection is asked for whole rather than padded
+        // here.
+        if (!(souther.compiler.check.TypeView.of(plan.type(), symbols).shape()
+                instanceof souther.compiler.check.Shape.Sequence carrier)) {
+            return null;
+        }
+        FixtureTemplate collection =
+                Witnesses.holdingAlso(carrier, element, plan.least(), symbols, policy);
+        if (collection == null) {
+            return null;
+        }
+        List<TypeReachName.Written> worn = new ArrayList<>();
+        for (TypeOps.Layer layer : plan.worn()) {
+            if (!(symbols.scope().reach(layer.named()) instanceof TypeReachName.Written written)) {
+                return null;   // a name this module cannot write leaves no value to write
+            }
+            worn.add(written);
+        }
+        return RepresentativeSource.under(worn, collection);
     }
 
     /** One record of the plan, out of what the assignment put at the positions under it. */
     private static FixtureTemplate composed(ConstructionPlan.Built built,
-                                            Map<String, FixtureTemplate> chosen, Symbols symbols) {
+                                            Map<String, FixtureTemplate> chosen, Symbols symbols,
+                                            ReadingPolicy policy) {
         Map<String, FixtureTemplate> fields = new LinkedHashMap<>();
         for (Map.Entry<String, ConstructionPlan.Node> under : built.under().entrySet()) {
-            FixtureTemplate value = compose(under.getValue(), chosen, symbols);
+            FixtureTemplate value = compose(under.getValue(), chosen, symbols, policy);
             if (value == null) {
                 return null;
             }
