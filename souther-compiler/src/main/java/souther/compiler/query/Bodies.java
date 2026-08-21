@@ -1245,6 +1245,40 @@ public final class Bodies {
     }
 
     /**
+     * The definitions a module's row operands are, by the name each is emitted under.
+     *
+     * <p>Their own family. A row's operand is a value this compilation writes for the row, reached
+     * from a row and from nothing a source can spell, so it is not a declaration a name resolves to
+     * — which is why it is not among what the module has as fns of its own and is not in the table a
+     * call expands against. It rode there once, to be carried through the passes a fn is carried
+     * through, and every rule keyed on what the module holds had a synthetic method among its
+     * subjects.
+     *
+     * <p>Read from the one walk that built them, which built the correspondence beside them
+     * ({@link RowMethods}) — a second reading would be a second numbering, and a row would run the
+     * operand beside the one it wrote.
+     */
+    public record RowFixtureDefs(String name) implements Key<Map<String, Hir.FnDef>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, Hir.FnDef>> compute(Db db) {
+            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+            if (!prepared.present()) {
+                return Answer.absent();
+            }
+            Map<String, Hir.FnDef> out = new LinkedHashMap<>();
+            for (Hir.FnDef def : prepared.value().rowDefs()) {
+                out.put(def.name(), def);
+            }
+            return Answer.of(Ordered.map(out));
+        }
+    }
+
+    /**
      * The methods a module emits for its rows: one per operand, answering with the value that
      * operand is.
      *
@@ -1297,6 +1331,11 @@ public final class Bodies {
                         return Answer.of(candidate);
                     }
                 }
+            }
+            // A definition minted for a row, which is no declaration and is in no table.
+            Answer<Map<String, Hir.FnDef>> rows = db.ask(new RowFixtureDefs(module));
+            if (rows.present() && rows.value().containsKey(fn)) {
+                return Answer.of(rows.value().get(fn));
             }
             // A declaration this module reaches and has not taken on. Its body is the declaring
             // module's and was settled there; what changes here is the name it answers to, which is
@@ -1428,11 +1467,11 @@ public final class Bodies {
             }
             // A row's operand is a definition minted for it, and it is emitted beside these for the
             // same reason: nothing inlines it, because nothing calls it.
-            for (Hir.FnDef fn : settled.value().takenOn()) {
-                if (rowMethods.value().contains(fn.name())) {
-                    beyond.add(fn);
-                }
+            Answer<Map<String, Hir.FnDef>> rows = db.ask(new RowFixtureDefs(name));
+            if (!rows.present()) {
+                return Answer.absent();
             }
+            beyond.addAll(rows.value().values());
             // Both, and each stays where it was: what becomes a method is one question and what this
             // module declared is another, and the backend reads the first while every rule about the
             // declaring module reads the second.

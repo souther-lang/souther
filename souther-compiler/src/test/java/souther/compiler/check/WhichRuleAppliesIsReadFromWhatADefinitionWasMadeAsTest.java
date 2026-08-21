@@ -72,18 +72,19 @@ class WhichRuleAppliesIsReadFromWhatADefinitionWasMadeAsTest {
         return answer.value();
     }
 
-    private static Hir.FnDef definition(Hir.Module module, String name) {
-        for (Hir.FnDef fn : module.takenOn()) {
-            if (fn.name().equals(name)) {
-                return fn;
+    /** A definition of the module, wherever this compilation keeps it: what it declared, what it
+     * took on, or a value minted for one of its rows. */
+    private static Hir.FnDef definition(Prepared state, String name) {
+        List<List<Hir.FnDef>> families =
+                List.of(state.tree().takenOn(), state.tree().fns(), state.rowDefs());
+        for (List<Hir.FnDef> family : families) {
+            for (Hir.FnDef fn : family) {
+                if (fn.name().equals(name)) {
+                    return fn;
+                }
             }
         }
-        for (Hir.FnDef fn : module.fns()) {
-            if (fn.name().equals(name)) {
-                return fn;
-            }
-        }
-        throw new AssertionError("`" + name + "` is not a definition of " + module.name());
+        throw new AssertionError("`" + name + "` is not a definition of " + state.name());
     }
 
     @Test
@@ -92,14 +93,14 @@ class WhichRuleAppliesIsReadFromWhatADefinitionWasMadeAsTest {
 
         for (String method : state.operandMethods().values()) {
             assertInstanceOf(DefinitionRole.RowValue.class,
-                    definition(state.tree(), method).role(), method);
+                    definition(state, method).role(), method);
         }
     }
 
     @Test
     void aDefinitionAnotherModuleWroteIsOrdinaryHoweverThisOneNamesIt() {
         Prepared state = prepared();
-        Hir.FnDef taken = definition(state.tree(), "rules.depth");
+        Hir.FnDef taken = definition(state, "rules.depth");
 
         assertInstanceOf(DefinitionRole.Ordinary.class, taken.role());
         assertFalse(taken.written().authored(),
@@ -109,7 +110,7 @@ class WhichRuleAppliesIsReadFromWhatADefinitionWasMadeAsTest {
     @Test
     void aDefinitionTheModuleWroteIsOrdinaryToo() {
         assertInstanceOf(DefinitionRole.Ordinary.class,
-                definition(prepared().tree(), "run").role());
+                definition(prepared(), "run").role());
     }
 
     @Test
@@ -120,7 +121,7 @@ class WhichRuleAppliesIsReadFromWhatADefinitionWasMadeAsTest {
         Prepared state = prepared();
         List<RowPosition> positions = new ArrayList<>();
         for (String method : state.operandMethods().values()) {
-            positions.add(((DefinitionRole.RowValue) definition(state.tree(), method).role())
+            positions.add(((DefinitionRole.RowValue) definition(state, method).role())
                     .position());
         }
 
