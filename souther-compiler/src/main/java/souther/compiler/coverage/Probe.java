@@ -46,6 +46,27 @@ public final class Probe {
         }
     }
 
+    /**
+     * Called by probed code where a comparison of an instrumented condition answered, with the value
+     * it answered.
+     *
+     * <p>Records both facts, because they are one event. That the comparison was reached and the way
+     * it came out are read by different measures, and emitting a call each would make "a way recorded
+     * implies its comparison reached" a rule the emitter has to keep rather than something no run can
+     * be found breaking.
+     *
+     * <p>Takes the value rather than a second site chosen from it, so that the numbering the emitter
+     * was given is the numbering it uses and a way out is never a number a reading picked.
+     */
+    public static void compared(boolean held, int site) {
+        Recording recording = RECORDING.get();
+        if (recording != null) {
+            recording.taken.set(site);
+            recording.comparisons.add(
+                    new ComparisonOutcome(new ComparisonOccurrence(site), held));
+        }
+    }
+
     /** Starts collecting on this thread. */
     public static void begin() {
         RECORDING.set(new Recording());
