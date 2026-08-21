@@ -620,12 +620,15 @@ public final class InvariantChecker {
                 one.adopted().forEach(position -> took.record(each.from(), position));
             }
             // What was counted bounds what was built, which is the whole of why counting before
-            // reading is enough. Checked rather than trusted: the count and the reading are the same
-            // fold over the same clauses, so they come apart only if somebody changes one of them —
-            // and what that costs is a declaration admitted under a budget it then runs past, which
-            // is the widening the domain is chosen beforehand to avoid. An assertion because it is
-            // about this compiler and not about the model, and because a throw would be caught by
-            // the fail-open above and leave the reading silently dropped.
+            // reading is enough. It is an induction and its steps are held where they are taken —
+            // a leaf is one alternative, a choice holds at most the sum and a conjunction at most
+            // the product (`WhatACountTakenBeforeReadingPromisesAboutWhatIsBuilt`) — and it reaches
+            // a clause at all because the count and the reading are one fold over it, so there is
+            // no second walk to disagree about which shape is a choice.
+            //
+            // This is where the two ends are tied, over whatever declarations a corpus holds. An
+            // assertion because it is about this compiler and not about the model, and because a
+            // throw would be caught by the fail-open above and leave the reading silently dropped.
             assert alternatives == Alternatives.MERGED
                     || heldApart(stated.values()) <= expansion
                     : "a reading of " + named.name() + " expanded to " + heldApart(stated.values())

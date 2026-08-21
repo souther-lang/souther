@@ -38,10 +38,10 @@ class APositionWithAFloorIsOfferedAValueThatMeetsItTest {
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
         Sig sig = sigs.get(behavior);
-        Partitions.Partitioning partitioning = Partitions.of(spec.name(), InputDomain.of(spec, sig, symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES);
+        Partitions.Partitioning partitioning = Partitions.of(spec.name(), InputDomain.of(spec, sig, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return new Generator.Subject(
                 new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
-                        sig.inputTypes(), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES),
+                        sig.inputTypes(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 partitioning.axes());
     }
 

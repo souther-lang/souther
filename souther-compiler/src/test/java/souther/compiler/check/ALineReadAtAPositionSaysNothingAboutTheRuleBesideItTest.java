@@ -46,7 +46,7 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
         TypeSymbol named = TypeSymbols.declared(new TypeKey(module, type));
         Hir.Data data = (Hir.Data) symbols.declarations().declaration(named.key());
         assertNotNull(data, "no `" + type + "` declared");
-        return FieldDomains.of(named, data, symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES);
+        return FieldDomains.of(named, data, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 
     private static final String MEASURED = """

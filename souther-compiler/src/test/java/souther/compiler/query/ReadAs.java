@@ -1,4 +1,6 @@
-package souther.compiler.check;
+package souther.compiler.query;
+
+import souther.compiler.check.ReadingPolicy;
 
 /**
  * What these tests read a declaration under, which is what a compilation reads it under.
@@ -9,9 +11,9 @@ package souther.compiler.check;
  */
 public final class ReadAs {
 
-    /** The limit a compilation sets. Held here as well because a test is a caller and not part of
-     *  the analysis; {@code AReadingIsHeldToTheLimitTheCompilationSetsTest} keeps the two equal. */
-    public static final ReadingPolicy THE_COMPILATION_DOES = new ReadingPolicy(64);
+    /** The compilation's own, and not a copy of it: two numbers to keep equal is a thing to keep
+     *  equal, and there is nothing here to go stale. */
+    public static final ReadingPolicy THE_COMPILATION_DOES = Front.Reading.STANDARD;
 
     /**
      * A limit no choice fits under, so every one of them is merged into the product containing it.

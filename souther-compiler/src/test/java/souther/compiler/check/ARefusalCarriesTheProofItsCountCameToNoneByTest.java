@@ -35,7 +35,7 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
         List<souther.compiler.ast.Hir.Def> defs =
                 compilation.module("demo").defs().stream().map(Derived.Def::read).toList();
         return UninhabitableTypes.withNoValueOfTheirOwn(defs,
-                TypeCardinality.solve(defs, Scopes.derived(compilation.db(), "demo").value(), souther.compiler.check.ReadAs.THE_COMPILATION_DOES));
+                TypeCardinality.solve(defs, Scopes.derived(compilation.db(), "demo").value(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
     }
 
     private static Emptiness only(String source) {
@@ -51,7 +51,7 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
         List<souther.compiler.ast.Hir.Def> defs =
                 compilation.module("demo").defs().stream().map(Derived.Def::read).toList();
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
-        return shape(TypeCardinality.solve(defs, symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES).of(
+        return shape(TypeCardinality.solve(defs, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).of(
                 souther.compiler.types.TypeSymbols.declared(
                         new souther.compiler.types.TypeKey(symbols.module(), name))).why());
     }

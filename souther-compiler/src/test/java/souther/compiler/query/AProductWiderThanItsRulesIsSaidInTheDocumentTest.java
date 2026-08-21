@@ -92,7 +92,7 @@ class AProductWiderThanItsRulesIsSaidInTheDocumentTest {
         // test that wants the fallback says so — and this is the one seam where what the fallback
         // answers has to reach a document.
         Compilation compilation = Compilation.ofSource(source, "Main")
-                .withReadingPolicy(souther.compiler.check.ReadAs.MERGING_WHAT_A_CHOICE_LEAVES);
+                .withReadingPolicy(souther.compiler.query.ReadAs.MERGING_WHAT_A_CHOICE_LEAVES);
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
         return JSON.readTree(AdequacyReport.of(compilation).json(SourceNameResolver.identity()))
@@ -184,14 +184,6 @@ class AProductWiderThanItsRulesIsSaidInTheDocumentTest {
         assertFalse(said.contains("partition_not_read"), said.toString());
     }
 
-    /** A test reads under the limit a compilation sets, and says so with the same number. */
-    @Test
-    void whatATestReadsUnderIsWhatACompilationReadsUnder() {
-        Compilation compilation = Compilation.ofSource(WITNESS, "Main");
-
-        assertEquals(souther.compiler.check.ReadAs.THE_COMPILATION_DOES,
-                compilation.db().ask(new Front.Reading()).value());
-    }
 
     /**
      * A declaration the rules leave no value is not told how its values were held.

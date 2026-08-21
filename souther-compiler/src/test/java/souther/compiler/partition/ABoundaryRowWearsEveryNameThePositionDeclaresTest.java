@@ -94,13 +94,13 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
         GuardThresholds.Guards guards = GuardThresholds.of(spec.name(), body, plan,
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get(spec.name()), symbols);
         Partitions.Partitioning p = Partitions.withThresholds(
-                Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(spec.name()), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES),
-                guards.thresholds(), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES);
+                Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(spec.name()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                guards.thresholds(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
         List<String> names = new ArrayList<>();
         spec.params().forEach(each -> names.add(each.name()));
         Generator.Subject subject = new Generator.Subject(
-                new BehaviorInputs(names, sigs.get(spec.name()).inputTypes(), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES), p.axes());
+                new BehaviorInputs(names, sigs.get(spec.name()).inputTypes(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), p.axes());
 
         List<String> out = new ArrayList<>();
         for (Axis axis : p.axes()) {

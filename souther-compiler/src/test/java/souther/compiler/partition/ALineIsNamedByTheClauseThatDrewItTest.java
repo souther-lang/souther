@@ -160,7 +160,7 @@ class ALineIsNamedByTheClauseThatDrewItTest {
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("price")).findFirst().orElseThrow();
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        return Partitions.of(spec.name(), InputDomain.of(spec, sigs.get("price"), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES)
+        return Partitions.of(spec.name(), InputDomain.of(spec, sigs.get("price"), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
                 .axes().stream().filter(a -> a.path().toString().equals("length"))
                 .findFirst().orElseThrow();
     }

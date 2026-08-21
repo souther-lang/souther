@@ -78,17 +78,17 @@ class RowClassesTest {
         CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
         List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
         Partitions.Partitioning partitioning = Partitions.withThresholds(
-                Partitions.of(spec.name(), InputDomain.of(spec, sigs.get("submit"), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES),
+                Partitions.of(spec.name(), InputDomain.of(spec, sigs.get("submit"), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 GuardThresholds.of("submit", body, plan,
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("submit"), symbols).thresholds(),
-                symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES);
+                symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
         Output.Examples.Of observed = compilation.db()
                 .ask(Output.Examples.asked(compilation.db(), module,
                         compilation.sourceIds().get(0))).value();
         assertNotNull(observed);
         return new Read(partitioning.axes(),
-                new BehaviorInputs(parameters, sigs.get("submit").inputTypes(), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES),
+                new BehaviorInputs(parameters, sigs.get("submit").inputTypes(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 observed.rows());
     }
 

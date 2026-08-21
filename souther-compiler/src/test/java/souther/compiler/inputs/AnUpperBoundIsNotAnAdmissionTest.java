@@ -29,9 +29,16 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * as an admission, a `match` arm declaring the case cannot arrive is refused against a set that
  * never established it could.
  *
- * <p>Issue #877 at the seam that acts on the answer. The reading of the values below runs to the end
- * of every rule: what it cannot do is hold two clauses that each relate the two positions, so the
- * product it keeps holds a pair no value of the type takes.
+ * <p>Issue #877 at the seam that acts on the answer. A reading that merges what a choice leaves
+ * runs to the end of every rule and still cannot hold two clauses that each relate the two
+ * positions, so the product it keeps holds a pair no value of the type takes.
+ *
+ * <p>Held apart — which is what a compilation reads under — the same rules are answered exactly and
+ * the case is refused rather than left unsettled. That answer, and every other arm this seam can
+ * give, is
+ * {@link EveryAnswerAPositionGivesAboutADistinctionIsOneSomeModelHereGetsTest}. What is here is the
+ * one thing that is not about which arm: that a reading which kept a case for want of a reason to
+ * remove it may not call it admitted.
  */
 class AnUpperBoundIsNotAnAdmissionTest {
 
@@ -56,6 +63,11 @@ class AnUpperBoundIsNotAnAdmissionTest {
             """;
 
     private static Position positionOf(String path) {
+        return positionOf(path, souther.compiler.query.ReadAs.MERGING_WHAT_A_CHOICE_LEAVES);
+    }
+
+    private static Position positionOf(String path,
+                                       souther.compiler.check.ReadingPolicy policy) {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
@@ -65,7 +77,7 @@ class AnUpperBoundIsNotAnAdmissionTest {
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("take")).findFirst().orElseThrow();
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        return InputDomain.of(spec, sigs.get("take"), symbols, souther.compiler.check.ReadAs.MERGING_WHAT_A_CHOICE_LEAVES).positions().stream()
+        return InputDomain.of(spec, sigs.get("take"), symbols, policy).positions().stream()
                 .filter(p -> p.path().toString().equals(path))
                 .findFirst().orElseThrow();
     }

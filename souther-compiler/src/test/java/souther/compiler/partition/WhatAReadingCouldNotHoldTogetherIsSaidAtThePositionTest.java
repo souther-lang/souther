@@ -46,7 +46,7 @@ class WhatAReadingCouldNotHoldTogetherIsSaidAtThePositionTest {
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
         return Partitions.of(spec.name(),
-                InputDomain.of(spec, sigs.get(behavior), symbols, souther.compiler.check.ReadAs.MERGING_WHAT_A_CHOICE_LEAVES), symbols, souther.compiler.check.ReadAs.MERGING_WHAT_A_CHOICE_LEAVES);
+                InputDomain.of(spec, sigs.get(behavior), symbols, souther.compiler.query.ReadAs.MERGING_WHAT_A_CHOICE_LEAVES), symbols, souther.compiler.query.ReadAs.MERGING_WHAT_A_CHOICE_LEAVES);
     }
 
     /** The witness of issue #877: two invariants, each a choice reaching across both fields. */

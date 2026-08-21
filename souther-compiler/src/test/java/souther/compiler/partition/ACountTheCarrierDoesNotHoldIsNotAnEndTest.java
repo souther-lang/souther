@@ -196,7 +196,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         return Partitions.representativesOf(
                         souther.compiler.types.Type.ref(
-                                souther.compiler.types.TypeSymbols.declared(new souther.compiler.types.TypeKey(module, name))), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES)
+                                souther.compiler.types.TypeSymbols.declared(new souther.compiler.types.TypeKey(module, name))), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
                 .stream().map(FixtureTemplate::text).toList();
     }
 
@@ -211,7 +211,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().get(0);
         assertNotNull(sigs.get(spec.name()), "the model under test compiles");
         Partitions.Partitioning p =
-                Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(spec.name()), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES), symbols, souther.compiler.check.ReadAs.THE_COMPILATION_DOES);
+                Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(spec.name()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return p.axes().stream()
                 .flatMap(axis -> Partitions.bordersOf(axis, symbols,
                         p.domains().get(axis.term())).stream())

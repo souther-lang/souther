@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.query.ReadAs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Scopes;

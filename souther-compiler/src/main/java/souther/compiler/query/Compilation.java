@@ -54,7 +54,7 @@ public final class Compilation {
         db.set(new Front.Policy(), souther.compiler.examples.EvaluationPolicy.fromSettings());
         // The one place a reading policy is made. Everything that reads a declaration is handed
         // this one, so a declaration read twice in one compilation is read the same way both times.
-        db.set(new Front.Reading(), new souther.compiler.check.ReadingPolicy(64));
+        db.set(new Front.Reading(), Front.Reading.STANDARD);
     }
 
     /** A compile of several sources identified by their position, the way a build hands them over.
