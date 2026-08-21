@@ -105,7 +105,7 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
         List<String> out = new ArrayList<>();
         for (Axis axis : p.axes()) {
             for (Border border
-                    : Partitions.bordersOf(axis, symbols, p.domains().get(axis.term()))) {
+                    : Partitions.bordersOf(axis, symbols, p.quantities().runsBetween(axis.term()))) {
               for (PointRole role : List.of(PointRole.ON, PointRole.OFF)) {
                 if (!(border.demand(role).criterion()
                         instanceof Criterion.AtTheLevel each)) {

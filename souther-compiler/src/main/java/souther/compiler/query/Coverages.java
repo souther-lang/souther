@@ -441,12 +441,13 @@ final class Coverages {
     static List<BorderAssessment> assess(
             Axis axis, BehaviorInputs where, souther.compiler.query.Adequacy.Observed observed,
             boolean armsAsked, boolean knownWritable, Probe probe,
+            souther.compiler.inputs.Quantities rules,
             souther.compiler.numeric.NumericDomain.Bounds within) {
         // Keyed by the line rather than by the reading of it. A guard inside a non-recursive helper
         // is read once per call of that helper, and the rows do not owe the same border twice for
         // having been offered it twice; what each reading saw is merged below.
         java.util.SequencedMap<BoundaryLine, BorderAssessment> out = new java.util.LinkedHashMap<>();
-        LevelRealizer realizer = new LevelRealizer(term -> within);
+        LevelRealizer realizer = new LevelRealizer(rules);
         for (Border each : Partitions.bordersOf(axis, where.symbols(), within)) {
             out.merge(BoundaryLine.of(each),
                     assessed(each, shapeOf(each, where, knownWritable, probe, realizer),
@@ -717,7 +718,7 @@ final class Coverages {
         // line twice for having been offered it twice — nor may one reading of it take back what
         // another established.
         java.util.SequencedMap<BoundaryLine, BorderAssessment> out = new LinkedHashMap<>();
-        LevelRealizer realizer = new LevelRealizer(partitioning.domains()::get);
+        LevelRealizer realizer = new LevelRealizer(partitioning.quantities());
         for (Border each : partitioning.between()) {
             out.merge(BoundaryLine.of(each),
                     assessed(each, shapeOf(each, where, false, probe, realizer), observed,

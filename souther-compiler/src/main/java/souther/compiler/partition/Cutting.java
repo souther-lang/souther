@@ -33,15 +33,19 @@ import souther.compiler.numeric.Towards;
  * @param at     where on it
  * @param claim  what the operator states about the threshold's own value
  * @param within what the rules leave the quantity itself, or null where they leave it everything.
- *               A form's own values are bounded by what its positions are bounded by — three times
- *               a length is never negative — and a threshold outside them is one the rule draws no
- *               border at
+ *               Three times a length is never negative, and a threshold outside where a quantity
+ *               runs is one the rule draws no border at. Asked of the reading of the input rather
+ *               than composed from what each of the form's positions runs between: a product of
+ *               per-position answers cannot carry a rule relating them, so two fields a record
+ *               holds at five together came to ten and a border was drawn where the model has
+ *               nothing
  */
 record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                souther.compiler.numeric.NumericDomain.Bounds within) {
 
     /** The line {@code comparison} draws, or null where nothing here reads one. */
-    static Cutting of(String behavior, Core.Binary comparison, InputReads reads, Symbols symbols) {
+    static Cutting of(String behavior, Core.Binary comparison, InputReads reads, Symbols symbols,
+                      souther.compiler.inputs.Quantities quantities) {
         // Read once and handed to each of the three. Each reading asks the same arithmetic a
         // different question, and walking the comparison again per question is four to six walks of
         // every comparison in every body and every clause.
@@ -62,7 +66,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     new ComparisonClaim.Cut(apart.valueBelongsBelow(), apart.holdsAtTheLine()),
                     null);
         }
-        return overAForm(behavior, read, reads, symbols);
+        return overAForm(behavior, read, reads, symbols, quantities);
     }
 
     /**
@@ -78,7 +82,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * put a border at a number nothing stands at.
      */
     private static Cutting overAForm(String behavior, AffineReading read, InputReads reads,
-                                     Symbols symbols) {
+                                     Symbols symbols,
+                                     souther.compiler.inputs.Quantities quantities) {
         if (read == null || !read.orders()) {
             return null;
         }
@@ -87,77 +92,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return null;
         }
         return new Cutting(new BorderQuantity.OverAForm(behavior, read.form(), carrier),
-                new Level.ACount(new Count(read.cut())), read.claim(), reachOf(read, reads));
-    }
-
-    /**
-     * What the form's own values run between, from what its positions run between.
-     *
-     * <p>A quantity is bounded by what it is made of. Three times a length is never negative,
-     * whatever a rule happens to compare it against — and a threshold outside what the form takes is
-     * one no border is drawn at, rather than one whose points a search is sent looking for and never
-     * finds.
-     *
-     * <p>Null where a position is unbounded either way, which leaves the form unbounded that way and
-     * nothing to say.
-     */
-    private static souther.compiler.numeric.NumericDomain.Bounds reachOf(AffineReading read,
-                                                                        InputReads reads) {
-        java.util.Map<NumericTerm, souther.compiler.numeric.Rational> coefs =
-                new java.util.LinkedHashMap<>();
-        read.form().coefs().forEach((term, coef) ->
-                coefs.put(term, souther.compiler.numeric.Rational.of(coef)));
-        souther.compiler.numeric.Reach runs = souther.compiler.numeric.Reach.of(
-                coefs, souther.compiler.numeric.Rational.ZERO,
-                term -> runsBetween(term, reads));
-        if (runs.least() == null || runs.most() == null) {
-            return null;
-        }
-        return new souther.compiler.numeric.NumericDomain.Bounds(
-                written(runs.least()), written(runs.most()));
-    }
-
-    /** A cut as the end of a range. Every end that reaches here came from a written number, so what
-     *  it is written as is what it was. */
-    private static souther.compiler.numeric.Endpoint written(
-            souther.compiler.numeric.RationalCut cut) {
-        java.math.BigDecimal at = cut.at().asWrittenDecimal();
-        if (at == null) {
-            throw new IllegalStateException("a quantity's reach is written: " + cut);
-        }
-        return new souther.compiler.numeric.Endpoint(
-                new souther.compiler.numeric.Count(at), cut.inclusive());
-    }
-
-    /** What one position runs between, as the arithmetic wants it. */
-    private static souther.compiler.numeric.Reach runsBetween(NumericTerm term, InputReads reads) {
-        souther.compiler.numeric.NumericDomain.Bounds bounds = boundsOf(term, reads);
-        if (bounds == null) {
-            return souther.compiler.numeric.Reach.ANYWHERE;
-        }
-        return souther.compiler.numeric.Reach.between(asCut(bounds.min()), asCut(bounds.max()));
-    }
-
-    private static souther.compiler.numeric.RationalCut asCut(
-            souther.compiler.numeric.Endpoint end) {
-        if (end == null || !(end.at() instanceof souther.compiler.numeric.Count at)) {
-            return null;
-        }
-        return new souther.compiler.numeric.RationalCut(
-                souther.compiler.numeric.Rational.of(at.at()), end.inclusive());
-    }
-
-    /** What every rule reaching one position leaves its numbers, or null where the reading has no
-     *  position for the term. */
-    private static souther.compiler.numeric.NumericDomain.Bounds boundsOf(NumericTerm term,
-                                                                          InputReads reads) {
-        for (souther.compiler.inputs.Position position : reads.read().positions()) {
-            if (position.term().equals(term)) {
-                return position.numericDomain() != null ? position.numericDomain()
-                        : term.ownBounds();
-            }
-        }
-        return null;
+                new Level.ACount(new Count(read.cut())), read.claim(),
+                quantities.runsBetween(read.form()));
     }
 
     /** What the operator of a line at a position states, which the reading of it already answered

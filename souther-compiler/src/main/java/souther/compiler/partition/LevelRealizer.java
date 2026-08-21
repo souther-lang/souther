@@ -13,7 +13,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.Function;
 
 /**
  * Where each position has to stand for a row to be at one coverage item.
@@ -33,14 +32,23 @@ import java.util.function.Function;
  */
 public final class LevelRealizer {
 
-    private final Function<NumericTerm, NumericDomain.Bounds> within;
+    private final souther.compiler.inputs.Quantities rules;
 
     /**
-     * @param within what the rules leave each position, on its own carrier. A term nothing was
-     *               recorded about is one the rules leave everything
+     * @param rules what the declarations reaching this behavior's input leave its quantities, which
+     *              is what a row has to be written inside. Taken whole rather than as an end per
+     *              position: a rule relating two positions is not in either of their ranges, so a
+     *              search handed the ranges walks a box with a corner cut off it that it cannot see
+     *              — and offers a row in the corner
      */
-    public LevelRealizer(Function<NumericTerm, NumericDomain.Bounds> within) {
-        this.within = within;
+    public LevelRealizer(souther.compiler.inputs.Quantities rules) {
+        if (rules == null) {
+            throw new IllegalArgumentException(
+                    "a search looks inside what the rules leave, and there is always a reading of"
+                            + " them: an input nothing was written about is one they leave"
+                            + " everything, which is an answer and not an absence");
+        }
+        this.rules = rules;
     }
 
     /** Where the positions have to stand, or why this found nowhere. */
@@ -163,6 +171,13 @@ public final class LevelRealizer {
     /** How many assignments the search will try before it stops and says it did not settle it. */
     private static final int STEPS_A_SEARCH_MAY_TAKE = 200_000;
 
+    /** How often one search reads the declarations again with a position fixed. Each of them is a
+     *  reading of every rule reaching the form's positions, and what it buys is skipping
+     *  assignments the rules refuse — worth paying for a search that ends quickly and not for one
+     *  walking a box a hundred thousand wide. */
+    private static final int HOW_OFTEN_THE_RULES_ARE_ASKED_AGAIN = 2_000;
+
+
     /** How far a derived end is written out where the division that makes it does not end. Any
      *  number of them is sound while the rounding goes outward; this many keeps the bound close
      *  enough that the walk it bounds is still short. */
@@ -182,6 +197,7 @@ public final class LevelRealizer {
         private final boolean whole;
         private final Place[] at;
         private int taken;
+        private int asked;
         private boolean everyEndKnown = true;
 
         Search(List<Map.Entry<NumericTerm, java.math.BigDecimal>> terms, Carrier carrier,
@@ -199,7 +215,7 @@ public final class LevelRealizer {
         }
 
         Map<NumericTerm, Place> solve(Count target) {
-            return walk(0, target.at()) ? fixing() : null;
+            return walk(0, target.at(), rules) ? fixing() : null;
         }
 
         private Map<NumericTerm, Place> fixing() {
@@ -210,7 +226,7 @@ public final class LevelRealizer {
             return out;
         }
 
-        private boolean walk(int i, java.math.BigDecimal owed) {
+        private boolean walk(int i, java.math.BigDecimal owed, souther.compiler.inputs.Quantities here) {
             if (++taken > STEPS_A_SEARCH_MAY_TAKE) {
                 return false;
             }
@@ -224,7 +240,7 @@ public final class LevelRealizer {
                 return false;
             }
             java.math.BigDecimal coef = terms.get(i).getValue();
-            NumericDomain.Bounds within = bounds(terms.get(i).getKey());
+            NumericDomain.Bounds within = bounds(here, terms.get(i).getKey());
             // Narrowed by what the positions after this one can add up to. Used to reject a choice
             // after making it, a box a million wide is walked a million times and the budget runs
             // out on `a + b <= 2000000` — an equation with one answer. Used to bound the walk, that
@@ -258,6 +274,12 @@ public final class LevelRealizer {
                 if (!left.admits(new Count(solved))) {
                     return false;
                 }
+                // And the rules with every position of the form fixed, which is the one place a
+                // whole assignment exists to be held against them. A value inside each position's
+                // own ends can still be one no value of the record has beside the others.
+                if (fixing(here, terms.get(i).getKey(), solved) == null) {
+                    return false;
+                }
                 at[i] = new Count(solved);
                 return true;
             }
@@ -283,13 +305,25 @@ public final class LevelRealizer {
                 if (inside == null || !(inside instanceof Count taken)) {
                     return false;
                 }
+                souther.compiler.inputs.Quantities next = fixing(here, terms.get(i).getKey(), taken.at());
+                if (next == null) {
+                    return false;
+                }
                 at[i] = taken;
-                return walk(i + 1, owed.subtract(coef.multiply(taken.at())));
+                return walk(i + 1, owed.subtract(coef.multiply(taken.at())), next);
             }
             for (java.math.BigDecimal x = low; x.compareTo(high) <= 0;
                     x = x.add(java.math.BigDecimal.ONE)) {
+                // What the rules leave once this position holds this value. A value they leave
+                // nothing beside is skipped here rather than offered and refused where the row is
+                // built: refused there, one candidate coming back rejected is reported as every
+                // value having been tried.
+                souther.compiler.inputs.Quantities next = fixing(here, terms.get(i).getKey(), x);
+                if (next == null) {
+                    continue;
+                }
                 at[i] = new Count(x);
-                if (walk(i + 1, owed.subtract(coef.multiply(x)))) {
+                if (walk(i + 1, owed.subtract(coef.multiply(x)), next)) {
                     return true;
                 }
                 if (taken > STEPS_A_SEARCH_MAY_TAKE) {
@@ -297,6 +331,30 @@ public final class LevelRealizer {
                 }
             }
             return false;
+        }
+
+        /**
+         * The rules with one more position fixed, or null where they are then left nothing.
+         *
+         * <p>Null is a proof and not a guess. What is skipped on it is an assignment the
+         * declarations refuse, so a walk that skips every one of them and finds nothing has still
+         * walked everything there was.
+         *
+         * <p><b>Asked while it is worth asking.</b> Each of these reads the declarations reaching
+         * the positions again, and a box wide enough to walk for a hundred thousand steps is wide
+         * enough to read them a hundred thousand times. Past {@link #HOW_OFTEN_THE_RULES_ARE_ASKED_AGAIN}
+         * the walk carries on against what the rules left before anything was fixed, which is wider
+         * and is sound: it offers assignments this would have skipped, and skips none it would have
+         * kept.
+         */
+        private souther.compiler.inputs.Quantities fixing(souther.compiler.inputs.Quantities here, NumericTerm term,
+                                 java.math.BigDecimal at) {
+            if (asked >= HOW_OFTEN_THE_RULES_ARE_ASKED_AGAIN) {
+                return here;
+            }
+            asked++;
+            souther.compiler.inputs.Quantities next = here.given(term, new Count(at));
+            return next.emptiness().isPresent() ? null : next;
         }
 
         /**
@@ -557,7 +615,13 @@ public final class LevelRealizer {
     }
 
     private NumericDomain.Bounds bounds(NumericTerm term) {
-        NumericDomain.Bounds held = within == null ? null : within.apply(term);
+        return bounds(rules, term);
+    }
+
+    /** The same, of the rules as some of the positions have been fixed. */
+    private static NumericDomain.Bounds bounds(souther.compiler.inputs.Quantities rules,
+                                               NumericTerm term) {
+        NumericDomain.Bounds held = rules.runsBetween(term);
         return held == null ? new NumericDomain.Bounds(null, null) : held;
     }
 

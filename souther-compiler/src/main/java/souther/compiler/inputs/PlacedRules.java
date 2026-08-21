@@ -53,6 +53,17 @@ record PlacedRules(TypeSymbol value, Rules rules) {
         return rules.bounds();
     }
 
+    /**
+     * The same value, read again with some of its positions settled at a value.
+     *
+     * <p>The value's own paths and not this input's: what a caller out here calls {@code p.x} is
+     * {@code x} to the rules of the value {@code p} holds, and the translation is the caller's.
+     */
+    PlacedRules given(java.util.Map<String, souther.compiler.numeric.Count> settled) {
+        return settled.isEmpty() || !(rules instanceof Rules.Read read) ? this
+                : new PlacedRules(value, new Rules.Read(read.domains().given(settled)));
+    }
+
     /** What is left for the position at {@code path}, which is read from the value this is of. */
     NumericDomain.Bounds at(TermPath path) {
         return path.fields().isEmpty() ? null : bounds().at(String.join(".", path.fields()));
