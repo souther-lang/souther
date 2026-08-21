@@ -12,6 +12,7 @@ import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * What a behavior takes: what its inputs are called, what they are declared to be, and what those
@@ -72,11 +73,65 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
      * disagree, and no observation says why because nothing went wrong with one.
      */
     public List<ObservedValue> valuesAt(RowOutcome row, TermPath path) {
+        List<Occurrence> found = occurrencesAt(row, path);
+        return found == null ? null : found.stream().map(Occurrence::value).toList();
+    }
+
+    /**
+     * One value a row put at {@code path}, and which element was taken to reach it at each step
+     * inside a sequence.
+     *
+     * <p>The element and not only the value, because a relation between two positions is about one
+     * element and not about the two sets. A row holding one person under a line and another over it
+     * has values on both sides at {@code people[*].age} and values in both classes at
+     * {@code people[*].status}, and which went with which is the whole of what a pair says — read
+     * off the sets, the pairs one row covers are every combination of them, and a row is counted as
+     * evidence for a combination none of its elements is in.
+     *
+     * @param at which element was taken, by the step it was taken at — the path up to and
+     *           including that step inside a sequence. Empty where the path enters no sequence,
+     *           which is one occurrence and stands with every other
+     */
+    public record Occurrence(Map<TermPath, Integer> at, ObservedValue value) {
+
+        public Occurrence {
+            at = Map.copyOf(at);
+        }
+
+        /**
+         * Whether this and {@code other} can be one reading of the row.
+         *
+         * <p>Every step the two took together was taken at the same element, and the steps they did
+         * not take together are free. Keyed by the step rather than counted, so the rule is one
+         * sentence and every case follows from it: two positions under one person agree about the
+         * person; a zip code and a phone number under one person agree about the person and not
+         * about the address or the phone; two positions under different parameters share nothing
+         * and stand with each other however they are spelled; and a position inside no sequence
+         * takes no step, so it stands with everything.
+         *
+         * <p>Counted instead — the first so many elements of one list against the first so many of
+         * another — two sibling collections would be zipped, which is a relation neither the row
+         * nor the model states.
+         */
+        public boolean agreesWith(Occurrence other) {
+            for (Map.Entry<TermPath, Integer> each : at.entrySet()) {
+                Integer beside = other.at().get(each.getKey());
+                if (beside != null && !beside.equals(each.getValue())) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+
+    /** The values a row put at {@code path}, each with the elements taken to reach it. */
+    public List<Occurrence> occurrencesAt(RowOutcome row, TermPath path) {
         int at = indexOf(path);
         if (at < 0 || at >= row.inputs().size()) {
             return null;
         }
-        List<Standing> standing = List.of(new Standing(row.inputs().get(at), types.get(at)));
+        List<Standing> standing = List.of(new Standing(row.inputs().get(at), types.get(at),
+                TermPath.of(path.head()), Map.of()));
         boolean[] broke = {false};
         for (TermPath.Step step : path.steps()) {
             List<Standing> next = new ArrayList<>();
@@ -94,7 +149,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
         if (standing.isEmpty() && broke[0]) {
             return null;
         }
-        return standing.stream().map(Standing::value).toList();
+        return standing.stream().map(each -> new Occurrence(each.at(), each.value())).toList();
     }
 
     /**
@@ -117,7 +172,8 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
      * <p>A list of these and not one, because a step into what a sequence holds turns one value
      * into as many as it holds. Everything else keeps the count it had.
      */
-    private record Standing(ObservedValue value, Type type) {
+    private record Standing(ObservedValue value, Type type, TermPath reached,
+                            Map<TermPath, Integer> at) {
 
         /** Takes {@code step}, adding what stands below. False where it could not be taken. */
         boolean step(TermPath.Step step, Symbols symbols, List<Standing> out) {
@@ -129,7 +185,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
             ObservedValue here = Classifier.inside(
                     view.wrappers().stream().map(TypeOps.Layer::named).toList(), value);
             if (here.unread() != null) {
-                out.add(new Standing(here, type));
+                out.add(new Standing(here, type, reached, at));
                 return true;
             }
             switch (step) {
@@ -143,7 +199,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
                     if (next == null || held == null) {
                         return false;
                     }
-                    out.add(new Standing(held, next));
+                    out.add(new Standing(held, next, reached.then(named.name()), at));
                 }
                 // Every element the row wrote, and no choice among them. Which of them a rule is
                 // about is not something the coordinate says, so what stands here is all of them
@@ -154,8 +210,15 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
                             || !(here instanceof ObservedValue.Sequence written)) {
                         return false;
                     }
-                    written.elements().forEach(
-                            element -> out.add(new Standing(element, sequence.element())));
+                    // Keyed by the step, which is this path with the step taken. Two positions
+                    // that took it took the same one or they are not one reading of the row.
+                    TermPath inside = reached.element();
+                    for (int i = 0; i < written.elements().size(); i++) {
+                        Map<TermPath, Integer> deeper = new java.util.LinkedHashMap<>(at);
+                        deeper.put(inside, i);
+                        out.add(new Standing(written.elements().get(i), sequence.element(),
+                                inside, deeper));
+                    }
                 }
             }
             return true;

@@ -203,11 +203,11 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
     void aReadableValueIsStillPlacedInTheClassThatHoldsIt() {
         Read read = read();
 
-        assertEquals(new Classification.Classified(List.of("request.cost/0 <= x <= 100")),
+        assertEquals((Classification) Classification.in("request.cost/0 <= x <= 100"),
                 at(read, read.row(), "request.cost"));
-        assertEquals(new Classification.Classified(List.of("request.plain/x <= 10")),
+        assertEquals((Classification) Classification.in("request.plain/x <= 10"),
                 at(read, read.row(), "request.plain"));
-        assertEquals(new Classification.Classified(List.of("Domestic")),
+        assertEquals((Classification) Classification.in("Domestic"),
                 at(read, read.row(), "request.kind"));
     }
 
@@ -241,7 +241,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
                 _ -> new Membership.Incomplete(Incompleteness.Code.VALUE_UNREADABLE),
                 _ -> Membership.MATCH);
 
-        assertEquals(new Classification.Classified(List.of("c2")),
+        assertEquals((Classification) Classification.in("c2"),
                 RowClasses.of(read.row(), read.inputs(), axes).values().iterator().next());
     }
 

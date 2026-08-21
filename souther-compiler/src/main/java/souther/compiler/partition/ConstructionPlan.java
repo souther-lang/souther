@@ -52,8 +52,13 @@ record ConstructionPlan(Node root) {
         Type type();
     }
 
-    /** A position the search chooses a value for. */
-    record Slot(TermPath at, Type type) implements Node {}
+    /**
+     * A position the search chooses a value for.
+     *
+     * @param fixed whether the caller had already fixed a value here, which is what says a class is
+     *              being placed under whatever holds it
+     */
+    record Slot(TermPath at, Type type, boolean fixed) implements Node {}
 
     /**
      * A sequence composed out of what stands at its element.
@@ -143,7 +148,7 @@ record ConstructionPlan(Node root) {
         // Before the recipe, because a position the caller fixed takes the value it was given
         // whatever a class would have built there.
         if (decided.contains(at.toString())) {
-            return new Slot(at, declared);
+            return new Slot(at, declared, true);
         }
         RepresentativeSource.Evaluation.Compose recipe = recipes.get(at.toString());
         Type building = refined(declared, recipe);
@@ -152,17 +157,19 @@ record ConstructionPlan(Node root) {
         // chosen whole, since what is being asked for is a list holding a value in a class and no
         // proposal of a whole list can be asked to hold one.
         if (view.shape() instanceof souther.compiler.check.Shape.Sequence sequence
-                && depth < MAX_DEPTH && placesSomethingInside(at, decided)) {
-            return new Held(at, building, view.wrappers(),
-                    node(sequence.element(), at.element(), symbols, depth + 1, decided, recipes,
-                            least),
-                    Math.max(1, least.applyAsInt(at)));
+                && depth < MAX_DEPTH) {
+            Node inside = node(sequence.element(), at.element(), symbols, depth + 1, decided,
+                    recipes, least);
+            if (holdsAFixedPosition(inside)) {
+                return new Held(at, building, view.wrappers(), inside,
+                        Math.max(1, least.applyAsInt(at)));
+            }
         }
         StructuralDescent.Children children = StructuralDescent.of(view.shape());
         // A record with no fields composes nothing out of anything, so it is a value to be chosen
         // like any other and not a position made of positions.
         if (depth >= MAX_DEPTH || children == null || children.under().isEmpty()) {
-            return new Slot(at, building);
+            return new Slot(at, building, false);
         }
         Map<String, Node> under = new LinkedHashMap<>();
         children.under().forEach((field, type) -> under.put(field,
@@ -170,15 +177,23 @@ record ConstructionPlan(Node root) {
         return new Built(at, building, children.of(), view.wrappers(), recipe, under);
     }
 
-    /** Whether the caller fixed a value at some position inside the sequence at {@code at}. */
-    private static boolean placesSomethingInside(TermPath at, Set<String> decided) {
-        String inside = at.element().toString();
-        for (String each : decided) {
-            if (each.equals(inside) || each.startsWith(inside + ".")) {
-                return true;
-            }
-        }
-        return false;
+    /**
+     * Whether anything under {@code inside} is a position the caller fixed a value at.
+     *
+     * <p>Asked of the plan that was built for it rather than of how the paths are written. Whether
+     * one position is under another is a fact about the steps between them, and a rendering runs
+     * those together with whatever each is spelled with — so a test on the text has to name every
+     * separator a step can wear, and a position one collection further in follows its container with
+     * no dot and matched none of them. Built and then read, the only thing compared is one path with
+     * itself.
+     */
+    private static boolean holdsAFixedPosition(Node inside) {
+        return switch (inside) {
+            case Slot slot -> slot.fixed();
+            case Built built -> built.under().values().stream()
+                    .anyMatch(ConstructionPlan::holdsAFixedPosition);
+            case Held held -> holdsAFixedPosition(held.under());
+        };
     }
 
     /**

@@ -51,42 +51,34 @@ public final class RowClasses {
      * had to guess.
      */
     private static Classification classify(RowOutcome row, BehaviorInputs where, Axis axis) {
-        List<ObservedValue> values = where.valuesAt(row, axis.path());
+        List<BehaviorInputs.Occurrence> values = where.occurrencesAt(row, axis.path());
         if (values == null) {
             return Classification.unreadable(Incompleteness.Code.VALUE_UNREADABLE,
                     axis.id().behavior(), axis.id().term());
         }
-        // Every value the row put here, and every class any of them is in. One at most positions;
-        // as many as the row wrote at a position inside a sequence, where they need not fall
-        // together — and where one of them being unreadable leaves the classes the others reached
-        // standing, since each is a value of its own.
-        List<String> in = new ArrayList<>();
-        Incompleteness.Code stopped = null;
-        for (ObservedValue value : values) {
-            Classification each = classifyOne(row, where, axis, value);
-            switch (each) {
-                case Classification.Classified found -> found.classIds().forEach(id -> {
-                    if (!in.contains(id)) {
-                        in.add(id);
-                    }
-                });
+        // Every value the row put here, the class it is in, and the element it came from. One value
+        // at most positions; as many as the row wrote at a position inside a sequence, where they
+        // need not fall together — and where one of them being unreadable leaves the classes the
+        // others reached standing, since each is a value of its own.
+        List<Classification.At> in = new ArrayList<>();
+        Incompleteness stopped = null;
+        for (BehaviorInputs.Occurrence value : values) {
+            switch (classifyOne(row, where, axis, value.value())) {
+                case Classification.Classified found -> found.classIds().forEach(id ->
+                        in.add(new Classification.At(value.at(), id)));
                 case Classification.Unclassified why -> {
                     if (stopped == null) {
-                        stopped = why.reason().code();
+                        stopped = why.reason();
                     }
                 }
             }
         }
-        if (!in.isEmpty()) {
-            return Classification.in(in);
-        }
-        if (stopped != null) {
-            return Classification.unreadable(stopped, axis.id().behavior(), axis.id().term());
-        }
-        // Read, and in no class. A row whose list holds no element is one: there was nothing at
-        // this position to be in a class, which is not a reading that stopped.
-        return values.isEmpty() ? Classification.in(List.of())
-                : classifyOne(row, where, axis, values.get(0));
+        // Both, and not one instead of the other. A value one class holds and a value beside it
+        // nothing could read are two facts about one row: the classes it covers stand, and the
+        // measurement here is short of what the rest of the list says. Kept apart, either the
+        // coverage is thrown away or the measure calls itself complete over a value nothing looked
+        // at. A row that wrote no element at all is neither — it was read, and is in no class.
+        return Classification.at(in, stopped);
     }
 
     /** Where one value at the position falls, or why no class could say. */
