@@ -44,6 +44,14 @@ final class ReadQuantities implements Quantities {
      */
     private final Map<NumericTerm, Fixed> fixed;
     /**
+     * What a caller has taken in about this input beyond what the declarations say.
+     *
+     * <p>Reached only through {@link SearchRegion}, which is what keeps a reading of the
+     * declarations from acquiring one. Kept as what was said and not as what it came to: taking in
+     * accumulates, and what the whole of it leaves is worked out where everything else is.
+     */
+    private final List<Assumed> assumed;
+    /**
      * The rules read with everything fixed, worked out when something is asked and not before.
      *
      * <p>One reading per parameter and not one per question. A search asks where a position runs and
@@ -66,6 +74,9 @@ final class ReadQuantities implements Quantities {
      */
     private volatile souther.compiler.numeric.NumericDomain<InputAtom> constraints;
 
+    /** One thing taken in about a form of this input's terms: {@code form rel 0}. */
+    private record Assumed(NumericDomain.LinearForm<NumericTerm> form, NumericDomain.Rel rel) {}
+
     /** The values fixed at one term, kept as their least and greatest so that what was fixed does
      *  not depend on the order it arrived in. */
     private record Fixed(Count least, Count most) {
@@ -82,8 +93,9 @@ final class ReadQuantities implements Quantities {
 
     private ReadQuantities(Map<String, PlacedRules> byParameter, Set<String> parameters,
                            Map<TermPath, Position> byPath, Map<NumericTerm, Fixed> fixed,
-                           souther.compiler.check.Symbols symbols) {
+                           souther.compiler.check.Symbols symbols, List<Assumed> assumed) {
         this.symbols = symbols;
+        this.assumed = List.copyOf(assumed);
         // In the order the behavior declares its parameters. A proof of emptiness names one of them
         // and a report is a document compared against the one written last time, so an order read
         // off a hash would move which parameter is named between runs.
@@ -102,7 +114,7 @@ final class ReadQuantities implements Quantities {
     static ReadQuantities of(Map<String, PlacedRules> byParameter, Set<String> parameters,
                              Map<TermPath, Position> byPath,
                              souther.compiler.check.Symbols symbols) {
-        return new ReadQuantities(byParameter, parameters, byPath, Map.of(), symbols);
+        return new ReadQuantities(byParameter, parameters, byPath, Map.of(), symbols, List.of());
     }
 
     /** Each parameter's rules read with what is fixed under it, once. */
@@ -116,6 +128,43 @@ final class ReadQuantities implements Quantities {
             conditioned = read;
         }
         return read;
+    }
+
+    @Override
+    public SearchRegion region() {
+        return new ReadRegion(this);
+    }
+
+    /**
+     * The same rules, with {@code form rel 0} taken in as well.
+     *
+     * <p>Reached only through {@link ReadRegion}, so what comes back is a region and never a reading
+     * of the declarations. What is kept is the assertion and not what it came to: two of them said
+     * in either order are the same two, and one said twice is one.
+     *
+     * <p>This value back where the arithmetic cannot take the assertion in — a form over a position
+     * whose values it has no spacing for. Kept anyway, it would sit in the state as a rule about a
+     * number nothing knows how to space, which {@link souther.compiler.numeric.NumericDomain#assume}
+     * refuses outright; declined here, the region stays wider than what reaches the border, which is
+     * the direction every reader of it depends on.
+     */
+    ReadQuantities assuming(NumericDomain.LinearForm<NumericTerm> form, NumericDomain.Rel rel) {
+        if (form == null || form.coefs().isEmpty()) {
+            return this;
+        }
+        for (NumericTerm term : form.coefs().keySet()) {
+            held(term);
+            if (spacingOf(constraints(), term, called(term)) == null) {
+                return this;
+            }
+        }
+        Assumed taking = new Assumed(form, rel);
+        if (assumed.contains(taking)) {
+            return this;
+        }
+        List<Assumed> both = new java.util.ArrayList<>(assumed);
+        both.add(taking);
+        return new ReadQuantities(byParameter, parameters, byPath, fixed, symbols, both);
     }
 
     /**
@@ -148,6 +197,23 @@ final class ReadQuantities implements Quantities {
             made = made.meet(each.getValue().numbersOver(
                     at -> called(parameter, at),
                     subject -> new InputAtom.Anonymous(parameter, subject)));
+        }
+        // And what the caller took in, onto the same rules rather than met against the answer
+        // afterwards. A condition relating two positions says nothing about either of them alone,
+        // so met afterwards it would be gone.
+        for (Assumed each : assumed) {
+            Map<InputAtom, souther.compiler.numeric.Granularity> spacing = new LinkedHashMap<>();
+            for (NumericTerm term : each.form().coefs().keySet()) {
+                souther.compiler.numeric.Granularity spaced = spacingOf(made, term, called(term));
+                if (spaced == null) {
+                    spacing = null;
+                    break;
+                }
+                spacing.put(called(term), spaced);
+            }
+            if (spacing != null) {
+                made = made.assume(over(each.form()), each.rel(), spacing);
+            }
         }
         read = made;
         constraints = read;
@@ -291,7 +357,7 @@ final class ReadQuantities implements Quantities {
             both.merge(term, new Fixed(each.getValue(), each.getValue()),
                     (had, one) -> had.and(one.least()));
         }
-        return new ReadQuantities(byParameter, parameters, byPath, both, symbols);
+        return new ReadQuantities(byParameter, parameters, byPath, both, symbols, assumed);
     }
 
     /**
@@ -332,7 +398,12 @@ final class ReadQuantities implements Quantities {
                 return here;
             }
         }
-        return Optional.empty();
+        // And what the rules leave once they are all said together, which is the only place a
+        // contradiction between two parameters — or between a declaration and something a caller
+        // took in — can be seen at all. Last, so that a proof one parameter's own reading can name a
+        // place for is the one a caller hears about.
+        return constraints().isBottom()
+                ? Optional.of(new EmptyInput.ProvedByTheRulesTakenTogether()) : Optional.empty();
     }
 
     /**

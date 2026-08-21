@@ -453,10 +453,11 @@ final class Coverages {
         // is read once per call of that helper, and the rows do not owe the same border twice for
         // having been offered it twice; what each reading saw is merged below.
         java.util.SequencedMap<BoundaryLine, BorderAssessment> out = new java.util.LinkedHashMap<>();
-        LevelRealizer realizer = new LevelRealizer(rules);
+        LevelRealizer realizer = new LevelRealizer();
         for (Border each : Partitions.bordersOf(axis, where.symbols(), within)) {
             out.merge(BoundaryLine.of(each),
-                    assessed(each, shapeOf(each, where, knownWritable, probe, realizer),
+                    assessed(each, shapeOf(each, where, knownWritable, probe, realizer,
+                                    rules.region()),
                             observed, armsAsked),
                     Coverages::whicheverSawMore);
         }
@@ -544,7 +545,8 @@ final class Coverages {
      */
     private static OneShapeOfBorder shapeOf(Border border, BehaviorInputs where,
                                             boolean knownWritable, Probe probe,
-                                            LevelRealizer realizer) {
+                                            LevelRealizer realizer,
+                                            souther.compiler.inputs.SearchRegion within) {
         BorderQuantity quantity = border.cut().of();
         java.util.Optional<souther.compiler.coverage.ComparisonOccurrence> site =
                 border.origin().comparisonAt();
@@ -565,7 +567,7 @@ final class Coverages {
                 // the realizer. What it composes is a candidate and no part of the item: another row
                 // in the same side is at the point as much as this one would be, so what the row is
                 // offered for goes in beside it rather than being read back off it.
-                return switch (realizer.realize(quantity.standingAt(criterion))) {
+                return switch (realizer.realize(quantity.standingAt(criterion), within)) {
                     case Realization.Found found ->
                             whatCameOfIt(probe.attempt(label, quantity.carrier(), found.fixing()));
                     // And the two ways of finding nothing are not one answer. A walk of the whole
@@ -724,10 +726,11 @@ final class Coverages {
         // line twice for having been offered it twice — nor may one reading of it take back what
         // another established.
         java.util.SequencedMap<BoundaryLine, BorderAssessment> out = new LinkedHashMap<>();
-        LevelRealizer realizer = new LevelRealizer(partitioning.quantities());
+        LevelRealizer realizer = new LevelRealizer();
         for (Border each : partitioning.between()) {
             out.merge(BoundaryLine.of(each),
-                    assessed(each, shapeOf(each, where, false, probe, realizer), observed,
+                    assessed(each, shapeOf(each, where, false, probe, realizer,
+                                    partitioning.quantities().region()), observed,
                             armsAsked),
                     Coverages::whicheverSawMore);
         }
