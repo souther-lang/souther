@@ -160,6 +160,12 @@ record ConstraintState(NumericDomain<FactSubject> numbers, PredicateFacts facts,
      * unread rather than about how the alternatives are held.
      */
     ConstraintState takingValuesRead(AdmissibleValues<FactSubject> read) {
+        // Said once, and what stands here until it is said is what nothing read leaves. Saying it
+        // twice would keep the second reading and drop the first without a word, which is the one
+        // way this can be got wrong now that it cannot combine two of them. An assertion because a
+        // throw would be caught by the fail-open around the reading and leave it silently dropped.
+        assert values.equals(AdmissibleValues.<FactSubject>top())
+                : "the values of a state are read once, and these were read over " + values;
         return new ConstraintState(numbers, facts, AdmissibleValues.<FactSubject>top().meet(read),
                 ordered, shown);
     }

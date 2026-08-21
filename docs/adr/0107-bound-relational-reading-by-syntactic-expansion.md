@@ -227,37 +227,47 @@ impossibility than the current model permits.
 Its behavior under `join`, `meet`, `at`, `guaranteedAt`, `standing`, and `dropped` is therefore
 specified separately.
 
-`Nothing` carries a **bottom residue**: the per-position record the arithmetic was holding when it
-learned that nothing satisfies the rules. The residue is not the relation's projections, which are
-all empty once the relation is. It holds positions left no value beside positions a rule narrowed
-and left values at, and both are answered with, so that a reader asking which position was left
-nothing gets the answer the reading had.
+Which position a reading that admits nothing leaves empty is **not** held with the alternatives. It
+is a question about each position's own rules, and the alternatives cannot answer it: a conjunction
+meets them pairwise and drops the pairs nothing stands in, so what a dropped pair was going to say
+about a position leaves with it, and the answer follows the order the rules were met in.
 
-Narrowing it to the positions every dead alternative agrees are empty does not reproduce the
-previous behavior. Measured:
+Measured, with the answer taken from what survived:
 
 ```text
-(a == "1" && a == "2") && b == "3"
+X = a == 0 && b == 0
+Y = a == 0
+Z = (a == 1 && b == 0) || (a == 0 && b == 1)
 
-    at(b)   {"3"} before, ANY once the residue keeps only what is commonly empty
+    X ∧ Y ∧ Z    b is left 0
+    Y ∧ Z ∧ X    b is left nothing
 ```
 
-Nothing about the residue says whether a reading is bottom — that is the case's to say. A reading
-shown to admit nothing from outside carries no position at all, so a residue read for an empty set
-answers it backwards. Telling a worked-out product from the absence of one is asked in exactly one
-place.
+Nothing satisfies the three of them either way. Read one position at a time they leave `a` at `0`
+and `b` at `0`, so neither is a position the rules leave nothing at — what they cannot do is hold
+together. The second answer blames a position no rule of theirs leaves empty, which sends an author
+to a rule that is not the reason.
 
-A conjunction and a choice differ in what a side that admits nothing leaves behind, and both are
-right. A rule stated beside an impossible one was still stated, so the conjunction answers with the
-values it worked out; an alternative nobody can take puts nothing under obligation, so the choice
-keeps only what every alternative agrees is empty.
+So a reading carries **what each position's own rules leave it**, every alternative merged, beside
+the alternatives. It is not what a position may hold — `at` is narrower wherever the alternatives
+are held apart, which is the whole point of holding them — and not a second account of that either.
+It answers the one question the alternatives cannot, and it answers it the same however the rules
+were bracketed, because a meet of these is their meet at each position.
+
+A reading that admits nothing therefore says which position, if any, is why. Both answers are needed:
+a choice between two impossible alternatives that fail at different positions admits nothing with no
+position at fault, and a position left no value is one an author can go to.
+
+An alternative is a product no side of which is empty, and that is refused where a box is built
+rather than remembered by whoever builds one. It is what lets a reading say it admits nothing by
+being `Nothing` and nothing else.
 
 ### Exactness is about a reading that holds alternatives
 
 `relationExact` and `projectionExactAt` are asked of a reading that holds alternatives. Where it
-admits nothing, `at` answers from the residue rather than from a relation, so there is no projection
-for an answer to be exact about, and a caller asking is asking about a position no value ever stands
-at. Consumers do not ask it there: a declaration the rules leave no value is owed that it has no
+admits nothing, `at` answers from each position's own rules rather than from a relation, so there is
+no projection for an answer to be exact about, and a caller asking is asking about a position no
+value ever stands at. Consumers do not ask it there: a declaration the rules leave no value is owed that it has no
 values, which is said elsewhere.
 
 ### The policy is owned by the compilation

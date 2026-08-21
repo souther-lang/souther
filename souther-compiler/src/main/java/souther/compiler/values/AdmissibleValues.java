@@ -31,11 +31,12 @@ import java.util.function.BinaryOperator;
  * ({@link Held.Nothing}), and not an empty union: an empty union would say that no position can hold
  * anything, which is more than the rules were read to say.
  *
- * <p>What it carries is a {@link BottomResidue} — where the arithmetic had got to when it learned
- * that nothing satisfies the rules. Not the relation's projections, which are all empty once the
- * relation is: a position the residue holds values at is one the rules said something about, and it
- * is answered with rather than passed over so that a reader is told which position was left no
- * value and which was not.
+ * <p>Which of the two it is is a question about each position's own rules, and the alternatives
+ * cannot answer it: a conjunction meets them pairwise and drops the pairs nothing stands in, so
+ * what a dropped pair was going to say about a position leaves with it, and the answer would follow
+ * the order the rules were met in. So the reading carries {@link #perPosition} beside them — every
+ * position read on its own, by the same connectives — and that is what a reading admitting nothing
+ * answers from.
  *
  * <p><b>A position no box holds is at {@link ValueSet#ANY}.</b> That is what makes the two
  * connectives what they are below, and it is the one thing to hold on to while reading them.
@@ -92,7 +93,8 @@ import java.util.function.BinaryOperator;
  * {@link #guaranteedAt} is carried for, and holding "something went unread" alone would answer the
  * same clause two ways depending on where its brackets fell.
  */
-public record AdmissibleValues<A>(Held<A> held, Map<A, UnreadReason> standing,
+public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
+                                  Map<A, UnreadReason> standing,
                                   boolean dropped,
                                   Map<A, ValueSet> guaranteed, ValueSet defaultGuaranteed,
                                   boolean guaranteedTogether,
@@ -108,12 +110,14 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, UnreadReason> standing,
     public sealed interface Held<A> {
 
         /**
-         * Nothing satisfies the rules, and what the arithmetic was holding when it found out.
+         * Nothing satisfies the rules.
          *
-         * <p>The residue is not the relation's projections. Those are empty wherever the relation
-         * is, and saying so at a position would name one the rules are fine with.
+         * <p>Which position is at fault, if any, is not held here. That is a question about each
+         * position's own rules and is answered by {@link AdmissibleValues#perPosition} — the
+         * alternatives cannot answer it, because a conjunction drops the pairs nothing stands in
+         * and what a dropped pair was going to say about a position leaves with it.
          */
-        record Nothing<A>(BottomResidue<A> residue) implements Held<A> {}
+        record Nothing<A>() implements Held<A> {}
 
         /**
          * The alternatives the rules leave, none of which admits nothing.
@@ -138,62 +142,41 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, UnreadReason> standing,
      *
      * <p>A position at {@link ValueSet#ANY} is left out, so that what is held is what was said. No
      * position is left no value — a product with an empty side stands for nothing, which is not an
-     * alternative but the absence of one, and telling them apart is {@link PairOutcome}'s.
+     * alternative but the absence of one, and a set of these is what a reading holds when something
+     * does stand in it.
+     *
+     * <p>Refused here rather than remembered by whoever builds one. It is what lets a reading say it
+     * admits nothing by being {@link Held.Nothing} and nothing else, so a caller that could put an
+     * empty side in a box could make a reading that admits nothing and does not say so.
      */
     public record Box<A>(Map<A, ValueSet> at) {
         public Box {
             at = said(at);
+            if (at.values().stream().anyMatch(ValueSet::isEmpty)) {
+                throw new IllegalArgumentException(
+                        "a product with an empty side stands for nothing, and is not an alternative");
+            }
         }
 
         ValueSet get(A atom) {
             return at.getOrDefault(atom, ValueSet.ANY);
-        }
-    }
-
-    /**
-     * Where the arithmetic had got to when it learned that nothing satisfies the rules.
-     *
-     * <p>Evidence and not a relation. It holds positions left no value beside positions a rule
-     * narrowed and left values at, and neither is a claim about what a value of this type may hold:
-     * nothing may. What it is here for is that a reader asking which position was left nothing gets
-     * the answer the reading had, rather than "every position" or "no position".
-     *
-     * <p><b>Nothing here says whether the reading is bottom.</b> That is {@link Held.Nothing}'s to
-     * say, and a residue read for an empty set would answer it wrong: a reading shown to admit
-     * nothing from outside carries no position at all, and its residue holds every value everywhere.
-     */
-    public record BottomResidue<A>(Map<A, ValueSet> at) {
-        public BottomResidue {
-            at = said(at);
-        }
-
-        ValueSet get(A atom) {
-            return at.getOrDefault(atom, ValueSet.ANY);
-        }
-    }
-
-    /**
-     * What one product of two alternatives came to: an alternative, or the absence of one.
-     *
-     * <p>The one place a set of values per position is asked whether anything stands in it. Written
-     * anywhere else, a map that happens to hold no position reads as the product of nothing, which
-     * is every value at every position — so a reading shown to admit nothing would come back as one
-     * admitting everything.
-     */
-    public sealed interface PairOutcome<A> {
-
-        record Live<A>(Box<A> box) implements PairOutcome<A> {}
-
-        record Dead<A>(BottomResidue<A> residue) implements PairOutcome<A> {}
-
-        static <A> PairOutcome<A> of(Map<A, ValueSet> at) {
-            return at.values().stream().anyMatch(ValueSet::isEmpty)
-                    ? new Dead<>(new BottomResidue<>(at)) : new Live<>(new Box<>(at));
         }
     }
 
     /**
      * @param held what the rules leave: the alternatives, or nothing
+     * @param perPosition what each position's own rules leave it, every alternative merged. Not
+     *                what a position may hold — {@link #at} is narrower wherever the alternatives
+     *                are held apart, which is the whole point of holding them — and not a second
+     *                account of that either. It answers the one question the alternatives cannot:
+     *                which position, if any, is why nothing is admitted.
+     *
+     *                <p>A conjunction meets the alternatives pairwise and drops the pairs nothing
+     *                stands in, so what a dropped pair was going to say about a position leaves
+     *                with it. Asked of what survived, the answer follows the order the rules were
+     *                met in and blames a position no rule of theirs leaves empty. Read on its own
+     *                by the same connectives it does not: a meet of these is their meet at each
+     *                position, and that is the same however it is bracketed
      * @param standing what a rule left standing at each position, and what stopped the reading
      *                from taking it in. Why and not only which: two of these are lifted by
      *                different work and reported differently, and a reader handed the positions
@@ -339,7 +322,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, UnreadReason> standing,
 
     /** Nothing read and nothing missed, which is what a reading starts from. */
     public static <A> AdmissibleValues<A> top() {
-        return new AdmissibleValues<>(one(new Box<>(Map.of())), Map.of(), false, Map.of(),
+        return new AdmissibleValues<>(one(new Box<>(Map.of())), Map.of(), Map.of(), false, Map.of(),
                 ValueSet.ANY, true, Set.of(), Set.of());
     }
 
@@ -352,14 +335,15 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, UnreadReason> standing,
      */
     public AdmissibleValues<A> leavingNothing() {
         return isBottom() ? this
-                : new AdmissibleValues<>(new Held.Nothing<>(new BottomResidue<>(Map.of())),
-                        standing, dropped, Map.of(), ValueSet.NONE, true, tangled, widened);
+                : new AdmissibleValues<>(new Held.Nothing<>(), Map.of(), standing, dropped,
+                        Map.of(), ValueSet.NONE, true, tangled, widened);
     }
 
     /** One position said to admit {@code set}, and nothing missed. */
     public static <A> AdmissibleValues<A> at(A atom, ValueSet set) {
-        return new AdmissibleValues<>(heldBy(List.of(PairOutcome.of(Map.of(atom, set)))), Map.of(),
-                false, Map.of(atom, set), ValueSet.ANY, true, Set.of(), Set.of());
+        Map<A, ValueSet> said = Map.of(atom, set);
+        return new AdmissibleValues<>(set.isEmpty() ? new Held.Nothing<>() : one(new Box<>(said)),
+                said, Map.of(), false, Map.of(atom, set), ValueSet.ANY, true, Set.of(), Set.of());
     }
 
     /**
@@ -375,7 +359,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, UnreadReason> standing,
         // Nothing is guaranteed anywhere, and at the positions it does not name as much as at the
         // ones it does: what a rule this has no word for admits is not known, so a choice offering
         // it as an alternative is offering nothing that can be counted on.
-        return new AdmissibleValues<>(one(new Box<>(Map.of())), spoiled, true, Map.of(),
+        return new AdmissibleValues<>(one(new Box<>(Map.of())), Map.of(), spoiled, true, Map.of(),
                 ValueSet.NONE, true, Set.of(), Set.of());
     }
 
@@ -389,7 +373,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, UnreadReason> standing,
      */
     public ValueSet at(A atom) {
         return switch (held) {
-            case Held.Nothing<A> it -> it.residue().get(atom);
+            case Held.Nothing<A> _ -> perPosition.getOrDefault(atom, ValueSet.ANY);
             case Held.Alternatives<A> it -> {
                 ValueSet out = null;
                 for (Box<A> box : it.boxes()) {
@@ -454,8 +438,8 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, UnreadReason> standing,
         // at once, and met they would promise a combination neither reading has — so the
         // conjunction promises nothing. See {@link #guaranteedAt}.
         boolean apart = !guaranteedTogether || !other.guaranteedTogether;
-        return new AdmissibleValues<>(met(other), union(standing, other.standing),
-                dropped || other.dropped,
+        return new AdmissibleValues<>(met(other), narrowed(perPosition, other.perPosition),
+                union(standing, other.standing), dropped || other.dropped,
                 // Either way what comes out is a promise about whole values, which is why a
                 // conjunction never has to say it is not one. Two of them met is one — a value
                 // taken from each position of both stands in both readings — and nothing promised
@@ -490,29 +474,26 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, UnreadReason> standing,
      * alternative said survives the alternative being one nobody can take.
      */
     private Held<A> met(AdmissibleValues<A> other) {
-        List<PairOutcome<A>> outcomes = new ArrayList<>();
-        for (Map<A, ValueSet> here : operands()) {
-            for (Map<A, ValueSet> there : other.operands()) {
-                Map<A, ValueSet> both = new LinkedHashMap<>(here);
-                there.forEach((atom, set) -> both.merge(atom, set, ValueSet::meet));
-                outcomes.add(isBottom() || other.isBottom()
-                        // Shown to admit nothing, whatever the pair worked out to. A side may hold
-                        // no position at all — nothing satisfies it and no position is at fault —
-                        // and a pair with it is a product of what the other side said, which stands
-                        // in nothing.
-                        ? new PairOutcome.Dead<>(new BottomResidue<>(both))
-                        : PairOutcome.of(both));
+        if (isBottom() || other.isBottom()) {
+            return new Held.Nothing<>();
+        }
+        Set<Box<A>> live = new LinkedHashSet<>();
+        for (Box<A> here : alternatives()) {
+            for (Box<A> there : other.alternatives()) {
+                Map<A, ValueSet> both = narrowed(here.at(), there.at());
+                if (both.values().stream().noneMatch(ValueSet::isEmpty)) {
+                    live.add(new Box<>(both));
+                }
             }
         }
-        return heldBy(outcomes);
+        return live.isEmpty() ? new Held.Nothing<>() : new Held.Alternatives<>(live);
     }
 
-    /** What this holds, as the maps a conjunction is distributed over. */
-    private List<Map<A, ValueSet>> operands() {
-        return switch (held) {
-            case Held.Nothing<A> it -> List.of(it.residue().at());
-            case Held.Alternatives<A> it -> it.boxes().stream().map(Box::at).toList();
-        };
+    /** Both sides holding at each position, each side missing one standing at ANY. */
+    private static <A> Map<A, ValueSet> narrowed(Map<A, ValueSet> these, Map<A, ValueSet> those) {
+        Map<A, ValueSet> out = new LinkedHashMap<>(these);
+        those.forEach((atom, set) -> out.merge(atom, set, ValueSet::meet));
+        return out;
     }
 
     /**
@@ -554,8 +535,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, UnreadReason> standing,
         // alternative admits nothing at, and where there is no such position the choice still
         // admits nothing.
         if (isBottom() && other.isBottom()) {
-            Map<A, ValueSet> both = emptyInBoth(other);
-            return new AdmissibleValues<>(new Held.Nothing<>(new BottomResidue<>(both)),
+            return new AdmissibleValues<>(new Held.Nothing<>(), emptyInBoth(other),
                     union(standing, other.standing), dropped || other.dropped,
                     Map.of(), ValueSet.NONE, true,
                     both(tangled, other.tangled), both(widened, other.widened));
@@ -601,7 +581,8 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, UnreadReason> standing,
         // written to the left and another to the right. Measured: both were tried and both broke
         // `AChoiceIsOneConnectiveAndNotATree`. Coarse and the same either way is the trade, and
         // what it costs is a promise this could have kept rather than one it could not.
-        return new AdmissibleValues<>(apart ? apart(other) : merged(other), spoiled,
+        return new AdmissibleValues<>(apart ? apart(other) : merged(other),
+                widenedBy(perPosition, other.perPosition), spoiled,
                 dropped || other.dropped, covered, coveredElsewhere,
                 guaranteedTogether && other.guaranteedTogether && shapedBy.size() <= 1,
                 // Merging a union back into one product loses a relation among the positions the
@@ -669,7 +650,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, UnreadReason> standing,
     private Set<A> adopted() {
         Set<A> out = new LinkedHashSet<>();
         switch (held) {
-            case Held.Nothing<A> it -> out.addAll(it.residue().at().keySet());
+            case Held.Nothing<A> _ -> out.addAll(perPosition.keySet());
             case Held.Alternatives<A> it -> it.boxes().forEach(box -> out.addAll(box.at().keySet()));
         }
         return out;
@@ -680,41 +661,17 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, UnreadReason> standing,
         return new Held.Alternatives<>(Set.of(box));
     }
 
-    /**
-     * What a set of worked-out pairs comes to.
-     *
-     * <p>Where any of them stands, those are the alternatives and the rest are combinations nothing
-     * satisfies, which a union is not made wider by. Where none does, the reading admits nothing,
-     * and what it is left holding is what its alternatives agree on — the projection of their union,
-     * which is empty at a position exactly where every one of them is.
-     */
-    private static <A> Held<A> heldBy(List<PairOutcome<A>> outcomes) {
-        Set<Box<A>> live = new LinkedHashSet<>();
-        outcomes.forEach(each -> {
-            if (each instanceof PairOutcome.Live<A> it) {
-                live.add(it.box());
+    /** Either side holding at each position, which is what both spoke about: a position one of
+     *  them says nothing about is one a value satisfying that side may hold anything at. */
+    private static <A> Map<A, ValueSet> widenedBy(Map<A, ValueSet> these, Map<A, ValueSet> those) {
+        Map<A, ValueSet> out = new LinkedHashMap<>();
+        these.forEach((atom, set) -> {
+            ValueSet there = those.get(atom);
+            if (there != null) {
+                out.put(atom, set.join(there));
             }
         });
-        if (!live.isEmpty()) {
-            return new Held.Alternatives<>(live);
-        }
-        Map<A, ValueSet> residue = null;
-        for (PairOutcome<A> each : outcomes) {
-            Map<A, ValueSet> here = ((PairOutcome.Dead<A>) each).residue().at();
-            if (residue == null) {
-                residue = new LinkedHashMap<>(here);
-                continue;
-            }
-            Map<A, ValueSet> joined = new LinkedHashMap<>();
-            residue.forEach((atom, set) -> {
-                ValueSet there = here.get(atom);
-                if (there != null) {
-                    joined.put(atom, set.join(there));
-                }
-            });
-            residue = joined;
-        }
-        return new Held.Nothing<>(new BottomResidue<>(residue == null ? Map.of() : residue));
+        return out;
     }
 
     /** Every position of either, in the order they were recorded. */

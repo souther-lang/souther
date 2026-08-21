@@ -27,6 +27,17 @@ import java.util.List;
  */
 public record ReadingPolicy(int dnfExpansionLimit) {
 
+    public ReadingPolicy {
+        // A guardrail is a positive number a count can be compared against, and a limit outside
+        // that is one no reading is bounded by. Refused here rather than left to whoever writes it:
+        // this is a resource bound, and a bound that admits everything is the absence of one.
+        if (dnfExpansionLimit < 1) {
+            throw new IllegalArgumentException(
+                    "a reading holds at least one alternative, so a limit below one bounds nothing: "
+                            + dnfExpansionLimit);
+        }
+    }
+
     /**
      * How many alternatives the clauses of one declaration would expand to, counted before any of
      * them is read.
@@ -41,12 +52,12 @@ public record ReadingPolicy(int dnfExpansionLimit) {
      * added beside an existing one change how that one is read, and over this repository it buys
      * nothing: no declaration of it exceeds any usable limit.
      */
-    int expansionOf(List<Core> clauses) {
+    long expansionOf(List<Core> clauses) {
         return ExpansionCost.of(clauses, dnfExpansionLimit);
     }
 
     /** Whether a declaration that expands to {@code cost} alternatives may hold them apart. */
-    boolean holdsApart(int cost) {
+    boolean holdsApart(long cost) {
         return cost <= dnfExpansionLimit;
     }
 }

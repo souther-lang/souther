@@ -30,13 +30,18 @@ import java.util.List;
  * wanted — what is asked of it is whether the limit is exceeded — and a conjunction of choices
  * leaves the range of a count long before it leaves the range of what an author can write.
  */
-final class ExpansionCost implements ClauseReading<Integer> {
+final class ExpansionCost implements ClauseReading<Long> {
 
-    /** One past the limit, which is where the arithmetic stops. */
-    private final int ceiling;
+    /** One past the limit, which is where the arithmetic stops.
+     *
+     *  <p>Counted in a wider type than the limit is written in, and answered in one. Counted in the
+     *  limit's own type, one past the largest limit is the smallest number there is and every count
+     *  is under it — so the guardrail would admit exactly the expansions it exists to refuse, and
+     *  would do it at the one limit somebody reaching for "no limit" would write. */
+    private final long ceiling;
 
     ExpansionCost(int limit) {
-        this.ceiling = limit + 1;
+        this.ceiling = (long) limit + 1;
     }
 
     /**
@@ -45,9 +50,9 @@ final class ExpansionCost implements ClauseReading<Integer> {
      *
      * @param limit the count is asked about, saturating at one past it
      */
-    static int of(List<Core> clauses, int limit) {
+    static long of(List<Core> clauses, int limit) {
         ExpansionCost counting = new ExpansionCost(limit);
-        int cost = counting.nothingSaid();
+        long cost = counting.nothingSaid();
         for (Core clause : clauses) {
             cost = counting.both(cost, counting.read(clause, true));
         }
@@ -56,8 +61,8 @@ final class ExpansionCost implements ClauseReading<Integer> {
 
     /** Nothing read is one alternative — the empty product — and is the identity of the fold. */
     @Override
-    public Integer nothingSaid() {
-        return 1;
+    public Long nothingSaid() {
+        return 1L;
     }
 
     /**
@@ -68,17 +73,17 @@ final class ExpansionCost implements ClauseReading<Integer> {
      * leaves come out costing nothing and be admitted under any budget.
      */
     @Override
-    public Integer leaf(Core e, boolean positive) {
-        return 1;
+    public Long leaf(Core e, boolean positive) {
+        return 1L;
     }
 
     @Override
-    public Integer both(Integer one, Integer other) {
-        return (int) Math.min(ceiling, (long) one * other);
+    public Long both(Long one, Long other) {
+        return Math.min(ceiling, one * other);
     }
 
     @Override
-    public Integer either(Integer one, Integer other) {
+    public Long either(Long one, Long other) {
         return Math.min(ceiling, one + other);
     }
 }

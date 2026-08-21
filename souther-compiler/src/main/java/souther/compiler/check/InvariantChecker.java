@@ -601,7 +601,7 @@ public final class InvariantChecker {
             // it is read. Its clauses are met, so what they come to together is the product of what
             // each comes to, and a bound on that bounds every step of the fold — which is why the
             // question is asked once here rather than of each clause as it arrives.
-            int expansion = policy.expansionOf(written.stream().map(Written::clause).toList());
+            long expansion = policy.expansionOf(written.stream().map(Written::clause).toList());
             Alternatives alternatives = policy.holdsApart(expansion)
                     ? Alternatives.APART : Alternatives.MERGED;
             Map<RuleRef, Map<Core, Set<FactSubject>>> adoptedBy = new LinkedHashMap<>();

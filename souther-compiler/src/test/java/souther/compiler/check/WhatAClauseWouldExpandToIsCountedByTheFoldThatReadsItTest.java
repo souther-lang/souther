@@ -11,6 +11,8 @@ import souther.compiler.types.Type;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * How many alternatives a clause would come to, counted before any of them is built.
@@ -52,20 +54,31 @@ class WhatAClauseWouldExpandToIsCountedByTheFoldThatReadsItTest {
                 new Core.Bool(true, Type.BOOL, POS), CoverageOrigin.unwritten(), Type.BOOL, POS);
     }
 
-    private static int cost(Core e) {
+    private static long cost(Core e) {
         return new ExpansionCost(64).read(e, true);
+    }
+
+    /** A conjunction of choices, which doubles what it comes to per level and stays as long as the
+     *  level count. Written as a chain rather than by doubling a shared operand, which is one node
+     *  a reader walks twice and a count this reads as a tree. */
+    private static Core doubling(int levels) {
+        Core out = leaf();
+        for (int i = 0; i < levels; i++) {
+            out = and(or(leaf(), leaf()), out);
+        }
+        return out;
     }
 
     @Test
     void aClauseOfNoConnectiveIsOneAlternative() {
-        assertEquals(1, cost(leaf()));
+        assertEquals(1L, cost(leaf()));
     }
 
     @Test
     void aChoiceAddsAndAConjunctionMultiplies() {
-        assertEquals(2, cost(or(leaf(), leaf())));
-        assertEquals(1, cost(and(leaf(), leaf())));
-        assertEquals(4, cost(and(or(leaf(), leaf()), or(leaf(), leaf()))));
+        assertEquals(2L, cost(or(leaf(), leaf())));
+        assertEquals(1L, cost(and(leaf(), leaf())));
+        assertEquals(4L, cost(and(or(leaf(), leaf()), or(leaf(), leaf()))));
     }
 
     /**
@@ -82,8 +95,8 @@ class WhatAClauseWouldExpandToIsCountedByTheFoldThatReadsItTest {
             assertEquals(new ExpansionCost(64).read(each, false), cost(not(each)),
                     "a denial is carried down and not applied to what a branch came to");
         }
-        assertEquals(1, cost(not(or(leaf(), leaf()))), "a denied choice is a conjunction");
-        assertEquals(2, cost(not(and(leaf(), leaf()))), "and a denied conjunction is a choice");
+        assertEquals(1L, cost(not(or(leaf(), leaf()))), "a denied choice is a conjunction");
+        assertEquals(2L, cost(not(and(leaf(), leaf()))), "and a denied conjunction is a choice");
     }
 
     /**
@@ -98,17 +111,17 @@ class WhatAClauseWouldExpandToIsCountedByTheFoldThatReadsItTest {
         Core left = or(or(leaf(), leaf()), leaf());
         Core right = or(leaf(), or(leaf(), leaf()));
 
-        assertEquals(3, cost(left));
-        assertEquals(3, cost(right));
+        assertEquals(3L, cost(left));
+        assertEquals(3L, cost(right));
         assertEquals(cost(and(left, right)), cost(and(right, left)));
     }
 
     /** A declaration is its clauses met, so what it costs is their product. */
     @Test
     void aDeclarationCostsTheProductOfItsClauses() {
-        assertEquals(6, ExpansionCost.of(List.of(or(leaf(), leaf()),
+        assertEquals(6L, ExpansionCost.of(List.of(or(leaf(), leaf()),
                 or(or(leaf(), leaf()), leaf())), 64));
-        assertEquals(1, ExpansionCost.of(List.of(), 64), "and nothing read costs one");
+        assertEquals(1L, ExpansionCost.of(List.of(), 64), "and nothing read costs one");
     }
 
     /**
@@ -120,13 +133,40 @@ class WhatAClauseWouldExpandToIsCountedByTheFoldThatReadsItTest {
      */
     @Test
     void aCountThatRunsPastTheLimitSaturates() {
-        Core deep = leaf();
-        for (int i = 0; i < 64; i++) {
-            deep = and(or(leaf(), leaf()), deep);
-        }
-
-        assertEquals(65, cost(deep), "saturated at one past the limit, and not overflowed");
-        assertEquals(4, new ExpansionCost(3).read(and(or(leaf(), leaf()), or(leaf(), leaf())), true),
+        assertEquals(65, cost(doubling(64)), "saturated at one past the limit, and not overflowed");
+        assertEquals(4L, new ExpansionCost(3).read(and(or(leaf(), leaf()), or(leaf(), leaf())), true),
                 "a limit of its own is saturated at one past that");
+    }
+
+    /**
+     * And a limit at the top of its own type saturates like any other.
+     *
+     * <p>Counted in the type the limit is written in, one past the largest of them is the smallest,
+     * and every count is under it — so the guardrail admits the expansions it exists to refuse. The
+     * arithmetic is done a size up, so the ceiling is one past the limit whatever the limit is.
+     */
+    @Test
+    void andALimitAtTheTopOfItsTypeSaturatesLikeAnyOther() {
+        Core wide = doubling(40);
+
+        for (int limit : new int[] {Integer.MAX_VALUE - 1, Integer.MAX_VALUE}) {
+            assertEquals((long) limit + 1, new ExpansionCost(limit).read(wide, true),
+                    "one past the limit, whatever the limit is: " + limit);
+            assertTrue(new ExpansionCost(limit).read(wide, true) > limit,
+                    "and above it, so the guardrail refuses what it exists to refuse: " + limit);
+        }
+    }
+
+    /**
+     * A limit that bounds nothing is refused where it is written.
+     *
+     * <p>A reading holds at least one alternative, so a limit below one is one no reading is under.
+     * Left to whoever writes it, a resource bound that admits everything is the absence of one and
+     * says nothing about itself.
+     */
+    @Test
+    void aLimitThatBoundsNothingIsRefused() {
+        assertThrows(IllegalArgumentException.class, () -> new ReadingPolicy(0));
+        assertThrows(IllegalArgumentException.class, () -> new ReadingPolicy(-1));
     }
 }
