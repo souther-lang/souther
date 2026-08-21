@@ -26,12 +26,17 @@ import java.util.function.Function;
  * finds goes back through the differences, and round again. A round reads only what the round before
  * it produced, so no rule's answer depends on which rule ran first.
  *
- * <p><b>It is not a fixed point, and does not claim to be.</b> Narrowing over a general sum need not
- * settle in finitely many rounds: two rules each halving the other's bound descend forever without
- * arriving. So the rounds are bounded, and where the bound is reached the state says
- * {@link Status#BUDGET_EXHAUSTED} — meaning the box is sound but was not shown to be all the rules
- * leave. Stopping early only ever leaves it wider, so nothing this claims rests on the bound; what
- * rests on it is only whether exactness can be certified, which is a separate question asked
+ * <p><b>The rounds are not run to a fixed point, and do not claim to be.</b> Narrowing over a general
+ * sum need not settle in finitely many rounds: two rules each halving the other's bound descend
+ * forever without arriving. So the rounds are bounded, and where the bound is reached the state says
+ * {@link Status#BUDGET_EXHAUSTED} — meaning the box is sound but the rules were not read against it
+ * until it stopped moving. Stopping early only ever leaves it wider, so nothing this claims rests on
+ * the bound.
+ *
+ * <p><b>The box itself is a fixed point of the differences, whichever way the rounds left.</b> Each
+ * round carries the box along them before the next one reads it, so what is handed back is a box no
+ * relation can still narrow — and that, rather than the rounds having settled, is what a reading of
+ * one position at a time rests on. Asserted where the state is made and held to as a property
  * elsewhere.
  *
  * <p><b>What emptiness means here, in one direction.</b> Where this says nothing is left, nothing is
@@ -60,10 +65,15 @@ public final class ClosedState<A> {
         /**
          * The rounds ran out with the box still moving.
          *
-         * <p>Metadata about the derivation and never a thing to branch on. The box is sound either
-         * way, and a reader that behaved differently here would behave differently on rules that
-         * happen to take one round longer than some other rules — which is not a distinction the
-         * language makes.
+         * <p>About the derivation and never a thing to branch on. The box is sound either way, and a
+         * reader that behaved differently here would behave differently on rules that happen to take
+         * one round longer than some other rules — which is not a distinction the language makes.
+         *
+         * <p>Not a hypothesis of anything either, and in particular not of whether the ranges can be
+         * certified as the whole of what the rules leave. What that needs is the box being a fixed
+         * point of the differences, which holds here as well — see the class comment. Asking for the
+         * rounds to have settled on top of it would be a condition the theorem does not have, buying
+         * no soundness and refusing certificates that hold.
          */
         BUDGET_EXHAUSTED
     }
@@ -107,11 +117,39 @@ public final class ClosedState<A> {
                 return empty(differences);
             }
             if (next.equals(box)) {
-                return new ClosedState<>(box, differences, false, Status.STABLE);
+                return settled(box, differences, Status.STABLE);
             }
             box = next;
         }
-        return new ClosedState<>(box, differences, false, Status.BUDGET_EXHAUSTED);
+        return settled(box, differences, Status.BUDGET_EXHAUSTED);
+    }
+
+    /**
+     * A state with a box no difference can still narrow, which is what every reading of a range
+     * rests on.
+     *
+     * <p>Asserted at the one place a state with a box is made. The rounds carry the box along the
+     * differences at the end of each of them, so this holds however the loop left — and a reader
+     * taking a range as the whole of what the rules leave a position is depending on it whether or
+     * not the rounds settled.
+     */
+    /**
+     * The box carried along the differences, over the positions it has bounds for.
+     *
+     * <p>One expression rather than two. The check that a box about to be handed back is a fixed
+     * point and the answer a reader asks for are the same carry, and a second spelling of it is a
+     * second chance to disagree about which positions it is over — where they disagreed, one of them
+     * would be checking a property the other does not have.
+     */
+    private static <A> Box<A> carriedAlong(Box<A> box, DifferenceBounds<A> differences) {
+        return throughDifferences(box, differences, box.positions());
+    }
+
+    private static <A> ClosedState<A> settled(Box<A> box, DifferenceBounds<A> differences,
+                                              Status status) {
+        assert box.equals(carriedAlong(box, differences))
+                : "a difference still narrows the box that is about to be handed back";
+        return new ClosedState<>(box, differences, false, status);
     }
 
     private static <A> ClosedState<A> empty(DifferenceBounds<A> differences) {
@@ -215,6 +253,18 @@ public final class ClosedState<A> {
     /** The difference-bound part, closed, for a question about two positions rather than one. */
     public DifferenceBounds<A> differences() {
         return differences;
+    }
+
+    /**
+     * The box carried along the differences once more, which is the box it already was.
+     *
+     * <p>Here so that the property every reading of a range rests on can be checked rather than
+     * argued for. What makes a range the whole of what the rules leave a position is that no
+     * difference can carry another position's end onto it and find it loose, and that is this being
+     * a fixed point.
+     */
+    Box<A> boxCarriedAlongTheDifferences() {
+        return carriedAlong(box(), differences);
     }
 
     /** Whether the rounds settled. Metadata about the derivation; see {@link Status}. */

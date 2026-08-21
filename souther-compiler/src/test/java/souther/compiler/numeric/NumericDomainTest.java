@@ -253,8 +253,8 @@ class NumericDomainTest {
                 .assume(atom(B).minus(num(1440)), Rel.LE, whole(B))
                 .assume(atom(A).negate(), Rel.LE, whole(A));
 
-        assertTrue(d.projectionEntails(atom(A).minus(atom(B)), Rel.LT));
-        assertTrue(d.projectionEntails(atom(B).minus(num(1440)), Rel.LE));
+        assertTrue(d.provenByTheBoxAndItsDifferences(atom(A).minus(atom(B)), Rel.LT));
+        assertTrue(d.provenByTheBoxAndItsDifferences(atom(B).minus(num(1440)), Rel.LE));
     }
 
     /** A strict bound over decimals is an end the range stops at without reaching, which is the
@@ -265,7 +265,7 @@ class NumericDomainTest {
                 .assume(atom(A).minus(num(3)), Rel.LT, dense(A));
 
         assertEquals(Endpoint.exclusive(Count.of(3)), interval.boundsOf(A).max());
-        assertTrue(interval.projectionEntails(atom(A).minus(num(3)), Rel.LT));
+        assertTrue(interval.provenByTheBoxAndItsDifferences(atom(A).minus(num(3)), Rel.LT));
     }
 
     /** The same over whole numbers states it too: there the strictness became a step, and the value
@@ -276,7 +276,7 @@ class NumericDomainTest {
                 .assume(atom(A).minus(num(3)), Rel.LT, whole(A));
 
         assertEquals(Endpoint.inclusive(Count.of(2)), d.boundsOf(A).max());
-        assertTrue(d.projectionEntails(atom(A).minus(num(3)), Rel.LT));
+        assertTrue(d.provenByTheBoxAndItsDifferences(atom(A).minus(num(3)), Rel.LT));
     }
 
     /**
@@ -290,12 +290,12 @@ class NumericDomainTest {
     void aHoleIsStatedByTheRangesOnlyWhereItMovedAnEdge() {
         NumericDomain<String> loose = NumericDomain.<String>top()
                 .assume(atom(A), Rel.NE, whole(A));
-        assertFalse(loose.projectionEntails(atom(A), Rel.NE),
+        assertFalse(loose.provenByTheBoxAndItsDifferences(atom(A), Rel.NE),
                 "nothing says which side of nought a is on, so the range keeps the nought");
 
         NumericDomain<String> sided = loose.assume(atom(A), Rel.GE, whole(A));
         assertEquals(Endpoint.inclusive(Count.of(1)), sided.boundsOf(A).min());
-        assertTrue(sided.projectionEntails(atom(A), Rel.NE),
+        assertTrue(sided.provenByTheBoxAndItsDifferences(atom(A), Rel.NE),
                 "and here the range states it, because the hole moved the edge onto one");
     }
 
@@ -313,7 +313,7 @@ class NumericDomainTest {
         assertEquals(Endpoint.inclusive(Count.of(10)), d.boundsOf(A).max());
         assertTrue(d.entails(atom(A).plus(atom(B)).minus(num(10)), Rel.LE),
                 "the rules prove it, since one of them is it");
-        assertFalse(d.projectionEntails(atom(A).plus(atom(B)).minus(num(10)), Rel.LE),
+        assertFalse(d.provenByTheBoxAndItsDifferences(atom(A).plus(atom(B)).minus(num(10)), Rel.LE),
                 "and the two ranges do not, since they hold a = 10 beside b = 10");
     }
 
@@ -327,7 +327,7 @@ class NumericDomainTest {
                 .assume(atom(B).minus(num(3)), Rel.LE, whole(A, B))
                 .assume(atom(A).plus(atom(B)).minus(num(10)), Rel.LE, whole(A, B));
 
-        assertTrue(d.projectionEntails(atom(A).plus(atom(B)).minus(num(10)), Rel.LE),
+        assertTrue(d.provenByTheBoxAndItsDifferences(atom(A).plus(atom(B)).minus(num(10)), Rel.LE),
                 "a and b are each at most three, so their sum is at most six whatever is picked");
     }
 

@@ -45,7 +45,7 @@ public sealed interface CutEvidence {
 
         /** Whether a row at one of these edges may turn out to be unwritable. */
         public boolean uncertain() {
-            return !projection.isExact();
+            return !projection.isCertified();
         }
     }
 

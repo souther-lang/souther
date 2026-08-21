@@ -13,19 +13,26 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * One value is enough only where the range a position is chosen from is the whole of its rules.
+ * One value is enough only where the range a position is chosen from is certified as the whole of
+ * what the rules leave it.
  *
- * <p>Three ways it is not. A disequality is a hole no range keeps; a form that is neither an interval
- * nor a difference is not recorded at all; a strict bound over the decimals is recorded as the
- * non-strict one. In each of them the end a projection names can be the one value the rules refuse,
- * and a position offering only that has nothing left to try — however the choosing is ordered, because
- * ordering it changes which range is read and not how many values come out of one.
+ * <p>Three ways nothing certifies it. A disequality is a hole no range keeps; a form that is neither
+ * an interval nor a difference is not proven from what was derived; a strict bound over the decimals
+ * is recorded as the non-strict one. In each of them the end a projection names can be the one value
+ * the rules refuse, and a position offering only that has nothing left to try — however the choosing
+ * is ordered, because ordering it changes which range is read and not how many values come out of one.
+ *
+ * <p>Not three ways the range is wider, which is the reading this is named against. The hole really
+ * does leave a value in the middle of a range that nothing carries; {@code a + b >= 1} leaves each of
+ * its positions exactly what the rules leave them, and is only a rule nothing here can prove from the
+ * box and the relations its closure holds. A second value is offered in both, because what the offer
+ * turns on is having a proof and not on the range being wide.
  */
-class APositionOffersASecondValueWhereItsRangeIsApproximateTest {
+class APositionOffersASecondValueWhereItsRangeIsNotCertifiedTest {
 
     private static String rowsFor(String clause) throws Exception {
         String model = """
-                module example.approximate
+                module example.uncertified
 
                 data R =
                     { a: Int
@@ -39,7 +46,7 @@ class APositionOffersASecondValueWhereItsRangeIsApproximateTest {
 
                 let f (r, flag) = Ok
                 """.replace("CLAUSE", clause);
-        Path file = Files.createTempDirectory("souther-approximate").resolve("model.sou");
+        Path file = Files.createTempDirectory("souther-uncertified").resolve("model.sou");
         Files.writeString(file, model);
         PrintStream was = System.out;
         ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -52,7 +59,7 @@ class APositionOffersASecondValueWhereItsRangeIsApproximateTest {
         return out.toString(StandardCharsets.UTF_8);
     }
 
-    /** A hole in a range, which a range cannot hold. The projection says nothing, so the position is
+    /** A hole in a range, which a range cannot hold. Nothing certifies the range, so the position is
      * offered the zero it would have been offered anyway, and the rule refuses exactly that. */
     @Test
     void aDisequalityIsMetByTheValueBesideTheHole() throws Exception {

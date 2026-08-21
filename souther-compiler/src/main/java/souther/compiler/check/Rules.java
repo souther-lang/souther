@@ -85,7 +85,31 @@ public sealed interface Rules {
     default ProjectionEvidence projection() {
         return switch (this) {
             case Read read -> read.domains().projection();
-            case NoneWritten _ -> new ProjectionEvidence.Exact();
+            case NoneWritten _ -> NOTHING_WAS_WRITTEN;
+        };
+    }
+
+    /**
+     * What a value of a kind carrying no clause comes to, worked out once.
+     *
+     * <p>Asked of the algebra rather than made here. What certifies a range is the algebra's to say,
+     * and a value carrying no clause is a system of no rules — which meets every hypothesis and has
+     * no rule to leave unproven, so every certificate holds of it. Made once because it is the same
+     * answer every time and this is asked of every position and every line drawn on one.
+     */
+    ProjectionEvidence NOTHING_WAS_WRITTEN = whatNoRuleAtAllComesTo();
+
+    private static ProjectionEvidence whatNoRuleAtAllComesTo() {
+        return switch (souther.compiler.numeric.NumericDomain.<FactSubject>top()
+                .projectionCertification()) {
+            case souther.compiler.numeric.ProjectionCertification.Certified it ->
+                    new ProjectionEvidence.CertifiedExact(it.by());
+            // The arms below are the algebra changing what it takes a certificate to be, and not
+            // anything about a value: a system of no rules leaves nothing unproven and relates no
+            // two positions of different kinds.
+            case souther.compiler.numeric.ProjectionCertification other ->
+                    throw new IllegalStateException(
+                            "no rule is written anywhere and the algebra answered " + other);
         };
     }
 
