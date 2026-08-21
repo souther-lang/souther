@@ -68,7 +68,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
 
         assertBounds(domains.at("startsAt"), 0, 1439);
         assertBounds(domains.at("endsAt"), 1, 1440);
-        assertTrue(domains.projection().isExact(), "both rules were read");
+        assertTrue(domains.projection().isCertified(), "both rules were read");
     }
 
     /** Without the sibling rule the field's own type is the whole answer, so nothing moves. Held so
@@ -141,7 +141,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         assertFalse(domains.at("low").max().inclusive(), "a low of 1 leaves no room above it");
         assertFalse(domains.at("high").min().inclusive(), "nor a high of 0 below it");
         assertTrue(domains.at("high").max().inclusive(), "and a high of 1 needs none");
-        assertTrue(domains.projection().isExact(), "and every rule of the record was taken into these");
+        assertTrue(domains.projection().isCertified(), "and every rule of the record was taken into these");
     }
 
     /**
@@ -168,7 +168,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                 """, "R");
 
         assertBounds(domains.at("a"), 1, 10);
-        assertTrue(domains.projection().isExact(),
+        assertTrue(domains.projection().isCertified(),
                 "and the range is now the whole of it: every value in it is one a row can write");
     }
 
@@ -196,7 +196,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                 """, "WorkInterval");
 
         assertBounds(domains.at("startsAt"), 2, 1439);
-        assertTrue(domains.projection().isExact(), "both rules are comparisons of whole numbers");
+        assertTrue(domains.projection().isCertified(), "both rules are comparisons of whole numbers");
     }
 
     /**
@@ -227,7 +227,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                 """, "WorkInterval");
 
         assertBounds(domains.at("startsAt"), 0, 1439);
-        assertFalse(domains.projection().isExact(),
+        assertFalse(domains.projection().isCertified(),
                 "the pattern narrows no minute, and whether a minute of 1439 can be written is a"
                         + " question about a whole interval, which has a label in it");
     }
@@ -310,7 +310,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         TypeSymbol named = TypeSymbols.declared(new TypeKey("example.report", "Forecast"));
         FieldDomains domains = FieldDomains.of(named, (Hir.Data) symbols.declarations().declaration(named.key()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
-        assertTrue(domains.projection().isExact(),
+        assertTrue(domains.projection().isCertified(),
                 "the rule is `value >= 0.0m` wherever it is declared");
         assertEquals(0, BigDecimal.ZERO.compareTo(souther.compiler.numeric.Count.number(domains.at("total").min().at()).at()),
                 "and it reaches the domain from there too");
@@ -341,7 +341,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                 """, "R");
 
         assertBounds(domains.at("a"), 0, 9);
-        assertTrue(domains.projection().isExact(),
+        assertTrue(domains.projection().isCertified(),
                 "and nothing is left over: `a = 9` is written with `b = 9`, which the hole admits");
     }
 
@@ -368,7 +368,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     }
                 """, "R");
 
-        assertTrue(domains.projection() instanceof ProjectionEvidence.Approximate approximate
+        assertTrue(domains.projection() instanceof ProjectionEvidence.NotCertified approximate
                         && approximate.causes().stream()
                                 .anyMatch(cause -> cause instanceof ProjectionEvidence.Cause.Rounded),
                 "the edge is a third and no decimal is: " + domains.projection());
@@ -407,7 +407,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
 
         assertBounds(domains.at("a"), 0, 9);
         assertBounds(domains.at("b"), 1, 10);
-        assertTrue(domains.projection().isExact());
+        assertTrue(domains.projection().isCertified());
     }
 
     /**
@@ -442,7 +442,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                 """, "Root");
 
         assertBounds(domains.at("n"), 0, 10);
-        assertFalse(domains.projection().isExact(),
+        assertFalse(domains.projection().isCertified(),
                 "the pattern is three records down and a Root cannot be built without going through"
                         + " it");
     }
@@ -469,7 +469,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                 """, "Root");
 
         assertBounds(domains.at("n"), 0, 10);
-        assertTrue(domains.projection().isExact(),
+        assertTrue(domains.projection().isCertified(),
                 "a Root with no note and no others is a Root, and the pattern never runs");
     }
 
@@ -508,7 +508,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
 
         assertBounds(domains.at("a"), 0, 9);
         assertBounds(domains.at("b"), 1, 10);
-        assertTrue(domains.projection().isExact(),
+        assertTrue(domains.projection().isCertified(),
                 "a local `Amount` of another shape says nothing about the one these fields are");
     }
 

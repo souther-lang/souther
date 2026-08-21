@@ -1,20 +1,26 @@
 package souther.compiler.check;
 
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.ProjectionCertificate;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
- * How much of what the rules say the bounds a reading produced are able to state.
+ * Whether anything established that the bounds a reading produced are the whole of what the rules
+ * leave, and what it was or what stood in the way.
  *
- * <p>Evidence about the projection that was made, and not a classification of the rules that might
- * have made it. What an edge stands on is that the range is exact: a row at an edge is a whole value
- * with that edge in it, so a rule the bounds cannot express is a way that value can be refused
- * however plainly the numbers themselves were read. Asked of the reading that built the bounds
- * because that is what the answer is about — a second walk of the declarations asking which clauses
- * could have become a bound answers with what this compiler's interval algebra happens to hold, and
- * would go on saying a rule was unread after a domain that holds it was written.
+ * <p>A proof state and not a reading of the world. Whether a range is the whole of what the rules
+ * leave a position is settled by the rules and holds or fails whatever this manages to show, so
+ * neither answer here is about how wide the bounds actually are. What an edge stands on is having a
+ * proof: a row at an edge is a whole value with that edge in it, so a rule the bounds cannot express
+ * is a way that value can be refused however plainly the numbers themselves were read.
+ *
+ * <p>Asked of the reading that built the bounds because that is what the answer is about — a second
+ * walk of the declarations asking which clauses could have become a bound answers with what this
+ * compiler's interval algebra happens to hold, and would go on saying a rule was unread after a
+ * domain that holds it was written.
  *
  * <p>Not a coverage question, and the two are independent in both directions. {@code value /= 0} is
  * taken in whole by the reading that turns clauses into sets of values — every question about which
@@ -24,34 +30,75 @@ import java.util.Set;
  */
 public sealed interface ProjectionEvidence {
 
-    /** Everything the rules say about the positions they name is in the bounds. */
-    record Exact() implements ProjectionEvidence {}
-
     /**
-     * The bounds are wider than the rules are, and why.
+     * Something established that the bounds are the whole of what the rules leave every position,
+     * and what it was.
      *
-     * <p>Every cause is a reason some value the bounds admit may be one nothing can build. They are
-     * kept apart rather than counted because they are lifted by different work, and a reader sending
-     * an author somewhere needs to know which.
+     * <p>Named for the proof and not for the world. Whether the bounds are the whole of it is
+     * settled by the rules, and holds or fails whatever anything here manages to show — so this is
+     * that a proof was found, and {@link NotCertified} is that none was. Neither of them is a
+     * reading of how wide the bounds actually are.
      *
-     * @param causes never empty: nothing to say is {@link Exact}, which says so
+     * @param by which proof it was, kept rather than reduced to the fact that there is one: a reader
+     *           saying why an edge may be promised cannot get it back from the fact that it may be
      */
-    record Approximate(List<Cause> causes) implements ProjectionEvidence {
+    record CertifiedExact(ProjectionCertificate by) implements ProjectionEvidence {
 
-        public Approximate {
-            causes = List.copyOf(causes);
-            if (causes.isEmpty()) {
-                throw new IllegalArgumentException("no cause is `Exact`, which says so");
+        public CertifiedExact {
+            if (by == null) {
+                throw new IllegalArgumentException("certified by something, or not certified");
             }
         }
     }
 
     /**
-     * Why a projection is wider than the rules.
+     * Nothing established that the bounds are the whole of what the rules leave, and what stood in
+     * the way.
      *
-     * <p>The three do not share a key, and giving them one would put a rule's name on something that
-     * has none. A clause that could not be stated is one whose position is exactly what is unknown
-     * about it; a clause that reached the reading is a rule something can be attributed to.
+     * <p>Not that the bounds are wider. Every cause is a reason no proof could be put together, and
+     * a reader may act on the absence of a proof — an edge nothing licenses is an edge nothing
+     * licenses — and may not act on it as a fact about the model. The two readings differ where it
+     * matters: one sends an author to look at a value, the other tells them there is none.
+     *
+     * <p>The causes are kept apart rather than counted, because they are lifted by different work
+     * and a reader sending somebody somewhere needs to know which.
+     *
+     * @param causes never empty: nothing standing in the way is {@link CertifiedExact}, which says
+     *               what did the certifying
+     */
+    record NotCertified(List<Cause> causes) implements ProjectionEvidence {
+
+        public NotCertified {
+            causes = List.copyOf(causes);
+            if (causes.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "nothing in the way is `CertifiedExact`, which says what certified it");
+            }
+        }
+    }
+
+    /**
+     * The evidence, from what the algebra certified and from what the reading found in the way.
+     *
+     * <p>One place decides the shape. The certificate is the algebra's answer about the ranges it
+     * derived; the causes are everything else a value's ranges have to get past — a rule that never
+     * reached the algebra, one it could make nothing of, an end that could not be written down. A
+     * certificate is not enough on its own and never stands in for those, which is what putting the
+     * two together here rather than at each caller keeps true.
+     */
+    static ProjectionEvidence of(Optional<ProjectionCertificate> certificate, List<Cause> causes) {
+        return certificate.isPresent() && causes.isEmpty()
+                ? new CertifiedExact(certificate.get())
+                : new NotCertified(causes);
+    }
+
+    /**
+     * What stood in the way of a proof that the bounds are the whole of what the rules leave.
+     *
+     * <p>They do not share a key, and giving them one would put a rule's name on something that has
+     * none. A clause that could not be stated is one whose position is exactly what is unknown about
+     * it; a clause that reached the reading is a rule something can be attributed to; a hypothesis
+     * that did not hold is about the value and about no rule in it.
      */
     sealed interface Cause {
 
@@ -122,6 +169,28 @@ public sealed interface ProjectionEvidence {
         }
 
         /**
+         * The rules leave no value at all here, so there is no range to be the whole of anything.
+         *
+         * <p>What is handed over at every position of a value nothing satisfies is unbounded both
+         * ways, which is as wide as a range gets and is nothing the rules left. Said rather than let
+         * pass: asked of each rule on its own, an emptiness discharges every one of them, so a value
+         * nobody can build would come back with every rule proven and its edges promised.
+         */
+        record NothingIsLeft() implements Cause {}
+
+        /**
+         * The rules relate positions whose values are spaced differently.
+         *
+         * <p>Which is not something wrong with the rules. The step from "the ranges and the
+         * relations between them are the feasible set" to "each range is the whole of what the rules
+         * leave that position" is a theorem about a system of one kind of value — see
+         * {@link souther.compiler.numeric.ProjectionCertificate.ByBoxAndClosedDifferences}. Over a
+         * mixed one the corner a range is read at need not be a point, and nothing here has shown
+         * whether it is.
+         */
+        record PositionsSpacedDifferently() implements Cause {}
+
+        /**
          * An end the rules put at a value no decimal writes, so the number handed over is a hair
          * outside where they stop.
          *
@@ -172,13 +241,18 @@ public sealed interface ProjectionEvidence {
         }
     }
 
-    /** Whether an edge may be promised on the strength of these bounds. */
-    default boolean isExact() {
-        return this instanceof Exact;
+    /**
+     * Whether an edge may be promised on the strength of these bounds.
+     *
+     * <p>False is that nothing showed it may be, and not that it may not. Nothing here is entitled
+     * to the second, and a reader taking it for one would turn "no proof" into "no value".
+     */
+    default boolean isCertified() {
+        return this instanceof CertifiedExact;
     }
 
-    /** The causes, for a reader that only counts them. */
+    /** What stood in the way, for a reader that only counts them. */
     default List<Cause> causes() {
-        return this instanceof Approximate approximate ? approximate.causes() : List.of();
+        return this instanceof NotCertified it ? it.causes() : List.of();
     }
 }

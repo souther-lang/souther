@@ -359,7 +359,7 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
         FieldDomains read = FieldDomains.of(named,
                 (Hir.Data) symbols.declarations().declaration(named.key()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
-        assertFalse(read.projection().isExact(), "the bounds hold no hole");
+        assertFalse(read.projection().isCertified(), "the bounds hold no hole");
         assertEquals(Set.of(), rule(read.accounting(), "said").unaccounted(),
                 "and it was read all the same");
     }

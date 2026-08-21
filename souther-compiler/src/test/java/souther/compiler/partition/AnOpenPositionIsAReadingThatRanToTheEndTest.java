@@ -197,6 +197,6 @@ class AnOpenPositionIsAReadingThatRanToTheEndTest {
     void noCutsIsNotAPresentCut() {
         assertThrows(IllegalArgumentException.class,
                 () -> new CutEvidence.Present(List.of(),
-                        new souther.compiler.check.ProjectionEvidence.Exact()));
+                        souther.compiler.check.ProjectionEvidence.of(java.util.Optional.of(new souther.compiler.numeric.ProjectionCertificate.ByBoxAndClosedDifferences()), java.util.List.of())));
     }
 }

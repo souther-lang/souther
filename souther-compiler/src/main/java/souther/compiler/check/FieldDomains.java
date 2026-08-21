@@ -850,6 +850,8 @@ public final class FieldDomains {
             case ProjectionEvidence.Cause.Lossy it ->
                     "3 " + it.rule().named() + " " + it.atom() + " " + it.unstated();
             case ProjectionEvidence.Cause.Rounded it -> "4 " + it.atom();
+            case ProjectionEvidence.Cause.NothingIsLeft _ -> "5";
+            case ProjectionEvidence.Cause.PositionsSpacedDifferently _ -> "6";
         };
     }
 
@@ -958,7 +960,8 @@ public final class FieldDomains {
         Set<ProjectionEvidence.Cause.Lossy> lossy = new LinkedHashSet<>();
         readBy.forEach((rule, byPart) -> byPart.values().forEach(read -> {
             for (Predicates.Constraint each : read.stated()) {
-                if (constraints.numbers().projectionEntails(each.form(), each.rel())) {
+                if (constraints.numbers()
+                        .provenByTheBoxAndItsDifferences(each.form(), each.rel())) {
                     continue;
                 }
                 for (FactSubject atom : each.atoms()) {
@@ -981,9 +984,29 @@ public final class FieldDomains {
         // a value with two conjuncts short of the bounds printed its two causes in whichever order
         // this run happened to give them. Sorted rather than kept in insertion order, because the
         // causes come from three producers and there is no one order they arrive in.
+        // And whether anything establishes that the ranges are the whole of what the rules leave
+        // each position. Asked of the algebra, which is where the derivation is and so where the
+        // theorem the answer rests on can be stated with its hypotheses. Asking each rule against
+        // the ranges is one half of that theorem and was standing in for the whole of it.
+        java.util.Optional<souther.compiler.numeric.ProjectionCertificate> certificate =
+                constraints.numbers().projectionCertificate();
+        if (certificate.isEmpty()) {
+            if (constraints.numbers().isBottom()) {
+                causes.add(new ProjectionEvidence.Cause.NothingIsLeft());
+            } else if (lossy.isEmpty()) {
+                // Every rule was stated and the certificate still did not come, so what stopped it
+                // is the hypothesis about how the positions are spaced.
+                causes.add(new ProjectionEvidence.Cause.PositionsSpacedDifferently());
+            }
+        }
+        // A certificate is every rule proven from the ranges and their relations, so a rule this
+        // found unstated is one it could not have been given. Said as an assertion because the two
+        // walk different lists — the algebra's own rules, and the constraints each reading handed
+        // over — and a list that has drifted shows up nowhere else.
+        assert certificate.isEmpty() || lossy.isEmpty()
+                : "certified while `" + lossy + "` went unstated";
         causes.sort(java.util.Comparator.comparing(FieldDomains::orderOf));
-        return causes.isEmpty() ? new ProjectionEvidence.Exact()
-                : new ProjectionEvidence.Approximate(causes);
+        return ProjectionEvidence.of(certificate, causes);
     }
 
 }

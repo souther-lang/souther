@@ -132,7 +132,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
                 d.boundsOf("straw").max(), "choco is never below nought");
         assertTrue(d.entails(atom("straw").minus(num(16)), Rel.LE),
                 "and the proof says what the range says");
-        assertTrue(d.projectionEntails(atom("straw").minus(num(16)), Rel.LE),
+        assertTrue(d.provenByTheBoxAndItsDifferences(atom("straw").minus(num(16)), Rel.LE),
                 "including what is handed over on its own");
     }
 
@@ -203,8 +203,8 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
 
         assertEquals(d.entails(atom("a").minus(atom("b")).minus(num(2)), Rel.LE),
                 d.entails(scaled("a", 2).minus(scaled("b", 2)).minus(num(4)), Rel.LE));
-        assertEquals(d.projectionEntails(atom("a").minus(atom("b")).minus(num(2)), Rel.LE),
-                d.projectionEntails(scaled("a", 2).minus(scaled("b", 2)).minus(num(4)), Rel.LE));
+        assertEquals(d.provenByTheBoxAndItsDifferences(atom("a").minus(atom("b")).minus(num(2)), Rel.LE),
+                d.provenByTheBoxAndItsDifferences(scaled("a", 2).minus(scaled("b", 2)).minus(num(4)), Rel.LE));
         assertTrue(d.entails(scaled("a", 2).minus(scaled("b", 2)).minus(num(4)), Rel.LE));
     }
 
@@ -314,8 +314,8 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
                 assertEquals(asWritten.refutes(each.form(), each.rel()),
                         asWritten.refutes(doubledForm, each.rel()),
                         () -> "scaling the question moved what is refuted: " + rules);
-                assertEquals(asWritten.projectionEntails(each.form(), each.rel()),
-                        asWritten.projectionEntails(doubledForm, each.rel()),
+                assertEquals(asWritten.provenByTheBoxAndItsDifferences(each.form(), each.rel()),
+                        asWritten.provenByTheBoxAndItsDifferences(doubledForm, each.rel()),
                         () -> "scaling the question moved what the ranges state: " + rules);
             }
             for (NumericDomain<String> other : List.of(reordered, twice)) {

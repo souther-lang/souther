@@ -85,7 +85,14 @@ public sealed interface Rules {
     default ProjectionEvidence projection() {
         return switch (this) {
             case Read read -> read.domains().projection();
-            case NoneWritten _ -> new ProjectionEvidence.Exact();
+            // Nothing was written, so there is no rule for a range to be short of — and the
+            // certificate is asked for all the same rather than made here. What certifies a range is
+            // the algebra's to say, and a value of a kind that carries no clause is a system of no
+            // rules, which is a system every certificate holds of.
+            case NoneWritten _ -> ProjectionEvidence.of(
+                    souther.compiler.numeric.NumericDomain.<FactSubject>top()
+                            .projectionCertificate(),
+                    java.util.List.of());
         };
     }
 

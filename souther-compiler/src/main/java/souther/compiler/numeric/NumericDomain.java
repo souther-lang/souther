@@ -241,18 +241,106 @@ public final class NumericDomain<A> {
     }
 
     /**
-     * Whether what is <em>handed over</em> proves {@code f rel 0}.
+     * Whether the ranges, together with the relations the closure holds between them, prove
+     * {@code f rel 0}.
      *
-     * <p>The bounds a reader downstream is given, and not the rules beside them. A rule relating
-     * several positions narrows each of them and is still not something a range states, so asking
-     * whether the ranges alone hold it is asking a different question from whether the rules do —
-     * and it is the question a caller deciding how much of the rules the bounds say wants.
+     * <p>Not the ranges on their own, and the difference matters. {@code a - b <= 2} beside two
+     * positions the rules leave running 0 to 7 is not something the two ranges state — they hold
+     * {@code a} at 7 beside {@code b} at 0 — and it is held exactly by the closed differences, which
+     * this reads. So a rule of that shape comes back proven, and a reader taking this for "the
+     * product of the ranges states it" is reading an answer about a stronger object than the one it
+     * has.
      *
-     * <p>A caller deciding whether a construction discharges its invariant wants the other one: what
-     * is known there is everything the rules say, however they say it.
+     * <p>For naming what could not be stated, and not for deciding whether a range is the whole of
+     * what the rules leave a position. That decision is {@link #projectionCertificate()}, which is
+     * this asked of every rule at once <em>and</em> the hypotheses the step from here to a range
+     * needs. Asked one rule at a time this answers about the rule; it does not answer about the
+     * range.
+     *
+     * <p>A caller deciding whether a construction discharges its invariant wants {@link #entails}:
+     * what is known there is everything the rules say, however they say it.
      */
-    public boolean projectionEntails(LinearForm<A> f, Rel rel) {
+    public boolean provenByTheBoxAndItsDifferences(LinearForm<A> f, Rel rel) {
         return entails(f, rel, false);
+    }
+
+    /**
+     * Why the ranges handed over are the whole of what the rules leave each position, where anything
+     * establishes it.
+     *
+     * <p>Empty is not "they are wider". It is that nothing here showed they are not, which is the
+     * only thing a caller may act on — see {@link ProjectionCertificate}.
+     *
+     * <p>Empty where the rules leave nothing at all. There are no ranges then: what is handed over
+     * at every position is unbounded both ways, and a value nothing can be built at is not one whose
+     * edges may be promised. Saying so here rather than letting the emptiness discharge every rule
+     * and come back certified, which is what asking each rule on its own does.
+     */
+    public java.util.Optional<ProjectionCertificate> projectionCertificate() {
+        if (isBottom() || !everyRelatedPositionIsSpacedAlike()) {
+            return java.util.Optional.empty();
+        }
+        for (AffineConstraint<A> rule : rules) {
+            if (!proven(rule, false)) {
+                return java.util.Optional.empty();
+            }
+        }
+        return java.util.Optional.of(new ProjectionCertificate.ByBoxAndClosedDifferences());
+    }
+
+    /**
+     * Whether every position the rules relate to each other has its values spaced the same way.
+     *
+     * <p>Related and not merely present. The hypothesis belongs to the step from a system to one of
+     * its ranges, and that step is taken through the relations — so what has to be of one kind is a
+     * position and everything a chain of relations reaches from it. Two positions no rule mentions
+     * together are two systems that happen to be written down beside each other, and a record with a
+     * whole number in one field and a decimal in another is exactly that, which is most of them.
+     *
+     * <p>Related through the whole chain and not one rule at a time. The closure composes edges, so
+     * a difference of two whole numbers beside a difference of one of them and a decimal leaves a
+     * relation between a whole number and a decimal that nobody wrote — which is the same mixture,
+     * one composition further on.
+     */
+    private boolean everyRelatedPositionIsSpacedAlike() {
+        Map<A, A> reaches = new LinkedHashMap<>();
+        for (AffineConstraint<A> rule : rules) {
+            A first = null;
+            for (A atom : rule.form().coefs().keySet()) {
+                if (first == null) {
+                    first = atom;
+                } else {
+                    relate(reaches, first, atom);
+                }
+            }
+        }
+        Map<A, Granularity> ofGroup = new LinkedHashMap<>();
+        for (A atom : List.copyOf(reaches.keySet())) {
+            Granularity had = ofGroup.putIfAbsent(groupOf(reaches, atom), kinds.get(atom));
+            if (had != null && had != kinds.get(atom)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** The two positions put in one group, which is what one rule naming both of them says. */
+    private static <A> void relate(Map<A, A> reaches, A one, A other) {
+        A mine = groupOf(reaches, one);
+        A theirs = groupOf(reaches, other);
+        if (!mine.equals(theirs)) {
+            reaches.put(mine, theirs);
+        }
+    }
+
+    /** Which group a position is in, following the chain to its end. */
+    private static <A> A groupOf(Map<A, A> reaches, A atom) {
+        reaches.putIfAbsent(atom, atom);
+        A at = atom;
+        while (!reaches.get(at).equals(at)) {
+            at = reaches.get(at);
+        }
+        return at;
     }
 
     /**
