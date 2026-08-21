@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.Count;
@@ -471,6 +472,17 @@ public sealed interface Carrier {
      * <p>Asked of the carrier because the answer is the carrier's arithmetic. It sat on the ends
      * themselves, which is where it could only ever be a number's answer, and a carrier whose values
      * are not numbers had nothing to say through it.
+     *
+     * <p><b>What comes back is a value this carrier holds.</b> Which is one answer and not two:
+     * {@link #onTheGrid} says which places are this carrier's, and a value chosen without asking it
+     * is a value a caller has to check and may find refused — with nothing to tell it whether the
+     * range held another. A caller that filtered afterwards lost the value at the very end of the
+     * order every time a rule reached past it.
+     *
+     * <p>Null is this composing none and never the range holding none. Above a strict bound on a
+     * string it declines deliberately: every string with that one as a prefix is inside, which of
+     * them is a choice, and a choice made here puts a character nobody wrote into a row somebody has
+     * to read.
      */
     default Place somethingInside(Endpoint low, Endpoint high) {
         if (this instanceof Text) {
@@ -478,12 +490,24 @@ public sealed interface Carrier {
         }
         Granularity spacing = spacing();
         if (spacing == Granularity.DISCRETE) {
-            Endpoint lo = whole(low, true);
-            Endpoint hi = whole(high, false);
+            // Held inside what this order reaches before a count is taken from it. A range that runs
+            // past an end of the order starts at a count this carrier holds nothing at, and
+            // {@link #onTheGrid} refuses that count — so a range from before the first time of day
+            // to a second inside the day offered the count it started at, which is no time, while
+            // the first second of the day lay in the range and was never offered. Which is the
+            // range giving up no value where it holds one, and it is this that decides what the
+            // range gives up.
+            OrderedInterval reaches = extent();
+            Endpoint lo = whole(Endpoint.lower(low, reaches.low()), true);
+            Endpoint hi = whole(Endpoint.upper(high, reaches.high()), false);
             if (!Endpoint.someValueLiesBetween(lo, hi)) {
                 return null;
             }
-            return lo != null ? lo.at() : hi != null ? hi.at() : Count.ZERO;
+            // Which end is taken is still the range's own, and only where it has one. Read off the
+            // held ends instead, a range nothing bounds below is bounded by the order and the value
+            // taken is the first count the order has — the least whole number there is, offered as
+            // the row an author should write.
+            return low != null ? lo.at() : high != null ? hi.at() : Count.ZERO;
         }
         if (!Endpoint.someValueLiesBetween(low, high)) {
             return null;
