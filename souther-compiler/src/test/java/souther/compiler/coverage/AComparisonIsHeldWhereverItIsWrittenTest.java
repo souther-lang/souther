@@ -137,8 +137,7 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
         numbered.put(sum, 0);
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> new CoverageSites.Plan(List.of(), List.of(), new IdentityHashMap<>(),
-                        numbered, ComparisonCatalog.of(bodies)));
+                () -> planNumbering(numbered, ComparisonCatalog.of(bodies)));
         assertTrue(refused.getMessage().contains("ADD"), refused.getMessage());
     }
 
@@ -158,10 +157,17 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
         numbered.put(comparison, 0);
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> new CoverageSites.Plan(List.of(), List.of(), new IdentityHashMap<>(),
-                        numbered, ComparisonCatalog.of(Map.of())));
+                () -> planNumbering(numbered, ComparisonCatalog.of(Map.of())));
         assertTrue(refused.getMessage().contains("one answer or they are two"),
                 refused.getMessage());
+    }
+
+    /** A plan that numbers {@code numbered} and holds {@code catalog}, and nothing else. */
+    private static CoverageSites.Plan planNumbering(IdentityHashMap<Core, Integer> numbered,
+                                                    ComparisonCatalog catalog) {
+        return new CoverageSites.Plan(List.of(), List.of(), new IdentityHashMap<>(), numbered,
+                new IdentityHashMap<>(), new IdentityHashMap<>(), java.util.Set.of(),
+                new IdentityHashMap<>(), catalog);
     }
 
     private static Core sumIn(Map<String, Core> bodies) {

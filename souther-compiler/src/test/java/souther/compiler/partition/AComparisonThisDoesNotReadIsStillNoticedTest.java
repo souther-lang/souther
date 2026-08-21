@@ -202,9 +202,14 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
 
         assertInstanceOf(RuleRef.Comparison.class, said.rule());
         RuleCitation.WrittenAt cited = assertInstanceOf(RuleCitation.WrittenAt.class, said.cited());
-        assertInstanceOf(souther.compiler.diag.Citation.Written.class, cited.at(),
-                "a rule with no name is found where it is written, which this compile has a file "
-                        + "for");
+        souther.compiler.diag.Citation.Written where = assertInstanceOf(
+                souther.compiler.diag.Citation.Written.class, cited.at(),
+                "a rule with no name is found where it is written");
+        // Line 14 column 31 is the `<`, and column 8 is the `if` that tests it. The two are
+        // on one line, so a citation taken from the fork would be a plausible place on the right
+        // line — which is what this used to say and what a reader would go to the wrong token for.
+        assertEquals(31, where.at().column(),
+                () -> "the comparison and not the fork that tests it: " + where.at());
     }
 
     /**

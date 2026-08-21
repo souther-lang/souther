@@ -210,20 +210,6 @@ public final class CoverageSites {
                 java.util.Set.of(), new IdentityHashMap<>(), ComparisonCatalog.of(Map.of()));
 
         /**
-         * The same plan built without the control layer, for a caller assembling one by hand.
-         *
-         * <p>The catalog is not defaulted. Handed an empty one, such a plan says a body holds no
-         * comparison and numbers several — which every reader below agrees with, each about a
-         * different body.
-         */
-        public Plan(List<Site> sites, List<GuardRef> guards, IdentityHashMap<Core, int[]> byNode,
-                    IdentityHashMap<Core, Integer> byComparison, ComparisonCatalog comparisons) {
-            this(sites, guards, byNode, byComparison, new IdentityHashMap<>(),
-                    new IdentityHashMap<>(), java.util.Set.of(), new IdentityHashMap<>(),
-                    comparisons);
-        }
-
-        /**
          * Whether one run of the behavior can pass {@code node} more than once.
          *
          * <p>What decides whether a set is enough to say what a run did. A recording holds that a

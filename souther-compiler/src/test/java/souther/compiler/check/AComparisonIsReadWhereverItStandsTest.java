@@ -7,6 +7,7 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.reach.Reachability;
 
 import java.util.ArrayList;
@@ -15,6 +16,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A comparison is read under what holds where it stands, wherever that is.
@@ -143,6 +145,41 @@ class AComparisonIsReadWhereverItStandsTest {
     }
 
     /**
+     * And so does every comparison of every shape a body can hold one in.
+     *
+     * <p>What the reading owes is one answer per comparison the plan numbered, and it is discharged
+     * by a walk — so the set the walk reaches and the set the plan numbered agree only as far as
+     * the shapes anything has looked at. Held as a property over the shapes rather than as a check
+     * the reading makes of itself: a check inside a reading that is fail-open by contract reports
+     * into a list nothing reads, which is a guard that cannot fail.
+     */
+    @Test
+    void everyComparisonOfEveryShapeIsAnsweredFor() {
+        for (String shape : SHAPES) {
+            assertEquals(List.of(), numberedButUnanswered(shape, "charge"),
+                    () -> "every comparison the plan numbered has an answer:" + shape);
+        }
+    }
+
+    /** Bodies holding a comparison where each of the walk's cases has to reach it. */
+    private static final List<String> SHAPES = List.of(
+            NOTHING_REACHES_THE_REST_OF_THE_CHAIN,
+            IN_THE_CONDITION,
+            NAMED_BEFORE_THE_FORK,
+            // Under an arm of a fork, which is entered with what that arm proves.
+            body("if a.value < 100 then (if a.value > 1 then Free else Charged { yen = 1 })"
+                    + " else Free"),
+            // Inside a function value handed to a combinator, passed once per element.
+            body("if List.length(List.filter(x -> x > 0, [a.value])) > 0"
+                    + " then Free else Charged { yen = 1 }"),
+            // Behind a comparison the rules leave nothing on either side of.
+            body("if a.value > 2000000 then Free else Charged { yen = 1 }"));
+
+    private static String body(String answer) {
+        return "TEMPLATE".replace("TEMPLATE", "module d\n\ndata Amount = Int invariant value >= 0 && value <= 1000000\ndata Free\ndata Charged = { yen: Int }\n\nbehavior charge : (a: Amount) -> Free | Charged\n    constructs Charged\n\nlet charge (a) = ") + answer + "\n";
+    }
+
+    /**
      * Nothing at or above 6000 got past a guard that kept everything under 5000, and the comparison
      * saying so is read whether or not a name stands between it and the fork.
      *
@@ -158,4 +195,5 @@ class AComparisonIsReadWhereverItStandsTest {
                 comparisonsProvenUnreachable(NAMED_BEFORE_THE_FORK),
                 "and giving it a name is not a fact about what arrives at it");
     }
+
 }

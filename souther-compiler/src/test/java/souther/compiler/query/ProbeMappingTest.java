@@ -93,7 +93,8 @@ class ProbeMappingTest {
                 real.sites().size(), real.sites().size(), extra.obligation()));
         CoverageSites.Plan overcounted =
                 new CoverageSites.Plan(longer, real.guards(), real.byNode(), real.byComparison(),
-                        real.comparisons());
+                        real.armsByNode(), real.controlByComparison(), real.mayRepeat(),
+                        real.forkByNode(), real.comparisons());
 
         IllegalStateException stopped = assertThrows(IllegalStateException.class,
                 () -> Backend.generate(in.lowered(), in.scope(), in.typePackages(), in.sigs(),

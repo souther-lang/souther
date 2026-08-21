@@ -259,15 +259,13 @@ class ARuleThisCouldNotReadIsNamedByTheRuleTest {
                 }
                 """;
 
-        String human = human(model);
-
-        List<String> cited = human.lines()
-                .filter(line -> line.contains("not read: comparison@"))
-                .map(line -> line.substring(line.indexOf("not read: comparison@")).split(" ")[2])
+        List<souther.compiler.check.RuleCitation> cited = rulesNotRead(model).stream()
+                .map(each -> ((PartitionEvidence.NotRead.ARule) each).finding().cited())
                 .distinct().toList();
+
         assertEquals(2, cited.size(),
                 () -> "the comparison in the condition and the one inside the fork it holds are "
-                        + "two rules at two places: " + cited + "\n" + human);
+                        + "two rules at two places: " + cited + "\n" + human(model));
     }
 
     /**
