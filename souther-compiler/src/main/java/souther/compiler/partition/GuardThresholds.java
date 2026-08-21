@@ -72,10 +72,12 @@ public final class GuardThresholds {
     public record Guards(List<Threshold> thresholds,
                          List<UnreadRule> unread, List<Singled> singled,
                          List<LineDrawn> between,
-                         List<AtAPosition> accounting) {
+                         List<AtAPosition> accounting,
+                         ReachingCuts reaching) {
 
         public static final Guards NONE =
-                new Guards(List.of(), List.of(), List.of(), List.of(), List.of());
+                new Guards(List.of(), List.of(), List.of(), List.of(), List.of(),
+                        ReachingCuts.NONE);
 
         /**
          * One comparison's accounting, and the position a reader is sent to for it.
@@ -154,39 +156,21 @@ public final class GuardThresholds {
         // The comparisons a line came of, and not the positions they were about. A position carries
         // more than one statement and reading one of them settles nothing about the others.
         List<Core> made = new ArrayList<>();
-        lines(behavior, body, plan, BoundaryComparisons.of(body, plan), InputReads.of(inputs),
-                symbols, quantities, found, singled, between, accounting, made);
-        // Read after the lines and not beside them, because what it asks is which comparisons
-        // nothing turned into one. Asked at each fork the walk passed, the answer depended on the
-        // lines that fork's own condition had made by then, which is an order to keep rather than
-        // a question to answer.
-        unread(behavior, body, made, InputReads.of(inputs), symbols, plan.comparisons(), unread);
-        return new Guards(found, unread, singled, between, accounting);
-    }
-
-    /**
-     * Every line the body draws, read where the comparison that draws it is written.
-     *
-     * <p>Per comparison and not per fork. What bears a line is {@link BoundaryComparisons}'s answer,
-     * and a reader that had to find a fork first could not be handed a wider answer without being
-     * rewritten — which is the whole of what naming the policy buys.
-     */
-    private static void lines(String behavior, Core e, CoverageSites.Plan plan,
-                              BoundaryComparisons boundaries, InputReads reads, Symbols symbols,
-                              souther.compiler.inputs.Quantities quantities, List<Threshold> out,
-                              List<Guards.Singled> singled, List<LineDrawn> between,
-                              List<Guards.AtAPosition> accounting, List<Core> made) {
-        if (e instanceof Core.Binary comparison && boundaries.contains(comparison)) {
-            lineAt(behavior, comparison, plan, reads, symbols, quantities, out, singled, between,
-                    accounting, made);
+        // Every line the body draws, read where the comparison that draws it is written and under
+        // the names in force there. Which comparisons those are is
+        // {@link BoundaryComparisons}'s answer: a reader that had to find a fork before it could
+        // find a rule could not be handed a wider one without being rewritten.
+        for (BoundaryComparisons.Bearing each
+                : BoundaryComparisons.of(body, plan, InputReads.of(inputs)).all()) {
+            lineAt(behavior, each.comparison(), plan, each.reads(), symbols, quantities, found,
+                    singled, between, accounting, made);
         }
-        // Inside what a `let` binds, since that is where a name standing for an argument is read
-        // as the argument: an expanded helper binds the call's argument to its own parameter, and a
-        // walk that did not follow the binding would find its comparisons about nothing.
-        InputReads inside = e instanceof Core.LetIn let ? reads.and(let.binder(), let.value())
-                : reads;
-        Core.forEachChild(e, child -> lines(behavior, child, plan, boundaries, inside, symbols,
-                quantities, out, singled, between, accounting, made));
+        // What a row had already satisfied when each comparison ran, and every comparison nothing
+        // turned into a line. Both walk the body; neither decides which comparisons there are.
+        ReachingCuts.Collected cuts = new ReachingCuts.Collected();
+        reached(behavior, body, made, plan, InputReads.of(inputs), symbols, List.of(), cuts,
+                unread);
+        return new Guards(found, unread, singled, between, accounting, cuts.made());
     }
 
     /**
@@ -202,11 +186,22 @@ public final class GuardThresholds {
      * otherwise deny — so a comparison written somewhere no line is drawn from is still a rule the
      * author wrote and still worth saying went unread.
      */
-    private static void unread(String behavior, Core e, List<Core> made, InputReads reads,
-                               Symbols symbols, ComparisonCatalog catalog, List<UnreadRule> out) {
+    private static void reached(String behavior, Core e, List<Core> made, CoverageSites.Plan plan,
+                                InputReads reads, Symbols symbols, List<ReachingCuts.Cut> assumed,
+                                ReachingCuts.Collected cuts, List<UnreadRule> out) {
+        // One reading of this condition, folded by both of the questions asked here. Read off the
+        // shape of the node in front of each of them, they each knew on their own which shapes are
+        // transparent and which combine, and a shape one learned to see through was one the other
+        // still could not.
+        Condition asked = e instanceof Core.If iff ? Condition.of(iff.cond(), reads) : null;
         if (e instanceof Core.If iff) {
+            // What a row had already satisfied when each of this condition's comparisons ran, filed
+            // where it was assumed. Asked of the condition rather than of the fork: a condition
+            // stops as soon as it is settled, so what stands when the second comparison runs is not
+            // what stood when the first did.
+            ReachingCuts.collect(asked, assumed, plan, symbols, cuts);
             for (UnreadRule compared
-                    : comparedIn(behavior, iff.cond(), made, reads, symbols, catalog)) {
+                    : comparedIn(behavior, iff.cond(), made, reads, symbols, plan.comparisons())) {
                 if (out.stream().noneMatch(had -> had.sameAs(compared))) {
                     out.add(compared);
                 }
@@ -217,7 +212,39 @@ public final class GuardThresholds {
         // number arms.
         InputReads inside = e instanceof Core.LetIn let ? reads.and(let.binder(), let.value())
                 : reads;
-        Core.forEachChild(e, child -> unread(behavior, child, made, inside, symbols, catalog, out));
+        if (e instanceof Core.If iff) {
+            // The arms under what each of them proves of the condition, and the condition itself
+            // under what stood above the fork. A comparison inside a condition is not below the
+            // fork: it runs to decide it.
+            reached(behavior, iff.cond(), made, plan, inside, symbols, assumed, cuts, out);
+            reached(behavior, iff.then(), made, plan, inside, symbols,
+                    taking(asked, true, assumed, symbols), cuts, out);
+            reached(behavior, iff.els(), made, plan, inside, symbols,
+                    taking(asked, false, assumed, symbols), cuts, out);
+            return;
+        }
+        Core.forEachChild(e, child ->
+                reached(behavior, child, made, plan, inside, symbols, assumed, cuts, out));
+    }
+
+    /**
+     * What stands inside one arm of a fork: what stood above it, and what that arm proves of the
+     * condition.
+     *
+     * <p>Asked of {@link ReachingCuts#stating}, which is the same rule that says what reaching the
+     * right operand of a condition establishes. Both are "this subtree came out this way, so what
+     * follows", and written apart they would agree by having been derived alike — until one of them
+     * learned to read a shape of condition the other did not.
+     */
+    private static List<ReachingCuts.Cut> taking(Condition condition, boolean onThen,
+                                                 List<ReachingCuts.Cut> assumed, Symbols symbols) {
+        List<ReachingCuts.Cut> arm = ReachingCuts.stating(condition, onThen, symbols);
+        if (arm.isEmpty()) {
+            return assumed;
+        }
+        List<ReachingCuts.Cut> out = new ArrayList<>(assumed);
+        out.addAll(arm);
+        return List.copyOf(out);
     }
 
     /**

@@ -1,13 +1,11 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.ComparisonCatalog;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.inputs.InputReads;
 
-import java.util.Collections;
-import java.util.IdentityHashMap;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Which of a body's comparisons a line may be drawn on.
@@ -40,51 +38,78 @@ import java.util.Set;
  */
 final class BoundaryComparisons {
 
-    private final Set<Core> bearing;
+    /**
+     * One comparison a line may be drawn on, and where the names in it point.
+     *
+     * <p>The reading travels with the comparison because it is not the same at every one of them: a
+     * comparison inside an expanded helper is about the argument the call handed it, and read
+     * against the names outside the binding it is about nothing at all.
+     */
+    record Bearing(Core.Binary comparison, InputReads reads) {}
 
-    private BoundaryComparisons(Set<Core> bearing) {
-        this.bearing = bearing;
+    private final List<Bearing> bearing;
+
+    private BoundaryComparisons(List<Bearing> bearing) {
+        this.bearing = List.copyOf(bearing);
     }
 
-    /** Whether a line may be drawn on {@code comparison}, which is the whole of what this says. */
-    boolean contains(Core.Binary comparison) {
-        return bearing.contains(comparison);
+    /** The comparisons a line may be drawn on, in the order the source wrote them. */
+    List<Bearing> all() {
+        return bearing;
     }
 
     /** The comparisons of {@code body} a line may be drawn on. */
-    static BoundaryComparisons of(Core body, CoverageSites.Plan plan) {
-        Set<Core> bearing = Collections.newSetFromMap(new IdentityHashMap<>());
-        gather(body, plan, bearing);
+    static BoundaryComparisons of(Core body, CoverageSites.Plan plan, InputReads reads) {
+        List<Bearing> bearing = new ArrayList<>();
+        gather(body, plan, reads, bearing);
         return new BoundaryComparisons(bearing);
     }
 
-    private static void gather(Core e, CoverageSites.Plan plan, Set<Core> bearing) {
+    private static void gather(Core e, CoverageSites.Plan plan, InputReads reads,
+                               List<Bearing> bearing) {
         // A fork no run can be recorded in is one no line drawn under it could ever be shown met, so
         // the rules there are read and nothing is owed.
         if (e instanceof Core.If iff && guardOf(plan, iff) != null) {
-            inTheCondition(iff.cond(), plan.comparisons(), bearing);
+            inTheCondition(Condition.of(iff.cond(), reads), plan, bearing);
         }
-        Core.forEachChild(e, child -> gather(child, plan, bearing));
+        // Inside what a `let` binds, since that is where a name standing for an argument is read as
+        // the argument. What a binding inside a condition contributes is {@link Condition}'s to
+        // look through; this is the one above the fork.
+        InputReads inside = e instanceof Core.LetIn let ? reads.and(let.binder(), let.value())
+                : reads;
+        Core.forEachChild(e, child -> gather(child, plan, inside, bearing));
     }
 
     /**
      * The comparisons one condition is built out of.
      *
-     * <p>Descends through {@code &&} and {@code ||} only, which is what a condition is built out of.
-     * Anything else is where the condition's operands stop, and whether one of those is a comparison
-     * is the catalog's answer rather than a shape read off the node.
+     * <p>Read off {@link Condition} and not off the shape of the node, which is where every reader
+     * of a condition used to decide for itself which shapes combine, which are transparent and
+     * which are something to say about.
+     *
+     * <p>The ones the plan numbered, which is not all of them. Meeting a line takes getting the
+     * comparison to answer, and whether it answered is what a site records — so a comparison with no
+     * site is one no row could ever be shown to have reached, and a border drawn on it would owe a
+     * row nothing can measure.
      */
-    private static void inTheCondition(Core e, ComparisonCatalog catalog, Set<Core> bearing) {
-        if (e instanceof Core.Binary binary
-                && (binary.op() == Hir.BinOp.AND || binary.op() == Hir.BinOp.OR)) {
-            inTheCondition(binary.left(), catalog, bearing);
-            inTheCondition(binary.right(), catalog, bearing);
-            return;
+    private static void inTheCondition(Condition e, CoverageSites.Plan plan,
+                                       List<Bearing> bearing) {
+        switch (e) {
+            case Condition.Both both -> {
+                inTheCondition(both.left(), plan, bearing);
+                inTheCondition(both.right(), plan, bearing);
+            }
+            case Condition.Either either -> {
+                inTheCondition(either.left(), plan, bearing);
+                inTheCondition(either.right(), plan, bearing);
+            }
+            case Condition.Compares one -> {
+                if (plan.comparisonAt(one.at()).isPresent()) {
+                    bearing.add(new Bearing(one.at(), one.reads()));
+                }
+            }
+            case Condition.NotRead ignored -> { }
         }
-        // Whether this is a comparison is the catalog's answer. Read off the node's own shape here,
-        // this was a second account of what a comparison is — spelled as "a binary that is not
-        // `&&` or `||`", which is every arithmetic node in the condition as well.
-        catalog.at(e).ifPresent(comparison -> bearing.add(comparison.node()));
     }
 
     /** The arms a row that reached this fork's condition can be recorded in, or null where none

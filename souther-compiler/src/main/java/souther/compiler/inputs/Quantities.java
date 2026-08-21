@@ -97,6 +97,18 @@ public sealed interface Quantities permits ReadQuantities {
     }
 
     /**
+     * Where a row may be written, before anything a body says is taken in.
+     *
+     * <p>The one way over to {@link SearchRegion}, and it is one way. What the declarations leave is
+     * where the borders are read from, and a region is where a row for one of them is looked for —
+     * so a caller may go from the first to the second and nothing can come back. Read the other way,
+     * a region narrowed by the conditions on the way to one border would reach the reader that
+     * decides which borders exist, and an obligation would go away for this compiler having read
+     * more of the body.
+     */
+    SearchRegion region();
+
+    /**
      * Why the rules leave no value under what is fixed, or empty where nothing proved they leave
      * none.
      *

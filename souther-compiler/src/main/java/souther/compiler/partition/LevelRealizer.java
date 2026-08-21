@@ -32,39 +32,39 @@ import java.util.Optional;
  */
 public final class LevelRealizer {
 
-    private final souther.compiler.inputs.Quantities rules;
-
     /**
-     * @param rules what the declarations reaching this behavior's input leave its quantities, which
-     *              is what a row has to be written inside. Taken whole rather than as an end per
-     *              position: a rule relating two positions is not in either of their ranges, so a
-     *              search handed the ranges walks a box with a corner cut off it that it cannot see
-     *              — and offers a row in the corner
+     * Where the positions have to stand for a row to be at this item, or why this found nowhere.
+     *
+     * <p>The region is handed in per item and is no part of this. Where a row may be written depends
+     * on what the rules a row has to pass before it reaches this item leave, which is a fact about
+     * where the item's rule is written rather than about the behavior — held here, one region would
+     * answer for every item of a body and the search for a border deep in it would run over values
+     * nothing arriving there can hold.
+     *
+     * @param within where a row for this item may be written. Never wider than what the declarations
+     *               leave and never narrower than what reaches the item, which is what makes an
+     *               exhausted walk of it a proof
      */
-    public LevelRealizer(souther.compiler.inputs.Quantities rules) {
-        if (rules == null) {
+    public Realization realize(Standing standing, souther.compiler.inputs.SearchRegion within) {
+        if (within == null) {
             throw new IllegalArgumentException(
-                    "a search looks inside what the rules leave, and there is always a reading of"
-                            + " them: an input nothing was written about is one they leave"
-                            + " everything, which is an answer and not an absence");
+                    "a search looks inside a region, and there is always one: an item nothing on the"
+                            + " way to it narrows is searched for in what the declarations leave,"
+                            + " which is an answer and not an absence");
         }
-        this.rules = rules;
-    }
-
-    /** Where the positions have to stand, or why this found nowhere. */
-    public Realization realize(Standing standing) {
         return switch (standing) {
-            case Standing.OfOneCoordinate one -> ofOne(one);
-            case Standing.OfTwoOnOneCarrier two -> ofTwo(two);
-            case Standing.OfAForm over -> ofAForm(over);
+            case Standing.OfOneCoordinate one -> ofOne(one, within);
+            case Standing.OfTwoOnOneCarrier two -> ofTwo(two, within);
+            case Standing.OfAForm over -> ofAForm(over, within);
         };
     }
 
     /** One position at a place of its own carrier that the item accepts. */
-    private Realization ofOne(Standing.OfOneCoordinate one) {
-        Place at = placeMeeting(one.where(), one.of(), bounds(one.term()));
+    private Realization ofOne(Standing.OfOneCoordinate one,
+                              souther.compiler.inputs.SearchRegion within) {
+        Place at = placeMeeting(one.where(), one.of(), bounds(within, one.term()));
         return at == null ? new Realization.Unknown(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE)
-                : found(Map.of(one.term(), at));
+                : found(Map.of(one.term(), at), within);
     }
 
     /**
@@ -78,29 +78,88 @@ public final class LevelRealizer {
      * that found nothing rather than as a proof, because two ranges leaving no place in common is a
      * fact about the ranges and the pair may be refused or admitted by a rule neither range holds.
      */
-    private Realization ofTwo(Standing.OfTwoOnOneCarrier two) {
-        Place common = commonPlace(bounds(two.on()), bounds(two.against()), two.of(),
+    private Realization ofTwo(Standing.OfTwoOnOneCarrier two,
+                              souther.compiler.inputs.SearchRegion within) {
+        NumericDomain.Bounds on = bounds(within, two.on());
+        NumericDomain.Bounds together = commonRange(on, bounds(within, two.against()), two.of(),
                 two.where().anchor().asACount());
-        if (common == null) {
-            return new Realization.Unknown(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE);
+        for (Place common : alongTheLine(together, two.of())) {
+            // Where the first has to stand relative to the second: the place the level's distance
+            // from it, and then whatever the item asks of that place. Arithmetic on the carrier's
+            // counts and not a walk along it — a walk is an addition that only exists where the
+            // order has a smallest step, so a rule over two decimals had no pair anything could
+            // compose.
+            // Null where the carrier's arithmetic could not put the item's levels beside the place
+            // the other position stands at — read on, an item with no level in it was handed to a
+            // reader that asks where its level falls.
+            Criterion here = relativeTo(two.where(), common, two.of());
+            Place at = here == null ? null : placeMeeting(here, two.of(), on);
+            if (at == null) {
+                continue;
+            }
+            Map<NumericTerm, Place> fixing = new LinkedHashMap<>();
+            fixing.put(two.on(), at);
+            fixing.put(two.against(), common);
+            if (found(fixing, within) instanceof Realization.Found made) {
+                return made;
+            }
         }
-        // Where the first has to stand relative to the second: the place the level's distance from
-        // it, and then whatever the item asks of that place. Arithmetic on the carrier's counts and
-        // not a walk along it — a walk is an addition that only exists where the order has a
-        // smallest step, so a rule over two decimals had no pair anything could compose.
-        // Null where the carrier's arithmetic could not put the item's levels beside the place the
-        // other position stands at. Reported as a search that composed nothing, which is what it is
-        // — read on, an item with no level in it was handed to a reader that asks where its level
-        // falls.
-        Criterion here = relativeTo(two.where(), common, two.of());
-        Place at = here == null ? null : placeMeeting(here, two.of(), bounds(two.on()));
-        if (at == null) {
-            return new Realization.Unknown(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE);
+        return new Realization.Unknown(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE);
+    }
+
+    /**
+     * How many places along a line a pair is tried at before this stops.
+     *
+     * <p>Small on purpose. What a range cannot say is that one of its values is missing, and a rule
+     * that takes a value away takes one — everything that moves an end is in the range already. So
+     * what this steps past is holes, and there are as many of those as the rules state.
+     */
+    private static final int HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT = 64;
+
+    /**
+     * The places to try the pair at, from the one the ranges leave outward.
+     *
+     * <p>Every place on the line carries the pair as well as any other — where they stand is a
+     * witness and the line is the item ({@link Standing.OfTwoOnOneCarrier}) — so one that the rules
+     * refuse is one to step off rather than an answer.
+     *
+     * <p>Which is a distinction the ranges cannot make. A place is chosen from what the two ranges
+     * leave and whether it stands is the rules' to say, and a range has no word for a value taken
+     * out of the middle of it: before anything narrowed a search, nothing the ranges left was ever
+     * refused and the two never disagreed. A region draws one value out and the pair at it is the
+     * only pair on the line that cannot be written.
+     *
+     * <p>One place where the carrier's values do not count. There is no next place to step to, so
+     * the one the ranges leave is the whole of what there is to try.
+     */
+    private static List<Place> alongTheLine(NumericDomain.Bounds together, Carrier carrier) {
+        Place first = carrier.somethingInside(together.min(), together.max());
+        if (first == null) {
+            return List.of();
         }
-        Map<NumericTerm, Place> fixing = new LinkedHashMap<>();
-        fixing.put(two.on(), at);
-        fixing.put(two.against(), common);
-        return found(fixing);
+        if (!carrier.counts()) {
+            return List.of(first);
+        }
+        List<Place> out = new java.util.ArrayList<>();
+        out.add(first);
+        for (int step = 1; out.size() < HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT; step++) {
+            Place above = carrier.onTheGrid(Count.number(first).plus(Count.of(step)));
+            Place below = carrier.onTheGrid(Count.number(first).plus(Count.of(-step)));
+            boolean took = false;
+            if (above != null && together.admits(above)) {
+                out.add(above);
+                took = true;
+            }
+            if (below != null && together.admits(below)
+                    && out.size() < HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT) {
+                out.add(below);
+                took = true;
+            }
+            if (!took) {
+                break;
+            }
+        }
+        return List.copyOf(out);
     }
 
     /**
@@ -138,7 +197,8 @@ public final class LevelRealizer {
      * that one's answer: whether a row can be composed at one of them is this one's, and the two are
      * apart so that how long this is willing to look does not read as a fact about the order.
      */
-    private Realization ofAForm(Standing.OfAForm over) {
+    private Realization ofAForm(Standing.OfAForm over,
+                                souther.compiler.inputs.SearchRegion within) {
         LevelSpace levels = over.levels();
         // In the form's own order and not the map's. A form is a map, so the order its coefficients
         // were recorded in is a hash order — and which position is solved last decides whether the
@@ -152,10 +212,10 @@ public final class LevelRealizer {
         boolean whole = levels.neighbour(new Level.ACount(Count.ZERO), Towards.ABOVE).isPresent();
         boolean bounded = true;
         for (Level level : LevelCandidateSource.forItem(over.where(), levels)) {
-            Search search = new Search(terms, over.of(), whole);
+            Search search = new Search(terms, over.of(), whole, within);
             Map<NumericTerm, Place> standing = search.solve(level.asACount());
             if (standing != null) {
-                Realization made = found(standing);
+                Realization made = found(standing, within);
                 if (made instanceof Realization.Found) {
                     return made;
                 }
@@ -198,6 +258,8 @@ public final class LevelRealizer {
         private final List<Map.Entry<NumericTerm, java.math.BigDecimal>> terms;
         private final Carrier carrier;
         private final boolean whole;
+        /** Where a row for the item being searched for may be written. */
+        private final souther.compiler.inputs.SearchRegion within;
         private final Place[] at;
         /**
          * Where each term runs before anything is fixed, worked out once.
@@ -214,14 +276,15 @@ public final class LevelRealizer {
         private boolean everyEndKnown = true;
 
         Search(List<Map.Entry<NumericTerm, java.math.BigDecimal>> terms, Carrier carrier,
-               boolean whole) {
+               boolean whole, souther.compiler.inputs.SearchRegion within) {
             this.terms = terms;
             this.carrier = carrier;
             this.whole = whole;
+            this.within = within;
             this.at = new Place[terms.size()];
             this.runsBetween = new NumericDomain.Bounds[terms.size()];
             for (int i = 0; i < terms.size(); i++) {
-                runsBetween[i] = bounds(terms.get(i).getKey());
+                runsBetween[i] = bounds(within, terms.get(i).getKey());
             }
         }
 
@@ -232,7 +295,7 @@ public final class LevelRealizer {
         }
 
         Map<NumericTerm, Place> solve(Count target) {
-            return walk(0, target.at(), rules) ? fixing() : null;
+            return walk(0, target.at(), within) ? fixing() : null;
         }
 
         private Map<NumericTerm, Place> fixing() {
@@ -243,7 +306,7 @@ public final class LevelRealizer {
             return out;
         }
 
-        private boolean walk(int i, java.math.BigDecimal owed, souther.compiler.inputs.Quantities here) {
+        private boolean walk(int i, java.math.BigDecimal owed, souther.compiler.inputs.SearchRegion here) {
             if (++taken > STEPS_A_SEARCH_MAY_TAKE) {
                 return false;
             }
@@ -325,7 +388,7 @@ public final class LevelRealizer {
                 if (inside == null || !(inside instanceof Count taken)) {
                     return false;
                 }
-                souther.compiler.inputs.Quantities next = narrowing(here, terms.get(i).getKey(), taken.at());
+                souther.compiler.inputs.SearchRegion next = narrowing(here, terms.get(i).getKey(), taken.at());
                 if (next == null) {
                     return false;
                 }
@@ -338,7 +401,7 @@ public final class LevelRealizer {
                 // nothing beside is skipped here rather than offered and refused where the row is
                 // built: refused there, one candidate coming back rejected is reported as every
                 // value having been tried.
-                souther.compiler.inputs.Quantities next = narrowing(here, terms.get(i).getKey(), x);
+                souther.compiler.inputs.SearchRegion next = narrowing(here, terms.get(i).getKey(), x);
                 if (next == null) {
                     continue;
                 }
@@ -372,13 +435,13 @@ public final class LevelRealizer {
          * arriving by way of a budget. So the last step is {@link #theRulesHaveNotRefused} and is
          * not budgeted.
          */
-        private souther.compiler.inputs.Quantities narrowing(souther.compiler.inputs.Quantities here, NumericTerm term,
+        private souther.compiler.inputs.SearchRegion narrowing(souther.compiler.inputs.SearchRegion here, NumericTerm term,
                                     java.math.BigDecimal at) {
             if (asked >= HOW_OFTEN_THE_RULES_ARE_ASKED_AGAIN) {
                 return here;
             }
             asked++;
-            souther.compiler.inputs.Quantities next = here.given(term, new Count(at));
+            souther.compiler.inputs.SearchRegion next = here.given(term, new Count(at));
             return next.emptiness().isPresent() ? null : next;
         }
 
@@ -402,7 +465,7 @@ public final class LevelRealizer {
             for (int j = 0; j < terms.size(); j++) {
                 all.put(terms.get(j).getKey(), at[j]);
             }
-            return LevelRealizer.this.theRulesHaveNotRefused(all);
+            return LevelRealizer.this.theRulesHaveNotRefused(all, within);
         }
 
         /**
@@ -620,7 +683,8 @@ public final class LevelRealizer {
     }
 
     /**
-     * A place both positions of a line between them can hold, or null where their rules leave none.
+     * Where both positions of a line between them can stand, once the level's distance is taken off
+     * the first.
      *
      * <p>What proves a row can be written on such a line. The line is where the two positions are
      * equal, so a row on it writes one place at both — and whether one exists is the two positions'
@@ -630,14 +694,14 @@ public final class LevelRealizer {
      * fact about the rules; a range this could not read in full is a range this did not read, and the
      * caller is the one holding whether that happened.
      */
-    public static Place commonPlace(NumericDomain.Bounds on, NumericDomain.Bounds against,
-                                    Carrier carrier, Count apart) {
+    static NumericDomain.Bounds commonRange(NumericDomain.Bounds on, NumericDomain.Bounds against,
+                                            Carrier carrier, Count apart) {
         NumericDomain.Bounds moved = carrier.counts() ? shifted(on, apart.negate()) : on;
-        Endpoint min = Endpoint.lower(moved == null ? null : moved.min(),
-                against == null ? null : against.min());
-        Endpoint max = Endpoint.upper(moved == null ? null : moved.max(),
-                against == null ? null : against.max());
-        return carrier.somethingInside(min, max);
+        return new NumericDomain.Bounds(
+                Endpoint.lower(moved == null ? null : moved.min(),
+                        against == null ? null : against.min()),
+                Endpoint.upper(moved == null ? null : moved.max(),
+                        against == null ? null : against.max()));
     }
 
     /**
@@ -662,10 +726,6 @@ public final class LevelRealizer {
                 : new Endpoint(count.plus(by), end.inclusive());
     }
 
-    private NumericDomain.Bounds bounds(NumericTerm term) {
-        return bounds(rules, term);
-    }
-
     /**
      * A placement handed back, or nothing composed where the rules were shown to leave none.
      *
@@ -681,8 +741,9 @@ public final class LevelRealizer {
      * the rules are already known to refuse, offered as a row and then reported as though the point
      * had nothing at it.
      */
-    private Realization found(Map<NumericTerm, Place> fixing) {
-        return theRulesHaveNotRefused(fixing)
+    private Realization found(Map<NumericTerm, Place> fixing,
+                              souther.compiler.inputs.SearchRegion within) {
+        return theRulesHaveNotRefused(fixing, within)
                 ? new Realization.Found(fixing)
                 : new Realization.Unknown(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE);
     }
@@ -708,18 +769,19 @@ public final class LevelRealizer {
      * about the values in it. Anything more would be a claim about an order this reading does not
      * reach.
      */
-    private boolean theRulesHaveNotRefused(Map<NumericTerm, Place> fixing) {
+    private boolean theRulesHaveNotRefused(Map<NumericTerm, Place> fixing,
+                                           souther.compiler.inputs.SearchRegion within) {
         Map<NumericTerm, Count> counted = new LinkedHashMap<>();
         fixing.forEach((term, at) -> {
             if (at instanceof Count count) {
                 counted.put(term, count);
             }
         });
-        return counted.isEmpty() || rules.given(counted).emptiness().isEmpty();
+        return counted.isEmpty() || within.given(counted).emptiness().isEmpty();
     }
 
     /** The same, of the rules as some of the positions have been fixed. */
-    private static NumericDomain.Bounds bounds(souther.compiler.inputs.Quantities rules,
+    private static NumericDomain.Bounds bounds(souther.compiler.inputs.SearchRegion rules,
                                                NumericTerm term) {
         NumericDomain.Bounds held = rules.runsBetween(term);
         return held == null ? new NumericDomain.Bounds(null, null) : held;
