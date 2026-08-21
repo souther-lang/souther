@@ -332,7 +332,9 @@ public final class CoverageSites {
                 new IdentityHashMap<>();
         private final IdentityHashMap<Core, ForkOccurrence> forkByNode = new IdentityHashMap<>();
         private final IdentityHashMap<Core, Integer> controlByComparison = new IdentityHashMap<>();
-        private final IdentityHashMap<Core, Boolean> answering = new IdentityHashMap<>();
+        /** The reading of the body being walked, which every question about a node in it is asked
+         *  of. Rooted at the body because what a name reads is settled by what bound it. */
+        private NormalReturn answering = NormalReturn.ofBody(null);
         /** The nodes one run can pass more than once. Kept by identity, like everything else here:
          *  two arms that look the same are equal records and this is about this one. */
         private final java.util.Set<Core> mayRepeat =
@@ -361,17 +363,20 @@ public final class CoverageSites {
         void behavior(String name, Core body) {
             this.behavior = name;
             this.ordinal = 0;
+            this.answering = NormalReturn.ofBody(body);
             walk(body, true);
         }
 
         /**
          * One arm, or {@link #NO_SITE} where no row that stands can be in it.
          *
-         * <p>Two things have to hold. The arm has to be able to answer a value, and it has to stand
+         * <p>Three things have to hold. The arm has to be able to answer a value; it has to stand
          * somewhere a row can get to — an arm of a {@code match} written after a binding that aborts
-         * is a fork nothing reaches, however ordinary the arm itself looks. A row that gets as far as
-         * an {@code unreachable} is E1911 and states nothing, so an arm only such a row could go
-         * through is an arm no row will ever be recorded in.
+         * is a fork nothing reaches, however ordinary the arm itself looks; and the condition above
+         * it has to be able to come out its way, since a fork on something the reading settles to one
+         * truth sends every run down one arm and leaves the other an arm nothing enters. A row that
+         * gets as far as an {@code unreachable} is E1911 and states nothing, so an arm only such a
+         * row could go through is an arm no row will ever be recorded in.
          */
         private ControlPointId.ArmOccurrence armOf(SourceOutcome outcome, Core owner,
                                                    CoverageOrigin origin, int part, Core arm,
@@ -379,7 +384,7 @@ public final class CoverageSites {
             // The arm is made either way. Whether a run through it can be recorded is the second
             // question and only the probe turns on it — an arm nothing could record is still an arm,
             // and the readings that judge one need to be able to name it.
-            int probe = reachable && NormalReturn.of(arm)
+            int probe = reachable && answers(arm) && answering.mayEnter(owner, part)
                     ? site(outcome, owner, origin, part) : NO_SITE;
             return new ControlPointId.ArmOccurrence(controls++,
                     probe == NO_SITE ? OptionalInt.empty() : OptionalInt.of(probe),
@@ -414,21 +419,14 @@ public final class CoverageSites {
         }
 
         /**
-         * Whether {@code e} answers a value, asked once per node.
+         * Whether {@code e} answers a value, asked of the reading of the body it stands in.
          *
          * <p>The walk asks this of every node it passes and of every arm it makes, and the answer is
-         * read off the whole subtree — so without this the walk would be quadratic in the size of a
-         * body. Keyed by identity, like {@link Plan#byNode}: two arms that look the same are equal
-         * records, and what is being remembered is about this one.
+         * read off the whole subtree — so the reading settles every occurrence in the body once and
+         * the walk asks it rather than reading a subtree again per node.
          */
         private boolean answers(Core e) {
-            Boolean known = answering.get(e);
-            if (known != null) {
-                return known;
-            }
-            boolean found = NormalReturn.of(e);
-            answering.put(e, found);
-            return found;
+            return answering.at(e);
         }
 
         /**
