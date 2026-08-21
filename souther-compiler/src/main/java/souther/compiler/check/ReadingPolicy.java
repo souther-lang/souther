@@ -28,7 +28,8 @@ import java.util.List;
 public record ReadingPolicy(int dnfExpansionLimit) {
 
     /**
-     * Whether the clauses of one declaration may be read with their alternatives held apart.
+     * How many alternatives the clauses of one declaration would expand to, counted before any of
+     * them is read.
      *
      * <p>Asked of the whole declaration and before any of it is read. Its clauses are met, so what
      * they expand to together is the product of what each expands to, and a bound on that bounds
@@ -40,7 +41,12 @@ public record ReadingPolicy(int dnfExpansionLimit) {
      * added beside an existing one change how that one is read, and over this repository it buys
      * nothing: no declaration of it exceeds any usable limit.
      */
-    boolean holdsAlternativesApart(List<Core> clauses) {
-        return ExpansionCost.of(clauses, dnfExpansionLimit) <= dnfExpansionLimit;
+    int expansionOf(List<Core> clauses) {
+        return ExpansionCost.of(clauses, dnfExpansionLimit);
+    }
+
+    /** Whether a declaration that expands to {@code cost} alternatives may hold them apart. */
+    boolean holdsApart(int cost) {
+        return cost <= dnfExpansionLimit;
     }
 }

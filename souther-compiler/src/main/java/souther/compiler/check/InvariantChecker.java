@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.values.AdmissibleValues;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Combinators.Handed;
 import souther.compiler.check.PathEngine.Entered;
@@ -600,8 +601,8 @@ public final class InvariantChecker {
             // it is read. Its clauses are met, so what they come to together is the product of what
             // each comes to, and a bound on that bounds every step of the fold — which is why the
             // question is asked once here rather than of each clause as it arrives.
-            Alternatives alternatives = policy.holdsAlternativesApart(
-                    written.stream().map(Written::clause).toList())
+            int expansion = policy.expansionOf(written.stream().map(Written::clause).toList());
+            Alternatives alternatives = policy.holdsApart(expansion)
                     ? Alternatives.APART : Alternatives.MERGED;
             Map<RuleRef, Map<Core, Set<FactSubject>>> adoptedBy = new LinkedHashMap<>();
             for (Written each : written) {
@@ -618,6 +619,17 @@ public final class InvariantChecker {
                 stated = stated.meet(one);
                 one.adopted().forEach(position -> took.record(each.from(), position));
             }
+            // What was counted bounds what was built, which is the whole of why counting before
+            // reading is enough. Checked rather than trusted: the count and the reading are the same
+            // fold over the same clauses, so they come apart only if somebody changes one of them —
+            // and what that costs is a declaration admitted under a budget it then runs past, which
+            // is the widening the domain is chosen beforehand to avoid. An assertion because it is
+            // about this compiler and not about the model, and because a throw would be caught by
+            // the fail-open above and leave the reading silently dropped.
+            assert alternatives == Alternatives.MERGED
+                    || heldApart(stated.values()) <= expansion
+                    : "a reading of " + named.name() + " expanded to " + heldApart(stated.values())
+                            + " alternatives past a counted " + expansion;
             // And which of the clauses place an edge, asked once the positions have names to be
             // recognised by.
             Reading reading = c.directsIn(written, at, atoms, keys, held, typeAt, took,
@@ -643,6 +655,12 @@ public final class InvariantChecker {
             gaveUp("seedFields " + named.name(), why);
             return Seeded.nothingRead();
         }
+    }
+
+    /** How many alternatives a reading came to, a reading that admits nothing holding none. */
+    private static int heldApart(AdmissibleValues<FactSubject> values) {
+        return values.held() instanceof AdmissibleValues.Held.Alternatives<FactSubject> it
+                ? it.boxes().size() : 0;
     }
 
     /**
