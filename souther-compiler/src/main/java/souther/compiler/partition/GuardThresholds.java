@@ -49,10 +49,8 @@ import java.util.List;
  * <p>Whether a comparison ran is not something the arms answer. A condition stops as soon as it is
  * settled, so under {@code A && B} an overseas request takes the else arm without {@code cost} having
  * been compared — and so does a request whose cost was compared and found too high. Each comparison
- * carries the site its own value is recorded at, which is what a line is measured against. What the
- * shape of the condition does decide is which arm a row that reached the comparison can be in, and
- * that is a question about the classes either side of the line: it is carried as a {@link OriginRef
- * .ComparisonOrigin.Witness}.
+ * carries the site its own value is recorded at, which is what a line is measured against, and the
+ * arms of the fork standing round it are read for nothing.
  *
  * <p>Three readers are kept apart and are easy to run together. Which comparisons exist is
  * {@link souther.compiler.coverage.ComparisonCatalog}'s answer and which of them a line may be drawn
@@ -66,11 +64,10 @@ public final class GuardThresholds {
     /**
      * What one reading of a body says about the comparisons in it.
      *
-     * <p>One walk, because the operator is known once. Which side of the line each arm takes is not
-     * recoverable from a {@link Threshold} — {@code x <= c} and {@code x > c} both put {@code c} on
-     * the low side and their {@code then} arms are opposite halves — so what a row reaching a
-     * comparison can be in is carried as {@link OriginRef.ComparisonOrigin.Witness} where the operator
-     * is still in hand, and which values arrive is asked of the reading of the whole body.
+     * <p>One walk, because the operator is known once. Which side of the line the value itself is on
+     * is not recoverable from a {@link Threshold} — {@code x <= c} and {@code x > c} both put
+     * {@code c} on the low side and are two different rules about it — so it is read where the
+     * operator is still in hand, and which values arrive is asked of the reading of the whole body.
      */
     public record Guards(List<Threshold> thresholds,
                          List<UnreadRule> unread, List<Singled> singled,
@@ -400,25 +397,25 @@ public final class GuardThresholds {
         if (BoundaryComparisons.guardOf(plan, iff) == null) {
             return made;   // no site for this `if`: nothing could answer for it
         }
-        for (BoundaryComparisons.Placed each : BoundaryComparisons.of(iff, plan.comparisons())) {
+        for (Core.Binary each : BoundaryComparisons.of(iff, plan.comparisons())) {
             // The plan numbered every comparison of an instrumented condition before anything read a
             // line off one, so this is here. Required rather than looked up leniently: a line whose
             // comparison has no site is this reader and the plan disagreeing about what a condition
             // is made of.
             souther.compiler.coverage.ComparisonOccurrence site =
-                    plan.requireComparisonAt(each.comparison());
+                    plan.requireComparisonAt(each);
             // What the comparison cuts is one question with one answer ({@link Cutting}). What is
             // added here is what meeting the line takes, which is a guard's own answer and no other
             // rule's.
-            Cutting cutting = Cutting.of(behavior, each.comparison(), reads, symbols, quantities);
+            Cutting cutting = Cutting.of(behavior, each, reads, symbols, quantities);
             if (cutting == null) {
-                raisesNoLine(accounting, behavior, iff, each.comparison(), reads, symbols);
+                raisesNoLine(accounting, behavior, iff, each, reads, symbols);
                 continue;
             }
             OriginRef.ComparisonOrigin origin = new OriginRef.ComparisonOrigin(
-                    new RuleRef.Comparison(behavior, each.comparison().origin()),
-                    new OriginRef.ComparisonOrigin.Read(site, citationOf(iff, each.comparison())),
-                    cutting.valueBelongsBelow(), each.witness(), cutting.holdsAtTheValue(),
+                    new RuleRef.Comparison(behavior, each.origin()),
+                    new OriginRef.ComparisonOrigin.Read(site, citationOf(iff, each)),
+                    cutting.valueBelongsBelow(), cutting.holdsAtTheValue(),
                     cutting.singles());
             NumericTerm divided = cutting.dividedPosition();
             if (divided == null) {
@@ -434,26 +431,26 @@ public final class GuardThresholds {
                 // line — so a second rule over one form left the first one's run going to the end
                 // of the order, past it.
                 if (!Border.reaches(cutting.target(), cutting.within())) {
-                    raisesNoLine(accounting, behavior, iff, each.comparison(), reads,
+                    raisesNoLine(accounting, behavior, iff, each, reads,
                             symbols);
                     continue;
                 }
                 between.add(new LineDrawn(cutting, origin));
                 List<TermPath> named = new ArrayList<>();
-                mentioned(each.comparison().left(), reads, symbols, named);
-                mentioned(each.comparison().right(), reads, symbols, named);
+                mentioned(each.left(), reads, symbols, named);
+                mentioned(each.right(), reads, symbols, named);
                 if (named.isEmpty()) {
                     continue;   // a comparison about no position of the input raises nothing
                 }
                 // Filed at the position the reading names first, which is the one a line between two
                 // would be read `on`. One comparison is one line however many positions it mentions.
-                raises(accounting, behavior, iff, each.comparison(), named.get(0),
-                        comparedTerm(each.comparison(), reads, symbols),
-                        subjectsOf(each.comparison(), reads, symbols, null),
+                raises(accounting, behavior, iff, each, named.get(0),
+                        comparedTerm(each, reads, symbols),
+                        subjectsOf(each, reads, symbols, null),
                         new Required.LineRead.ALineBetweenTwoPositions());
                 continue;
             }
-            made.add(each.comparison());
+            made.add(each);
             // The value a row is owed against this line, which the reading of the comparison
             // already answered. Taken off the level the rule was written with, a rule that wrote a
             // multiple of the position named a class at a number the position never holds.
@@ -477,8 +474,8 @@ public final class GuardThresholds {
             if (value == null && Border.reaches(cutting.target(), cutting.within())) {
                 between.add(new LineDrawn(cutting, origin));
             }
-            raises(accounting, behavior, iff, each.comparison(), divided.path(), divided,
-                    subjectsOf(each.comparison(), reads, symbols, null),
+            raises(accounting, behavior, iff, each, divided.path(), divided,
+                    subjectsOf(each, reads, symbols, null),
                     new Required.LineRead.ALineOnThePosition());
         }
         return made;

@@ -67,30 +67,27 @@ public sealed interface OriginRef {
      * <p>The comparison and not what tests it. Meeting this boundary takes more than writing the
      * value — the comparison has to have been evaluated, and a row can hand the behavior the exact
      * threshold and never get there — and where that is recorded is the comparison's own place.
-     * Which fork consumed the truth is a fact about the use: one comparison given a name can be
-     * consumed by two forks and by none, so a reading that took its identity from a fork would be
-     * asking which of them the rule really belongs to.
+     * Nothing about a fork is here at all. One comparison given a name can be consumed by two forks
+     * and by none, so a reading that took anything from a fork would be answering which of them the
+     * rule really belongs to — a question with no answer. What a use of the truth proves about the
+     * comparison is not modelled, because no measure asks it: a row meets the line by lighting the
+     * comparison's own probe.
      *
      * @param rule              which comparison, which is the rule and the whole of it
      * @param read              which reading of that rule this is, and where it was met
      * @param valueBelongsBelow which side of the line the cut value itself is on. It decides which
      *                          neighbour is the other class's edge: {@code <= 3000} leaves 3001 over
      *                          there, {@code < 3000} leaves 2999.
-     * @param witness           which arms of the fork a row reaching this comparison can land in.
-     *                          Not what says the comparison ran — {@link Read#comparison} is — but
-     *                          what says which arm's edge is this comparison's to draw, which is a
-     *                          question about the classes either side of the line
      * @param holdsAtTheValue   whether the comparison is true at the line's own value. Not derivable
      *                          from {@code valueBelongsBelow}: {@code x <= c} and {@code x > c} agree
      *                          about the class the value is in and disagree here
      */
     record ComparisonOrigin(RuleRef.Comparison rule, Read read, boolean valueBelongsBelow,
-                       Witness witness, boolean holdsAtTheValue, boolean singles)
-            implements OriginRef {
+                            boolean holdsAtTheValue, boolean singles) implements OriginRef {
 
         public ComparisonOrigin(RuleRef.Comparison rule, Read read, boolean valueBelongsBelow,
-                           Witness witness, boolean holdsAtTheValue) {
-            this(rule, read, valueBelongsBelow, witness, holdsAtTheValue, false);
+                                boolean holdsAtTheValue) {
+            this(rule, read, valueBelongsBelow, holdsAtTheValue, false);
         }
 
         /**
@@ -104,8 +101,7 @@ public sealed interface OriginRef {
          * <p>No fork. What a row met the line by is getting the comparison to answer, and the
          * comparison is where that is recorded — so the arms of the {@code if} standing round it
          * were a second place the same reading could be taken from, and one that has nothing to say
-         * about a comparison written where no fork stands round it. Which fork consumed the truth is
-         * a fact about the use and belongs beside this rather than in it.
+         * about a comparison written where no fork stands round it.
          *
          * @param comparison which comparison this reads. Required, and this is what meeting the line
          *              is measured against: a row met it by getting the comparison to answer, which
@@ -122,20 +118,6 @@ public sealed interface OriginRef {
         public record Read(souther.compiler.coverage.ComparisonOccurrence comparison,
                            souther.compiler.check.RuleCitation.WrittenAt written) {}
 
-        /** Which arms a row that reached this comparison can be in. */
-        public enum Witness {
-            /** Either: the comparison is on the leftmost spine, so it runs whatever the condition
-             * comes to. */
-            BOTH,
-            /** Only the arm the whole condition is true on, which is a conjunction. */
-            THEN,
-            /** Only the arm it is false on, which is a disjunction. */
-            ELSE,
-            /** Neither on its own, which a condition mixing {@code &&} and {@code ||} leaves: a row
-             * that reached the comparison can be in either arm, so neither arm's edge is this
-             * comparison's alone. */
-            NEITHER
-        }
     }
 
     /**

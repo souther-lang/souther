@@ -206,13 +206,16 @@ class ThresholdNormalizationTest {
                         then Answer { n = 1 } else Answer { n = 2 }
                 """, "check");
 
-        // The line is the model's wherever in the condition it is written. What the condition
-        // decides is not whether it is a line but which arm stands as evidence for it: `urgent` is
-        // evaluated on the way to either arm, and the comparison behind it only on the way to the
-        // one where the whole condition held.
+        // The line is the model's wherever in the condition it is written. What stands beside the
+        // comparison decides nothing about that: `urgent` draws no line, and the comparison behind
+        // it draws the same one it would draw on its own.
         assertEquals(1, compound.thresholds().size(), compound.thresholds().toString());
-        assertEquals(OriginRef.ComparisonOrigin.Witness.THEN,
-                ((OriginRef.ComparisonOrigin) compound.thresholds().get(0).origin()).witness());
+        Threshold bare = read.thresholds().get(0);
+        Threshold beside = compound.thresholds().get(0);
+        assertEquals(
+                List.of(bare.term(), bare.parts(), bare.valueBelongsBelow()),
+                List.of(beside.term(), beside.parts(), beside.valueBelongsBelow()),
+                "and the line is the same one either way: " + compound.thresholds());
     }
 
     @Test
