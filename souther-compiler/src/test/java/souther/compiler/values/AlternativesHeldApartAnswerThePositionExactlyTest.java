@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -21,6 +20,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Kept apart, the conjunction meets them pairwise. Three of the four pairs of issue #877's
  * witness leave nothing, and the one that stands is what the model leaves — with nothing to
  * qualify.
+ *
+ * <p>What the same witness comes to merged is
+ * {@link WhatAReadingCanPromiseAboutItsProjectionsTest}, which is where the other reading is said.
  */
 class AlternativesHeldApartAnswerThePositionExactlyTest {
 
@@ -61,18 +63,6 @@ class AlternativesHeldApartAnswerThePositionExactlyTest {
         assertTrue(both.relationExact(), "nothing was merged, so what is held is what was read");
         assertTrue(both.projectionExactAt(A));
         assertTrue(both.projectionExactAt(B));
-    }
-
-    /** And merged it is the answer that has to be qualified, which is what it was. */
-    @Test
-    void andMergedItIsTheAnswerThatHasToBeQualified() {
-        AdmissibleValues<String> one = pair(FIVE, ZERO).join(pair(SIX, ONE));
-        AdmissibleValues<String> two = pair(FIVE, ZERO).join(pair(SIX, ZERO));
-
-        AdmissibleValues<String> both = one.meet(two);
-
-        assertEquals(ValueSet.oneOf(Set.of(FIVE, SIX)), both.at(A), "wider than the rules leave it");
-        assertFalse(both.projectionExactAt(A), "so the reading may not say this is what a holds");
     }
 
     /**
