@@ -49,9 +49,11 @@ import java.util.Map;
 public final class InvariantSettled {
 
     private final Hir.Module module;
+    private final java.util.SequencedSet<String> standing;
 
-    private InvariantSettled(Hir.Module module) {
-        this.module = module;
+    private InvariantSettled(Expansion<Hir.Module> expanded) {
+        this.module = expanded.value();
+        this.standing = expanded.standing();
     }
 
     /**
@@ -68,6 +70,18 @@ public final class InvariantSettled {
         Hir.Module derived = Deriver.derive(expandable.module(), scope);
         return new InvariantSettled(
                 ClauseHelpers.withSettledInvariants(derived, scope, published));
+    }
+
+    /**
+     * Every recursive helper the clauses of this module left a call to standing.
+     *
+     * <p>A module's declarations are in the table a call graph is built over, so what one of their
+     * bodies reaches is answered by following edges. A clause is not a declaration and is in no
+     * table, so what it reaches is known only to the expansion that read it — which is here, and is
+     * why this travels with the settled module rather than being looked for again afterwards.
+     */
+    public java.util.SequencedSet<String> standingRecursiveCalls() {
+        return standing;
     }
 
 
@@ -156,14 +170,22 @@ public final class InvariantSettled {
         }
     }
 
+    /**
+     * Both of what this answers with. The standing set is not derived from the tree by anything that
+     * reads this — it is what the expansion that produced the tree met on the way — so a state
+     * carrying a different one is a different answer, whatever the trees compare as. Left out, the
+     * store would find a recomputed answer equal to the one it held and leave everything that reads
+     * the standing set on the old one.
+     */
     @Override
     public boolean equals(Object o) {
-        return o instanceof InvariantSettled other && module.equals(other.module);
+        return o instanceof InvariantSettled other && module.equals(other.module)
+                && standing.equals(other.standing);
     }
 
     @Override
     public int hashCode() {
-        return module.hashCode();
+        return module.hashCode() * 31 + standing.hashCode();
     }
 
     @Override

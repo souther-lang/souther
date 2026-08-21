@@ -11,6 +11,7 @@ import souther.compiler.check.StatedContract;
 import souther.compiler.check.ContractDischarge;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.HelperInliner;
+import souther.compiler.check.Expansion;
 import souther.compiler.check.HelperGraph;
 import souther.compiler.check.HelperNames;
 import souther.compiler.check.HelperTable;
@@ -47,6 +48,7 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -343,7 +345,7 @@ public final class Bodies {
             Answer<Lower.Lowered> lowering = db.ask(new Lowering(name));
             Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> signatures = db.ask(new Signatures(name));
-            Answer<Map<String, Type>> helpers = db.ask(new RecursiveHelperSigs(name));
+            Answer<Map<String, Type>> helpers = db.ask(new RecursiveCallSigs(name, InliningPolicy.FULL));
             if (!lowering.present() || !scope.present() || !signatures.present()
                     || !helpers.present()) {
                 return Answer.absent();
@@ -631,7 +633,7 @@ public final class Bodies {
             Answer<souther.compiler.check.Expandable> expandable = db.ask(new Shapes.Expandable(name));
             Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> signatures = db.ask(new Signatures(name));
-            Answer<Map<String, Type>> helpers = db.ask(new RecursiveHelperSigs(name));
+            Answer<Map<String, Type>> helpers = db.ask(new RecursiveCallSigs(name, InliningPolicy.FULL));
             if (!expandable.present() || !scope.present() || !signatures.present()
                     || !helpers.present()) {
                 return Answer.absent();
@@ -940,10 +942,11 @@ public final class Bodies {
                 return Answer.absent();
             }
             Map<String, Hir.FnDef> helpers = new LinkedHashMap<>(imported.value());
-            // What this module has, both components of it: a body may name a helper it took on to
-            // emit exactly as it names one it declared, and a row may apply either.
+            // What this module declared. A recursion it emits without having declared one is not
+            // here: it is reached under the name of the module that wrote it, which is a name this
+            // table already answers with that declaration, and which of them this module emits is
+            // settled after its trees are expanded rather than being carried here.
             helpers.putAll(HelperInliner.helpersOf(settled.value()));
-            helpers.putAll(HelperInliner.takenOnBy(settled.value()));
             return Answer.of(helpers);
         }
     }
@@ -1173,24 +1176,6 @@ public final class Bodies {
         return fn;
     }
 
-    /** The helpers a module emits as methods rather than expanding: the ones that recurse (spec
-     * 13.1), including the prelude ones it has taken on as its own. Answered in declaration order:
-     * a check that reports one member of a mutual cycle reports the first, so the order is part of
-     * the answer and is said in the type. */
-    public record RecursiveHelpers(String name) implements Key<SequencedSet<String>> {
-        @Override
-        public String module() {
-            return name;
-        }
-
-        @Override
-        public Answer<SequencedSet<String>> compute(Db db) {
-            Answer<HelperInliner> inliner = expanding(db, name, InliningPolicy.FULL);
-            return inliner.present() ? Answer.of(inliner.value().recursiveHelpers())
-                    : Answer.absent();
-        }
-    }
-
     /**
      * What a body of {@code module} is expanded against: which declaration each name reaches, and
      * which of them recurse.
@@ -1243,6 +1228,40 @@ public final class Bodies {
     }
 
     /**
+     * The definitions a module's row operands are, by the name each is emitted under.
+     *
+     * <p>Their own family. A row's operand is a value this compilation writes for the row, reached
+     * from a row and from nothing a source can spell, so it is not a declaration a name resolves to
+     * — which is why it is not among what the module has as fns of its own and is not in the table a
+     * call expands against. It rode there once, to be carried through the passes a fn is carried
+     * through, and every rule keyed on what the module holds had a synthetic method among its
+     * subjects.
+     *
+     * <p>Read from the one walk that built them, which built the correspondence beside them
+     * ({@link RowMethods}) — a second reading would be a second numbering, and a row would run the
+     * operand beside the one it wrote.
+     */
+    public record RowFixtureDefs(String name) implements Key<Map<String, Hir.FnDef>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, Hir.FnDef>> compute(Db db) {
+            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+            if (!prepared.present()) {
+                return Answer.absent();
+            }
+            Map<String, Hir.FnDef> out = new LinkedHashMap<>();
+            for (Hir.FnDef def : prepared.value().rowDefs()) {
+                out.put(def.name(), def);
+            }
+            return Answer.of(Ordered.map(out));
+        }
+    }
+
+    /**
      * The methods a module emits for its rows: one per operand, answering with the value that
      * operand is.
      *
@@ -1286,17 +1305,28 @@ public final class Bodies {
             if (!settled.present()) {
                 return Answer.absent();
             }
-            // Either component: a body is asked for by name, and a helper the module took on to emit
-            // has one to expand exactly as one it declared does.
-            for (List<Hir.FnDef> component : List.of(
-                    settled.value().fns(), settled.value().takenOn())) {
-                for (Hir.FnDef candidate : component) {
-                    if (candidate.name().equals(fn)) {
-                        return Answer.of(candidate);
-                    }
+            // What this module wrote.
+            for (Hir.FnDef candidate : settled.value().fns()) {
+                if (candidate.name().equals(fn)) {
+                    return Answer.of(candidate);
                 }
             }
-            return Answer.absent();
+            // A definition minted for a row, which is no declaration and is in no table.
+            Answer<Map<String, Hir.FnDef>> rows = db.ask(new RowFixtureDefs(module));
+            if (rows.present() && rows.value().containsKey(fn)) {
+                return Answer.of(rows.value().get(fn));
+            }
+            // A declaration this module reaches and has not taken on. Its body is the declaring
+            // module's and was settled there; what changes here is the name it answers to, which is
+            // the name this module reaches it by and the name a method is emitted under. Read from
+            // the table rather than from a component, so asking for a body does not depend on the
+            // module having already been told it needs one.
+            Answer<Expanding.Of> against = db.ask(new Expanding(module, InliningPolicy.FULL));
+            if (!against.present()) {
+                return Answer.absent();
+            }
+            Hir.FnDef reached = against.value().table().reached(fn);
+            return reached == null ? Answer.absent() : Answer.of(reached.reachedAs(fn));
         }
     }
 
@@ -1306,23 +1336,28 @@ public final class Bodies {
      * <p>What it reads is the fn itself and the helpers around it, so editing another body in the same
      * module does not expand this one again.
      */
-    public record LoweredBody(String module, String fn) implements Key<Hir.FnDef> {
+    public record LoweredBody(String module, String fn) implements Key<Expansion<Hir.FnDef>> {
 
         @Override
-        public Answer<Hir.FnDef> compute(Db db) {
+        public Answer<Expansion<Hir.FnDef>> compute(Db db) {
             Answer<Hir.FnDef> def = db.ask(new SettledFn(module, fn));
-            Answer<HelperInliner> inliner = expanding(db, module, InliningPolicy.FULL);
-            Answer<SequencedSet<String>> recursive = db.ask(new RecursiveHelpers(module));
+            Answer<Expanding.Of> against = db.ask(new Expanding(module, InliningPolicy.FULL));
             Answer<Map<ValueName.Behavior, Integer>> behaviors =
                     db.ask(new NamedBehaviorArity(module));
-            if (!def.present() || !inliner.present() || !recursive.present()
-                    || !behaviors.present()) {
+            if (!def.present() || !against.present() || !behaviors.present()) {
                 return Answer.absent();
             }
+            // Whether this body is a recursion, asked of the graph rather than of the set the module
+            // took on. The two agree for every fn that has a body here, and the graph does not have
+            // to be told what the module reaches — which is what makes what the module reaches
+            // askable in terms of this.
+            boolean recursive = against.value().graph().recurses(fn);
             try {
+                HelperInliner inliner = HelperInliner.over(against.value().table(),
+                        against.value().graph());
                 return Answer.of(Lower.body(def.value(),
-                        inliner.value().namingBehaviors(behaviors.value()),
-                        recursive.value().contains(fn), dependencyParams(db, module, fn)));
+                        inliner.namingBehaviors(behaviors.value()),
+                        recursive, dependencyParams(db, module, fn)));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -1343,18 +1378,22 @@ public final class Bodies {
         @Override
         public Answer<Hir.FnDef> compute(Db db) {
             Answer<Hir.FnDef> def = db.ask(new SettledFn(module, fn));
-            Answer<HelperInliner> inliner = expanding(db, module, InliningPolicy.DISCHARGE);
-            Answer<SequencedSet<String>> recursive = db.ask(new RecursiveHelpers(module));
+            Answer<Expanding.Of> against = db.ask(new Expanding(module, InliningPolicy.DISCHARGE));
             Answer<Map<ValueName.Behavior, Integer>> behaviors =
                     db.ask(new NamedBehaviorArity(module));
-            if (!def.present() || !inliner.present() || !recursive.present()
-                    || !behaviors.present()) {
+            if (!def.present() || !against.present() || !behaviors.present()) {
                 return Answer.absent();
             }
+            // Whether this body is a recursion, asked of the graph of the representation it is being
+            // read in. A recursion is a cycle among the declarations in reach, and which
+            // declarations those are is what the policy decides.
+            HelperInliner inliner = HelperInliner.over(against.value().table(),
+                    against.value().graph());
+            boolean recursive = against.value().graph().recurses(fn);
             try {
                 return Answer.of(Lower.body(def.value(),
-                        inliner.value().namingBehaviors(behaviors.value()),
-                        recursive.value().contains(fn), dependencyParams(db, module, fn)));
+                        inliner.namingBehaviors(behaviors.value()),
+                        recursive, dependencyParams(db, module, fn)).value());
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -1378,7 +1417,7 @@ public final class Bodies {
         @Override
         public Answer<Lower.Lowered> compute(Db db) {
             Answer<Hir.Module> settled = db.ask(new Settled(name));
-            Answer<SequencedSet<String>> recursive = db.ask(new RecursiveHelpers(name));
+            Answer<SequencedSet<String>> recursive = db.ask(new RequiredRecursiveDefs(name));
             Answer<Set<String>> rowMethods = db.ask(new RowMethods(name));
             if (!settled.present() || !recursive.present() || !rowMethods.present()) {
                 return Answer.absent();
@@ -1390,11 +1429,36 @@ public final class Bodies {
             // that took on a helper it also declares would otherwise emit two of it.
             Set<String> taken = new LinkedHashSet<>();
             List<List<Hir.FnDef>> lowered = new ArrayList<>();
+            // What this module emits and did not declare: every recursion its own expansions left
+            // standing that it has no declaration for, under the name it reaches each by — which is
+            // the name a call in the emitted tree already holds, and so the name the method is
+            // written under. This is the one place a declaration of another module becomes a method
+            // of this one, so it is the one place the renaming happens.
+            List<Hir.FnDef> beyond = new ArrayList<>();
+            Set<String> declaredHere = new LinkedHashSet<>();
+            for (Hir.FnDef fn : settled.value().fns()) {
+                declaredHere.add(fn.name());
+            }
+            for (String required : recursive.value()) {
+                if (!declaredHere.contains(required)) {
+                    Answer<Hir.FnDef> def = db.ask(new SettledFn(name, required));
+                    if (!def.present()) {
+                        return Answer.absent();
+                    }
+                    beyond.add(def.value());
+                }
+            }
+            // A row's operand is a definition minted for it, and it is emitted beside these for the
+            // same reason: nothing inlines it, because nothing calls it.
+            Answer<Map<String, Hir.FnDef>> rows = db.ask(new RowFixtureDefs(name));
+            if (!rows.present()) {
+                return Answer.absent();
+            }
+            beyond.addAll(rows.value().values());
             // Both, and each stays where it was: what becomes a method is one question and what this
             // module declared is another, and the backend reads the first while every rule about the
             // declaring module reads the second.
-            for (List<Hir.FnDef> component : List.of(
-                    settled.value().fns(), settled.value().takenOn())) {
+            for (List<Hir.FnDef> component : List.of(settled.value().fns(), beyond)) {
                 List<Hir.FnDef> fns = new ArrayList<>();
                 for (Hir.FnDef fn : component) {
                     // A non-recursive helper is fully inlined at its call sites and never
@@ -1408,13 +1472,13 @@ public final class Bodies {
                     if (!taken.add(fn.name())) {
                         continue;
                     }
-                    Answer<Hir.FnDef> body = db.ask(new LoweredBody(name, fn.name()));
+                    Answer<Expansion<Hir.FnDef>> body = db.ask(new LoweredBody(name, fn.name()));
                     if (!body.present()) {
                         // Why is the body's to say, and it said it. A module with a body that does
                         // not expand has none to emit.
                         return Answer.absent();
                     }
-                    fns.add(body.value());
+                    fns.add(body.value().value());
                 }
                 lowered.add(fns);
             }
@@ -1423,9 +1487,29 @@ public final class Bodies {
         }
     }
 
-    /** The signatures of a module's recursive helpers — what a self- or mutual call is typed
-     * against, and what every body that calls one reads. */
-    public record RecursiveHelperSigs(String name) implements Key<Map<String, Type>> {
+    /**
+     * The signatures every recursive helper this representation can reach would be called under.
+     *
+     * <p>What typing a call left standing needs, and nothing about what this module turned out to
+     * reach. A call is left standing because its callee recurses — which is a fact about the
+     * declarations in reach and is what {@link HelperGraph#recursive()} answers — so the names a body
+     * of this module could hold a standing call to are those, whether or not any body holds one. Read
+     * off the table rather than found by walking the module: a walk over the places a module writes
+     * expressions is a second statement of what a module is made of, and the one that was here
+     * answered that a rule reaching a fold needed nothing.
+     *
+     * <p>Wider than {@link RequiredRecursiveDefs}, and not a replacement for it. That one answers
+     * which helpers this module processes and emits, which is what a reader wanting a body needs;
+     * this one answers which names can be typed, which is what a reader holding a call needs. Kept
+     * apart because a signature for a helper nobody called costs an entry in a map, and a body for
+     * one costs a body that does not exist.
+     *
+     * <p>Keyed by the policy as {@link Expanding} is: the discharge representation leaves the
+     * language's own operations standing rather than expanding them into the fold they become, so its
+     * table holds none of the library and its recursive set is not the emitted representation's.
+     */
+    public record RecursiveCallSigs(String name, InliningPolicy policy)
+            implements Key<Map<String, Type>> {
         @Override
         public String module() {
             return name;
@@ -1433,17 +1517,152 @@ public final class Bodies {
 
         @Override
         public Answer<Map<String, Type>> compute(Db db) {
-            Answer<HelperInliner> inliner = expanding(db, name, InliningPolicy.FULL);
+            Answer<Expanding.Of> against = db.ask(new Expanding(name, policy));
             Answer<Symbols> scope = Names.derivedSymbols(db, name);
-            if (!inliner.present() || !scope.present()) {
+            if (!against.present() || !scope.present()) {
                 return Answer.absent();
             }
             try {
-                return Answer.of(TypeChecker.recursiveHelperSigs(inliner.value(), scope.value()));
+                return Answer.of(TypeChecker.recursiveCallSigs(against.value().table(),
+                        against.value().graph().recursive(), scope.value()));
             } catch (CompileException e) {
                 // A recursive helper that does not say what it returns costs the signatures of all of
                 // them, and there is no module to check without them.
                 return Answer.absent(e);
+            }
+        }
+    }
+
+    /**
+     * The recursive helpers this module has to process and emit: the ones it declared, and the ones
+     * an expansion of its own left a call standing to.
+     *
+     * <p>Made of what the expansions did, not of a prediction about what they would do. Every tree
+     * this module is made of is expanded somewhere, and each of those expansions answers with the
+     * recursions it could not remove ({@link Expansion}); this is those answers joined, and the
+     * bodies of what they name expanded in turn until nothing new is named.
+     *
+     * <p>The seeds are the trees, and there are two kinds. A definition's body is expanded by {@link
+     * LoweredBody}, which answers with what it left standing. A clause — a data's {@code invariant},
+     * a behavior's {@code ensures} — is not a definition and is in no table, so what it reaches is
+     * known only to the expansion that read it, and it travels out of {@link Shapes.Settling}. The
+     * walk that was here instead listed the places a module writes expressions and did not list
+     * {@code ensures}, so a rule reaching a fold asked for no fold.
+     *
+     * <p>The closure is the expansion's, not the call graph's. A body reaches a recursion by
+     * applying it and by reading a value whose own body applies it, and only the first is a call —
+     * so a graph of calls answers about a narrower relation than the one that decides this, and a
+     * recursion behind a value is reached by the expansion and by nothing that could see it. Each
+     * required recursion is therefore expanded in its turn: it is emitted as a method, so its body
+     * is expanded on its own rather than into anything, and what that leaves standing is required
+     * too.
+     *
+     * <p>Being required and having been read are two things. A recursion this module declared is
+     * required before the walk begins, and its body still goes through it — a walk that took its
+     * result set for its work list would never read one.
+     *
+     * <p>A helper this module declared is here whether or not anything reaches it: its source is
+     * this module's to check and to publish, which is not a question about use. Only what it did not
+     * declare is decided by use.
+     */
+    public record RequiredRecursiveDefs(String name) implements Key<SequencedSet<String>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<SequencedSet<String>> compute(Db db) {
+            Answer<Expanding.Of> against = db.ask(new Expanding(name, InliningPolicy.FULL));
+            Answer<Hir.Module> settled = db.ask(new Settled(name));
+            Answer<souther.compiler.check.InvariantSettled> settling =
+                    db.ask(new Shapes.Settling(name));
+            Answer<Set<String>> rows = db.ask(new RowMethods(name));
+            if (!against.present() || !settled.present() || !settling.present()
+                    || !rows.present()) {
+                return Answer.absent();
+            }
+            HelperGraph graph = against.value().graph();
+            Set<String> required = new LinkedHashSet<>();
+            Deque<String> pending = new ArrayDeque<>();
+            Set<String> processed = new HashSet<>();
+
+            // What this module declared that recurses. Required whether or not anything reaches it:
+            // its source is this module's to check and to publish, which is not a question about
+            // use. Its body still goes through the walk below — being required is not being read.
+            for (String declared : against.value().table().declarations().keySet()) {
+                if (graph.recurses(declared)) {
+                    require(graph, required, pending, declared);
+                }
+            }
+            // The trees that survive to run: a behavior's implementation, a row's operand, and the
+            // clauses. Nothing else is a root. A helper that does not recurse is expanded into
+            // whatever reaches it, so what it leaves standing is answered by that expansion — and a
+            // helper nothing reaches leaves nothing standing anywhere, which is why one that folds
+            // and is never called asks for no fold.
+            for (String standing : settling.value().standingRecursiveCalls()) {
+                require(graph, required, pending, standing);
+            }
+            Set<String> behaviors = Names.behaviorNames(settled.value());
+            Set<String> roots = new LinkedHashSet<>(rows.value());
+            for (Hir.FnDef fn : settled.value().fns()) {
+                if (behaviors.contains(fn.name())) {
+                    roots.add(fn.name());
+                }
+            }
+            for (String root : roots) {
+                Answer<Expansion<Hir.FnDef>> body = db.ask(new LoweredBody(name, root));
+                if (!body.present()) {
+                    // Why is the body's to say, and it said it where it went wrong.
+                    return Answer.absent();
+                }
+                for (String standing : body.value().standing()) {
+                    require(graph, required, pending, standing);
+                }
+            }
+            // A required definition is emitted as a method, so its own body is expanded on its own
+            // rather than into anything — and what that expansion leaves standing is required too.
+            // Followed here, by expanding it, and not by reading edges off the call graph: a body
+            // reaches a recursion by applying it and by reading a value whose body applies it, and
+            // only the first is a call. Reading the graph instead, a recursion behind a value was
+            // reached by the expansion and by nothing that could see it.
+            while (!pending.isEmpty()) {
+                String next = pending.removeFirst();
+                if (!processed.add(next)) {
+                    continue;
+                }
+                Answer<Expansion<Hir.FnDef>> body = db.ask(new LoweredBody(name, next));
+                if (!body.present()) {
+                    return Answer.absent();
+                }
+                for (String standing : body.value().standing()) {
+                    require(graph, required, pending, standing);
+                }
+            }
+            // In the graph's order, which is declaration order: a check reporting one member of a
+            // mutual cycle reports the first, and the order is part of the answer. The walk above
+            // finds them in the order it happened to reach them, which is not that.
+            SequencedSet<String> ordered = new LinkedHashSet<>();
+            for (String recursive : graph.recursive()) {
+                if (required.contains(recursive)) {
+                    ordered.add(recursive);
+                }
+            }
+            return Answer.of(Collections.unmodifiableSequencedSet(ordered));
+        }
+
+        /** Takes {@code standing} on, and queues its body to be expanded the first time. */
+        private static void require(HelperGraph graph, Set<String> required, Deque<String> pending,
+                                    String standing) {
+            if (!graph.recurses(standing)) {
+                // An expansion answers with what it left standing, and a call is left standing
+                // because its callee recurses. One that does not is this compiler disagreeing with
+                // itself about why the call is still a call, and nothing here can be right about it.
+                throw new IllegalStateException("`" + standing + "` was left standing by an"
+                        + " expansion and does not recurse");
+            }
+            if (required.add(standing)) {
+                pending.addLast(standing);
             }
         }
     }
@@ -1460,21 +1679,24 @@ public final class Bodies {
         @Override
         public Answer<Map<String, DataChecker.Constructs>> compute(Db db) {
             Answer<HelperInliner> inliner = expanding(db, name, InliningPolicy.FULL);
-            Answer<Map<String, Type>> sigs = db.ask(new RecursiveHelperSigs(name));
+            // The recursions this module processes, which is what has bodies here. A signature is a
+            // wider answer — it says what a call could be typed against, including a recursion
+            // nothing here reaches — and a body for one of those is a body nobody wrote.
+            Answer<SequencedSet<String>> required = db.ask(new RequiredRecursiveDefs(name));
             Answer<Symbols> scope = Names.derivedSymbols(db, name);
-            if (!inliner.present() || !sigs.present() || !scope.present()) {
+            if (!inliner.present() || !required.present() || !scope.present()) {
                 return Answer.absent();
             }
             Map<String, Hir.Expr> bodies = new LinkedHashMap<>();
-            for (String helper : sigs.value().keySet()) {
-                Answer<Hir.FnDef> body = db.ask(new LoweredBody(name, helper));
+            for (String helper : required.value()) {
+                Answer<Expansion<Hir.FnDef>> body = db.ask(new LoweredBody(name, helper));
                 if (!body.present()) {
                     return Answer.absent();
                 }
-                bodies.put(helper, body.value().writtenBody());
+                bodies.put(helper, body.value().value().writtenBody());
             }
             try {
-                return Answer.of(TypeChecker.recursiveHelperConstructs(sigs.value().keySet(), bodies,
+                return Answer.of(TypeChecker.recursiveHelperConstructs(required.value(), bodies,
                         inliner.value(), scope.value()));
             } catch (CompileException e) {
                 return Answer.absent(e);
@@ -1547,7 +1769,7 @@ public final class Bodies {
         public Answer<Core> compute(Db db) {
             Answer<Hir.SpecBehavior> spec = db.ask(new Spec(module, behavior));
             Answer<Hir.FnDef> fn = db.ask(new SettledFn(module, behavior));
-            Answer<Hir.FnDef> body = db.ask(new LoweredBody(module, behavior));
+            Answer<Expansion<Hir.FnDef>> body = db.ask(new LoweredBody(module, behavior));
             Answer<Symbols> scope = Names.derivedSymbols(db, module);
             // What this body names, and not what its module happens to have callable in it: a
             // signature it never names is no part of what it is checked against, and depending on
@@ -1556,7 +1778,7 @@ public final class Bodies {
                     db.ask(new CalleeSigsForBody(module, behavior));
             Answer<Map<ValueName.Behavior, ReqSig>> reqSigs = db.ask(new ReqSigs(module));
             Answer<HelperInliner> inliner = expanding(db, module, InliningPolicy.FULL);
-            Answer<Map<String, Type>> sigs = db.ask(new RecursiveHelperSigs(module));
+            Answer<Map<String, Type>> sigs = db.ask(new RecursiveCallSigs(module, InliningPolicy.FULL));
             Answer<Map<String, DataChecker.Constructs>> constructs =
                     db.ask(new RecursiveHelperConstructs(module));
             Answer<Hir.FnDef> discharge = db.ask(new BodyForInvariantDischarge(module, behavior));
@@ -1582,7 +1804,8 @@ public final class Bodies {
                     : null;
             List<Diagnostic> warnings = new ArrayList<>();
             try {
-                Core core = TypeChecker.checkBehavior(spec.value(), fn.value(), body.value().writtenBody(),
+                Core core = TypeChecker.checkBehavior(spec.value(), fn.value(),
+                        body.value().value().writtenBody(),
                         db.ask(new Front.Reading()).value(),
                         dischargeSource, scope.value(), calleeSigs.value(), reqSigs.value(),
                         inliner.value(), sigs.value(), constructs.value(),
@@ -1708,7 +1931,7 @@ public final class Bodies {
             Answer<Map<String, Sig>> signatures = db.ask(new Signatures(name));
             Answer<Set<ValueName.Behavior>> injected = db.ask(new ImportedInjected(name));
             Answer<Map<ValueName.Behavior, ReqSig>> reqSigs = db.ask(new ReqSigs(name));
-            Answer<Map<String, Type>> sigs = db.ask(new RecursiveHelperSigs(name));
+            Answer<Map<String, Type>> sigs = db.ask(new RecursiveCallSigs(name, InliningPolicy.FULL));
             Answer<Map<ValueName.Behavior, ReqSig>> calleeSigs = db.ask(new CalleeSigs(name));
             Answer<Map<String, Hir.FnDef>> published = db.ask(new ImportedDefinitions(name));
             if (!lowering.present() || !scope.present()

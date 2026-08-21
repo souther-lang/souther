@@ -1914,30 +1914,29 @@ final class BodyGen {
         private Scope bound() {
             Map<BindingId, Scope.Binding> held = new LinkedHashMap<>();
             locals.forEach((binding, v) -> held.put(binding, new Scope.Binding(v.name(), v.type())));
-            Map<String, Type> declared = new HashMap<>();
-            captured.forEach((name, v) -> declared.put(name, v.type()));
-            return Scope.of(held).reaching(declared);
+            Map<String, Type> named = new HashMap<>();
+            captured.forEach((name, v) -> named.put(name, v.type()));
+            return Scope.of(held).naming(named);
         }
 
-        /** {@link #bound} plus the recursive helpers' signatures, so re-typing an expression that
-         * calls one (a nested {@code foldFrom} in a fold's seed) resolves it as a function. Only a
-         * recursive helper's signature can be read here, and a recursive helper declares its return
-         * type (spec §fn-declaration); an example-applied helper is emitted beside them without declaring one, and
-         * no standing call names it — it is expanded wherever a body calls it. */
+        /** {@link #bound} plus what a call left standing is typed against, so re-typing an
+         * expression that holds one (a nested {@code foldFrom} in a fold's seed) resolves it as a
+         * function.
+         *
+         * <p>Read from the check's own answer rather than from the methods this module emits. Which
+         * names a standing call can hold follows from the declarations in reach; which methods are
+         * emitted follows from what this module turned out to need. Typing against the second
+         * answered that a rule reaching a fold had no fold to call, in a module whose only reach to
+         * one was that rule.
+         *
+         * <p>Nothing is taken out of it for what a block captured. The two are looked up by what the
+         * name denotes — a behavior reaches what the author wrote, a helper or a library operation
+         * reaches what a call was left standing on — so one cannot stand where the other is asked
+         * for, and there is no precedence to arrange. Arranged anyway, by removing the captured
+         * spellings from these, a captured name that denoted a helper would have been deleted from
+         * the only map it could have been found in. */
         private Scope scope() {
-            Scope held = bound();
-            Map<String, Type> declared = new HashMap<>(held.declared());
-            ctx.emittedHelpers.forEach((name, h) -> {
-                if (declared.containsKey(name) || h.declaredReturn() == null) {
-                    return;
-                }
-                List<Type> params = new ArrayList<>();
-                for (Hir.FnParam p : h.params()) {
-                    params.add(TypeOps.resolveParamType(p.type()));
-                }
-                declared.put(name, Type.fn(params, successType(h.declaredReturn())));
-            });
-            return held.reaching(declared);
+            return bound().reaching(ctx.standingCalls);
         }
 
         /** Emits a function value from its elaborated node: the parameter and result types are the

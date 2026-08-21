@@ -58,7 +58,8 @@ class AReachNameSurvivesWhereARewriteCannotGoTest {
         byId.put("lib.sou", LIB);
         byId.put("app.sou", APP);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        Hir.FnDef def = c.db().ask(new Bodies.LoweredBody("app", "lib.flatten")).value();
+        Hir.FnDef def =
+                c.db().ask(new Bodies.LoweredBody("app", "lib.flatten")).value().value();
         return ((Hir.FnBody.Written) def.body()).expr();
     }
 

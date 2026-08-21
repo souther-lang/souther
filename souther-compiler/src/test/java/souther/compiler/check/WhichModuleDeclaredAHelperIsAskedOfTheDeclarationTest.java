@@ -169,11 +169,11 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
      * one over either, so the fns of a module are exactly where a declaration it only took on to emit
      * turns up.
      *
-     * <p>The body below is the declaration as its own module wrote it, which is the shape
-     * {@link HelperInliner#injectedRecursiveHelpers} puts into a reader's fns for a library helper:
-     * it reads {@code Prelude.helpers()}, whose bodies were never closed. A body that <em>was</em> closed cannot carry this at all — the expansion
-     * eta-expands a helper named where a value goes — so this rule and the one above meet a foreign
-     * declaration by different routes and need the same scope either way.
+     * <p>The body below is the declaration as its own module wrote it, which is the shape a reader
+     * meets a library helper in: those come from {@code Prelude.helpers()}, whose bodies were never
+     * closed. A body that <em>was</em> closed cannot carry this at all — the expansion eta-expands a
+     * helper named where a value goes — so this rule and the one above meet a foreign declaration by
+     * different routes and need the same scope either way.
      */
     @Test
     void aHelperTakenOnToEmitIsNotReReadForAPartialHandedOver() {

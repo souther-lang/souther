@@ -64,26 +64,31 @@ class WhichRuleAppliesIsReadFromWhatADefinitionWasMadeAsTest {
                 | "a row applies a recursion" : (In { n = depth(Item { rank = 0 }) }) -> Out { m = 0 }
             """;
 
-    private static Prepared prepared() {
-        Db db = Compilation.ofDocuments(Map.of("rules.sou", RULES, "app.sou", APP),
+    private static Db db() {
+        return Compilation.ofDocuments(Map.of("rules.sou", RULES, "app.sou", APP),
                 Set.of(), ModulePath.EMPTY).db();
+    }
+
+    private static Prepared prepared() {
+        Db db = db();
         Answer<Prepared> answer = db.ask(new Shapes.Prepared("app"));
         assertTrue(answer.present(), "prepared of app: " + answer.reports());
         return answer.value();
     }
 
-    private static Hir.FnDef definition(Hir.Module module, String name) {
-        for (Hir.FnDef fn : module.takenOn()) {
-            if (fn.name().equals(name)) {
-                return fn;
+    /** A definition of the module, wherever this compilation keeps it: what it declared, what it
+     * took on, or a value minted for one of its rows. */
+    private static Hir.FnDef definition(Prepared state, String name) {
+        List<List<Hir.FnDef>> families =
+                List.of(state.tree().takenOn(), state.tree().fns(), state.rowDefs());
+        for (List<Hir.FnDef> family : families) {
+            for (Hir.FnDef fn : family) {
+                if (fn.name().equals(name)) {
+                    return fn;
+                }
             }
         }
-        for (Hir.FnDef fn : module.fns()) {
-            if (fn.name().equals(name)) {
-                return fn;
-            }
-        }
-        throw new AssertionError("`" + name + "` is not a definition of " + module.name());
+        throw new AssertionError("`" + name + "` is not a definition of " + state.name());
     }
 
     @Test
@@ -92,14 +97,21 @@ class WhichRuleAppliesIsReadFromWhatADefinitionWasMadeAsTest {
 
         for (String method : state.operandMethods().values()) {
             assertInstanceOf(DefinitionRole.RowValue.class,
-                    definition(state.tree(), method).role(), method);
+                    definition(state, method).role(), method);
         }
     }
 
+    /**
+     * Asked of the compilation rather than of the prepared tree. A definition another module wrote
+     * becomes one of this module's methods because an expansion here left a call to it standing,
+     * which is settled after this module's trees have been expanded and not before.
+     */
     @Test
     void aDefinitionAnotherModuleWroteIsOrdinaryHoweverThisOneNamesIt() {
-        Prepared state = prepared();
-        Hir.FnDef taken = definition(state.tree(), "rules.depth");
+        Answer<Hir.FnDef> answer =
+                db().ask(new souther.compiler.query.Bodies.SettledFn("app", "rules.depth"));
+        assertTrue(answer.present(), "`rules.depth` is a definition `app` emits");
+        Hir.FnDef taken = answer.value();
 
         assertInstanceOf(DefinitionRole.Ordinary.class, taken.role());
         assertFalse(taken.written().authored(),
@@ -109,7 +121,7 @@ class WhichRuleAppliesIsReadFromWhatADefinitionWasMadeAsTest {
     @Test
     void aDefinitionTheModuleWroteIsOrdinaryToo() {
         assertInstanceOf(DefinitionRole.Ordinary.class,
-                definition(prepared().tree(), "run").role());
+                definition(prepared(), "run").role());
     }
 
     @Test
@@ -120,7 +132,7 @@ class WhichRuleAppliesIsReadFromWhatADefinitionWasMadeAsTest {
         Prepared state = prepared();
         List<RowPosition> positions = new ArrayList<>();
         for (String method : state.operandMethods().values()) {
-            positions.add(((DefinitionRole.RowValue) definition(state.tree(), method).role())
+            positions.add(((DefinitionRole.RowValue) definition(state, method).role())
                     .position());
         }
 
