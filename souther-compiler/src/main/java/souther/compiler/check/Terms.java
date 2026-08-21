@@ -47,6 +47,11 @@ import java.util.Set;
  */
 final class Terms {
 
+    /** What a declaration read from here is read under. Handed down rather than made: two readings
+     *  of one declaration under different policies answer a position differently, and nothing that
+     *  reads one is in a position to know which the compilation asked for. */
+    private final ReadingPolicy policy;
+
     private final Symbols symbols;
     private final Map<TypeSymbol, java.util.Optional<Type>> affineScalarBases = new HashMap<>();
     /** How the values of each atom this has named are spaced. Kept here because this is where an
@@ -138,13 +143,14 @@ final class Terms {
         return out;
     }
 
-    Terms(Symbols symbols) {
-        this(symbols, Of.THE_DISCHARGE_TREE);
+    Terms(Symbols symbols, ReadingPolicy policy) {
+        this(symbols, Of.THE_DISCHARGE_TREE, policy);
     }
 
-    Terms(Symbols symbols, Of reading) {
+    Terms(Symbols symbols, Of reading, ReadingPolicy policy) {
         this.symbols = symbols;
         this.reading = reading;
+        this.policy = policy;
     }
 
     /**
@@ -569,7 +575,7 @@ final class Terms {
         // a step that ignores it names it nowhere, and a range is still asserted about it here.
         named(accumulator, granularityOf(e.type()));
         InductiveBounds.Walk made = new InductiveBounds.Walk(seed, accumulator, step,
-                StepInputFacts.of(walk, inside, this, symbols, reached(step)));
+                StepInputFacts.of(walk, inside, this, symbols, policy, reached(step)));
         InductiveBounds.Walk had = reductions.putIfAbsent(atom, made);
         if (had != null && !had.equals(made)) {
             throw new OneTermTwoDerivations("atom `" + atom.rendered() + "` is the answer of two"

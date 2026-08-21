@@ -496,9 +496,10 @@ public final class DataChecker {
      * sentences by looking at the declaration a second time would be a second reader of a question
      * the count already answered, free to pick the sentence the count did not mean.
      */
-    static List<CompileException> typesWithNoValue(List<Hir.Def> declarations, Symbols symbols) {
+    static List<CompileException> typesWithNoValue(List<Hir.Def> declarations, Symbols symbols,
+                                                   ReadingPolicy policy) {
         List<UninhabitableTypes.UninhabitableGroup> groups = UninhabitableTypes.withNoValueOfTheirOwn(
-                declarations, TypeCardinality.solve(declarations, symbols));
+                declarations, TypeCardinality.solve(declarations, symbols, policy));
         // How many of the lacks reported here each declaration is part of. A declaration in one of
         // them is a declaration whose lack the group accounts for entirely, and a suggestion about
         // that group is a way out. A declaration in two is in neither's: what a group is established

@@ -75,7 +75,7 @@ class ANameGoesBackOnTheWayItCameOffTest {
     }
 
     private PartitionClass classOf(String type, String id) {
-        return PartitionClasses.of(Type.ref(named(type)), symbols).stream()
+        return PartitionClasses.of(Type.ref(named(type)), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).stream()
                 .filter(each -> each.id().equals(id)).findFirst().orElseThrow();
     }
 
@@ -199,7 +199,7 @@ class ANameGoesBackOnTheWayItCameOffTest {
     }
 
     private List<String> written(PartitionClass each) {
-        return Partitions.standingFor(each.representatives(), symbols, java.util.Set.of()).stream()
+        return Partitions.standingFor(each.representatives(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES, java.util.Set.of()).stream()
                 .map(FixtureTemplate::text).toList();
     }
 }

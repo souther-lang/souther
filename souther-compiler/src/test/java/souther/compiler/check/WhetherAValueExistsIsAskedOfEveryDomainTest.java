@@ -113,9 +113,11 @@ class WhetherAValueExistsIsAskedOfEveryDomainTest {
     }
 
     private static ConstraintState valuesAtBottom() {
-        return ConstraintState.top()
-                .taking(AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("A"))))
-                .taking(AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("B"))));
+        // Met as one reading and handed over as one. Two readings are combined where the
+        // clauses of a declaration are read, and never at the state's boundary.
+        return ConstraintState.top().takingValuesRead(
+                AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("A")))
+                        .meet(AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("B")))));
     }
 
     private static ConstraintState orderedAtBottom() {

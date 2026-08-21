@@ -56,10 +56,11 @@ public record ContractDischarge(List<RuleDischarge> rules,
      * author is shown and what a caller is given cannot drift apart.
      *
      */
-    public static ContractDischarge of(StatedContract stated, Symbols symbols) {
+    public static ContractDischarge of(StatedContract stated, Symbols symbols,
+                                       ReadingPolicy policy) {
         List<RuleDischarge> classified = new ArrayList<>();
         for (StatedContract.StatedRule rule : stated.rules()) {
-            classified.addAll(of(stated, rule, symbols));
+            classified.addAll(of(stated, rule, symbols, policy));
         }
         return new ContractDischarge(classified, unstatedCases(stated, symbols));
     }
@@ -73,7 +74,7 @@ public record ContractDischarge(List<RuleDischarge> rules,
      * it was written as.
      */
     private static List<RuleDischarge> of(StatedContract contract, StatedContract.StatedRule rule,
-                                          Symbols symbols) {
+                                          Symbols symbols, ReadingPolicy policy) {
         // The parameters and `value` stand for themselves. A caller hands one value per parameter and
         // the behavior answers one value, so a rule naming either names something wherever it is read
         // — entered as locations, and nothing is seeded of them, since what the rule states is the
@@ -83,14 +84,15 @@ public record ContractDischarge(List<RuleDischarge> rules,
             named.add(param.binding());
         }
         named.add(rule.value());
-        Terms naming = new Terms(symbols);
+        Terms naming = new Terms(symbols, policy);
         Denotations locations =
                 Denotations.none().locations(named, naming::placeSubject, naming::placeTerm);
 
         List<RuleDischarge> out = new ArrayList<>();
         for (StatedContract.Conjunct conjunct : rule.conjuncts()) {
             out.add(new RuleDischarge(rule.id(), InvariantChecker
-                    .capabilityOf(conjunct, locations, symbols, contract.behavior().name())
+                    .capabilityOf(conjunct, locations, symbols, policy,
+                            contract.behavior().name())
                     .named(rule.clause())));
         }
         return out;

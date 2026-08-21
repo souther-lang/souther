@@ -73,7 +73,7 @@ class APositionSaysWhichOfItsRulesWentUnansweredTest {
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("price")).findFirst().orElseThrow();
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        return InputDomain.of(spec, sigs.get("price"), symbols).positions().stream()
+        return InputDomain.of(spec, sigs.get("price"), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).positions().stream()
                 .filter(p -> p.path().toString().equals("length"))
                 .findFirst().orElseThrow();
     }

@@ -227,6 +227,60 @@ impossibility than the current model permits.
 Its behavior under `join`, `meet`, `at`, `guaranteedAt`, `standing`, and `dropped` is therefore
 specified separately.
 
+Which position a reading that admits nothing leaves empty is **not** held with the alternatives. It
+is a question about each position's own rules, and the alternatives cannot answer it: a conjunction
+meets them pairwise and drops the pairs nothing stands in, so what a dropped pair was going to say
+about a position leaves with it, and the answer follows the order the rules were met in.
+
+Measured, with the answer taken from what survived:
+
+```text
+X = a == 0 && b == 0
+Y = a == 0
+Z = (a == 1 && b == 0) || (a == 0 && b == 1)
+
+    X ∧ Y ∧ Z    b is left 0
+    Y ∧ Z ∧ X    b is left nothing
+```
+
+Nothing satisfies the three of them either way. Read one position at a time they leave `a` at `0`
+and `b` at `0`, so neither is a position the rules leave nothing at — what they cannot do is hold
+together. The second answer blames a position no rule of theirs leaves empty, which sends an author
+to a rule that is not the reason.
+
+So a reading carries **what each position's own rules leave it**, every alternative merged, beside
+the alternatives. It is not what a position may hold — `at` is narrower wherever the alternatives
+are held apart, which is the whole point of holding them — and not a second account of that either.
+It answers the one question the alternatives cannot, and it answers it the same however the rules
+were bracketed, because a meet of these is their meet at each position.
+
+A reading that admits nothing therefore says which position, if any, is why. Both answers are needed:
+a choice between two impossible alternatives that fail at different positions admits nothing with no
+position at fault, and a position left no value is one an author can go to.
+
+An alternative is a product no side of which is empty, and that is refused where a box is built
+rather than remembered by whoever builds one. It is what lets a reading say it admits nothing by
+being `Nothing` and nothing else.
+
+### Exactness is about a reading that holds alternatives
+
+`relationExact` and `projectionExactAt` are asked of a reading that holds alternatives. Where it
+admits nothing, `at` answers from each position's own rules rather than from a relation, so there is
+no projection for an answer to be exact about, and a caller asking is asking about a position no
+value ever stands at. Consumers do not ask it there: a declaration the rules leave no value is owed that it has no
+values, which is said elsewhere.
+
+### The policy is owned by the compilation
+
+`ReadingPolicy` is an input to the query graph. Query keys read it at the boundary where they hand
+work to analysis and pass its value down; nothing that reads a declaration constructs one.
+
+This is not tidiness. The same declaration is read by the coverage path, by the cardinality
+fixpoint, and by the walk that bounds a reduction step. A policy constructed where it is needed can
+differ between two of them — each sound, each answering a position differently — and the difference
+would not appear in any diff. The policy is therefore a required argument on every path that reads a
+declaration, so a path that omits it does not compile.
+
 ## Rejected alternatives
 
 ### Budget by normalized semantic alternatives
@@ -261,9 +315,9 @@ The two states have different lifecycles and must remain distinct.
 one declaration is read in the same domain.
 
 The limit is a guardrail against pathological expansion and not a precision setting. Measured over
-the compiler's own suite — 68,106 readings, 41,897 clauses — the largest cost any clause reached is
-5, and 99.26% of clauses cost 1. Over the bench corpus, which is whole applications, every one of
-1,874 clauses costs 1. Nothing in this repository is read in ProductHull mode at any limit of 8 or
+the compiler's own suite — 68,725 readings, 42,377 clauses — the largest cost any clause reaches is
+5, and 98.97% of clauses cost 1. Over the bench corpus, which is whole applications, every one of
+3,740 clauses costs 1. Nothing in this repository is read in ProductHull mode at any limit of 8 or
 more.
 
 So 64 is not an optimum derived from those numbers. It is a conservative value with a wide margin
@@ -277,15 +331,30 @@ unrelated clause added to a declaration change how an existing clause is read. S
 reason, and simplicity of the contract follows from it.
 
 Because the default is never reached by real input, the conformance suite cannot detect a regression
-in ProductHull mode. The fallback is held instead by tests that set the limit themselves:
+in ProductHull mode. The fallback is held instead by tests that set the limit themselves, at a limit
+no choice fits under:
 
-- at 4, the witness of issue #877 is read in ExactAlternatives and its position is `Complete`;
-- at 3, the same witness is read in ProductHull and does not report `Complete`;
-- at 1, the reading's observable behavior is the previous `AdmissibleValues` implementation's;
-- at 64, every reading of the compiler suite and the bench corpus is in ExactAlternatives;
-- a cost that saturates does not overflow;
-- reordering clauses, and rebracketing the `AND` and `OR` within one, does not change which domain
-  is chosen.
+- the witness of issue #877 is answered exactly at the limit a compilation sets, and reports
+  `partition_values_not_separated` at a limit that merges — end to end, in a document;
+- a declaration the rules leave no value is told nothing about how its values were held, either way;
+- a clause written at one position has nothing to say under either reading;
+- what a test reads under is what a compilation reads under, checked against the compilation's own
+  input.
 
-The third is the load-bearing one: it makes "ProductHull is the previous implementation" an
-executable statement rather than a claim in this document.
+The cost model is held separately, on the fold that computes it: a denial counts what the clause
+under it counts denied, brackets and operand order do not change the count, a count that runs past
+the limit saturates without overflowing, and a declaration costs the product of its clauses.
+
+And the two are tied at run time. After a declaration is read, the number of alternatives it came to
+is asserted to be at most what was counted for it. An assertion rather than a check: it is about this
+compiler and not about the model, and a throw would be swallowed by the fail-open around the reading
+and leave the reading silently dropped. Measured with the count under-reporting a choice:
+
+```text
+java.lang.AssertionError: a reading of R expanded to 2 alternatives past a counted 1
+```
+
+That is what makes "counting before reading is enough" executable rather than a claim in this
+document. It is a second line: the first is that the count and the reading are the same
+`ClauseReading` fold over the same clauses, so there is one place where a connective is interpreted
+and no second walk to drift from it.

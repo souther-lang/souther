@@ -33,7 +33,7 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
                 "the model this reads has to be one somebody could write");
         return UninhabitableTypes.withNoValueOfTheirOwn(compilation.module("demo").defs().stream().map(Derived.Def::read).toList(),
                         TypeCardinality.solve(compilation.module("demo").defs().stream().map(Derived.Def::read).toList(),
-                                Scopes.derived(compilation.db(), "demo").value()))
+                                Scopes.derived(compilation.db(), "demo").value(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES))
                 .stream().map(each -> each.members().stream().map(TypeSymbol::name).toList()).toList();
     }
 

@@ -67,13 +67,14 @@ final class PathEngine {
     /** What each behavior a body may call states about its answer, by the name it is called under. */
     private final Map<ValueName.Behavior, StatedContract> contracts;
 
-    PathEngine(Symbols symbols, Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants) {
-        this(symbols, dischargeInvariants, Map.of(), Terms.Of.THE_DISCHARGE_TREE);
+    PathEngine(Symbols symbols, Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+               ReadingPolicy policy) {
+        this(symbols, dischargeInvariants, Map.of(), Terms.Of.THE_DISCHARGE_TREE, policy);
     }
 
     PathEngine(Symbols symbols, Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
-               Map<ValueName.Behavior, StatedContract> contracts) {
-        this(symbols, dischargeInvariants, contracts, Terms.Of.THE_DISCHARGE_TREE);
+               Map<ValueName.Behavior, StatedContract> contracts, ReadingPolicy policy) {
+        this(symbols, dischargeInvariants, contracts, Terms.Of.THE_DISCHARGE_TREE, policy);
     }
 
     /**
@@ -85,15 +86,16 @@ final class PathEngine {
      * representation under the name of a gap.
      */
     PathEngine(Symbols symbols, Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
-               Terms.Of reading) {
-        this(symbols, dischargeInvariants, Map.of(), reading);
+               Terms.Of reading, ReadingPolicy policy) {
+        this(symbols, dischargeInvariants, Map.of(), reading, policy);
     }
 
     PathEngine(Symbols symbols, Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
-               Map<ValueName.Behavior, StatedContract> contracts, Terms.Of reading) {
+               Map<ValueName.Behavior, StatedContract> contracts, Terms.Of reading,
+               ReadingPolicy policy) {
         this.symbols = symbols;
         this.clauses = new Clauses(symbols, dischargeInvariants);
-        this.terms = new Terms(symbols, reading);
+        this.terms = new Terms(symbols, reading, policy);
         this.predicates = new Predicates(terms);
         this.contracts = Map.copyOf(contracts);
     }

@@ -250,7 +250,8 @@ public final class SpecChecker {
      */
     static Core checkSpecFn(Hir.SpecBehavior spec, Hir.FnDef fn, Hir.Expr inlinedBody,
                                     InvariantChecker.Source discharge,
-                                    Symbols symbols, Map<ValueName.Behavior, ReqSig> calleeSigs,
+                                    Symbols symbols, ReadingPolicy policy,
+                                    Map<ValueName.Behavior, ReqSig> calleeSigs,
                                     Map<ValueName.Behavior, ReqSig> reqSigs, HelperInliner inliner,
                                     Map<String, Type> recursiveHelperFns,
                                     Map<String, DataChecker.Constructs> recHelperConstructs,
@@ -449,7 +450,7 @@ public final class SpecChecker {
                                 .withDependencies(dependsOn).forDischarge(), output);
         InvariantChecker.Findings inv = InvariantChecker.analyze(dischargeBody,
                 discharge == null ? Map.of() : discharge.invariants(),
-                discharge == null ? Map.of() : discharge.contracts(), env, symbols);
+                discharge == null ? Map.of() : discharge.contracts(), env, symbols, policy);
         warnings.addAll(inv.warnings());
         if (!inv.errors().isEmpty()) {
             throw inv.errors().get(0);
