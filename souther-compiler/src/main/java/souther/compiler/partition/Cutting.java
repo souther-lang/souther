@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.numeric.Towards;
+
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Symbols;

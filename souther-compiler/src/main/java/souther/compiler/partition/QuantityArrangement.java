@@ -115,8 +115,8 @@ public record QuantityArrangement(List<Seam> seams, List<Band> bands) {
     }
 
     /** The run one value of the quantity is in, or null where the rules leave it in none. */
-    public Band holding(LevelSpace space, Level at) {
-        return bands.stream().filter(each -> each.holds(space, at)).findFirst().orElse(null);
+    public Band holding(Level at) {
+        return bands.stream().filter(each -> each.holds(at)).findFirst().orElse(null);
     }
 
     private static boolean is(Seam one, Seam other) {

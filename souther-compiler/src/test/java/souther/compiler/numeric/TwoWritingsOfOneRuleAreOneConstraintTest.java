@@ -1,5 +1,7 @@
 package souther.compiler.numeric;
 
+import souther.compiler.numeric.Towards;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.AffineConstraint.Read;

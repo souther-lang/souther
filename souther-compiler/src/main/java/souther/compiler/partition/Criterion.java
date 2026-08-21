@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.numeric.Towards;
+
 /**
  * What a row has to do to be at one coverage item of a border.
  *
@@ -30,8 +32,8 @@ public sealed interface Criterion {
     record AtTheLevel(Level at) implements Criterion {
 
         @Override
-        public boolean holds(LevelSpace space, Level value) {
-            return space.compare(value, at) == 0;
+        public LevelRegion region() {
+            return LevelRegion.point(at);
         }
 
         @Override
@@ -59,9 +61,8 @@ public sealed interface Criterion {
     record Within(Band band, Level except) implements Criterion {
 
         @Override
-        public boolean holds(LevelSpace space, Level value) {
-            return band.holds(space, value)
-                    && (except == null || space.compare(value, except) != 0);
+        public LevelRegion region() {
+            return band.region().without(except);
         }
 
         @Override
@@ -70,42 +71,37 @@ public sealed interface Criterion {
         }
 
         /**
-         * A place of {@code carrier} this item accepts, or null where the search composed none.
+         * A place of {@code carrier} this item accepts, or null where nothing composed one.
          *
-         * <p>The run's own answer at every step: it says where to look, how closely, and whether what
-         * came back is at it. Looked for at whole numbers alone, a run between two thirds of a
-         * decimal was searched between one and nothing — the two lines rounded past each other —
-         * and a class with a half in it was reported as one nothing can be written in.
-         *
-         * <p>Which is the last place a line was read as a number of the position rather than as
-         * where the values part. Deciding what is in the run was already exact; only the looking
-         * was not.
+         * <p>The item's own values, held to what the rules leave the position, asked of the order
+         * the position is on, from the end {@code from} names. Which is the same question a border's point over a form asks of the
+         * order its levels are on, and it is asked the same way — one run, and the order says what
+         * it has inside it. Written twice instead, the two disagreed about a run whose ends are
+         * lines the quantity stands at no value of: what was in it was decided exactly, and what was
+         * looked for was found by stepping past it (issues #901, #903).
          */
         public souther.compiler.numeric.Place somewhereInside(
                 souther.compiler.check.Carrier carrier,
-                souther.compiler.numeric.Endpoint min, souther.compiler.numeric.Endpoint max) {
+                souther.compiler.numeric.Endpoint min, souther.compiler.numeric.Endpoint max,
+                Towards from) {
             LevelSpace space = LevelSpace.onACarrier(carrier);
-            // Whole numbers first, which is where a run wide enough to hold one has its plainest
-            // value, and then as many digits as its own two lines are apart. The second is worked
-            // out from the run and not guessed: a scale short of what it takes reports a run with a
-            // value in it as one nothing can be written in.
-            for (int digits : new int[] {0, band.digitsToLookIn(min, max)}) {
-                souther.compiler.numeric.NumericDomain.Bounds look = band.inside(min, max, digits);
-                souther.compiler.numeric.Place at =
-                        carrier.somethingInside(look.min(), look.max());
-                if (at == null) {
-                    continue;
-                }
-                // The grid is asked first and separately. What a carrier's values are spaced by
-                // says what a place may be sharpened onto and does not promise that every number
-                // between two counts is one of them.
-                souther.compiler.numeric.Place onTheGrid = carrier.onTheGrid(at);
-                if (onTheGrid != null
-                        && holds(space, new Level.OnACarrier(carrier, onTheGrid))) {
-                    return onTheGrid;
+            LevelInterval leaves = new LevelInterval(
+                    endOf(carrier, min), endOf(carrier, max));
+            for (LevelInterval part : region().parts()) {
+                LevelInterval look = part.intersect(leaves);
+                Level found = look == null ? null : space.witness(look, from).level();
+                if (found instanceof Level.OnACarrier on) {
+                    return on.at();
                 }
             }
             return null;
+        }
+
+        /** What the rules leave the position, as an end of a run of its values. */
+        private static Bound endOf(souther.compiler.check.Carrier carrier,
+                                   souther.compiler.numeric.Endpoint end) {
+            return end == null ? null
+                    : Bound.at(new Level.OnACarrier(carrier, end.at()), end.inclusive());
         }
     }
 
@@ -121,8 +117,8 @@ public sealed interface Criterion {
     record AnythingBut(Level excluded) implements Criterion {
 
         @Override
-        public boolean holds(LevelSpace space, Level value) {
-            return space.compare(value, excluded) != 0;
+        public LevelRegion region() {
+            return LevelRegion.EVERYTHING.without(excluded);
         }
 
         @Override
@@ -132,14 +128,24 @@ public sealed interface Criterion {
     }
 
     /**
+     * Which values of the quantity stand at this item.
+     *
+     * <p>On the interface because it is what a criterion is, and the only thing every shape has to
+     * say about itself. Whether a value stands here and where to look for one are both read off it,
+     * so they cannot come apart — asked separately, a witness composed for a side stood for it on
+     * the strength of the arithmetic that composed it rather than on the item's own answer, and a
+     * run whose ends the quantity stands at no value of was looked in by stepping past it.
+     */
+    LevelRegion region();
+
+    /**
      * Whether a row whose quantity came to {@code value} is at this item.
      *
-     * <p>On the interface because it is what a criterion is. A value stands for an item only where
-     * the item says it does, and every shape answers that — asked of one shape and not another, a
-     * witness composed for a side stood for it on the strength of the arithmetic that composed it
-     * rather than on the item's own answer.
+     * <p>The set's own answer and not a second reading of it.
      */
-    boolean holds(LevelSpace space, Level value);
+    default boolean holds(Level value) {
+        return region().contains(value);
+    }
 
     /** How this relates a row's quantity to what it is against. */
     String operator();

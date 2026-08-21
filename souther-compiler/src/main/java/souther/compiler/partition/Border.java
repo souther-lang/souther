@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.numeric.Towards;
+
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
@@ -167,9 +169,9 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
         // The partition this border bounds and the one it keeps out, each without the value against
         // the line — which is that side's own ON or OFF point and is not this one. A side the rules
         // leave nothing in is not a run of the arrangement at all, and that is the answer here too.
-        demands.put(PointRole.IN, runOf(satisfying == Towards.ABOVE
+        demands.put(PointRole.IN, runOf(space, satisfying == Towards.ABOVE
                 ? arrangement.above(mine) : arrangement.below(mine), against(on)));
-        demands.put(PointRole.OUT, runOf(satisfying == Towards.ABOVE
+        demands.put(PointRole.OUT, runOf(space, satisfying == Towards.ABOVE
                 ? arrangement.below(mine) : arrangement.above(mine), against(off)));
         return new Border(target, origin, demands);
     }
@@ -267,15 +269,24 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
                 valueBelongsBelow(origin) ? Towards.BELOW : Towards.ABOVE);
     }
 
-    /** A row anywhere in one run but at the value against the line, or the reason the rules leave
-     *  no run there. */
-    private static Demand runOf(Band run, Level except) {
-        // And a run whose one value is the value against the line has nothing away from it. The
-        // rules leave the side one value wide, that value is the border's own point, and asking for
-        // a second row there is asking for a row nobody can write.
-        return run == null || !run.holdsAnythingBut(except)
-                ? new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT)
-                : new Demand.Owed(new Criterion.Within(run, except));
+    /**
+     * A row anywhere in one run but at the value against the line, or the reason the rules leave no
+     * run there.
+     *
+     * <p>Whether anything is left is the order's answer about the item's own values, and not a
+     * reading of where the run starts and stops: the rules may leave a side one value wide and that
+     * value be the border's own point, and they may leave a run between two lines that the quantity
+     * takes no value in at all. Told apart by comparing the two ends instead, the second was owed a
+     * row nobody can write and the report said the search stopped looking for it.
+     */
+    private static Demand runOf(LevelSpace space, Band run, Level except) {
+        if (run == null) {
+            return new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
+        }
+        Criterion.Within inside = new Criterion.Within(run, except);
+        return inside.region().parts().stream().anyMatch(part -> space.inspect(part).any())
+                ? new Demand.Owed(inside)
+                : new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
     }
 
     /** The level a point against the line stands at, or null where no row is owed there. */
@@ -372,7 +383,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
                 // The run the bound's own value is in, which is the one it bounds. Asked of the
                 // value rather than worked out from which end of the rules the bound is: a bound
                 // orders nothing around itself, so there is no side to read off it.
-                demands.put(PointRole.IN, runOf(arrangement.holding(space, cut), cut));
+                demands.put(PointRole.IN, runOf(space, arrangement.holding(cut), cut));
                 demands.put(PointRole.OUT, new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT));
             }
             case THE_RULE_NAMES_A_VALUE_NOT_A_SIDE -> {

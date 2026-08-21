@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.numeric.Towards;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
@@ -64,10 +66,10 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
     void aRunHoldsTheValuesFromItsFirstToItsLast() {
         Band mid = QuantityArrangement.of(NUMBERS, List.of(upTo("10"), upTo("20"))).bands().get(1);
 
-        assertEquals(false, mid.holds(NUMBERS, at("10")), "ten is the last value below it");
-        assertEquals(true, mid.holds(NUMBERS, at("11")), "eleven is its first");
-        assertEquals(true, mid.holds(NUMBERS, at("20")), "twenty is its last");
-        assertEquals(false, mid.holds(NUMBERS, at("21")), "twenty-one is the first value above it");
+        assertEquals(false, mid.holds(at("10")), "ten is the last value below it");
+        assertEquals(true, mid.holds(at("11")), "eleven is its first");
+        assertEquals(true, mid.holds(at("20")), "twenty is its last");
+        assertEquals(false, mid.holds(at("21")), "twenty-one is the first value above it");
     }
 
     /** And a run with no seam under it runs from wherever the rules start the quantity. */
@@ -76,10 +78,10 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
         Band first = QuantityArrangement.of(NUMBERS, List.of(upTo("10")), at("0"), null)
                 .bands().get(0);
 
-        assertEquals(false, first.holds(NUMBERS, at("-1")), "the rules leave nothing below zero");
-        assertEquals(true, first.holds(NUMBERS, at("0")));
-        assertEquals(true, first.holds(NUMBERS, at("10")));
-        assertEquals(false, first.holds(NUMBERS, at("11")));
+        assertEquals(false, first.holds(at("-1")), "the rules leave nothing below zero");
+        assertEquals(true, first.holds(at("0")));
+        assertEquals(true, first.holds(at("10")));
+        assertEquals(false, first.holds(at("11")));
     }
 
     /**
@@ -101,8 +103,8 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
                 new Seam.Scale(three, dense));
         Band below = QuantityArrangement.of(decimals, List.of(third)).bands().get(0);
 
-        assertEquals(true, below.holds(decimals, decimal(dense, "0.2")), "a fifth is under a third");
-        assertEquals(false, below.holds(decimals, decimal(dense, "0.5")),
+        assertEquals(true, below.holds(decimal(dense, "0.2")), "a fifth is under a third");
+        assertEquals(false, below.holds(decimal(dense, "0.5")),
                 "and a half is over it, however the rule wrote the line");
     }
 

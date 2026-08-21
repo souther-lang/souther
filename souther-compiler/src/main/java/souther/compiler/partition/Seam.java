@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.numeric.Towards;
+
 /**
  * Where a rule parts one quantity's values: the last value on one side and the first on the other.
  *

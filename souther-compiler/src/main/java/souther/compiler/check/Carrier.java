@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.numeric.Towards;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
@@ -483,10 +484,25 @@ public sealed interface Carrier {
      * string it declines deliberately: every string with that one as a prefix is inside, which of
      * them is a choice, and a choice made here puts a character nobody wrote into a row somebody has
      * to read.
+     *
+     * <p>From the low end, which is what a range with no end named asks for.
      */
     default Place somethingInside(Endpoint low, Endpoint high) {
+        return somethingInside(low, high, Towards.ABOVE);
+    }
+
+    /**
+     * The same, from whichever end of the range the caller wants the value nearest.
+     *
+     * <p>Which end is a question about the range and is asked here, where the arithmetic that
+     * answers it already is. Decided by the caller instead, a reader that wanted the value beside a
+     * line reached for a second way of getting one — "some value other than the line's" — and the
+     * two ways were one policy said twice, only one of them on purpose. That is the shape a run
+     * bounded at both ends was already lost to once (issue #903).
+     */
+    default Place somethingInside(Endpoint low, Endpoint high, Towards from) {
         if (this instanceof Text) {
-            return someStringInside(low, high);
+            return someStringInside(low, high, from);
         }
         Granularity spacing = spacing();
         if (spacing == Granularity.DISCRETE) {
@@ -507,10 +523,27 @@ public sealed interface Carrier {
             // held ends instead, a range nothing bounds below is bounded by the order and the value
             // taken is the first count the order has — the least whole number there is, offered as
             // the row an author should write.
-            return low != null ? lo.at() : high != null ? hi.at() : Count.ZERO;
+            Endpoint wanted = from == Towards.ABOVE ? low : high;
+            Endpoint other = from == Towards.ABOVE ? high : low;
+            Endpoint taken = from == Towards.ABOVE ? lo : hi;
+            Endpoint away = from == Towards.ABOVE ? hi : lo;
+            return wanted != null ? taken.at() : other != null ? away.at() : Count.ZERO;
         }
         if (!Endpoint.someValueLiesBetween(low, high)) {
             return null;
+        }
+        if (from == Towards.BELOW) {
+            if (high == null) {
+                return low == null ? Count.ZERO
+                        : low.inclusive() ? low.at() : count(low).plus(1);
+            }
+            if (high.inclusive()) {
+                return high.at();
+            }
+            // Open above, so the place is not the end. Halfway to the other end where there is one,
+            // and a step in where there is not.
+            return low == null ? count(high).minus(1)
+                    : count(low).halfwayTo(count(high), Granularity.DENSE);
         }
         if (low == null) {
             return high == null ? Count.ZERO
@@ -539,18 +572,20 @@ public sealed interface Carrier {
      * reason: the language names no next value, and inventing one tests a rule the model never
      * stated.
      */
-    private static Place someStringInside(Endpoint low, Endpoint high) {
+    private static Place someStringInside(Endpoint low, Endpoint high, Towards from) {
         if (!Endpoint.someValueLiesBetween(low, high)) {
             return null;
         }
-        // An end the range holds is the string taken, whichever end it is. Only the lower one was
-        // looked at, so `"a" < x <= "b"` came back with nothing while holding a value the model
-        // itself wrote two characters away.
-        if (low != null && low.inclusive()) {
-            return low.at();
+        // An end the range holds is the string taken, and the one the caller asked to be near first.
+        // Only the lower one was looked at, so `"a" < x <= "b"` came back with nothing while holding
+        // a value the model itself wrote two characters away.
+        Endpoint first = from == Towards.ABOVE ? low : high;
+        Endpoint second = from == Towards.ABOVE ? high : low;
+        if (first != null && first.inclusive()) {
+            return first.at();
         }
-        if (high != null && high.inclusive()) {
-            return high.at();
+        if (second != null && second.inclusive()) {
+            return second.at();
         }
         // Open above a string, and every string with that one as a prefix is inside. Which of them
         // is a choice, and a choice made here puts a character nobody wrote into a row somebody has

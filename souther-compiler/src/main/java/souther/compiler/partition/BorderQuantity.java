@@ -65,7 +65,7 @@ public sealed interface BorderQuantity {
                 case NumericTerm.Reading.Missing _ -> Stands.UNREADABLE;
                 case NumericTerm.Reading.NotNumber _ -> Stands.NO;
                 case NumericTerm.Reading.Number number ->
-                        where.holds(levels(), new Level.OnACarrier(of, number.value()))
+                        where.holds(new Level.OnACarrier(of, number.value()))
                                 ? Stands.YES : Stands.NO;
             };
         }
@@ -193,7 +193,7 @@ public sealed interface BorderQuantity {
                         ? Stands.YES : Stands.NO;
             }
             Count apart = Count.number(onAt.value()).minus(Count.number(againstAt.value()));
-            return where.holds(levels(), new Level.ACount(apart)) ? Stands.YES : Stands.NO;
+            return where.holds(new Level.ACount(apart)) ? Stands.YES : Stands.NO;
         }
 
         /** Whether a pair standing {@code order} round from where they meet is at the item, for a
@@ -205,7 +205,7 @@ public sealed interface BorderQuantity {
                 // The only level such a quantity takes is the one where they meet, so which run a
                 // pair is in is which way round they stand from it — said as that count, since the
                 // sign is the whole of what the order has.
-                case Criterion.Within within -> within.holds(LevelSpace.onlyWhereTheyMeet(),
+                case Criterion.Within within -> within.holds(
                         new Level.ACount(souther.compiler.numeric.Count.of(order)));
                 case Criterion.AnythingBut _ -> order != 0;
             };
@@ -321,7 +321,7 @@ public sealed interface BorderQuantity {
                 }
                 at = at.add(Count.number(number.value()).at().multiply(each.getValue()));
             }
-            return where.holds(levels(), new Level.ACount(new Count(at)))
+            return where.holds(new Level.ACount(new Count(at)))
                     ? Stands.YES : Stands.NO;
         }
 
