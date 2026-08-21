@@ -176,7 +176,7 @@ public final class InteractionCells {
     public static List<Group> of(List<Interaction> groups, List<Axis> axes) {
         List<Group> out = new ArrayList<>();
         for (Interaction group : groups) {
-            Cell reach = narrowedBy(group.reach(), axes);
+            Cell reach = narrowedBy(constraintsOf(group.reach()), axes);
             if (reach == null) {
                 continue;
             }
@@ -210,7 +210,7 @@ public final class InteractionCells {
         for (Factor factor : group.factors()) {
             List<Cell> outcomes = new ArrayList<>();
             for (Outcome outcome : factor.outcomes()) {
-                Cell at = narrowedBy(outcome.holds(), axes);
+                Cell at = narrowedBy(constraintsOf(outcome.holds()), axes);
                 if (at == null || alreadyThere(outcomes, at)) {
                     return null;
                 }
@@ -219,6 +219,11 @@ public final class InteractionCells {
             out.add(outcomes);
         }
         return out;
+    }
+
+    /** What a run of decisions takes of the inputs, which is this reader's half of each of them. */
+    private static List<Condition> constraintsOf(List<souther.compiler.interaction.Decision> made) {
+        return made.stream().map(souther.compiler.interaction.Decision::constrains).toList();
     }
 
     /** What {@code holds} leaves open, or null where any of it narrows nothing or narrows it away. */

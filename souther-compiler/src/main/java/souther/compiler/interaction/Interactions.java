@@ -88,7 +88,7 @@ public final class Interactions {
     }
 
     private void walk(Core node, InputReads reads, Map<BindingId, List<Outcome>> bound,
-                      Set<Core> absorbed, List<Condition> reach, List<Interaction> found) {
+                      Set<Core> absorbed, List<Decision> reach, List<Interaction> found) {
         if (!answers(node)) {
             // The same invariant the outcomes are read under, and the walk is where it is decided
             // whether there is a group here at all. A subtree that arrives at no value is one no
@@ -152,14 +152,20 @@ public final class Interactions {
      * two.
      */
     private void descend(Core node, InputReads reads, Map<BindingId, List<Outcome>> bound,
-                         Set<Core> absorbed, List<Condition> reach, List<Interaction> found) {
+                         Set<Core> absorbed, List<Decision> reach, List<Interaction> found) {
         switch (node) {
+            // A way in nobody can name stops the walk into that arm, whether what could not be named
+            // is the position the decision is about or the place a run that took it would be seen at.
+            // A group found in there would be under a condition nothing can steer a row into or hold
+            // a run to, and offering it asks for a row that may never arrive.
             case Core.If iff -> {
                 walk(iff.cond(), reads, bound, absorbed, reach, found);
                 Core[] arms = {iff.then(), iff.els()};
                 for (int part = 0; part < arms.length; part++) {
-                    walk(arms[part], reads, bound, absorbed,
-                            and(reach, armCondition(iff, part, reads)), found);
+                    Decision went = armCondition(iff, part, reads);
+                    if (went != null) {
+                        walk(arms[part], reads, bound, absorbed, and(reach, went), found);
+                    }
                 }
             }
             case Core.Match match -> {
@@ -167,8 +173,10 @@ public final class Interactions {
                 walk(match.scrutinee(), reads, bound, absorbed, reach, found);
                 for (int part = 0; part < match.cases().size(); part++) {
                     Core.Case each = match.cases().get(part);
-                    walk(each.body(), reads, bound, absorbed,
-                            and(reach, caseCondition(at, each, match, part)), found);
+                    Decision went = caseCondition(at, each, match, part);
+                    if (went != null) {
+                        walk(each.body(), reads, bound, absorbed, and(reach, went), found);
+                    }
                 }
             }
             case Core.Binary binary when shortCircuits(binary.op()) -> {
@@ -176,9 +184,8 @@ public final class Interactions {
                 // The right runs only where the left did not settle the answer, and which of the
                 // left's outcomes that is takes reading a value rather than a condition. Where the
                 // left is one this can say a side of, that side is what getting here takes; where
-                // it is not, there is nothing to say and the walk does not go in — a group under a
-                // way in nobody can name is one whose rows may not arrive.
-                Condition went = settledBy(binary.left(), binary.op() == Hir.BinOp.AND, reads);
+                // it is not, there is nothing to say and the walk does not go in.
+                Decision went = settledBy(binary.left(), binary.op() == Hir.BinOp.AND, reads);
                 if (went != null) {
                     walk(binary.right(), reads, bound, absorbed, and(reach, went), found);
                 }
@@ -233,15 +240,15 @@ public final class Interactions {
     }
 
     private void walkAll(List<Core> parts, InputReads reads, Map<BindingId, List<Outcome>> bound,
-                         Set<Core> absorbed, List<Condition> reach, List<Interaction> found) {
+                         Set<Core> absorbed, List<Decision> reach, List<Interaction> found) {
         for (Core each : parts) {
             walk(each, reads, bound, absorbed, reach, found);
         }
     }
 
     /** The way in, and one more thing that holds along it. */
-    private static List<Condition> and(List<Condition> reach, Condition went) {
-        List<Condition> both = new ArrayList<>(reach);
+    private static List<Decision> and(List<Decision> reach, Decision went) {
+        List<Decision> both = new ArrayList<>(reach);
         both.add(went);
         return both;
     }
@@ -390,7 +397,10 @@ public final class Interactions {
                 if (!answers(each.body())) {
                     continue;
                 }
-                Condition when = caseCondition(at, each, match, part);
+                Decision when = caseCondition(at, each, match, part);
+                if (when == null) {
+                    continue;
+                }
                 for (Outcome inner : outcomesOf(each.body(), reads, bound)) {
                     out.add(prepend(when, inner));
                 }
@@ -410,7 +420,10 @@ public final class Interactions {
                 if (!answers(arms[part])) {
                     continue;
                 }
-                Condition when = armCondition(iff, part, reads);
+                Decision when = armCondition(iff, part, reads);
+                if (when == null) {
+                    continue;
+                }
                 for (Outcome inner : outcomesOf(arms[part], reads, bound)) {
                     out.add(prepend(when, inner));
                 }
@@ -433,7 +446,10 @@ public final class Interactions {
                 if (!answers(arms.get(part))) {
                     continue;
                 }
-                Condition when = arm(constructed, part);
+                Decision when = forkDecision(constructed, part);
+                if (when == null) {
+                    continue;
+                }
                 for (Outcome inner : outcomesOf(arms.get(part), reads, bound)) {
                     out.add(prepend(when, inner));
                 }
@@ -462,14 +478,19 @@ public final class Interactions {
         return out;
     }
 
-    /** Which case of the union this arm is, said of the position matched on where there is one. */
-    private Condition caseCondition(TermPath at, Core.Case arm, Core.Match match, int part) {
+    /** Which case of the union this arm is, said of the position matched on where there is one, or
+     *  null where no run through the arm could be recorded. */
+    private Decision caseCondition(TermPath at, Core.Case arm, Core.Match match, int part) {
+        souther.compiler.coverage.ControlClaim claim = armClaim(match, part);
+        if (claim == null) {
+            return null;
+        }
         if (at == null) {
-            return arm(match, part);
+            return new Decision(forkArm(match, part), claim);
         }
         List<String> names = arm.pattern().selectors().stream()
                 .map(selector -> selector.name().name()).toList();
-        return new Condition.Case(at, String.join("|", names));
+        return new Decision(new Condition.Case(at, String.join("|", names)), claim);
     }
 
     /**
@@ -480,9 +501,20 @@ public final class Interactions {
      * value that made {@code B} false and by one that never evaluated {@code B}: a row is steered
      * by getting the comparison to answer, which no arm records.
      */
-    private Condition armCondition(Core.If iff, int part, InputReads reads) {
-        Condition said = settledBy(iff.cond(), part == 0, reads);
-        return said != null ? said : arm(iff, part);
+    private Decision armCondition(Core.If iff, int part, InputReads reads) {
+        Decision said = settledBy(iff.cond(), part == 0, reads);
+        if (said != null) {
+            return said;
+        }
+        // The condition is a value rather than a comparison, so nothing recorded the way it came
+        // out — what a run that went this way is seen to have done is that it took this arm.
+        souther.compiler.coverage.ControlClaim claim = armClaim(iff, part);
+        if (claim == null) {
+            return null;
+        }
+        TermPath read = reads.pathOf(iff.cond(), symbols);
+        return new Decision(read == null ? forkArm(iff, part)
+                : new Condition.Case(read, part == 0 ? "true" : "false"), claim);
     }
 
     /**
@@ -492,32 +524,55 @@ public final class Interactions {
      * <p>Asked of a fork's condition and of the left of an operator that stops early, which are the
      * same question: both are a value whose coming out one way is what a row has to arrange.
      */
-    private Condition settledBy(Core test, boolean held, InputReads reads) {
+    private Decision settledBy(Core test, boolean held, InputReads reads) {
         if (!(test instanceof Core.Binary comparison)) {
-            // The condition is the value. A Bool the body branches on is a position of its own and
-            // the two ways it comes out are its two classes, so this is said of it.
-            TermPath read = reads.pathOf(test, symbols);
-            return read == null ? null : new Condition.Case(read, held ? "true" : "false");
+            // The condition is a value rather than a comparison, and nothing records a value coming
+            // out one way. Whether the arm below says it is the caller's question: under a fork
+            // there is an arm to be held to, and on the left of an operator that stops early there
+            // is not.
+            return null;
         }
         souther.compiler.coverage.ComparisonOccurrence site =
                 plan.comparisonAt(comparison).orElse(null);
         TermPath at = firstOf(reads.pathOf(comparison.left(), symbols),
                 reads.pathOf(comparison.right(), symbols));
-        return site == null || at == null ? null : new Condition.Side(at, site, held);
+        if (site == null || at == null) {
+            return null;
+        }
+        return plan.outcomeOf(comparison, held)
+                .flatMap(souther.compiler.coverage.ControlClaim::of)
+                .map(claim -> new Decision(new Condition.Side(at, site, held), claim))
+                .orElse(null);
+    }
+
+    /** One arm of a fork, where a run through it can be recorded, and null where it cannot. */
+    private souther.compiler.coverage.ControlClaim armClaim(Core fork, int part) {
+        ControlPointId.ArmOccurrence[] arms = plan.armsOf(fork);
+        if (arms == null || part >= arms.length) {
+            return null;
+        }
+        return souther.compiler.coverage.ControlClaim.of(arms[part]).orElse(null);
     }
 
     /** The fork itself, for a decision this reading cannot name a position for. */
-    private Condition arm(Core fork, int part) {
+    private Condition forkArm(Core fork, int part) {
         ControlPointId.ArmOccurrence[] arms = plan.armsOf(fork);
         return new Condition.Arm(arms == null || arms.length == 0 ? -1 : arms[0].controlId(), part);
+    }
+
+    /** A fork coming out one way and nothing said about which position, or null where no run
+     *  through the arm could be recorded. */
+    private Decision forkDecision(Core fork, int part) {
+        souther.compiler.coverage.ControlClaim claim = armClaim(fork, part);
+        return claim == null ? null : new Decision(forkArm(fork, part), claim);
     }
 
     private static TermPath firstOf(TermPath left, TermPath right) {
         return left != null ? left : right;
     }
 
-    private static Outcome prepend(Condition when, Outcome outcome) {
-        List<Condition> holds = new ArrayList<>();
+    private static Outcome prepend(Decision when, Outcome outcome) {
+        List<Decision> holds = new ArrayList<>();
         holds.add(when);
         holds.addAll(outcome.holds());
         return new Outcome(holds);
@@ -533,9 +588,9 @@ public final class Interactions {
         List<Outcome> out = new ArrayList<>();
         for (Outcome one : left) {
             for (Outcome other : right) {
-                List<Condition> holds = new ArrayList<>(one.holds());
+                List<Decision> holds = new ArrayList<>(one.holds());
                 boolean agree = true;
-                for (Condition each : other.holds()) {
+                for (Decision each : other.holds()) {
                     if (holds.contains(each)) {
                         continue;
                     }
@@ -557,9 +612,10 @@ public final class Interactions {
     }
 
     /** Whether {@code added} settles a decision the outcome already settles the other way. */
-    private static boolean disagrees(List<Condition> holds, Condition added) {
-        for (Condition each : holds) {
-            boolean same = switch (added) {
+    private static boolean disagrees(List<Decision> holds, Decision added) {
+        for (Decision already : holds) {
+            Condition each = already.constrains();
+            boolean same = switch (added.constrains()) {
                 case Condition.Case one ->
                         each instanceof Condition.Case other && other.at().equals(one.at());
                 case Condition.Side one -> each instanceof Condition.Side other
