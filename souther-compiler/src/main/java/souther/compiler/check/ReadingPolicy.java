@@ -16,9 +16,9 @@ import java.util.List;
  * <p><b>A guardrail and not a precision setting.</b> Measured over the compiler's own suite —
  * 68,725 readings, 42,377 clauses — the largest expansion any clause reaches is five, and 98.97% of
  * clauses reach one; over the bench corpus, which is whole applications, every clause reaches one.
- * So nothing written here is read by the fallback at any limit of eight or more, and the number
- * below is a wide margin over anything observed rather than an optimum derived from it. What the
- * design needs is that a finite limit exists.
+ * So nothing written here is read by the fallback at any limit of eight or more. What the design
+ * needs is that a finite limit exists; which one a compilation sets is the compilation's, and is
+ * written where a reading cannot reach it.
  *
  * <p><b>Owned by the compilation and not made here.</b> Nothing that reads a declaration decides
  * what it may be read with: a policy made where it is needed is one that can differ between two

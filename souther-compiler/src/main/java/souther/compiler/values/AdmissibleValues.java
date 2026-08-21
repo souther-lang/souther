@@ -226,6 +226,11 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
      *                quantifier and is false wherever a clause of its own answers for a position
      */
     public AdmissibleValues {
+        // Every part is copied, and a reader wanting to know that they all are asks the record
+        // rather than this list — `EveryPartOfAReadingIsAValue` counts the parts off the
+        // declaration, because a list written here is one a part added later is missing from and
+        // a list written there would be a copy of it with the same hole.
+        perPosition = said(perPosition);
         standing = Collections.unmodifiableMap(new LinkedHashMap<>(standing));
         // A guarantee empty at one position is empty at all of them. What is promised is one set
         // per position standing for the product of them, and a product with an empty side is

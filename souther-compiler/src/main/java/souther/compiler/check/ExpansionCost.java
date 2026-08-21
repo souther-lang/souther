@@ -20,7 +20,7 @@ import java.util.List;
  * <p><b>Counted on the fold that does the reading, and not by a walk of its own.</b> Which shapes
  * are connectives, where a denial goes and what is left as a leaf are {@link ClauseReading}'s. A
  * second walk stating that again is a second answer, and the two agree only until somebody changes
- * one of them. Read as a {@code ClauseReading<Integer>} the recursion is the same code, so a shape
+ * one of them. Read as a {@code ClauseReading<Long>} the recursion is the same code, so a shape
  * added to the reading is one this counts by the same act.
  *
  * <p>What comes apart there is not a wrong number. It is a declaration admitted under a budget it
