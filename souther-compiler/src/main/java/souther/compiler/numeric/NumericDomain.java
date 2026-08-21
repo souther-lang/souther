@@ -228,37 +228,33 @@ public final class NumericDomain<A> {
      * second reading, and nothing about what the rules leave changes.
      *
      * <p>Every position a rule weighs has to have a name, and no two of them the same
-     * ({@link CanonicalForm#over}). A rule reaching a position the caller's vocabulary cannot spell
+     * ({@link Renaming}). A rule reaching a position the caller's vocabulary cannot spell
      * is a rule that cannot be carried across, and dropping it here would hand back a domain that
      * leaves more than these rules do — which is the one direction a reader downstream cannot see.
      * So the caller is the one that decides what such a position is called, and it may call it
      * something opaque; what it may not do is leave it unnamed and be given a wider answer.
      *
      * <p>The spacing goes with the names, since it is a fact about the position rather than about
-     * the word for it.
+     * the word for it. Every position a rule weighs is one this records a spacing for, so naming
+     * them all is naming everything the rules are about — a rule reaching one this has no spacing
+     * for is refused rather than carried across unnamed.
      */
     public <B> NumericDomain<B> over(java.util.function.Function<A, B> naming) {
-        Map<B, Granularity> called = new LinkedHashMap<>();
-        kinds.forEach((atom, spacing) -> {
-            B name = naming.apply(atom);
-            if (name == null) {
-                throw new IllegalArgumentException(
-                        "no name in the vocabulary asked for was given to `" + atom + "`");
-            }
-            Granularity had = called.put(name, spacing);
-            if (had != null && had != spacing) {
-                throw new IllegalStateException(
-                        "two positions called `" + name + "` are " + had + " and " + spacing);
-            }
-        });
+        // Settled once, over every position these rules speak of, which is what this holds and no
+        // rule of it does. A rule asked whether a naming is one-to-one can only answer about its own
+        // positions, so two independent rules would be carried across as two rules about one number
+        // and a box holding something would come back holding nothing.
+        Renaming<A, B> called = Renaming.of(kinds.keySet(), naming);
+        Map<B, Granularity> spacing = new LinkedHashMap<>();
+        kinds.forEach((atom, spaced) -> spacing.put(called.of(atom), spaced));
         List<AffineConstraint<B>> out = new ArrayList<>();
         for (AffineConstraint<A> rule : rules) {
-            AffineConstraint<B> renamed = rule.over(naming);
+            AffineConstraint<B> renamed = rule.over(called);
             if (!out.contains(renamed)) {
                 out.add(renamed);
             }
         }
-        return new NumericDomain<>(List.copyOf(out), Map.copyOf(called),
+        return new NumericDomain<>(List.copyOf(out), Map.copyOf(spacing),
                 readARuleNothingSatisfies);
     }
 

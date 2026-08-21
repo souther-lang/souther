@@ -31,14 +31,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * the reading that relates positions, the other three are answered only where that reading happens
  * to have a name for the coordinate — and where it does not, an answer that was in hand is dropped.
  *
- * <p>Which it does for whole reasons at a time. A form is one question per parameter, so a
- * coordinate the reading cannot name takes the answer about every other coordinate of that
- * parameter down with it: two positions each known to be at least none add up to something with no
- * floor.
+ * <p>And it gives them up for whole reasons at a time. The clauses relating positions are read one
+ * value at a time, so a coordinate that reading cannot name is one it can say nothing about — and an
+ * answer that gave up on its account would give up on every coordinate beside it too: two positions
+ * each known to be at least none would add up to something with no floor.
  *
- * <p>So what each term runs between is composed first, from everything about that term alone, and
- * what the rules relating them leave the form is met onto it. Meeting only narrows, so an answer is
- * never wider than the term's own — which is the direction the whole boundary is written in.
+ * <p>So all four go in beside each other and the answer is read out of the four together. Taking one
+ * in only narrows, so what comes back is never wider than what the term alone says — which is the
+ * direction the whole boundary is written in. What these hold to is the answer and not the way it is
+ * arrived at: a fact in hand may not be dropped because the mechanism asked for it declined.
  */
 class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
 
@@ -134,11 +135,12 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
     /**
      * And the rule relating two terms survives a third the reading cannot name.
      *
-     * <p>The part that keeps a relation is the terms the reading has a coordinate for, and the rest
-     * is added beside it. Met as two totals instead — everything each term is on its own against
-     * everything the relations leave the whole form — one unnameable term makes the relational
-     * total say nothing, and the relation between the two terms beside it is lost with it. Meeting
-     * does not distribute over addition, so which unit it happens at is which answer comes out.
+     * <p>A term the reading has no coordinate for is one no relation can be asked about, and that is
+     * the whole of what it costs. Asked as two totals instead — everything each term is on its own,
+     * against everything the relations leave the whole form — the unnameable term makes the
+     * relational total say nothing and takes the relation between the two beside it with it. Meeting
+     * does not distribute over addition, so the unit an answer is assembled at is which answer comes
+     * out.
      *
      * <p>Held here and not at a report, because no report reaches it today. A coordinate the reading
      * of a value never named is in practice a count nothing takes, and a position whose values are

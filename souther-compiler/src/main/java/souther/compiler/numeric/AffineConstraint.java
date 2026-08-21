@@ -63,7 +63,7 @@ public sealed interface AffineConstraint<A> {
      * <p>What is renamed is the form and never the threshold. A bound is a number and a number is
      * not in anybody's vocabulary.
      */
-    default <B> AffineConstraint<B> over(Function<A, B> naming) {
+    default <B> AffineConstraint<B> over(Renaming<A, B> naming) {
         return switch (this) {
             case HalfSpace<A> half -> new HalfSpace<>(half.form().over(naming), half.bound());
             case Equality<A> at -> new Equality<>(at.form().over(naming), at.at());

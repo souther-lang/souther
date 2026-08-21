@@ -93,6 +93,27 @@ class RulesReadOfOneValueAreCarriedAndSaidTogetherTest {
         assertThrows(IllegalArgumentException.class, () -> read.over(_ -> "one"));
     }
 
+    /**
+     * Two positions no one rule names together are still two positions.
+     *
+     * <p>The case the check inside a form cannot see. Injectivity is a fact about the naming over
+     * everything the rules are about, and a form knows only its own atoms — so a naming that calls
+     * two of them one name is caught where they stand side by side and nowhere else. Left there,
+     * two independent rules would come back as two rules about one number, and a domain that holds
+     * something would come back holding nothing.
+     */
+    @Test
+    void twoPositionsCalledOneNameAreRefusedWhereNoRuleNamesBoth() {
+        NumericDomain<String> read = NumericDomain.<String>top()
+                .assume(atom("x"), Rel.LE, whole("x"))
+                .assume(atom("y").minus(num(1)), Rel.GE, whole("y"));
+
+        assertFalse(read.isBottom(), "nothing here contradicts: x is at nought or below, y at one"
+                + " or above");
+        assertThrows(IllegalArgumentException.class, () -> read.over(_ -> "z"),
+                "calling both of them `z` is identifying two numbers, not renaming them");
+    }
+
     /** Saying two readings together says everything either of them says. */
     @Test
     void whatIsSaidTogetherIsEverythingBothSay() {
