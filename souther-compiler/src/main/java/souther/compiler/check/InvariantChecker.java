@@ -611,7 +611,7 @@ public final class InvariantChecker {
             Reading reading = c.directsIn(written, at, atoms, keys, held, typeAt, took,
                     new PartsRead(readBy, adoptedBy));
             ConstraintState constraints = k.constraints()
-                    .taking(stated.values())
+                    .takingValuesRead(stated.values())
                     .taking(stated.ordered());
             for (Map.Entry<String, Count> each : settled.entrySet()) {
                 FactSubject atom = atoms.get(each.getKey());

@@ -142,9 +142,26 @@ record ConstraintState(NumericDomain<FactSubject> numbers, PredicateFacts facts,
         return new ConstraintState(numbers, facts.assume(key, positive), values, ordered, shown);
     }
 
-    /** This, with {@code admitted} taken as holding of the positions it speaks about. */
-    ConstraintState taking(AdmissibleValues<FactSubject> admitted) {
-        return new ConstraintState(numbers, facts, values.meet(admitted), ordered, shown);
+    /**
+     * This, with the clauses of one declaration read into its values.
+     *
+     * <p><b>Not two readings combined.</b> What stands here is what nothing read leaves until this
+     * is called, and it is called once — so the answer is the same either way today. Written
+     * against that rather than against what the state happens to hold, because a reading is a union
+     * of alternatives and a conjunction of two of them is the union of the pairs: two readings met
+     * here would be two declarations' alternatives multiplied outside the budget either of them was
+     * admitted under, and the budget is what makes the reading of one declaration bounded at all.
+     *
+     * <p>Met with what nothing read leaves rather than assigned, which is not the same answer. A
+     * reading a choice reached across two positions promises nothing about whole values, and a
+     * conjunction with one of those promises nothing anywhere — so the meet gives up a lower bound
+     * that an assignment would keep. That is {@link AdmissibleValues#guaranteedAt}'s rule about
+     * conjunctions firing on a side that read nothing, and lifting it is about which rules went
+     * unread rather than about how the alternatives are held.
+     */
+    ConstraintState takingValuesRead(AdmissibleValues<FactSubject> read) {
+        return new ConstraintState(numbers, facts, AdmissibleValues.<FactSubject>top().meet(read),
+                ordered, shown);
     }
 
     /** This, with {@code bounded} taken as holding of the positions it bounds. */
