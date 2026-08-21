@@ -193,7 +193,7 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
         for (RowOutcome row : evaluated(ANSWERS).rows()) {
             Counting.Read read = assertInstanceOf(Counting.Read.class, row.run().counting(),
                     "the counting was read");
-            assertEquals(java.util.Set.of(), read.hits(),
+            assertEquals(java.util.Set.of(), read.observation().taken(),
                     "and lit no branch, there being no body to light one");
         }
     }

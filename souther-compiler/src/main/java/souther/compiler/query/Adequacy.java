@@ -523,7 +523,7 @@ public final class Adequacy {
             Set<Integer> lit = new LinkedHashSet<>();
             for (Observed observed : rowsOf(db, name).values()) {
                 for (RowOutcome row : observed.rows()) {
-                    lit.addAll(litBy(row));
+                    lit.addAll(seenBy(row).taken());
                 }
             }
             Map<String, souther.compiler.check.PathReachability.Answers.AsRun> out =
@@ -1007,7 +1007,7 @@ public final class Adequacy {
             Set<Integer> lit = new LinkedHashSet<>();
             for (Observed observed : byTarget.values()) {
                 for (RowOutcome row : observed.rows()) {
-                    lit.addAll(litBy(row));
+                    lit.addAll(seenBy(row).taken());
                 }
             }
 
@@ -2513,17 +2513,17 @@ public final class Adequacy {
     private Adequacy() {}
 
     /**
-     * The sites a row is known to have gone through.
+     * What a row is known to have done.
      *
      * <p>Read as a {@code switch} so that a counting this does not know about is a compile error
-     * here rather than a row silently counted as having lit nothing. A row whose counting was never
-     * read lights none that anything here can name, and that it was left undecided is said where the
-     * row is reported.
+     * here rather than a row silently counted as having done nothing. A row whose counting was never
+     * read is known to have done none of it, and that it was left undecided is said where the row is
+     * reported.
      */
-    private static java.util.Set<Integer> litBy(RowOutcome row) {
+    private static souther.compiler.coverage.Observation seenBy(RowOutcome row) {
         return switch (row.run().counting()) {
-            case Counting.Read read -> read.hits();
-            case Counting.Unread _ -> java.util.Set.of();
+            case Counting.Read read -> read.observation();
+            case Counting.Unread _ -> souther.compiler.coverage.Observation.NONE;
         };
     }
 

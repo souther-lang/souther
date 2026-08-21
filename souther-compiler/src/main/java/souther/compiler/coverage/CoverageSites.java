@@ -191,13 +191,35 @@ public final class CoverageSites {
 
         /** Which way {@code comparison} coming out {@code result} is, or empty where this plan
          *  numbered no comparison there. */
-        public java.util.Optional<ControlPointId.ComparisonOutcome> outcomeOf(Core comparison,
-                                                                             boolean result) {
+        public java.util.Optional<ControlPointId.ComparisonPoint> outcomeOf(Core comparison,
+                                                                           boolean result) {
             Integer control = controlByComparison.get(comparison);
-            Integer probe = byComparison.get(comparison);
-            return control == null || probe == null ? java.util.Optional.empty()
-                    : java.util.Optional.of(
-                            new ControlPointId.ComparisonOutcome(control, probe, result));
+            return control == null ? java.util.Optional.empty()
+                    : comparisonAt(comparison).map(at -> new ControlPointId.ComparisonPoint(
+                            control, new ComparisonOutcome(at, result)));
+        }
+
+        /**
+         * Which comparison of this plan {@code comparison} is, or empty where it numbered none there.
+         *
+         * <p>What a reading of the model joins on, and what it is given instead of the number. Empty
+         * is an ordinary answer for the same reason {@link #comparisonSiteOf} has one.
+         */
+        public java.util.Optional<ComparisonOccurrence> comparisonAt(Core comparison) {
+            Integer site = byComparison.get(comparison);
+            return site == null ? java.util.Optional.empty()
+                    : java.util.Optional.of(new ComparisonOccurrence(site));
+        }
+
+        /**
+         * The same, where the caller's own construction says there is one.
+         *
+         * <p>Absent here is not a comparison that cannot be measured — it is this plan and the reader
+         * that found the comparison disagreeing about what a condition is made of, which no
+         * measurement should paper over.
+         */
+        public ComparisonOccurrence requireComparisonAt(Core comparison) {
+            return new ComparisonOccurrence(requireComparisonSiteOf(comparison));
         }
 
         /**

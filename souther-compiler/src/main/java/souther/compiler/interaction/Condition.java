@@ -1,5 +1,6 @@
 package souther.compiler.interaction;
 
+import souther.compiler.coverage.ComparisonOccurrence;
 import souther.compiler.inputs.TermPath;
 
 /**
@@ -28,16 +29,17 @@ public sealed interface Condition {
     /**
      * A comparison in the body coming out one way.
      *
-     * @param site  where the comparison's own value is recorded, which is what tells one reading of
-     *              one rule from another: a comparison inside a non-recursive helper is read once
-     *              per call of that helper
-     * @param held  the way it came out
+     * @param comparison which comparison, which is what tells one reading of one rule from another:
+     *                   a comparison inside a non-recursive helper is read once per call of that
+     *                   helper. The occurrence and not the number it is instrumented under — the
+     *                   number is how a run is recorded and is no part of what this decision is
+     * @param held       the way it came out
      */
-    record Side(TermPath at, int site, boolean held) implements Condition {
+    record Side(TermPath at, ComparisonOccurrence comparison, boolean held) implements Condition {
 
         @Override
         public String toString() {
-            return at + (held ? " holds" : " fails") + "@" + site;
+            return at + (held ? " holds" : " fails") + "@" + comparison.emissionSite();
         }
     }
 

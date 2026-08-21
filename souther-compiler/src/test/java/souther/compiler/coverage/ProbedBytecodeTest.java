@@ -120,7 +120,7 @@ class ProbedBytecodeTest {
             Probe.begin();
             submit.apply(50L);
             Set<Integer> there = elsewhere.submit(() -> submit.armsFor(500L)).get();
-            Set<Integer> here = Probe.taken();
+            Set<Integer> here = Probe.snapshot().taken();
             Probe.end();
 
             assertNotEquals(here, there);
@@ -137,7 +137,7 @@ class ProbedBytecodeTest {
 
         submit.apply(50L);   // outside begin()/end()
 
-        assertEquals(Set.of(), Probe.taken());
+        assertEquals(Set.of(), Probe.snapshot().taken());
     }
 
     // --- what the shipped classes do not mention -------------------------------------------------
@@ -259,7 +259,7 @@ class ProbedBytecodeTest {
             Probe.begin();
             try {
                 apply(cost);
-                return Probe.taken();
+                return Probe.snapshot().taken();
             } finally {
                 Probe.end();
             }

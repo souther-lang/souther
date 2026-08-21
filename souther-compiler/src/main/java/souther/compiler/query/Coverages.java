@@ -499,7 +499,7 @@ final class Coverages {
         // guard's line is about a place in a body and is reached or not; an invariant's and a
         // clause's are about the values — one refuses everything outside its bound, the other states
         // a relation — so for both of those writing the value is the whole of what there is to reach.
-        boolean guard = border.origin().comparisonSite().isPresent();
+        boolean guard = border.origin().comparisonAt().isPresent();
         ItemAssessment.Coverage.Reason absent = guard
                 ? whyNoGuardLine(observed.rows(), armsAsked, observed.armsUnseen(),
                         observed.someRowsUnseen())
@@ -537,7 +537,8 @@ final class Coverages {
                                             boolean knownWritable, Probe probe,
                                             LevelRealizer realizer) {
         BorderQuantity quantity = border.cut().of();
-        java.util.OptionalInt site = border.origin().comparisonSite();
+        java.util.Optional<souther.compiler.coverage.ComparisonOccurrence> site =
+                border.origin().comparisonAt();
         return new OneShapeOfBorder() {
 
             @Override
@@ -593,18 +594,21 @@ final class Coverages {
      * belong to the rows: that a row nothing could read leaves the item undecided rather than missed,
      * and that a line a fork drew is met by getting the comparison to answer as well.
      *
-     * @param site where the comparison's own value is recorded, for a rule that meeting takes more
-     *             than standing at the level. Empty where standing there is the whole of it
+     * @param site which comparison a row has to have got an answer out of, for a rule that meeting
+     *             takes more than standing at the level. Empty where standing there is the whole
+     *             of it
      */
     private static Met metOn(BorderQuantity quantity, BehaviorInputs where, List<RowOutcome> rows,
-                             Criterion criterion, java.util.OptionalInt site) {
+                             Criterion criterion,
+                             java.util.Optional<souther.compiler.coverage.ComparisonOccurrence>
+                                     site) {
         boolean unreadable = false;
         for (RowOutcome row : rows) {
             switch (quantity.standsAt(criterion, path -> where.valueAt(row, path))) {
                 case UNREADABLE -> unreadable = true;
                 case NO -> { }
                 case YES -> {
-                    if (site.stream().allMatch(litBy(row)::contains)) {
+                    if (site.stream().allMatch(seenBy(row)::reached)) {
                         return Met.YES;
                     }
                 }
@@ -837,17 +841,17 @@ final class Coverages {
     private Coverages() {}
 
     /**
-     * The sites a row is known to have gone through.
+     * What a row is known to have done.
      *
      * <p>Read as a {@code switch} so that a counting this does not know about is a compile error
-     * here rather than a row silently counted as having lit nothing. A row whose counting was never
-     * read lights none that anything here can name, and that it was left undecided is said where the
-     * row is reported.
+     * here rather than a row silently counted as having done nothing. A row whose counting was never
+     * read is known to have done none of it, and that it was left undecided is said where the row is
+     * reported.
      */
-    private static java.util.Set<Integer> litBy(RowOutcome row) {
+    private static souther.compiler.coverage.Observation seenBy(RowOutcome row) {
         return switch (row.run().counting()) {
-            case Counting.Read read -> read.hits();
-            case Counting.Unread _ -> java.util.Set.of();
+            case Counting.Read read -> read.observation();
+            case Counting.Unread _ -> souther.compiler.coverage.Observation.NONE;
         };
     }
 

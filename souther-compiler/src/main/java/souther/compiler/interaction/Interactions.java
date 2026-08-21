@@ -488,7 +488,8 @@ public final class Interactions {
             TermPath read = reads.pathOf(test, symbols);
             return read == null ? null : new Condition.Case(read, held ? "true" : "false");
         }
-        Integer site = plan.byComparison().get(comparison);
+        souther.compiler.coverage.ComparisonOccurrence site =
+                plan.comparisonAt(comparison).orElse(null);
         TermPath at = firstOf(reads.pathOf(comparison.left(), symbols),
                 reads.pathOf(comparison.right(), symbols));
         return site == null || at == null ? null : new Condition.Side(at, site, held);
@@ -550,8 +551,8 @@ public final class Interactions {
             boolean same = switch (added) {
                 case Condition.Case one ->
                         each instanceof Condition.Case other && other.at().equals(one.at());
-                case Condition.Side one ->
-                        each instanceof Condition.Side other && other.site() == one.site();
+                case Condition.Side one -> each instanceof Condition.Side other
+                        && other.comparison().equals(one.comparison());
                 case Condition.Arm one ->
                         each instanceof Condition.Arm other && other.control() == one.control();
             };

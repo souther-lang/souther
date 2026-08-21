@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.coverage.ComparisonOccurrence;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.interaction.Condition;
 import souther.compiler.interaction.Factor;
@@ -266,11 +267,11 @@ public final class InteractionCells {
                 if (axis < 0) {
                     return null;
                 }
-                Cut line = cutAt(axes.get(axis), one.site());
+                Cut line = cutAt(axes.get(axis), one.comparison());
                 if (line == null) {
                     return null;
                 }
-                OriginRef.GuardOrigin guard = guardOf(line, one.site());
+                OriginRef.GuardOrigin guard = guardOf(line, one.comparison());
                 int home = holding(axes.get(axis), line);
                 if (home < 0) {
                     return null;
@@ -333,9 +334,9 @@ public final class InteractionCells {
     }
 
     /** The cut this reading of the comparison drew, or null where it drew none. */
-    private static Cut cutAt(Axis axis, int site) {
+    private static Cut cutAt(Axis axis, ComparisonOccurrence comparison) {
         for (Cut each : axis.cuts()) {
-            if (guardOf(each, site) != null) {
+            if (guardOf(each, comparison) != null) {
                 return each;
             }
         }
@@ -343,9 +344,10 @@ public final class InteractionCells {
     }
 
     /** Which rule of the cut this reading of the comparison is. */
-    private static OriginRef.GuardOrigin guardOf(Cut cut, int site) {
+    private static OriginRef.GuardOrigin guardOf(Cut cut, ComparisonOccurrence comparison) {
         for (OriginRef origin : cut.origins()) {
-            if (origin instanceof OriginRef.GuardOrigin guard && guard.read().site() == site) {
+            if (origin instanceof OriginRef.GuardOrigin guard
+                    && guard.read().comparison().equals(comparison)) {
                 return guard;
             }
         }
