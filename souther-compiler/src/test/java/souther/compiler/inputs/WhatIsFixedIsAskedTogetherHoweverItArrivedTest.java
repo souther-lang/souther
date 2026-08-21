@@ -343,6 +343,59 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
         }
     }
 
+    /**
+     * A proof of emptiness says where it sits, in this input's words.
+     *
+     * <p>What proves it names a position the way the declaration does — {@code x} for a field of the
+     * record the clause was written on — and a caller out here holds {@code p.x}. Said in the
+     * declaration's words a report would name a field of nothing, and said as the parameter alone it
+     * would name the whole of what the behavior takes for a contradiction at one field of it. That
+     * translation is the reason this vocabulary exists beside the proof the declarations hold, so it
+     * is what is checked.
+     */
+    @Test
+    void aProofThatNamesAPositionIsSaidUnderTheParameter() {
+        Read read = read(NOTHING_AT_A_FIELD, "take");
+
+        EmptyInput why = read.inputs().quantities(read.symbols()).emptiness().orElseThrow();
+
+        assertEquals(new EmptyInput.At(TermPath.of("p").then("x"),
+                        new EmptyInput.ProvedByTheDeclarationsReading()),
+                why);
+    }
+
+    /**
+     * And where the proof names no position, the parameter is where it sits.
+     *
+     * <p>A pair the rules refuse is a fact about the value and not about one field of it, so there
+     * is no field to name and naming one would be inventing a place.
+     */
+    @Test
+    void aProofAboutTheWholeValueSitsAtTheParameter() {
+        Read read = read(SOURCE, "take");
+
+        EmptyInput why = read.inputs().quantities(read.symbols())
+                .given(fixing(X, 4, Y, 4)).emptiness().orElseThrow();
+
+        assertEquals(new EmptyInput.At(TermPath.of("p"),
+                        new EmptyInput.ProvedByTheDeclarationsReading()),
+                why);
+    }
+
+    /** A field whose own type the rules leave no value of, so the proof names that field. */
+    private static final String NOTHING_AT_A_FIELD = """
+            module example.nofield
+
+            data Impossible = Int
+                invariant impossible = value > 1 && value < 1
+
+            data P = { x: Impossible, y: Int }
+
+            data Taken
+
+            behavior take : (p: P) -> Taken
+            """;
+
     private static NumericTerm size(Read read, String field) {
         TermPath at = TermPath.of("p").then(field);
         return new NumericTerm.SizeOf(souther.compiler.check.NumericMeasures.takenOf(

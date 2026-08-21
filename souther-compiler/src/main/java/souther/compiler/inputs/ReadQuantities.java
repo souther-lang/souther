@@ -17,15 +17,19 @@ import java.util.Set;
 /**
  * The one reading of a behavior's input, asked about a quantity over several of its positions.
  *
- * <p>What {@link Quantities} says, made. Nothing is read here that {@link InputDomain} did not
- * already read: the declarations reaching each parameter were read once, and this asks them a
- * question with several positions in it instead of one.
+ * <p>What {@link Quantities} says, made. The declarations reaching each parameter are read when one
+ * of these is made, and not again: a question with several positions in it, and the same question
+ * with some of them settled, are both answered from what that reading came to.
  */
 final class ReadQuantities implements Quantities {
 
     private final Map<String, PlacedRules> byParameter;
     /** What the behavior takes, which is what a path of this input starts at. */
     private final Set<String> parameters;
+    /** Every position that was read, by where it sits. What one of them was read to hold is what
+     *  its own term runs between, and the reading that relates positions has a name for some of
+     *  those terms and not for others. */
+    private final Map<TermPath, Position> byPath;
     private final Map<NumericTerm, Count> fixed;
     private final EmptyInput proved;
     /**
@@ -39,16 +43,23 @@ final class ReadQuantities implements Quantities {
     private volatile Map<String, FieldDomains.Settled> conditioned;
 
     private ReadQuantities(Map<String, PlacedRules> byParameter, Set<String> parameters,
-                           Map<NumericTerm, Count> fixed, EmptyInput proved) {
-        this.byParameter = Map.copyOf(byParameter);
+                           Map<TermPath, Position> byPath, Map<NumericTerm, Count> fixed,
+                           EmptyInput proved) {
+        // In the order the behavior declares its parameters. A proof of emptiness names one of them
+        // and a report is a document compared against the one written last time, so an order read
+        // off a hash would move which parameter is named between runs.
+        this.byParameter = java.util.Collections.unmodifiableMap(
+                new LinkedHashMap<>(byParameter));
         this.parameters = Set.copyOf(parameters);
+        this.byPath = Map.copyOf(byPath);
         this.fixed = Map.copyOf(fixed);
         this.proved = proved;
     }
 
     /** Before anything is fixed. */
-    static ReadQuantities of(Map<String, PlacedRules> byParameter, Set<String> parameters) {
-        return new ReadQuantities(byParameter, parameters, Map.of(), null);
+    static ReadQuantities of(Map<String, PlacedRules> byParameter, Set<String> parameters,
+                             Map<TermPath, Position> byPath) {
+        return new ReadQuantities(byParameter, parameters, byPath, Map.of(), null);
     }
 
     /** Each parameter's rules read with what is fixed under it, once. */
@@ -58,7 +69,7 @@ final class ReadQuantities implements Quantities {
             Map<String, FieldDomains.Settled> made = new LinkedHashMap<>();
             byParameter.forEach((parameter, rules) ->
                     made.put(parameter, rules.given(under(parameter))));
-            read = Map.copyOf(made);
+            read = java.util.Collections.unmodifiableMap(made);
             conditioned = read;
         }
         return read;
@@ -70,18 +81,35 @@ final class ReadQuantities implements Quantities {
             return null;
         }
         form.coefs().keySet().forEach(this::held);
-        // What the term guarantees of itself, which the declarations need not have been told. A size
-        // is never negative and no clause writes that down, so a reading of the clauses alone finds
-        // nothing wrong with a form that runs below zero.
-        Reach intrinsic = Reach.of(weighed(form), Rational.of(form.constant()),
-                term -> reachOf(term.ownBounds()));
+        // One term taken as itself, which is the arithmetic being the identity rather than a second
+        // answer to the same question. It is also the only shape a position the arithmetic cannot
+        // count is ever asked in — a form adds its terms together and two strings have no sum — so
+        // this is where a floor written as a value rather than as a number survives at all.
+        NumericTerm only = onlyTermOf(form);
+        if (only != null) {
+            // The relation still applies: what the rules leave one position under what is fixed is
+            // the question a search asks between two steps, and it is the arithmetic that is the
+            // identity here rather than the reading.
+            return meeting(whereOneTermRuns(only), relatedTo(only));
+        }
+        // Every term on its own first, from everything known about that term alone: where it stands
+        // if it has been fixed, what its own position was read to hold, and what the term
+        // guarantees of itself. Composed here rather than left to the reading that relates
+        // positions, which has a name for some of these terms and not for others — asked only
+        // there, a floor on a position the arithmetic has no word for was dropped, a value the
+        // caller had just fixed was forgotten, and one term it could not name took the answer about
+        // every other term of that parameter with it.
+        Reach alone = Reach.of(weighed(form), Rational.of(form.constant()), this::atOneTerm);
         // And what the rules leave it. One parameter at a time, because a parameter's rules are the
         // only ones that reach its positions: the part of the form over each is solved against that
         // parameter's rules, and the answers are added. The parts stay forms — added position by
         // position, the relation each part carries is the thing that would be lost.
         Reach related = Reach.of(byParameter(form), Rational.of(form.constant()),
                 parameter -> relationally(parameter, form));
-        return boundsOf(tighter(intrinsic, related));
+        // Met and not chosen between. What relates the positions is what the terms alone cannot
+        // say, and what a term is on its own is what the relation need not have been told — so an
+        // answer is at least as tight as either, and never wider than the term's own.
+        return boundsOf(tighter(alone, related));
     }
 
     @Override
@@ -101,7 +129,7 @@ final class ReadQuantities implements Quantities {
                 found = first(found, new EmptyInput.TwoValuesAtOnePosition(term, had, at));
             }
         }
-        ReadQuantities wider = new ReadQuantities(byParameter, parameters, both, found);
+        ReadQuantities wider = new ReadQuantities(byParameter, parameters, byPath, both, found);
         return wider.provingWhatIsFixedIsReachable(more);
     }
 
@@ -152,7 +180,7 @@ final class ReadQuantities implements Quantities {
 
     /** Where in this input the proof sits: the parameter, and the position under it the proof names
      *  where it names one. */
-    static TermPath where(String parameter, souther.compiler.check.Emptiness why) {
+    private static TermPath where(String parameter, souther.compiler.check.Emptiness why) {
         TermPath at = TermPath.of(parameter);
         if (!(why instanceof souther.compiler.check.Emptiness.AtAField field)
                 || field.path().isEmpty()) {
@@ -192,7 +220,7 @@ final class ReadQuantities implements Quantities {
         for (Map.Entry<NumericTerm, Count> each : just.entrySet()) {
             NumericDomain.Bounds own = each.getKey().ownBounds();
             if (own != null && !own.admits(each.getValue())) {
-                return new ReadQuantities(byParameter, parameters, fixed,
+                return new ReadQuantities(byParameter, parameters, byPath, fixed,
                         at(each.getKey().path(), new EmptyInput.OutsideWhereThePositionRuns(
                                 each.getKey(), each.getValue())));
             }
@@ -262,6 +290,9 @@ final class ReadQuantities implements Quantities {
     /** What one parameter's rules leave its part of the form, solved as a form. */
     private Reach relationally(String parameter, NumericDomain.LinearForm<NumericTerm> form) {
         FieldDomains.Settled rules = conditioned().get(parameter);
+        // Nothing where the reading cannot answer for this part of the form, which is one term of
+        // it being a coordinate it never named. Said as a bound of nothing at all, the terms it
+        // could name would be answered for by a reading that had given up on the form they are in.
         return rules == null ? Reach.ANYWHERE
                 : reachOf(rules.boundsOf(partOf(parameter, form)));
     }
@@ -277,6 +308,94 @@ final class ReadQuantities implements Quantities {
             }
         });
         return out;
+    }
+
+    /** The term a form is, where it is one term taken as itself, or null where it is arithmetic. */
+    private static NumericTerm onlyTermOf(NumericDomain.LinearForm<NumericTerm> form) {
+        if (form.coefs().size() != 1 || form.constant().signum() != 0) {
+            return null;
+        }
+        Map.Entry<NumericTerm, BigDecimal> one = form.coefs().entrySet().iterator().next();
+        return one.getValue().compareTo(BigDecimal.ONE) == 0 ? one.getKey() : null;
+    }
+
+    /**
+     * What the rules relating this term to others leave it, or null where the reading cannot name
+     * the coordinate.
+     *
+     * <p>The same question {@link #relationally} asks of a form, of a form that is one term. Read as
+     * bounds rather than as something to add up, because nothing is being added.
+     */
+    private NumericDomain.Bounds relatedTo(NumericTerm term) {
+        FieldDomains.Settled rules = conditioned().get(term.path().head());
+        return rules == null ? null : rules.boundsOf(new LinkedHashMap<>(Map.of(
+                new FieldDomains.Coordinate(String.join(".", term.path().fields()),
+                        term instanceof NumericTerm.SizeOf),
+                BigDecimal.ONE)));
+    }
+
+    /**
+     * Where one term runs, as bounds rather than as something to add up.
+     *
+     * <p>Beside {@link #atOneTerm} and about the same three things. What it does not do is turn them
+     * into numbers: a position ordered by its own values has ends that are values — a string stops
+     * at {@code "A"} — and the arithmetic that adds terms together has no word for one.
+     */
+    private NumericDomain.Bounds whereOneTermRuns(NumericTerm term) {
+        NumericDomain.Bounds runs = ownOf(term);
+        NumericDomain.Bounds intrinsic = term.ownBounds();
+        if (intrinsic != null) {
+            runs = meeting(runs, intrinsic);
+        }
+        Count fixedAt = fixed.get(term);
+        return fixedAt == null ? runs
+                : meeting(runs, new NumericDomain.Bounds(Endpoint.inclusive(fixedAt),
+                        Endpoint.inclusive(fixedAt)));
+    }
+
+    /** The tighter end on each side, where an absent bound is no bound and never the tighter. */
+    private static NumericDomain.Bounds meeting(NumericDomain.Bounds one,
+                                                NumericDomain.Bounds other) {
+        if (one == null) {
+            return other;
+        }
+        if (other == null) {
+            return one;
+        }
+        return new NumericDomain.Bounds(Endpoint.lower(one.min(), other.min()),
+                Endpoint.upper(one.max(), other.max()));
+    }
+
+    /**
+     * What the position measured at this term was read to hold, or null where no position is
+     * measured at it.
+     *
+     * <p>Which number a position is measured at is settled by the reading that made it, and a count
+     * taken of a position the reading measured by its own value is a different quantity — answered
+     * with the position's, a body measuring the length of a string would be told where the string
+     * stops.
+     */
+    private NumericDomain.Bounds ownOf(NumericTerm term) {
+        Position at = byPath.get(term.path());
+        return at != null && term.equals(at.term()) ? at.numericDomain() : null;
+    }
+
+    /**
+     * Where one term runs, from everything about that term and nothing about what it stands beside.
+     *
+     * <p>Three things and they are not one thing. A value the caller fixed it at is where it stands
+     * whether or not any clause ever named that coordinate; what its own position was read to hold
+     * is where its values stop, on whatever order it is measured — a text position has a floor and
+     * no number for the arithmetic to relate; and what the term guarantees of itself is true of
+     * every term of its kind, which is how a count is never negative without a clause saying so.
+     *
+     * <p>The position's answer only where the position is measured at this term. Which number a
+     * position is measured at is settled by the reading that made it, and a count taken of a
+     * position the reading measured by its own value is a different quantity — answered with the
+     * position's, a body measuring the length of a string would be told where the string stops.
+     */
+    private Reach atOneTerm(NumericTerm term) {
+        return reachOf(whereOneTermRuns(term));
     }
 
     private static Map<NumericTerm, Rational> weighed(NumericDomain.LinearForm<NumericTerm> form) {

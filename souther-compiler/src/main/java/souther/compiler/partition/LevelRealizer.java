@@ -64,7 +64,7 @@ public final class LevelRealizer {
     private Realization ofOne(Standing.OfOneCoordinate one) {
         Place at = placeMeeting(one.where(), one.of(), bounds(one.term()));
         return at == null ? new Realization.Unknown(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE)
-                : new Realization.Found(Map.of(one.term(), at));
+                : found(Map.of(one.term(), at));
     }
 
     /**
@@ -100,14 +100,7 @@ public final class LevelRealizer {
         Map<NumericTerm, Place> fixing = new LinkedHashMap<>();
         fixing.put(two.on(), at);
         fixing.put(two.against(), common);
-        // And the pair against the rules, which is the same last step a form's assignment gets and
-        // for the same reason: a place inside each position's own ends can still be one no value of
-        // the record has beside the other, and two ranges cannot hold what relates them. Offered
-        // without it, a pair the rules already refuse is a row asked for and refused where it is
-        // built.
-        return theRulesHaveNotRefused(fixing)
-                ? new Realization.Found(fixing)
-                : new Realization.Unknown(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE);
+        return found(fixing);
     }
 
     /**
@@ -160,9 +153,12 @@ public final class LevelRealizer {
         boolean bounded = true;
         for (Level level : LevelCandidateSource.forItem(over.where(), levels)) {
             Search search = new Search(terms, over.of(), whole);
-            Map<NumericTerm, Place> found = search.solve(level.asACount());
-            if (found != null) {
-                return new Realization.Found(found);
+            Map<NumericTerm, Place> standing = search.solve(level.asACount());
+            if (standing != null) {
+                Realization made = found(standing);
+                if (made instanceof Realization.Found) {
+                    return made;
+                }
             }
             bounded &= search.exhaustive();
         }
@@ -203,6 +199,16 @@ public final class LevelRealizer {
         private final Carrier carrier;
         private final boolean whole;
         private final Place[] at;
+        /**
+         * Where each term runs before anything is fixed, worked out once.
+         *
+         * <p>What the positions from here on can add up to is asked at every step of the walk and
+         * of every term still to be chosen, and it is the same answer every time: it is asked of the
+         * rules as they stand and not of the rules as this walk has narrowed them. Asked afresh each
+         * time, a bounded walk of a wide box pays for a projection per step per term where it used
+         * to pay for a lookup.
+         */
+        private final NumericDomain.Bounds[] runsBetween;
         private int taken;
         private int asked;
         private boolean everyEndKnown = true;
@@ -213,6 +219,10 @@ public final class LevelRealizer {
             this.carrier = carrier;
             this.whole = whole;
             this.at = new Place[terms.size()];
+            this.runsBetween = new NumericDomain.Bounds[terms.size()];
+            for (int i = 0; i < terms.size(); i++) {
+                runsBetween[i] = bounds(terms.get(i).getKey());
+            }
         }
 
         /** Whether what it walked was the whole of the box, which is what makes an empty answer a
@@ -452,7 +462,7 @@ public final class LevelRealizer {
             java.math.BigDecimal least = java.math.BigDecimal.ZERO;
             java.math.BigDecimal most = java.math.BigDecimal.ZERO;
             for (int j = i; j < terms.size(); j++) {
-                NumericDomain.Bounds within = bounds(terms.get(j).getKey());
+                NumericDomain.Bounds within = runsBetween[j];
                 java.math.BigDecimal coef = terms.get(j).getValue();
                 java.math.BigDecimal low = numberOf(within.min());
                 java.math.BigDecimal high = numberOf(within.max());
@@ -654,6 +664,27 @@ public final class LevelRealizer {
 
     private NumericDomain.Bounds bounds(NumericTerm term) {
         return bounds(rules, term);
+    }
+
+    /**
+     * A placement handed back, or nothing composed where the rules were shown to leave none.
+     *
+     * <p><b>The one place a placement becomes an answer.</b> What a search may hand back is the same
+     * thing whatever it was searching for — one position at a place of its carrier, two of them a
+     * distance apart, a form at a level — and each of those was written on its own. Written on its
+     * own, each also had to remember the last step, and two of the three did not: a shape whose
+     * search is added later inherits the obligation only if there is one place that carries it.
+     *
+     * <p>What it means is that the rules were not shown to refuse this placement. Not that a value
+     * exists — nothing here builds one, and an emptiness nobody proved is not a value proven to
+     * exist. What it removes is narrower and is what a search over ranges gets wrong: a placement
+     * the rules are already known to refuse, offered as a row and then reported as though the point
+     * had nothing at it.
+     */
+    private Realization found(Map<NumericTerm, Place> fixing) {
+        return theRulesHaveNotRefused(fixing)
+                ? new Realization.Found(fixing)
+                : new Realization.Unknown(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE);
     }
 
     /**

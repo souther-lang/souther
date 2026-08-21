@@ -22,18 +22,28 @@ import java.util.Optional;
  * reading of it. How a search uses that, when it gives up, and what it concludes from having given
  * up are the search's, and keeping them apart is why a quantity added later costs nothing here.
  *
- * <p><b>Reached through {@link InputDomain} and nowhere else, and never wider than a position.</b>
- * What is answered is the declarations reaching this input, intersected with what each of its terms
- * guarantees of itself, intersected with whatever has been fixed. So an answer here is at least as
- * tight as the box of the positions it is over, and a border can go away for being asked about
- * properly and can never appear.
+ * <p><b>Reached through {@link InputDomain} and nowhere else, and never wider than a term's own.</b>
+ * Every term is answered for on its own first — where it stands if it has been fixed, what its own
+ * position was read to hold, and what the term guarantees of itself — and what the rules relating
+ * the terms leave the form is met onto that. Meeting only narrows, so a border can go away for
+ * being asked about properly and can never appear.
  *
- * <p><b>Whose positions.</b> A term is queryable where its path is one of this input's. Which
- * numbers a path is measured at is not settled once and for all by the reading of the declarations:
- * a bare list nothing bounds becomes an axis about its length where a body measures it, and that
- * term is a term of this input as much as the ones the declarations named. A term at a path this
- * input does not have is a caller's mistake and is refused as one — read as an emptiness it would be
- * a bug wearing the words of a contradiction in the model.
+ * <p>Composed that way round because the reading that relates positions has a name for some terms
+ * and not for others, and answers a form one parameter at a time. Asked only there, a floor on a
+ * position the arithmetic has no word for is dropped, a value the caller has just fixed is
+ * forgotten, and one term it cannot name takes the answer about every other term of that parameter
+ * with it.
+ *
+ * <p><b>Whose positions, and owned is not the same as known about.</b> A term is queryable where
+ * what it sits under is something this behavior takes. The walk that reads an input's positions
+ * stops where a report stops being about anything an author would call one input, and nothing stops
+ * a rule from naming what is under that — such a term is answered for, with what it guarantees of
+ * itself and nothing the declarations relate it to. Which numbers a path is measured at is not
+ * settled by that reading either: a bare list nothing bounds becomes an axis about its length where
+ * a body measures it. What is refused is a term under something this behavior does not take, which
+ * no reading of this input could ever answer for — read as an emptiness it would be a bug wearing
+ * the words of a contradiction in the model. Whether a path names a field the type has is settled
+ * where the term is made.
  *
  * <p><b>Across parameters, a product is the answer rather than a gap.</b> Rules reach this input
  * from the declarations of its parameters and from nowhere else: one reading per parameter, and

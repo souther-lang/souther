@@ -176,7 +176,7 @@ public final class InputDomain {
             byParameter.computeIfAbsent(parameter.name(),
                     _ -> PlacedRules.of(parameter.type(), symbols, policy));
         }
-        return ReadQuantities.of(byParameter, byParameter.keySet());
+        return ReadQuantities.of(byParameter, byParameter.keySet(), byPath);
     }
 
     /**

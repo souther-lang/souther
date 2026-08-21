@@ -45,12 +45,13 @@ public sealed interface EmptyInput {
     record TwoValuesAtOnePosition(NumericTerm term, Count one, Count other) implements EmptyInput {}
 
     /**
-     * A position was fixed outside where its own values run.
+     * A position was fixed at a value the term itself cannot take.
      *
-     * <p>Proved against what the position runs between, which takes in what the term guarantees of
-     * itself as well as what the declarations leave it. A count is never negative and no clause has
-     * to write that down, so a reading of the clauses alone would find nothing wrong with fixing one
-     * below zero.
+     * <p>Against what the term guarantees of its own values and against nothing else, which is the
+     * whole of what fixing settles without reading anything. A count is never negative and no clause
+     * writes that down, so this is what refuses a count fixed below none — and everything the
+     * declarations refuse is theirs to refuse, where they are read, which is why a value outside a
+     * declared bound arrives as {@link ProvedByTheDeclarationsReading} instead.
      */
     record OutsideWhereThePositionRuns(NumericTerm term, Count fixed) implements EmptyInput {}
 

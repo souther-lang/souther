@@ -46,12 +46,23 @@ fixing nothing changes nothing, fixing twice is fixing both, and the two orders 
 left and of what is proved empty alike. Which route proved an emptiness is not observable, or a cache
 and an arithmetic would decide what the model says.
 
-What it answers is the declarations reaching the input, intersected with what each of its numeric
-terms guarantees of itself, intersected with what is fixed. An answer is therefore at least as tight
-as the box of the positions it is over: a border can go away for being asked about properly and can
-never appear. A count is never negative and no clause writes that down, which is why the intersection
-with the term's own guarantee is part of the meaning rather than an optimisation — a value fixed
-below none is proved impossible where no reading of the clauses refuses it.
+**Every term is answered for on its own first, and the relation is met onto that.** What one term
+runs between is where it stands if it has been fixed, what its own position was read to hold, and
+what the term guarantees of itself; what the rules relating the terms leave the form is met onto the
+sum of those. Meeting only narrows, so a border can go away for being asked about properly and can
+never appear.
+
+That order matters because the reading that relates positions has a name for some terms and not for
+others, and answers a form one parameter at a time. Asked only there, a floor on a position the
+arithmetic has no word for is dropped — a string stops at `"A"` and there is no number for a relation
+to be about — a value the caller has just fixed at a coordinate no clause ever named is forgotten,
+and one term the reading cannot name takes the answer about every other term of that parameter with
+it. All three are the same mistake: an answer already in hand given up because the mechanism asked
+for it declined.
+
+A form that is one term taken as itself is that term's own answer, met with what the relation leaves
+it. The arithmetic is the identity there, and it is the only shape a position the arithmetic cannot
+count is ever asked in — a form adds its terms together and two strings have no sum.
 
 A term is queryable where what it sits under is something the behavior takes. **Owned is not the
 same as known about.** The walk that reads an input's positions stops two levels down, where a report
@@ -102,6 +113,13 @@ one per comparison would read every parameter of a behavior once per comparison 
 look for one, and what follows from having given up stay in `LevelRealizer`. It walks what
 `Quantities` soundly leaves, which the actual set is a subset of; `Impossible` is sound by the
 direction of that inclusion and not because the two are the same.
+
+**One place turns a placement into an answer.** What a search hands back is the same thing whatever
+it was searching for — one position at a place of its carrier, two of them a distance apart, a form
+at a level — and each of those searches is written on its own. Written on its own, each also had to
+remember to hold what it found against the rules, and two of the three did not; they were noticed one
+at a time, which is what a per-shape obligation costs, and a fourth shape of line would have cost a
+third noticing. So the obligation is not per shape.
 
 **Narrowing may be given up and the answer may not.** A search reads the rules again as it fixes
 positions and skips what they leave nothing beside. Past a budget it carries on against what they

@@ -126,6 +126,54 @@ class ARowOfferedAtAPointIsOneTheRulesHaveNotRefusedTest {
         assertFalse(report.contains("every value tried at p.x = p.y was refused"), report);
     }
 
+    /**
+     * One position, whose range holds a value the rules leave nothing at.
+     *
+     * <p>A range says where a position's values stop and not which of them it holds. Two fields the
+     * record holds equal, one of them refused the value one, leave the other running from none to
+     * two with nothing at one — and a line drawn there is met by a value the range admits and no
+     * value of the record has.
+     */
+    private static final String A_HOLE_IN_THE_RANGE = """
+            module example.hole
+
+            data N = Int
+                invariant atLeastNone = value >= 0
+                invariant atMostTwo   = value <= 2
+
+            data P = { x: N, y: N }
+                invariant sameAsEachOther = x.value == y.value
+                invariant notOne = y.value /= 1
+
+            data No = { why: Int }
+            data Yes = { v: Int }
+            data Result = No | Yes
+
+            behavior f : (p: P) -> Result
+                constructs Yes, No
+            let f (p) = {
+                guard p.x.value <= 1 else No { why = 0 }
+                Yes { v = 1 }
+            }
+
+            example f
+                | "at none" : (P { x = N(0), y = N(0) }) -> Yes { v = 1 }
+            """;
+
+    /**
+     * And a value at one position that the rules leave nothing at is not offered as a row.
+     *
+     * <p>The same last step the pair and the form already get. What a range admits is where the
+     * values stop, and a rule can take one out of the middle without moving either end.
+     */
+    @Test
+    void aValueTheRangeAdmitsAndTheRulesDoNotIsNotOfferedAsARow() {
+        String report = report(A_HOLE_IN_THE_RANGE);
+
+        assertFalse(report.contains("every value tried at f/p.x = 1 was refused"), report);
+        assertFalse(report.contains("every value tried at p.x = 1 was refused"), report);
+    }
+
     private static String report(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());

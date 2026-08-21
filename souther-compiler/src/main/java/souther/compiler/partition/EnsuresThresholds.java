@@ -102,15 +102,24 @@ public final class EnsuresThresholds {
      *               not be read. Both leave nothing to draw a line from, and which of them happened
      *               is said where the declaration is held to its rules
      */
+
+    /**
+     * The same, reading the input's rules here.
+     *
+     * <p>For a caller that has no reading of them in hand. The pipeline that measures a behavior
+     * reads them once and hands the same one to everything that asks, since each of these reading
+     * its own is every rule of every parameter read again to arrive at the same answers.
+     */
     public static Clauses of(StatedContract stated, InputDomain inputs, Symbols symbols) {
+        return of(stated, inputs, inputs.quantities(symbols), symbols);
+    }
+
+    public static Clauses of(StatedContract stated, InputDomain inputs,
+                             souther.compiler.inputs.Quantities quantities, Symbols symbols) {
         if (stated == null || stated.isEmpty()) {
             return Clauses.NONE;
         }
         InputReads reads = InputReads.ofWhatIsDeclared(inputs, rootsOf(stated.params()));
-        // Built once for the whole contract. What it holds is a way of asking the declarations a
-        // further question, and one per conjunct would read every parameter of this behavior once
-        // per comparison written about it.
-        souther.compiler.inputs.Quantities quantities = inputs.quantities(symbols);
         Drawn drawn = new Drawn(stated.behavior().name(), new ArrayList<>(), new ArrayList<>(),
                 new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
         for (StatedContract.StatedRule rule : stated.rules()) {

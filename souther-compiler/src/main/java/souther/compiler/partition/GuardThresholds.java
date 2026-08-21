@@ -131,17 +131,28 @@ public final class GuardThresholds {
     /** The thresholds one behavior's body compares its parameters against, and both arms of each
      * comparison. {@code plan} supplies the guard each one belongs to, so a boundary can later ask
      * whether the comparison ran and an arm can be found by the probe that counts it. */
+
+    /**
+     * The same, reading the input's rules here.
+     *
+     * <p>For a caller that has no reading of them in hand. The pipeline that measures a behavior
+     * reads them once and hands the same one to everything that asks, since each of these reading
+     * its own is every rule of every parameter read again to arrive at the same answers.
+     */
     public static Guards of(String behavior, Core body, CoverageSites.Plan plan,
                             InputDomain inputs, Symbols symbols) {
+        return of(behavior, body, plan, inputs, inputs.quantities(symbols), symbols);
+    }
+
+    public static Guards of(String behavior, Core body, CoverageSites.Plan plan,
+                            InputDomain inputs, souther.compiler.inputs.Quantities quantities,
+                            Symbols symbols) {
         List<Threshold> found = new ArrayList<>();
         List<UnreadRule> unread = new ArrayList<>();
         List<Guards.AtAPosition> accounting = new ArrayList<>();
         List<Guards.Singled> singled = new ArrayList<>();
         List<LineDrawn> between = new ArrayList<>();
-        // Built here and handed down. What it holds is a way of asking the declarations a further
-        // question, and one per comparison would read every parameter of this behavior once per
-        // comparison written about it.
-        walk(behavior, body, plan, InputReads.of(inputs), symbols, inputs.quantities(symbols),
+        walk(behavior, body, plan, InputReads.of(inputs), symbols, quantities,
                 found, unread, singled, between, accounting);
         return new Guards(found, unread, singled, between, accounting);
     }

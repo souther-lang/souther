@@ -66,14 +66,20 @@ final class Coverages {
         // a field under a name is reached by taking the name off, and a walk given the paths
         // alone reaches nothing where the derivation reaches a field.
         BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols, policy);
+        // Read once for the three below. What it holds is a way of asking the declarations reaching
+        // this input a further question, and each of them asking for its own would read every rule
+        // of every parameter three times over to arrive at the same answers.
+        souther.compiler.inputs.Quantities quantities = inputs.quantities(symbols);
         Partitions.Partitioning partitioning =
-                Partitions.of(behavior.name(), inputs, symbols, policy);
+                Partitions.of(behavior.name(), inputs, quantities, symbols, policy);
         // What the behavior states about its own answer, which is read whether or not anything
         // implements it: a clause is written against the declaration, so an injected behavior draws
         // its lines like any other and there is no body for them to have come out of.
-        EnsuresThresholds.Clauses clauses = EnsuresThresholds.of(stated, inputs, symbols);
+        EnsuresThresholds.Clauses clauses =
+                EnsuresThresholds.of(stated, inputs, quantities, symbols);
         GuardThresholds.Guards guards = body == null ? GuardThresholds.Guards.NONE
-                : GuardThresholds.of(behavior.name(), body, plan, inputs, symbols);
+                : GuardThresholds.of(behavior.name(), body, plan, inputs, quantities,
+                        symbols);
         // Both producers of one kind of line, put together before the position is divided. Two
         // rules at one value are one cut and stay separate obligations, which is what the merge
         // below does — applied one producer at a time, a clause and a guard naming one number would

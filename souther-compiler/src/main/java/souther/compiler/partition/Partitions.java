@@ -135,13 +135,23 @@ public final class Partitions {
      *
      * @param behavior what the axes are named after, which is the behavior the reading was made for
      */
+
+    /**
+     * The same, reading the input's rules here.
+     *
+     * <p>For a caller that has no reading of them in hand. The pipeline that measures a behavior
+     * reads them once and hands the same one to everything that asks, since each of these reading
+     * its own is every rule of every parameter read again to arrive at the same answers.
+     */
     public static Partitioning of(String behavior, InputDomain inputs, Symbols symbols,
                                   ReadingPolicy policy) {
+        return of(behavior, inputs, inputs.quantities(symbols), symbols, policy);
+    }
+
+    public static Partitioning of(String behavior, InputDomain inputs,
+                                  souther.compiler.inputs.Quantities quantities, Symbols symbols,
+                                  ReadingPolicy policy) {
         List<Axis> found = new ArrayList<>();
-        // Built once for the behavior and handed on. What every measure below asks about what the
-        // rules leave is asked of this, so a position's own ends and a form over several of them
-        // are one answer rather than a range apiece and a product of them.
-        souther.compiler.inputs.Quantities quantities = inputs.quantities(symbols);
         java.util.Set<NumericTerm> uncertain = new java.util.LinkedHashSet<>();
         List<UnreadRule> unread = new ArrayList<>();
         // What the reading could not hold together, asked of every position it read rather than of
