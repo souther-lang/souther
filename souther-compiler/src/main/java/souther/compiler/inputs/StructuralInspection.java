@@ -67,8 +67,15 @@ public sealed interface StructuralInspection {
     }
 
     /**
-     * There is something under the position and this could not reach it, or the type could not be
-     * interpreted at all.
+     * The continuation under the position was not made, and why.
+     *
+     * <p>Not one reason but three kinds of reason, and they are not the same claim about the model.
+     * A traversal this compiler cannot express and a type it could not interpret say something about
+     * what is there; a {@link BlockReason.DepthLimit} says only that <em>this reader</em> stopped
+     * here, and a reader that goes further finds the positions it declined to look at. Read as "the
+     * model puts nothing reachable under this position", the third is a claim nobody made — and it
+     * is the one that had a second walk built beside this one, because everything past the reading's
+     * depth looked unreachable rather than unasked.
      *
      * <p>{@code why} is the reason this position is left with if nothing else answers for it, not a
      * verdict. A rule a body writes may still draw a line on this same position — a length, a size
@@ -86,15 +93,18 @@ public sealed interface StructuralInspection {
      * quietly has nothing under it.
      *
      * @param shape   the position's shape, already proved to be one a partition is derived from
-     * @param deeper  whether the walk may still go down, which only a position made of positions
-     *                can be stopped by
+     * @param deeper  whether this reading goes on down, which only a position made of positions can
+     *                be stopped by. The reading's own answer and not the type's: how far a report is
+     *                about one input is what it settles, and a reader that wants what is under a
+     *                position this stopped at asks {@link StructuralDescent} rather than being told
+     *                there is nothing there
      */
     static StructuralInspection of(Shape.ReadablePositionShape shape, boolean deeper) {
         return switch (shape) {
-            // Made of positions, and read one level down — unless the walk has gone as deep as it
-            // goes, which is a reaching this compiler declines rather than a record with nothing in
-            // it.
-            case Shape.Product product -> deeper ? new Children(product.fields())
+            // Made of positions, and read one level down — unless this reading stops here, which is
+            // a reading that declines to look rather than a record with nothing in it.
+            case Shape.Product product -> deeper
+                    ? new Children(StructuralDescent.of(product).under())
                     : new Blocked(new BlockReason.DepthLimit());
             // Holds its values inside something. Which reaching is missing is kept apart, because
             // what would lift each is different work.
