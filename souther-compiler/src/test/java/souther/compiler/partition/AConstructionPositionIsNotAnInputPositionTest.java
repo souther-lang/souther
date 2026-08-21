@@ -17,14 +17,21 @@ import souther.compiler.query.Shapes;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Where a value has to be built and where a behavior's input has a position are different questions.
@@ -43,7 +50,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  * <p>So what is checked here is that a path from one is not looked up in the other, and that the
  * disagreement is the design rather than a defect. The one thing they share is the step, and that is
  * checked over in {@code inputs} by
- * {@code WhatIsUnderATypeIsDerivedInOnePlaceTest}.
+ * {@code TheReadingAndThePlanTakeOneStepDownATypeTest}.
  */
 class AConstructionPositionIsNotAnInputPositionTest {
 
@@ -160,6 +167,59 @@ class AConstructionPositionIsNotAnInputPositionTest {
         assertNotNull(reading.at(TermPath.of("d")), "the sum itself is a position of the input");
         assertNull(reading.at(TermPath.of("d").then("id")),
                 "what a recipe put under the sum is a position of the value being built");
+    }
+
+    /**
+     * And nothing that holds a plan can ask the reading about one of its positions.
+     *
+     * <p>The tests above say the two sets are two. What they cannot say is that nobody writes
+     * {@code inputDomain.at(slot.at())} — the coordinate is one type on purpose, so that call
+     * compiles, and what comes back is null for a construction position and a position of the input
+     * for a path that happens to be both.
+     *
+     * <p>Asked of the sources at the grain the reading's own rule is asked at. Naming the file that
+     * holds a plan is where such a call would be written, so the first line of it turns this red;
+     * a helper in between defeats it, as it defeats every check of this kind here. The one file
+     * exempt is the plan's own, whose javadoc names the reading in order to say they are different
+     * things.
+     */
+    @Test
+    void nothingThatHoldsAPlanConsultsTheReading() throws IOException {
+        List<Path> sources = mainSources();
+        assertTrue(sources.size() > 20,
+                () -> "the scan found only " + sources.size() + " sources, which is not the tree");
+
+        List<String> both = new ArrayList<>();
+        for (Path source : sources) {
+            String text = Files.readString(source, StandardCharsets.UTF_8);
+            if (source.endsWith(Path.of("partition", "ConstructionPlan.java"))
+                    || !text.contains("ConstructionPlan") || !text.contains("InputDomain")) {
+                continue;
+            }
+            both.add(source.getParent().getFileName() + "/" + source.getFileName());
+        }
+        assertEquals(List.of(), both,
+                "a coordinate of the plan is not a position of the input, and these could ask");
+    }
+
+    private static List<Path> mainSources() throws IOException {
+        Path module = Path.of("").toAbsolutePath();
+        Path repo = Files.isDirectory(module.resolve(Path.of("src", "main", "java")))
+                ? module.getParent() : module;
+        List<Path> sources = new ArrayList<>();
+        try (Stream<Path> modules = Files.list(repo)) {
+            for (Path candidate : modules.toList()) {
+                Path root = candidate.resolve(Path.of("src", "main", "java"));
+                if (!Files.isDirectory(root)) {
+                    continue;
+                }
+                try (Stream<Path> walk = Files.walk(root)) {
+                    walk.filter(each -> each.toString().endsWith(".java")).forEach(sources::add);
+                }
+            }
+        }
+        sources.sort(Path::compareTo);
+        return sources;
     }
 
     /** The name of the case to build through, taken off a behavior that is declared to take one. */
