@@ -238,8 +238,7 @@ final class Intervals {
     private static Place representative(Band run, Carrier carrier, Endpoint min, Endpoint max) {
         // A class is the run itself and is named for no line, so it is read from its lower end the
         // way a range of counts is.
-        return new Criterion.Within(run, null, Towards.ABOVE)
-                .somewhereInside(carrier, min, max, Towards.ABOVE);
+        return new Criterion.Within(run, null, Towards.ABOVE).somewhereInside(carrier, min, max);
     }
 
     /**

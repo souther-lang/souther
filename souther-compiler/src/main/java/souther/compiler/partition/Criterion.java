@@ -88,7 +88,7 @@ public sealed interface Criterion {
          * A place of {@code carrier} this item accepts, or null where nothing composed one.
          *
          * <p>The item's own values, held to what the rules leave the position, asked of the order
-         * the position is on, from the end {@code from} names. Which is the same question a border's point over a form asks of the
+         * the position is on, from the end this point is named for. Which is the same question a border's point over a form asks of the
          * order its levels are on, and it is asked the same way — one run, and the order says what
          * it has inside it. Written twice instead, the two disagreed about a run whose ends are
          * lines the quantity stands at no value of: what was in it was decided exactly, and what was
@@ -96,14 +96,13 @@ public sealed interface Criterion {
          */
         public souther.compiler.numeric.Place somewhereInside(
                 souther.compiler.check.Carrier carrier,
-                souther.compiler.numeric.Endpoint min, souther.compiler.numeric.Endpoint max,
-                Towards from) {
+                souther.compiler.numeric.Endpoint min, souther.compiler.numeric.Endpoint max) {
             LevelSpace space = LevelSpace.onACarrier(carrier);
             LevelInterval leaves = new LevelInterval(
                     endOf(carrier, min), endOf(carrier, max));
             for (LevelInterval part : region().parts()) {
                 LevelInterval look = part.intersect(leaves);
-                Level found = look == null ? null : space.witness(look, from).level();
+                Level found = look == null ? null : space.witness(look, away).level();
                 if (found instanceof Level.OnACarrier on) {
                     return on.at();
                 }

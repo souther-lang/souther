@@ -482,13 +482,12 @@ public final class LevelRealizer {
         Place offered = switch (where) {
             case Criterion.AtTheLevel at -> placeOf(at.at());
             // From the end the line is at, which is what makes the row one beside the boundary
-            // rather than one at the far side of the partition. Which end that is is the item's
-            // order to give and is given in one place, so that a place and a level are chosen by
-            // one policy — said twice, the carrier reached for "some value other than the line's"
-            // and only the other half said what it was for.
+            // rather than one at the far side of the partition. The point carries which end that is
+            // and is not asked for it again: handed it a second time, a caller could ask for a run
+            // to be read from the end it is not named for, which is the shape of one decision given
+            // from two places.
             case Criterion.Within within ->
-                    within.somewhereInside(carrier, bounds.min(), bounds.max(),
-                            LevelCandidateSource.nearestEndOf(within));
+                    within.somewhereInside(carrier, bounds.min(), bounds.max());
             case Criterion.AnythingBut other ->
                     carrier.somethingOtherThan(List.of(placeOf(other.excluded())), bounds);
         };

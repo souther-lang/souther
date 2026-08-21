@@ -86,18 +86,6 @@ public final class LevelCandidateSource {
     }
 
     /**
-     * Which end of this run a row is wanted nearest, which is the end the line is at.
-     *
-     * <p>The point's own answer and not a reading of the run. Two points of two different borders
-     * are the same run and are named for its two different ends, so nothing about the set tells them
-     * apart — worked out here, both were searched from the lower end and the second was handed a row
-     * at the far side of its partition.
-     */
-    public static Towards nearestEndOf(Criterion.Within within) {
-        return within.away();
-    }
-
-    /**
      * Levels of {@code region} to try, walking away from {@code from}.
      *
      * <p>Each one is asked for inside what is left, which is the region less everything already
