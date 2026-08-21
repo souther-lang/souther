@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.check.Location;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Carrier;
@@ -21,6 +20,7 @@ import souther.compiler.numeric.Place;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
+import souther.compiler.coverage.ComparisonCatalog;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.Citation;
 import souther.compiler.types.BindingId;
@@ -54,10 +54,12 @@ import java.util.List;
  * that is a question about the classes either side of the line: it is carried as a {@link OriginRef
  * .GuardOrigin.Witness}.
  *
- * <p>Three readers are kept apart here and are easy to run together. Which comparisons exist is
- * {@link #comparisonsIn}; which positions a comparison names at all is {@link #mentioned}; which
- * number a line can be drawn on is {@link #termOf}. The last is the narrowest, and asking it the
- * first two questions is how a position a body compares became a position nothing compares.
+ * <p>Three readers are kept apart and are easy to run together. Which comparisons exist is
+ * {@link souther.compiler.coverage.ComparisonCatalog}'s answer and which of them a line may be drawn
+ * on is {@link BoundaryComparisons}'s; which positions a comparison names at all is
+ * {@link #mentioned}; which number a line can be drawn on is {@link #termOf}. The last is the
+ * narrowest, and asking it the first two questions is how a position a body compares became a
+ * position nothing compares.
  */
 public final class GuardThresholds {
 
@@ -171,7 +173,8 @@ public final class GuardThresholds {
             // and a line read at it says nothing about the rest: kept per position, a threshold on
             // `x` swallowed the comparison beside it that nothing could read, which is "a result
             // exists, so the reading is complete".
-            for (UnreadRule compared : comparedIn(behavior, iff, read, reads, symbols)) {
+            for (UnreadRule compared : comparedIn(behavior, iff, read, reads, symbols,
+                    plan.comparisons())) {
                 if (unread.stream().noneMatch(had -> had.sameAs(compared))) {
                     unread.add(compared);
                 }
@@ -197,21 +200,25 @@ public final class GuardThresholds {
      * exactly what {@code not derivable} would otherwise deny.
      */
     private static List<UnreadRule> comparedIn(String behavior, Core.If iff, List<Core> read,
-                                               InputReads reads, Symbols symbols) {
+                                               InputReads reads, Symbols symbols,
+                                               ComparisonCatalog catalog) {
         List<UnreadRule> out = new ArrayList<>();
-        compared(behavior, iff, iff.cond(), read, reads, symbols, out);
+        compared(behavior, iff, iff.cond(), read, reads, symbols, catalog, out);
         return out;
     }
 
     private static void compared(String behavior, Core.If iff, Core e, List<Core> read,
-                                 InputReads reads, Symbols symbols, List<UnreadRule> out) {
+                                 InputReads reads, Symbols symbols, ComparisonCatalog catalog,
+                                 List<UnreadRule> out) {
+        // Which nodes are comparisons is the catalog's answer. Asked of the operator here, this was
+        // a second account of it beside the numbering's, and the two were spelled differently.
+        boolean isComparison = catalog.at(e).isPresent();
         // By the comparison it is, and not by what it was about: two comparisons at one position are
         // two statements, and this one having been read is no answer about the other.
-        if (e instanceof Core.Binary comparison && orders(comparison.op())
-                && read.stream().anyMatch(each -> each == comparison)) {
+        if (isComparison && read.stream().anyMatch(each -> each == e)) {
             return;
         }
-        if (e instanceof Core.Binary binary && orders(binary.op()) && writtenHere(binary)) {
+        if (isComparison && e instanceof Core.Binary binary && writtenHere(binary)) {
             List<TermPath> named = new ArrayList<>();
             mentioned(binary.left(), reads, symbols, named);
             mentioned(binary.right(), reads, symbols, named);
@@ -245,7 +252,7 @@ public final class GuardThresholds {
             // here would take the word from one construct and the place from another. The walk that
             // found this fork reaches that one too, and reads it against itself.
             if (!(child instanceof Core.If)) {
-                compared(behavior, iff, child, read, inside, symbols, out);
+                compared(behavior, iff, child, read, inside, symbols, catalog, out);
             }
         });
     }
@@ -369,11 +376,6 @@ public final class GuardThresholds {
         return out;
     }
 
-    /** Whether an operator is one that compares two values rather than combining two conditions. */
-    static boolean orders(Hir.BinOp op) {
-        return ComparisonClaim.places(op);
-    }
-
     /**
      * The positions a line was drawn on here.
      *
@@ -395,11 +397,11 @@ public final class GuardThresholds {
         // shape of line a comparison draws is a later question and not one this depends on — read
         // after a constant had been found, the site was a thing only a line against a constant could
         // have, and a comparison of two positions had no way to say what had reached it.
-        CoverageSites.GuardRef guard = guardOf(plan, iff);
+        CoverageSites.GuardRef guard = BoundaryComparisons.guardOf(plan, iff);
         if (guard == null) {
             return made;   // no site for this `if`: nothing could answer for it
         }
-        for (Placed each : comparisonsIn(iff.cond())) {
+        for (BoundaryComparisons.Placed each : BoundaryComparisons.of(iff, plan.comparisons())) {
             // The plan numbered every comparison of an instrumented condition before anything read a
             // line off one, so this is here. Required rather than looked up leniently: a line whose
             // comparison has no site is this reader and the plan disagreeing about what a condition
@@ -613,108 +615,6 @@ public final class GuardThresholds {
                                                                    Core.Binary comparison) {
         return new souther.compiler.check.RuleCitation.WrittenAt(
                 iff.origin().kind(), Citation.of(comparison.pos()));
-    }
-
-    /** One comparison of a condition, and which arms of the {@code if} prove it was evaluated. */
-    private record Placed(Core.Binary comparison, OriginRef.GuardOrigin.Witness witness) {}
-
-    /**
-     * The comparisons a condition is made of, each with what its own place leaves as evidence.
-     *
-     * <p>Asked per comparison and not per condition. A condition that is nothing but {@code &&}
-     * settles it for every operand at once, and so does one that is nothing but {@code ||}; a
-     * condition made of both does not. In {@code A && (B || C)} the arm where the whole thing held
-     * proves {@code A} was true and so proves {@code B} ran, while {@code C} ran only where
-     * {@code B} was false — which is a difference between two operands of one condition, and a
-     * single verdict over the whole cannot hold it.
-     *
-     * <p>Two facts are carried down, and they are not the same one. Whether this subtree is
-     * evaluated at all on a given arm, and whether reaching that arm forces the subtree's own value
-     * — because it is the second that says whether the operand to its left was true, which is what
-     * decides whether the operand to its right ran.
-     */
-    private static List<Placed> comparisonsIn(Core condition) {
-        List<Placed> out = new ArrayList<>();
-        // At the top there is nothing above to have stopped the condition, and the arm taken is the
-        // condition's own value.
-        placed(condition, new Reached(true, true, true, true), out);
-        return out;
-    }
-
-    /**
-     * What reaching each arm of the enclosing {@code if} says about one subtree of its condition.
-     *
-     * <p>Four answers and not six, on a premise worth stating rather than leaving to be rediscovered.
-     * A subtree can be forced true only where the whole condition is true and forced false only where
-     * it is false — {@code &&} passes a true value down to both operands, {@code ||} passes a false
-     * one, and neither passes anything the other way. So "false on {@code then}" and "true on
-     * {@code else}" are unreachable and are not carried.
-     *
-     * <p>What makes that hold is that a condition is built from {@code &&} and {@code ||} and
-     * nothing else. There is no negation operator: {@code Bool.not} is a helper, inlined to an
-     * {@code if} whose condition is the comparison itself, so it never stands between a comparison
-     * and the arms this is about. An operator that inverted a value inside a condition would break
-     * the premise and want the other two answers, and would find this comment rather than a wrong
-     * result.
-     *
-     * @param onThen    whether reaching the {@code then} arm implies this subtree was evaluated
-     * @param onElse    the same for {@code else}
-     * @param trueThen  whether reaching {@code then} implies this subtree's own value was true
-     * @param falseElse whether reaching {@code else} implies its own value was false
-     */
-    private record Reached(boolean onThen, boolean onElse, boolean trueThen, boolean falseElse) {
-
-        OriginRef.GuardOrigin.Witness witness() {
-            if (onThen && onElse) {
-                return OriginRef.GuardOrigin.Witness.BOTH;
-            }
-            if (onThen) {
-                return OriginRef.GuardOrigin.Witness.THEN;
-            }
-            return onElse ? OriginRef.GuardOrigin.Witness.ELSE
-                    : OriginRef.GuardOrigin.Witness.NEITHER;
-        }
-    }
-
-    private static boolean combines(Hir.BinOp op) {
-        return op == Hir.BinOp.AND || op == Hir.BinOp.OR;
-    }
-
-    private static void placed(Core e, Reached reached, List<Placed> out) {
-        if (e instanceof Core.Binary binary && combines(binary.op())) {
-            boolean and = binary.op() == Hir.BinOp.AND;
-            // A conjunction's value being true makes both its operands true; a disjunction's being
-            // false makes both false. Neither says anything the other way round.
-            Reached left = new Reached(reached.onThen(), reached.onElse(),
-                    and && reached.trueThen(), !and && reached.falseElse());
-            // The right operand runs where the left settled nothing — which is where the left was
-            // true under `&&` and false under `||`, and that is what the left's own forced value
-            // above says.
-            Reached right = new Reached(
-                    and && reached.onThen() && reached.trueThen(),
-                    !and && reached.onElse() && reached.falseElse(),
-                    and && reached.trueThen(), !and && reached.falseElse());
-            placed(binary.left(), left, out);
-            placed(binary.right(), right, out);
-            return;
-        }
-        if (e instanceof Core.Binary comparison && !combines(comparison.op())) {
-            out.add(new Placed(comparison, reached.witness()));
-        }
-    }
-
-
-    private static CoverageSites.GuardRef guardOf(CoverageSites.Plan plan, Core.If iff) {
-        int[] arms = plan.probesOf(iff);
-        if (arms == null || arms.length != 2) {
-            return null;
-        }
-        for (CoverageSites.GuardRef guard : plan.guards()) {
-            if (guard.siteIndexThen() == arms[0] && guard.siteIndexElse() == arms[1]) {
-                return guard;
-            }
-        }
-        return null;
     }
 
     /**

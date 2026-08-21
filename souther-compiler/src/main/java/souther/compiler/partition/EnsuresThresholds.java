@@ -178,7 +178,7 @@ public final class EnsuresThresholds {
         // Anything else is a form this walk does not read. Which positions it is about is still
         // said, because a position left out of every answer is reported as one the model draws no
         // line through — and the model says otherwise in the rule this stopped on.
-        if (!(e instanceof Core.Binary comparison) || !GuardThresholds.orders(comparison.op())) {
+        if (!(e instanceof Core.Binary comparison) || !comparison.op().compares()) {
             reportUnread(new RuleRef.Ensures(rule.id(), clause), e, rule.value(),
                     reads, symbols, out.unread());
             return;
