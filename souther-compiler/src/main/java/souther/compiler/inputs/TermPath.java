@@ -134,12 +134,25 @@ public record TermPath(String head, List<Step> steps) {
      * this reading has nothing to say about the position, and not that nothing does.
      */
     public String fieldKey() {
-        if (insideASequence()) {
-            return null;
-        }
+        return insideASequence() ? null : stepsSpelled();
+    }
+
+    /**
+     * The steps written out, with the parameter left off.
+     *
+     * <p>A name for the location under whatever holds it, which is what a table keyed by such names
+     * looks a position up by. Where a step reaches inside a sequence the name still spells it, so
+     * two positions never come to one name — and no clause of a value is written at such a name, so
+     * a lookup finds nothing, which is the true answer and not a collision.
+     *
+     * <p>{@link #fieldKey} is this where a clause could name the position and null where none can.
+     * A caller deciding what a clause says wants that one; a caller needing a name for every
+     * position wants this.
+     */
+    public String stepsSpelled() {
         StringBuilder out = new StringBuilder();
         for (Step step : steps) {
-            if (!out.isEmpty()) {
+            if (!out.isEmpty() && !(step instanceof Step.Element)) {
                 out.append('.');
             }
             out.append(step);

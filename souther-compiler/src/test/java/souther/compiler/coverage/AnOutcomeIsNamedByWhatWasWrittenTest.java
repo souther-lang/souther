@@ -175,9 +175,9 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
      *
      * <p>{@code a + b} is minted exactly the way {@code a >= b} is — one call of the builder, one
      * ordinal — so naming the construct after the use the analysis puts a few of them to would put a
-     * word on every arithmetic node in every body that is untrue of it. Only the comparisons of a
-     * fork's condition become sites, and a {@code &&} is descended through rather than numbered, so
-     * what a construct is and what was made of it have to be two answers.
+     * word on every arithmetic node in every body that is untrue of it. The comparisons become sites
+     * and the arithmetic does not, and the {@code &&} that puts two comparisons together is neither,
+     * so what a construct is and what was made of it have to be two answers.
      */
     @Test
     void everyBinaryTheSourceWroteIsABinaryAndOnlySomeAreSites() {
@@ -194,8 +194,8 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
         assertTrue(written.stream().allMatch(k -> k == CoverageConstruct.BINARY),
                 () -> "what the source wrote is a binary expression, whichever operator: " + written);
 
-        // And two of the six are sites: the comparisons the fork's condition settles on. The `&&`
-        // is walked into rather than numbered, and nothing outside a condition is numbered at all.
+        // And two of the six are sites: the comparisons. The `&&` is walked into rather than
+        // numbered, and the arithmetic answers a number rather than a truth.
         assertEquals(2, planOf(source).sites().stream()
                         .filter(site -> site.outcome() instanceof SourceOutcome.Compared)
                         .count(),

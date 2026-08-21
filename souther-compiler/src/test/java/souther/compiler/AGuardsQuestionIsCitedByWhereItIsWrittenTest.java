@@ -66,7 +66,8 @@ class AGuardsQuestionIsCitedByWhereItIsWrittenTest {
                 () -> "one line, two questions: " + standing);
     }
 
-    /** And it is cited by where the author wrote it, not by a name it does not have. */
+    /** And it is cited by where the author wrote it, not by a name it does not have and not by
+     *  the construct standing round it. */
     @Test
     void itIsCitedByThePlaceAndNamedByNothing() {
         PartitionEvidence.Unanswered one = partition().unanswered().stream()
@@ -75,8 +76,8 @@ class AGuardsQuestionIsCitedByWhereItIsWrittenTest {
 
         RuleCitation.WrittenAt written =
                 assertInstanceOf(RuleCitation.WrittenAt.class, one.cited());
-        assertTrue(written.said(SourceNameResolver.identity(), null).startsWith("if@"),
-                () -> "the construct the author wrote and where: "
+        assertTrue(written.said(SourceNameResolver.identity(), null).startsWith("comparison@"),
+                () -> "what the rule is and where it is written: "
                         + written.said(SourceNameResolver.identity(), null));
     }
 

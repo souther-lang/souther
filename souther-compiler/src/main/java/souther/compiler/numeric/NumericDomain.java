@@ -217,6 +217,84 @@ public final class NumericDomain<A> {
                 : new NumericDomain<>(rules, Map.copyOf(next), readARuleNothingSatisfies);
     }
 
+    // --- renaming and joining ---------------------------------------------------------------------
+
+    /**
+     * The same rules over positions called something else.
+     *
+     * <p>For a reader that holds the rules of a value and is asked about them as rules of the thing
+     * that holds it. What a rule says is a relation between positions, and a relation does not move
+     * when the positions are called by another vocabulary's names — so this is a renaming and not a
+     * second reading, and nothing about what the rules leave changes.
+     *
+     * <p>Every position a rule weighs has to have a name, and no two of them the same
+     * ({@link Renaming}). A rule reaching a position the caller's vocabulary cannot spell
+     * is a rule that cannot be carried across, and dropping it here would hand back a domain that
+     * leaves more than these rules do — which is the one direction a reader downstream cannot see.
+     * So the caller is the one that decides what such a position is called, and it may call it
+     * something opaque; what it may not do is leave it unnamed and be given a wider answer.
+     *
+     * <p>The spacing goes with the names, since it is a fact about the position rather than about
+     * the word for it. Every position a rule weighs is one this records a spacing for, so naming
+     * them all is naming everything the rules are about — a rule reaching one this has no spacing
+     * for is refused rather than carried across unnamed.
+     */
+    public <B> NumericDomain<B> over(java.util.function.Function<A, B> naming) {
+        // Settled once, over every position these rules speak of, which is what this holds and no
+        // rule of it does. A rule asked whether a naming is one-to-one can only answer about its own
+        // positions, so two independent rules would be carried across as two rules about one number
+        // and a box holding something would come back holding nothing.
+        Renaming<A, B> called = Renaming.of(kinds.keySet(), naming);
+        Map<B, Granularity> spacing = new LinkedHashMap<>();
+        kinds.forEach((atom, spaced) -> spacing.put(called.of(atom), spaced));
+        List<AffineConstraint<B>> out = new ArrayList<>();
+        for (AffineConstraint<A> rule : rules) {
+            AffineConstraint<B> renamed = rule.over(called);
+            if (!out.contains(renamed)) {
+                out.add(renamed);
+            }
+        }
+        return new NumericDomain<>(List.copyOf(out), Map.copyOf(spacing),
+                readARuleNothingSatisfies);
+    }
+
+    /**
+     * Everything both of these say.
+     *
+     * <p>Saying two sets of rules together, which is what a caller holding rules read of two values
+     * at once has. Nothing is derived here — the rules are kept as they arrived and what they leave
+     * is worked out when it is asked for, the same as when they arrive one at a time.
+     *
+     * <p>A rule in both is one rule, for the reason {@link #keeping} gives: a rule said twice is the
+     * same rule, and an answer that depended on how often each was said would depend on how the
+     * caller came by them.
+     *
+     * <p>Spacings are checked rather than merged. Two readings calling one position by one name and
+     * spacing it two ways is the naming and the typing disagreeing, and picking the safer of the two
+     * would answer about a position neither reading was about.
+     */
+    public NumericDomain<A> meet(NumericDomain<A> other) {
+        if (other == null || (other.rules.isEmpty() && other.kinds.isEmpty()
+                && !other.readARuleNothingSatisfies)) {
+            return this;
+        }
+        Map<A, Granularity> both = new LinkedHashMap<>(kinds);
+        other.kinds.forEach((atom, spacing) -> {
+            Granularity had = both.put(atom, spacing);
+            if (had != null && had != spacing) {
+                throw new IllegalStateException("atom `" + atom + "` is " + had + " and " + spacing);
+            }
+        });
+        List<AffineConstraint<A>> out = new ArrayList<>(rules);
+        for (AffineConstraint<A> rule : other.rules) {
+            if (!out.contains(rule)) {
+                out.add(rule);
+            }
+        }
+        return new NumericDomain<>(List.copyOf(out), Map.copyOf(both),
+                readARuleNothingSatisfies || other.readARuleNothingSatisfies);
+    }
+
     // --- what the rules leave, worked out once ----------------------------------------------------
 
     /**

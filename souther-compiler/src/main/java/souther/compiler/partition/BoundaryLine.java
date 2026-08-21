@@ -49,8 +49,7 @@ public record BoundaryLine(BoundaryTarget target, Drawing drawing) {
      * @param narrowedWithin the declarations a bound was taken in by, kept so that a narrowed line
      *                       stays apart from the bare one it narrows
      */
-    public record Drawing(RuleRef rule, boolean valueBelongsBelow,
-                          OriginRef.GuardOrigin.Witness witness, boolean holdsAtTheValue,
+    public record Drawing(RuleRef rule, boolean valueBelongsBelow, boolean holdsAtTheValue,
                           boolean singles, List<TypeSymbol> narrowedWithin) {
 
         public Drawing {
@@ -65,19 +64,19 @@ public record BoundaryLine(BoundaryTarget target, Drawing drawing) {
 
     private static Drawing drawnBy(OriginRef origin) {
         return switch (origin) {
-            case OriginRef.GuardOrigin g -> new Drawing(g.rule(), g.valueBelongsBelow(),
-                    g.witness(), g.holdsAtTheValue(), g.singles(), List.of());
+            case OriginRef.ComparisonOrigin g -> new Drawing(g.rule(), g.valueBelongsBelow(),
+                    g.holdsAtTheValue(), g.singles(), List.of());
             case OriginRef.EnsuresOrigin e -> new Drawing(e.rule(), e.valueBelongsBelow(),
-                    null, e.holdsAtTheValue(), e.singles(), List.of());
+                    e.holdsAtTheValue(), e.singles(), List.of());
             // A bound leaves nothing outside itself, so no value below or above it is a line of its
             // own and `valueBelongsBelow` has nothing to say. Whether the cut is one of the range's
             // own does have something to say, and telling two ends at one value apart by it is what
             // keeps a bound that admits the value from folding into one that stops short of it.
             case OriginRef.InvariantOrigin i ->
-                    new Drawing(i.rule(), false, null, i.holdsAtTheValue(), false, List.of());
+                    new Drawing(i.rule(), false, i.holdsAtTheValue(), false, List.of());
             case OriginRef.NarrowedOrigin n -> {
                 Drawing inner = drawnBy(n.bound());
-                yield new Drawing(inner.rule(), inner.valueBelongsBelow(), inner.witness(),
+                yield new Drawing(inner.rule(), inner.valueBelongsBelow(),
                         inner.holdsAtTheValue(), inner.singles(), n.within());
             }
         };

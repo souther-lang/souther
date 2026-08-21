@@ -92,6 +92,29 @@ public record CanonicalForm<A>(Map<A, Rational> coefs) {
         return AdditiveImage.of(coefs, spacing);
     }
 
+    /**
+     * The same form over positions called something else.
+     *
+     * <p>A renaming and nothing more. What a form says is a relation between the positions it
+     * weighs, and calling them by the names of another vocabulary leaves that relation where it
+     * was — so this is how a rule read of one value is asked about as a rule of the thing that
+     * holds it, rather than being re-derived there.
+     *
+     * <p>Still canonical, because canonical is a fact about the coefficients and this touches none
+     * of them.
+     *
+     * <p><b>Nothing is checked here.</b> Whether two positions have been called one name is a fact
+     * about the naming over every position the rules speak of, and a form knows its own and no
+     * others — asked here, it would catch a collision that fell inside one form and miss every
+     * collision between two. {@link Renaming} is one-to-one by construction, which is what makes
+     * this safe to be as simple as it looks.
+     */
+    public <B> CanonicalForm<B> over(Renaming<A, B> naming) {
+        Map<B, Rational> out = new LinkedHashMap<>();
+        coefs.forEach((atom, coef) -> out.put(naming.of(atom), coef));
+        return new CanonicalForm<>(out);
+    }
+
     /** This form with every coefficient turned around, which is what reading a comparison the other
      *  way produces. Still canonical: negating leaves what the coefficients share. */
     public CanonicalForm<A> negated() {

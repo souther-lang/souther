@@ -68,7 +68,7 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
 
         PartitionEvidence.NotRead.ARule rule =
                 assertInstanceOf(PartitionEvidence.NotRead.ARule.class, said);
-        assertInstanceOf(souther.compiler.check.RuleRef.Guard.class, rule.rule());
+        assertInstanceOf(souther.compiler.check.RuleRef.Comparison.class, rule.rule());
         assertEquals(List.of(Adequacy.Kind.PARTITION_NOT_READ), kinds(A_RULE));
     }
 
@@ -102,7 +102,7 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
      */
     @Test
     void theTwoAreWrittenApart() {
-        assertTrue(human(A_RULE).contains("not read: if@"), human(A_RULE));
+        assertTrue(human(A_RULE).contains("not read: comparison@"), human(A_RULE));
         assertFalse(human(A_RULE).contains("not read: n "), human(A_RULE));
         assertTrue(human(A_POSITION).contains("not read: items[*].charge ("), human(A_POSITION));
     }

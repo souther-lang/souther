@@ -72,17 +72,62 @@ condition of a fork is not one of those. The rule is read where it is written in
 it is given a name first. That is a limit of the numbering and not of this reading, and it is
 recorded in a test so that it is something said rather than a silence.
 
-A second limit, and it is in front of all of this rather than beside it. Whether an expression can
-answer a value at all is read before any of these paths are, and that reading takes an operator
-which stops early to be strict in both its sides. So `a > 1 && abort` is answered as reaching no
-value, when a run with a small `a` reaches one — and everything under the fork on it, both arms
-included, goes unwalked. Which paths a short circuit has is exactly the question this decides, and
-the reading that decides it here cannot be the one asked there: it is built on the numbering, and
-the numbering is built on that answer. What is owed is a reading of what an expression can come to
-that needs no numbering, told apart from what it knows — a comparison this cannot evaluate is not
-the same as one that comes out both ways, and `1 > 2 || abort` answers no value while `a > 2 ||
-abort` may. Under-reading is where it is left until then, which is the direction everything else
-here takes.
+Whether an expression arrives at a value at all is read before any of these paths are, and that
+reading was taking an operator which stops early to be strict in both its sides. So `a > 1 && abort`
+was answered as reaching no value, when a run with a small `a` reaches one — and everything under the
+fork on it, both arms included, went unwalked. It was written down here as a limit of this reading
+and it was not one: which paths a short circuit has is exactly the question decided above, and the
+reason it could not be asked there was that this reading is built on the numbering while the reading
+that answers what arrives is what the numbering is built on.
+
+That is now the same reading asked without a numbering, and what made it one reading is that three
+facts were being carried as two. Whether a run arrives at a value, what a boolean value comes to, and
+whether a way to it can be written down in the numbering's words are three, and the third had been
+folded into the second: a comparison the plan could not place was answered as a comparison with no
+value, so a fork on it lost its arms and an operator over it lost its paths. Held apart, the reading
+of what arrives is the reading of the paths with the naming taken away, and there is no second
+account of the body to keep in step with the first.
+
+Four things hold of it, and they are what the separation is.
+
+A naming decides what a way is called and never whether there is one, and it is a structure and not a
+rule to keep. What the body does is read with no naming at all, and the naming reaches only the list
+of ways: a condition it has no words for leaves a way written in part, a pair of conditions it sees
+settle one decision opposite ways leaves a way out, and more ways than it will hold apart leave the
+list saying nothing. None of those can move what arrives or what a value comes to, because that half
+was never computed with a naming in it. Said as a rule instead, two of the three went on moving it —
+a naming that could see two arms of one decision contradict answered that no value arrives where the
+reading without one answered that a value does.
+
+Not knowing is never both. A value this reading has worked out no truth for settles nothing: it does
+not send an operator into its right and it does not stop one there, and no path is offered on the
+strength of it. A way to a value that arrives is offered where the way is worked out or where what
+follows it arrives anyway. Which is a different question from whether an arm of a fork stands, and it
+is asked differently: an arm stands unless the reading worked out that the condition never comes out
+its way, so a value with no truth worked out leaves both arms standing. Two questions and two names
+for them, because one name for both is how not-knowing gets widened into both.
+
+A value is answered as known only where a value of what it is over stands behind it. Not a rule about
+the shape of the node, in either direction: `a == a` is a comparison and comes out one way, `1 > 2` is
+a comparison and comes out one way, and a position of the input holding a truth is no comparison at
+all and comes out both ways. A reading answering "a comparison comes out both ways" would offer the
+first two a path no run takes; one asking the question only of comparisons would answer that
+`flag && abort` arrives nowhere, when every run with a false `flag` arrives. So each way is asked
+about on its own, against the range of what is compared — which for a whole number is read off the
+ends, so a number at the end of the range closes the way past it. A way nothing stands behind is not
+offered, and where nothing stands behind either the value is answered as one this reading has nothing
+to say about. Under-read, and the direction everything here takes.
+
+A way found twice is one way. The reading answers a set for that reason: what is counted anywhere
+downstream is what the body does and not how many times the reading got there.
+
+What is still not read is what correlates two paths. Under
+`(if a > 0 then true else abort) && (if a <= 0 then true else abort)` no run arrives, and each side is
+read on its own and arrives — so the operator is answered as arriving. The same holds of the model's
+own rules: a behavior requiring `a > 1` has no run with a small `a`, and `a > 1 && abort` is answered
+as arriving all the same. Both are the liberty this reading has always taken with arms of a fork,
+which are counted without anything having asked whether the condition can come out that way, and
+neither is decided here.
 
 Two ways in that settle one decision opposite ways describe no run, so the walk does not go that
 way rather than going and leaving what it finds to be thrown out later. Which decision it is is not
@@ -135,7 +180,13 @@ settled one way, which asks for nothing".
 
 ## Consequences
 
-Rows are added and none are taken away, which is ADR-0108's shape and holds for the same reason.
+Rows are added, and one kind is taken away. A fork on an operator that stops early is where they are
+added: both of its arms were going unwalked, and every meeting standing in either of them is now
+offered under the way in that reaches it. What is taken away is an arm the condition never comes out
+the way of — `if true then … else …` has one arm a run enters and a comparison against the largest
+whole number has the other, and numbering the one nothing enters is a row owed for a combination the
+body has no run at. Read from the same place everything else about arms is read from, so the
+numbering and the walk into an arm cannot come to differ about which arms there are.
 A fork on a chain of comparisons varies as many ways as the chain has of settling rather than two,
 so a value made out of it is a factor of that many; the arms of such a fork and the operands after
 the first are walked into, so the groups standing in them are offered where they were not offered

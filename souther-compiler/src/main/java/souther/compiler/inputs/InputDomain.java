@@ -64,15 +64,23 @@ public final class InputDomain {
     public static final int MAX_DEPTH = 2;
 
     /** Nothing to read: a behavior whose signature is not in hand. */
-    public static final InputDomain NONE = new InputDomain(List.of(), Map.of());
+    public static final InputDomain NONE = new InputDomain(List.of(), Map.of(), List.of(), null);
 
     private final List<Position> positions;
     private final Map<TermPath, Position> byPath;
     private final Map<BindingId, String> read;
+    /** What the behavior takes, kept as it was written. Values and nothing else: what is answered
+     * with is compared as a value by whatever decides an edit changed nothing, and a reading holds a
+     * way of reading the declarations rather than a statement about them. */
+    private final List<Parameter> parameters;
+    private final ReadingPolicy policy;
 
-    private InputDomain(List<Position> positions, Map<BindingId, String> read) {
+    private InputDomain(List<Position> positions, Map<BindingId, String> read,
+                        List<Parameter> parameters, ReadingPolicy policy) {
         this.positions = List.copyOf(positions);
         this.read = Map.copyOf(read);
+        this.parameters = List.copyOf(parameters);
+        this.policy = policy;
         Map<TermPath, Position> at = new LinkedHashMap<>();
         // The first reading of a path stands. A path is where a rule and a row meet, so two
         // readings under one path would be the position answering differently depending on which
@@ -109,7 +117,7 @@ public final class InputDomain {
             walk(TermPath.of(parameter.name()), parameter.type(), 0, symbols,
                     PlacedRules.of(parameter.type(), symbols, policy), found);
         }
-        return found.isEmpty() ? NONE : new InputDomain(found, read);
+        return found.isEmpty() ? NONE : new InputDomain(found, read, parameters, policy);
     }
 
     /**
@@ -162,6 +170,36 @@ public final class InputDomain {
      */
     public Position at(TermPath path) {
         return byPath.get(path);
+    }
+
+    /**
+     * The same input, asked about a quantity over several of its positions.
+     *
+     * <p>The relational half of what a reading of an input can say. A {@link Position} answers about
+     * itself, and a rule relating two of them divides neither — so a caller holding a form asks here
+     * rather than composing the positions' answers, which cannot carry a relation whatever each of
+     * them says.
+     *
+     * <p><b>A capability, and not part of what this answers with.</b> Asking the declarations a
+     * further question takes a way of reading them, and what is answered with is compared as a value
+     * by whatever decides that a compile changed nothing — so this is built where it is used and
+     * never kept here. Which is also why it takes the symbols rather than holding them: the reading
+     * of an input says what it says, and this is how something else goes on asking.
+     *
+     * <p><b>Once per reader.</b> What comes back reads each parameter's declarations, so a caller
+     * that built one per comparison would read every parameter of every behavior once per
+     * comparison written about it. Built at the top of whatever is walking, and handed down.
+     */
+    public Quantities quantities(Symbols symbols) {
+        Map<String, PlacedRules> byParameter = new LinkedHashMap<>();
+        for (Parameter parameter : parameters) {
+            // The first reading under a name stands, for the same reason the first reading of a path
+            // does: two parameters spelled alike would be one name answering differently depending
+            // on which reader looked it up.
+            byParameter.computeIfAbsent(parameter.name(),
+                    _ -> PlacedRules.of(parameter.type(), symbols, policy));
+        }
+        return ReadQuantities.of(byParameter, byParameter.keySet(), byPath, symbols);
     }
 
     /**

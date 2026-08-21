@@ -9,6 +9,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.check.PathReachability;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 
 import java.io.ByteArrayOutputStream;
@@ -301,6 +302,29 @@ class AnArmNothingReachesIsNotOwedARowTest {
 
     // --- what happens if the proof is wrong -------------------------------------------------------
 
+    /**
+     * The probe numbers of the fork's two arms, read off the plan.
+     *
+     * <p>Written down rather than read, these were the first two numbers the walk handed out —
+     * which they were only while nothing else in the body was numbered before them. A probe number
+     * is what the emitter and a measurement agree on and it moves whenever the numbering does, so a
+     * test that names one is naming the walk's order and not the arm.
+     */
+    private static List<Integer> armProbes() {
+        Compilation compilation = Compilation.ofSource(CAPPED, "Main");
+        compilation.answerEverything();
+        Bodies.Elaborated checked = compilation.db()
+                .ask(new Bodies.Checked(compilation.modules().get(0))).value();
+        return CoverageSites.of(checked.behaviorBodies()).arms("classify").stream()
+                .map(CoverageSites.Site::index).toList();
+    }
+
+    /** The arm nothing reaches — the {@code then} of a guard at 50 no pair can be above. */
+    private static final int UNREACHED = armProbes().get(0);
+
+    /** The arm every run takes. */
+    private static final int TAKEN = armProbes().get(1);
+
     private static CoverageSites.Site arm(int index) {
         return new CoverageSites.Site("classify",
                 new souther.compiler.coverage.SourceOutcome.Held(
@@ -331,11 +355,12 @@ class AnArmNothingReachesIsNotOwedARowTest {
     @Test
     void aProvenArmLeavesTheDenominator() {
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured(
-                List.of(arm(0), arm(1)), Set.of(1),
-                proving().asRunWith(Set.of(1)), MeasurementStatus.COMPLETE, "t");
+                List.of(arm(UNREACHED), arm(TAKEN)), Set.of(TAKEN),
+                proving().asRunWith(Set.of(TAKEN)), MeasurementStatus.COMPLETE, "t");
 
-        assertEquals(List.of(1), measured.all().stream().map(CoverageSites.Site::index).toList());
-        assertEquals(Set.of(1), measured.covered());
+        assertEquals(List.of(TAKEN),
+                measured.all().stream().map(CoverageSites.Site::index).toList());
+        assertEquals(Set.of(TAKEN), measured.covered());
         assertTrue(measured.contradicted().isEmpty());
         assertTrue(measured.unreached().isEmpty());
     }
@@ -351,16 +376,17 @@ class AnArmNothingReachesIsNotOwedARowTest {
     void anArmObservedAgainstTheProofIsKeptAndSaidSo() {
         // The rows lit both arms, one of which nothing was supposed to reach. Handed to the same
         // fold the measures read, so what a run does to a proof is decided in one place.
-        PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(0, 1));
+        PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(UNREACHED, TAKEN));
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured(
-                List.of(arm(0), arm(1)), Set.of(0, 1), asRun, MeasurementStatus.COMPLETE, "t");
+                List.of(arm(UNREACHED), arm(TAKEN)), Set.of(UNREACHED, TAKEN), asRun,
+                MeasurementStatus.COMPLETE, "t");
 
-        assertEquals(Set.of(0), measured.contradicted(),
-                "arm 0 was proven unreachable and a row went through it");
-        assertEquals(List.of(0, 1),
+        assertEquals(Set.of(UNREACHED), measured.contradicted(),
+                "the arm nothing reaches was proven unreachable and a row went through it");
+        assertEquals(List.of(UNREACHED, TAKEN),
                 measured.all().stream().map(CoverageSites.Site::index).toList(),
                 "so it is still an arm this behavior has");
-        assertEquals(Set.of(0, 1), measured.covered());
+        assertEquals(Set.of(UNREACHED, TAKEN), measured.covered());
         assertEquals(MeasurementStatus.PARTIAL, measured.status(),
                 "and no number here is given as though nothing had happened");
     }
@@ -369,11 +395,11 @@ class AnArmNothingReachesIsNotOwedARowTest {
      * the case behind it would stay unowed over a proof already disproved. */
     @Test
     void theSameArmIsBackForEveryMeasure() {
-        PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(0));
+        PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(UNREACHED));
 
-        assertEquals(Set.of(0), asRun.provedWrong(),
+        assertEquals(Set.of(UNREACHED), asRun.provedWrong(),
                 "a row went through an arm this reading had proven nothing reaches");
-        assertFalse(asRun.answers().nothingArrivesAt(0),
+        assertFalse(asRun.answers().nothingArrivesAt(UNREACHED),
                 "so nothing about it is proven any more");
         // Both measures read this one object, so what is back for one is back for the other. Said
         // of the arms: what a comparison's outcome was proven to be is not something a row through

@@ -206,13 +206,16 @@ class ThresholdNormalizationTest {
                         then Answer { n = 1 } else Answer { n = 2 }
                 """, "check");
 
-        // The line is the model's wherever in the condition it is written. What the condition
-        // decides is not whether it is a line but which arm stands as evidence for it: `urgent` is
-        // evaluated on the way to either arm, and the comparison behind it only on the way to the
-        // one where the whole condition held.
+        // The line is the model's wherever in the condition it is written. What stands beside the
+        // comparison decides nothing about that: `urgent` draws no line, and the comparison behind
+        // it draws the same one it would draw on its own.
         assertEquals(1, compound.thresholds().size(), compound.thresholds().toString());
-        assertEquals(OriginRef.GuardOrigin.Witness.THEN,
-                ((OriginRef.GuardOrigin) compound.thresholds().get(0).origin()).witness());
+        Threshold bare = read.thresholds().get(0);
+        Threshold beside = compound.thresholds().get(0);
+        assertEquals(
+                List.of(bare.term(), bare.parts(), bare.valueBelongsBelow()),
+                List.of(beside.term(), beside.parts(), beside.valueBelongsBelow()),
+                "and the line is the same one either way: " + compound.thresholds());
     }
 
     @Test
@@ -220,7 +223,7 @@ class ThresholdNormalizationTest {
         Read read = read(CEILING, "submit");
         Axis cost = axis(read.partitioning(), "request.cost");
 
-        NumericDomain.Bounds within = read.partitioning().domains().get(cost.term());
+        NumericDomain.Bounds within = read.partitioning().quantities().runsBetween(cost.term());
         assertNotNull(within, "the invariant's domain is what this asks the obligations about");
         List<String> described = pointsAgainstTheLines(cost, read.symbols(), within);
 
@@ -268,7 +271,7 @@ class ThresholdNormalizationTest {
                 "the cut is the coarser partition, so the classes stay the cases");
 
         List<String> described = pointsAgainstTheLines(stage, read.symbols(),
-                read.partitioning().domains().get(stage.term()));
+                read.partitioning().quantities().runsBetween(stage.term()));
         assertEquals(List.of("ON Prospecting", "OFF Qualified"), described);
     }
 
@@ -297,7 +300,7 @@ class ThresholdNormalizationTest {
         Axis amount = axis(read.partitioning(), "amount");
         assertEquals(List.of("0 <= x < 3000", "3000 <= x"), labels(amount));
 
-        NumericDomain.Bounds within = read.partitioning().domains().get(amount.term());
+        NumericDomain.Bounds within = read.partitioning().quantities().runsBetween(amount.term());
         assertNotNull(within, "the invariant's domain is what this asks the obligations about");
         List<String> described = pointsAgainstTheLines(amount, read.symbols(), within);
         assertTrue(described.contains("OFF 3000"), described.toString());
@@ -341,6 +344,6 @@ class ThresholdNormalizationTest {
 
         assertEquals(2, at10.origins().size(), "an invariant and a guard both drew it");
         assertTrue(at10.origins().stream().anyMatch(o -> o instanceof OriginRef.InvariantOrigin));
-        assertTrue(at10.origins().stream().anyMatch(o -> o instanceof OriginRef.GuardOrigin));
+        assertTrue(at10.origins().stream().anyMatch(o -> o instanceof OriginRef.ComparisonOrigin));
     }
 }

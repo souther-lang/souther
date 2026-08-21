@@ -43,11 +43,12 @@ public enum CoverageConstruct {
     /**
      * A binary expression — a comparison, a conjunction, an arithmetic operation, a concatenation.
      *
-     * <p>What was written, and not what was made of it. Only a comparison inside a fork's condition
-     * is ever numbered, and whether this one was is {@link souther.compiler.coverage.SourceOutcome}'s
-     * answer rather than this one's: {@code a + b} is as much a binary expression the source wrote as
-     * {@code a > b} is, and naming the construct after the use the analysis puts a few of them to
-     * would make this value say something untrue of every arithmetic node in every body.
+     * <p>What was written, and not what was made of it. The comparisons among these are numbered and
+     * the rest are not, and whether this one was is
+     * {@link souther.compiler.coverage.SourceOutcome}'s answer rather than this one's: {@code a + b}
+     * is as much a binary expression the source wrote as {@code a > b} is, and naming the construct
+     * after the use the analysis puts a few of them to would make this value say something untrue of
+     * every arithmetic node in every body.
      */
     BINARY,
 

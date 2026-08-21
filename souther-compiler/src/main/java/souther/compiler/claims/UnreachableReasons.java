@@ -38,56 +38,56 @@ public final class UnreachableReasons {
      * disagree about which paths answer nothing. Repeats are kept, so that two arms aborting with
      * the same words still have two places between them; a caller wanting the reasons drops them.
      */
-    public static List<Said> said(Core e) {
+    public static List<Said> said(Core e, NormalReturn answering) {
         List<Said> found = new java.util.ArrayList<>();
-        collect(e, found);
+        collect(e, answering, found);
         return List.copyOf(found);
     }
 
-    private static void collect(Core e, List<Said> into) {
-        if (NormalReturn.of(e)) {
+    private static void collect(Core e, NormalReturn answering, List<Said> into) {
+        if (e == null || answering.at(e)) {
             return;
         }
         switch (e) {
             case Core.Unreachable u -> into.add(new Said(u.reason(), u.pos()));
             case Core.LetIn li -> collect(
-                    NormalReturn.of(li.value()) ? li.body() : li.value(), into);
+                    answering.at(li.value()) ? li.body() : li.value(), answering, into);
             case Core.If iff -> {
-                if (!NormalReturn.of(iff.cond())) {
-                    collect(iff.cond(), into);
+                if (!answering.at(iff.cond())) {
+                    collect(iff.cond(), answering, into);
                 } else {
-                    collect(iff.then(), into);
-                    collect(iff.els(), into);
+                    collect(iff.then(), answering, into);
+                    collect(iff.els(), answering, into);
                 }
             }
             case Core.Match m -> {
-                if (!NormalReturn.of(m.scrutinee())) {
-                    collect(m.scrutinee(), into);
+                if (!answering.at(m.scrutinee())) {
+                    collect(m.scrutinee(), answering, into);
                 } else {
-                    m.cases().forEach(arm -> collect(arm.body(), into));
+                    m.cases().forEach(arm -> collect(arm.body(), answering, into));
                 }
             }
             case Core.Construct nd -> {
-                Core stops = evaluated(nd);
+                Core stops = evaluated(nd, answering);
                 if (stops != null) {
-                    collect(stops, into);
+                    collect(stops, answering, into);
                 }
             }
             case Core.IfConstructed ic -> {
-                Core stops = evaluated(ic.construct());
+                Core stops = evaluated(ic.construct(), answering);
                 if (stops != null) {
-                    collect(stops, into);
+                    collect(stops, answering, into);
                 } else {
-                    collect(ic.then(), into);
-                    ic.els().forEach(arm -> collect(arm.body(), into));
+                    collect(ic.then(), answering, into);
+                    ic.els().forEach(arm -> collect(arm.body(), answering, into));
                 }
             }
             // Anything else answers nothing because something it evaluates first does, and the rest
             // of what is written in it never runs.
             default -> {
-                Core stops = firstThatAborts(Evaluated.inOrder(e));
+                Core stops = firstThatAborts(Evaluated.inOrder(e), answering);
                 if (stops != null) {
-                    collect(stops, into);
+                    collect(stops, answering, into);
                 }
             }
         }
@@ -100,15 +100,15 @@ public final class UnreachableReasons {
      * the construction settled that when it was built, so what stops it is asked here rather than
      * worked out again from how the fields were written.
      */
-    private static Core evaluated(Core.Construct nd) {
-        return firstThatAborts(Evaluated.inOrder(nd));
+    private static Core evaluated(Core.Construct nd, NormalReturn answering) {
+        return firstThatAborts(Evaluated.inOrder(nd), answering);
     }
 
     /** The first of a run of strict positions that does not answer, which is where evaluation stops
      * and where every reason below it stops being one. */
-    private static Core firstThatAborts(List<Core> evaluated) {
+    private static Core firstThatAborts(List<Core> evaluated, NormalReturn answering) {
         for (Core each : evaluated) {
-            if (!NormalReturn.of(each)) {
+            if (!answering.at(each)) {
                 return each;
             }
         }

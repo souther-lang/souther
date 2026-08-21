@@ -769,7 +769,8 @@ public final class Adequacy {
                 }
                 out.addAll(Coverages.assess(axis, inputs, observed, armsAsked,
                         partitioning.edgeIsKnownWritable(axis.term()), probe,
-                        partitioning.domains().get(axis.term())));
+                        partitioning.quantities(), partitioning.reaching(),
+                        partitioning.quantities().runsBetween(axis.term())));
             }
             out.addAll(Coverages.assessBetween(partitioning, inputs, observed, armsAsked, probe));
             return List.copyOf(out);
@@ -2269,7 +2270,7 @@ public final class Adequacy {
                         // sentence deciding one of them from the other would be reading a rule off
                         // a role.
                         case About.APointOfABorder(var point) -> againstTheLine(point).rule()
-                                .wasDrawnInABodyFork()
+                                .isWrittenRatherThanNamed()
                                 ? new ExampleMessage.NoRowIsAtThePointOfTheBorderAConstructDrew(
                                         point.role().name(), point.border().axis(),
                                         point.against(), constructOf(point))
@@ -2398,11 +2399,12 @@ public final class Adequacy {
             return point.border();
         }
 
-        /** Which construct of the language drew a boundary's line, as a phrase the reader's
-         *  language supplies. Asked of the rule, which is where the source's own answer is. */
+        /** What a sentence calls a rule that has no name, as a phrase the reader's language
+         *  supplies. One phrase, because a rule found by where it is written is a comparison —
+         *  which construct stands around it is a fact about the body and not about the rule. */
         private static souther.compiler.diag.Localizable constructOf(
                 BorderAssessment.Point point) {
-            return point.border().rule().constructThatDrewIt().said();
+            return souther.compiler.diag.Localizable.of("construct.comparison");
         }
 
         /**

@@ -196,6 +196,7 @@ public final class PathReachability {
         PathEngine engine =
                 new PathEngine(symbols, Map.of(), Terms.Of.THE_TREE_THAT_RUNS, policy);
         Map<ControlPointId, Reachability> out = new LinkedHashMap<>();
+        boolean walked = false;
         try {
             PathEngine.Entered in = PathEngine.Entered.nothing();
             for (Map.Entry<BindingId, Scope.Binding> p : params.bindings().entrySet()) {
@@ -209,12 +210,55 @@ public final class PathReachability {
             reading.entered = in.at();
             reading.walk(body, in.known(), in.at(),
                             InputReads.of(read == null ? InputDomain.NONE : read), List.of(), true);
+            walked = true;
         } catch (RuntimeException why) {
             // The run-time check is the backstop for the analysis this borrows, and it is the
             // backstop for this too: what was not read leaves an obligation standing.
             InvariantChecker.gaveUp("reachability", why);
         }
+        if (walked) {
+            unanswered(body, plan, out).ifPresent(why -> InvariantChecker.gaveUp("reachability",
+                    new IllegalStateException(why)));
+        }
         return new Answers(out);
+    }
+
+    /**
+     * That the walk answered for every comparison the plan numbered in this body.
+     *
+     * <p>What the reading owes, checked rather than left to the shape of the walk. Absent and
+     * unsettled are the same answer to every reader below — a line is dropped only by a proof — so a
+     * comparison the walk never reached is a claim nobody can find missing. The walk stops at a
+     * place nothing arrives at, and a node it stops at can stand over comparisons: which ones
+     * depends on how a condition was bracketed, which is not a thing to keep in step by reading.
+     *
+     * <p>Only where the walk finished, and reported rather than thrown. This reading is fail-open
+     * by contract — what it does when the analysis it borrows falls over is answer about what it
+     * reached and no more — so a walk that missed one says less, the way it does for everything
+     * else it cannot settle. Thrown from here it would abort a compile on one path
+     * ({@code Adequacy.PathReached}) and come back as a build with no classes and no reason on
+     * another ({@code Output.Evaluated} takes an absent answer for a failure).
+     *
+     * @return what went unanswered, or empty where nothing did
+     */
+    private static java.util.Optional<String> unanswered(Core body, CoverageSites.Plan plan,
+                                                         Map<ControlPointId, Reachability> out) {
+        if (body instanceof Core.Binary comparison) {
+            for (boolean result : new boolean[] {true, false}) {
+                ControlPointId where = plan.outcomeOf(comparison, result).orElse(null);
+                if (where != null && !out.containsKey(where)) {
+                    return java.util.Optional.of(
+                            "this reading answered for no run through " + comparison.op()
+                                    + " at " + comparison.pos() + " coming out " + result
+                                    + "; the plan numbered it and a reader below cannot tell an "
+                                    + "answer that was never made from one that settled nothing");
+                }
+            }
+        }
+        List<String> missed = new ArrayList<>();
+        Core.forEachChild(body, child -> unanswered(child, plan, out).ifPresent(missed::add));
+        return missed.isEmpty() ? java.util.Optional.empty()
+                : java.util.Optional.of(missed.get(0));
     }
 
     private final PathEngine engine;
@@ -254,17 +298,47 @@ public final class PathReachability {
      */
     private void walk(Core e, Known k, Denotations at, InputReads reads,
                       List<PathDecision> decided, boolean nothingAbove) {
-        if (e == null || k.reachesNothing()) {
-            // Nothing stands here, so nothing below is a place anything arrives at either. The arm
-            // that made it so was answered where it was entered; the arms under it are left absent,
-            // which reads as unsettled — the outermost one is the place to say it, and saying it
-            // again at every fork inside would be the same finding several times over.
+        if (e == null) {
+            return;
+        }
+        // Every comparison this plan numbers is answered for, and answered under what holds where it
+        // stands. Before the reach test below, because a comparison in a region nothing arrives at
+        // is a comparison nothing arrives at — which is the fact, and the fact a boundary drawn on
+        // it is dropped by.
+        if (e instanceof Core.Binary comparison) {
+            outcomesAt(comparison, k, at, decided);
+        }
+        if (k.reachesNothing()) {
+            // Nothing stands here, so nothing below is a place anything arrives at either. The arms
+            // under this are left absent, which reads as unsettled: the arm that made it so was
+            // answered where it was entered, and saying it again at every fork inside would be the
+            // same finding several times over.
+            //
+            // The comparisons are not. What this reading owes is one answer per comparison the plan
+            // numbered, and a comparison nothing arrives at is exactly a comparison nothing arrives
+            // at — so the walk goes on for those and stops for everything else.
+            unreached(e, k, at, decided);
             return;
         }
         switch (e) {
+            // A short circuit runs its right side only where the left settled nothing, so the two
+            // sides do not stand under the same conditions. Threaded here rather than in a walk of
+            // its own over a fork's condition: a chain is a chain wherever it is written, and one
+            // read only under the fork it was written into left the same operators unread a line
+            // above.
+            case Core.Binary binary when binary.op() == Hir.BinOp.AND
+                    || binary.op() == Hir.BinOp.OR -> {
+                walk(binary.left(), k, at, reads, decided, nothingAbove);
+                // `&&` gets to its right side having held, `||` having failed. Read the other way
+                // round, a comparison guarded by its neighbour would be read against conditions
+                // nothing on the way to it established.
+                boolean reachedWhen = binary.op() == Hir.BinOp.AND;
+                Predicates.Assumed reaching = engine.assuming(binary.left(), k, at, reachedWhen);
+                walk(binary.right(), reaching.known(), at, reads,
+                        with(decided, reaching, binary.left().pos(), reachedWhen), nothingAbove);
+            }
             case Core.If iff -> {
                 walk(iff.cond(), k, at, reads, decided, nothingAbove);
-                outcomes(iff.cond(), k, at, decided);
                 ControlPointId.ArmOccurrence[] arms = plan.armsOf(iff);
                 enterArm(arms, 0, iff, iff.then(), k, at, reads, decided, true);
                 enterArm(arms, 1, iff, iff.els(), k, at, reads, decided, false);
@@ -319,40 +393,50 @@ public final class PathReachability {
     }
 
     /**
-     * Each comparison of a condition, read under what holds where that comparison runs.
+     * Every comparison below a place nothing arrives at, answered as one nothing arrives at.
      *
-     * <p>Not under what holds at the fork. A condition stops as soon as it is settled, so the
-     * right-hand side of an {@code &&} runs only where the left-hand side held and the right-hand
-     * side of an {@code ||} only where it did not — and a comparison read under the fork's own
-     * state would be read under conditions that were never established when it ran.
+     * <p>A separate descent because what it does is not what the walk does: no arm is filed, and
+     * nothing here narrows anything — the state was already empty when this began, and it stays
+     * that way for every node under it. Whether one operand of a short circuit was reached is a
+     * question about a run, and there are none.
      *
-     * <p>Descends through {@code &&} and {@code ||} only, which is what a condition is built out of
-     * and what the plan numbered. Anything else is a leaf: the plan answers for it or does not, and
-     * a node it numbered nothing at is one nothing is filed about.
+     * <p>Written out rather than folded into the walk, because the walk stops here and stopping is
+     * what it is for. Read as one thing, the walk answered for whatever it happened to reach:
+     * {@code A && (B || C)} with {@code A} ruled out stops at the operator, which is numbered
+     * nowhere, and left {@code B} and {@code C} unanswered — the shape of a claim nothing made.
      */
-    private void outcomes(Core cond, Known k, Denotations at, List<PathDecision> decided) {
-        if (cond instanceof Core.Binary b
-                && (b.op() == Hir.BinOp.AND || b.op() == Hir.BinOp.OR)) {
-            outcomes(b.left(), k, at, decided);
-            // The side that reaches the right operand: `&&` gets there having held, `||` having
-            // failed. Read the other way round, a comparison guarded by its neighbour would be
-            // proven against conditions nothing on the way to it established.
-            boolean reachedWhen = b.op() == Hir.BinOp.AND;
-            Predicates.Assumed reaching = engine.assuming(b.left(), k, at, reachedWhen);
-            outcomes(b.right(), reaching.known(), at,
-                    with(decided, reaching, b.left().pos(), reachedWhen));
-            return;
-        }
+    private void unreached(Core e, Known k, Denotations at, List<PathDecision> decided) {
+        Core.forEachChild(e, child -> {
+            if (child instanceof Core.Binary comparison) {
+                outcomesAt(comparison, k, at, decided);
+            }
+            unreached(child, k, at, decided);
+        });
+    }
+
+    /**
+     * One comparison, answered both ways, under what holds where it stands.
+     *
+     * <p>Which nodes get an answer is the plan's to say and not this walk's. Read off the shape of
+     * a fork's condition, the reading answered for the comparisons a fork was written directly
+     * around and silently for no others — and a comparison nothing answered for reads, everywhere
+     * below, exactly like one answered "nothing is known".
+     *
+     * <p>Empty is an ordinary answer here: the node is not a comparison, or is one this plan
+     * numbered nothing at, and either way there is no place a run through it would be recorded.
+     */
+    private void outcomesAt(Core.Binary comparison, Known k, Denotations at,
+                            List<PathDecision> decided) {
         for (boolean result : new boolean[] {true, false}) {
-            var where = plan.outcomeOf(cond, result);
+            var where = plan.outcomeOf(comparison, result);
             if (where.isEmpty()) {
                 continue;
             }
-            Predicates.Assumed taken = engine.assuming(cond, k, at, result);
+            Predicates.Assumed taken = engine.assuming(comparison, k, at, result);
             out.put(where.get(), taken.known().reachesNothing()
                     ? new Reachability.Unreachable(Proof.conditionsThatCannotAllHold(
-                            with(decided, taken, cond.pos(), result)))
-                    : new Reachability.Unsettled(whyNot(taken, cond)));
+                            with(decided, taken, comparison.pos(), result)))
+                    : new Reachability.Unsettled(whyNot(taken, comparison)));
         }
     }
 

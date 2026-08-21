@@ -324,7 +324,7 @@ public final class InteractionCells {
                 if (line == null) {
                     return null;
                 }
-                OriginRef.GuardOrigin guard = guardOf(line, one.comparison());
+                OriginRef.ComparisonOrigin guard = guardOf(line, one.comparison());
                 int home = holding(axes.get(axis), line);
                 if (home < 0) {
                     return null;
@@ -397,9 +397,9 @@ public final class InteractionCells {
     }
 
     /** Which rule of the cut this reading of the comparison is. */
-    private static OriginRef.GuardOrigin guardOf(Cut cut, ComparisonOccurrence comparison) {
+    private static OriginRef.ComparisonOrigin guardOf(Cut cut, ComparisonOccurrence comparison) {
         for (OriginRef origin : cut.origins()) {
-            if (origin instanceof OriginRef.GuardOrigin guard
+            if (origin instanceof OriginRef.ComparisonOrigin guard
                     && guard.read().comparison().equals(comparison)) {
                 return guard;
             }

@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.check.Location;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Carrier;
@@ -21,6 +20,7 @@ import souther.compiler.numeric.Place;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
+import souther.compiler.coverage.ComparisonCatalog;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.Citation;
 import souther.compiler.types.BindingId;
@@ -49,34 +49,35 @@ import java.util.List;
  * <p>Whether a comparison ran is not something the arms answer. A condition stops as soon as it is
  * settled, so under {@code A && B} an overseas request takes the else arm without {@code cost} having
  * been compared — and so does a request whose cost was compared and found too high. Each comparison
- * carries the site its own value is recorded at, which is what a line is measured against. What the
- * shape of the condition does decide is which arm a row that reached the comparison can be in, and
- * that is a question about the classes either side of the line: it is carried as a {@link OriginRef
- * .GuardOrigin.Witness}.
+ * carries the site its own value is recorded at, which is what a line is measured against, and the
+ * arms of the fork standing round it are read for nothing.
  *
- * <p>Three readers are kept apart here and are easy to run together. Which comparisons exist is
- * {@link #comparisonsIn}; which positions a comparison names at all is {@link #mentioned}; which
- * number a line can be drawn on is {@link #termOf}. The last is the narrowest, and asking it the
- * first two questions is how a position a body compares became a position nothing compares.
+ * <p>Three readers are kept apart and are easy to run together. Which comparisons exist is
+ * {@link souther.compiler.coverage.ComparisonCatalog}'s answer and which of them a line may be drawn
+ * on is {@link BoundaryComparisons}'s; which positions a comparison names at all is
+ * {@link #mentioned}; which number a line can be drawn on is {@link #termOf}. The last is the
+ * narrowest, and asking it the first two questions is how a position a body compares became a
+ * position nothing compares.
  */
 public final class GuardThresholds {
 
     /**
      * What one reading of a body says about the comparisons in it.
      *
-     * <p>One walk, because the operator is known once. Which side of the line each arm takes is not
-     * recoverable from a {@link Threshold} — {@code x <= c} and {@code x > c} both put {@code c} on
-     * the low side and their {@code then} arms are opposite halves — so what a row reaching a
-     * comparison can be in is carried as {@link OriginRef.GuardOrigin.Witness} where the operator
-     * is still in hand, and which values arrive is asked of the reading of the whole body.
+     * <p>One walk, because the operator is known once. Which side of the line the value itself is on
+     * is not recoverable from a {@link Threshold} — {@code x <= c} and {@code x > c} both put
+     * {@code c} on the low side and are two different rules about it — so it is read where the
+     * operator is still in hand, and which values arrive is asked of the reading of the whole body.
      */
     public record Guards(List<Threshold> thresholds,
                          List<UnreadRule> unread, List<Singled> singled,
                          List<LineDrawn> between,
-                         List<AtAPosition> accounting) {
+                         List<AtAPosition> accounting,
+                         ReachingCuts reaching) {
 
         public static final Guards NONE =
-                new Guards(List.of(), List.of(), List.of(), List.of(), List.of());
+                new Guards(List.of(), List.of(), List.of(), List.of(), List.of(),
+                        ReachingCuts.NONE);
 
         /**
          * One comparison's accounting, and the position a reader is sent to for it.
@@ -128,58 +129,125 @@ public final class GuardThresholds {
         }
     }
 
-    /** The thresholds one behavior's body compares its parameters against, and both arms of each
-     * comparison. {@code plan} supplies the guard each one belongs to, so a boundary can later ask
-     * whether the comparison ran and an arm can be found by the probe that counts it. */
+    /** The thresholds one behavior's body compares its parameters against. {@code plan} supplies
+     * the site each comparison's own value is recorded at, so a boundary can later ask whether the
+     * comparison ran — which is not something the arms of anything standing round it record. */
+
+    /**
+     * The same, reading the input's rules here.
+     *
+     * <p>For a caller that has no reading of them in hand. The pipeline that measures a behavior
+     * reads them once and hands the same one to everything that asks, since each of these reading
+     * its own is every rule of every parameter read again to arrive at the same answers.
+     */
     public static Guards of(String behavior, Core body, CoverageSites.Plan plan,
                             InputDomain inputs, Symbols symbols) {
-        return of(behavior, body, plan, inputs, symbols,
+        return of(behavior, body, plan, inputs, inputs.quantities(symbols), symbols,
                 souther.compiler.check.ElementBindings.NONE);
     }
 
     /** The same, of a body whose operations handed their closures the contents of containers. */
     public static Guards of(String behavior, Core body, CoverageSites.Plan plan,
-                            InputDomain inputs, Symbols symbols,
+                            InputDomain inputs, souther.compiler.inputs.Quantities quantities,
+                            Symbols symbols,
                             souther.compiler.check.ElementBindings elements) {
         List<Threshold> found = new ArrayList<>();
         List<UnreadRule> unread = new ArrayList<>();
         List<Guards.AtAPosition> accounting = new ArrayList<>();
         List<Guards.Singled> singled = new ArrayList<>();
         List<LineDrawn> between = new ArrayList<>();
-        walk(behavior, body, plan, InputReads.of(inputs, elements), symbols, found, unread,
-                singled, between, accounting);
-        return new Guards(found, unread, singled, between, accounting);
+        // The comparisons a line came of, and not the positions they were about. A position carries
+        // more than one statement and reading one of them settles nothing about the others.
+        List<Core> made = new ArrayList<>();
+        // Every line the body draws, read where the comparison that draws it is written and under
+        // the names in force there. Which comparisons those are is
+        // {@link BoundaryComparisons}'s answer: a reader that had to find a fork before it could
+        // find a rule could not be handed a wider one without being rewritten.
+        for (BoundaryComparisons.Bearing each
+                : BoundaryComparisons.of(body, plan, InputReads.of(inputs, elements)).all()) {
+            lineAt(behavior, each.comparison(), plan, each.reads(), symbols, quantities, found,
+                    singled, between, accounting, made);
+        }
+        // What a row had already satisfied when each comparison ran, and every comparison nothing
+        // turned into a line. Both walk the body; neither decides which comparisons there are.
+        ReachingCuts.Collected cuts = new ReachingCuts.Collected();
+        reached(behavior, body, made, plan, InputReads.of(inputs, elements), symbols, List.of(),
+                cuts, unread);
+        return new Guards(found, unread, singled, between, accounting, cuts.made());
     }
 
-    private static void walk(String behavior, Core e, CoverageSites.Plan plan,
-                             InputReads reads, Symbols symbols, List<Threshold> out,
-                             List<UnreadRule> unread,
-                             List<Guards.Singled> singled, List<LineDrawn> between,
-                             List<Guards.AtAPosition> accounting) {
+    /**
+     * Every comparison a condition holds that nothing turned into a line.
+     *
+     * <p>Asked of the comparisons and not of the positions. One position carries more than one
+     * statement, and a line read at it says nothing about the rest: kept per position, a threshold
+     * on `x` swallowed the comparison beside it that nothing could read, which is "a result exists,
+     * so the reading is complete".
+     *
+     * <p>A wider set than the one that bears lines, and deliberately. What this establishes is that
+     * the model states something at a position — which is exactly what {@code not derivable} would
+     * otherwise deny — so a comparison written somewhere no line is drawn from is still a rule the
+     * author wrote and still worth saying went unread.
+     */
+    private static void reached(String behavior, Core e, List<Core> made, CoverageSites.Plan plan,
+                                InputReads reads, Symbols symbols, List<ReachingCuts.Cut> assumed,
+                                ReachingCuts.Collected cuts, List<UnreadRule> out) {
+        // One reading of this condition, folded by both of the questions asked here. Read off the
+        // shape of the node in front of each of them, they each knew on their own which shapes are
+        // transparent and which combine, and a shape one learned to see through was one the other
+        // still could not.
+        Condition asked = e instanceof Core.If iff ? Condition.of(iff.cond(), reads) : null;
         if (e instanceof Core.If iff) {
-            List<Core> read =
-                    read(behavior, iff, plan, reads, symbols, out, singled, between, accounting);
-            // Every comparison this condition holds that nothing turned into a line — asked of the
-            // comparisons and not of the positions. One position carries more than one statement,
-            // and a line read at it says nothing about the rest: kept per position, a threshold on
-            // `x` swallowed the comparison beside it that nothing could read, which is "a result
-            // exists, so the reading is complete".
-            for (UnreadRule compared : comparedIn(behavior, iff, read, reads, symbols)) {
-                if (unread.stream().noneMatch(had -> had.sameAs(compared))) {
-                    unread.add(compared);
+            // What a row had already satisfied when each of this condition's comparisons ran, filed
+            // where it was assumed. Asked of the condition rather than of the fork: a condition
+            // stops as soon as it is settled, so what stands when the second comparison runs is not
+            // what stood when the first did.
+            ReachingCuts.collect(asked, assumed, plan, symbols, cuts);
+            for (UnreadRule compared
+                    : comparedIn(behavior, iff.cond(), made, reads, symbols, plan.comparisons())) {
+                if (out.stream().noneMatch(had -> had.sameAs(compared))) {
+                    out.add(compared);
                 }
             }
         }
         // A match case's body and an attempted construction's departure are expression slots, so the
         // generic walk reaches them; only the arms themselves are not children, and this walk does not
         // number arms.
-        // Inside what a `let` binds, since that is where a name standing for an argument is read
-        // as the argument: an expanded helper binds the call's argument to its own parameter, and a
-        // walk that did not follow the binding would find its comparisons about nothing.
         InputReads inside = e instanceof Core.LetIn let ? reads.and(let.binder(), let.value())
                 : reads;
-        Core.forEachChild(e, child -> walk(behavior, child, plan, inside, symbols, out,
-                unread, singled, between, accounting));
+        if (e instanceof Core.If iff) {
+            // The arms under what each of them proves of the condition, and the condition itself
+            // under what stood above the fork. A comparison inside a condition is not below the
+            // fork: it runs to decide it.
+            reached(behavior, iff.cond(), made, plan, inside, symbols, assumed, cuts, out);
+            reached(behavior, iff.then(), made, plan, inside, symbols,
+                    taking(asked, true, assumed, symbols), cuts, out);
+            reached(behavior, iff.els(), made, plan, inside, symbols,
+                    taking(asked, false, assumed, symbols), cuts, out);
+            return;
+        }
+        Core.forEachChild(e, child ->
+                reached(behavior, child, made, plan, inside, symbols, assumed, cuts, out));
+    }
+
+    /**
+     * What stands inside one arm of a fork: what stood above it, and what that arm proves of the
+     * condition.
+     *
+     * <p>Asked of {@link ReachingCuts#stating}, which is the same rule that says what reaching the
+     * right operand of a condition establishes. Both are "this subtree came out this way, so what
+     * follows", and written apart they would agree by having been derived alike — until one of them
+     * learned to read a shape of condition the other did not.
+     */
+    private static List<ReachingCuts.Cut> taking(Condition condition, boolean onThen,
+                                                 List<ReachingCuts.Cut> assumed, Symbols symbols) {
+        List<ReachingCuts.Cut> arm = ReachingCuts.stating(condition, onThen, symbols);
+        if (arm.isEmpty()) {
+            return assumed;
+        }
+        List<ReachingCuts.Cut> out = new ArrayList<>(assumed);
+        out.addAll(arm);
+        return List.copyOf(out);
     }
 
     /**
@@ -206,46 +274,45 @@ public final class GuardThresholds {
      * question, and this establishes only that the model draws something at this position — which is
      * exactly what {@code not derivable} would otherwise deny.
      */
-    private static List<UnreadRule> comparedIn(String behavior, Core.If iff, List<Core> read,
-                                               InputReads reads, Symbols symbols) {
+    private static List<UnreadRule> comparedIn(String behavior, Core condition, List<Core> read,
+                                               InputReads reads, Symbols symbols,
+                                               ComparisonCatalog catalog) {
         List<UnreadRule> out = new ArrayList<>();
-        compared(behavior, iff, iff.cond(), read, reads, symbols, out);
+        compared(behavior, condition, read, reads, symbols, catalog, out);
         return out;
     }
 
-    private static void compared(String behavior, Core.If iff, Core e, List<Core> read,
-                                 InputReads reads, Symbols symbols, List<UnreadRule> out) {
+    private static void compared(String behavior, Core e, List<Core> read,
+                                 InputReads reads, Symbols symbols, ComparisonCatalog catalog,
+                                 List<UnreadRule> out) {
+        // Which nodes are comparisons and where each is written are the catalog's answers, taken
+        // together and once. Asked of the operator and of the node's position here, this was a
+        // second account of both beside the numbering's, and the two were spelled differently.
+        ComparisonCatalog.Comparison entry = catalog.at(e).orElse(null);
         // By the comparison it is, and not by what it was about: two comparisons at one position are
         // two statements, and this one having been read is no answer about the other.
-        if (e instanceof Core.Binary comparison && orders(comparison.op())
-                && read.stream().anyMatch(each -> each == comparison)) {
+        if (entry != null && read.stream().anyMatch(each -> each == e)) {
             return;
         }
-        if (e instanceof Core.Binary binary && orders(binary.op()) && writtenHere(binary)) {
+        if (entry != null && writtenHere(entry)) {
+            Core.Binary binary = entry.node();
             List<TermPath> named = new ArrayList<>();
             mentioned(binary.left(), reads, symbols, named);
             mentioned(binary.right(), reads, symbols, named);
             BlockReason.AboutARule why = why(binary, reads, symbols);
             // The rule the author wrote, read off the source. Which comparison it is is the
-            // behavior and the construct; where a reader is sent is the fork it stands in and the
-            // place it is written. Neither comes from the plan: a condition both of whose arms can
-            // record nothing is numbered nowhere, and a model states its rules regardless.
-            RuleRef.Guard rule = new RuleRef.Guard(behavior, binary.origin());
-            souther.compiler.check.RuleCitation cited = citationOf(iff, binary);
+            // behavior and the construct the source wrote; where a reader is sent is where it is
+            // written. Neither comes from the plan: a condition both of whose arms can record
+            // nothing is numbered nowhere, and a model states its rules regardless.
+            RuleRef.Comparison rule = new RuleRef.Comparison(behavior, binary.origin());
+            souther.compiler.check.RuleCitation cited = citationOf(binary, catalog);
             // A comparison naming no position of the input, whose terms came from one. An operation
             // made the value it compares out of what stands there, so the rule is about that
             // position's values and this cannot say what it says about them — which is not the same
             // as a body that wrote no rule, and used to read as one.
             if (named.isEmpty()) {
                 cameFrom(binary, reads, symbols, named);
-                for (TermPath each : named) {
-                    UnreadRule derived = new UnreadRule(rule, cited, each,
-                            new BlockReason.RuleAboutADerivedValue());
-                    if (out.stream().noneMatch(had -> had.sameAs(derived))) {
-                        out.add(derived);
-                    }
-                }
-                return;
+                why = new BlockReason.RuleAboutADerivedValue();
             }
             for (TermPath each : named) {
                 // One per position the comparison names, and told from its neighbours by the rule
@@ -270,7 +337,7 @@ public final class GuardThresholds {
             // here would take the word from one construct and the place from another. The walk that
             // found this fork reaches that one too, and reads it against itself.
             if (!(child instanceof Core.If)) {
-                compared(behavior, iff, child, read, inside, symbols, out);
+                compared(behavior, child, read, inside, symbols, catalog, out);
             }
         });
     }
@@ -293,13 +360,17 @@ public final class GuardThresholds {
      * where this compile has no file", and it is the same answer
      * {@link souther.compiler.check.RuleCitation} renders.
      *
+     * <p>Read off the catalog, which holds where a comparison is written. Taken from the node again
+     * here, this was one more place deciding for itself what the catalog already answers — and the
+     * one deciding whether an author is told to edit a file they do not have.
+     *
      * <p>Asked of the comparison and not of the fork above it. The one the author wrote sits
      * outside an expansion whose insides they did not, so a subtree is the wrong unit — and the
      * walk still goes through the expansion, because that is where a call's argument is bound and
      * a comparison read without it is about nothing.
      */
-    private static boolean writtenHere(Core.Binary comparison) {
-        return !(Citation.of(comparison.pos()) instanceof Citation.Elsewhere);
+    private static boolean writtenHere(ComparisonCatalog.Comparison comparison) {
+        return !(comparison.at() instanceof Citation.Elsewhere);
     }
 
     /**
@@ -394,132 +465,114 @@ public final class GuardThresholds {
         return out;
     }
 
-    /** Whether an operator is one that compares two values rather than combining two conditions. */
-    static boolean orders(Hir.BinOp op) {
-        return ComparisonClaim.places(op);
-    }
-
     /**
-     * The positions a line was drawn on here.
+     * The line one comparison draws, where anything of it can be read.
      *
-     * <p>One condition can hold several. {@code A && B} is two comparisons and two lines, and which
-     * arm stands as evidence for each is not the same answer — so each is read with the witness its
-     * place in the condition leaves it, and the arms are numbered once for the {@code if} they both
-     * belong to.
+     * <p>One comparison is one line however many positions it mentions, and what it cuts is
+     * {@link Cutting}'s one answer. What is added here is what meeting it takes, which is this
+     * rule's own and no other's.
+     *
+     * <p>Whether a line may be drawn on this comparison at all was settled before the walk got
+     * here, by {@link BoundaryComparisons}. Asked at the fork instead, this reader had to find one
+     * to find a rule.
      */
-    private static List<Core> read(String behavior, Core.If iff, CoverageSites.Plan plan,
-                                   InputReads reads, Symbols symbols,
-                                   List<Threshold> out,
-                                   List<Guards.Singled> singled, List<LineDrawn> between,
-                                   List<Guards.AtAPosition> accounting) {
-        // The comparisons a line came of, and not the positions they were about. A position carries
-        // more than one statement and reading one of them settles nothing about the others.
-        List<Core> made = new ArrayList<>();
-        // What a row leaves behind at these comparisons, taken before any of them is read. Which
-        // shape of line a comparison draws is a later question and not one this depends on — read
-        // after a constant had been found, the site was a thing only a line against a constant could
-        // have, and a comparison of two positions had no way to say what had reached it.
-        CoverageSites.GuardRef guard = guardOf(plan, iff);
-        if (guard == null) {
-            return made;   // no site for this `if`: nothing could answer for it
+    private static void lineAt(String behavior, Core.Binary each, CoverageSites.Plan plan,
+                               InputReads reads, Symbols symbols,
+                               souther.compiler.inputs.Quantities quantities,
+                               List<Threshold> out, List<Guards.Singled> singled,
+                               List<LineDrawn> between, List<Guards.AtAPosition> accounting,
+                               List<Core> made) {
+        // The plan numbered every comparison of an instrumented condition before anything read a
+        // line off one, so this is here. Required rather than looked up leniently: a line whose
+        // comparison has no site is this reader and the plan disagreeing about what a condition
+        // is made of.
+        souther.compiler.coverage.ComparisonOccurrence site =
+                plan.requireComparisonAt(each);
+        // What the comparison cuts is one question with one answer ({@link Cutting}). What is
+        // added here is what meeting the line takes, which is a guard's own answer and no other
+        // rule's.
+        Cutting cutting = Cutting.of(behavior, each, reads, symbols, quantities);
+        if (cutting == null) {
+            raisesNoLine(accounting, behavior, plan.comparisons(), each, reads, symbols);
+            return;
         }
-        for (Placed each : comparisonsIn(iff.cond(), reads)) {
-            // What its names mean where it is written, and not what they meant above the fork.
-            InputReads here = each.reads();
-            // The plan numbered every comparison of an instrumented condition before anything read a
-            // line off one, so this is here. Required rather than looked up leniently: a line whose
-            // comparison has no site is this reader and the plan disagreeing about what a condition
-            // is made of.
-            souther.compiler.coverage.ComparisonOccurrence site =
-                    plan.requireComparisonAt(each.comparison());
-            // What the comparison cuts is one question with one answer ({@link Cutting}). What is
-            // added here is what meeting the line takes, which is a guard's own answer and no other
-            // rule's.
-            Cutting cutting = Cutting.of(behavior, each.comparison(), here, symbols);
-            if (cutting == null) {
-                raisesNoLine(accounting, behavior, iff, each.comparison(), here, symbols);
-                continue;
+        OriginRef.ComparisonOrigin origin = new OriginRef.ComparisonOrigin(
+                new RuleRef.Comparison(behavior, each.origin()),
+                new OriginRef.ComparisonOrigin.Read(site, citationOf(each, plan.comparisons())),
+                cutting.valueBelongsBelow(), cutting.holdsAtTheValue(),
+                cutting.singles());
+        NumericTerm divided = cutting.dividedPosition();
+        if (divided == null) {
+            // A line on something that is not one position's own values. Not added to `made`:
+            // what the partition could not read here it still could not read, and a boundary
+            // answering does not answer for it (spec §example-partition).
+            // Null where the quantity does not reach the line, which is the line and not one of
+            // its points: three times a length is never negative, and a rule comparing one
+            // against a negative draws nothing.
+            // Collected rather than turned into a border here. What a border owes away from
+            // its line is a run of the arrangement every rule about that quantity makes
+            // together, and a border built where its comparison was read knows only its own
+            // line — so a second rule over one form left the first one's run going to the end
+            // of the order, past it.
+            if (!Border.reaches(cutting.target(), cutting.within())) {
+                raisesNoLine(accounting, behavior, plan.comparisons(), each, reads, symbols);
+                return;
             }
-            OriginRef.GuardOrigin origin = new OriginRef.GuardOrigin(
-                    new RuleRef.Guard(behavior, each.comparison().origin()),
-                    new OriginRef.GuardOrigin.Read(guard, site, Citation.of(iff.pos())),
-                    cutting.valueBelongsBelow(), each.witness(), cutting.holdsAtTheValue(),
-                    cutting.singles());
-            NumericTerm divided = cutting.dividedPosition();
-            if (divided == null) {
-                // A line on something that is not one position's own values. Not added to `made`:
-                // what the partition could not read here it still could not read, and a boundary
-                // answering does not answer for it (spec §example-partition).
-                // Null where the quantity does not reach the line, which is the line and not one of
-                // its points: three times a length is never negative, and a rule comparing one
-                // against a negative draws nothing.
-                // Collected rather than turned into a border here. What a border owes away from
-                // its line is a run of the arrangement every rule about that quantity makes
-                // together, and a border built where its comparison was read knows only its own
-                // line — so a second rule over one form left the first one's run going to the end
-                // of the order, past it.
-                if (!Border.reaches(cutting.target(), cutting.within())) {
-                    raisesNoLine(accounting, behavior, iff, each.comparison(), here,
-                            symbols);
-                    continue;
-                }
-                between.add(new LineDrawn(cutting, origin));
-                List<TermPath> named = new ArrayList<>();
-                mentioned(each.comparison().left(), here, symbols, named);
-                mentioned(each.comparison().right(), here, symbols, named);
-                if (named.isEmpty()) {
-                    continue;   // a comparison about no position of the input raises nothing
-                }
-                // Filed at the position the reading names first, which is the one a line between two
-                // would be read `on`. One comparison is one line however many positions it mentions.
-                raises(accounting, behavior, iff, each.comparison(), named.get(0),
-                        comparedTerm(each.comparison(), here, symbols),
-                        subjectsOf(each.comparison(), here, symbols, null),
-                        new Required.LineRead.ALineBetweenTwoPositions());
-                continue;
+            between.add(new LineDrawn(cutting, origin));
+            List<TermPath> named = new ArrayList<>();
+            mentioned(each.left(), reads, symbols, named);
+            mentioned(each.right(), reads, symbols, named);
+            if (named.isEmpty()) {
+                return;   // a comparison about no position of the input raises nothing
             }
-            made.add(each.comparison());
-            // The value a row is owed against this line, which the reading of the comparison
-            // already answered. Taken off the level the rule was written with, a rule that wrote a
-            // multiple of the position named a class at a number the position never holds.
-            Place value = cutting.dividedValue();
-            if (cutting.singles()) {
-                // The value the rule names, which is where its line falls and not the value beside
-                // it. A rule that names no value of the position singles nothing out here — the
-                // position is divided all the same, and what divides it is the line.
-                Place names = cutting.singledValue();
-                if (names != null) {
-                    singled.add(new Guards.Singled(divided, names, origin));
-                }
-            } else {
-                out.add(new Threshold(divided, cutting.seam(), cutting.valueBelongsBelow(), origin));
-            }
-            // And the line itself, where the position has no value beside it for a row to be owed
-            // at. It divides the position — the classes either side are what the model tells apart
-            // — and the border is drawn on the quantity the rule wrote, which can name where the
-            // line falls. Left out, a rule that cuts at a third had its classes counted and nothing
-            // said about its line at all.
-            if (value == null && Border.reaches(cutting.target(), cutting.within())) {
-                between.add(new LineDrawn(cutting, origin));
-            }
-            raises(accounting, behavior, iff, each.comparison(), divided.path(), divided,
-                    subjectsOf(each.comparison(), here, symbols, null),
-                    new Required.LineRead.ALineOnThePosition());
+            // Filed at the position the reading names first, which is the one a line between two
+            // would be read `on`. One comparison is one line however many positions it mentions.
+            raises(accounting, behavior, plan.comparisons(), each, named.get(0),
+                    comparedTerm(each, reads, symbols),
+                    subjectsOf(each, reads, symbols, null),
+                    new Required.LineRead.ALineBetweenTwoPositions());
+            return;
         }
-        return made;
+        made.add(each);
+        // The value a row is owed against this line, which the reading of the comparison
+        // already answered. Taken off the level the rule was written with, a rule that wrote a
+        // multiple of the position named a class at a number the position never holds.
+        Place value = cutting.dividedValue();
+        if (cutting.singles()) {
+            // The value the rule names, which is where its line falls and not the value beside
+            // it. A rule that names no value of the position singles nothing out here — the
+            // position is divided all the same, and what divides it is the line.
+            Place names = cutting.singledValue();
+            if (names != null) {
+                singled.add(new Guards.Singled(divided, names, origin));
+            }
+        } else {
+            out.add(new Threshold(divided, cutting.seam(), cutting.valueBelongsBelow(), origin));
+        }
+        // And the line itself, where the position has no value beside it for a row to be owed
+        // at. It divides the position — the classes either side are what the model tells apart
+        // — and the border is drawn on the quantity the rule wrote, which can name where the
+        // line falls. Left out, a rule that cuts at a third had its classes counted and nothing
+        // said about its line at all.
+        if (value == null && Border.reaches(cutting.target(), cutting.within())) {
+            between.add(new LineDrawn(cutting, origin));
+        }
+        raises(accounting, behavior, plan.comparisons(), each, divided.path(), divided,
+                subjectsOf(each, reads, symbols, null),
+                new Required.LineRead.ALineOnThePosition());
     }
 
     /** What a comparison nothing read raises, filed at the position the reading names first. */
     private static void raisesNoLine(List<Guards.AtAPosition> accounting, String behavior,
-                                     Core.If iff, Core.Binary comparison, InputReads reads,
-                                     Symbols symbols) {
+                                     ComparisonCatalog catalog, Core.Binary comparison,
+                                     InputReads reads, Symbols symbols) {
         List<TermPath> named = new ArrayList<>();
         mentioned(comparison.left(), reads, symbols, named);
         mentioned(comparison.right(), reads, symbols, named);
         if (named.isEmpty()) {
             return;   // a comparison about no position of the input raises nothing about one
         }
-        raises(accounting, behavior, iff, comparison, named.get(0),
+        raises(accounting, behavior, catalog, comparison, named.get(0),
                 comparedTerm(comparison, reads, symbols),
                 subjectsOf(comparison, reads, symbols, null),
                 new Required.LineRead.NoLine(why(comparison, reads, symbols)));
@@ -609,161 +662,39 @@ public final class GuardThresholds {
      * where nothing answers it — walked from the lines, such a rule would be one the model never
      * wrote.
      */
-    private static void raises(List<Guards.AtAPosition> out, String behavior, Core.If iff,
+    private static void raises(List<Guards.AtAPosition> out, String behavior,
+                               ComparisonCatalog catalog,
                                Core.Binary comparison, TermPath at, NumericTerm term,
                                Required.ComparisonSubject of, Required.LineRead read) {
         out.add(new Guards.AtAPosition(at, term, RuleAccounting.ofComparison(
-                new RuleRef.Guard(behavior, comparison.origin()),
+                new RuleRef.Comparison(behavior, comparison.origin()),
                 souther.compiler.check.ComparisonClaim.of(comparison.op()), of, read,
                 // A comparison is written rather than named, so a reader is sent where the author
                 // wrote it — the comparison's own place and not the fork's. Two comparisons of one
                 // condition are two rules, and cited at the `if` they were one handle twice.
-                //
-                // The construct is the fork's, which is what a rule with no name is found by: an
-                // `if` and a `guard` are two things an author wrote and a reader looks for two
-                // different words. Asked of the comparison's own origin instead, the answer is
-                // `BINARY`, which is not a construct a rule is written in at all.
-                citationOf(iff, comparison))));
+                citationOf(comparison, catalog))));
     }
 
     /**
-     * How a reader finds a comparison, which is what construct it stands in and where it is
-     * written.
+     * How a reader finds a comparison, which is where it is written.
      *
-     * <p>Two coordinates from two places, and neither stands for the other. The fork says what to
-     * call the thing the author wrote; the comparison says where in the file to look. A condition
-     * holding two comparisons is two rules under one construct, so citing both at the fork would be
-     * one handle twice.
+     * <p>Nothing from what stands around it. The construct came from the fork the comparison was
+     * written into — the word a reader looks for — and that made the handle for a rule depend on
+     * something the rule has no part of: a condition holding two comparisons is two rules under one
+     * construct, and a comparison given a name a line above the fork is the same rule with no fork
+     * over it at all.
+     *
+     * <p>Read off the catalog rather than taken from the node again. Where a comparison is written
+     * is a fact about the comparison, and the catalog is what holds those — taken here as well, it
+     * would be a second answer to a question already answered, which is what this whole reading is
+     * about.
      */
-    static souther.compiler.check.RuleCitation.WrittenAt citationOf(Core.If iff,
-                                                                   Core.Binary comparison) {
+    static souther.compiler.check.RuleCitation.WrittenAt citationOf(Core.Binary comparison,
+                                                                    ComparisonCatalog catalog) {
         return new souther.compiler.check.RuleCitation.WrittenAt(
-                iff.origin().kind(), Citation.of(comparison.pos()));
-    }
-
-    /**
-     * One comparison of a condition, which arms of the {@code if} prove it was evaluated, and what
-     * its names mean where it stands.
-     *
-     * <p>The reading is carried because a condition binds. A closure a combinator was handed
-     * arrives as a {@code let} inside the condition, and its comparison reads the name that
-     * {@code let} binds — so a reading taken above the {@code if} answers nothing about it, and the
-     * comparison came back as one written in a form nothing reads.
-     */
-    private record Placed(Core.Binary comparison, OriginRef.GuardOrigin.Witness witness,
-                          InputReads reads) {}
-
-    /**
-     * The comparisons a condition is made of, each with what its own place leaves as evidence.
-     *
-     * <p>Asked per comparison and not per condition. A condition that is nothing but {@code &&}
-     * settles it for every operand at once, and so does one that is nothing but {@code ||}; a
-     * condition made of both does not. In {@code A && (B || C)} the arm where the whole thing held
-     * proves {@code A} was true and so proves {@code B} ran, while {@code C} ran only where
-     * {@code B} was false — which is a difference between two operands of one condition, and a
-     * single verdict over the whole cannot hold it.
-     *
-     * <p>Two facts are carried down, and they are not the same one. Whether this subtree is
-     * evaluated at all on a given arm, and whether reaching that arm forces the subtree's own value
-     * — because it is the second that says whether the operand to its left was true, which is what
-     * decides whether the operand to its right ran.
-     */
-    private static List<Placed> comparisonsIn(Core condition, InputReads reads) {
-        List<Placed> out = new ArrayList<>();
-        // At the top there is nothing above to have stopped the condition, and the arm taken is the
-        // condition's own value.
-        placed(condition, new Reached(true, true, true, true), reads, out);
-        return out;
-    }
-
-    /**
-     * What reaching each arm of the enclosing {@code if} says about one subtree of its condition.
-     *
-     * <p>Four answers and not six, on a premise worth stating rather than leaving to be rediscovered.
-     * A subtree can be forced true only where the whole condition is true and forced false only where
-     * it is false — {@code &&} passes a true value down to both operands, {@code ||} passes a false
-     * one, and neither passes anything the other way. So "false on {@code then}" and "true on
-     * {@code else}" are unreachable and are not carried.
-     *
-     * <p>What makes that hold is that a condition is built from {@code &&} and {@code ||} and
-     * nothing else. There is no negation operator: {@code Bool.not} is a helper, inlined to an
-     * {@code if} whose condition is the comparison itself, so it never stands between a comparison
-     * and the arms this is about. An operator that inverted a value inside a condition would break
-     * the premise and want the other two answers, and would find this comment rather than a wrong
-     * result.
-     *
-     * @param onThen    whether reaching the {@code then} arm implies this subtree was evaluated
-     * @param onElse    the same for {@code else}
-     * @param trueThen  whether reaching {@code then} implies this subtree's own value was true
-     * @param falseElse whether reaching {@code else} implies its own value was false
-     */
-    private record Reached(boolean onThen, boolean onElse, boolean trueThen, boolean falseElse) {
-
-        OriginRef.GuardOrigin.Witness witness() {
-            if (onThen && onElse) {
-                return OriginRef.GuardOrigin.Witness.BOTH;
-            }
-            if (onThen) {
-                return OriginRef.GuardOrigin.Witness.THEN;
-            }
-            return onElse ? OriginRef.GuardOrigin.Witness.ELSE
-                    : OriginRef.GuardOrigin.Witness.NEITHER;
-        }
-    }
-
-    private static boolean combines(Hir.BinOp op) {
-        return op == Hir.BinOp.AND || op == Hir.BinOp.OR;
-    }
-
-    private static void placed(Core e, Reached reached, InputReads reads, List<Placed> out) {
-        if (e instanceof Core.Binary binary && combines(binary.op())) {
-            boolean and = binary.op() == Hir.BinOp.AND;
-            // A conjunction's value being true makes both its operands true; a disjunction's being
-            // false makes both false. Neither says anything the other way round.
-            Reached left = new Reached(reached.onThen(), reached.onElse(),
-                    and && reached.trueThen(), !and && reached.falseElse());
-            // The right operand runs where the left settled nothing — which is where the left was
-            // true under `&&` and false under `||`, and that is what the left's own forced value
-            // above says.
-            Reached right = new Reached(
-                    and && reached.onThen() && reached.trueThen(),
-                    !and && reached.onElse() && reached.falseElse(),
-                    and && reached.trueThen(), !and && reached.falseElse());
-            placed(binary.left(), left, reads, out);
-            placed(binary.right(), right, reads, out);
-            return;
-        }
-        // Through what a binding holds, which is where a condition handed in from outside arrives.
-        // A closure given to a library combinator is inlined as a `let` binding the element with
-        // the author's comparison under it, so the condition is a `let` and the comparison is one
-        // level in. What reaching an arm says is unchanged by the binding: the body is the
-        // condition's own value at this point.
-        //
-        // In step with the walk that numbers them ({@link CoverageSites}). The two take one
-        // condition apart and a line read here is measured against a site numbered there, so a
-        // condition one of them enters and the other does not is a comparison whose line is drawn
-        // with nothing to say whether it ran — or one numbered and never read, which is this.
-        if (e instanceof Core.LetIn let) {
-            placed(let.body(), reached, reads.and(let.binder(), let.value()), out);
-            return;
-        }
-        if (e instanceof Core.Binary comparison && !combines(comparison.op())) {
-            out.add(new Placed(comparison, reached.witness(), reads));
-        }
-    }
-
-
-    private static CoverageSites.GuardRef guardOf(CoverageSites.Plan plan, Core.If iff) {
-        int[] arms = plan.probesOf(iff);
-        if (arms == null || arms.length != 2) {
-            return null;
-        }
-        for (CoverageSites.GuardRef guard : plan.guards()) {
-            if (guard.siteIndexThen() == arms[0] && guard.siteIndexElse() == arms[1]) {
-                return guard;
-            }
-        }
-        return null;
+                catalog.at(comparison).orElseThrow(() -> new IllegalStateException(
+                        "a rule was cited at a comparison this catalog does not hold, at "
+                                + comparison.pos())).at());
     }
 
     /**

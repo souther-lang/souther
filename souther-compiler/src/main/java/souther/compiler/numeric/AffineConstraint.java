@@ -52,6 +52,25 @@ public sealed interface AffineConstraint<A> {
         };
     }
 
+    /**
+     * The same rule over positions called something else.
+     *
+     * <p>Here rather than at each shape, because renaming is one act and the three shapes differ
+     * only in what they hold their sum against — and none of that moves when the positions are
+     * called something else. Written per shape, a fourth shape would be one more place to remember
+     * it, and the reading that forgot would hand back a rule about the positions it started with.
+     *
+     * <p>What is renamed is the form and never the threshold. A bound is a number and a number is
+     * not in anybody's vocabulary.
+     */
+    default <B> AffineConstraint<B> over(Renaming<A, B> naming) {
+        return switch (this) {
+            case HalfSpace<A> half -> new HalfSpace<>(half.form().over(naming), half.bound());
+            case Equality<A> at -> new Equality<>(at.form().over(naming), at.at());
+            case Disequality<A> hole -> new Disequality<>(hole.form().over(naming), hole.at());
+        };
+    }
+
     /** The sum held no higher than a bound it may or may not reach. */
     record HalfSpace<A>(CanonicalForm<A> form, RationalCut bound) implements AffineConstraint<A> {
 
