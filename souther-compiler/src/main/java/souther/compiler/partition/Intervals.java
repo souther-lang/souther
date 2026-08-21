@@ -1,7 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.numeric.Towards;
-
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Symbols;
@@ -12,6 +10,7 @@ import souther.compiler.numeric.Place;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Towards;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
@@ -237,8 +236,10 @@ final class Intervals {
      * values do.
      */
     private static Place representative(Band run, Carrier carrier, Endpoint min, Endpoint max) {
-        return new Criterion.Within(run, null).somewhereInside(carrier, min, max,
-                Towards.ABOVE);
+        // A class is the run itself and is named for no line, so it is read from its lower end the
+        // way a range of counts is.
+        return new Criterion.Within(run, null, Towards.ABOVE)
+                .somewhereInside(carrier, min, max, Towards.ABOVE);
     }
 
     /**

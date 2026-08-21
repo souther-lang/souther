@@ -81,33 +81,20 @@ public final class LevelCandidateSource {
         if (within.holds(from)) {
             out.add(from);
         }
-        out.addAll(drawnFrom(levels, within.region(), from, away(within)));
+        out.addAll(drawnFrom(levels, within.region(), from, within.away()));
         return out;
     }
 
     /**
      * Which end of this run a row is wanted nearest, which is the end the line is at.
      *
-     * <p>The one place that says it, read by everything that composes a row inside a run — the
-     * search that picks a level of a form and the one that picks a place of a carrier alike. Said
-     * separately, each of them was near the line for its own reason and only one of them on purpose.
+     * <p>The point's own answer and not a reading of the run. Two points of two different borders
+     * are the same run and are named for its two different ends, so nothing about the set tells them
+     * apart — worked out here, both were searched from the lower end and the second was handed a row
+     * at the far side of its partition.
      */
     public static Towards nearestEndOf(Criterion.Within within) {
-        return away(within);
-    }
-
-    /** Which way from the line this run lies, which is which end of it the line is at. */
-    private static Towards away(Criterion.Within within) {
-        Band band = within.band();
-        Level except = within.except();
-        if (except != null && band.first() != null
-                && except.key().equals(band.first().key())) {
-            return Towards.ABOVE;
-        }
-        if (except != null && band.last() != null && except.key().equals(band.last().key())) {
-            return Towards.BELOW;
-        }
-        return band.under() != null ? Towards.ABOVE : Towards.BELOW;
+        return within.away();
     }
 
     /**

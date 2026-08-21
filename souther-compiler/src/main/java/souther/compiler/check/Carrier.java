@@ -1,7 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.numeric.Towards;
-
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.Count;
@@ -14,6 +12,7 @@ import souther.compiler.numeric.Instants;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Times;
+import souther.compiler.numeric.Towards;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -527,6 +526,9 @@ public sealed interface Carrier {
             Endpoint other = from == Towards.ABOVE ? high : low;
             Endpoint taken = from == Towards.ABOVE ? lo : hi;
             Endpoint away = from == Towards.ABOVE ? hi : lo;
+            // And zero where nothing bounds it either way, whichever end was asked for: a range with
+            // no end has no end to be near, and the order's own is not one -- reached for there, the
+            // greatest whole number there is would be the row an author is handed.
             return wanted != null ? taken.at() : other != null ? away.at() : Count.ZERO;
         }
         if (!Endpoint.someValueLiesBetween(low, high)) {

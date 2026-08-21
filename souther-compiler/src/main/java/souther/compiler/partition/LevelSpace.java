@@ -1,7 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.numeric.Towards;
-
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.BoundaryDomain;
 import souther.compiler.numeric.AdditiveImage;
@@ -11,6 +9,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rational;
+import souther.compiler.numeric.Towards;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -231,18 +230,6 @@ public interface LevelSpace {
                         into == Towards.ABOVE ? RoundingMode.CEILING : RoundingMode.FLOOR));
             }
 
-            private static boolean bounded(Endpoint of, Endpoint stops) {
-                return of != null || stops != null;
-            }
-
-            /**
-             * A place of the carrier inside the run.
-             *
-             * <p>Whole numbers first, which is where a run wide enough to hold one has its plainest
-             * value, and then as many digits as its own two ends are apart. The second is worked out
-             * from the run and not guessed: a scale short of what it takes reports a run with a
-             * value in it as one nothing can be written in.
-             */
             /**
              * Which value a range gives up is the carrier's own answer
              * ({@link Carrier#somethingInside}), asked from the end this was asked about. Read again
@@ -342,43 +329,72 @@ public interface LevelSpace {
             }
 
             /**
-             * A multiple of the generator inside the run, at as few digits as the run allows.
+             * A multiple of the generator inside the run, nearest the end asked about.
              *
-             * <p>Arithmetic and not a walk. What this takes is every finite-decimal multiple of the
-             * generator, so a value inside a run is one whose quotient by the generator is a finite
-             * decimal inside the run divided by it — a division, at the digits the two ends are
-             * apart. Stepped a whole generator from an end instead, every value between here and
-             * there was walked past: three times a decimal past one is three, and a run that stops
-             * at two got nothing (issue #903).
+             * <p>Arithmetic and not a walk, and the arithmetic is done <b>in the multiplier</b>. What
+             * this takes is {@code g · d} with {@code d} a finite decimal, so a value inside a run is
+             * one whose quotient by the generator is a finite decimal inside the run divided by it —
+             * and that quotient interval is {@code (hi - lo) / g} wide, not {@code hi - lo}. Scaled
+             * by how far the run's own ends are apart, the generator never entered: three times a
+             * decimal found a value between one and two, and a million and three times one found
+             * none, though it reaches into every run there is.
+             *
+             * <p>So the scale is worked out from both: {@code 10^s} has to open the quotient interval
+             * past one, which is {@code 10^s · (hi - lo) > g}. At that scale a multiple of
+             * {@code g / 10^s} lands strictly inside, and which one is the end the caller asked
+             * about — the point inside a partition exists to be beside its boundary.
              */
             @Override
             Witness inside(BigDecimal low, boolean lowIn, BigDecimal high, boolean highIn,
                            int digits, Towards from) {
+                // The end itself where the run holds it and this reaches it, which is the value
+                // beside the line and the row an author would write.
+                BigDecimal end = from == Towards.ABOVE ? low : high;
+                boolean endHeld = from == Towards.ABOVE ? lowIn : highIn;
+                if (end != null && endHeld && reaches(end)) {
+                    return new Witness.Found(new Level.ACount(new Count(end)));
+                }
                 Witness whole = super.inside(low, lowIn, high, highIn, 0, from);
                 if (whole instanceof Witness.Found) {
                     return whole;   // the plainest value the run has, where it has one
                 }
-                if (low == null && high == null) {
-                    return new Witness.Found(new Level.ACount(Count.ZERO));
+                if (low == null || high == null) {
+                    // With an end nothing bounds, a whole multiple of the generator is always in
+                    // reach that way, so the answer above is the whole of what there is to say.
+                    return low == null && high == null
+                            ? new Witness.Found(new Level.ACount(Count.ZERO)) : Witness.NONE;
                 }
-                // Halfway between the ends, or a step in from the only one there is, and then put on
-                // the generator's own multiples at enough digits to stay inside. A quotient rounded
-                // at fewer digits than the ends are apart lands outside the run it came from.
-                BigDecimal at = low == null ? high.subtract(generator)
-                        : high == null ? low.add(generator)
-                                : low.add(high).divide(BigDecimal.valueOf(2));
-                // Read from the end the caller asked about, so a run whose values fill offers one
-                // near the line rather than one halfway across the partition.
-                for (int scale : new int[] {digits, digits + 1, digits + 2}) {
-                    BigDecimal on = at.divide(generator, Math.max(scale, 0), RoundingMode.HALF_UP)
-                            .multiply(generator);
-                    if ((low == null || (lowIn ? on.compareTo(low) >= 0 : on.compareTo(low) > 0))
-                            && (high == null
-                                    || (highIn ? on.compareTo(high) <= 0 : on.compareTo(high) < 0))) {
-                        return new Witness.Found(new Level.ACount(new Count(on)));
-                    }
+                BigDecimal apart = high.subtract(low);
+                if (apart.signum() <= 0) {
+                    return Witness.NONE;
                 }
-                return Witness.NONE;
+                BigDecimal step = generator.movePointLeft(scaleToOpen(generator, apart));
+                BigDecimal on = from == Towards.ABOVE
+                        ? low.divide(step, 0, RoundingMode.FLOOR).add(BigDecimal.ONE).multiply(step)
+                        : high.divide(step, 0, RoundingMode.CEILING)
+                                .subtract(BigDecimal.ONE).multiply(step);
+                return (lowIn ? on.compareTo(low) >= 0 : on.compareTo(low) > 0)
+                        && (highIn ? on.compareTo(high) <= 0 : on.compareTo(high) < 0)
+                        ? new Witness.Found(new Level.ACount(new Count(on)))
+                        : Witness.NONE;
+            }
+
+            /**
+             * How far the generator has to be divided down for its multiples to land inside a run
+             * {@code apart} wide: the smallest {@code s} with {@code 10^s · apart > g}.
+             *
+             * <p>Worked out and not guessed, the way {@link CutPosition#digitsToTellApartFrom} works
+             * out the digits between two lines. A handful of scales tried instead is a bound on how
+             * large a generator this can answer for, and nothing says what that bound is.
+             */
+            private int scaleToOpen(BigDecimal generator, BigDecimal apart) {
+                int scale = 0;
+                BigDecimal reach = apart;
+                while (reach.compareTo(generator) <= 0) {
+                    reach = reach.movePointRight(1);
+                    scale++;
+                }
+                return scale;
             }
         };
     }

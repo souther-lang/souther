@@ -1,10 +1,9 @@
 package souther.compiler.partition;
 
-import souther.compiler.numeric.Towards;
-
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Towards;
 
 import java.util.EnumMap;
 import java.util.EnumSet;
@@ -169,10 +168,16 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
         // The partition this border bounds and the one it keeps out, each without the value against
         // the line — which is that side's own ON or OFF point and is not this one. A side the rules
         // leave nothing in is not a run of the arrangement at all, and that is the answer here too.
+        // Each of the two is told which line it is named for: this border's own, which the run it
+        // asks for lies one way of. The `IN` point is inside the partition this border bounds, so
+        // the run runs the way the rule is satisfied; the `OUT` point is the other way. Worked out
+        // from the run instead, the two points that share a run — this border's `IN` and the next
+        // border's `OUT` — both started at the same end of it.
         demands.put(PointRole.IN, runOf(space, satisfying == Towards.ABOVE
-                ? arrangement.above(mine) : arrangement.below(mine), against(on)));
+                ? arrangement.above(mine) : arrangement.below(mine), against(on), satisfying));
         demands.put(PointRole.OUT, runOf(space, satisfying == Towards.ABOVE
-                ? arrangement.below(mine) : arrangement.above(mine), against(off)));
+                ? arrangement.below(mine) : arrangement.above(mine), against(off),
+                satisfying.opposite()));
         return new Border(target, origin, demands);
     }
 
@@ -279,11 +284,11 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
      * takes no value in at all. Told apart by comparing the two ends instead, the second was owed a
      * row nobody can write and the report said the search stopped looking for it.
      */
-    private static Demand runOf(LevelSpace space, Band run, Level except) {
+    private static Demand runOf(LevelSpace space, Band run, Level except, Towards away) {
         if (run == null) {
             return new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
         }
-        Criterion.Within inside = new Criterion.Within(run, except);
+        Criterion.Within inside = new Criterion.Within(run, except, away);
         return inside.region().parts().stream().anyMatch(part -> space.inspect(part).any())
                 ? new Demand.Owed(inside)
                 : new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
@@ -383,7 +388,13 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<PointRole, Demand
                 // The run the bound's own value is in, which is the one it bounds. Asked of the
                 // value rather than worked out from which end of the rules the bound is: a bound
                 // orders nothing around itself, so there is no side to read off it.
-                demands.put(PointRole.IN, runOf(space, arrangement.holding(cut), cut));
+                // A bound's own value is at an end of what it leaves, and the run runs away from it
+                // into what the rules admit — which is the side the bound keeps.
+                Band bounded = arrangement.holding(cut);
+                demands.put(PointRole.IN, runOf(space, bounded, cut,
+                        bounded != null && bounded.last() != null
+                                && bounded.last().key().equals(cut.key())
+                                ? Towards.BELOW : Towards.ABOVE));
                 demands.put(PointRole.OUT, new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT));
             }
             case THE_RULE_NAMES_A_VALUE_NOT_A_SIDE -> {

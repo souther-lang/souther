@@ -1,7 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.numeric.Towards;
-
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.BoundaryDomain;
 import souther.compiler.inputs.NumericTerm;
@@ -9,6 +7,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Towards;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -301,19 +300,6 @@ public final class LevelRealizer {
         }
 
         /**
-         * One end of what the rules leave a position, as a whole number this can start or stop at.
-         *
-         * <p>Asked only to bound an enumeration, which only a position whose values step has. Where
-         * they fill, what a value inside the ends is is the carrier's answer and whether a solved one
-         * is inside them is the ends' own.
-         *
-         * <p>Rounded inwards and never outwards, and the excluded end excluded. A bound of
-         * {@code > 0} leaves one, not zero; a bound of {@code >= 2.4} over whole numbers leaves
-         * three, not two. Rounded the other way, the search offers a value the position refuses and
-         * the decoder turns the row down — which arrives as every candidate having been rejected,
-         * and reads as the model refusing an edge it admits.
-         */
-        /**
          * What the rules leave this position, narrowed to the values that leave the rest a residue
          * they can reach.
          *
@@ -413,6 +399,19 @@ public final class LevelRealizer {
             return end == null || !(end.at() instanceof Count count) ? null : count.at();
         }
 
+        /**
+         * One end of what the rules leave a position, as a whole number this can start or stop at.
+         *
+         * <p>Asked only to bound an enumeration, which only a position whose values step has. Where
+         * they fill, what a value inside the ends is is the carrier's answer and whether a solved one
+         * is inside them is the ends' own.
+         *
+         * <p>Rounded inwards and never outwards, and the excluded end excluded. A bound of
+         * {@code > 0} leaves one, not zero; a bound of {@code >= 2.4} over whole numbers leaves
+         * three, not two. Rounded the other way, the search offers a value the position refuses and
+         * the decoder turns the row down — which arrives as every candidate having been rejected,
+         * and reads as the model refusing an edge it admits.
+         */
         private java.math.BigDecimal endOf(Endpoint end, boolean low) {
             if (end == null || !(end.at() instanceof Count count)) {
                 return null;
@@ -455,7 +454,8 @@ public final class LevelRealizer {
             case Criterion.Within within -> {
                 Band run = within.band().mappedBy(onto);
                 yield run == null ? null : new Criterion.Within(run,
-                        within.except() == null ? null : onto.apply(within.except()));
+                        within.except() == null ? null : onto.apply(within.except()),
+                        within.away());
             }
             case Criterion.AnythingBut other ->
                     only(new Criterion.AnythingBut(onto.apply(other.excluded())),

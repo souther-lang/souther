@@ -1,11 +1,10 @@
 package souther.compiler.partition;
 
-import souther.compiler.numeric.Towards;
-
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Towards;
 
 import java.util.List;
 

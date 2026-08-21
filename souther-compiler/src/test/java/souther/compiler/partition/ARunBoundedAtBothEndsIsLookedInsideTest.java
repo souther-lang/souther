@@ -1,11 +1,10 @@
 package souther.compiler.partition;
 
-import souther.compiler.numeric.Towards;
-
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Text;
+import souther.compiler.numeric.Towards;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -16,6 +15,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -138,6 +138,61 @@ class ARunBoundedAtBothEndsIsLookedInsideTest {
 
         assertInstanceOf(Occupancy.Inhabited.class, strings.inspect(above));
         assertEquals(Witness.NONE, strings.witness(above, Towards.ABOVE));
+    }
+
+    /**
+     * However large the generator, a run the order reaches into gives up a value of it.
+     *
+     * <p>The property the arithmetic has to hold to, and the one a handful of tried scales cannot.
+     * A value of this order is the generator times a finite decimal, so how finely to look is set by
+     * the run divided by the generator and not by the run — measured on the run alone, three found a
+     * value between one and two and a million and three found none, though it reaches into every run
+     * there is.
+     *
+     * <p>Written as generators an author could plausibly write, an order of magnitude apart, because
+     * what fails is a ratio and not a number.
+     */
+    @Test
+    void aRunTheOrderReachesIntoGivesUpAValueHoweverLargeItsGeneratorIs() {
+        LevelInterval between = new LevelInterval(
+                Bound.at(count(1), false), Bound.at(count(2), false));
+        for (String generator : List.of("3", "7", "101", "1000003", "10000000000003")) {
+            LevelSpace fills = LevelSpace.overFiniteDecimals(new BigDecimal(generator));
+            assertInstanceOf(Occupancy.Inhabited.class, fills.inspect(between), generator);
+            Level found = assertInstanceOf(Witness.Found.class,
+                    fills.witness(between, Towards.ABOVE), generator).level();
+            assertTrue(fills.attainable(found) && between.contains(found),
+                    () -> "generator " + generator + " offered " + found
+                            + ", which is not a value of it inside the run");
+        }
+    }
+
+    /**
+     * Two points that are one run are named for its two different lines, and each is offered a row
+     * beside its own.
+     *
+     * <p>A run between two lines is the {@code IN} point of the border below it and the {@code OUT}
+     * point of the border above it, and as a set the two are the same thing. Which line each is
+     * named for is not in the set, so it is carried; read off the run instead, both started at the
+     * lower line and the second was handed a row at the far side of its own partition.
+     *
+     * <p>Held on the two rows as well as on the two criteria, because the criterion carrying a side
+     * and nothing reading it is the state this was already in.
+     */
+    @Test
+    void twoPointsThatShareARunAreNamedForItsTwoLines() {
+        Map<String, BorderAssessment> borders = bordersOf(cut("2"));
+        Criterion.Within below = assertInstanceOf(Criterion.Within.class,
+                borders.get("3 * n = 1").owedAt(PointRole.IN).criterion());
+        Criterion.Within above = assertInstanceOf(Criterion.Within.class,
+                borders.get("3 * n = 2").owedAt(PointRole.OUT).criterion());
+
+        assertEquals(below.band().key(), above.band().key(), "the two points are one run");
+        assertEquals(Towards.ABOVE, below.away(), "and the lower one is named for the line under it");
+        assertEquals(Towards.BELOW, above.away(), "while the upper one is named for the line over it");
+        assertNotEquals(rowAt(cut("2"), "3 * n = 1", PointRole.IN),
+                rowAt(cut("2"), "3 * n = 2", PointRole.OUT),
+                "so they are offered a row beside their own line rather than one row twice");
     }
 
     private static Level count(long at) {

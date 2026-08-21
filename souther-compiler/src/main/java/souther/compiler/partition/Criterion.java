@@ -57,8 +57,22 @@ public sealed interface Criterion {
      * @param except the value against the line, which is the border's own {@code ON} or {@code OFF}
      *               point and is not this one. Null where the order names no value there, and then
      *               the whole run is what is asked for
+     * @param away   which way from the line this point is named for the run lies, which is to say
+     *               which of the run's two ends that line is at. Told rather than worked out: two
+     *               points of two different borders are the same run — the {@code IN} point above a
+     *               line and the {@code OUT} point below the next one along are one set — and which
+     *               line each is named for is not in the set. Read off the run instead, both of them
+     *               were taken to start at the lower of the two, and a point that exists to sit
+     *               beside its boundary was searched from the far side of the partition
      */
-    record Within(Band band, Level except) implements Criterion {
+    record Within(Band band, Level except, Towards away) implements Criterion {
+
+        public Within {
+            if (band == null || away == null) {
+                throw new IllegalArgumentException(
+                        "a run is a band and the side of it the line is at: " + band + " / " + away);
+            }
+        }
 
         @Override
         public LevelRegion region() {
@@ -184,16 +198,17 @@ public sealed interface Criterion {
         if (in.except() != null) {
             return in.except();
         }
-        if (in.band().first() != null) {
-            return in.band().first();
+        // The end the line is at, which the run says and this point names. A run's two ends are two
+        // different lines, and which of them a search starts from is what tells one point from the
+        // other where neither has a value against it.
+        Level beside = in.away() == Towards.ABOVE ? in.band().first() : in.band().last();
+        if (beside != null) {
+            return beside;
         }
-        if (in.band().last() != null) {
-            return in.band().last();
-        }
-        // And the line itself where the run has no value at either end. A search starts there and
+        // And the line itself where the run has no value at that end. A search starts there and
         // walks away from it — which is why this is not what the run holds: two decimals a rule
         // holds apart have every distance past the line and no first one.
-        Seam edge = in.band().under() != null ? in.band().under() : in.band().over();
+        Seam edge = in.away() == Towards.ABOVE ? in.band().under() : in.band().over();
         return edge == null ? null : edge.at().asALevelOfTheQuantity();
     }
 
