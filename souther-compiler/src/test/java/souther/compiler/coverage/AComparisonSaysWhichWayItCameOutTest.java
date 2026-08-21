@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * What a run says about the comparisons it evaluated.
  *
- * <p>Three states and not two. A comparison of an instrumented condition can have come out one way,
+ * <p>Three states and not two. A comparison this plan numbers can have come out one way,
  * come out the other, or not have been reached at all — and a condition stops as soon as it is
  * settled, so the third happens whenever an earlier operand decides the answer.
  *

@@ -166,17 +166,35 @@ public final class CoverageSites {
                        IdentityHashMap<Core, ControlPointId.ArmOccurrence[]> armsByNode,
                        IdentityHashMap<Core, Integer> controlByComparison,
                        java.util.Set<Core> mayRepeat,
-                       IdentityHashMap<Core, ForkOccurrence> forkByNode) {
+                       IdentityHashMap<Core, ForkOccurrence> forkByNode,
+                       ComparisonCatalog comparisons) {
+
+        public Plan {
+            // What a number means to the emitter is "copy the value this node left on the stack",
+            // so a number on anything but an atomic comparison is a copy of something else — half a
+            // `long` where the node was arithmetic, or the whole condition where it was an `&&`.
+            // Checked here because this is what every reader joins on: the reading, the partition
+            // and the reachability would all have agreed with a wrong numbering, and the first thing
+            // to notice would have been the verifier refusing the class.
+            for (Core numbered : byComparison.keySet()) {
+                if (!(numbered instanceof Core.Binary comparison)
+                        || !comparison.op().compares()) {
+                    throw new IllegalArgumentException(
+                            "a number was handed to something that is not a comparison: " + numbered);
+                }
+            }
+        }
 
         public static final Plan NONE = new Plan(List.of(), List.of(), new IdentityHashMap<>(),
                 new IdentityHashMap<>(), new IdentityHashMap<>(), new IdentityHashMap<>(),
-                java.util.Set.of(), new IdentityHashMap<>());
+                java.util.Set.of(), new IdentityHashMap<>(), ComparisonCatalog.of(Map.of()));
 
         /** The same plan built without the control layer, for a caller assembling one by hand. */
         public Plan(List<Site> sites, List<GuardRef> guards, IdentityHashMap<Core, int[]> byNode,
                     IdentityHashMap<Core, Integer> byComparison) {
             this(sites, guards, byNode, byComparison, new IdentityHashMap<>(),
-                    new IdentityHashMap<>(), java.util.Set.of(), new IdentityHashMap<>());
+                    new IdentityHashMap<>(), java.util.Set.of(), new IdentityHashMap<>(),
+                    ComparisonCatalog.of(Map.of()));
         }
 
         /**
@@ -283,10 +301,10 @@ public final class CoverageSites {
         /**
          * The same, where the caller's own construction says there is one.
          *
-         * <p>A guard-origin boundary is read off a comparison of a condition this plan instruments,
-         * so the site was planned before the line was. Absent here is not a boundary that cannot be
-         * measured — it is this plan and the reader that found the comparison disagreeing about what
-         * a condition is made of, which no measurement should paper over.
+         * <p>A boundary is read off a comparison this plan numbers, so the site was planned before
+         * the line was. Absent here is not a boundary that cannot be measured — it is this plan and
+         * the reader that found the comparison disagreeing about what a comparison is, which no
+         * measurement should paper over.
          */
         public int requireComparisonSiteOf(Core comparison) {
             Integer site = byComparison.get(comparison);
@@ -313,13 +331,17 @@ public final class CoverageSites {
     /** The sites of every behavior body in one module, numbered in the order the bodies are declared
      * and, within one, in the order the arms are written. */
     public static Plan of(Map<String, Core> behaviorBodies) {
-        Walk walk = new Walk();
+        // Which comparisons there are is not this walk's to decide. Asked here and answered once,
+        // so that what gets a number and what a line is drawn on are the same collection read twice
+        // rather than two descents that happen to agree.
+        ComparisonCatalog comparisons = ComparisonCatalog.of(behaviorBodies);
+        Walk walk = new Walk(comparisons);
         for (Map.Entry<String, Core> body : behaviorBodies.entrySet()) {
             walk.behavior(body.getKey(), body.getValue());
         }
         return new Plan(List.copyOf(walk.sites), List.copyOf(walk.guards), walk.byNode,
                 walk.byComparison, walk.armsByNode, walk.controlByComparison, walk.mayRepeat,
-                walk.forkByNode);
+                walk.forkByNode, comparisons);
     }
 
     private static final class Walk {
@@ -351,13 +373,16 @@ public final class CoverageSites {
                 new SourceOutcome.Failed(new SourceOutcome.FailedBy.Condition());
         private static final SourceOutcome BUILT =
                 new SourceOutcome.Held(new SourceOutcome.HeldBy.Construction());
+        /** Which nodes are comparisons, which this walk asks rather than reads off their shape. */
+        private final ComparisonCatalog comparisons;
         private String behavior;
         private int ordinal;
         /** Numbered across the whole plan and never reused, so that one number names one place
          *  whichever behavior it is in — the same rule the probe numbers are under. */
         private int controls;
 
-        Walk() {
+        Walk(ComparisonCatalog comparisons) {
+            this.comparisons = comparisons;
         }
 
         void behavior(String name, Core body) {
@@ -494,6 +519,7 @@ public final class CoverageSites {
                 case Core.Neg n -> walk(n.operand(), inside);
                 case Core.FieldAccess fa -> walk(fa.target(), inside);
                 case Core.Binary b -> {
+                    number(b, inside);
                     walk(b.left(), inside);
                     walk(b.right(), inside);
                 }
@@ -539,7 +565,6 @@ public final class CoverageSites {
                         guards.add(new GuardRef(behavior, iff.origin(),
                                 then.probe().orElse(NO_SITE), els.probe().orElse(NO_SITE),
                                 iff.pos()));
-                        comparisons(iff.cond());
                     }
                 }
                 case Core.Match m -> {
@@ -574,41 +599,41 @@ public final class CoverageSites {
         }
 
         /**
-         * Every comparison one condition is made of, numbered where the code says one is.
+         * One comparison, numbered where a run through it could be recorded.
          *
-         * <p>Read off the shape of the condition and nothing else. Which of these a line is later
-         * drawn on takes the behavior's parameters and the module's symbols to answer, and neither is
-         * here — nor should be. A plan's numbering has to be a function of the bodies alone, because
-         * the emitter builds one plan and a measurement builds another and the two are the same
-         * numbering or the probes mean nothing. So this is deliberately wider than what gets read: a
-         * comparison no boundary is drawn on keeps a site nobody asks about, which costs two
-         * instructions in a measuring build and keeps the numbering answerable without the partition.
+         * <p>Which nodes are comparisons is {@link ComparisonCatalog}'s answer and not this walk's.
+         * Read off the shape of the node here, the numbering came out as the comparisons a fork
+         * happened to be written around: a comparison given a name a line above the fork that tests
+         * it, or written inside a function value handed to a combinator, is the same construct and
+         * got no number, so nothing that joins on one could name it.
          *
-         * <p>Descends through {@code &&} and {@code ||} only, because that is what a condition is
-         * built out of and what the reader of lines walks. Anything else is where the condition's
-         * operands stop.
+         * <p>Deliberately wider than what gets read. Which comparisons a line is drawn on takes the
+         * behavior's parameters and the module's symbols to answer, and neither is here — nor should
+         * be. A plan's numbering has to be a function of the bodies alone, because the emitter builds
+         * one plan and a measurement builds another and the two are the same numbering or the probes
+         * mean nothing. A comparison no boundary is drawn on keeps a site nobody asks about, which
+         * costs two instructions in a measuring build.
+         *
+         * @param inside whether a row that stands can get this far and what the comparison stands in
+         *               answers a value. A comparison behind an abort is one no run reaches, and a
+         *               site for it would be one the emitter lights on no run
          */
-        private void comparisons(Core condition) {
-            if (condition instanceof Core.Binary binary
-                    && (binary.op() == Hir.BinOp.AND || binary.op() == Hir.BinOp.OR)) {
-                comparisons(binary.left());
-                comparisons(binary.right());
-                return;
-            }
+        private void number(Core.Binary comparison, boolean inside) {
             // Numbered once. A node reached twice is one comparison written once, and a second number
             // for it would be a site the emitter never lights — which is the shape of a real omission
             // and would be reported as one.
-            if (condition instanceof Core.Binary comparison
-                    && !byComparison.containsKey(comparison)) {
-                // Keyed on where the comparison was written and not on the fork testing it. A
-                // condition can be an application of a function parameter, and then the comparison is
-                // the caller's: two predicates written separately are two lines, and one predicate
-                // handed to two calls is one, neither of which the fork can say.
-                byComparison.put(comparison,
-                        site(new SourceOutcome.Compared(comparison.op()), comparison,
-                                comparison.origin(), 0));
-                controlByComparison.put(comparison, controls++);
+            if (!inside || comparisons.at(comparison).isEmpty()
+                    || byComparison.containsKey(comparison)) {
+                return;
             }
+            // Keyed on where the comparison was written and not on what tests it. A condition can be
+            // an application of a function parameter, and then the comparison is the caller's: two
+            // predicates written separately are two lines, and one predicate handed to two calls is
+            // one, neither of which a fork can say.
+            byComparison.put(comparison,
+                    site(new SourceOutcome.Compared(comparison.op()), comparison,
+                            comparison.origin(), 0));
+            controlByComparison.put(comparison, controls++);
         }
 
         private static SourceOutcome matched(Core.Case arm) {
