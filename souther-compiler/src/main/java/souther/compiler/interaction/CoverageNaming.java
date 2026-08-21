@@ -1,0 +1,220 @@
+package souther.compiler.interaction;
+
+import souther.compiler.ast.Hir;
+import souther.compiler.check.Symbols;
+import souther.compiler.core.Core;
+import souther.compiler.coverage.ComparisonOccurrence;
+import souther.compiler.coverage.ControlClaim;
+import souther.compiler.coverage.ControlPointId;
+import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.ForkOccurrence;
+import souther.compiler.flow.Naming;
+import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.TermPath;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * The conditions along a path, said of the input positions they are about and of the places a run
+ * that took them would be seen at.
+ *
+ * <p>What a group is composed against, and the only part of reading a body that the numbering has
+ * anything to do with. Nothing here decides whether an expression arrives at a value or what a value
+ * comes to: a condition this has no words for comes back as null, the reading marks the path
+ * {@link souther.compiler.flow.Completeness#PARTIAL}, and the arm or the way is still there. That is
+ * the whole of the separation — before it, a comparison the plan could not place was read as a
+ * comparison with no value, and everything standing under it went with it.
+ *
+ * <p>A value per position and not one object walked along: what a name reads widens inside a
+ * {@code let}, so {@link #under} answers a new one and the reading holds each where it belongs.
+ */
+final class CoverageNaming implements Naming<Outcome> {
+
+    /**
+     * How many ways one value is read as being settled before the reading gives up on enumerating
+     * them.
+     *
+     * <p>A product taken at one node. What bounds how many ways in a position is read under is a
+     * different bound on a different product, and the two multiply with the nesting of a body.
+     */
+    static final int MOST_OUTCOMES = 64;
+
+    private final CoverageSites.Plan plan;
+    private final Symbols symbols;
+    private final InputReads reads;
+
+    CoverageNaming(CoverageSites.Plan plan, Symbols symbols, InputReads reads) {
+        this.plan = plan;
+        this.symbols = symbols;
+        this.reads = reads;
+    }
+
+    /** What a name reads here, which a caller walking the body needs for its own naming. */
+    InputReads reads() {
+        return reads;
+    }
+
+    @Override
+    public Outcome nowhere() {
+        return new Outcome(List.of());
+    }
+
+    @Override
+    public Outcome join(Outcome held, Outcome more) {
+        List<Decision> both = merge(held.holds(), more.holds());
+        return both == null ? null : new Outcome(both);
+    }
+
+    @Override
+    public CoverageNaming under(Hir.Binder binder, Core value) {
+        return new CoverageNaming(plan, symbols, reads.and(binder, value));
+    }
+
+    /**
+     * That {@code comparison} came out {@code held}, said of the position it is about, or null where
+     * this cannot say which position that is or where no run through it could be recorded.
+     *
+     * <p>The comparison and not the arm. A condition stops as soon as it is settled, so under
+     * {@code A && B} the arm taken when the condition fails is reached both by a value that made
+     * {@code B} false and by one that never evaluated {@code B}: a row is steered by getting the
+     * comparison to answer, which no arm records.
+     */
+    @Override
+    public Outcome side(Core.Binary comparison, boolean held) {
+        ComparisonOccurrence site = plan.comparisonAt(comparison).orElse(null);
+        TermPath at = firstOf(reads.pathOf(comparison.left(), symbols),
+                reads.pathOf(comparison.right(), symbols));
+        if (site == null || at == null) {
+            return null;
+        }
+        return plan.outcomeOf(comparison, held)
+                .flatMap(ControlClaim::of)
+                .map(claim -> one(new Decision(new Condition.Side(at, site, held), claim)))
+                .orElse(null);
+    }
+
+    /** Which case of the union this arm is, said of the position matched on where there is one, or
+     *  null where no run through the arm could be recorded. */
+    @Override
+    public Outcome matchCase(Core.Match match, int part) {
+        ControlClaim claim = armClaim(match, part);
+        if (claim == null) {
+            return null;
+        }
+        TermPath at = reads.pathOf(match.scrutinee(), symbols);
+        if (at == null) {
+            Condition fork = forkOf(match, part);
+            return fork == null ? null : one(new Decision(fork, claim));
+        }
+        List<String> names = match.cases().get(part).pattern().selectors().stream()
+                .map(selector -> selector.name().name()).toList();
+        return one(new Decision(new Condition.Case(at, String.join("|", names)), claim));
+    }
+
+    /**
+     * That a run went down arm {@code part}, where nothing said which comparison sent it there.
+     *
+     * <p>What the reading falls back on. Where the condition's ways can be enumerated they are what
+     * names the way in, on the comparisons a row is steered by; this is the answer for a condition
+     * whose ways cannot all be written down, and it is the answer every fork used to get.
+     *
+     * <p>An arm places at no class of any input, so a group offered under one of these goes. That it
+     * is here at all is what says the reading found a way in it could not name.
+     */
+    @Override
+    public Outcome forkArm(Core fork, int part) {
+        ControlClaim claim = armClaim(fork, part);
+        if (claim == null) {
+            return null;
+        }
+        if (fork instanceof Core.If iff) {
+            TermPath read = reads.pathOf(iff.cond(), symbols);
+            Condition what = read == null ? forkOf(fork, part)
+                    : new Condition.Case(read, part == 0 ? "true" : "false");
+            return what == null ? null : one(new Decision(what, claim));
+        }
+        Condition what = forkOf(fork, part);
+        return what == null ? null : one(new Decision(what, claim));
+    }
+
+    @Override
+    public int mostArrivals() {
+        return MOST_OUTCOMES;
+    }
+
+    /** One arm of a fork, where a run through it can be recorded, and null where it cannot. */
+    private ControlClaim armClaim(Core fork, int part) {
+        ControlPointId.ArmOccurrence[] arms = plan.armsOf(fork);
+        if (arms == null || part >= arms.length) {
+            return null;
+        }
+        return ControlClaim.of(arms[part]).orElse(null);
+    }
+
+    /** The fork itself, for a decision this cannot name a position for, or null where the plan named
+     *  no fork here. */
+    private Condition forkOf(Core fork, int part) {
+        ForkOccurrence named = plan.forkAt(fork);
+        return named == null ? null : new Condition.Arm(named, part);
+    }
+
+    private static Outcome one(Decision decision) {
+        return new Outcome(List.of(decision));
+    }
+
+    private static TermPath firstOf(TermPath left, TermPath right) {
+        return left != null ? left : right;
+    }
+
+    /**
+     * Both sets of conditions, or null where between them they settle one decision two ways.
+     *
+     * <p>One rule for every place two of these are put together: the parts of a value, a way in held
+     * to the way in above it, the left of an operator that stops early held to what runs after it. A
+     * decision read twice is one decision, and one settled two ways is no path.
+     */
+    static List<Decision> merge(List<Decision> holds, List<Decision> more) {
+        List<Decision> both = new ArrayList<>(holds);
+        for (Decision each : more) {
+            if (both.contains(each)) {
+                continue;
+            }
+            if (disagrees(both, each)) {
+                return null;
+            }
+            both.add(each);
+        }
+        return both;
+    }
+
+    /**
+     * Whether {@code added} settles a decision the conditions already settle the other way.
+     *
+     * <p>The same decision and a different way out of it, which is two things and not one. A decision
+     * named twice and settled the same way is one run doing one thing twice over —
+     * {@code if a then (if a then …)} is written as two forks and no row takes one of them without
+     * the other — and reading that as a contradiction would take away a path the body has.
+     *
+     * <p>Which decision it is is not which place a run is recorded at. Two forks on one flag are two
+     * places and one decision, so what is compared is what the condition is about and never the claim
+     * beside it.
+     */
+    private static boolean disagrees(List<Decision> holds, Decision added) {
+        for (Decision already : holds) {
+            Condition each = already.constrains();
+            boolean otherWay = switch (added.constrains()) {
+                case Condition.Case one -> each instanceof Condition.Case other
+                        && other.at().equals(one.at()) && !other.name().equals(one.name());
+                case Condition.Side one -> each instanceof Condition.Side other
+                        && other.comparison().equals(one.comparison()) && other.held() != one.held();
+                case Condition.Arm one -> each instanceof Condition.Arm other
+                        && other.fork().equals(one.fork()) && other.part() != one.part();
+            };
+            if (otherWay) {
+                return true;
+            }
+        }
+        return false;
+    }
+}
