@@ -90,25 +90,33 @@ account of the body to keep in step with the first.
 
 Four things hold of it, and they are what the separation is.
 
-A naming decides what a way is called and never whether there is one. Swapped for another, the same
-nodes arrive and the same values are worked out; what moves is how a way is written and whether it is
-written whole. A way the naming has no words for is carried as one written in part, not left out — so
-an arm reached by a condition nothing can place is still an arm, and only the reader that steers rows
-turns the incompleteness away.
+A naming decides what a way is called and never whether there is one, and it is a structure and not a
+rule to keep. What the body does is read with no naming at all, and the naming reaches only the list
+of ways: a condition it has no words for leaves a way written in part, a pair of conditions it sees
+settle one decision opposite ways leaves a way out, and more ways than it will hold apart leave the
+list saying nothing. None of those can move what arrives or what a value comes to, because that half
+was never computed with a naming in it. Said as a rule instead, two of the three went on moving it —
+a naming that could see two arms of one decision contradict answered that no value arrives where the
+reading without one answered that a value does.
 
 Not knowing is never both. A value this reading has worked out no truth for settles nothing: it does
 not send an operator into its right and it does not stop one there, and no path is offered on the
 strength of it. A way to a value that arrives is offered where the way is worked out or where what
-follows it arrives anyway.
+follows it arrives anyway. Which is a different question from whether an arm of a fork stands, and it
+is asked differently: an arm stands unless the reading worked out that the condition never comes out
+its way, so a value with no truth worked out leaves both arms standing. Two questions and two names
+for them, because one name for both is how not-knowing gets widened into both.
 
 A value is answered as known only where a value of what it is over stands behind it. Not a rule about
-the shape of the node: `a == a` is a comparison and comes out one way, `1 > 2` is a comparison and
-comes out one way, and a reading answering "a comparison comes out both ways" would offer each of
-them a path no run takes and say the expression arrives where every run aborts. So each way is asked
-about on its own, against the range of the position compared — which for a whole number is read off
-the ends, so a number at the end of the range closes the way past it. A way nothing whole stands
-behind is not offered, and where nothing stands behind either the value is answered as one this
-reading has nothing to say about. Under-read, and the direction everything here takes.
+the shape of the node, in either direction: `a == a` is a comparison and comes out one way, `1 > 2` is
+a comparison and comes out one way, and a position of the input holding a truth is no comparison at
+all and comes out both ways. A reading answering "a comparison comes out both ways" would offer the
+first two a path no run takes; one asking the question only of comparisons would answer that
+`flag && abort` arrives nowhere, when every run with a false `flag` arrives. So each way is asked
+about on its own, against the range of what is compared — which for a whole number is read off the
+ends, so a number at the end of the range closes the way past it. A way nothing stands behind is not
+offered, and where nothing stands behind either the value is answered as one this reading has nothing
+to say about. Under-read, and the direction everything here takes.
 
 A way found twice is one way. The reading answers a set for that reason: what is counted anywhere
 downstream is what the body does and not how many times the reading got there.
@@ -172,10 +180,13 @@ settled one way, which asks for nothing".
 
 ## Consequences
 
-Rows are added and none are taken away, which is ADR-0108's shape and holds for the same reason.
-A fork on an operator that stops early is one of the places they are added: both of its arms were
-going unwalked, and every meeting standing in either of them is now offered under the way in that
-reaches it.
+Rows are added, and one kind is taken away. A fork on an operator that stops early is where they are
+added: both of its arms were going unwalked, and every meeting standing in either of them is now
+offered under the way in that reaches it. What is taken away is an arm the condition never comes out
+the way of — `if true then … else …` has one arm a run enters and a comparison against the largest
+whole number has the other, and numbering the one nothing enters is a row owed for a combination the
+body has no run at. Read from the same place everything else about arms is read from, so the
+numbering and the walk into an arm cannot come to differ about which arms there are.
 A fork on a chain of comparisons varies as many ways as the chain has of settling rather than two,
 so a value made out of it is a factor of that many; the arms of such a fork and the operands after
 the first are walked into, so the groups standing in them are offered where they were not offered
