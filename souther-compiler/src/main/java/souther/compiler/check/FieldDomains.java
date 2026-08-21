@@ -537,7 +537,7 @@ public final class FieldDomains {
                 taken = ConstraintState.settling(taken, atom, each.getValue(), spaced);
             }
         }
-        return new Settled(taken, positions, atomAt, countAt);
+        return new Settled(taken, positions, atomAt, countAt, spacing);
     }
 
     /**
@@ -554,13 +554,16 @@ public final class FieldDomains {
         private final SequencedMap<FactSubject, String> positions;
         private final Map<String, FactSubject> atomAt;
         private final Map<String, FactSubject> countAt;
+        private final Map<FactSubject, souther.compiler.numeric.Granularity> spacing;
 
         private Settled(ConstraintState constraints, SequencedMap<FactSubject, String> positions,
-                        Map<String, FactSubject> atomAt, Map<String, FactSubject> countAt) {
+                        Map<String, FactSubject> atomAt, Map<String, FactSubject> countAt,
+                        Map<FactSubject, souther.compiler.numeric.Granularity> spacing) {
             this.constraints = constraints;
             this.positions = positions;
             this.atomAt = atomAt;
             this.countAt = countAt;
+            this.spacing = spacing;
         }
 
         /** Why the rules and what is settled leave no value, or empty where nothing proved they
@@ -572,6 +575,58 @@ public final class FieldDomains {
         /** Where a form over these coordinates runs — see {@link FieldDomains#boundsOf}. */
         public NumericDomain.Bounds boundsOf(Map<Coordinate, java.math.BigDecimal> form) {
             return boundsOfForm(constraints, atomAt, countAt, form);
+        }
+
+        /**
+         * The same rules, with these coordinates held between these ends as well.
+         *
+         * <p>For a caller that knows something about a coordinate this reading does not. What a
+         * position was read to hold is read by a reader of its own, and what a term guarantees of
+         * itself is true whether or not any clause says so — put in here, those facts are solved
+         * together with the rules that relate the coordinates instead of beside them.
+         *
+         * <p>Which is not the same answer. Taking a form's bounds under each of them and meeting
+         * afterwards is wider than taking them under both at once: a rule holding two coordinates at
+         * one apiece says nothing about a third the rules leave unbounded below, and met afterwards
+         * against a floor that reader did have, the rule is gone. Projecting does not distribute
+         * over meeting any more than meeting distributes over addition.
+         *
+         * <p>Ends that are not numbers are left out, since what is being added to is the arithmetic.
+         * A caller holding one of those is holding it about a position no form reaches.
+         */
+        public Settled within(Map<Coordinate, NumericDomain.Bounds> ends) {
+            ConstraintState taken = constraints;
+            for (Map.Entry<Coordinate, NumericDomain.Bounds> each : ends.entrySet()) {
+                FactSubject atom = each.getKey().measured()
+                        ? countAt.get(each.getKey().path()) : atomAt.get(each.getKey().path());
+                if (atom == null || each.getValue() == null) {
+                    continue;
+                }
+                souther.compiler.numeric.Granularity spaced = spacing.get(atom);
+                if (spaced == null) {
+                    continue;
+                }
+                taken = holding(taken, atom, each.getValue().min(), true, spaced);
+                taken = holding(taken, atom, each.getValue().max(), false, spaced);
+            }
+            return taken == constraints ? this
+                    : new Settled(taken, positions, atomAt, countAt, spacing);
+        }
+
+        /** One end taken onto the rules, where it is a number and there is one. */
+        private static ConstraintState holding(ConstraintState state, FactSubject atom,
+                                               Endpoint end, boolean least,
+                                               souther.compiler.numeric.Granularity spaced) {
+            if (end == null || !(end.at() instanceof Count at)) {
+                return state;
+            }
+            NumericDomain.Rel how = least
+                    ? (end.inclusive() ? NumericDomain.Rel.GE : NumericDomain.Rel.GT)
+                    : (end.inclusive() ? NumericDomain.Rel.LE : NumericDomain.Rel.LT);
+            return state.taking(
+                    NumericDomain.LinearForm.<FactSubject>atom(atom)
+                            .minus(NumericDomain.LinearForm.<FactSubject>constant(at.at())),
+                    how, Map.of(atom, spaced));
         }
 
         /**

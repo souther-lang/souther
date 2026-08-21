@@ -64,6 +64,20 @@ A form that is one term taken as itself is that term's own answer, met with what
 it. The arithmetic is the identity there, and it is the only shape a position the arithmetic cannot
 count is ever asked in — a form adds its terms together and two strings have no sum.
 
+**And within a part the facts are solved together rather than met after.** Projecting is not
+distributive over meeting either: what the rules leave a form, met against what each of its
+coordinates is known to be, is wider than what the rules and those facts leave it together. A rule
+holding two coordinates at one apiece says nothing about a form that also names a third the rules
+leave unbounded — the third goes as far below nothing as anybody likes — and meeting a bound on the
+whole form against another bound on the whole form cannot put the rule back. So what a position was
+read to hold and what a term guarantees of itself are taken onto the rules before the form is
+projected out of them.
+
+Both of those are one thing said twice, and it is the thing this whole boundary keeps getting wrong:
+an answer assembled at a coarser unit than the facts are held at loses whichever fact the coarse
+mechanism has no room for. Add at the finest unit that carries the relation, and solve within it
+rather than meeting projections.
+
 A term is queryable where what it sits under is something the behavior takes. **Owned is not the
 same as known about.** The walk that reads an input's positions stops two levels down, where a report
 stops being about anything an author would call one input, and nothing stops a rule from naming what

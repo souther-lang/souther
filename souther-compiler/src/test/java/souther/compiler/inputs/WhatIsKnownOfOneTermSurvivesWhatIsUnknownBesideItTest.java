@@ -164,6 +164,48 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
                 "the two the record relates come to five, and nothing is negative beside them");
     }
 
+    /** Three counts, two of them related and the third bounded on its own. */
+    private static final String THREE_COUNTS = """
+            module example.three
+
+            data P =
+                { a: List<Int>
+                , b: List<Int>
+                , c: List<Int>
+                }
+                invariant oneOfAB = List.length(a) + List.length(b) >= 1
+                invariant capC    = List.length(c) <= 10
+
+            data Taken
+
+            behavior take : (p: P) -> Taken
+            """;
+
+    /**
+     * And a term the rules name, whose floor only the term itself states, does not undo them.
+     *
+     * <p>A count is never negative and no clause writes that down, so the reading of the clauses has
+     * a coordinate for it and no floor under it. Asked for a bound on the three together, that
+     * reading may put the third as far below nothing as it likes and answers with no floor at all —
+     * and met afterwards against what each of them is on its own, the rule holding the first two at
+     * one is gone. Projecting is not distributive over meeting either: what the rules and the terms
+     * leave together is narrower than each of them projected and then met.
+     */
+    @Test
+    void aFloorOnlyTheTermStatesDoesNotUndoTheRuleBesideIt() {
+        Read read = read(THREE_COUNTS);
+        Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
+        coefs.put(size(read, "a"), BigDecimal.ONE);
+        coefs.put(size(read, "b"), BigDecimal.ONE);
+        coefs.put(size(read, "c"), BigDecimal.ONE);
+
+        NumericDomain.Bounds runs = read.quantities()
+                .runsBetween(new NumericDomain.LinearForm<>(BigDecimal.ZERO, coefs));
+
+        assertEquals(Endpoint.inclusive(count(1)), runs.min(),
+                "two of them come to one, and the third is never negative");
+    }
+
     private static NumericTerm size(Read read, String field) {
         TermPath at = TermPath.of("p").then(field);
         return new NumericTerm.SizeOf(souther.compiler.check.NumericMeasures.takenOf(

@@ -327,13 +327,19 @@ final class ReadQuantities implements Quantities {
             return null;
         }
         Map<FieldDomains.Coordinate, BigDecimal> named = new LinkedHashMap<>();
+        // And what each of those terms is on its own, put in rather than met on afterwards. The
+        // rules relate the coordinates and a term guarantees things about itself that no clause
+        // writes down; solved together they hold each other up, and taken apart and met the rule
+        // over two of them says nothing as soon as a third is one the rules leave unbounded.
+        Map<FieldDomains.Coordinate, NumericDomain.Bounds> ends = new LinkedHashMap<>();
         form.coefs().forEach((term, coef) -> {
             FieldDomains.Coordinate at = coordinateOf(term);
             if (term.path().head().equals(parameter) && rules.names(at)) {
                 named.merge(at, coef, BigDecimal::add);
+                ends.putIfAbsent(at, whereOneTermRuns(term));
             }
         });
-        return rules.boundsOf(named);
+        return rules.within(ends).boundsOf(named);
     }
 
     /** The coordinate of one term, in the words the rules of its parameter are read in. */
