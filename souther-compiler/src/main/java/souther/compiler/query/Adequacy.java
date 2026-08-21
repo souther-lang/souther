@@ -525,7 +525,7 @@ public final class Adequacy {
             Set<Integer> lit = new LinkedHashSet<>();
             for (Observed observed : rowsOf(db, name).values()) {
                 for (RowOutcome row : observed.rows()) {
-                    lit.addAll(litBy(row));
+                    lit.addAll(seenBy(row).taken());
                 }
             }
             Map<String, souther.compiler.check.PathReachability.Answers.AsRun> out =
@@ -1012,7 +1012,7 @@ public final class Adequacy {
             Set<Integer> lit = new LinkedHashSet<>();
             for (Observed observed : byTarget.values()) {
                 for (RowOutcome row : observed.rows()) {
-                    lit.addAll(litBy(row));
+                    lit.addAll(seenBy(row).taken());
                 }
             }
 
@@ -1305,6 +1305,10 @@ public final class Adequacy {
             Map<String, Filling> out = new LinkedHashMap<>();
             FixtureReader.Construction building = constructing(db, name,
                     prepared.value().forExamples(), symbols);
+            // One for the module, so the classes a candidate is built and applied in are defined
+            // once however many behaviors are searched.
+            souther.compiler.examples.RowTrial.Trials trials = trialling(db, name,
+                    prepared.value().forExamples(), symbols);
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
                 if (!(behavior instanceof Hir.SpecBehavior spec)) {
                     continue;
@@ -1320,7 +1324,8 @@ public final class Adequacy {
                     pairs = pairsFor(spec, sig, symbols, db.ask(new Front.Reading()).value(), bodies.get(spec.name()), plan,
                             byTarget.getOrDefault(spec.name(), Observed.NONE), building,
                             domainOf(readInputs, spec), arrivalsOf(arrives, spec),
-                            statedOf(declared, spec));
+                            statedOf(declared, spec), runningRowsOf(trials, spec.name(), sig),
+                            levelOf(db).measuresArms());
                 } catch (LinkageError _) {
                     // The generated classes would not link, so nothing can be built to find out
                     // what a model admits. Saying so is not the same as saying the combinations are
@@ -1493,6 +1498,8 @@ public final class Adequacy {
                     // with. They are said in their own words elsewhere and answer nothing here.
                     case souther.compiler.partition.GenerationReason.PositionWithheld _,
                             souther.compiler.partition.GenerationReason.SearchLimit _,
+                            souther.compiler.partition.GenerationReason.RowsNotConfirmed _,
+                            souther.compiler.partition.GenerationReason.CombinationsWithheld _,
                             souther.compiler.partition.GenerationReason.RowsNotRead _ -> null;
                 };
                 if (said != null) {
@@ -1563,13 +1570,35 @@ public final class Adequacy {
                     stopped.stream().distinct().toList());
         }
 
+        /**
+         * A way to run this behavior's composed rows, said in the generator's words.
+         *
+         * <p>Two seams and one adaptation, the way the check that a value can be built already is.
+         * What runs a row is the evaluation's business and speaks in what a fixture states; what a
+         * generator has is a template it composed. Neither has to know the other's word for a row.
+         */
+        private static Generator.Trial runningRowsOf(
+                souther.compiler.examples.RowTrial.Trials trials, String behavior, Sig sig) {
+            if (trials == null) {
+                return Generator.Trial.NOTHING_RUNS;
+            }
+            souther.compiler.examples.RowTrial.Application application =
+                    trials.forBehavior(behavior, sig);
+            return inputs -> application
+                    .run(inputs.stream()
+                            .map(souther.compiler.partition.FixtureTemplate::value).toList())
+                    .<Generator.Watched>map(Generator.Watched.Ran::new)
+                    .orElseGet(Generator.Watched.NoAccount::new);
+        }
+
         private static Generator.GenerationResult pairsFor(
                 Hir.SpecBehavior spec, Sig sig, Symbols symbols,
                 souther.compiler.check.ReadingPolicy policy, souther.compiler.core.Core body,
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
                 FixtureReader.Construction building, InputDomain domain,
                 souther.compiler.check.PathReachability.Answers arrives,
-                souther.compiler.check.StatedContract stated) {
+                souther.compiler.check.StatedContract stated, Generator.Trial trial,
+                boolean recording) {
             if (observed.someRowsUnseen()) {
                 // Rows exist that nothing read. What they cover is unknown, so what is left uncovered
                 // is unknown too — and a generated row is a specific piece of work handed to a person,
@@ -1592,10 +1621,17 @@ public final class Adequacy {
             Generator.CandidateCheck check = building == null ? Generator.CandidateCheck.ANY
                     : (at, candidate) -> building.refuse(sig.ins().get(at), candidate.value());
 
-            List<Map<AxisId, Classification>> existing = rows.stream()
-                    .map(row -> RowClasses.of(row, inputs, partitioning.axes())).toList();
+            // Where each row's values sit, and what its run did. Both come off the one outcome:
+            // the first is what a pair count is taken over, the second is what says which of the
+            // body's combinations the row was seen filling.
+            List<Generator.ObservedRow> existing = rows.stream()
+                    .map(row -> new Generator.ObservedRow(
+                            RowClasses.of(row, inputs, partitioning.axes()),
+                            watched(row, recording)))
+                    .toList();
             return Generator.fill(subject, existing, check,
-                    souther.compiler.interaction.Interactions.of(body, plan, domain, symbols));
+                    souther.compiler.interaction.Interactions.of(body, plan, domain, symbols),
+                    trial);
         }
     }
 
@@ -1626,6 +1662,38 @@ public final class Adequacy {
         // value builds at this module's boundary is the decoder's answer, and nothing here runs.
         return FixtureReader.constructing(written, symbols, classes,
                 Output.evaluationLoader(db), values == null ? Map.of() : values);
+    }
+
+    /**
+     * A way to run rows against this module's own classes, or nothing where none can be run.
+     *
+     * <p>Nothing where the compile is not measuring, which is the one condition worth stating
+     * outright. Classes emitted without the calls that record where a run went give a run nothing
+     * was recorded of, and that reads exactly like a run that went nowhere — so a search told to
+     * confirm its candidates against them would find every one of them missing and offer nothing at
+     * all. Where they are absent the search says its rows went unconfirmed, which is what happened.
+     *
+     * <p>A budget is installed here, unlike where values are only built. A row this composed is a
+     * row nobody wrote, so a model that does not finish on one is this search's to stop.
+     */
+    static souther.compiler.examples.RowTrial.Trials trialling(Db db, String module,
+            souther.compiler.check.Prepared.ExampleExecution written, Symbols symbols) {
+        if (!levelOf(db).measuresArms()) {
+            return null;
+        }
+        souther.compiler.generated.EvaluationArtifact artifact =
+                db.ask(new Output.EvaluationLinked(module, coverageAsked(db))).value();
+        if (artifact == null || artifact.implementations() == null) {
+            return null;
+        }
+        Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(module)).value();
+        souther.compiler.examples.EvaluationPolicy steps = db.ask(new Front.Policy()).value();
+        if (steps == null) {
+            return null;
+        }
+        return souther.compiler.examples.RowTrial.over(written, symbols, artifact.classes(),
+                Output.evaluationLoader(db), values == null ? Map.of() : values,
+                artifact.implementations(), steps);
     }
 
     /**
@@ -2519,17 +2587,40 @@ public final class Adequacy {
     private Adequacy() {}
 
     /**
-     * The sites a row is known to have gone through.
+     * What a row is known to have done.
      *
      * <p>Read as a {@code switch} so that a counting this does not know about is a compile error
-     * here rather than a row silently counted as having lit nothing. A row whose counting was never
-     * read lights none that anything here can name, and that it was left undecided is said where the
-     * row is reported.
+     * here rather than a row silently counted as having done nothing. A row whose counting was never
+     * read is known to have done none of it, and that it was left undecided is said where the row is
+     * reported.
      */
-    private static java.util.Set<Integer> litBy(RowOutcome row) {
+    private static souther.compiler.coverage.Observation seenBy(RowOutcome row) {
         return switch (row.run().counting()) {
-            case Counting.Read read -> read.hits();
-            case Counting.Unread _ -> java.util.Set.of();
+            case Counting.Read read -> read.observation();
+            case Counting.Unread _ -> souther.compiler.coverage.Observation.NONE;
+        };
+    }
+
+    /**
+     * What came of running {@code row}, as something that says which of the two nothings it is.
+     *
+     * <p>A row whose counting was never read, and a compile that records nothing of any row, both
+     * leave an empty account — and neither of them is a row that went nowhere. Handed over as an
+     * account, the difference is gone by the time anything acts on it, and a combination the row
+     * may well fill reads as one it was shown not to.
+     */
+    private static souther.compiler.partition.Generator.Watched watched(RowOutcome row,
+                                                                        boolean recording) {
+        if (!recording) {
+            // The row ran — every row of an evaluated source does — and nothing was recording it.
+            // Answered as having no account rather than as a run with an empty one, which is what a
+            // row that reached nothing leaves and is a different thing to have found out.
+            return new souther.compiler.partition.Generator.Watched.NoAccount();
+        }
+        return switch (row.run().counting()) {
+            case Counting.Read read ->
+                    new souther.compiler.partition.Generator.Watched.Ran(read.observation());
+            case Counting.Unread _ -> new souther.compiler.partition.Generator.Watched.NoAccount();
         };
     }
 

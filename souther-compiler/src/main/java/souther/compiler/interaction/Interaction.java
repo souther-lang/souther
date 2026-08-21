@@ -19,11 +19,16 @@ import java.util.List;
  * @param reach   what holds on the way to the meeting, which every one of its combinations is under
  * @param factors what varies at it, one per value consumed there
  */
-public record Interaction(List<Condition> reach, List<Factor> factors) {
+public record Interaction(List<Decision> reach, List<Factor> factors) {
 
     public Interaction {
         reach = List.copyOf(reach);
         factors = List.copyOf(factors);
+    }
+
+    /** What a run that took the way to the meeting would be seen to have done. */
+    public List<souther.compiler.coverage.ControlClaim> reachClaims() {
+        return reach.stream().map(Decision::claims).toList();
     }
 
     @Override

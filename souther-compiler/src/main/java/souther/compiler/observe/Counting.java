@@ -1,6 +1,6 @@
 package souther.compiler.observe;
 
-import java.util.Set;
+import souther.compiler.coverage.Observation;
 
 /**
  * What this compile's own counting read of one row's evaluation.
@@ -27,13 +27,18 @@ public sealed interface Counting {
      * of the budget its rows use before one of them reaches it — the only way to set the budget from
      * evidence rather than by guessing. Zero says no counted point was passed, and says only that.
      *
-     * <p>{@link #hits} is the branch sites the row went through. Empty until branches are measured,
-     * which is a property of the compile rather than of the row.
+     * <p>{@link #observation} is what the row was seen to do — the sites it went through and the ways
+     * its comparisons came out. Empty until branches are measured, which is a property of the compile
+     * rather than of the row.
+     *
+     * <p>One value rather than a field per shape of thing recorded. What a run leaves behind is taken
+     * of one thread between one start and one stop, and a record with a field each would let the
+     * halves of one run be filled from different ones.
      */
-    record Read(long steps, Set<Integer> hits) implements Counting {
+    record Read(long steps, Observation observation) implements Counting {
 
         public Read {
-            hits = hits == null ? Set.of() : Set.copyOf(hits);
+            observation = observation == null ? Observation.NONE : observation;
         }
     }
 

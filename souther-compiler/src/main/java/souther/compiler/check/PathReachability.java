@@ -74,15 +74,15 @@ public final class PathReachability {
         }
 
         /**
-         * What arrives at the comparison recorded at {@code probe}, coming out {@code result}.
+         * What arrives at {@code way} — one comparison, coming out one way.
          *
-         * <p>Asked by probe because that is what a line read off a comparison carries. The place is
-         * still the control point — this only finds it.
+         * <p>Asked by the way out because that is what a line read off a comparison carries, and
+         * because it is what a run records. The place is still the control point; this only finds it.
          */
-        public Reachability atComparison(int probe, boolean result) {
+        public Reachability atComparison(souther.compiler.coverage.ComparisonOutcome way) {
             for (Map.Entry<ControlPointId, Reachability> each : found.entrySet()) {
-                if (each.getKey() instanceof ControlPointId.ComparisonOutcome outcome
-                        && outcome.comparisonProbe() == probe && outcome.result() == result) {
+                if (each.getKey() instanceof ControlPointId.ComparisonPoint point
+                        && point.way().equals(way)) {
                     return each.getValue();
                 }
             }
@@ -149,11 +149,14 @@ public final class PathReachability {
             return false;
         }
 
-        /** Whether the comparison at {@code probe} divides nothing that gets to it — one of its two
-         *  outcomes being one nothing takes. */
-        public boolean dividesNothing(int probe) {
-            return atComparison(probe, true) instanceof Reachability.Unreachable
-                    || atComparison(probe, false) instanceof Reachability.Unreachable;
+        /** Whether {@code comparison} divides nothing that gets to it — one of its two outcomes
+         *  being one nothing takes. */
+        public boolean dividesNothing(souther.compiler.coverage.ComparisonOccurrence comparison) {
+            return atComparison(new souther.compiler.coverage.ComparisonOutcome(comparison, true))
+                            instanceof Reachability.Unreachable
+                    || atComparison(
+                            new souther.compiler.coverage.ComparisonOutcome(comparison, false))
+                            instanceof Reachability.Unreachable;
         }
     }
 

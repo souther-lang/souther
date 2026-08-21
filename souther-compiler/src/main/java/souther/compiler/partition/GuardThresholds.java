@@ -388,7 +388,8 @@ public final class GuardThresholds {
             // line off one, so this is here. Required rather than looked up leniently: a line whose
             // comparison has no site is this reader and the plan disagreeing about what a condition
             // is made of.
-            int site = plan.requireComparisonSiteOf(each.comparison());
+            souther.compiler.coverage.ComparisonOccurrence site =
+                    plan.requireComparisonAt(each.comparison());
             // What the comparison cuts is one question with one answer ({@link Cutting}). What is
             // added here is what meeting the line takes, which is a guard's own answer and no other
             // rule's.

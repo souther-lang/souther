@@ -423,7 +423,7 @@ public final class Partitions {
                     // Asked of the comparison, where the rule is met by having produced one. A
                     // clause has no comparison a path can arrive at: it is checked whenever the
                     // behavior answers, so nothing about which branch a body took drops its line.
-                    .filter(t -> t.origin().comparisonSite().stream()
+                    .filter(t -> t.origin().comparisonAt().stream()
                             .noneMatch(arrives::dividesNothing))
                     .toList();
             // What the term is, not what an invariant said about it. There is a bound to read only

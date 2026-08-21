@@ -153,7 +153,7 @@ class ARowSaysWhatAppliedTheBehaviorTest {
 
         Counting.Read counted = assertInstanceOf(Counting.Read.class, held.run().counting());
         assertTrue(counted.steps() >= 0, "the count is this compile's own reading");
-        assertFalse(counted.hits().isEmpty(),
+        assertFalse(counted.observation().taken().isEmpty(),
                 "and so are the arms it went through, this compile having emitted what counts them");
     }
 
@@ -189,7 +189,7 @@ class ARowSaysWhatAppliedTheBehaviorTest {
                 () -> new RowOutcome(ran.at(), ran.target(), ran.identity(), Stage.FIXTURES_VALIDATED,
                         ran.disposition(), ran.failurePhase(), ran.expectedArm(), ran.resultArm(),
                         ran.inputCases(), ran.inputs(),
-                        new Run(new Applied.GeneratedHere(), new Counting.Read(1L, Set.of()))),
+                        new Run(new Applied.GeneratedHere(), new Counting.Read(1L, souther.compiler.coverage.Observation.NONE))),
                 "and one that did not has nothing to say applied it");
         assertThrows(NullPointerException.class,
                 () -> new RowOutcome(ran.at(), ran.target(), ran.identity(), ran.stage(),

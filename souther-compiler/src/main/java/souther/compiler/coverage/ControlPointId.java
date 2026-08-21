@@ -78,16 +78,37 @@ public sealed interface ControlPointId {
     }
 
     /**
-     * One comparison coming out one way.
+     * The place a comparison comes out one way.
      *
      * <p>Which arm that leads to is not this, and the two are not each other's. A condition stops as
      * soon as it is settled, so under {@code A && B} the arm taken when the condition fails is
      * reached both by a value that made {@code B} false and by one that never reached {@code B} —
      * the arm cannot say which comparison came out which way, and a line is drawn on the comparison.
      *
-     * @param comparisonProbe where the comparison's own value is recorded
-     * @param result          the way it came out
+     * <p>The place and what a run records at it are the same value here ({@link #way}), rather than
+     * this holding a copy of its parts. A reading that carried the comparison and the way separately
+     * would be two halves a caller could pair with another place's, which is what asking a run
+     * whether it did this then takes on trust.
+     *
+     * @param way which comparison, coming out which way — as a run would record it
      */
-    record ComparisonOutcome(int controlId, int comparisonProbe, boolean result)
-            implements ControlPointId {}
+    record ComparisonPoint(int controlId, ComparisonOutcome way) implements ControlPointId {
+
+        public ComparisonPoint {
+            if (way == null) {
+                throw new IllegalArgumentException(
+                        "a place a comparison comes out one way is a place of one way");
+            }
+        }
+
+        /** Which comparison this is a way out of. */
+        public ComparisonOccurrence at() {
+            return way.at();
+        }
+
+        /** The way it came out. */
+        public boolean held() {
+            return way.held();
+        }
+    }
 }

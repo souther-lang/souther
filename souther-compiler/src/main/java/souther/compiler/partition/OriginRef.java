@@ -100,15 +100,18 @@ public sealed interface OriginRef {
          *
          * @param guard which {@code if} — by the arms it owns, which is what says which class of
          *              the partition a row landed in
-         * @param site  where the comparison's own value is recorded. Required, and this is what
-         *              meeting the line is measured against: a row met it by getting the comparison
-         *              to answer, which is not what any arm records. A condition stops as soon as
-         *              it is settled, so under {@code A && B} the arm where the condition failed
-         *              holds rows that made {@code B} false and rows that never reached {@code B}
+         * @param comparison which comparison this reads. Required, and this is what meeting the line
+         *              is measured against: a row met it by getting the comparison to answer, which
+         *              is not what any arm records. A condition stops as soon as it is settled, so
+         *              under {@code A && B} the arm where the condition failed holds rows that made
+         *              {@code B} false and rows that never reached {@code B}. The comparison and not
+         *              the number it is instrumented under — two readers agreeing that they mean one
+         *              place should not come down to their having been handed the same int
          * @param at    where the fork is written, which is where a reader is sent. A rule with no
          *              name is pointed at instead of being called something
          */
-        public record Read(CoverageSites.GuardRef guard, int site, Citation at) {}
+        public record Read(CoverageSites.GuardRef guard,
+                           souther.compiler.coverage.ComparisonOccurrence comparison, Citation at) {}
 
         /** Which arms a row that reached this comparison can be in. */
         public enum Witness {
@@ -338,8 +341,8 @@ public sealed interface OriginRef {
     }
 
     /**
-     * Where the comparison's own value is recorded, for a rule that meeting takes more than writing
-     * the value.
+     * Which comparison a row has to get an answer out of, for a rule that meeting takes more than
+     * writing the value.
      *
      * <p>Asked of the rule rather than matched on which kind it is, because the two are not the same
      * question and reading one for the other is what puts a new rule on whichever arm the code was
@@ -349,13 +352,13 @@ public sealed interface OriginRef {
      * about the values themselves. An invariant refuses everything outside its bound, so nothing
      * exists that could have missed it; a clause states a relation, and what covers where the
      * relation changes is the input written at it. For those, writing the value is the whole of what
-     * there is to reach and there is no site to look at.
+     * there is to reach and there is no comparison to look at.
      */
-    default java.util.OptionalInt comparisonSite() {
+    default java.util.Optional<souther.compiler.coverage.ComparisonOccurrence> comparisonAt() {
         return switch (this) {
-            case GuardOrigin g -> java.util.OptionalInt.of(g.read().site());
-            case NarrowedOrigin n -> n.bound().comparisonSite();
-            case InvariantOrigin _, EnsuresOrigin _ -> java.util.OptionalInt.empty();
+            case GuardOrigin g -> java.util.Optional.of(g.read().comparison());
+            case NarrowedOrigin n -> n.bound().comparisonAt();
+            case InvariantOrigin _, EnsuresOrigin _ -> java.util.Optional.empty();
         };
     }
 

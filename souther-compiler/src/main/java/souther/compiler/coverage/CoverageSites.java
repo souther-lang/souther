@@ -164,16 +164,34 @@ public final class CoverageSites {
     public record Plan(List<Site> sites, List<GuardRef> guards, IdentityHashMap<Core, int[]> byNode,
                        IdentityHashMap<Core, Integer> byComparison,
                        IdentityHashMap<Core, ControlPointId.ArmOccurrence[]> armsByNode,
-                       IdentityHashMap<Core, Integer> controlByComparison) {
+                       IdentityHashMap<Core, Integer> controlByComparison,
+                       java.util.Set<Core> mayRepeat,
+                       IdentityHashMap<Core, ForkOccurrence> forkByNode) {
 
         public static final Plan NONE = new Plan(List.of(), List.of(), new IdentityHashMap<>(),
-                new IdentityHashMap<>(), new IdentityHashMap<>(), new IdentityHashMap<>());
+                new IdentityHashMap<>(), new IdentityHashMap<>(), new IdentityHashMap<>(),
+                java.util.Set.of(), new IdentityHashMap<>());
 
         /** The same plan built without the control layer, for a caller assembling one by hand. */
         public Plan(List<Site> sites, List<GuardRef> guards, IdentityHashMap<Core, int[]> byNode,
                     IdentityHashMap<Core, Integer> byComparison) {
             this(sites, guards, byNode, byComparison, new IdentityHashMap<>(),
-                    new IdentityHashMap<>());
+                    new IdentityHashMap<>(), java.util.Set.of(), new IdentityHashMap<>());
+        }
+
+        /**
+         * Whether one run of the behavior can pass {@code node} more than once.
+         *
+         * <p>What decides whether a set is enough to say what a run did. A recording holds that a
+         * place was passed and not how many times it was, so two facts recorded about a place a run
+         * passes twice cannot be told from two facts about one passing — and a statement about
+         * several places meeting is about their meeting once, which such a recording cannot answer.
+         *
+         * <p>Inherited downwards, so a node this is false of stands under nothing this is true of.
+         * That is what lets one question asked at a meeting answer for everything the meeting names.
+         */
+        public boolean mayRepeat(Core node) {
+            return mayRepeat.contains(node);
         }
 
         /**
@@ -189,15 +207,42 @@ public final class CoverageSites {
             return armsByNode.get(node);
         }
 
+        /** Which fork {@code node} is, or null where this plan made no arms for it. */
+        public ForkOccurrence forkAt(Core node) {
+            return forkByNode.get(node);
+        }
+
         /** Which way {@code comparison} coming out {@code result} is, or empty where this plan
          *  numbered no comparison there. */
-        public java.util.Optional<ControlPointId.ComparisonOutcome> outcomeOf(Core comparison,
-                                                                             boolean result) {
+        public java.util.Optional<ControlPointId.ComparisonPoint> outcomeOf(Core comparison,
+                                                                           boolean result) {
             Integer control = controlByComparison.get(comparison);
-            Integer probe = byComparison.get(comparison);
-            return control == null || probe == null ? java.util.Optional.empty()
-                    : java.util.Optional.of(
-                            new ControlPointId.ComparisonOutcome(control, probe, result));
+            return control == null ? java.util.Optional.empty()
+                    : comparisonAt(comparison).map(at -> new ControlPointId.ComparisonPoint(
+                            control, new ComparisonOutcome(at, result)));
+        }
+
+        /**
+         * Which comparison of this plan {@code comparison} is, or empty where it numbered none there.
+         *
+         * <p>What a reading of the model joins on, and what it is given instead of the number. Empty
+         * is an ordinary answer for the same reason {@link #comparisonSiteOf} has one.
+         */
+        public java.util.Optional<ComparisonOccurrence> comparisonAt(Core comparison) {
+            Integer site = byComparison.get(comparison);
+            return site == null ? java.util.Optional.empty()
+                    : java.util.Optional.of(new ComparisonOccurrence(site));
+        }
+
+        /**
+         * The same, where the caller's own construction says there is one.
+         *
+         * <p>Absent here is not a comparison that cannot be measured — it is this plan and the reader
+         * that found the comparison disagreeing about what a condition is made of, which no
+         * measurement should paper over.
+         */
+        public ComparisonOccurrence requireComparisonAt(Core comparison) {
+            return new ComparisonOccurrence(requireComparisonSiteOf(comparison));
         }
 
         /**
@@ -273,7 +318,8 @@ public final class CoverageSites {
             walk.behavior(body.getKey(), body.getValue());
         }
         return new Plan(List.copyOf(walk.sites), List.copyOf(walk.guards), walk.byNode,
-                walk.byComparison, walk.armsByNode, walk.controlByComparison);
+                walk.byComparison, walk.armsByNode, walk.controlByComparison, walk.mayRepeat,
+                walk.forkByNode);
     }
 
     private static final class Walk {
@@ -284,8 +330,17 @@ public final class CoverageSites {
         private final IdentityHashMap<Core, Integer> byComparison = new IdentityHashMap<>();
         private final IdentityHashMap<Core, ControlPointId.ArmOccurrence[]> armsByNode =
                 new IdentityHashMap<>();
+        private final IdentityHashMap<Core, ForkOccurrence> forkByNode = new IdentityHashMap<>();
         private final IdentityHashMap<Core, Integer> controlByComparison = new IdentityHashMap<>();
         private final IdentityHashMap<Core, Boolean> answering = new IdentityHashMap<>();
+        /** The nodes one run can pass more than once. Kept by identity, like everything else here:
+         *  two arms that look the same are equal records and this is about this one. */
+        private final java.util.Set<Core> mayRepeat =
+                java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+        /** Whether the walk is somewhere a run may come back to. Held rather than passed down
+         *  because every node below such a place is one, which is what makes it a state of the walk
+         *  and not a property of the call. */
+        private boolean repeating;
         /** The outcomes that carry nothing of their own. What each of them means is settled with
          *  the construct beside it, so one instance stands for every occurrence. */
         private static final SourceOutcome HELD =
@@ -332,6 +387,20 @@ public final class CoverageSites {
                     // rewrites and carries whatever position it was built from, so quoting it sends
                     // an author somewhere else in the file.
                     Citation.of(owner.pos()), origin);
+        }
+
+        /**
+         * The arms of one fork, and the fork they are arms of.
+         *
+         * <p>Both written here, in one act. What names the fork is the first of its arms, and it is
+         * a name rather than a lookup for exactly that reason: made apart, the fork's identity would
+         * be something each reader worked out again from whatever component it had to hand.
+         */
+        private void arms(Core fork, ControlPointId.ArmOccurrence[] arms) {
+            armsByNode.put(fork, arms);
+            if (arms.length > 0) {
+                forkByNode.put(fork, new ForkOccurrence(arms[0].controlId()));
+            }
         }
 
         /** The probe numbers of {@code arms}, in their order, {@link #NO_SITE} where an arm has
@@ -415,6 +484,9 @@ public final class CoverageSites {
             // Everything below this node is reached by way of the node, so what the node cannot do
             // nothing inside it can do either.
             boolean inside = reachable && answers(e);
+            if (repeating) {
+                mayRepeat.add(e);
+            }
             switch (e) {
                 case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
                      Core.Read _, Core.UnitValue _, Core.OptionNone _ -> { }
@@ -439,7 +511,17 @@ public final class CoverageSites {
                 }
                 // A function value, and its arms are arms: what is written here runs when whatever
                 // this is handed to applies it, and the rows that make that happen go through them.
-                case Core.Block b -> walk(b.body(), inside);
+                //
+                // How many times it applies it is that caller's business and nothing here can say —
+                // a comprehension applies one of these per element — so everything inside is a place
+                // one run may come back to. Recorded rather than assumed anywhere else: what a set
+                // of places can be asked turns on it.
+                case Core.Block b -> {
+                    boolean outside = repeating;
+                    repeating = true;
+                    walk(b.body(), inside);
+                    repeating = outside;
+                }
                 case Core.ListLit lit -> lit.elements().forEach(el -> walk(el, inside));
                 case Core.OptionSome s -> walk(s.value(), inside);
                 case Core.Tuple t -> t.elements().forEach(el -> walk(el, inside));
@@ -454,7 +536,7 @@ public final class CoverageSites {
                             armOf(FAILED, iff, iff.origin(), 1, iff.els(), inside);
                     walk(iff.els(), inside);
                     byNode.put(iff, probesOf(then, els));
-                    armsByNode.put(iff, new ControlPointId.ArmOccurrence[] {then, els});
+                    arms(iff, new ControlPointId.ArmOccurrence[] {then, els});
                     if (then.isMeasured() || els.isMeasured()) {
                         guards.add(new GuardRef(behavior, iff.origin(),
                                 then.probe().orElse(NO_SITE), els.probe().orElse(NO_SITE),
@@ -472,7 +554,7 @@ public final class CoverageSites {
                         walk(arm.body(), inside);
                     }
                     byNode.put(m, probesOf(arms));
-                    armsByNode.put(m, arms);
+                    arms(m, arms);
                 }
                 case Core.IfConstructed ic -> {
                     ic.construct().values().forEach(given -> walk(given.value(), inside));
@@ -488,7 +570,7 @@ public final class CoverageSites {
                         walk(arm.body(), inside);
                     }
                     byNode.put(ic, probesOf(arms));
-                    armsByNode.put(ic, arms);
+                    arms(ic, arms);
                 }
             }
         }

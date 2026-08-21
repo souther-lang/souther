@@ -103,7 +103,8 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
         row.put(second.id(), Classification.in(second.classes().get(0).id()));
 
         Generator.GenerationResult filled =
-                Generator.fill(subject, List.of(row), Generator.CandidateCheck.ANY);
+                Generator.fill(subject, List.of(Generator.ObservedRow.unseen(row)),
+                        Generator.CandidateCheck.ANY);
 
         assertFalse(filled.rows().isEmpty(), "the positions it could read were filled");
         assertInstanceOf(GenerationReason.PositionWithheld.class, filled.reasons().get(0));

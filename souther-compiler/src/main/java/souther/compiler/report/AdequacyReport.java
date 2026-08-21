@@ -1083,6 +1083,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     "the rules leave no value at " + at;
             case NOTHING_TO_BUILD_AGAINST -> "there was nothing to build a candidate against";
             case LINKAGE_FAILED -> "the generated classes would not link";
+            case NO_CERTIFIED_WITNESS ->
+                    "no row composed for " + at + " was seen reaching it, which does not make the"
+                            + " combination unreachable";
             case NO_REASON_RECORDED -> "nothing was recorded about why";
         };
     }

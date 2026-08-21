@@ -57,6 +57,17 @@ public final class Generator {
      * parameter with something held in reserve is walked twice, each pass under this bound. */
     private static final int MAX_TUPLES = 256;
 
+    /**
+     * How many rows one combination is composed for before the search gives up on it.
+     *
+     * <p>What a combination leaves open is often several assignments, and the first of them is
+     * chosen for what else it covers rather than for reaching the meeting — so a second is worth
+     * trying where the first went somewhere else. What this bounds is how much of the search one
+     * combination may spend: a group whose reading is wrong misses at every assignment, and without
+     * a bound it would work its way through the whole space while every other group waited.
+     */
+    private static final int MOST_CANDIDATES = 3;
+
     /** How deep a record is built. Past this a value stops being anything an author recognises as one
      * input, and a type that refers to itself would not stop at all. */
     private static final int MAX_DEPTH = 8;
@@ -109,6 +120,34 @@ public final class Generator {
     }
 
     /**
+     * A row that is already written, as the two things this reads it for.
+     *
+     * <p>Where its values sit is what says which classes and which pairs it fills; what its run did
+     * is what says which combinations of the body's decisions it fills. The second is not derivable
+     * from the first, which is the whole of what this issue is about — a row whose values sit in a
+     * combination's classes and whose run went elsewhere fills nothing, and looks from the values
+     * alone exactly like one that fills it.
+     *
+     * @param at      which class of each divided position the row's values fall in
+     * @param watched what came of running it. A sum and not an account that may be empty: a run
+     *                that recorded nothing and a row nothing recorded are the same empty account
+     *                and are not the same fact, and which of them this is decides what may be
+     *                concluded from the row
+     */
+    public record ObservedRow(Map<AxisId, Classification> at, Watched watched) {
+
+        public ObservedRow {
+            at = Map.copyOf(at);
+            watched = watched == null ? new Watched.NoAccount() : watched;
+        }
+
+        /** A row nothing here can say anything about the run of, for a caller with none to read. */
+        public static ObservedRow unseen(Map<AxisId, Classification> at) {
+            return new ObservedRow(at, new Watched.NoAccount());
+        }
+    }
+
+    /**
      * A combination no row could be written for, and why.
      *
      * <p>{@code ALL_CANDIDATES_REJECTED} is not a proof that the combination is impossible. It says
@@ -156,6 +195,20 @@ public final class Generator {
             /** The generated classes would not link, so the decoders could not be reached. Told
              * apart from the one above it because they were there, which is not what that says. */
             LINKAGE_FAILED,
+            /**
+             * No row composed for the combination was seen reaching it.
+             *
+             * <p>Said that way round because it is what the search establishes. Some of the
+             * assignments tried may have composed nothing at all, so a word about what every row
+             * did would be a word about rows there were none of; what holds of all of them is that
+             * none was a witness.
+             *
+             * <p>Not a proof that the combination is unreachable, and nothing reads it as one. It
+             * is a fact about the candidates — and, where the reading that named the combination is
+             * wrong, about that reading. Either way the combination stays untried rather than being
+             * counted as offered (ADR-0091).
+             */
+            NO_CERTIFIED_WITNESS,
             /**
              * A strategy that takes this class produced neither a row nor a reason for it.
              *
@@ -234,6 +287,54 @@ public final class Generator {
         CandidateCheck ANY = (_, _) -> Optional.empty();
     }
 
+    /**
+     * A way to run a composed row and see what it did.
+     *
+     * <p>The other thing a generator cannot work out for itself, and the one this issue is about.
+     * Which combination a row sits in is settled by running it: everything before that is a reading
+     * of the body, and a reading is what may be wrong.
+     *
+     * <p>Separate from {@link CandidateCheck} because the questions are. That one is asked of one
+     * value at one position while the row is being composed, and answers whether the value can be
+     * built at all; this is asked of the whole row afterwards, and answers where it went.
+     */
+    @FunctionalInterface
+    public interface Trial {
+
+        /** What running {@code inputs} through the behavior came to. */
+        Watched run(List<FixtureTemplate> inputs);
+
+        /** Nothing runs here — what a caller with no runtime to run against uses. */
+        Trial NOTHING_RUNS = _ -> new Watched.NoAccount();
+    }
+
+    /**
+     * What came of running one composed row.
+     *
+     * <p>A sum, so that a caller has to say which of them it has. Having no account of a row and
+     * having one that shows it reached nothing are the same emptiness read off a set of places and
+     * are not the same fact: the first leaves every combination as untried as it was, and the second
+     * is a row that missed.
+     */
+    public sealed interface Watched {
+
+        /** It ran, something was recording, and this is what it was seen doing. Also what a row
+         *  that aborted part way comes back as: it went where it went before it stopped, and that
+         *  is recorded. */
+        record Ran(souther.compiler.coverage.Observation seen) implements Watched {}
+
+        /**
+         * Nothing here can say what it did.
+         *
+         * <p>Three things come to this and they are one arm because nothing tells them apart by
+         * acting differently: nothing ran the row, something ran it and nothing was recording, and
+         * something ran it and the recording was never read. What none of them is, is a run that
+         * reached nothing — that is {@link Ran} of an empty account, and it is the one difference
+         * anything here turns on.
+         */
+        record NoAccount() implements Watched {}
+    }
+
     // --- filling the pairs ----------------------------------------------------------------------
 
     /**
@@ -244,8 +345,7 @@ public final class Generator {
      * it brings in. Ties go to the lower index, the axes are ordered before anything starts, and nothing
      * consults a clock or a hash order — the same model and the same rows produce the same rows twice.
      */
-    public static GenerationResult fill(Subject subject,
-                                        List<Map<AxisId, Classification>> existing,
+    public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
                                         CandidateCheck check) {
         return fill(subject, existing, check, List.of());
     }
@@ -260,10 +360,28 @@ public final class Generator {
      * they leave free is what the pairs are spent on — so the rows a cell needs are rows the pair
      * space was going to want anyway, rather than rows added beside them.
      */
-    public static GenerationResult fill(Subject subject,
-                                        List<Map<AxisId, Classification>> existing,
+    public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
                                         CandidateCheck check,
                                         List<souther.compiler.interaction.Interaction> groups) {
+        return fill(subject, existing, check, groups, Trial.NOTHING_RUNS);
+    }
+
+    /**
+     * The same, running each row composed for a combination to see whether it got there.
+     *
+     * <p>Which is the only thing that can say so. A row is composed by narrowing each position to
+     * the classes the combination leaves it, and every step of that narrowing is a reading of the
+     * body — so a row that misses is what a reading being wrong looks like, and a row that misses
+     * looks like one that arrives until something watches it.
+     *
+     * <p>A row that missed is not offered and the combination stays untried. It is not evidence
+     * that the combination is unreachable: what was shown is that these candidates were not
+     * witnesses (ADR-0091).
+     */
+    public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
+                                        CandidateCheck check,
+                                        List<souther.compiler.interaction.Interaction> groups,
+                                        Trial trial) {
         List<Axis> ordered = ordered(subject);
         // A position where some row's value could not be read is a position nothing is known about.
         // A row generated for a class there may be a row that is already written, and telling an
@@ -286,16 +404,16 @@ public final class Generator {
         // covers every pair can still miss a class of a position the pairs happened to fix elsewhere.
         Set<Pair> pairs = pairsOf(axes);
         Set<Pair> singles = singlesOf(axes);
-        for (Map<AxisId, Classification> row : existing) {
-            cover(pairs, singles, axes, whereIn(row, axes));
+        for (ObservedRow row : existing) {
+            cover(pairs, singles, axes, whereIn(row.at(), axes));
         }
 
         List<GeneratedRow> rows = new ArrayList<>();
         List<UnresolvedCombination> unresolved = new ArrayList<>();
         List<GenerationReason> reasons = new ArrayList<>(undecided);
-        List<int[]> written = new ArrayList<>();
-        for (Map<AxisId, Classification> row : existing) {
-            written.add(whereIn(row, axes));
+        List<Placement> written = new ArrayList<>();
+        for (ObservedRow row : existing) {
+            written.add(new Placement.Written(whereIn(row.at(), axes), row.watched()));
         }
         // Built here and not handed in: a cell is one class per position of the axes this
         // generation kept, and the caller's list is neither ordered the same nor filtered the same.
@@ -308,6 +426,8 @@ public final class Generator {
         // there is no count of how many of a group to prepare, so a combination a written row
         // already sits in costs no row and does not stand in for one that would have.
         boolean anyLeft = true;
+        boolean unconfirmed = false;
+        int withheld = 0;
         while (anyLeft && rows.size() < MAX_ROWS) {
             anyLeft = false;
             for (int g = 0; g < byGroup.size() && rows.size() < MAX_ROWS; g++) {
@@ -315,31 +435,43 @@ public final class Generator {
                 if (taken[g] >= group.size()) {
                     continue;
                 }
-                InteractionCells.Cell cell = group.at(taken[g]++);
+                CellSelection selection = group.at(taken[g]++);
                 anyLeft = true;
-                if (cell == null) {
+                if (selection == null) {
                     // The factors this choice takes leave a position nothing, so it is not a
                     // combination the body has a path to and there is nothing to ask for.
                     continue;
                 }
-                if (sits(written, cell)) {
-                    // A cell a row already sits in is a cell nothing is owed for.
+                CombinationStanding standing = standingOf(written, selection);
+                if (standing instanceof CombinationStanding.Filled) {
+                    continue;   // a row was seen filling it, so nothing is owed
+                }
+                if (standing instanceof CombinationStanding.MayBeWritten) {
+                    // Not filled and not offered: a row in the file sits where one filling this
+                    // would, and nothing could say whether it does. Counted so that it is said —
+                    // an author told nothing here would read it as a combination covered.
+                    withheld++;
                     continue;
                 }
-                int[] where = assign(axes, pairs, cell);
-                Attempt built = build(subject, axes, where, check);
-                if (built.row() == null) {
-                    unresolved.add(new UnresolvedCombination(labels(axes, cell, where),
-                            built.reason(), built.detail(), built.said()));
-                    continue;
+                switch (witnessFor(subject, axes, pairs, selection, check, trial)) {
+                    case Witness.None none -> unresolved.add(new UnresolvedCombination(
+                            none.classes(), none.reason(), none.detail(), none.said()));
+                    case Witness.Certified found -> {
+                        rows.add(found.row());
+                        written.add(new Placement.Composed(found.by().where(),
+                                new Watched.Ran(found.by().seen())));
+                        cover(pairs, singles, axes, found.by().where());
+                    }
+                    case Witness.Unconfirmed offer -> {
+                        rows.add(offer.row());
+                        written.add(new Placement.Composed(offer.where(), new Watched.NoAccount()));
+                        cover(pairs, singles, axes, offer.where());
+                        // Nothing watched it, so what it is offered for is what the reading says
+                        // and not what anything saw. Said once for the behavior: it is one fact
+                        // about this generation.
+                        unconfirmed = true;
+                    }
                 }
-                // Named for the cell it was composed for, which is the positions the decisions
-                // read. What the pass below filled the rest of the row with is what this row turns
-                // out to settle beside that, and a name carrying it would move when nothing about
-                // the row had.
-                rows.add(new GeneratedRow(labels(axes, cell, where), built.row().inputs()));
-                written.add(where);
-                cover(pairs, singles, axes, where);
             }
         }
         int cellsLeft = 0;
@@ -381,6 +513,13 @@ public final class Generator {
         if (cellsLeft + pairsLeft > 0) {
             reasons.add(new GenerationReason.SearchLimit(axes.get(0).id().behavior(),
                     cellsLeft + pairsLeft));
+        }
+        if (unconfirmed) {
+            reasons.add(new GenerationReason.RowsNotConfirmed(axes.get(0).id().behavior()));
+        }
+        if (withheld > 0) {
+            reasons.add(new GenerationReason.CombinationsWithheld(axes.get(0).id().behavior(),
+                    withheld));
         }
         return new GenerationResult(rows, unresolved, reasons);
     }
@@ -603,9 +742,9 @@ public final class Generator {
     /** Whether every existing row said where it sat at this position. One that did not leaves the
      * position undecided: what the rows cover there is unknown, so what they do not cover is unknown
      * too. */
-    private static boolean readEverywhere(Axis axis, List<Map<AxisId, Classification>> existing) {
-        for (Map<AxisId, Classification> row : existing) {
-            Classification where = row.get(axis.id());
+    private static boolean readEverywhere(Axis axis, List<ObservedRow> existing) {
+        for (ObservedRow row : existing) {
+            Classification where = row.at().get(axis.id());
             if (where != null && !(where instanceof Classification.Classified)) {
                 return false;
             }
@@ -644,19 +783,83 @@ public final class Generator {
         }
     }
 
-    /** Whether a row already written sits inside what {@code cell} leaves each position. */
-    private static boolean sits(List<int[]> written, InteractionCells.Cell cell) {
-        int positions = cell.allowed().length;
-        for (int[] row : written) {
-            boolean all = true;
-            for (int i = 0; i < positions && all; i++) {
-                all = !cell.narrows(i) || (i < row.length && cell.admits(i, row[i]));
-            }
-            if (all) {
-                return true;
+    /**
+     * A row this generation counts the combinations against: where it sits, what came of running
+     * it, and whose row it is.
+     *
+     * <p>Whose it is, because being unable to say where a row went costs different things for the
+     * two. A row the author wrote is in the file whatever this can establish about it, so passing
+     * over a combination it may fill risks nothing worse than a combination left owed — while
+     * offering one risks handing them work they have already done. A row this search composed is in
+     * nobody's file, so counting one it cannot judge is reading a reading back as evidence for
+     * itself.
+     */
+    private sealed interface Placement {
+
+        int[] where();
+
+        Watched watched();
+
+        /** A row that is in the author's file. */
+        record Written(int[] where, Watched watched) implements Placement {}
+
+        /** A row this search composed on this pass. */
+        record Composed(int[] where, Watched watched) implements Placement {}
+    }
+
+    /**
+     * Where one combination stands before anything is composed for it.
+     *
+     * <p>Named at length because {@link Standing} beside it is where a value stands against a line,
+     * and a nested type sharing that word would answer to it inside this file and to the other one
+     * everywhere else.
+     *
+     * <p>Three answers because two questions are being asked of the rows, and folding them into one
+     * is what this issue is about. Whether a combination is filled is a question about evidence, and
+     * only a run answers it. Whether a row for it is worth putting in front of an author is a
+     * question about what is already in their file, and a row they have written answers that
+     * whatever anything can establish about it — re-offering a combination over such a row hands
+     * back work already done.
+     *
+     * <p>Kept apart because the second is not the first. A combination withheld is not one anything
+     * showed to be filled, so it is not counted as such and it is not passed over in silence: it is
+     * said, and what it says is that a row in the file may fill it and nothing here could tell.
+     */
+    private sealed interface CombinationStanding {
+
+        /** A row was seen filling it. The witness is what says so and the only thing that can. */
+        record Filled(CellSelection.CertifiedWitness by) implements CombinationStanding {}
+
+        /** A row already in the author's file sits where one filling this would, and nothing could
+         *  say whether it does. Not evidence, and not silence either. */
+        record MayBeWritten() implements CombinationStanding {}
+
+        /** Nothing here says anything about it. */
+        record Owed() implements CombinationStanding {}
+    }
+
+    /**
+     * Where {@code selection} stands against the rows counted so far.
+     *
+     * <p>Evidence first and on its own terms: a row of either kind, seen doing what the combination
+     * names and sitting where it leaves room, fills it — one question put to one thing that can
+     * answer it. Only where nothing was established does whose row it is come into it, and then it
+     * decides what to offer rather than what is true.
+     */
+    private static CombinationStanding standingOf(List<Placement> written, CellSelection selection) {
+        boolean maybe = false;
+        for (Placement row : written) {
+            if (row.watched() instanceof Watched.Ran ran) {
+                Optional<CellSelection.CertifiedWitness> found =
+                        selection.certifying(row.where(), ran.seen());
+                if (found.isPresent()) {
+                    return new CombinationStanding.Filled(found.get());
+                }
+            } else if (row instanceof Placement.Written && selection.cell().holds(row.where())) {
+                maybe = true;
             }
         }
-        return false;
+        return maybe ? new CombinationStanding.MayBeWritten() : new CombinationStanding.Owed();
     }
 
     /** Every position fixed: the seed's two as the seed says, and each of the rest at whichever class
@@ -772,6 +975,159 @@ public final class Generator {
         String left = label(axes.get(pair.left()), pair.leftClass());
         return pair.alone() ? List.of(left)
                 : List.of(left, label(axes.get(pair.right()), pair.rightClass()));
+    }
+
+    // --- looking for a row that fills a combination ----------------------------------------------
+
+    /**
+     * What the search for a row filling one combination came to.
+     *
+     * <p>Three answers and not two, because a row seen filling the combination and a row offered
+     * because nothing could watch it are not the same thing to have found. They differ in what may
+     * afterwards be concluded from the row and in whether this generation may say its rows were
+     * confirmed, so which of them it is, is the answer — rather than something read back off an
+     * empty account of the run.
+     */
+    private sealed interface Witness {
+
+        /** A row seen filling the combination, carrying the witness — that being the only value
+         *  which says so. */
+        record Certified(GeneratedRow row, CellSelection.CertifiedWitness by) implements Witness {}
+
+        /** A row nothing could watch, offered on the strength of the reading alone. */
+        record Unconfirmed(GeneratedRow row, int[] where) implements Witness {}
+
+        /** No row to offer, and why. Never a statement that none exists. */
+        record None(List<String> classes, UnresolvedCombination.Reason reason, String detail,
+                    Optional<String> said) implements Witness {}
+    }
+
+    /**
+     * A row that fills {@code selection}, looked for among the assignments it leaves open.
+     *
+     * <p>Composing and confirming are one act here and are two questions. A candidate is composed by
+     * fixing every position, which the combination settles for some of them and the pair search
+     * settles for the rest; then it is run, and what it did is held against what the combination
+     * says a row filling it does. A candidate that went elsewhere is dropped and another assignment
+     * is tried, because which assignment was chosen is a choice this made rather than something the
+     * combination said.
+     *
+     * <p>What a run of candidates that all missed establishes is that they were not witnesses. It is
+     * not that the combination is unreachable, and it is not by itself that the reading naming the
+     * combination is wrong — the assignments were this search's, and so was the number of them.
+     */
+    private static Witness witnessFor(Subject subject, List<Axis> axes, Set<Pair> uncovered,
+                                      CellSelection selection, CandidateCheck check, Trial trial) {
+        InteractionCells.Cell cell = selection.cell();
+        List<int[]> tried = new ArrayList<>();
+        Attempt last = null;
+        int[] where = null;
+        boolean missed = false;
+        for (int candidate = 0; candidate < MOST_CANDIDATES; candidate++) {
+            int[] at = assignment(axes, uncovered, cell, candidate, tried);
+            if (at == null) {
+                break;   // the combination leaves nothing this has not already tried
+            }
+            tried.add(at);
+            where = at;
+            last = build(subject, axes, at, check);
+            if (last.row() == null) {
+                continue;   // nothing composed here; another assignment may compose
+            }
+            // Named for the combination it was composed for, which is the positions the decisions
+            // read. What the pair search filled the rest of the row with is what this row turns out
+            // to settle beside that, and a name carrying it would move when nothing about the row
+            // had.
+            GeneratedRow named = new GeneratedRow(labels(axes, cell, at), last.row().inputs());
+            switch (trial.run(named.inputs())) {
+                // Nothing can say where it went, so nothing certifies it and nothing refutes it.
+                // Offered as it was before anything ran, and said to be. Both of the ways that
+                // happens come here: nothing applied the row, or nothing was recording while it
+                // was applied.
+                case Watched.NoAccount _ -> {
+                    return new Witness.Unconfirmed(named, at);
+                }
+                case Watched.Ran ran -> {
+                    // Through the one thing that can say a row filled a combination, which is the
+                    // same thing a row already in the file is put through.
+                    Optional<CellSelection.CertifiedWitness> found =
+                            selection.certifying(at, ran.seen());
+                    if (found.isPresent()) {
+                        return new Witness.Certified(named, found.get());
+                    }
+                    missed = true;
+                }
+            }
+        }
+        List<String> named = where == null ? List.of() : labels(axes, cell, where);
+        if (missed) {
+            return new Witness.None(named, UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS, null,
+                    Optional.empty());
+        }
+        if (last != null && last.row() == null) {
+            return new Witness.None(named, last.reason(), last.detail(), last.said());
+        }
+        // Nothing was composed and nothing was refused, which takes the combination leaving no
+        // assignment at all. Named rather than guessed at, the same way every other empty result
+        // here is.
+        return new Witness.None(named, UnresolvedCombination.Reason.NO_REASON_RECORDED, null,
+                Optional.empty());
+    }
+
+    /**
+     * The {@code candidate}th assignment to try for {@code cell}, or null where it leaves none this
+     * has not tried.
+     *
+     * <p>The first is the pair search's: every position the combination does not settle goes to
+     * whichever class brings in the most combinations nothing covers yet, which is what makes the
+     * rows a combination needs rows the pair space wanted anyway. The rest are the assignments the
+     * combination admits, counted off in order — a fixed order, so the same model offers the same
+     * rows twice.
+     *
+     * <p>Bounded by how many have been tried rather than by a walk over the space: at most
+     * {@link #MOST_CANDIDATES} assignments are ever tried, so one of the first that many is one
+     * that has not been.
+     */
+    private static int[] assignment(List<Axis> axes, Set<Pair> uncovered,
+                                    InteractionCells.Cell cell, int candidate, List<int[]> tried) {
+        if (candidate == 0) {
+            return assign(axes, uncovered, cell);
+        }
+        List<List<Integer>> admitted = new ArrayList<>();
+        for (int i = 0; i < axes.size(); i++) {
+            List<Integer> here = new ArrayList<>();
+            for (int c = 0; c < axes.get(i).classes().size(); c++) {
+                if (cell.admits(i, c)) {
+                    here.add(c);
+                }
+            }
+            if (here.isEmpty()) {
+                return null;   // a position with nothing in it is not a combination
+            }
+            admitted.add(here);
+        }
+        for (int index = 0; index < MOST_CANDIDATES; index++) {
+            int[] where = new int[axes.size()];
+            int left = index;
+            for (int i = 0; i < axes.size(); i++) {
+                List<Integer> here = admitted.get(i);
+                where[i] = here.get(left % here.size());
+                left /= here.size();
+            }
+            if (!alreadyTried(tried, where)) {
+                return where;
+            }
+        }
+        return null;
+    }
+
+    private static boolean alreadyTried(List<int[]> tried, int[] where) {
+        for (int[] each : tried) {
+            if (java.util.Arrays.equals(each, where)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // --- turning classes into a row -------------------------------------------------------------

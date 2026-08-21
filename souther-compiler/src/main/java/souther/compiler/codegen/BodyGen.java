@@ -607,13 +607,20 @@ final class BodyGen {
          * there, and a measuring build and a shipping build differ by these calls and by nothing else.
          */
         /**
-         * Records that this comparison produced a value, where it is one a guard's condition is made
-         * of.
+         * Records that this comparison produced a value and which value it was, where it is one a
+         * guard's condition is made of.
          *
          * <p>After the value and not before it. What a boundary is met by is the comparison having
          * answered, and an operand can abort on the way — {@code x /= 0 && 100 / x > 1} is why the
          * operators stop when the answer is settled in the first place. A probe in front of the
          * emission would record a comparison that never produced anything as one that did.
+         *
+         * <p>The value itself is handed over, copied off the stack rather than recomputed. Which way
+         * a comparison came out is not something the arm below it can say — a condition stops as soon
+         * as it is settled — so anything that worked it out afterwards would be reasoning where the
+         * value is right there. {@code comparisonMaterialize} has already brought it to an
+         * {@code iconst_0} or {@code iconst_1}, so the copy is of a plain boolean and the original is
+         * left exactly as the emission that follows expects it.
          *
          * <p>Absent is ordinary here, unlike an arm's: what has a site is every comparison of a
          * condition this plan instruments, and the emitter walks comparisons everywhere else too.
@@ -624,8 +631,9 @@ final class BodyGen {
             }
             ctx.comparisonSiteOf(comparison).ifPresent(site -> {
                 ctx.emitted(site);
+                code.dup();
                 code.loadConstant(site);
-                code.invokestatic(CD_Probe, "hit", MTD_Probe_hit);
+                code.invokestatic(CD_Probe, "compared", MTD_Probe_compared);
             });
         }
 

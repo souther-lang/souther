@@ -1060,7 +1060,7 @@ public final class ExampleVerifier {
                     verifier.policy.recursionDepthLimit());
             try {
                 verifier.checkRowNow(fixtures, target, sig, outCases, row, mine, state);
-                state.hits = Probe.taken();
+                state.seen = Probe.snapshot();
             } finally {
                 // Read on every way out, not only the one where the row came back. A row stopped by
                 // its budget is the row whose cost is most worth knowing, and reading it after the
@@ -1105,10 +1105,11 @@ public final class ExampleVerifier {
         private TypeSymbol resultArm;
         private final List<TypeSymbol> inputCases = new ArrayList<>();
         private final List<ObservedValue> inputs = new ArrayList<>();
-        /** The arms this row went through, where the classes it ran were generated to say. Empty
-         * otherwise, and empty for a row that did not finish — a set read from a row still running
-         * would be some of the arms rather than the arms. */
-        private Set<Integer> hits = Set.of();
+        /** What this row was seen to do, where the classes it ran were generated to say. Empty
+         * otherwise, and empty for a row that did not finish — a snapshot read from a row still
+         * running would be some of what it did rather than what it did. */
+        private souther.compiler.coverage.Observation seen =
+                souther.compiler.coverage.Observation.NONE;
         /** What the row cost, in the unit it is held to. Written by the worker when it finishes, so
          * read only for a row that did. */
         private long stepsSpent;
@@ -1166,7 +1167,7 @@ public final class ExampleVerifier {
         return new RowOutcome(row.pos(), target.name(), row.identity(),
                 reached.stage(), state.disposition, state.failurePhase, state.expectedArm,
                 state.resultArm, state.inputCases, state.inputs,
-                ran(reached, new Counting.Read(state.stepsSpent, state.hits)));
+                ran(reached, new Counting.Read(state.stepsSpent, state.seen)));
     }
 
     /**

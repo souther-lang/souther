@@ -121,6 +121,10 @@ final class Descriptors {
     /** {@code Probe.hit(int)}: records one arm and leaves the stack as it was. */
     static final MethodTypeDesc MTD_Probe_hit =
             MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_int);
+    /** {@code Probe.compared(boolean, int)}: records one comparison and the value it answered,
+     * taking a copy of that value off the stack and leaving the original where it was. */
+    static final MethodTypeDesc MTD_Probe_compared = MethodTypeDesc.of(ConstantDescs.CD_void,
+            ConstantDescs.CD_boolean, ConstantDescs.CD_int);
     /**
      * What an evaluation is allowed, called by classes generated for evaluating and by nothing that
      * ships. Reached the way {@link #CD_Probe} is, and for the same reason.

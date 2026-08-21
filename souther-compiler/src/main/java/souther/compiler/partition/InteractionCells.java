@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.coverage.ComparisonOccurrence;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.interaction.Condition;
 import souther.compiler.interaction.Factor;
@@ -99,8 +100,39 @@ public final class InteractionCells {
             return cls >= 0 && cls < allowed[axis].length && allowed[axis][cls];
         }
 
+        /**
+         * Whether a row sitting at {@code where} — one class per position, in the order the axes
+         * are ordered — is one this leaves room for.
+         *
+         * <p>A position this says nothing about admits whatever the row has there. What it does not
+         * admit is a class it narrowed away, which is the whole of what a cell is.
+         */
+        public boolean holds(int[] where) {
+            for (int axis = 0; axis < allowed.length; axis++) {
+                if (narrows(axis) && !(axis < where.length && admits(axis, where[axis]))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         public boolean sameAs(Cell other) {
             return Arrays.deepEquals(allowed, other.allowed);
+        }
+    }
+
+    /**
+     * What one way of settling something leaves open, and what a run that settled it that way would
+     * be seen to have done.
+     *
+     * <p>The pair travels together from here on. Kept apart, the classes and the claims would be two
+     * lists indexed alike, and an outcome dropped from one of them for narrowing nothing would leave
+     * the other saying what a different outcome takes.
+     */
+    public record Placed(Cell cell, List<souther.compiler.coverage.ControlClaim> claims) {
+
+        public Placed {
+            claims = List.copyOf(claims);
         }
     }
 
@@ -115,7 +147,7 @@ public final class InteractionCells {
      * @param reach    what the path to the meeting leaves open, which every combination is under
      * @param byFactor what each outcome of each factor leaves open, one list per factor
      */
-    public record Group(Cell reach, List<List<Cell>> byFactor) {
+    public record Group(Placed reach, List<List<Placed>> byFactor) {
 
         public Group {
             byFactor = List.copyOf(byFactor);
@@ -130,7 +162,7 @@ public final class InteractionCells {
          */
         public int size() {
             long size = 1;
-            for (List<Cell> factor : byFactor) {
+            for (List<Placed> factor : byFactor) {
                 size *= factor.size();
                 if (size >= MOST_CELLS) {
                     return MOST_CELLS;
@@ -146,17 +178,21 @@ public final class InteractionCells {
          * <p>Leaving a position nothing is not a combination the body refuses. There is no path
          * through the body that takes both, so there is nothing there to ask for.
          */
-        public Cell at(int index) {
-            Cell cell = reach;
+        public CellSelection at(int index) {
+            Cell cell = reach.cell();
+            List<souther.compiler.coverage.ControlClaim> claims =
+                    new ArrayList<>(reach.claims());
             int left = index;
-            for (List<Cell> factor : byFactor) {
-                cell = cell.and(factor.get(left % factor.size()));
+            for (List<Placed> factor : byFactor) {
+                Placed taken = factor.get(left % factor.size());
+                cell = cell.and(taken.cell());
                 if (cell == null) {
                     return null;
                 }
+                claims.addAll(taken.claims());
                 left /= factor.size();
             }
-            return cell;
+            return new CellSelection(cell, claims);
         }
 
         /** How many cells the group has from {@code from} on, which is what a stopped search left. */
@@ -175,11 +211,11 @@ public final class InteractionCells {
     public static List<Group> of(List<Interaction> groups, List<Axis> axes) {
         List<Group> out = new ArrayList<>();
         for (Interaction group : groups) {
-            Cell reach = narrowedBy(group.reach(), axes);
+            Placed reach = placedBy(group.reach(), axes);
             if (reach == null) {
                 continue;
             }
-            List<List<Cell>> placed = factorsOf(group, axes);
+            List<List<Placed>> placed = factorsOf(group, axes);
             if (placed == null || productOf(placed) >= MOST_CELLS) {
                 continue;
             }
@@ -192,9 +228,9 @@ public final class InteractionCells {
     }
 
     /** How far the product runs, stopping where it is past anything that would be offered. */
-    private static long productOf(List<List<Cell>> placed) {
+    private static long productOf(List<List<Placed>> placed) {
         long size = 1;
-        for (List<Cell> factor : placed) {
+        for (List<Placed> factor : placed) {
             size *= factor.size();
             if (size >= MOST_CELLS) {
                 return MOST_CELLS;
@@ -204,12 +240,12 @@ public final class InteractionCells {
     }
 
     /** What each outcome of each factor leaves open, or null where the group is not one to offer. */
-    private static List<List<Cell>> factorsOf(Interaction group, List<Axis> axes) {
-        List<List<Cell>> out = new ArrayList<>();
+    private static List<List<Placed>> factorsOf(Interaction group, List<Axis> axes) {
+        List<List<Placed>> out = new ArrayList<>();
         for (Factor factor : group.factors()) {
-            List<Cell> outcomes = new ArrayList<>();
+            List<Placed> outcomes = new ArrayList<>();
             for (Outcome outcome : factor.outcomes()) {
-                Cell at = narrowedBy(outcome.holds(), axes);
+                Placed at = placedBy(outcome.holds(), axes);
                 if (at == null || alreadyThere(outcomes, at)) {
                     return null;
                 }
@@ -218,6 +254,24 @@ public final class InteractionCells {
             out.add(outcomes);
         }
         return out;
+    }
+
+    /**
+     * What {@code made} leaves open and what a run that made it would be seen to have done, or null
+     * where any of it narrows nothing or narrows it away.
+     *
+     * <p>One walk over the decisions for both halves. The classes are this reader's own reading of
+     * what the decisions take of the inputs; the claims are carried through untouched, being the
+     * reading that owns them. Which decisions are here is decided once, so the claims cannot end up
+     * being of a different set of them than the classes are.
+     */
+    private static Placed placedBy(List<souther.compiler.interaction.Decision> made,
+                                   List<Axis> axes) {
+        Cell cell = narrowedBy(
+                made.stream().map(souther.compiler.interaction.Decision::constrains).toList(), axes);
+        return cell == null ? null
+                : new Placed(cell, made.stream()
+                        .map(souther.compiler.interaction.Decision::claims).toList());
     }
 
     /** What {@code holds} leaves open, or null where any of it narrows nothing or narrows it away. */
@@ -236,9 +290,9 @@ public final class InteractionCells {
         return cell;
     }
 
-    private static boolean alreadyThere(List<Cell> outcomes, Cell at) {
-        for (Cell each : outcomes) {
-            if (each.sameAs(at)) {
+    private static boolean alreadyThere(List<Placed> outcomes, Placed at) {
+        for (Placed each : outcomes) {
+            if (each.cell().sameAs(at.cell())) {
                 return true;
             }
         }
@@ -266,11 +320,11 @@ public final class InteractionCells {
                 if (axis < 0) {
                     return null;
                 }
-                Cut line = cutAt(axes.get(axis), one.site());
+                Cut line = cutAt(axes.get(axis), one.comparison());
                 if (line == null) {
                     return null;
                 }
-                OriginRef.GuardOrigin guard = guardOf(line, one.site());
+                OriginRef.GuardOrigin guard = guardOf(line, one.comparison());
                 int home = holding(axes.get(axis), line);
                 if (home < 0) {
                     return null;
@@ -333,9 +387,9 @@ public final class InteractionCells {
     }
 
     /** The cut this reading of the comparison drew, or null where it drew none. */
-    private static Cut cutAt(Axis axis, int site) {
+    private static Cut cutAt(Axis axis, ComparisonOccurrence comparison) {
         for (Cut each : axis.cuts()) {
-            if (guardOf(each, site) != null) {
+            if (guardOf(each, comparison) != null) {
                 return each;
             }
         }
@@ -343,9 +397,10 @@ public final class InteractionCells {
     }
 
     /** Which rule of the cut this reading of the comparison is. */
-    private static OriginRef.GuardOrigin guardOf(Cut cut, int site) {
+    private static OriginRef.GuardOrigin guardOf(Cut cut, ComparisonOccurrence comparison) {
         for (OriginRef origin : cut.origins()) {
-            if (origin instanceof OriginRef.GuardOrigin guard && guard.read().site() == site) {
+            if (origin instanceof OriginRef.GuardOrigin guard
+                    && guard.read().comparison().equals(comparison)) {
                 return guard;
             }
         }
