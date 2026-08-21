@@ -254,7 +254,17 @@ public final class PathReachability {
      */
     private void walk(Core e, Known k, Denotations at, InputReads reads,
                       List<PathDecision> decided, boolean nothingAbove) {
-        if (e == null || k.reachesNothing()) {
+        if (e == null) {
+            return;
+        }
+        // Every comparison this plan numbers is answered for, and answered under what holds where it
+        // stands. Before the reach test below, because a comparison in a region nothing arrives at
+        // is a comparison nothing arrives at — which is the fact, and the fact a boundary drawn on
+        // it is dropped by.
+        if (e instanceof Core.Binary comparison) {
+            outcomesAt(comparison, k, at, decided);
+        }
+        if (k.reachesNothing()) {
             // Nothing stands here, so nothing below is a place anything arrives at either. The arm
             // that made it so was answered where it was entered; the arms under it are left absent,
             // which reads as unsettled — the outermost one is the place to say it, and saying it
@@ -262,9 +272,24 @@ public final class PathReachability {
             return;
         }
         switch (e) {
+            // A short circuit runs its right side only where the left settled nothing, so the two
+            // sides do not stand under the same conditions. Threaded here rather than in a walk of
+            // its own over a fork's condition: a chain is a chain wherever it is written, and one
+            // read only under the fork it was written into left the same operators unread a line
+            // above.
+            case Core.Binary binary when binary.op() == Hir.BinOp.AND
+                    || binary.op() == Hir.BinOp.OR -> {
+                walk(binary.left(), k, at, reads, decided, nothingAbove);
+                // `&&` gets to its right side having held, `||` having failed. Read the other way
+                // round, a comparison guarded by its neighbour would be read against conditions
+                // nothing on the way to it established.
+                boolean reachedWhen = binary.op() == Hir.BinOp.AND;
+                Predicates.Assumed reaching = engine.assuming(binary.left(), k, at, reachedWhen);
+                walk(binary.right(), reaching.known(), at, reads,
+                        with(decided, reaching, binary.left().pos(), reachedWhen), nothingAbove);
+            }
             case Core.If iff -> {
                 walk(iff.cond(), k, at, reads, decided, nothingAbove);
-                outcomes(iff.cond(), k, at, decided);
                 ControlPointId.ArmOccurrence[] arms = plan.armsOf(iff);
                 enterArm(arms, 0, iff, iff.then(), k, at, reads, decided, true);
                 enterArm(arms, 1, iff, iff.els(), k, at, reads, decided, false);
@@ -319,40 +344,28 @@ public final class PathReachability {
     }
 
     /**
-     * Each comparison of a condition, read under what holds where that comparison runs.
+     * One comparison, answered both ways, under what holds where it stands.
      *
-     * <p>Not under what holds at the fork. A condition stops as soon as it is settled, so the
-     * right-hand side of an {@code &&} runs only where the left-hand side held and the right-hand
-     * side of an {@code ||} only where it did not — and a comparison read under the fork's own
-     * state would be read under conditions that were never established when it ran.
+     * <p>Which nodes get an answer is the plan's to say and not this walk's. Read off the shape of
+     * a fork's condition, the reading answered for the comparisons a fork was written directly
+     * around and silently for no others — and a comparison nothing answered for reads, everywhere
+     * below, exactly like one answered "nothing is known".
      *
-     * <p>Descends through {@code &&} and {@code ||} only, which is what a condition is built out of
-     * and what the plan numbered. Anything else is a leaf: the plan answers for it or does not, and
-     * a node it numbered nothing at is one nothing is filed about.
+     * <p>Empty is an ordinary answer here: the node is not a comparison, or is one this plan
+     * numbered nothing at, and either way there is no place a run through it would be recorded.
      */
-    private void outcomes(Core cond, Known k, Denotations at, List<PathDecision> decided) {
-        if (cond instanceof Core.Binary b
-                && (b.op() == Hir.BinOp.AND || b.op() == Hir.BinOp.OR)) {
-            outcomes(b.left(), k, at, decided);
-            // The side that reaches the right operand: `&&` gets there having held, `||` having
-            // failed. Read the other way round, a comparison guarded by its neighbour would be
-            // proven against conditions nothing on the way to it established.
-            boolean reachedWhen = b.op() == Hir.BinOp.AND;
-            Predicates.Assumed reaching = engine.assuming(b.left(), k, at, reachedWhen);
-            outcomes(b.right(), reaching.known(), at,
-                    with(decided, reaching, b.left().pos(), reachedWhen));
-            return;
-        }
+    private void outcomesAt(Core.Binary comparison, Known k, Denotations at,
+                            List<PathDecision> decided) {
         for (boolean result : new boolean[] {true, false}) {
-            var where = plan.outcomeOf(cond, result);
+            var where = plan.outcomeOf(comparison, result);
             if (where.isEmpty()) {
                 continue;
             }
-            Predicates.Assumed taken = engine.assuming(cond, k, at, result);
+            Predicates.Assumed taken = engine.assuming(comparison, k, at, result);
             out.put(where.get(), taken.known().reachesNothing()
                     ? new Reachability.Unreachable(Proof.conditionsThatCannotAllHold(
-                            with(decided, taken, cond.pos(), result)))
-                    : new Reachability.Unsettled(whyNot(taken, cond)));
+                            with(decided, taken, comparison.pos(), result)))
+                    : new Reachability.Unsettled(whyNot(taken, comparison)));
         }
     }
 
