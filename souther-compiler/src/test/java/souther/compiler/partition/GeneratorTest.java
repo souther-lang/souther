@@ -161,7 +161,8 @@ class GeneratorTest {
                 new AxisId("submit", "request.urgent"), Classification.in("true"));
 
         Generator.GenerationResult filled =
-                Generator.fill(subject, List.of(written), Generator.CandidateCheck.ANY);
+                Generator.fill(subject, List.of(Generator.ObservedRow.unseen(written)),
+                        Generator.CandidateCheck.ANY);
 
         assertEquals(3, filled.rows().size());
         assertTrue(filled.rows().stream()

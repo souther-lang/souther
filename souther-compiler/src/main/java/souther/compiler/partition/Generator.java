@@ -108,6 +108,34 @@ public final class Generator {
     }
 
     /**
+     * A row that is already written, as the two things this reads it for.
+     *
+     * <p>Where its values sit is what says which classes and which pairs it fills; what its run did
+     * is what says which combinations of the body's decisions it fills. The second is not derivable
+     * from the first, which is the whole of what this issue is about — a row whose values sit in a
+     * combination's classes and whose run went elsewhere fills nothing, and looks from the values
+     * alone exactly like one that fills it.
+     *
+     * @param at   which class of each divided position the row's values fall in
+     * @param seen what the row's run was recorded doing, or {@link Observation#NONE} where nothing
+     *             read it. Nothing read is not nothing done: it certifies no combination, which
+     *             leaves them owed rather than filled
+     */
+    public record ObservedRow(Map<AxisId, Classification> at,
+                              souther.compiler.coverage.Observation seen) {
+
+        public ObservedRow {
+            at = Map.copyOf(at);
+            seen = seen == null ? souther.compiler.coverage.Observation.NONE : seen;
+        }
+
+        /** A row nothing ran, for a caller with no run to read. */
+        public static ObservedRow unseen(Map<AxisId, Classification> at) {
+            return new ObservedRow(at, souther.compiler.coverage.Observation.NONE);
+        }
+    }
+
+    /**
      * A combination no row could be written for, and why.
      *
      * <p>{@code ALL_CANDIDATES_REJECTED} is not a proof that the combination is impossible. It says
@@ -243,8 +271,7 @@ public final class Generator {
      * it brings in. Ties go to the lower index, the axes are ordered before anything starts, and nothing
      * consults a clock or a hash order — the same model and the same rows produce the same rows twice.
      */
-    public static GenerationResult fill(Subject subject,
-                                        List<Map<AxisId, Classification>> existing,
+    public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
                                         CandidateCheck check) {
         return fill(subject, existing, check, List.of());
     }
@@ -259,8 +286,7 @@ public final class Generator {
      * they leave free is what the pairs are spent on — so the rows a cell needs are rows the pair
      * space was going to want anyway, rather than rows added beside them.
      */
-    public static GenerationResult fill(Subject subject,
-                                        List<Map<AxisId, Classification>> existing,
+    public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
                                         CandidateCheck check,
                                         List<souther.compiler.interaction.Interaction> groups) {
         List<Axis> ordered = ordered(subject);
@@ -285,16 +311,16 @@ public final class Generator {
         // covers every pair can still miss a class of a position the pairs happened to fix elsewhere.
         Set<Pair> pairs = pairsOf(axes);
         Set<Pair> singles = singlesOf(axes);
-        for (Map<AxisId, Classification> row : existing) {
-            cover(pairs, singles, axes, whereIn(row, axes));
+        for (ObservedRow row : existing) {
+            cover(pairs, singles, axes, whereIn(row.at(), axes));
         }
 
         List<GeneratedRow> rows = new ArrayList<>();
         List<UnresolvedCombination> unresolved = new ArrayList<>();
         List<GenerationReason> reasons = new ArrayList<>(undecided);
-        List<int[]> written = new ArrayList<>();
-        for (Map<AxisId, Classification> row : existing) {
-            written.add(whereIn(row, axes));
+        List<Placement> written = new ArrayList<>();
+        for (ObservedRow row : existing) {
+            written.add(new Placement(whereIn(row.at(), axes), row.seen()));
         }
         // Built here and not handed in: a cell is one class per position of the axes this
         // generation kept, and the caller's list is neither ordered the same nor filtered the same.
@@ -322,8 +348,9 @@ public final class Generator {
                     continue;
                 }
                 InteractionCells.Cell cell = selection.cell();
-                if (sits(written, cell)) {
-                    // A cell a row already sits in is a cell nothing is owed for.
+                if (fills(written, selection)) {
+                    // A combination a row was seen filling is one nothing is owed for. Sitting in
+                    // its classes is not that, and is not enough.
                     continue;
                 }
                 int[] where = assign(axes, pairs, cell);
@@ -338,7 +365,9 @@ public final class Generator {
                 // out to settle beside that, and a name carrying it would move when nothing about
                 // the row had.
                 rows.add(new GeneratedRow(labels(axes, cell, where), built.row().inputs()));
-                written.add(where);
+                // Counted against the pairs, which are about where a row's values sit, and against
+                // no combination: nothing ran this, so it was seen filling none of them.
+                written.add(new Placement(where, souther.compiler.coverage.Observation.NONE));
                 cover(pairs, singles, axes, where);
             }
         }
@@ -603,9 +632,9 @@ public final class Generator {
     /** Whether every existing row said where it sat at this position. One that did not leaves the
      * position undecided: what the rows cover there is unknown, so what they do not cover is unknown
      * too. */
-    private static boolean readEverywhere(Axis axis, List<Map<AxisId, Classification>> existing) {
-        for (Map<AxisId, Classification> row : existing) {
-            Classification where = row.get(axis.id());
+    private static boolean readEverywhere(Axis axis, List<ObservedRow> existing) {
+        for (ObservedRow row : existing) {
+            Classification where = row.at().get(axis.id());
             if (where != null && !(where instanceof Classification.Classified)) {
                 return false;
             }
@@ -644,15 +673,44 @@ public final class Generator {
         }
     }
 
-    /** Whether a row already written sits inside what {@code cell} leaves each position. */
-    private static boolean sits(List<int[]> written, InteractionCells.Cell cell) {
+    /** A row this generation is counting against the combinations: where it sits, and what its
+     *  run did. */
+    private record Placement(int[] where, souther.compiler.coverage.Observation seen) {}
+
+    /**
+     * Whether {@code cell} leaves room for a row sitting at {@code where}.
+     *
+     * <p>A statement about the search space and about nothing else. Being admitted is what makes a
+     * row a candidate for a combination; it is not what makes it one that fills it.
+     */
+    private static boolean admits(InteractionCells.Cell cell, int[] where) {
         int positions = cell.allowed().length;
-        for (int[] row : written) {
-            boolean all = true;
-            for (int i = 0; i < positions && all; i++) {
-                all = !cell.narrows(i) || (i < row.length && cell.admits(i, row[i]));
+        for (int i = 0; i < positions; i++) {
+            if (cell.narrows(i) && !(i < where.length && cell.admits(i, where[i]))) {
+                return false;
             }
-            if (all) {
+        }
+        return true;
+    }
+
+    /**
+     * Whether a row already counted fills {@code selection} — sits in its classes, and was seen
+     * doing what it names.
+     *
+     * <p>Both, and the second is what settles it. A combination is a path through the body and an
+     * outcome at each of the decisions that meet on it, so what fills one is a run that took that
+     * path and settled them those ways. A row whose values sit in the classes is a row the reading
+     * expected to do that, and every step from the decisions to the classes is a reading that can
+     * be wrong — so taking the values for the answer is taking the reading for its own witness.
+     *
+     * <p>Which is why a row this generation composed and nothing ran fills nothing. It is admitted
+     * and it is not certified, so the combination stays owed. Counting it would be the same mistake
+     * one step earlier: a row offered on the strength of a reading, then read back as evidence for
+     * the reading that offered it.
+     */
+    private static boolean fills(List<Placement> written, CellSelection selection) {
+        for (Placement row : written) {
+            if (admits(selection.cell(), row.where()) && selection.certifiedBy(row.seen())) {
                 return true;
             }
         }

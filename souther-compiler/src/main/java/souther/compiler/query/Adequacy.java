@@ -1586,8 +1586,13 @@ public final class Adequacy {
             Generator.CandidateCheck check = building == null ? Generator.CandidateCheck.ANY
                     : (at, candidate) -> building.refuse(sig.ins().get(at), candidate.value());
 
-            List<Map<AxisId, Classification>> existing = rows.stream()
-                    .map(row -> RowClasses.of(row, inputs, partitioning.axes())).toList();
+            // Where each row's values sit, and what its run did. Both come off the one outcome:
+            // the first is what a pair count is taken over, the second is what says which of the
+            // body's combinations the row was seen filling.
+            List<Generator.ObservedRow> existing = rows.stream()
+                    .map(row -> new Generator.ObservedRow(
+                            RowClasses.of(row, inputs, partitioning.axes()), seenBy(row)))
+                    .toList();
             return Generator.fill(subject, existing, check,
                     souther.compiler.interaction.Interactions.of(body, plan, domain, symbols));
         }
