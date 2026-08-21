@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -28,6 +29,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * so running out of rounds leaves a box that is wider than the rules and still closed. Which is why
  * the certificate does not ask {@link ClosedState.Status}: what it needs is this, and this holds
  * either way.
+ *
+ * <p>The half where the rounds run out is written down rather than sampled. Over whole numbers in a
+ * bounded box the descent stops on its own — each round takes some end at least a whole step in, and
+ * there are finitely many steps to take — so the generated systems below never reach it, and a check
+ * that hoped they would would be about one status while claiming both. What needs the budget is a
+ * descent that never arrives, which takes values that fill.
  */
 class TheBoxAClosedStateHandsBackIsClosedUnderItsDifferencesTest {
 
@@ -46,13 +53,14 @@ class TheBoxAClosedStateHandsBackIsClosedUnderItsDifferencesTest {
     void noDifferenceLeavesAnEndLooserThanItCouldBe() {
         Random dice = new Random(907);
         int settled = 0;
+        int exhausted = 0;
         for (int round = 0; round < CASES; round++) {
             ClosedState<String> closed = ClosedState.of(read(aSystem(dice)),
                     atom -> Granularity.DISCRETE);
             if (closed.holdsNothing()) {
                 continue;
             }
-            settled += closed.status() == ClosedState.Status.STABLE ? 1 : 0;
+            if (closed.status() == ClosedState.Status.STABLE) { settled++; } else { exhausted++; }
             Box<String> box = closed.box();
             for (String here : POSITIONS) {
                 for (String there : POSITIONS) {
@@ -88,9 +96,9 @@ class TheBoxAClosedStateHandsBackIsClosedUnderItsDifferencesTest {
                 }
             }
         }
-        assertTrue(settled > 0 && settled < CASES,
-                "the systems have to come out both ways for the property to be about both, and "
-                        + settled + " of " + CASES + " settled");
+        assertTrue(settled > 0,
+                "no system settled, so the property was checked about nothing: " + settled
+                        + " settled and " + exhausted + " ran out of rounds");
     }
 
     /** And so carrying it again is carrying it nowhere, which is the same property said as a step. */
@@ -108,7 +116,59 @@ class TheBoxAClosedStateHandsBackIsClosedUnderItsDifferencesTest {
         }
     }
 
+    /**
+     * And where the rounds run out, said as one system rather than hoped for.
+     *
+     * <p>Two rules each halving what the other leaves — {@code 2x <= y} beside {@code 2y <= x} over
+     * values that fill — descend by a quarter every round and never arrive, which is the case the
+     * budget exists for. A third position is held a step from one of them, so that carrying the box
+     * along the differences has something to carry: the property is about the relations, and a system
+     * without one would hold it by having nothing to check.
+     */
+    @Test
+    void aBoxTheRoundsRanOutOnIsClosedUnderTheDifferencesToo() {
+        List<Written> system = new ArrayList<>();
+        for (String position : List.of("x", "y")) {
+            system.add(new Written(Map.of(position, Rational.ONE), Rational.ZERO, Rel.GE));
+            system.add(new Written(Map.of(position, Rational.ONE), Rational.of(-100), Rel.LE));
+        }
+        system.add(new Written(Map.of("z", Rational.ONE), Rational.ZERO, Rel.GE));
+        system.add(new Written(Map.of("z", Rational.ONE), Rational.of(-101), Rel.LE));
+        system.add(new Written(halving("x", "y"), Rational.ZERO, Rel.LE));
+        system.add(new Written(halving("y", "x"), Rational.ZERO, Rel.LE));
+        system.add(new Written(apart("z", "x"), Rational.of(-1), Rel.LE));
+
+        ClosedState<String> closed = ClosedState.of(read(system), atom -> Granularity.DENSE);
+
+        assertEquals(ClosedState.Status.BUDGET_EXHAUSTED, closed.status(),
+                "the point of this system is that the rounds do not settle it");
+        assertFalse(closed.holdsNothing());
+        assertEquals(closed.box(), closed.boxCarriedAlongTheDifferences(),
+                "the rounds ran out and the box is a fixed point of the differences all the same");
+        // `z - x <= 1` with `x` wherever the rounds left it, which is what carrying it along the
+        // differences puts `z` at — and is where the box has it.
+        assertEquals(closed.box().mostOf("x").at().plus(Rational.ONE),
+                closed.box().mostOf("z").at(),
+                "the difference did not reach `z` at the end the rounds left `x` at");
+    }
+
     // --- the systems ------------------------------------------------------------------------------
+
+    /** {@code 2·above - below}, a rule the differences cannot hold and the rounds have to read. */
+    private static Map<String, Rational> halving(String above, String below) {
+        Map<String, Rational> coefs = new LinkedHashMap<>();
+        coefs.put(above, Rational.of(2));
+        coefs.put(below, Rational.ONE.negated());
+        return coefs;
+    }
+
+    /** {@code above - below}, which the differences hold exactly. */
+    private static Map<String, Rational> apart(String above, String below) {
+        Map<String, Rational> coefs = new LinkedHashMap<>();
+        coefs.put(above, Rational.ONE);
+        coefs.put(below, Rational.ONE.negated());
+        return coefs;
+    }
 
     private record Written(Map<String, Rational> coefs, Rational constant, Rel rel) {}
 
