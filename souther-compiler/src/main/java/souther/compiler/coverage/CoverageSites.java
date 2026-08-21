@@ -597,6 +597,15 @@ public final class CoverageSites {
                 comparisons(binary.right());
                 return;
             }
+            // Through what a binding holds, since that is where a condition handed in from outside
+            // arrives. A closure given to a library combinator is inlined as a `let` binding the
+            // element and the author's comparison under it, so a walk that went no further than the
+            // connectives left every comparison written inside one unnumbered — and a comparison with
+            // no site is one nothing can say ran, which is the answer a comparison nobody wrote gives.
+            if (condition instanceof Core.LetIn let) {
+                comparisons(let.body());
+                return;
+            }
             // Numbered once. A node reached twice is one comparison written once, and a second number
             // for it would be a site the emitter never lights — which is the shape of a real omission
             // and would be reported as one.
