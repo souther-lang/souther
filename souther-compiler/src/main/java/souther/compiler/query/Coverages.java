@@ -452,11 +452,13 @@ final class Coverages {
      *                  well as into {@link #assessBetween} because which shape of quantity a rule
      *                  cuts says nothing about where a row for it may be written — and a region put
      *                  into one of the two paths would leave the other searching over everything its
-     *                  position could ever hold. No input is known where it changes an answer down
-     *                  this path: the points of a line at one position all sit beside the line, and
-     *                  a line the region excludes is one the reading of what arrives has already
-     *                  taken the obligation away for. That is a second route to the same answer and
-     *                  not a reason to leave a path short of what it is owed.
+     *                  position could ever hold. No model was found where it moves an answer down
+     *                  this path, and no test holds it: the points of a line at one position all sit
+     *                  beside the line, and every line tried that the region excludes turned out to
+     *                  be one {@link souther.compiler.check.PathReachability} had already taken the
+     *                  obligation away for. Whether those two always coincide is not established
+     *                  here — they are different readings — so what this says is that a path is not
+     *                  left short of what it is owed, and not that the region is idle here.
      */
     static List<BorderAssessment> assess(
             Axis axis, BehaviorInputs where, souther.compiler.query.Adequacy.Observed observed,
