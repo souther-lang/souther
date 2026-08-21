@@ -577,12 +577,24 @@ public final class CallElaborator {
             }
             return applySignature(call, fn, ca, expected, env, ctx).result();
         }
-        // A library name that matched no builtin or intrinsic above is a wrong stdlib call
-        // (spec §stdlib) — reported as that, not as a missing behavior. Asked of which kind
-        // of name this reaches and not of whether the spelling holds a dot: a field read
-        // applied (`deps.count(x)`) is quoted with a dot in it and reaches a binding, and
-        // what is wrong with it is that it is not a function, which the report below says.
+        // A library name that matched no builtin or intrinsic above. Which of the two it is the
+        // library says, and the two are not one report. A name it declares reached here without
+        // having been expanded or bound, and neither is something an author can write or undo —
+        // it is this compiler disagreeing with itself, which is what the helper arm below says of
+        // the same failure and is said the same way here. A spelling it declares nothing under is
+        // a wrong stdlib call (spec §stdlib) and is reported as that, not as a missing behavior.
+        //
+        // A sugar declares nothing, so a call of one that got this far is a call the rewrite did
+        // not take: `List.fold` written with two arguments is not the three-argument call it is
+        // sugar for, and what is wrong with it is what was written.
+        //
+        // Asked of which kind of name this reaches and not of whether the spelling holds a dot: a
+        // field read applied (`deps.count(x)`) is quoted with a dot in it and reaches a binding,
+        // and what is wrong with it is that it is not a function, which the report below says.
         if (callee.reachedAs() instanceof ReachName.OfLibrary) {
+            if (entry != null) {
+                throw unelaborated("a standard-library function", call);
+            }
             throw CompileException.of(Diagnostic
                             .at(call.appliedAt()).say(new NameMessage.NotAStandardLibraryFunction(call.written())).build());
         }
@@ -591,9 +603,8 @@ public final class CallElaborator {
         // which is this compiler having failed to do one of them rather than anything the
         // author wrote. Said outright: reported as a wrong library call, it named a library
         // the author never wrote.
-        if (callee.denotes() instanceof ValueName.Helper helper) {
-            throw new IllegalStateException("`" + helper + "` was neither expanded nor"
-                    + " bound before the call to it at " + call.pos() + " was typed");
+        if (callee.denotes() instanceof ValueName.Helper) {
+            throw unelaborated("a helper", call);
         }
         // a required behavior called inline (spec §unmarked-output, §fn), or one that requires nothing and
         // is called by name (spec [#calling-a-behavior]). Both are typed against the callee's
