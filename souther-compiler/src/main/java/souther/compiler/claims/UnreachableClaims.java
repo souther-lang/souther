@@ -57,7 +57,7 @@ public final class UnreachableClaims {
             return NONE;
         }
         List<Claim> found = new ArrayList<>();
-        claimedUnder(body, InputReads.of(read), symbols, plan, found);
+        claimedUnder(body, InputReads.of(read), symbols, plan, NormalReturn.ofBody(body), found);
         return found.isEmpty() ? NONE : new UnreachableClaims(found);
     }
 
@@ -70,16 +70,16 @@ public final class UnreachableClaims {
      */
     private static void claimedUnder(Core e, InputReads reads, Symbols symbols,
                                      souther.compiler.coverage.CoverageSites.Plan plan,
-                                     List<Claim> found) {
+                                     NormalReturn answering, List<Claim> found) {
         if (e == null) {
             return;
         }
         InputReads inside = e instanceof Core.LetIn let ? reads.and(let.binder(), let.value())
                 : reads;
         if (e instanceof Core.Match match) {
-            claimedIn(match, inside, symbols, plan, found);
+            claimedIn(match, inside, symbols, plan, answering, found);
         }
-        Core.forEachChild(e, child -> claimedUnder(child, inside, symbols, plan, found));
+        Core.forEachChild(e, child -> claimedUnder(child, inside, symbols, plan, answering, found));
     }
 
     /**
@@ -90,7 +90,7 @@ public final class UnreachableClaims {
      */
     private static void claimedIn(Core.Match match, InputReads reads, Symbols symbols,
                                   souther.compiler.coverage.CoverageSites.Plan plan,
-                                  List<Claim> found) {
+                                  NormalReturn answering, List<Claim> found) {
         TermPath path = reads.pathOf(match.scrutinee(), symbols);
         if (path == null) {
             return;
@@ -98,14 +98,14 @@ public final class UnreachableClaims {
         souther.compiler.coverage.ControlPointId.ArmOccurrence[] arms = plan.armsOf(match);
         for (int i = 0; i < match.cases().size(); i++) {
             Core.Case arm = match.cases().get(i);
-            if (NormalReturn.of(arm.body())) {
+            if (answering.at(arm.body())) {
                 continue;
             }
             if (arms == null || i >= arms.length) {
                 continue;   // a fork this plan holds no arms for is one nothing can be asked about
             }
             souther.compiler.coverage.ControlPointId.ArmOccurrence where = arms[i];
-            List<UnreachableReasons.Said> said = UnreachableReasons.said(arm.body());
+            List<UnreachableReasons.Said> said = UnreachableReasons.said(arm.body(), answering);
             List<String> why = said.stream().map(UnreachableReasons.Said::reason).distinct().toList();
             // Cases written together on one arm are one run of code, and it declares the same thing
             // about every one of them.
