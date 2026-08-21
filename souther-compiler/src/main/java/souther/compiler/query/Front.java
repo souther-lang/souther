@@ -132,6 +132,35 @@ public final class Front {
      */
     public record Policy() implements Input<souther.compiler.examples.EvaluationPolicy> {}
 
+    /**
+     * How much of a declaration's clauses a reading may hold apart.
+     *
+     * <p>Held as an input for the reason the one above is: it belongs to the compilation, and every
+     * reading of one declaration has to be under the same one. Read here and handed to the analysis,
+     * which never makes one — a policy made where it is needed is one that can differ between two
+     * readings of the same declaration, and each would answer a position differently while both
+     * stayed sound.
+     */
+    public record Reading() implements Input<souther.compiler.check.ReadingPolicy> {
+
+        /**
+         * What a compilation sets, and the one place the number is written.
+         *
+         * <p>A guardrail against pathological expansion and not a precision setting: measured over
+         * the compiler's own suite the largest expansion any clause reaches is five, and over the
+         * bench corpus every clause reaches one. So nothing written in this repository is read by
+         * the fallback at any limit of eight or more, and this is a wide margin over anything
+         * observed rather than an optimum derived from it. What the design needs is that a finite
+         * limit exists.
+         *
+         * <p>Held here rather than beside the policy it makes, so that reading a declaration cannot
+         * reach it: what governs a reading is handed to it, and a default it could pick up is a
+         * default two readings of one declaration can differ by.
+         */
+        static final souther.compiler.check.ReadingPolicy STANDARD =
+                new souther.compiler.check.ReadingPolicy(64);
+    }
+
     /** One source, parsed, with the text of each declaration kept for publishing. Every position in
      * what comes back names this source, so a writing that later joins another file's module still
      * says where it was written. */

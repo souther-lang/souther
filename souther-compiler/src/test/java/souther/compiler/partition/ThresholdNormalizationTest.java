@@ -61,8 +61,8 @@ class ThresholdNormalizationTest {
         GuardThresholds.Guards guards = GuardThresholds.of(behavior, body, plan,
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get(behavior), symbols);
         List<Threshold> thresholds = guards.thresholds();
-        Partitions.Partitioning base = Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(behavior), symbols), symbols);
-        return new Read(Partitions.withThresholds(base, thresholds, symbols), thresholds, symbols);
+        Partitions.Partitioning base = Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(behavior), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        return new Read(Partitions.withThresholds(base, thresholds, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), thresholds, symbols);
     }
 
     private static Axis axis(Partitions.Partitioning partitioning, String path) {

@@ -25,7 +25,8 @@ import java.util.List;
  * takes are two chances to read a position differently, which is the shape of every defect this
  * package has been fixing: {@link Generator.Subject} is these inputs and the axes derived at them.
  */
-public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols symbols) {
+public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols symbols,
+                             souther.compiler.check.ReadingPolicy policy) {
 
     public BehaviorInputs {
         parameters = List.copyOf(parameters);

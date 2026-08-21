@@ -68,7 +68,7 @@ class ATermThatReadsAnotherHoldsItsNameAndNotItsShapeTest {
     }
 
     private static int held(int links) {
-        Term term = chainTerm(new Terms(Symbols.none()), links);
+        Term term = chainTerm(new Terms(Symbols.none(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES), links);
         return term == null ? -1 : term.distinct();
     }
 
@@ -112,7 +112,7 @@ class ATermThatReadsAnotherHoldsItsNameAndNotItsShapeTest {
      */
     @Test
     void twoShapesThatDifferAreTwoTerms() {
-        Terms terms = new Terms(Symbols.none());
+        Terms terms = new Terms(Symbols.none(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Term four = chainTerm(terms, 4);
         Term five = chainTerm(terms, 5);
         Term fourAgain = chainTerm(terms, 4);
@@ -138,7 +138,7 @@ class ATermThatReadsAnotherHoldsItsNameAndNotItsShapeTest {
      */
     @Test
     void theChainDoesNotHashIntoOneBucket() {
-        List<Term> along = chain(new Terms(Symbols.none()), 1000);
+        List<Term> along = chain(new Terms(Symbols.none(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES), 1000);
         java.util.Set<Term> terms = new java.util.HashSet<>(along);
         java.util.Set<Integer> hashes = new java.util.HashSet<>();
         along.forEach(term -> hashes.add(term.hashCode()));
@@ -157,8 +157,8 @@ class ATermThatReadsAnotherHoldsItsNameAndNotItsShapeTest {
      */
     @Test
     void aTermBuiltByAnotherReadingIsTheSameTerm() {
-        Term here = chainTerm(new Terms(Symbols.none()), 6);
-        Term there = chainTerm(new Terms(Symbols.none()), 6);
+        Term here = chainTerm(new Terms(Symbols.none(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES), 6);
+        Term there = chainTerm(new Terms(Symbols.none(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES), 6);
 
         assertEquals(here, there, "two readings name one value alike");
         assertEquals(here.hashCode(), there.hashCode(), "and hash it alike");

@@ -80,13 +80,13 @@ class AnOpenPositionIsAReadingThatRanToTheEndTest {
     private Position read(String type) {
         return InputDomain.of(
                         List.of(new InputDomain.Parameter("x", null, Type.ref(named(type)))),
-                        symbols)
+                        symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
                 .at(TermPath.of("x"));
     }
 
     /** What the reading of {@code type} came to. */
     private LocalPartition partitionOf(String type) {
-        return LocalInspection.of(read(type), symbols);
+        return LocalInspection.of(read(type), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 
     /** A type that states cases divides the position, and no line is drawn through them. */

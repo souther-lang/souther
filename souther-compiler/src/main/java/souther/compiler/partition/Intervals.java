@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
@@ -184,6 +185,7 @@ final class Intervals {
      * and which values carry a count is asked of what builds them rather than settled here.
      */
     static List<PartitionClass> classesOf(List<Band> runs, NumericTerm of, Type type,
+                                          ReadingPolicy policy,
                                           Symbols symbols, Endpoint min, Endpoint max) {
         // What the counts in a label stand for. A day count is a carrier and never a name for the
         // line, so the class an author reads is spelled in dates where the position holds them.
@@ -209,7 +211,7 @@ final class Intervals {
                         "no value this position can hold lies inside this range"));
                 continue;
             }
-            List<FixtureTemplate> values = standingIn(of, inside, type, carrier, symbols);
+            List<FixtureTemplate> values = standingIn(of, inside, type, policy, carrier, symbols);
             classes.add(values.isEmpty()
                     ? PartitionClass.ungeneratable(id, label, is,
                             "nothing here writes a value whose " + measureOf(of) + " is in this range")
@@ -247,6 +249,7 @@ final class Intervals {
      * only when the thing that builds them has none to give.
      */
     private static List<FixtureTemplate> standingIn(NumericTerm of, Place inside, Type type,
+                                                    ReadingPolicy policy,
                                                     Carrier carrier, Symbols symbols) {
         if (of instanceof NumericTerm.ValueOf) {
             FixtureTemplate standing = Witnesses.wrapped(type,
@@ -259,7 +262,7 @@ final class Intervals {
         }
         List<FixtureTemplate> out = new ArrayList<>();
         for (FixtureTemplate each
-                : Witnesses.ofSize(TypeOps.base(type, symbols), size, symbols, Set.of()).values()) {
+                : Witnesses.ofSize(TypeOps.base(type, symbols), size, symbols, policy, Set.of()).values()) {
             out.add(Witnesses.wrapped(type, each, symbols));
         }
         return List.copyOf(out);

@@ -22,6 +22,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Both are what this reading can prove and not what is true of the model. A conservative rule may
  * answer false where the values happen to be exact, which is why they are read as guarantees: what
  * they say holds, and what they do not say is unknown.
+ *
+ * <p><b>Said of a choice whose alternatives are merged</b> — {@code join} here, which is what a
+ * declaration too large to hold them apart is read by. Held apart the same witness is answered
+ * exactly, and that is {@link AlternativesHeldApartAnswerThePositionExactlyTest}.
  */
 class WhatAReadingCanPromiseAboutItsProjectionsTest {
 

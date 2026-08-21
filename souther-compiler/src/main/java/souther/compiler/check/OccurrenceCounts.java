@@ -47,8 +47,9 @@ public final class OccurrenceCounts {
      * up to how many values the element has, and each of those is the same reading of the same
      * clauses.
      */
-    public static OccurrenceCounts of(TypeSymbol named, Hir.Data data, Symbols symbols) {
-        return of(named, data, symbols, _ -> false);
+    public static OccurrenceCounts of(TypeSymbol named, Hir.Data data, Symbols symbols,
+                                       ReadingPolicy policy) {
+        return of(named, data, symbols, policy, _ -> false);
     }
 
     /**
@@ -59,9 +60,10 @@ public final class OccurrenceCounts {
      * it has a value is not reading it at all.
      */
     static OccurrenceCounts of(TypeSymbol named, Hir.Data data, Symbols symbols,
+                                 ReadingPolicy policy,
                                  java.util.function.Predicate<TypeSymbol> granted) {
         return new OccurrenceCounts(
-                InvariantChecker.seedFields(named, data, symbols, java.util.Map.of(),
+                InvariantChecker.seedFields(named, data, symbols, policy, java.util.Map.of(),
                         InvariantChecker.Reach.stoppingAt(granted)));
     }
 

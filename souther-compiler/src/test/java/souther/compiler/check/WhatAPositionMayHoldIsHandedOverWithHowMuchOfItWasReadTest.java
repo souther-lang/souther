@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.query.ReadAs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Scopes;
@@ -46,6 +47,10 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
     }
 
     private static Read read(String source, String named) {
+        return read(source, named, ReadAs.THE_COMPILATION_DOES);
+    }
+
+    private static Read read(String source, String named, ReadingPolicy policy) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         assertEquals(List.of(), compilation.diagnostics().values().stream()
@@ -55,11 +60,18 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
         return new Read(FieldDomains.of(name,
-                (Hir.Data) symbols.declarations().declaration(name.key()), symbols), symbols);
+                (Hir.Data) symbols.declarations().declaration(name.key()), symbols, policy), symbols);
     }
 
     private static FieldDomains of(String source, String named) {
         return read(source, named).domains();
+    }
+
+    /** The same, read with no choice held apart. What a reading owes when it cannot hold what a
+     *  choice leaves is reached no other way: nothing written here expands far enough for the
+     *  limit a compilation sets to fall back to it. */
+    private static FieldDomains merging(String source, String named) {
+        return read(source, named, ReadAs.MERGING_WHAT_A_CHOICE_LEAVES).domains();
     }
 
     /** The same, for a model the compiler refuses: what this hands over afterwards is still read by
@@ -72,7 +84,8 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
         return FieldDomains.of(name,
-                (Hir.Data) symbols.declarations().declaration(name.key()), symbols);
+                (Hir.Data) symbols.declarations().declaration(name.key()), symbols,
+                ReadAs.THE_COMPILATION_DOES);
     }
 
     private static final Value A = Value.text("A");
@@ -101,7 +114,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
      */
     @Test
     void aChoiceAcrossTwoPositionsIsNotTheWholeOfWhatTheRulesLeave() {
-        FieldDomains read = of("""
+        FieldDomains read = merging("""
                 module demo
 
                 data R = { a: String, b: String }
@@ -283,7 +296,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
      */
     @Test
     void aChoiceOverTwoPositionsCoversNothingForTheAlternativeBesideIt() {
-        FieldDomains read = of("""
+        FieldDomains read = merging("""
                 module demo
 
                 data R = { a: Int, b: Int }

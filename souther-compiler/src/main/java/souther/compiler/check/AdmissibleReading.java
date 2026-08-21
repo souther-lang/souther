@@ -43,19 +43,22 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<FactSubj
      * values an integer has, and the reading that asked the carrier had no word for the first. */
     private final Map<FactSubject, Type> byName;
     private final Symbols symbols;
+    /** How a choice holds what it leaves, settled for the whole declaration before it was read. */
+    private final Alternatives alternatives;
 
     private AdmissibleReading(Terms terms, Denotations at, Map<FactSubject, Type> byName,
-                              Symbols symbols) {
+                              Symbols symbols, Alternatives alternatives) {
         this.terms = terms;
         this.at = at;
         this.byName = byName;
         this.symbols = symbols;
+        this.alternatives = alternatives;
     }
 
     /** The reading of one value's positions, for {@link StatedByClauses} to take the leaves of. */
     static AdmissibleReading of(Terms terms, Denotations at, Map<FactSubject, Type> byName,
-                                Symbols symbols) {
-        return new AdmissibleReading(terms, at, byName, symbols);
+                                Symbols symbols, Alternatives alternatives) {
+        return new AdmissibleReading(terms, at, byName, symbols, alternatives);
     }
 
     @Override
@@ -68,9 +71,16 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<FactSubj
         return one.meet(other);
     }
 
+    /**
+     * Either alternative holding, held apart or merged as the declaration was admitted.
+     *
+     * <p>Chosen before the reading and not while it folds. Merging only once some intermediate ran
+     * past a limit would make what a position is answered turn on how the choice was bracketed, and
+     * a model written two ways would be read two ways.
+     */
     @Override
     public AdmissibleValues<FactSubject> either(AdmissibleValues<FactSubject> one, AdmissibleValues<FactSubject> other) {
-        return one.join(other);
+        return alternatives == Alternatives.APART ? one.joinApart(other) : one.join(other);
     }
 
     /** An equality names a value and a denial leaves the rest; nothing else here is read. */

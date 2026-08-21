@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.check.ReadingPolicy;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.source.SourceId;
 
@@ -233,8 +234,8 @@ public final class Adequacy {
                     // the lowering leaves them alone. A behavior nothing implements has positions
                     // all the same.
                     Answer<Hir.FnDef> fn = db.ask(new Bodies.SettledFn(name, spec.name()));
-                    out.put(spec.name(), InputDomain.of(spec, fn.present() ? fn.value() : null, sig,
-                            scope.value()));
+                    out.put(spec.name(), InputDomain.of(spec, fn.present() ? fn.value() : null,
+                            sig, scope.value(), db.ask(new Front.Reading()).value()));
                 }
             }
             return Answer.of(Ordered.map(out));
@@ -322,7 +323,8 @@ public final class Adequacy {
                     continue;
                 }
                 out.put(spec.name(), souther.compiler.check.PathReachability.of(
-                        body, spec, fn, plan, domainOf(readInputs, spec), scope.value()));
+                        body, db.ask(new Front.Reading()).value(), spec, fn, plan, domainOf(readInputs, spec),
+                        scope.value()));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -643,7 +645,7 @@ public final class Adequacy {
                 // numbers rather than into them ({@link Claimed}), and the two meet where a report
                 // is written.
                 out.put(spec.name(), Coverages.of(spec, domainOf(readInputs, spec), sig,
-                        scope.value(), bodies.get(spec.name()), plan, seen,
+                        scope.value(), db.ask(new Front.Reading()).value(), bodies.get(spec.name()), plan, seen,
                         boundaries == null ? List.of()
                                 : boundaries.getOrDefault(spec.name(), List.of()),
                         arrivalsOf(arrives, spec), statedOf(declared, spec)));
@@ -714,7 +716,8 @@ public final class Adequacy {
                 if (sig == null) {
                     continue;
                 }
-                out.put(spec.name(), assess(spec, sig, symbols, bodies.get(spec.name()), plan,
+                out.put(spec.name(), assess(spec, sig, symbols, db.ask(new Front.Reading()).value(),
+                        bodies.get(spec.name()), plan,
                         byTarget.getOrDefault(spec.name(), Observed.NONE), armsAsked, building,
                         domainOf(readInputs, spec), arrivalsOf(arrives, spec),
                         statedOf(declared, spec)));
@@ -724,7 +727,8 @@ public final class Adequacy {
 
         /** Every line of one behavior, with what the rows and the decoder say about each. */
         private static List<BorderAssessment> assess(
-                Hir.SpecBehavior spec, Sig sig, Symbols symbols, souther.compiler.core.Core body,
+                Hir.SpecBehavior spec, Sig sig, Symbols symbols,
+                souther.compiler.check.ReadingPolicy policy, souther.compiler.core.Core body,
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
                 boolean armsAsked, FixtureReader.Construction building, InputDomain domain,
                 souther.compiler.check.PathReachability.Answers arrives,
@@ -732,11 +736,11 @@ public final class Adequacy {
             List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
             souther.compiler.partition.BehaviorInputs inputs =
                     new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
-                            symbols);
+                            symbols, policy);
             souther.compiler.partition.Partitions.Partitioning partitioning =
-                    Coverages.partitioningOf(spec, domain, sig, symbols, body, plan, arrives,
+                    Coverages.partitioningOf(spec, domain, sig, symbols, policy, body, plan, arrives,
                             stated);
-            Coverages.Probe probe = probing(partitioning, sig, symbols, parameters, building);
+            Coverages.Probe probe = probing(partitioning, sig, symbols, policy, parameters, building);
             // Two sources and not one. A line drawn at a count of a position comes off that position's
             // axis; a line drawn between two positions comes off the comparison and has no axis to come
             // off — the body of a behavior whose inputs are plain numbers nothing bounds draws lines
@@ -763,13 +767,14 @@ public final class Adequacy {
          */
         private static Coverages.Probe probing(
                 souther.compiler.partition.Partitions.Partitioning partitioning, Sig sig,
-                Symbols symbols, List<String> parameters, FixtureReader.Construction building) {
+                Symbols symbols, souther.compiler.check.ReadingPolicy policy,
+                List<String> parameters, FixtureReader.Construction building) {
             if (building == null) {
                 return null;
             }
             Generator.Subject subject = new Generator.Subject(
                     new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
-                            symbols), partitioning.axes());
+                            symbols, policy), partitioning.axes());
             Generator.CandidateCheck check =
                     (at, candidate) -> building.refuse(sig.ins().get(at), candidate.value());
             return new Coverages.Probe() {
@@ -1316,7 +1321,7 @@ public final class Adequacy {
                         : boundaries.getOrDefault(spec.name(), List.of());
                 Generator.GenerationResult pairs;
                 try {
-                    pairs = pairsFor(spec, sig, symbols, bodies.get(spec.name()), plan,
+                    pairs = pairsFor(spec, sig, symbols, db.ask(new Front.Reading()).value(), bodies.get(spec.name()), plan,
                             byTarget.getOrDefault(spec.name(), Observed.NONE), building,
                             domainOf(readInputs, spec), arrivalsOf(arrives, spec),
                             statedOf(declared, spec), runningRowsOf(trials, spec.name(), sig),
@@ -1587,7 +1592,8 @@ public final class Adequacy {
         }
 
         private static Generator.GenerationResult pairsFor(
-                Hir.SpecBehavior spec, Sig sig, Symbols symbols, souther.compiler.core.Core body,
+                Hir.SpecBehavior spec, Sig sig, Symbols symbols,
+                souther.compiler.check.ReadingPolicy policy, souther.compiler.core.Core body,
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
                 FixtureReader.Construction building, InputDomain domain,
                 souther.compiler.check.PathReachability.Answers arrives,
@@ -1607,9 +1613,9 @@ public final class Adequacy {
             // written are read by it, and the rows offered are generated from it.
             souther.compiler.partition.BehaviorInputs inputs =
                     new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
-                            symbols);
+                            symbols, policy);
             souther.compiler.partition.Partitions.Partitioning partitioning =
-                    Coverages.partitioningOf(spec, domain, sig, symbols, body, plan, arrives,
+                    Coverages.partitioningOf(spec, domain, sig, symbols, policy, body, plan, arrives,
                             stated);
             Generator.Subject subject = new Generator.Subject(inputs, partitioning.axes());
             Generator.CandidateCheck check = building == null ? Generator.CandidateCheck.ANY

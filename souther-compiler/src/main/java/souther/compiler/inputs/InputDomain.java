@@ -5,6 +5,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NumericMeasures;
+import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
@@ -80,7 +81,8 @@ public final class InputDomain {
     public record Parameter(String name, BindingId binding, Type type) {}
 
     /** Every position of an input, in the order the parameters are declared and descended into. */
-    public static InputDomain of(List<Parameter> parameters, Symbols symbols) {
+    public static InputDomain of(List<Parameter> parameters, Symbols symbols,
+                                 ReadingPolicy policy) {
         List<Position> found = new ArrayList<>();
         Map<BindingId, String> read = new LinkedHashMap<>();
         for (Parameter parameter : parameters) {
@@ -88,7 +90,7 @@ public final class InputDomain {
                 read.putIfAbsent(parameter.binding(), parameter.name());
             }
             walk(TermPath.of(parameter.name()), parameter.type(), 0, symbols,
-                    PlacedRules.of(parameter.type(), symbols), found);
+                    PlacedRules.of(parameter.type(), symbols, policy), found);
         }
         return found.isEmpty() ? NONE : new InputDomain(found, read);
     }
@@ -104,7 +106,7 @@ public final class InputDomain {
      *           behavior has positions and no body to read them in
      */
     public static InputDomain of(Hir.SpecBehavior behavior, Hir.FnDef fn, Sig sig,
-                                 Symbols symbols) {
+                                 Symbols symbols, ReadingPolicy policy) {
         List<Parameter> parameters = new ArrayList<>();
         for (int i = 0; i < sig.inputTypes().size() && i < behavior.params().size(); i++) {
             BindingId binding = fn != null && i < fn.params().size()
@@ -112,7 +114,7 @@ public final class InputDomain {
             parameters.add(new Parameter(behavior.params().get(i).name(), binding,
                     sig.inputTypes().get(i)));
         }
-        return of(parameters, symbols);
+        return of(parameters, symbols, policy);
     }
 
     /**
@@ -123,8 +125,9 @@ public final class InputDomain {
      * same spelling. So this is the reading for a caller with no body in hand, and a caller with one
      * that used it would find every claim and every comparison naming nothing.
      */
-    public static InputDomain of(Hir.SpecBehavior behavior, Sig sig, Symbols symbols) {
-        return of(behavior, null, sig, symbols);
+    public static InputDomain of(Hir.SpecBehavior behavior, Sig sig, Symbols symbols,
+                                 ReadingPolicy policy) {
+        return of(behavior, null, sig, symbols, policy);
     }
 
     /** The positions, in the order they were read. */

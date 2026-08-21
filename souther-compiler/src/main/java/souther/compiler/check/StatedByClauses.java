@@ -67,26 +67,11 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
     }
 
 
-    /**
-     * What {@code clauses} leave, all of them holding at once.
-     *
-     * @param byName the type at each position, keyed by what that position is called
-     */
-    static StatedByClauses of(List<Core> clauses, Terms terms, Denotations at,
-                              Map<FactSubject, Type> byName, Symbols symbols) {
-        Reading reading = readingOf(terms, at, byName, symbols);
-        StatedByClauses out = top();
-        for (Core clause : clauses) {
-            out = out.meet(reading.read(clause, true));
-        }
-        return out;
-    }
-
     /** The reading of one value's positions, made once and used over however many clauses reach it.
      *  Built per clause, this walk paid for a pair of readers at every clause of every value. */
     static Reading readingOf(Terms terms, Denotations at, Map<FactSubject, Type> byName,
-                             Symbols symbols) {
-        return new Reading(AdmissibleReading.of(terms, at, byName, symbols),
+                             Symbols symbols, Alternatives alternatives) {
+        return new Reading(AdmissibleReading.of(terms, at, byName, symbols, alternatives),
                 OrderedReading.of(terms, at, byName, symbols), terms, at, byName);
     }
 
@@ -146,7 +131,7 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
                     // Each language says whether it gave up on the leaf. The reading of values
                     // carries it; the reading of order has nothing to hand back but its ranges, and
                     // a leaf it read leaves at least one.
-                    Adoption.at(mentions, said.values().keySet(), said.dropped()),
+                    Adoption.at(mentions, said.adoptedAt(), said.dropped()),
                     Adoption.at(mentions, range.ranges().keySet(), range.ranges().isEmpty()));
         }
 

@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.check.ReadingPolicy;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
@@ -73,7 +74,7 @@ public final class TypeChecker {
      * <p>{@code reqSigs} and {@code recursiveHelperFns} are handed over rather than worked out here,
      * because the body check reads the same two and they must be the same two.
      */
-    public static Reported checkModule(Hir.Module module, Symbols symbols,
+    public static Reported checkModule(Hir.Module module, Symbols symbols, ReadingPolicy policy,
                                        Map<String, Sig> sigs,
                                        Set<ValueName.Behavior> importedInjected,
                                        Hir.Module lowered, Map<ValueName.Behavior, ReqSig> reqSigs,
@@ -85,7 +86,7 @@ public final class TypeChecker {
         List<CompileException> errors = new ArrayList<>();
         boolean stopped = false;
         try {
-            checkRecovering(module, symbols, sigs, importedInjected, lowered, calleeSigs, errors,
+            checkRecovering(module, symbols, policy, sigs, importedInjected, lowered, calleeSigs, errors,
                     elaborated, abandoned, reqSigs, recursiveHelperFns, imported, settled);
         } catch (Unanswerable e) {
             abandoned.add(e);
@@ -109,13 +110,14 @@ public final class TypeChecker {
      * around it means — never another body.
      */
     public static Core checkBehavior(Hir.SpecBehavior spec, Hir.FnDef fn, Hir.Expr loweredBody,
+                                    ReadingPolicy policy,
                                      InvariantChecker.Source discharge,
                                      Symbols symbols, Map<ValueName.Behavior, ReqSig> calleeSigs,
                                      Map<ValueName.Behavior, ReqSig> reqSigs, HelperInliner inliner,
                                      Map<String, Type> recursiveHelperFns,
                                      Map<String, DataChecker.Constructs> recHelperConstructs,
                                      List<Diagnostic> warnings) {
-        return SpecChecker.checkSpecFn(spec, fn, loweredBody, discharge, symbols, calleeSigs, reqSigs,
+        return SpecChecker.checkSpecFn(spec, fn, loweredBody, discharge, symbols, policy, calleeSigs, reqSigs,
                 inliner, recursiveHelperFns, recHelperConstructs, warnings);
     }
 
@@ -175,7 +177,7 @@ public final class TypeChecker {
      * phase reads (the {@code fns} map, the {@code exposed} set, {@code reqSigs}, {@code sigs}) may
      * throw straight out — its caller treats that as fail-fast and abandons the module.
      */
-    static void checkRecovering(Hir.Module module, Symbols symbols,
+    static void checkRecovering(Hir.Module module, Symbols symbols, ReadingPolicy policy,
                                         Map<String, Sig> sigs,
                                        Set<ValueName.Behavior> importedInjected,
                                         Hir.Module lowered, Map<ValueName.Behavior, ReqSig> calleeSigs,
@@ -279,7 +281,8 @@ public final class TypeChecker {
         if (errors.isEmpty()) {
             List<CompileException> withNoValue = new ArrayList<>();
             collect(errors, abandoned,
-                    () -> withNoValue.addAll(DataChecker.typesWithNoValue(module.defs(), symbols)));
+                    () -> withNoValue.addAll(
+                            DataChecker.typesWithNoValue(module.defs(), symbols, policy)));
             errors.addAll(withNoValue);
         }
         Map<String, Hir.FnDef> fns = new HashMap<>();

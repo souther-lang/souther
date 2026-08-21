@@ -10,6 +10,7 @@ import souther.compiler.check.Shape;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.check.ReadingPolicy;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
@@ -42,9 +43,9 @@ record PlacedRules(TypeSymbol value, Rules rules) {
      * lifted as ends alone, a wrapper relating two of the record's fields narrowed nothing and a
      * wrapper clause nothing could read left every edge under it looking certain.
      */
-    static PlacedRules of(Type type, Symbols symbols) {
+    static PlacedRules of(Type type, Symbols symbols, ReadingPolicy policy) {
         TypeSymbol read = readAs(type, symbols);
-        return new PlacedRules(read, Rules.of(read, symbols));
+        return new PlacedRules(read, Rules.of(read, symbols, policy));
     }
 
     /** What the rules leave the numbers, ends and narrowings of this value. */

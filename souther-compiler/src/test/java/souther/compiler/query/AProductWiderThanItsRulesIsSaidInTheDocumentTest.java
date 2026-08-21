@@ -1,9 +1,7 @@
-package souther.compiler;
+package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.query.Adequacy;
-import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.diag.SourceNameResolver;
 
@@ -74,8 +72,27 @@ class AProductWiderThanItsRulesIsSaidInTheDocumentTest {
             behavior take : (r: R) -> Taken
             """;
 
+    /** The same clauses beside one nothing satisfies with them, so the rules leave no value. */
+    private static final String NONE = """
+            module demo
+
+            data Taken
+
+            data R = { a: String, b: String }
+                invariant one = (a == "5" && b == "0") || (a == "6" && b == "1")
+                invariant two = (a == "5" && b == "0") || (a == "6" && b == "0")
+                invariant apart = a == "9"
+
+            behavior take : (r: R) -> Taken
+            """;
+
     private static JsonNode behaviorOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        // Read with no choice held apart, which is the reading this finding comes of. Nothing
+        // written here expands far enough to fall back to it at the limit a compilation sets, so a
+        // test that wants the fallback says so — and this is the one seam where what the fallback
+        // answers has to reach a document.
+        Compilation compilation = Compilation.ofSource(source, "Main")
+                .withReadingPolicy(souther.compiler.query.ReadAs.MERGING_WHAT_A_CHOICE_LEAVES);
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
         return JSON.readTree(AdequacyReport.of(compilation).json(SourceNameResolver.identity()))
@@ -139,5 +156,51 @@ class AProductWiderThanItsRulesIsSaidInTheDocumentTest {
     void aReadingThatHoldsItsClausesSaysNothing() {
         assertTrue(ofKind(HELD, "partition_values_not_separated").isEmpty(),
                 "each clause is written at one position, so the product is what they admit");
+    }
+
+    /**
+     * And with the alternatives held apart, the same model says none of it.
+     *
+     * <p>Which is the whole of what holding them apart buys, arrived at where a consumer reads it:
+     * the reading answers `a` the one value the two clauses leave, so there is no width to qualify
+     * and no entry to write. What the fallback says above is what a reading that could not hold them
+     * owes, and it is reached by nothing an author writes.
+     */
+    @Test
+    void andHeldApartTheSameModelSaysNoneOfIt() {
+        Compilation compilation = Compilation.ofSource(WITNESS, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+        JsonNode behavior = JSON.readTree(
+                        AdequacyReport.of(compilation).json(SourceNameResolver.identity()))
+                .get("modules").get(0).get("behaviors").get(0);
+
+        List<String> said = new ArrayList<>();
+        for (JsonNode each : behavior.get("findings")) {
+            said.add(each.get("kind").asString());
+        }
+        assertFalse(said.contains("partition_values_not_separated"),
+                "every rule is read and what it leaves is held: " + said);
+        assertFalse(said.contains("partition_not_read"), said.toString());
+    }
+
+
+    /**
+     * A declaration the rules leave no value is not told how its values were held.
+     *
+     * <p>What a reading holds once it admits nothing is where the arithmetic had got to, and not the
+     * relation's projections — those are empty wherever the relation is. So whether it is exact is a
+     * question about a projection nobody is being shown, and answering it here would write a note
+     * about the width of a set at a position no value of the type ever stands at.
+     *
+     * <p>Read with the alternatives merged, which is the reading that has anything to say about
+     * width at all. Every clause is read and the positions are the ones the choices reached across,
+     * so this is the same shape that does report — with one more rule beside it that nothing
+     * satisfies.
+     */
+    @Test
+    void aDeclarationTheRulesLeaveNoValueIsNotToldHowItsValuesWereHeld() {
+        assertEquals(List.of(), ofKind(NONE, "partition_values_not_separated"),
+                "no value of this type exists, and that is the answer it is owed");
     }
 }

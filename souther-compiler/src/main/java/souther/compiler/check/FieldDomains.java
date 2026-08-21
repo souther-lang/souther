@@ -64,8 +64,8 @@ public final class FieldDomains {
     public static final FieldDomains NONE =
             new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), Set.of(), List.of(), List.of(), Map.of(),
                     Map.of(), new ReadingEvidence(), Map.of(), Set.of(THE_VALUE), NO_POSITIONS,
-                    ConstraintState.top(), null, null, null, Map.of(), Set.of(THE_VALUE), Map.of(),
-                    Map.of(), Map.of());
+                    ConstraintState.top(), null, null, null, null, Map.of(), Set.of(THE_VALUE),
+                    Map.of(), Map.of(), Map.of());
 
     private final Map<String, NumericDomain.Bounds> byField;
     /** The ends the record's own clauses place, which is a different question from the range they
@@ -120,6 +120,10 @@ public final class FieldDomains {
     private final Hir.Data data;
     private final Symbols symbols;
     private final Map<String, Count> settled;
+    /** What this value was read under, so that reading it again for what one rule did reads it the
+     *  same way. A second reading of one declaration under another policy would answer a position
+     *  differently while both stayed sound, and what moved would be read as what the rule did. */
+    private final ReadingPolicy policy;
     /** The atom a range is taken of at each position: the position's own value, and the count of
      *  one where a count is taken. A position with neither has no range to be exact about. */
     private final Map<String, FactSubject> atomAt;
@@ -140,7 +144,8 @@ public final class FieldDomains {
                          Set<String> notGathered,
                          SequencedMap<FactSubject, String> positions,
                          ConstraintState constraints, TypeSymbol named,
-                         Hir.Data data, Symbols symbols, Map<String, Count> settled,
+                         Hir.Data data, Symbols symbols, ReadingPolicy policy,
+                         Map<String, Count> settled,
                          Set<String> unreadOfEveryValue,
                          Map<String, FactSubject> atomAt, Map<String, FactSubject> countAt,
                          Map<RuleRef, Map<Core, InvariantChecker.PartRead>> readBy) {
@@ -161,6 +166,7 @@ public final class FieldDomains {
         this.named = named;
         this.data = data;
         this.symbols = symbols;
+        this.policy = policy;
         this.settled = settled;
         this.unreadOfEveryValue = unreadOfEveryValue;
         this.atomAt = atomAt;
@@ -200,8 +206,9 @@ public final class FieldDomains {
     }
 
     /** What {@code data}, declared as {@code named}, leaves its fields able to hold. */
-    public static FieldDomains of(TypeSymbol named, Hir.Data data, Symbols symbols) {
-        return of(named, data, symbols, Map.of());
+    public static FieldDomains of(TypeSymbol named, Hir.Data data, Symbols symbols,
+                                  ReadingPolicy policy) {
+        return of(named, data, symbols, policy, Map.of());
     }
 
     /**
@@ -213,8 +220,8 @@ public final class FieldDomains {
      * once the other end is fixed, which is 1440 and nothing else.
      */
     public static FieldDomains of(TypeSymbol named, Hir.Data data, Symbols symbols,
-                                  Map<String, Count> settled) {
-        return of(named, data, symbols, settled, InvariantChecker.Reach.EVERYTHING);
+                                  ReadingPolicy policy, Map<String, Count> settled) {
+        return of(named, data, symbols, policy, settled, InvariantChecker.Reach.EVERYTHING);
     }
 
     /**
@@ -227,20 +234,22 @@ public final class FieldDomains {
      * about.
      */
     static FieldDomains granting(TypeSymbol named, Hir.Data data, Symbols symbols,
+                                 ReadingPolicy policy,
                                  java.util.function.Predicate<TypeSymbol> granted) {
-        return of(named, data, symbols, Map.of(), InvariantChecker.Reach.stoppingAt(granted));
+        return of(named, data, symbols, policy, Map.of(),
+                InvariantChecker.Reach.stoppingAt(granted));
     }
 
     /** The same, reading only as far as {@code reach} says — see {@link #narrowedBy}. */
     private static FieldDomains of(TypeSymbol named, Hir.Data data, Symbols symbols,
-                                   Map<String, Count> settled,
+                                   ReadingPolicy policy, Map<String, Count> settled,
                                    InvariantChecker.Reach reach) {
         // A newtype is read the same way, and only its bounds are not worth handing back: its value
         // is the same position it is, so there are no siblings to relate. Everything else is the same
         // question — its own rules can hold a hole no range keeps, and they can contradict, and both
         // answers were being given away by treating it as a value with nothing to say.
         InvariantChecker.Seeded seeded =
-                InvariantChecker.seedFields(named, data, symbols, settled, reach);
+                InvariantChecker.seedFields(named, data, symbols, policy, settled, reach);
         Map<String, NumericDomain.Bounds> out = new LinkedHashMap<>();
         seeded.atoms().forEach((field, atom) -> {
             // The value itself is at no path, and its range is the one thing not worth handing back:
@@ -278,10 +287,18 @@ public final class FieldDomains {
             // Asked of each name the position answers to, as the values are. What the reading could
             // not hold together is a fact about the positions a choice reached across, and a
             // position outside them is left where it was.
+            //
+            // Not asked at all where the reading admits nothing. What it holds there is not the
+            // relation's projections — those are empty wherever the relation is — but where the
+            // arithmetic had got to when it learned that no value of this type exists, so whether
+            // it is exact is a question about a projection nobody is being shown. And the answer
+            // owed about such a declaration is that it has no values, which is said elsewhere and
+            // is not made truer by a note about how the values were held.
             boolean separated = true;
             for (FactSubject name : named(seeded, field)) {
                 here = here.meet(values.at(name));
-                separated = separated && values.projectionExactAt(name);
+                separated = separated
+                        && (values.isBottom() || values.projectionExactAt(name));
                 // The first that stopped it. Two names of one position are two ways the same rules
                 // were filed, so a second reason is another account of a position already known to
                 // be short of its rules rather than a further thing wrong with it.
@@ -328,7 +345,7 @@ public final class FieldDomains {
                 seeded.reading().raised(), seeded.reading().raisedByPart(), seeded.took(),
                 seeded.reading().narrowers(),
                 seeded.notGathered(), placeOf,
-                seeded.constraints(), named, data, symbols, settled,
+                seeded.constraints(), named, data, symbols, policy, settled,
                 seeded.unreadOfEveryValue(), seeded.atoms(), seeded.held(),
                 seeded.readBy());
     }
@@ -456,7 +473,8 @@ public final class FieldDomains {
 
     /** This value read again without the clauses of the declarations {@code skip} names. */
     private FieldDomains without(java.util.function.Predicate<TypeSymbol> skip) {
-        return of(named, data, symbols, settled, InvariantChecker.Reach.withoutClausesOf(skip));
+        return of(named, data, symbols, policy, settled,
+                InvariantChecker.Reach.withoutClausesOf(skip));
     }
 
     /**
@@ -662,9 +680,9 @@ public final class FieldDomains {
      *
      */
     public static boolean mayHoldNothingAt(TypeSymbol named, Hir.Data data, String path,
-                                           Symbols symbols) {
+                                           Symbols symbols, ReadingPolicy policy) {
         // A count is never below none, so leaving it no room above none is leaving it at none.
-        return OccurrenceCounts.of(named, data, symbols).mayHoldAtMost(path, 0);
+        return OccurrenceCounts.of(named, data, symbols, policy).mayHoldAtMost(path, 0);
     }
 
     /**

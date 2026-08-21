@@ -16,10 +16,10 @@ final class AsPlaces {
     }
 
     static FactSubject of(BindingId binding) {
-        return new Terms(Symbols.none()).placeSubject(binding);
+        return new Terms(Symbols.none(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES).placeSubject(binding);
     }
 
     static Term term(BindingId binding) {
-        return new Terms(Symbols.none()).placeTerm(binding);
+        return new Terms(Symbols.none(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES).placeTerm(binding);
     }
 }
