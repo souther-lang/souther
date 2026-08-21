@@ -1241,6 +1241,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return switch (rule) {
             case souther.compiler.check.RuleRef.Invariant _ -> "invariant";
             case souther.compiler.check.RuleRef.Ensures _ -> "ensures";
+            // `guard` and not `comparison`, which is what the same rule is called everywhere a
+            // reader sees it. A `const` of schema 3 and a value documents already group by, so the
+            // two disagreeing is a thing to say rather than a thing to fix under a version that
+            // shipped: the rule is a comparison and a fork is what one is sometimes written into.
             case souther.compiler.check.RuleRef.Comparison _ -> "guard";
         };
     }
