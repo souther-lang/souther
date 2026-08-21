@@ -1,9 +1,9 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.Shape;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
+import souther.compiler.inputs.StructuralDescent;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowOutcome;
@@ -81,11 +81,11 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
             if (value.unread() != null) {
                 return value;
             }
-            if (!(view.shape() instanceof Shape.Product product)
-                    || !(value instanceof ObservedValue.Constructed constructed)) {
+            StructuralDescent.Children children = StructuralDescent.of(view.shape());
+            if (children == null || !(value instanceof ObservedValue.Constructed constructed)) {
                 return null;
             }
-            Type next = product.fields().get(field);
+            Type next = children.under().get(field);
             ObservedValue held = constructed.field(field);
             if (next == null || held == null) {
                 return null;
