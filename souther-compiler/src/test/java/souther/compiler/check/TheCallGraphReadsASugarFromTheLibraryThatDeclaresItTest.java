@@ -1,0 +1,102 @@
+package souther.compiler.check;
+
+import souther.compiler.ast.Hir;
+import souther.compiler.diag.SourcePos;
+import souther.compiler.types.ConstructionOrigin;
+import souther.compiler.types.ReachName;
+import souther.compiler.types.ValueName;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * A sugar is a call to something else, and the call graph has to know which something else.
+ *
+ * <p>{@code List.fold} has no declaration of its own: it is {@code List.foldFrom} with the index the
+ * walk starts from already supplied. So a body that folds reaches the library's one recursion, and an
+ * edge to it is what says the module holding that body needs the method. Read from the library, which
+ * is where the rewrite is declared — written out beside it, the two agreed until a second sugar was
+ * added, and the disagreement is an edge quietly missing from a graph nothing else re-derives.
+ *
+ * <p>The condition is the rewrite's own. A sugar written with a different number of arguments than
+ * it stands for is not that call, the rewrite is not taken, and no edge is owed — crediting one
+ * would put a declaration into what a module has to emit on the strength of a call that never
+ * reaches it.
+ *
+ * <p>Every sugar the library declares is asked about, so this covers the next one on the day it is
+ * added rather than the day someone remembers this file.
+ */
+class TheCallGraphReadsASugarFromTheLibraryThatDeclaresItTest {
+
+    private static final SourcePos POS = new SourcePos(1, 1);
+
+    /** A call of {@code qualified} applied to {@code args} integers. */
+    private static Hir.Expr callTo(String qualified, int args) {
+        int dot = qualified.lastIndexOf('.');
+        ValueName.Stdlib name =
+                new ValueName.Stdlib(qualified.substring(0, dot), qualified.substring(dot + 1));
+        List<Hir.Expr> given = new ArrayList<>();
+        for (int i = 0; i < args; i++) {
+            given.add(new Hir.IntLit(i, POS, null));
+        }
+        return new Hir.Apply(qualified, name, new ReachName.OfLibrary(name), given,
+                ConstructionOrigin.own(), POS, null);
+    }
+
+    private static Set<String> callsIn(Hir.Expr e) {
+        Set<String> out = new LinkedHashSet<>();
+        HelperInliner.helperCallsIn(e, Prelude.helpers(), out);
+        return out;
+    }
+
+    @Test
+    void theLibraryDeclaresAtLeastOneSugarForThisToBeAbout() {
+        assertFalse(Prelude.rewrites().isEmpty(),
+                "a claim about every sugar says nothing where there are none");
+    }
+
+    @Test
+    void aSugarWrittenWithWhatItStandsForReachesWhatItRewritesTo() {
+        Prelude.rewrites().forEach((sugar, rewrite) -> {
+            Set<String> reached = callsIn(callTo(sugar, rewrite.keptArgs()));
+
+            assertEquals(Set.of(rewrite.target().qualified()), reached,
+                    sugar + " is " + rewrite.target().qualified() + " with "
+                            + rewrite.supplied().size() + " argument(s) supplied");
+        });
+    }
+
+    @Test
+    void andOneWrittenWithAnotherNumberOfArgumentsReachesNothing() {
+        Prelude.rewrites().forEach((sugar, rewrite) -> {
+            assertEquals(Set.of(), callsIn(callTo(sugar, rewrite.keptArgs() + 1)),
+                    sugar + " written with one argument too many is not the call it stands for");
+            if (rewrite.keptArgs() > 0) {
+                assertEquals(Set.of(), callsIn(callTo(sugar, rewrite.keptArgs() - 1)),
+                        sugar + " written with one too few is not it either");
+            }
+        });
+    }
+
+    /** And what the sugar rewrites to is a recursion, which is why the edge decides anything. */
+    @Test
+    void whatASugarRewritesToIsSomethingAModuleWouldHaveToEmit() {
+        HelperTable table = HelperTable.of("probe", Map.of(), Map.of(), Map.of(),
+                InliningPolicy.FULL);
+        HelperGraph graph = HelperGraph.of(table);
+
+        Prelude.rewrites().forEach((sugar, rewrite) ->
+                assertTrue(graph.recurses(rewrite.target().qualified()),
+                        sugar + " rewrites to " + rewrite.target().qualified()
+                                + ", which a module emits as a method only because it recurses"));
+    }
+}
