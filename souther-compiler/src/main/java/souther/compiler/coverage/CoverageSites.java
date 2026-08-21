@@ -164,16 +164,33 @@ public final class CoverageSites {
     public record Plan(List<Site> sites, List<GuardRef> guards, IdentityHashMap<Core, int[]> byNode,
                        IdentityHashMap<Core, Integer> byComparison,
                        IdentityHashMap<Core, ControlPointId.ArmOccurrence[]> armsByNode,
-                       IdentityHashMap<Core, Integer> controlByComparison) {
+                       IdentityHashMap<Core, Integer> controlByComparison,
+                       java.util.Set<Core> mayRepeat) {
 
         public static final Plan NONE = new Plan(List.of(), List.of(), new IdentityHashMap<>(),
-                new IdentityHashMap<>(), new IdentityHashMap<>(), new IdentityHashMap<>());
+                new IdentityHashMap<>(), new IdentityHashMap<>(), new IdentityHashMap<>(),
+                java.util.Set.of());
 
         /** The same plan built without the control layer, for a caller assembling one by hand. */
         public Plan(List<Site> sites, List<GuardRef> guards, IdentityHashMap<Core, int[]> byNode,
                     IdentityHashMap<Core, Integer> byComparison) {
             this(sites, guards, byNode, byComparison, new IdentityHashMap<>(),
-                    new IdentityHashMap<>());
+                    new IdentityHashMap<>(), java.util.Set.of());
+        }
+
+        /**
+         * Whether one run of the behavior can pass {@code node} more than once.
+         *
+         * <p>What decides whether a set is enough to say what a run did. A recording holds that a
+         * place was passed and not how many times it was, so two facts recorded about a place a run
+         * passes twice cannot be told from two facts about one passing — and a statement about
+         * several places meeting is about their meeting once, which such a recording cannot answer.
+         *
+         * <p>Inherited downwards, so a node this is false of stands under nothing this is true of.
+         * That is what lets one question asked at a meeting answer for everything the meeting names.
+         */
+        public boolean mayRepeat(Core node) {
+            return mayRepeat.contains(node);
         }
 
         /**
@@ -295,7 +312,7 @@ public final class CoverageSites {
             walk.behavior(body.getKey(), body.getValue());
         }
         return new Plan(List.copyOf(walk.sites), List.copyOf(walk.guards), walk.byNode,
-                walk.byComparison, walk.armsByNode, walk.controlByComparison);
+                walk.byComparison, walk.armsByNode, walk.controlByComparison, walk.mayRepeat);
     }
 
     private static final class Walk {
@@ -308,6 +325,14 @@ public final class CoverageSites {
                 new IdentityHashMap<>();
         private final IdentityHashMap<Core, Integer> controlByComparison = new IdentityHashMap<>();
         private final IdentityHashMap<Core, Boolean> answering = new IdentityHashMap<>();
+        /** The nodes one run can pass more than once. Kept by identity, like everything else here:
+         *  two arms that look the same are equal records and this is about this one. */
+        private final java.util.Set<Core> mayRepeat =
+                java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+        /** Whether the walk is somewhere a run may come back to. Held rather than passed down
+         *  because every node below such a place is one, which is what makes it a state of the walk
+         *  and not a property of the call. */
+        private boolean repeating;
         /** The outcomes that carry nothing of their own. What each of them means is settled with
          *  the construct beside it, so one instance stands for every occurrence. */
         private static final SourceOutcome HELD =
@@ -437,6 +462,9 @@ public final class CoverageSites {
             // Everything below this node is reached by way of the node, so what the node cannot do
             // nothing inside it can do either.
             boolean inside = reachable && answers(e);
+            if (repeating) {
+                mayRepeat.add(e);
+            }
             switch (e) {
                 case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
                      Core.Read _, Core.UnitValue _, Core.OptionNone _ -> { }
@@ -461,7 +489,17 @@ public final class CoverageSites {
                 }
                 // A function value, and its arms are arms: what is written here runs when whatever
                 // this is handed to applies it, and the rows that make that happen go through them.
-                case Core.Block b -> walk(b.body(), inside);
+                //
+                // How many times it applies it is that caller's business and nothing here can say —
+                // a comprehension applies one of these per element — so everything inside is a place
+                // one run may come back to. Recorded rather than assumed anywhere else: what a set
+                // of places can be asked turns on it.
+                case Core.Block b -> {
+                    boolean outside = repeating;
+                    repeating = true;
+                    walk(b.body(), inside);
+                    repeating = outside;
+                }
                 case Core.ListLit lit -> lit.elements().forEach(el -> walk(el, inside));
                 case Core.OptionSome s -> walk(s.value(), inside);
                 case Core.Tuple t -> t.elements().forEach(el -> walk(el, inside));

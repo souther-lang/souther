@@ -119,7 +119,18 @@ public final class Interactions {
                     factors.add(new Factor(outcomes));
                 }
             }
-            if (factors.size() > 1) {
+            // A group says that these decisions were settled these ways and met here, which is a
+            // statement about one passing. What can be established about a run is what its recording
+            // holds, and that is which places it passed rather than how many times it passed each —
+            // so where a run may come back to this meeting, the two factors coming out the named
+            // ways is not something any reading of such a recording can tell from their coming out
+            // those ways on different times round. The group would be one nothing could ever show a
+            // row to sit in, so it is not offered.
+            //
+            // Asked at the meeting and nowhere else, which is enough because a place a run may come
+            // back to has everything inside it in the same position: a meeting this is false of
+            // names a way in and factors that are all false of it too.
+            if (factors.size() > 1 && !plan.mayRepeat(node)) {
                 found.add(new Interaction(reach, factors));
             }
         }
