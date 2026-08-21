@@ -40,7 +40,7 @@ final class Combinators {
 
     /** A combinator's closure, the parameter its element arrives on, and the container it comes
      * from — all as argument positions of the call. Read by the rules that resolve a call
-     * ({@link #handedTo}, {@link DischargeRules.Reads}) and by nothing else: a position is only
+     * ({@link #handedTo}, {@link ArgumentRef}) and by nothing else: a position is only
      * meaningful beside the call it is a position in. */
     record Combinator(int closureArg, int elementParam, int containerArg) {}
 
