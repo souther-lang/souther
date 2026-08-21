@@ -49,9 +49,11 @@ import java.util.Map;
 public final class InvariantSettled {
 
     private final Hir.Module module;
+    private final java.util.SequencedSet<String> standing;
 
-    private InvariantSettled(Hir.Module module) {
-        this.module = module;
+    private InvariantSettled(Expansion<Hir.Module> expanded) {
+        this.module = expanded.value();
+        this.standing = expanded.standing();
     }
 
     /**
@@ -68,6 +70,18 @@ public final class InvariantSettled {
         Hir.Module derived = Deriver.derive(expandable.module(), scope);
         return new InvariantSettled(
                 ClauseHelpers.withSettledInvariants(derived, scope, published));
+    }
+
+    /**
+     * Every recursive helper the clauses of this module left a call to standing.
+     *
+     * <p>A module's declarations are in the table a call graph is built over, so what one of their
+     * bodies reaches is answered by following edges. A clause is not a declaration and is in no
+     * table, so what it reaches is known only to the expansion that read it — which is here, and is
+     * why this travels with the settled module rather than being looked for again afterwards.
+     */
+    public java.util.SequencedSet<String> standingRecursiveCalls() {
+        return standing;
     }
 
 

@@ -48,6 +48,7 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -1297,7 +1298,17 @@ public final class Bodies {
                     }
                 }
             }
-            return Answer.absent();
+            // A declaration this module reaches and has not taken on. Its body is the declaring
+            // module's and was settled there; what changes here is the name it answers to, which is
+            // the name this module reaches it by and the name a method is emitted under. Read from
+            // the table rather than from a component, so asking for a body does not depend on the
+            // module having already been told it needs one.
+            Answer<Expanding.Of> against = db.ask(new Expanding(module, InliningPolicy.FULL));
+            if (!against.present()) {
+                return Answer.absent();
+            }
+            Hir.FnDef reached = against.value().table().reached(fn);
+            return reached == null ? Answer.absent() : Answer.of(reached.reachedAs(fn));
         }
     }
 
@@ -1384,7 +1395,7 @@ public final class Bodies {
         @Override
         public Answer<Lower.Lowered> compute(Db db) {
             Answer<Hir.Module> settled = db.ask(new Settled(name));
-            Answer<SequencedSet<String>> recursive = db.ask(new RecursiveHelpers(name));
+            Answer<SequencedSet<String>> recursive = db.ask(new RequiredRecursiveDefs(name));
             Answer<Set<String>> rowMethods = db.ask(new RowMethods(name));
             if (!settled.present() || !recursive.present() || !rowMethods.present()) {
                 return Answer.absent();
@@ -1396,11 +1407,36 @@ public final class Bodies {
             // that took on a helper it also declares would otherwise emit two of it.
             Set<String> taken = new LinkedHashSet<>();
             List<List<Hir.FnDef>> lowered = new ArrayList<>();
+            // What this module emits and did not declare: every recursion its own expansions left
+            // standing that it has no declaration for, under the name it reaches each by — which is
+            // the name a call in the emitted tree already holds, and so the name the method is
+            // written under. This is the one place a declaration of another module becomes a method
+            // of this one, so it is the one place the renaming happens.
+            List<Hir.FnDef> beyond = new ArrayList<>();
+            Set<String> declaredHere = new LinkedHashSet<>();
+            for (Hir.FnDef fn : settled.value().fns()) {
+                declaredHere.add(fn.name());
+            }
+            for (String required : recursive.value()) {
+                if (!declaredHere.contains(required)) {
+                    Answer<Hir.FnDef> def = db.ask(new SettledFn(name, required));
+                    if (!def.present()) {
+                        return Answer.absent();
+                    }
+                    beyond.add(def.value());
+                }
+            }
+            // A row's operand is a definition minted for it, and it is emitted beside these for the
+            // same reason: nothing inlines it, because nothing calls it.
+            for (Hir.FnDef fn : settled.value().takenOn()) {
+                if (rowMethods.value().contains(fn.name())) {
+                    beyond.add(fn);
+                }
+            }
             // Both, and each stays where it was: what becomes a method is one question and what this
             // module declared is another, and the backend reads the first while every rule about the
             // declaring module reads the second.
-            for (List<Hir.FnDef> component : List.of(
-                    settled.value().fns(), settled.value().takenOn())) {
+            for (List<Hir.FnDef> component : List.of(settled.value().fns(), beyond)) {
                 List<Hir.FnDef> fns = new ArrayList<>();
                 for (Hir.FnDef fn : component) {
                     // A non-recursive helper is fully inlined at its call sites and never
@@ -1472,6 +1508,83 @@ public final class Bodies {
                 // them, and there is no module to check without them.
                 return Answer.absent(e);
             }
+        }
+    }
+
+    /**
+     * The recursive helpers this module has to process and emit: the ones it declared, and the ones
+     * an expansion of its own left a call standing to.
+     *
+     * <p>Made of what the expansions did, not of a prediction about what they would do. Every tree
+     * this module is made of is expanded somewhere, and each of those expansions answers with the
+     * recursions it could not remove ({@link Expansion}); this is those answers joined, closed over
+     * the call graph, and narrowed to what recurses.
+     *
+     * <p>The seeds are the trees, and there are two kinds. A definition's body is expanded by {@link
+     * LoweredBody}, which answers with what it left standing. A clause — a data's {@code invariant},
+     * a behavior's {@code ensures} — is not a definition and is in no table, so what it reaches is
+     * known only to the expansion that read it, and it travels out of {@link Shapes.Settling}. The
+     * walk that was here instead listed the places a module writes expressions and did not list
+     * {@code ensures}, so a rule reaching a fold asked for no fold.
+     *
+     * <p>The closure is the call graph's and is taken once. What a required helper's own body
+     * reaches is an edge of that graph, already there because the graph is built over every
+     * declaration in reach — so a helper reached only through a non-recursive one, and every member
+     * of a mutually-recursive group, arrive without a second round.
+     *
+     * <p>A helper this module declared is here whether or not anything reaches it: its source is
+     * this module's to check and to publish, which is not a question about use. Only what it did not
+     * declare is decided by use.
+     */
+    public record RequiredRecursiveDefs(String name) implements Key<SequencedSet<String>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<SequencedSet<String>> compute(Db db) {
+            Answer<Expanding.Of> against = db.ask(new Expanding(name, InliningPolicy.FULL));
+            Answer<Hir.Module> settled = db.ask(new Settled(name));
+            Answer<souther.compiler.check.InvariantSettled> settling =
+                    db.ask(new Shapes.Settling(name));
+            if (!against.present() || !settled.present() || !settling.present()) {
+                return Answer.absent();
+            }
+            // A row's operand is a definition of this module too — minted for it rather than
+            // written, and expanded the way any body is. Which definitions those are is the row
+            // machinery's to say and is asked there.
+            Answer<Set<String>> rows = db.ask(new RowMethods(name));
+            if (!rows.present()) {
+                return Answer.absent();
+            }
+            SequencedSet<String> seeds =
+                    new LinkedHashSet<>(settling.value().standingRecursiveCalls());
+            SequencedSet<String> expanded = new LinkedHashSet<>();
+            for (Hir.FnDef fn : settled.value().fns()) {
+                expanded.add(fn.name());
+            }
+            expanded.addAll(rows.value());
+            for (String fn : expanded) {
+                Answer<Expansion<Hir.FnDef>> body = db.ask(new LoweredBody(name, fn));
+                if (!body.present()) {
+                    // Why is the body's to say, and it said it where it went wrong.
+                    return Answer.absent();
+                }
+                seeds.addAll(body.value().standing());
+            }
+            HelperGraph graph = against.value().graph();
+            Set<String> reached = graph.reachedFrom(seeds);
+            SequencedSet<String> required = new LinkedHashSet<>();
+            // In the graph's order, which is declaration order: a check reporting one member of a
+            // mutual cycle reports the first, and the order is part of the answer.
+            for (String recursive : graph.recursive()) {
+                if (reached.contains(recursive)
+                        || against.value().table().declarations().containsKey(recursive)) {
+                    required.add(recursive);
+                }
+            }
+            return Answer.of(Collections.unmodifiableSequencedSet(required));
         }
     }
 
