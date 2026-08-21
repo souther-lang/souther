@@ -13,9 +13,11 @@ import souther.compiler.core.Core;
  * what happened when a comparison the numbering could not place was answered as a comparison with no
  * value.
  *
- * <p>So: swapping the naming may turn a {@link Completeness#COMPLETE} path into a
- * {@link Completeness#PARTIAL} one and may write the conditions differently. It may not change how
- * many arrivals there are or what any of them comes to. There is a test that holds it to that.
+ * <p>So: a naming reaches {@link Paths} and reaches nothing else. It may write the conditions
+ * differently, it may turn a {@link Completeness#COMPLETE} path into a {@link Completeness#PARTIAL}
+ * one, it may leave out a way it can see no run takes, and it may decline to hold more ways apart
+ * than it will. What none of that touches is {@link Comes}, which is computed with no naming at all —
+ * so this is a structure rather than a claim, and there is nothing here for a test to catch.
  *
  * <p>{@code P} is a value. Two of them that stand for the same way are equal, because that is what
  * makes a way found twice one way rather than two.
@@ -37,13 +39,18 @@ public interface Naming<P> {
     Naming<P> under(Hir.Binder binder, Core value);
 
     /**
-     * That {@code comparison} came out {@code held}, or null where this naming has no words for it.
+     * That {@code value} came out {@code held}, or null where this naming has no words for it.
      *
-     * <p>Null does not stop the value being read. A comparison this cannot place still comes out the
-     * way it comes out; what is missing is a way to say so, and the path carrying it is
+     * <p>Null does not stop the value being read. A value this cannot place still comes out the way
+     * it comes out; what is missing is a way to say so, and the path carrying it is
      * {@link Completeness#PARTIAL} rather than absent.
+     *
+     * <p>Any value the reading worked a truth out for, which is not only a comparison: a position of
+     * the input holding a truth comes out both ways too. A naming with words for one shape and not
+     * the other answers null for the other, which costs the path its completeness and costs the
+     * reading nothing.
      */
-    P side(Core.Binary comparison, boolean held);
+    P side(Core value, boolean held);
 
     /** That a run took case {@code part} of {@code match}, or null where this has no words for it. */
     P matchCase(Core.Match match, int part);

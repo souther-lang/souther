@@ -338,6 +338,12 @@ public final class Interactions {
      * and the walk into an arm do differently.
      */
     private List<List<Decision>> waysInFor(Core.If iff, int part, CoverageNaming naming) {
+        // Whether the arm is there at all is the reading of what the body does, and it is asked
+        // first. An arm the condition never comes out the way of is no arm to walk into, and falling
+        // back to naming it would offer whatever is inside it under a reach no run takes.
+        if (!reading.comesAt(iff.cond()).mayCome(part == 0)) {
+            return List.of();
+        }
         if (reading.waysTo(iff.cond(), part == 0) instanceof Ways.Known<Outcome> known) {
             return holdsOf(known.paths());
         }
@@ -392,7 +398,7 @@ public final class Interactions {
      */
     private List<Outcome> outcomesOf(Core e) {
         List<Outcome> out = new ArrayList<>();
-        for (Arrival<Outcome> each : reading.at(e)) {
+        for (Arrival<Outcome> each : reading.waysAt(e).orNone()) {
             if (each.isComplete() && !out.contains(each.path())) {
                 out.add(each.path());
             }

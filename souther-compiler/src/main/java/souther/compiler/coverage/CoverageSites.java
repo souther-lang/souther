@@ -370,11 +370,13 @@ public final class CoverageSites {
         /**
          * One arm, or {@link #NO_SITE} where no row that stands can be in it.
          *
-         * <p>Two things have to hold. The arm has to be able to answer a value, and it has to stand
+         * <p>Three things have to hold. The arm has to be able to answer a value; it has to stand
          * somewhere a row can get to — an arm of a {@code match} written after a binding that aborts
-         * is a fork nothing reaches, however ordinary the arm itself looks. A row that gets as far as
-         * an {@code unreachable} is E1911 and states nothing, so an arm only such a row could go
-         * through is an arm no row will ever be recorded in.
+         * is a fork nothing reaches, however ordinary the arm itself looks; and the condition above
+         * it has to be able to come out its way, since a fork on something the reading settles to one
+         * truth sends every run down one arm and leaves the other an arm nothing enters. A row that
+         * gets as far as an {@code unreachable} is E1911 and states nothing, so an arm only such a
+         * row could go through is an arm no row will ever be recorded in.
          */
         private ControlPointId.ArmOccurrence armOf(SourceOutcome outcome, Core owner,
                                                    CoverageOrigin origin, int part, Core arm,
@@ -382,7 +384,7 @@ public final class CoverageSites {
             // The arm is made either way. Whether a run through it can be recorded is the second
             // question and only the probe turns on it — an arm nothing could record is still an arm,
             // and the readings that judge one need to be able to name it.
-            int probe = reachable && answers(arm)
+            int probe = reachable && answers(arm) && answering.mayEnter(owner, part)
                     ? site(outcome, owner, origin, part) : NO_SITE;
             return new ControlPointId.ArmOccurrence(controls++,
                     probe == NO_SITE ? OptionalInt.empty() : OptionalInt.of(probe),

@@ -36,7 +36,7 @@ public final class Anonymous implements Naming<AnonymousPath> {
     }
 
     @Override
-    public AnonymousPath side(Core.Binary comparison, boolean held) {
+    public AnonymousPath side(Core value, boolean held) {
         return AnonymousPath.INSTANCE;
     }
 
@@ -50,10 +50,15 @@ public final class Anonymous implements Naming<AnonymousPath> {
         return AnonymousPath.INSTANCE;
     }
 
+    /**
+     * No bound, because this is the reading everything else's answers about the body come from.
+     *
+     * <p>It needs none. Every path here is the same path, so what a node is settled as is at most one
+     * way per {@link Truth} and the count cannot run away. A bound would be a way for this half to
+     * say less, and this is the half nothing is allowed to take away from.
+     */
     @Override
     public int mostArrivals() {
-        // Three truths and one path, so nothing here can go over it. Written down all the same: a
-        // reader takes the bound from the naming and does not ask which naming it has.
-        return 3;
+        return Integer.MAX_VALUE;
     }
 }

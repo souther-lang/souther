@@ -56,6 +56,24 @@ public final class NormalReturn {
     }
 
     /**
+     * Whether a run can go down arm {@code part} of {@code fork}.
+     *
+     * <p>A second question about an arm and not the same one. An arm whose body answers a value is
+     * still an arm no run enters where the condition never comes out its way — {@code true} sends
+     * every run to the first, and a comparison against the largest whole number sends every run to
+     * the second. Asked of the reading rather than worked out again here, because which arms a
+     * condition can reach is what that reading already answers and two accounts of it would be two
+     * answers to keep in step.
+     *
+     * <p>Anything but a fork on a value answers yes. Which arm of a {@code match} a run takes is
+     * which case the value is, and which arm of an attempted construction it takes is whether the
+     * thing was made — neither is a truth this reading has anything to say about.
+     */
+    public boolean mayEnter(Core fork, int part) {
+        return !(fork instanceof Core.If iff) || reading.comesAt(iff.cond()).mayCome(part == 0);
+    }
+
+    /**
      * Whether {@code e} can be evaluated to a value, read as a body of its own.
      *
      * <p>For a caller that has an expression and nothing above it. Every name in it is free, which is

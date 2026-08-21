@@ -57,7 +57,8 @@ public final class UnreachableClaims {
             return NONE;
         }
         List<Claim> found = new ArrayList<>();
-        claimedUnder(body, InputReads.of(read), symbols, plan, NormalReturn.ofBody(body), found);
+        claimedUnder(body, InputReads.of(read), symbols, plan, NormalReturn.ofBody(body), true,
+                found);
         return found.isEmpty() ? NONE : new UnreachableClaims(found);
     }
 
@@ -70,16 +71,23 @@ public final class UnreachableClaims {
      */
     private static void claimedUnder(Core e, InputReads reads, Symbols symbols,
                                      souther.compiler.coverage.CoverageSites.Plan plan,
-                                     NormalReturn answering, List<Claim> found) {
+                                     NormalReturn answering, boolean reachable, List<Claim> found) {
         if (e == null) {
             return;
         }
-        InputReads inside = e instanceof Core.LetIn let ? reads.and(let.binder(), let.value())
+        InputReads names = e instanceof Core.LetIn let ? reads.and(let.binder(), let.value())
                 : reads;
-        if (e instanceof Core.Match match) {
-            claimedIn(match, inside, symbols, plan, answering, found);
+        // Whether a run gets here, which is about the way in and not about this. A body every arm of
+        // which aborts arrives nowhere and is still where its claims are written; what is inside such
+        // a part is what nothing reaches, so a claim found further in would be one about a fork
+        // behind an abort — a case nobody can be asked for a row at and a gap that would stay open
+        // for ever. The same rule, and the same reading, the numbering stops on.
+        if (reachable && e instanceof Core.Match match) {
+            claimedIn(match, names, symbols, plan, answering, found);
         }
-        Core.forEachChild(e, child -> claimedUnder(child, inside, symbols, plan, answering, found));
+        boolean inside = reachable && answering.at(e);
+        Core.forEachChild(e,
+                child -> claimedUnder(child, names, symbols, plan, answering, inside, found));
     }
 
     /**

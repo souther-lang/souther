@@ -17,7 +17,12 @@ import java.util.List;
 public sealed interface Ways<P> {
 
     /** These ways to that truth, and no others. */
-    record Known<P>(List<P> paths) implements Ways<P> { }
+    record Known<P>(List<P> paths) implements Ways<P> {
+
+        public Known {
+            paths = List.copyOf(paths);
+        }
+    }
 
     /** Which ways come to that truth is not something this reading can say. */
     record Unknown<P>() implements Ways<P> { }

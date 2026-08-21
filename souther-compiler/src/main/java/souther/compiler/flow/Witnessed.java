@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.function.Function;
 
 /**
- * Whether a comparison has a value of what it is over that brings it out a given way.
+ * Whether a value of what an expression is over brings it out a given way.
  *
  * <p>Asked once per way and never as "a comparison comes out both ways". That rule reads a value
  * this reading cannot work out as a value it has worked out to be two things, and the two are what
@@ -17,6 +17,12 @@ import java.util.function.Function;
  * one way, and a rule about the shape of the node would say both come out two. A way with nothing
  * standing behind it is not answered here, and the caller reads that as having nothing to say rather
  * than as the way being closed.
+ *
+ * <p>Asked of an expression and not of a comparison, because what is being asked is whether a value
+ * stands behind a way and that is not a question about which node kind is written. A position of the
+ * input that holds a truth is such a value on its own: {@code flag} comes out both ways for the same
+ * reason {@code a > b} does, and reading it as a value this cannot work out would answer that
+ * {@code flag && abort} arrives nowhere while every run with a false {@code flag} arrives.
  *
  * <p>What stands behind a way is a value of the position the comparison is over, so the two sides
  * have to be positions this can name a range for and positions that do not settle each other. Such a
@@ -47,12 +53,15 @@ final class Witnessed {
      * @param settledBy what a name was bound to, or null where the body bound it to nothing this can
      *                  read — a parameter, an arm's binding, a value handed in from outside
      */
-    static boolean comesOut(Core.Binary comparison, boolean want,
-                            Function<Core.Read, Core> settledBy) {
+    static boolean comesOut(Core e, boolean want, Function<Core.Read, Core> settledBy) {
+        if (!(e instanceof Core.Binary comparison) || !compares(comparison.op())) {
+            // A position holding a truth, which can be given either of them.
+            return e.type() == Type.Prim.BOOL && positionOf(e, settledBy) != null;
+        }
         Core left = comparison.left();
         Core right = comparison.right();
-        List<Object> here = positionOf(left, settledBy);
-        List<Object> there = positionOf(right, settledBy);
+        List<Object> here = wholeNumberPosition(left, settledBy);
+        List<Object> there = wholeNumberPosition(right, settledBy);
         if (here != null && there != null) {
             // Two positions nothing settles against each other: they can be given the same value
             // and they can be given different ones, so every way of every comparison stands.
@@ -107,9 +116,6 @@ final class Witnessed {
      * comparison between them has a value behind it.
      */
     private static List<Object> positionOf(Core e, Function<Core.Read, Core> settledBy) {
-        if (!isWholeNumber(e.type())) {
-            return null;
-        }
         List<Object> taken = new ArrayList<>();
         Core at = e;
         while (true) {
@@ -139,8 +145,21 @@ final class Witnessed {
         }
     }
 
+    /** The position {@code e} reads where it holds a whole number, and null otherwise. */
+    private static List<Object> wholeNumberPosition(Core e, Function<Core.Read, Core> settledBy) {
+        return isWholeNumber(e.type()) ? positionOf(e, settledBy) : null;
+    }
+
     private static boolean isWholeNumber(Type type) {
         return type == Type.Prim.INT;
+    }
+
+    /** Whether the operator answers with which way two values came out against each other. */
+    private static boolean compares(Hir.BinOp op) {
+        return switch (op) {
+            case EQ, NE, LT, LE, GT, GE -> true;
+            case AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
+        };
     }
 
     private Witnessed() {}

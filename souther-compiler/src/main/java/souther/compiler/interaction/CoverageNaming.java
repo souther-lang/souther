@@ -81,7 +81,12 @@ final class CoverageNaming implements Naming<Outcome> {
      * comparison to answer, which no arm records.
      */
     @Override
-    public Outcome side(Core.Binary comparison, boolean held) {
+    public Outcome side(Core value, boolean held) {
+        if (!(value instanceof Core.Binary comparison)) {
+            // A position holding a truth comes out both ways and the plan places no comparison at
+            // it, so there is nothing here to say. The fork on it is named where the way in is.
+            return null;
+        }
         ComparisonOccurrence site = plan.comparisonAt(comparison).orElse(null);
         TermPath at = firstOf(reads.pathOf(comparison.left(), symbols),
                 reads.pathOf(comparison.right(), symbols));

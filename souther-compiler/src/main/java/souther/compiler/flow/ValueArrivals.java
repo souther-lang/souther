@@ -5,8 +5,8 @@ import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.IdentityHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -16,26 +16,42 @@ import java.util.Set;
  *
  * <p>One reading for three questions that were being answered separately and had to agree: whether
  * an expression can be evaluated to a value at all, what that value is where it is a truth, and
- * under what conditions each way there holds. The first two are read off the body and are the same
- * whoever is asking; the third is written in whatever words the {@link Naming} has, and a naming
- * with no words for a condition leaves the path {@link Completeness#PARTIAL} rather than leaving the
- * arrival out. So what the numbering can place decides how a way is written down and never whether
- * there is one.
+ * under what conditions each way there holds.
+ *
+ * <p><b>Two halves, and only one of them has a naming in it.</b> {@link Comes} says what the body
+ * does and is computed with no naming at all — it is what the reading with no numbering behind it
+ * answers, and every reader asking whether a value arrives or what it comes to is answered from
+ * there. {@link Paths} says what the ways are called, and it is the only half a naming touches: a
+ * condition it has no words for leaves a way {@link Completeness#PARTIAL}, a pair of conditions it
+ * sees settle one decision opposite ways leaves a way out, and more ways than it will hold apart
+ * leave {@link Paths.Beyond}. None of those can move the other half, because the other half was
+ * never computed with a naming to begin with.
+ *
+ * <p>Which is stronger than saying it. Before, the naming reached the answer three ways — a way it
+ * could not name, a pair of ways it refused, a count it would not hold — and two of them were still
+ * changing whether a value arrives. A reading of the numbering was deciding what the body does,
+ * which is the thing this was made to end.
  *
  * <p><b>Rooted at a body.</b> What a name reads is not a fact about the node that reads it: the same
  * {@code Core.Read} is a position of the input in one body and a {@code let} away from a number
  * written out in another. So the body is read once, every occurrence in it is settled under what the
- * binders above it bound, and a caller asks about a node it already has. A node this was not rooted
- * at is read as its own body, which is the honest answer for one — every name in it is free, because
- * nothing here bound them.
+ * binders above it bound, and a caller asks about a node it already has.
  *
- * <p><b>An arrival is a value.</b> Two that say the same thing are one way. The answers are sets for
- * that reason and not as an optimisation: a way found twice by a reading that got there two ways is
- * still one way in, and anything counting these is counting what the body does.
+ * <p><b>An arrival is a value.</b> Two that say the same thing are one way, so a way found twice by a
+ * reading that got there two ways is still one way, and anything counting these is counting what the
+ * body does.
  */
 public final class ValueArrivals<P> {
 
     private final Naming<P> naming;
+
+    /**
+     * The reading with no naming behind it, which is what this one's answers about the body are.
+     *
+     * <p>Null in that reading itself, where the question is not passed on because this is where it
+     * stops: what a value arrives at is what this half says it arrives at.
+     */
+    private final ValueArrivals<AnonymousPath> semantics;
 
     /**
      * What each occurrence was settled as, keyed by identity.
@@ -43,64 +59,75 @@ public final class ValueArrivals<P> {
      * <p>Sound because a node occurs once, and what is in scope at it is what the reading had when
      * it got there — so the environment is a function of the position and not a second key.
      */
-    private final IdentityHashMap<Core, Set<Arrival<P>>> settled = new IdentityHashMap<>();
+    private final IdentityHashMap<Core, Paths<P>> settled = new IdentityHashMap<>();
 
-    private ValueArrivals(Naming<P> naming) {
+    /**
+     * Which occurrences have been descended into.
+     *
+     * <p>Not the same as which have been settled, and held apart because running them together left
+     * the reading short. Settling a node reads what it is made of, which is not everything written
+     * inside it — a fork's arm the condition never comes out the way of is not read, and neither is
+     * the body of a block. So an ancestor settling a node would have stopped the descent into it,
+     * and the nodes below it would have been left with no answer while the claim that every
+     * occurrence has one went on being made.
+     */
+    private final Set<Core> walked =
+            java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+
+    private ValueArrivals(Naming<P> naming, ValueArrivals<AnonymousPath> semantics) {
         this.naming = naming;
+        this.semantics = semantics;
     }
 
     /** The reading of {@code body}, with every occurrence in it settled under what binds it. */
     public static <P> ValueArrivals<P> ofBody(Core body, Naming<P> naming) {
-        ValueArrivals<P> reading = new ValueArrivals<>(naming);
+        ValueArrivals<AnonymousPath> semantics =
+                naming == Anonymous.NAMING ? null : ofBody(body, Anonymous.NAMING);
+        ValueArrivals<P> reading = new ValueArrivals<>(naming, semantics);
         if (body != null) {
             reading.fill(body, naming, Map.of());
         }
         return reading;
     }
 
-    /** Whether {@code e} can be evaluated to a value. */
-    public static boolean arrives(Core body, Core e) {
-        return ofBody(body, Anonymous.NAMING).arrivesAt(e);
+    /**
+     * The ways {@code e} arrives at a value, as far as this naming holds them apart.
+     *
+     * <p>Asked of a node this was rooted at, and it raises for one it was not. Reading such a node as
+     * a body of its own would answer with every name in it free, which is a different question and
+     * one whose answer can differ — so a caller holding a node from somewhere else would be told
+     * something true about a body it is not asking about. Rooting a reading at that node is how to
+     * ask it.
+     */
+    public Paths<P> waysAt(Core e) {
+        if (e == null) {
+            return new Paths.Held<>(List.of());
+        }
+        Paths<P> already = settled.get(e);
+        if (already == null) {
+            throw new IllegalArgumentException(
+                    "this reading was not rooted at the body holding this "
+                            + e.getClass().getSimpleName() + " at " + e.pos());
+        }
+        return already;
     }
 
-    /** The ways {@code e} arrives at a value, empty where no run arrives at one. */
-    public Set<Arrival<P>> at(Core e) {
+    /** What the body does at {@code e}: whether a run arrives, and what it comes to. */
+    public Comes comesAt(Core e) {
         if (e == null) {
-            return Set.of();
+            return Comes.NOWHERE;
         }
-        Set<Arrival<P>> already = settled.get(e);
-        if (already != null) {
-            return already;
+        if (semantics != null) {
+            return semantics.comesAt(e);
         }
-        // Not rooted here, so read as its own body: nothing above it bound anything.
-        fill(e, naming, Map.of());
-        return settled.getOrDefault(e, Set.of());
+        Set<Truth> truths = EnumSet.noneOf(Truth.class);
+        waysAt(e).orNone().forEach(each -> truths.add(each.value()));
+        return new Comes(truths);
     }
 
     /** Whether {@code e} can be evaluated to a value. */
     public boolean arrivesAt(Core e) {
-        return !at(e).isEmpty();
-    }
-
-    /**
-     * Whether {@code e} can come out {@code want}.
-     *
-     * <p>Read off what the arrivals come to and nothing else, so it is the same answer whichever
-     * naming is asking. A way whose value is unread may be either, so it answers for both — which is
-     * this reading having nothing to say and not this reading saying both.
-     */
-    public boolean comesOut(Core e, boolean want) {
-        return comesOut(at(e), want);
-    }
-
-    /** The same, of arrivals already in hand. */
-    private static <P> boolean comesOut(Set<Arrival<P>> arrivals, boolean want) {
-        for (Arrival<P> each : arrivals) {
-            if (each.value() == Truth.UNREAD || each.value() == Truth.of(want)) {
-                return true;
-            }
-        }
-        return false;
+        return comesAt(e).arrives();
     }
 
     /**
@@ -111,21 +138,26 @@ public final class ValueArrivals<P> {
      * steered along — either way no list of them is complete, and an incomplete list is worse here
      * than no list because whatever takes one reads the ways it does not hold as ways the body has
      * not got.
+     *
+     * <p>An empty list says the value is never settled that way, so it is only ever answered where
+     * the reading of what the body does agrees. A naming that dropped every way to a truth the body
+     * comes to has enumerated nothing, not established an absence.
      */
     public Ways<P> waysTo(Core e, boolean want) {
-        return waysTo(at(e), want);
-    }
-
-    /** The same, of arrivals already in hand. */
-    private static <P> Ways<P> waysTo(Set<Arrival<P>> arrivals, boolean want) {
+        if (!(waysAt(e) instanceof Paths.Held<P> held)) {
+            return new Ways.Unknown<>();
+        }
         List<P> paths = new ArrayList<>();
-        for (Arrival<P> each : arrivals) {
+        for (Arrival<P> each : held.arrivals()) {
             if (each.value() == Truth.UNREAD || !each.isComplete()) {
                 return new Ways.Unknown<>();
             }
             if (each.value() == Truth.of(want)) {
                 paths.add(each.path());
             }
+        }
+        if (paths.isEmpty() && comesAt(e).mayCome(want)) {
+            return new Ways.Unknown<>();
         }
         return new Ways.Known<>(paths);
     }
@@ -141,7 +173,7 @@ public final class ValueArrivals<P> {
      * answer for the block itself stays what it is.
      */
     private void fill(Core e, Naming<P> naming, Map<BindingId, Bound<P>> bound) {
-        if (e == null || settled.containsKey(e)) {
+        if (e == null || !walked.add(e)) {
             return;
         }
         read(e, naming, bound);
@@ -165,16 +197,15 @@ public final class ValueArrivals<P> {
                 }
             }
             case Core.IfConstructed constructed -> {
-                constructed.construct().values()
-                        .forEach(given -> fill(given.value(), naming, bound));
+                fill(constructed.construct(), naming, bound);
                 fill(constructed.then(), naming, with(bound, constructed.binder(), oneWay(), null));
                 constructed.els().forEach(arm -> fill(arm.body(), naming, bound));
             }
-            default -> {
-                for (Core child : partsOf(e)) {
-                    fill(child, naming, bound);
-                }
-            }
+            // Everything else through the enumeration the language keeps for itself. A list written
+            // out here would be a copy of that one, agreeing with it until one of them changed — and
+            // the two slots it had already stopped agreeing about are exactly the ones nothing here
+            // could have noticed: a name a call applies, and the construction an attempt is of.
+            default -> Core.forEachChild(e, child -> fill(child, naming, bound));
         }
     }
 
@@ -187,7 +218,7 @@ public final class ValueArrivals<P> {
      * right rather than a name with no answer.
      */
     private Map<BindingId, Bound<P>> with(Map<BindingId, Bound<P>> bound, Hir.Binder binder,
-                                          Set<Arrival<P>> arrivals, Core settledBy) {
+                                          List<Arrival<P>> arrivals, Core settledBy) {
         if (binder == null) {
             return bound;
         }
@@ -203,59 +234,72 @@ public final class ValueArrivals<P> {
      * @param settledBy null for a name nothing here bound a value to, which is a position of whatever
      *                  the body is handed
      */
-    private record Bound<P>(Set<Arrival<P>> arrivals, Core settledBy) { }
+    private record Bound<P>(List<Arrival<P>> arrivals, Core settledBy) { }
 
     // ---------------------------------------------------------------- reading
 
-    private Set<Arrival<P>> read(Core e, Naming<P> naming, Map<BindingId, Bound<P>> bound) {
+    private List<Arrival<P>> read(Core e, Naming<P> naming, Map<BindingId, Bound<P>> bound) {
+        return settle(e, naming, bound).orNone();
+    }
+
+    private Paths<P> settle(Core e, Naming<P> naming, Map<BindingId, Bound<P>> bound) {
         if (e == null) {
             // A body the checker refused a clause of arrives with a hole where the clause was.
             // Nothing is evaluated there and nothing arrives.
-            return Set.of();
+            return new Paths.Held<>(List.of());
         }
-        Set<Arrival<P>> already = settled.get(e);
+        Paths<P> already = settled.get(e);
         if (already != null) {
             return already;
         }
-        Refusals refused = new Refusals();
-        Set<Arrival<P>> answer = reading(e, naming, bound, refused);
-        if (answer.isEmpty() && refused.any) {
-            // No arrival is not a proof that no value arrives, and this is not the reading that
-            // could give one. Where every way out of here settles a decision the way in settled the
-            // other way, what is missing is this reading following a correlation and not the body
-            // having a path. So it is answered as one this has nothing to say about.
-            answer = oneWay();
-        }
+        Paths<P> answer = held(e, reading(e, naming, bound));
         settled.put(e, answer);
         return answer;
     }
 
-    private Set<Arrival<P>> reading(Core e, Naming<P> naming, Map<BindingId, Bound<P>> bound,
-                                    Refusals refused) {
+    /**
+     * The ways as this naming was able to hold them, or that it was not.
+     *
+     * <p>The one place a naming's limits are turned into an answer, and they are turned into an
+     * answer about the list. Over what it will hold apart, and it holds none of them; emptied by
+     * ways it refused where the body arrives all the same, and it has enumerated nothing rather than
+     * established that nothing arrives — which is a claim only the other half makes.
+     */
+    private Paths<P> held(Core e, List<Arrival<P>> out) {
+        if (semantics == null) {
+            // This reading is what arriving means, so there is nothing here to be held to.
+            return new Paths.Held<>(out);
+        }
+        if (out.size() > naming.mostArrivals() || (out.isEmpty() && semantics.arrivesAt(e))) {
+            return new Paths.Beyond<>();
+        }
+        return new Paths.Held<>(out);
+    }
+
+    private List<Arrival<P>> reading(Core e, Naming<P> naming, Map<BindingId, Bound<P>> bound) {
         return switch (e) {
-            case Core.Unreachable ignored -> Set.of();
+            case Core.Unreachable ignored -> List.of();
             case Core.Bool literal -> one(Truth.of(literal.value()), whole(naming.nowhere()));
-            case Core.Read read -> {
-                Bound<P> named = bound.get(read.binding());
-                yield named != null ? named.arrivals() : oneWay();
-            }
+            case Core.Read read when bound.containsKey(read.binding()) ->
+                    bound.get(read.binding()).arrivals();
             // A function value, not a body being run here. What happens when a call applies it is
             // that call's business, and a call is not read through either.
             case Core.Block ignored -> oneWay();
             // The value is evaluated before the body it binds is.
             case Core.LetIn let -> {
-                Set<Arrival<P>> value = read(let.value(), naming, bound);
-                yield value.isEmpty() ? Set.of()
-                        : read(let.body(), naming.under(let.binder(), let.value()),
-                                with(bound, let.binder(), value, let.value()));
+                List<Arrival<P>> value = read(let.value(), naming, bound);
+                yield arrivesAt(let.value())
+                        ? read(let.body(), naming.under(let.binder(), let.value()),
+                                with(bound, let.binder(), value, let.value()))
+                        : List.of();
             }
             case Core.Binary binary when shortCircuits(binary.op()) ->
-                    through(binary, naming, bound, refused);
-            case Core.If iff -> fork(iff, naming, bound, refused);
-            case Core.Match match -> arms(match, naming, bound, refused);
-            case Core.IfConstructed constructed -> attempted(constructed, naming, bound, refused);
+                    through(binary, naming, bound);
+            case Core.If iff -> fork(iff, naming, bound);
+            case Core.Match match -> arms(match, naming, bound);
+            case Core.IfConstructed constructed -> attempted(constructed, naming, bound);
             case Core.PreservedCall preserved -> throw preserved.unexpectedIn("value-flow analysis");
-            default -> built(e, naming, bound, refused);
+            default -> built(e, naming, bound);
         };
     }
 
@@ -267,21 +311,17 @@ public final class ValueArrivals<P> {
      * arrives at no value leaves the whole arriving at none, which is what makes this the reading of
      * everything strict as well.
      */
-    private Set<Arrival<P>> built(Core e, Naming<P> naming, Map<BindingId, Bound<P>> bound,
-                                  Refusals refused) {
-        Set<Arrival<P>> out = oneWay();
+    private List<Arrival<P>> built(Core e, Naming<P> naming, Map<BindingId, Bound<P>> bound) {
+        List<Arrival<P>> out = oneWay();
         for (Core part : partsOf(e)) {
-            Set<Arrival<P>> each = read(part, naming, bound);
-            if (each.isEmpty()) {
-                return Set.of();
+            List<Arrival<P>> each = read(part, naming, bound);
+            if (!arrivesAt(part)) {
+                return List.of();
             }
-            out = product(out, each, naming, refused);
-            if (out.size() > naming.mostArrivals()) {
-                return oneWay();
-            }
+            out = product(out, each, naming);
         }
-        if (e instanceof Core.Binary comparison && compares(comparison.op()) && out.size() == 1) {
-            Set<Arrival<P>> settledTwoWays = comparedOut(comparison, out.iterator().next(), naming,
+        if (out.size() == 1) {
+            List<Arrival<P>> settledTwoWays = comparedOut(e, out.get(0), naming,
                     read -> {
                         Bound<P> named = bound.get(read.binding());
                         return named == null ? null : named.settledBy();
@@ -304,36 +344,36 @@ public final class ValueArrivals<P> {
      * <p>Asked where nothing under the comparison was already saying the value varies, so what is
      * read here is added to the reading and nothing is taken out of it.
      */
-    private Set<Arrival<P>> comparedOut(Core.Binary comparison, Arrival<P> under, Naming<P> naming,
-                                        java.util.function.Function<Core.Read, Core> settledBy) {
-        boolean holds = Witnessed.comesOut(comparison, true, settledBy);
-        boolean fails = Witnessed.comesOut(comparison, false, settledBy);
+    private List<Arrival<P>> comparedOut(Core value, Arrival<P> under, Naming<P> naming,
+                                         java.util.function.Function<Core.Read, Core> settledBy) {
+        boolean holds = Witnessed.comesOut(value, true, settledBy);
+        boolean fails = Witnessed.comesOut(value, false, settledBy);
         if (!holds && !fails) {
             return null;
         }
-        Set<Arrival<P>> out = new LinkedHashSet<>();
+        List<Arrival<P>> out = new ArrayList<>();
         if (holds) {
-            side(comparison, true, under, naming, out);
+            side(value, true, under, naming, out);
         }
         if (fails) {
-            side(comparison, false, under, naming, out);
+            side(value, false, under, naming, out);
         }
         return out.isEmpty() ? null : out;
     }
 
-    private void side(Core.Binary comparison, boolean held, Arrival<P> under, Naming<P> naming,
-                      Set<Arrival<P>> out) {
-        P named = naming.side(comparison, held);
+    private void side(Core value, boolean held, Arrival<P> under, Naming<P> naming,
+                      List<Arrival<P>> out) {
+        P named = naming.side(value, held);
         if (named == null) {
             // The way is there and this naming has no words for it.
-            out.add(new Arrival<>(Truth.of(held), under.provenance().partial()));
+            add(out, new Arrival<>(Truth.of(held), under.provenance().partial()));
             return;
         }
         P both = naming.join(under.path(), named);
         if (both == null) {
             return;
         }
-        out.add(new Arrival<>(Truth.of(held),
+        add(out, new Arrival<>(Truth.of(held),
                 new Provenance<>(both, under.provenance().completeness())));
     }
 
@@ -350,51 +390,46 @@ public final class ValueArrivals<P> {
      * this reading can point at otherwise: where the right arrives at no value, claiming this way
      * arrives would be reading "I cannot say which" as "it comes out the way that stops here".
      */
-    private Set<Arrival<P>> through(Core.Binary binary, Naming<P> naming,
-                                    Map<BindingId, Bound<P>> bound, Refusals refused) {
+    private List<Arrival<P>> through(Core.Binary binary, Naming<P> naming,
+                                     Map<BindingId, Bound<P>> bound) {
         Truth goesOn = binary.op() == Hir.BinOp.AND ? Truth.TRUE : Truth.FALSE;
-        Set<Arrival<P>> left = read(binary.left(), naming, bound);
-        Set<Arrival<P>> right = read(binary.right(), naming, bound);
-        Set<Arrival<P>> out = new LinkedHashSet<>();
+        List<Arrival<P>> left = read(binary.left(), naming, bound);
+        List<Arrival<P>> right = read(binary.right(), naming, bound);
+        boolean rightArrives = arrivesAt(binary.right());
+        List<Arrival<P>> out = new ArrayList<>();
         for (Arrival<P> each : left) {
             if (each.value() == goesOn) {
-                under(each.provenance(), right, naming, out, refused);
+                under(each.provenance(), right, naming, out);
             } else if (each.value() == Truth.UNREAD) {
-                if (!right.isEmpty()) {
-                    out.add(each);
+                if (rightArrives) {
+                    add(out, each);
                 }
             } else {
-                out.add(each);
-            }
-            if (out.size() > naming.mostArrivals()) {
-                return oneWay();
+                add(out, each);
             }
         }
         return out;
     }
 
-    private Set<Arrival<P>> fork(Core.If iff, Naming<P> naming,
-                                 Map<BindingId, Bound<P>> bound, Refusals refused) {
+    private List<Arrival<P>> fork(Core.If iff, Naming<P> naming, Map<BindingId, Bound<P>> bound) {
         // Numbered where they are written and not where they survive: the arm a fork answers on is
         // its place among the arms, and one that answers nothing is skipped rather than closing the
         // gap and letting the next arm be called the first.
         Core[] arms = {iff.then(), iff.els()};
-        Set<Arrival<P>> cond = read(iff.cond(), naming, bound);
-        Set<Arrival<P>> out = new LinkedHashSet<>();
+        read(iff.cond(), naming, bound);
+        Comes cond = comesAt(iff.cond());
+        List<Arrival<P>> out = new ArrayList<>();
         for (int part = 0; part < arms.length; part++) {
             boolean want = part == 0;
-            if (!comesOut(cond, want)) {
+            if (!cond.mayCome(want)) {
                 continue;
             }
-            Set<Arrival<P>> body = read(arms[part], naming, bound);
-            if (body.isEmpty()) {
+            List<Arrival<P>> body = read(arms[part], naming, bound);
+            if (!arrivesAt(arms[part])) {
                 continue;
             }
-            for (Provenance<P> way : waysIn(cond, iff, part, want, naming)) {
-                under(way, body, naming, out, refused);
-            }
-            if (out.size() > naming.mostArrivals()) {
-                return oneWay();
+            for (Provenance<P> way : waysIn(iff, part, want, naming)) {
+                under(way, body, naming, out);
             }
         }
         return out;
@@ -408,9 +443,8 @@ public final class ValueArrivals<P> {
      * settles only how a way into one is written, so a naming with no words for the fork leaves the
      * way {@link Completeness#PARTIAL} and takes no arm away.
      */
-    private List<Provenance<P>> waysIn(Set<Arrival<P>> cond, Core.If iff, int part, boolean want,
-                                       Naming<P> naming) {
-        if (waysTo(cond, want) instanceof Ways.Known<P> known && !known.paths().isEmpty()) {
+    private List<Provenance<P>> waysIn(Core.If iff, int part, boolean want, Naming<P> naming) {
+        if (waysTo(iff.cond(), want) instanceof Ways.Known<P> known && !known.paths().isEmpty()) {
             return known.paths().stream().map(this::whole).toList();
         }
         return List.of(armWay(iff, part, naming));
@@ -423,51 +457,48 @@ public final class ValueArrivals<P> {
                 ? new Provenance<>(naming.nowhere(), Completeness.PARTIAL) : whole(named);
     }
 
-    private Set<Arrival<P>> arms(Core.Match match, Naming<P> naming,
-                                 Map<BindingId, Bound<P>> bound, Refusals refused) {
-        if (read(match.scrutinee(), naming, bound).isEmpty()) {
-            return Set.of();
+    private List<Arrival<P>> arms(Core.Match match, Naming<P> naming,
+                                  Map<BindingId, Bound<P>> bound) {
+        read(match.scrutinee(), naming, bound);
+        if (!arrivesAt(match.scrutinee())) {
+            return List.of();
         }
-        Set<Arrival<P>> out = new LinkedHashSet<>();
+        List<Arrival<P>> out = new ArrayList<>();
         for (int part = 0; part < match.cases().size(); part++) {
             Core.Case arm = match.cases().get(part);
-            Set<Arrival<P>> body = read(arm.body(), naming, with(bound, arm.binding(), oneWay(), null));
-            if (body.isEmpty()) {
+            List<Arrival<P>> body =
+                    read(arm.body(), naming, with(bound, arm.binding(), oneWay(), null));
+            if (!arrivesAt(arm.body())) {
                 continue;
             }
             P named = naming.matchCase(match, part);
             Provenance<P> way = named == null
                     ? new Provenance<>(naming.nowhere(), Completeness.PARTIAL) : whole(named);
-            under(way, body, naming, out, refused);
-            if (out.size() > naming.mostArrivals()) {
-                return oneWay();
-            }
+            under(way, body, naming, out);
         }
         return out;
     }
 
-    private Set<Arrival<P>> attempted(Core.IfConstructed constructed, Naming<P> naming,
-                                      Map<BindingId, Bound<P>> bound, Refusals refused) {
+    private List<Arrival<P>> attempted(Core.IfConstructed constructed, Naming<P> naming,
+                                       Map<BindingId, Bound<P>> bound) {
         for (Core.FieldValue given : constructed.construct().values()) {
-            if (read(given.value(), naming, bound).isEmpty()) {
-                return Set.of();
+            read(given.value(), naming, bound);
+            if (!arrivesAt(given.value())) {
+                return List.of();
             }
         }
         List<Core> arms = new ArrayList<>();
         arms.add(constructed.then());
         constructed.els().forEach(arm -> arms.add(arm.body()));
-        Set<Arrival<P>> out = new LinkedHashSet<>();
+        List<Arrival<P>> out = new ArrayList<>();
         for (int part = 0; part < arms.size(); part++) {
             Map<BindingId, Bound<P>> inner =
                     part == 0 ? with(bound, constructed.binder(), oneWay(), null) : bound;
-            Set<Arrival<P>> body = read(arms.get(part), naming, inner);
-            if (body.isEmpty()) {
+            List<Arrival<P>> body = read(arms.get(part), naming, inner);
+            if (!arrivesAt(arms.get(part))) {
                 continue;
             }
-            under(armWay(constructed, part, naming), body, naming, out, refused);
-            if (out.size() > naming.mostArrivals()) {
-                return oneWay();
-            }
+            under(armWay(constructed, part, naming), body, naming, out);
         }
         return out;
     }
@@ -475,15 +506,14 @@ public final class ValueArrivals<P> {
     // ------------------------------------------------------------ putting ways together
 
     /** Each arrival held to what already holds along the way to it, into {@code out}. */
-    private void under(Provenance<P> holds, Set<Arrival<P>> arrivals, Naming<P> naming,
-                       Set<Arrival<P>> out, Refusals refused) {
+    private void under(Provenance<P> holds, List<Arrival<P>> arrivals, Naming<P> naming,
+                       List<Arrival<P>> out) {
         for (Arrival<P> each : arrivals) {
             P both = naming.join(holds.path(), each.path());
             if (both == null) {
-                refused.any = true;
                 continue;
             }
-            out.add(new Arrival<>(each.value(), new Provenance<>(both,
+            add(out, new Arrival<>(each.value(), new Provenance<>(both,
                     holds.completeness().and(each.provenance().completeness()))));
         }
     }
@@ -498,42 +528,40 @@ public final class ValueArrivals<P> {
      * several is the constructor's answer and no way to it carries a truth of its own, so these
      * arrive with nothing said about which of the two they are.
      */
-    private Set<Arrival<P>> product(Set<Arrival<P>> left, Set<Arrival<P>> right, Naming<P> naming,
-                                    Refusals refused) {
-        Set<Arrival<P>> out = new LinkedHashSet<>();
+    private List<Arrival<P>> product(List<Arrival<P>> left, List<Arrival<P>> right,
+                                     Naming<P> naming) {
+        List<Arrival<P>> out = new ArrayList<>();
         for (Arrival<P> one : left) {
             for (Arrival<P> other : right) {
                 P both = naming.join(one.path(), other.path());
-                if (both == null) {
-                    refused.any = true;
-                    continue;
-                }
-                out.add(new Arrival<>(Truth.UNREAD, new Provenance<>(both,
-                        one.provenance().completeness().and(other.provenance().completeness()))));
-                if (out.size() > naming.mostArrivals()) {
-                    return out;
+                if (both != null) {
+                    add(out, new Arrival<>(Truth.UNREAD, new Provenance<>(both,
+                            one.provenance().completeness()
+                                    .and(other.provenance().completeness()))));
                 }
             }
         }
         return out;
     }
 
+    /** One way, where it is not one this list already holds. */
+    private void add(List<Arrival<P>> out, Arrival<P> way) {
+        if (!out.contains(way)) {
+            out.add(way);
+        }
+    }
+
     /** What a value nothing forks is settled by, which is the same thing however it is written. */
-    private Set<Arrival<P>> oneWay() {
+    private List<Arrival<P>> oneWay() {
         return one(Truth.UNREAD, whole(naming.nowhere()));
     }
 
-    private Set<Arrival<P>> one(Truth value, Provenance<P> by) {
-        return Set.of(new Arrival<>(value, by));
+    private List<Arrival<P>> one(Truth value, Provenance<P> by) {
+        return List.of(new Arrival<>(value, by));
     }
 
     private Provenance<P> whole(P path) {
         return new Provenance<>(path, Completeness.COMPLETE);
-    }
-
-    /** Whether a way was put aside because nothing takes it, which is not the same as none. */
-    private static final class Refusals {
-        private boolean any;
     }
 
     // ------------------------------------------------------------------- the tree
@@ -541,14 +569,6 @@ public final class ValueArrivals<P> {
     /** Whether the operator settles its answer without evaluating both sides. */
     public static boolean shortCircuits(Hir.BinOp op) {
         return op == Hir.BinOp.AND || op == Hir.BinOp.OR;
-    }
-
-    /** Whether the operator answers with which way two values came out against each other. */
-    public static boolean compares(Hir.BinOp op) {
-        return switch (op) {
-            case EQ, NE, LT, LE, GT, GE -> true;
-            case AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
-        };
     }
 
     /**
@@ -577,6 +597,7 @@ public final class ValueArrivals<P> {
             // The callee's own body is not read; its arguments are evaluated before it is reached.
             case Core.Call call -> call.args();
             case Core.PreservedCall call -> call.args();
+            // What is applied is a name holding a function, which is loaded and not run here.
             case Core.Apply apply -> apply.args();
             case Core.ListLit list -> list.elements();
             case Core.Tuple tuple -> tuple.elements();
