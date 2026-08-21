@@ -112,7 +112,8 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
         String report = report(guarded("a.value + 1 <= 10"));
 
         assertTrue(report.contains("no row is at the ON point f/a = 9"), report);
-        assertTrue(report.contains("no row is at the OFF point f/a = 10 (guard"), report);
+        assertTrue(report.contains("no row is at the OFF point f/a = 10 (comparison"),
+                report);
         assertTrue(report.contains("equivalence partitions"),
                 "a line at one position divides it:\n" + report);
     }
@@ -280,7 +281,7 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
         String report = report(guarded(
                 "Int.add(Int.multiply(3, a.value), Int.multiply(5, b.value)) <= 7"));
 
-        assertTrue(report.contains("the ON point f/3 * a + 5 * b = 7 (guard@14:71)"
+        assertTrue(report.contains("the ON point f/3 * a + 5 * b = 7 (comparison@14:71)"
                         + " — the rules leave no value at 3 * a + 5 * b = 7"), report);
         assertFalse(report.contains("nothing composed one: the rules leave no value"),
                 "a proof does not arrive under the opening a failed search gets:\n" + report);
@@ -783,6 +784,6 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
     /** The same report with every citation of a rule with no name blanked, since where a rule is
      *  written is a place and two spellings of one rule are at two of them. */
     private static String exceptWhereRulesAreWritten(String report) {
-        return report.replaceAll("(guard|if|comprehension)@\\d+:\\d+", "$1@<written>");
+        return report.replaceAll("comparison@\\d+:\\d+", "comparison@<written>");
     }
 }

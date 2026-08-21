@@ -1,11 +1,15 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.core.Core;
 import souther.compiler.coverage.ControlPointId;
+import souther.compiler.coverage.CoverageSites;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.reach.Reachability;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -72,6 +76,70 @@ class AComparisonIsReadWhereverItStandsTest {
                 .filter(each -> each.getValue() instanceof Reachability.Unreachable)
                 .map(each -> ((ControlPointId.ComparisonPoint) each.getKey()).held())
                 .toList();
+    }
+
+    /** A chain whose first comparison the guard above rules out, with two more behind it. */
+    private static final String NOTHING_REACHES_THE_REST_OF_THE_CHAIN = """
+            module d
+
+            data Amount = Int invariant value >= 0 && value <= 1000000
+            data Free
+            data Charged = { yen: Int }
+
+            behavior charge : (a: Amount, b: Amount) -> Free | Charged
+                constructs Charged
+
+            let charge (a, b) = {
+                guard a.value < 5000 else Free
+
+                if a.value >= 6000 && (b.value > 1 || b.value < 3)
+                    then Free else Charged { yen = 500 }
+            }
+            """;
+
+    /** Which comparisons of {@code behavior} the plan numbered and this reading never answered. */
+    private static List<String> numberedButUnanswered(String source, String behavior) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        String module = compilation.modules().get(0);
+        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
+        assertNotNull(checked, "the model under test compiles");
+        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
+        Map<ControlPointId, Reachability> found = compilation.db()
+                .ask(new Adequacy.PathReached(module)).value().get(behavior).found();
+        List<String> out = new ArrayList<>();
+        unanswered(checked.behaviorBodies().get(behavior), plan, found, out);
+        return out;
+    }
+
+    /** The traversal is this test's and which nodes are comparisons is the plan's. */
+    private static void unanswered(Core e, CoverageSites.Plan plan,
+                                   Map<ControlPointId, Reachability> found, List<String> out) {
+        if (e instanceof Core.Binary node) {
+            for (boolean result : new boolean[] {true, false}) {
+                plan.outcomeOf(node, result)
+                        .filter(where -> !found.containsKey(where))
+                        .ifPresent(where -> out.add(node.op() + "@" + node.pos() + " " + result));
+            }
+        }
+        Core.forEachChild(e, child -> unanswered(child, plan, found, out));
+    }
+
+    /**
+     * A comparison the chain above it never gets to is still one this reading answers for.
+     *
+     * <p>What the reading owes is one answer per comparison the plan numbered, and a walk that
+     * stops where nothing arrives discharges that for whatever it happened to reach. Under
+     * {@code A && (B || C)} with {@code A} ruled out, the operator is where it stops — and the
+     * operator is numbered nowhere, so two comparisons behind it go unanswered. Unanswered reads
+     * the same as "nothing is known" everywhere below, which is the state a line drawn on one of
+     * them can never be dropped from.
+     */
+    @Test
+    void aComparisonBehindOneNothingReachesIsStillAnsweredFor() {
+        assertEquals(List.of(), numberedButUnanswered(NOTHING_REACHES_THE_REST_OF_THE_CHAIN,
+                        "charge"),
+                "every comparison the plan numbered has an answer");
     }
 
     /**

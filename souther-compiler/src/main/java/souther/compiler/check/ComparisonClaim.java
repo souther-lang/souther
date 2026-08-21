@@ -58,8 +58,19 @@ public sealed interface ComparisonClaim {
     /** Not a comparison of values at all, so nothing was placed. */
     record Nothing() implements ComparisonClaim {}
 
-    /** What {@code op} places. */
+    /**
+     * What {@code op} places, which is nothing where it is not a comparison.
+     *
+     * <p>Which operators compare is {@link Hir.BinOp#compares}'s answer and this asks it rather
+     * than listing them again. Two lists can be given different answers about one operator added
+     * later, and they fail in opposite directions: the numbering would leave it out of the
+     * comparisons of a body while this said what it cuts, so a line would be drawn on a comparison
+     * no run records and no row could ever meet it.
+     */
     static ComparisonClaim of(Hir.BinOp op) {
+        if (!op.compares()) {
+            return new Nothing();
+        }
         return switch (op) {
             case LE -> new Cut(true, true);
             case GT -> new Cut(true, false);
@@ -67,6 +78,8 @@ public sealed interface ComparisonClaim {
             case GE -> new Cut(false, true);
             case EQ -> new Singled(true);
             case NE -> new Singled(false);
+            // Refused above and written out here so the switch stays exhaustive: an operator added
+            // to the language stops the compile here and is decided about rather than falling in.
             case AND, OR, ADD, SUB, MUL, DIV, CONCAT -> new Nothing();
         };
     }
@@ -76,8 +89,4 @@ public sealed interface ComparisonClaim {
         return of(op) instanceof Cut;
     }
 
-    /** Whether {@code op} places anything at all, which is what a comparison does. */
-    static boolean places(Hir.BinOp op) {
-        return op.compares();
-    }
 }

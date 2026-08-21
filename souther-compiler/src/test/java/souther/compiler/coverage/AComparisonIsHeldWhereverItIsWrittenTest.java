@@ -6,6 +6,7 @@ import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 
+import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,8 +36,26 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
     }
 
     private static List<String> operatorsIn(String source) {
-        ComparisonCatalog catalog = ComparisonCatalog.of(bodiesOf(source));
-        return catalog.comparisons().stream().map(each -> each.node().op().name()).toList();
+        return comparisonsIn(bodiesOf(source)).stream().map(each -> each.op().name()).toList();
+    }
+
+    /**
+     * The comparisons of every body, by walking the bodies and asking the catalog at each node.
+     *
+     * <p>The traversal is this test's and the membership is the catalog's, which is the split the
+     * catalog exists for. A list the catalog handed over would be a second answer to keep in step
+     * with {@link ComparisonCatalog#at}, and nothing in the compiler wants one.
+     */
+    private static List<Core.Binary> comparisonsIn(Map<String, Core> bodies) {
+        ComparisonCatalog catalog = ComparisonCatalog.of(bodies);
+        List<Core.Binary> out = new ArrayList<>();
+        bodies.values().forEach(body -> collect(body, catalog, out));
+        return out;
+    }
+
+    private static void collect(Core e, ComparisonCatalog catalog, List<Core.Binary> out) {
+        catalog.at(e).ifPresent(each -> out.add(each.node()));
+        Core.forEachChild(e, child -> collect(child, catalog, out));
     }
 
     private static final String NAMED_BEFORE_THE_FORK = """
@@ -106,24 +125,47 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
      */
     @Test
     void aPlanCannotNumberSomethingThatIsNotAComparison() {
-        Core.Binary sum = (Core.Binary) sumIn("""
+        Map<String, Core> bodies = bodiesOf("""
                 module example.sum
 
                 behavior total : (a: Int, b: Int) -> Int
 
                 let total (a, b) = a + b
                 """);
+        Core.Binary sum = (Core.Binary) sumIn(bodies);
         IdentityHashMap<Core, Integer> numbered = new IdentityHashMap<>();
         numbered.put(sum, 0);
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> new CoverageSites.Plan(List.of(), List.of(), new IdentityHashMap<>(),
-                        numbered));
+                        numbered, ComparisonCatalog.of(bodies)));
         assertTrue(refused.getMessage().contains("ADD"), refused.getMessage());
     }
 
-    private static Core sumIn(String source) {
-        Core body = bodiesOf(source).get("total");
+    /**
+     * Nor one the catalog does not hold, which is the half a node's own operator cannot answer.
+     *
+     * <p>Two answers about what a comparison is, each complete on its own terms and each about a
+     * different body: the emitter and the reachability read the numbering, the partition reads the
+     * catalog. Nothing downstream can notice — a partition over an empty catalog draws no line and
+     * reports no unread rule, which is what a model stating none looks like.
+     */
+    @Test
+    void aPlanCannotNumberAComparisonItsCatalogDoesNotHold() {
+        Map<String, Core> bodies = bodiesOf(NAMED_BEFORE_THE_FORK);
+        Core.Binary comparison = comparisonsIn(bodies).get(0);
+        IdentityHashMap<Core, Integer> numbered = new IdentityHashMap<>();
+        numbered.put(comparison, 0);
+
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> new CoverageSites.Plan(List.of(), List.of(), new IdentityHashMap<>(),
+                        numbered, ComparisonCatalog.of(Map.of())));
+        assertTrue(refused.getMessage().contains("one answer or they are two"),
+                refused.getMessage());
+    }
+
+    private static Core sumIn(Map<String, Core> bodies) {
+        Core body = bodies.get("total");
         while (!(body instanceof Core.Binary)) {
             body = switch (body) {
                 case Core.LetIn let -> let.body();
@@ -152,7 +194,7 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
                 let positives (xs) = List.filter(x -> x > 0, xs)
                 """);
         CoverageSites.Plan plan = CoverageSites.of(bodies);
-        Core.Binary comparison = ComparisonCatalog.of(bodies).comparisons().get(0).node();
+        Core.Binary comparison = comparisonsIn(bodies).get(0);
 
         assertTrue(plan.comparisonAt(comparison).isPresent(), "it is numbered");
         assertTrue(plan.mayRepeat(comparison), "and one run may pass it once per element");

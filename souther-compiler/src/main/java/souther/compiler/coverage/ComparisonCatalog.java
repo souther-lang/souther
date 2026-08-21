@@ -3,9 +3,7 @@ package souther.compiler.coverage;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 
-import java.util.ArrayList;
 import java.util.IdentityHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -37,39 +35,33 @@ public final class ComparisonCatalog {
      * it, so one comparison the author wrote stands here once per call — each reached under its
      * caller's own conditions, and each its own thing to say something about.
      *
-     * @param behavior which body it stands in
-     * @param node     the comparison itself, which is what every reader joins on. Held by identity:
-     *                 Core nodes are records, so two comparisons that look the same are equal, and a
-     *                 reader handed the wrong one of two would be answering about the other body
-     * @param at       where it is written, as a report may say it. A {@link Citation} and not a
-     *                 position, because a comparison spliced in from another module is written in
-     *                 that module's file and reached from a call in this one
-     * @param ordinal  where it comes among the comparisons of this module, in the order the bodies
-     *                 are declared and, within one, the order the source wrote them
+     * @param node the comparison itself, which is what every reader joins on. Held by identity:
+     *             Core nodes are records, so two comparisons that look the same are equal, and a
+     *             reader handed the wrong one of two would be answering about the other body
+     * @param at   where it is written, as a report may say it. A {@link Citation} and not a
+     *             position, because a comparison spliced in from another module is written in that
+     *             module's file and reached from a call in this one — and it is here rather than
+     *             taken again wherever a report needs one, so that a rule and the line it draws are
+     *             found at one place because they read one answer
      */
-    public record Comparison(String behavior, Core.Binary node, Citation at, int ordinal) {}
+    public record Comparison(Core.Binary node, Citation at) {}
 
-    private final List<Comparison> comparisons;
     private final IdentityHashMap<Core, Comparison> byNode;
 
-    private ComparisonCatalog(List<Comparison> comparisons,
-                              IdentityHashMap<Core, Comparison> byNode) {
-        this.comparisons = List.copyOf(comparisons);
+    private ComparisonCatalog(IdentityHashMap<Core, Comparison> byNode) {
         this.byNode = byNode;
     }
 
-    /** The comparisons of every behavior body of one module, in the order the source wrote them. */
+    /** The comparisons of every behavior body of one module. */
     public static ComparisonCatalog of(Map<String, Core> behaviorBodies) {
-        List<Comparison> found = new ArrayList<>();
         IdentityHashMap<Core, Comparison> byNode = new IdentityHashMap<>();
-        for (Map.Entry<String, Core> body : behaviorBodies.entrySet()) {
-            walk(body.getKey(), body.getValue(), found, byNode);
+        for (Core body : behaviorBodies.values()) {
+            walk(body, byNode);
         }
-        return new ComparisonCatalog(found, byNode);
+        return new ComparisonCatalog(byNode);
     }
 
-    private static void walk(String behavior, Core e, List<Comparison> found,
-                             IdentityHashMap<Core, Comparison> byNode) {
+    private static void walk(Core e, IdentityHashMap<Core, Comparison> byNode) {
         // What a representation kept standing for an analysis to read. What a run does is measured
         // over the tree that runs, which keeps none of these, so reaching one would mean this
         // enumeration was taken over a tree nothing executes.
@@ -78,17 +70,9 @@ public final class ComparisonCatalog {
         }
         if (e instanceof Core.Binary binary && binary.op().compares()
                 && binary.origin() != null && binary.origin().isWritten()) {
-            Comparison comparison = new Comparison(behavior, binary,
-                    Citation.of(binary.pos()), found.size());
-            found.add(comparison);
-            byNode.put(binary, comparison);
+            byNode.put(binary, new Comparison(binary, Citation.of(binary.pos())));
         }
-        Core.forEachChild(e, child -> walk(behavior, child, found, byNode));
-    }
-
-    /** Every comparison of the module, in the order the source wrote them. */
-    public List<Comparison> comparisons() {
-        return comparisons;
+        Core.forEachChild(e, child -> walk(child, byNode));
     }
 
     /**

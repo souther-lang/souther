@@ -196,6 +196,7 @@ public final class PathReachability {
         PathEngine engine =
                 new PathEngine(symbols, Map.of(), Terms.Of.THE_TREE_THAT_RUNS, policy);
         Map<ControlPointId, Reachability> out = new LinkedHashMap<>();
+        boolean walked = false;
         try {
             PathEngine.Entered in = PathEngine.Entered.nothing();
             for (Map.Entry<BindingId, Scope.Binding> p : params.bindings().entrySet()) {
@@ -209,12 +210,55 @@ public final class PathReachability {
             reading.entered = in.at();
             reading.walk(body, in.known(), in.at(),
                             InputReads.of(read == null ? InputDomain.NONE : read), List.of(), true);
+            walked = true;
         } catch (RuntimeException why) {
             // The run-time check is the backstop for the analysis this borrows, and it is the
             // backstop for this too: what was not read leaves an obligation standing.
             InvariantChecker.gaveUp("reachability", why);
         }
+        if (walked) {
+            unanswered(body, plan, out).ifPresent(why -> InvariantChecker.gaveUp("reachability",
+                    new IllegalStateException(why)));
+        }
         return new Answers(out);
+    }
+
+    /**
+     * That the walk answered for every comparison the plan numbered in this body.
+     *
+     * <p>What the reading owes, checked rather than left to the shape of the walk. Absent and
+     * unsettled are the same answer to every reader below — a line is dropped only by a proof — so a
+     * comparison the walk never reached is a claim nobody can find missing. The walk stops at a
+     * place nothing arrives at, and a node it stops at can stand over comparisons: which ones
+     * depends on how a condition was bracketed, which is not a thing to keep in step by reading.
+     *
+     * <p>Only where the walk finished, and reported rather than thrown. This reading is fail-open
+     * by contract — what it does when the analysis it borrows falls over is answer about what it
+     * reached and no more — so a walk that missed one says less, the way it does for everything
+     * else it cannot settle. Thrown from here it would abort a compile on one path
+     * ({@code Adequacy.PathReached}) and come back as a build with no classes and no reason on
+     * another ({@code Output.Evaluated} takes an absent answer for a failure).
+     *
+     * @return what went unanswered, or empty where nothing did
+     */
+    private static java.util.Optional<String> unanswered(Core body, CoverageSites.Plan plan,
+                                                         Map<ControlPointId, Reachability> out) {
+        if (body instanceof Core.Binary comparison) {
+            for (boolean result : new boolean[] {true, false}) {
+                ControlPointId where = plan.outcomeOf(comparison, result).orElse(null);
+                if (where != null && !out.containsKey(where)) {
+                    return java.util.Optional.of(
+                            "this reading answered for no run through " + comparison.op()
+                                    + " at " + comparison.pos() + " coming out " + result
+                                    + "; the plan numbered it and a reader below cannot tell an "
+                                    + "answer that was never made from one that settled nothing");
+                }
+            }
+        }
+        List<String> missed = new ArrayList<>();
+        Core.forEachChild(body, child -> unanswered(child, plan, out).ifPresent(missed::add));
+        return missed.isEmpty() ? java.util.Optional.empty()
+                : java.util.Optional.of(missed.get(0));
     }
 
     private final PathEngine engine;
@@ -265,10 +309,15 @@ public final class PathReachability {
             outcomesAt(comparison, k, at, decided);
         }
         if (k.reachesNothing()) {
-            // Nothing stands here, so nothing below is a place anything arrives at either. The arm
-            // that made it so was answered where it was entered; the arms under it are left absent,
-            // which reads as unsettled — the outermost one is the place to say it, and saying it
-            // again at every fork inside would be the same finding several times over.
+            // Nothing stands here, so nothing below is a place anything arrives at either. The arms
+            // under this are left absent, which reads as unsettled: the arm that made it so was
+            // answered where it was entered, and saying it again at every fork inside would be the
+            // same finding several times over.
+            //
+            // The comparisons are not. What this reading owes is one answer per comparison the plan
+            // numbered, and a comparison nothing arrives at is exactly a comparison nothing arrives
+            // at — so the walk goes on for those and stops for everything else.
+            unreached(e, k, at, decided);
             return;
         }
         switch (e) {
@@ -341,6 +390,28 @@ public final class PathReachability {
                 Core.forEachChild(e, child -> walk(child, k, at, reads, decided, nothingAbove));
             }
         }
+    }
+
+    /**
+     * Every comparison below a place nothing arrives at, answered as one nothing arrives at.
+     *
+     * <p>A separate descent because what it does is not what the walk does: no arm is filed, and
+     * nothing here narrows anything — the state was already empty when this began, and it stays
+     * that way for every node under it. Whether one operand of a short circuit was reached is a
+     * question about a run, and there are none.
+     *
+     * <p>Written out rather than folded into the walk, because the walk stops here and stopping is
+     * what it is for. Read as one thing, the walk answered for whatever it happened to reach:
+     * {@code A && (B || C)} with {@code A} ruled out stops at the operator, which is numbered
+     * nowhere, and left {@code B} and {@code C} unanswered — the shape of a claim nothing made.
+     */
+    private void unreached(Core e, Known k, Denotations at, List<PathDecision> decided) {
+        Core.forEachChild(e, child -> {
+            if (child instanceof Core.Binary comparison) {
+                outcomesAt(comparison, k, at, decided);
+            }
+            unreached(child, k, at, decided);
+        });
     }
 
     /**

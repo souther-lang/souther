@@ -236,16 +236,6 @@ public sealed interface OriginRef {
     }
 
     /**
-     * What a report calls the construct a line was drawn in.
-     *
-     * <p>English, like every other word this method writes. What a diagnostic says instead is chosen
-     * in the reader's language, from the same construct.
-     */
-    private static String wordFor(ComparisonOrigin g) {
-        return souther.compiler.check.RuleCitation.wordFor(g.constructThatDrewIt());
-    }
-
-    /**
      * The same rule, named without a place.
      *
      * <p>What a diagnostic's own sentence says. A diagnostic is built where no reader is — nothing
@@ -261,7 +251,7 @@ public sealed interface OriginRef {
             // rather than named, and which fork tests it is a fact about this reading of it. Never
             // rendered to a reader either way — a rule with no name gets a sentence of its own, and
             // the catalog holds those words in every language rather than this building one.
-            case ComparisonOrigin g -> "the " + wordFor(g);
+            case ComparisonOrigin _ -> "the " + souther.compiler.check.RuleCitation.WHAT_IT_IS;
             // A narrowing is not part of the rule, so it is said here and not by the rule.
             case NarrowedOrigin n -> n.bound().named() + " within "
                     + n.within().stream().map(TypeSymbol::name)
@@ -270,43 +260,22 @@ public sealed interface OriginRef {
     }
 
     /**
-     * Whether a fork of a body drew this line, through however many narrowings.
+     * Whether this rule is found by where it is written rather than by what it is called.
      *
-     * <p>Not whether the author wrote {@code guard}. Three constructs put a line on a condition and
-     * one of them is spelled that way, so a predicate reading as the keyword would be answered
-     * {@code true} about an {@code if} — and the next reader to notice the mismatch would repair the
-     * name into a test of the construct and break the other two. What this separates is a rule with a
-     * place from a rule with a name, which is what every caller wants of it.
+     * <p>What every caller wants of it, and what it used to ask instead was which construct of the
+     * language drew the line. Three constructs put a line on a condition and one of them is spelled
+     * {@code guard}, so a predicate reading as the keyword answered {@code true} about an
+     * {@code if} — and a comparison given a name a line above the fork that tests it stands under
+     * no fork at all while being the same rule.
      *
-     * <p>Asked rather than matched on the text: what a rule is called is a rendering, and two of them
-     * read the same word.
+     * <p>Asked rather than matched on the text: what a rule is called is a rendering, and two of
+     * them read the same word.
      */
-    default boolean wasDrawnInABodyFork() {
+    default boolean isWrittenRatherThanNamed() {
         return switch (this) {
             case ComparisonOrigin _ -> true;
-            case NarrowedOrigin n -> n.bound().wasDrawnInABodyFork();
+            case NarrowedOrigin n -> n.bound().isWrittenRatherThanNamed();
             case InvariantOrigin _, EnsuresOrigin _ -> false;
-        };
-    }
-
-    /**
-     * Which construct of the language drew this line, through however many narrowings.
-     *
-     * <p>Asked of the rule rather than worked out from the shape the fork was lowered to. Three
-     * constructs draw a line off a condition and one of them is spelled {@code guard}; the tree that
-     * runs holds one node for all three, and the answer travels with the fork's origin from where the
-     * source was read.
-     *
-     * @throws IllegalStateException where no fork drew the line. An invariant and a clause have
-     *                               names rather than places, and {@link #wasDrawnInABodyFork} is
-     *                               what tells them apart from this
-     */
-    default souther.compiler.types.CoverageConstruct constructThatDrewIt() {
-        return switch (this) {
-            case ComparisonOrigin g -> g.read().written().construct();
-            case NarrowedOrigin n -> n.bound().constructThatDrewIt();
-            case InvariantOrigin _, EnsuresOrigin _ -> throw new IllegalStateException(
-                    "no fork of a body drew this line: " + named());
         };
     }
 

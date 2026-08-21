@@ -169,18 +169,39 @@ public final class CoverageSites {
                        ComparisonCatalog comparisons) {
 
         public Plan {
+            // Every number is of a comparison this plan's catalog holds. Two things go wrong
+            // without it and they are not the same thing.
+            //
             // What a number means to the emitter is "copy the value this node left on the stack",
-            // so a number on anything but an atomic comparison is a copy of something else — half a
-            // `long` where the node was arithmetic, or the whole condition where it was an `&&`.
-            // Checked here because this is what every reader joins on: the reading, the partition
-            // and the reachability would all have agreed with a wrong numbering, and the first thing
-            // to notice would have been the verifier refusing the class.
+            // so a number on anything but a comparison is a copy of something else — half a `long`
+            // where the node was arithmetic, or the whole condition where it was an `&&`. That much
+            // the node's own operator answers.
+            //
+            // The catalog is the other half, and it is the one this PR is about. A plan numbering a
+            // comparison the catalog does not hold is a plan with two answers about what a
+            // comparison is: the emitter and the reachability read the numbering, the partition
+            // reads the catalog, and each is complete on its own terms while they describe
+            // different bodies. Nothing downstream can notice — a partition over an empty catalog
+            // draws no line and reports no unread rule, which reads exactly like a model that
+            // states none.
             for (Core numbered : byComparison.keySet()) {
-                if (!(numbered instanceof Core.Binary comparison)
-                        || !comparison.op().compares()) {
-                    throw new IllegalArgumentException(
-                            "a number was handed to something that is not a comparison: " + numbered);
-                }
+                requireIsACatalogued(numbered, comparisons, "numbered");
+            }
+            for (Core numbered : controlByComparison.keySet()) {
+                requireIsACatalogued(numbered, comparisons, "given a control point");
+            }
+        }
+
+        private static void requireIsACatalogued(Core node, ComparisonCatalog comparisons,
+                                                 String what) {
+            if (!(node instanceof Core.Binary comparison) || !comparison.op().compares()) {
+                throw new IllegalArgumentException(
+                        "something that is not a comparison was " + what + ": " + node);
+            }
+            if (comparisons.at(comparison).isEmpty()) {
+                throw new IllegalArgumentException("a comparison this plan's catalog does not hold "
+                        + "was " + what + " at " + comparison.pos()
+                        + "; the numbering and the catalog are one answer or they are two");
             }
         }
 
@@ -188,12 +209,18 @@ public final class CoverageSites {
                 new IdentityHashMap<>(), new IdentityHashMap<>(), new IdentityHashMap<>(),
                 java.util.Set.of(), new IdentityHashMap<>(), ComparisonCatalog.of(Map.of()));
 
-        /** The same plan built without the control layer, for a caller assembling one by hand. */
+        /**
+         * The same plan built without the control layer, for a caller assembling one by hand.
+         *
+         * <p>The catalog is not defaulted. Handed an empty one, such a plan says a body holds no
+         * comparison and numbers several — which every reader below agrees with, each about a
+         * different body.
+         */
         public Plan(List<Site> sites, List<GuardRef> guards, IdentityHashMap<Core, int[]> byNode,
-                    IdentityHashMap<Core, Integer> byComparison) {
+                    IdentityHashMap<Core, Integer> byComparison, ComparisonCatalog comparisons) {
             this(sites, guards, byNode, byComparison, new IdentityHashMap<>(),
                     new IdentityHashMap<>(), java.util.Set.of(), new IdentityHashMap<>(),
-                    ComparisonCatalog.of(Map.of()));
+                    comparisons);
         }
 
         /**

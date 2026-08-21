@@ -158,7 +158,7 @@ class ARuleThisCouldNotReadIsNamedByTheRuleTest {
         List<PartitionEvidence.NotRead> said = rulesNotRead(model);
 
         assertEquals(1, said.size(), () -> unread(model));
-        assertTrue(human(model).contains("not read: guard@"), human(model));
+        assertTrue(human(model).contains("not read: comparison@"), human(model));
         assertTrue(human(model).lines()
                         .filter(line -> line.contains("not read:"))
                         .noneMatch(line -> line.contains("Int.clamp")),
@@ -236,15 +236,16 @@ class ARuleThisCouldNotReadIsNamedByTheRuleTest {
     }
 
     /**
-     * A comparison written inside a fork of its own is cited by that fork.
+     * A comparison written inside a fork of its own is a rule of its own, cited where it is.
      *
-     * <p>A condition can hold a fork — {@code guard Int.add(if a < b then 1 else 2, 0) > 0} — and
-     * the comparison inside it is written in the {@code if}, not in the {@code guard} around it.
-     * Walked from the outer fork, the word came from one construct and the place from the other,
-     * and the entry the inner fork made of itself was dropped as a repeat.
+     * <p>A condition can hold a fork — {@code guard Int.add(if a < b then 1 else 2, 0) > 0} — so
+     * two comparisons stand under one outer construct and are two rules. Told apart by the
+     * construct each was written in, the inner one's entry was dropped as a repeat of the outer's
+     * whenever the two constructs agreed; told apart by where each is written, they are two
+     * wherever they are two.
      */
     @Test
-    void aComparisonInsideAForkOfItsOwnIsCitedByThatFork() {
+    void aComparisonInsideAForkOfItsOwnIsARuleOfItsOwn() {
         String model = """
                 module m
 
@@ -260,8 +261,13 @@ class ARuleThisCouldNotReadIsNamedByTheRuleTest {
 
         String human = human(model);
 
-        assertTrue(human.lines().anyMatch(line -> line.contains("not read: guard@")), human);
-        assertTrue(human.lines().anyMatch(line -> line.contains("not read: if@")), human);
+        List<String> cited = human.lines()
+                .filter(line -> line.contains("not read: comparison@"))
+                .map(line -> line.substring(line.indexOf("not read: comparison@")).split(" ")[2])
+                .distinct().toList();
+        assertEquals(2, cited.size(),
+                () -> "the comparison in the condition and the one inside the fork it holds are "
+                        + "two rules at two places: " + cited + "\n" + human);
     }
 
     /**

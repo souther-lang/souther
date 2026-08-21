@@ -96,7 +96,7 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
      */
     @Test
     void theTwoAreWrittenApart() {
-        assertTrue(human(A_RULE).contains("not read: if@"), human(A_RULE));
+        assertTrue(human(A_RULE).contains("not read: comparison@"), human(A_RULE));
         assertFalse(human(A_RULE).contains("not read: n "), human(A_RULE));
         assertTrue(human(A_POSITION).contains("not read: items ("), human(A_POSITION));
     }

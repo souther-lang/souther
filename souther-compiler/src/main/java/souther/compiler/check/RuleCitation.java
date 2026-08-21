@@ -3,7 +3,6 @@ package souther.compiler.check;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.source.SourceId;
-import souther.compiler.types.CoverageConstruct;
 
 /**
  * How a reader finds the rule a question is about.
@@ -61,10 +60,10 @@ public sealed interface RuleCitation {
      * reader is standing are not always the same file: a comparison inside a helper is written
      * there and reached from the call, and the same type says both.
      */
-    record WrittenAt(CoverageConstruct construct, Citation at) implements RuleCitation {
+    record WrittenAt(Citation at) implements RuleCitation {
 
         public WrittenAt {
-            if (construct == null || at == null) {
+            if (at == null) {
                 throw new IllegalArgumentException("a rule with no name is found by where it is");
             }
         }
@@ -84,7 +83,7 @@ public sealed interface RuleCitation {
             case Named named -> named.name();
             // Written here, and reached from somewhere else: a comparison inside a helper is one
             // rule and a reader is sent to two places, which the citation already tells apart.
-            case WrittenAt written -> wordFor(written.construct())
+            case WrittenAt written -> WHAT_IT_IS
                     + joining(written.at()) + written.at().said(names, sectionSource);
         };
     }
@@ -100,20 +99,15 @@ public sealed interface RuleCitation {
     }
 
     /**
-     * What a report calls the construct a rule was written in.
+     * What a report calls a rule that has no name, which is one word.
+     *
+     * <p>The construct it stands in and not the rule. A condition holds as many rules as it holds
+     * comparisons, so {@code guard} was one word for all of them — and it was a word about
+     * something the rule has no part of: a comparison given a name a line above the fork that tests
+     * it is the same rule under a construct that is not a fork at all.
      *
      * <p>English, like every other word a report writes from a rule. What a diagnostic says instead
-     * is chosen in the reader's language, from the same construct.
+     * is chosen in the reader's language, from the same fact.
      */
-    static String wordFor(CoverageConstruct construct) {
-        return switch (construct) {
-            case IF -> "if";
-            case GUARD -> "guard";
-            case COMPREHENSION -> "comprehension";
-            // A comparison is read off a fork's condition, and these are not forks. Reaching one is
-            // this reader and the walk that numbered the fork disagreeing about what wrote the rule.
-            case MATCH, BINARY, NOT_WRITTEN -> throw new IllegalStateException(
-                    "a rule was written in something that is not a fork: " + construct);
-        };
-    }
+    String WHAT_IT_IS = "comparison";
 }
