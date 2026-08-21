@@ -1,6 +1,5 @@
 package souther.compiler.coverage;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
