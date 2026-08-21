@@ -515,6 +515,30 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, UnreadReason> standing,
      * than because of the model.
      */
     public AdmissibleValues<A> join(AdmissibleValues<A> other) {
+        return joining(other, false);
+    }
+
+    /**
+     * Either reading holding, with the alternatives of the two held apart.
+     *
+     * <p>The same choice, read without merging what it leaves back into one product. A choice
+     * between alternatives written at two positions is a union of two products and no product holds
+     * it, so merging is where the relation goes — and it goes unnoticed, because the projections
+     * survive a union and it is the next conjunction that spends what was lost.
+     *
+     * <p>Held apart, the conjunction meets the alternatives pairwise, the pairs nothing stands in
+     * drop out, and what is left is what the rules leave. Which is why nothing is owed here: the
+     * union of two products is what it is, and this states it rather than approximating it.
+     *
+     * <p>How many may be held is not this reading's to decide. What bounds them is settled from the
+     * clauses before any of them is read ({@code ExpansionCost}), so that precision cannot turn on
+     * how a fold was bracketed.
+     */
+    public AdmissibleValues<A> joinApart(AdmissibleValues<A> other) {
+        return joining(other, true);
+    }
+
+    private AdmissibleValues<A> joining(AdmissibleValues<A> other, boolean apart) {
         // An alternative nobody can take leaves the answer to the others. Both being that is a
         // different case: no side speaks for the other, and meeting them would state a conjunction
         // the alternatives never stood in. What the choice admits nothing at is what every
@@ -568,14 +592,14 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, UnreadReason> standing,
         // written to the left and another to the right. Measured: both were tried and both broke
         // `AChoiceIsOneConnectiveAndNotATree`. Coarse and the same either way is the trade, and
         // what it costs is a promise this could have kept rather than one it could not.
-        return new AdmissibleValues<>(merged(other), spoiled, dropped || other.dropped,
-                covered, coveredElsewhere,
+        return new AdmissibleValues<>(apart ? apart(other) : merged(other), spoiled,
+                dropped || other.dropped, covered, coveredElsewhere,
                 guaranteedTogether && other.guaranteedTogether && shapedBy.size() <= 1,
                 // Merging a union back into one product loses a relation among the positions the
                 // alternatives are written at, and outside those the two of them agree on
                 // everything by saying nothing. Measured the same way the promise above is, and by
                 // the same sufficient condition, so a choice at one position keeps both.
-                shapedBy.size() <= 1 ? both(tangled, other.tangled)
+                apart || shapedBy.size() <= 1 ? both(tangled, other.tangled)
                         : both(both(tangled, other.tangled), shapedBy),
                 // The projections survive whatever the alternatives are written at: the projection
                 // of a union is the union of the projections.
@@ -600,6 +624,23 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, UnreadReason> standing,
         // Live by construction: a join of two sets is empty only where both are, and neither side
         // is bottom here.
         return one(new Box<>(out));
+    }
+
+    /**
+     * The alternatives of both, which is what the choice leaves where they are held apart.
+     *
+     * <p>A set, so the same alternative offered twice is one. Neither side is bottom here, so every
+     * box of either stands in the choice — nothing is dropped and nothing is merged.
+     */
+    private Held<A> apart(AdmissibleValues<A> other) {
+        Set<Box<A>> boxes = new LinkedHashSet<>(alternatives());
+        boxes.addAll(other.alternatives());
+        return new Held.Alternatives<>(boxes);
+    }
+
+    /** The alternatives this holds, which a reading that admits nothing has none of. */
+    private Set<Box<A>> alternatives() {
+        return held instanceof Held.Alternatives<A> it ? it.boxes() : Set.of();
     }
 
     /** What every alternative of both admits nothing at, which is what a choice between two
