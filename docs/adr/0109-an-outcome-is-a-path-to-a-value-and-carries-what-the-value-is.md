@@ -72,6 +72,18 @@ condition of a fork is not one of those. The rule is read where it is written in
 it is given a name first. That is a limit of the numbering and not of this reading, and it is
 recorded in a test so that it is something said rather than a silence.
 
+A second limit, and it is in front of all of this rather than beside it. Whether an expression can
+answer a value at all is read before any of these paths are, and that reading takes an operator
+which stops early to be strict in both its sides. So `a > 1 && abort` is answered as reaching no
+value, when a run with a small `a` reaches one — and everything under the fork on it, both arms
+included, goes unwalked. Which paths a short circuit has is exactly the question this decides, and
+the reading that decides it here cannot be the one asked there: it is built on the numbering, and
+the numbering is built on that answer. What is owed is a reading of what an expression can come to
+that needs no numbering, told apart from what it knows — a comparison this cannot evaluate is not
+the same as one that comes out both ways, and `1 > 2 || abort` answers no value while `a > 2 ||
+abort` may. Under-reading is where it is left until then, which is the direction everything else
+here takes.
+
 Two ways in that settle one decision opposite ways describe no run, so the walk does not go that
 way rather than going and leaving what it finds to be thrown out later. Which decision it is is not
 which place a run is recorded at: `if a then (if a then …)` is two places and one decision, no row
@@ -86,9 +98,35 @@ that survive being held to what already held, because a way nothing could take w
 spend a share of the bound and push out one something could take — which would move where the bound
 falls with how the body is written rather than with how much there is to read.
 
+Counted and not estimated, which decides how the walk carries a way in. How many contexts survive
+at a position is a fact about the position and about all the ways down to it at once, and a walk
+arriving one way at a time cannot know what the ways beside it came to — so it would have to
+multiply what it does know, and that product is not the number. Where the arms are uneven it is
+larger: a condition asking again about something a condition above it already decided leaves half
+the contexts unable to reach the arm at all, and the half that can are then given up on as though
+the bound had been passed. Given up on means the arm names itself, which places at no class, so
+every group under it goes — a position under the bound losing everything because of how the ways
+above it were spread. The walk carries the contexts of a position together for that reason, and the
+bound is checked once, where they are all in hand.
+
 Over the bound the fork that would go over is read the one way a fork whose condition cannot be
 valued is read, which is by naming its arm. That is where every fork was before the ways in were
-told apart, so going over asks for no more than was asked for then.
+told apart, so going over asks for no more than was asked for then. The bound holds by induction
+rather than by anything counted along the way: a position is read under at most the bound, and what
+an arm below it is read under is either those contexts held to the ways the condition comes out —
+checked there — or one per context, which is what there already were. The right of an operator that
+stops early has no arm to fall back on, so over the bound it is not walked at all.
+
+A value this reading finds no path to is answered as one it has nothing to say about. Two parts of
+a value whose every settling contradicts the other's leave nothing — under
+`(if a then x else abort) + (if a then abort else x)` each part answers on its own and no run has
+both answering — and whether that is the body having no path or this reading not following one is a
+question about how the decisions on either side correlate, which nothing here asks. So it is not
+published: handed on it would reach the enumeration above, where an empty answer says the value
+never comes to that truth, and said of both truths at once it takes both arms of a fork away. The
+reading would be making a claim about the body off the back of its own silence. Normalised at the
+one place a reading is answered rather than at each shape that can produce it, because it is one
+invariant and the shapes that can break it are however many there are.
 
 None of this makes the operator a meeting. ADR-0108's reading of that stands: the two sides are not
 consumed into one value, and the combinations of their decisions are combinations no path takes.
@@ -109,5 +147,12 @@ say, and this is read for the generator and nothing else.
 A group offered once per way into an arm costs a row per way. They are held to the row budget the
 pairs are held to and to the bound above, and neither is a second budget: what the bound cuts off is
 how many ways in a position is read under and never the strength a group is offered at.
+
+The groups come out by the meeting first and by the way in second. A meeting reached several ways is
+one place in the body and as many groups, and they are written down together because that is when
+the walk is there. A generation whose budget runs out reaches a different set of them than it would
+have under the other order, and this is the order to have: which groups a stopped search got to is
+then said by where the meetings are written, and not by which way round a fork above them a row
+goes.
 
 Spec: `[#example-partition]`, `[#example-adequacy]`
