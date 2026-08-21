@@ -102,7 +102,20 @@ public final class EnsuresThresholds {
      *               not be read. Both leave nothing to draw a line from, and which of them happened
      *               is said where the declaration is held to its rules
      */
+
+    /**
+     * The same, reading the input's rules here.
+     *
+     * <p>For a caller that has no reading of them in hand. The pipeline that measures a behavior
+     * reads them once and hands the same one to everything that asks, since each of these reading
+     * its own is every rule of every parameter read again to arrive at the same answers.
+     */
     public static Clauses of(StatedContract stated, InputDomain inputs, Symbols symbols) {
+        return of(stated, inputs, inputs.quantities(symbols), symbols);
+    }
+
+    public static Clauses of(StatedContract stated, InputDomain inputs,
+                             souther.compiler.inputs.Quantities quantities, Symbols symbols) {
         if (stated == null || stated.isEmpty()) {
             return Clauses.NONE;
         }
@@ -116,7 +129,7 @@ public final class EnsuresThresholds {
                 // concluded from it either way: it draws no line here, and that it drew none is not
                 // a statement that the model has none there.
                 if (conjunct.stated().orNull() != null) {
-                    stated(conjunct.stated().orNull(), rule, clause, reads, symbols, drawn);
+                    stated(conjunct.stated().orNull(), rule, clause, reads, symbols, quantities, drawn);
                 }
             }
         }
@@ -140,10 +153,10 @@ public final class EnsuresThresholds {
      * line drawn from one would be a line the model does not draw.
      */
     private static void stated(Core e, StatedContract.StatedRule rule, String clause,
-                               InputReads reads, Symbols symbols, Drawn out) {
+                               InputReads reads, Symbols symbols, souther.compiler.inputs.Quantities quantities, Drawn out) {
         if (e instanceof Core.Binary both && both.op() == Hir.BinOp.AND) {
-            stated(both.left(), rule, clause, reads, symbols, out);
-            stated(both.right(), rule, clause, reads, symbols, out);
+            stated(both.left(), rule, clause, reads, symbols, quantities, out);
+            stated(both.right(), rule, clause, reads, symbols, quantities, out);
             return;
         }
         // Through what a `let` binds, which is not a choice: what the expression comes to is its
@@ -152,7 +165,8 @@ public final class EnsuresThresholds {
         // parameter — and a walk that stopped here found the rule stating nothing while the model
         // plainly says something about the position.
         if (e instanceof Core.LetIn let) {
-            stated(let.body(), rule, clause, reads.and(let.binder(), let.value()), symbols, out);
+            stated(let.body(), rule, clause, reads.and(let.binder(), let.value()), symbols,
+                    quantities, out);
             return;
         }
         // A disjunction was read, and what it states is not what either side of it states. Said as
@@ -172,7 +186,7 @@ public final class EnsuresThresholds {
         // What the comparison cuts is read the same way wherever a comparison is written, which is
         // what {@link Cutting} is for: a clause and a guard over one arithmetic form draw one line,
         // and a reader that called two of the three readings read no form at all.
-        Cutting cutting = Cutting.of(out.behavior(), comparison, reads, symbols);
+        Cutting cutting = Cutting.of(out.behavior(), comparison, reads, symbols, quantities);
         if (cutting == null) {
             // The positions are named as unread, because what the partition could not read here it
             // still could not read.

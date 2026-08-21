@@ -220,7 +220,7 @@ class ThresholdNormalizationTest {
         Read read = read(CEILING, "submit");
         Axis cost = axis(read.partitioning(), "request.cost");
 
-        NumericDomain.Bounds within = read.partitioning().domains().get(cost.term());
+        NumericDomain.Bounds within = read.partitioning().quantities().runsBetween(cost.term());
         assertNotNull(within, "the invariant's domain is what this asks the obligations about");
         List<String> described = pointsAgainstTheLines(cost, read.symbols(), within);
 
@@ -268,7 +268,7 @@ class ThresholdNormalizationTest {
                 "the cut is the coarser partition, so the classes stay the cases");
 
         List<String> described = pointsAgainstTheLines(stage, read.symbols(),
-                read.partitioning().domains().get(stage.term()));
+                read.partitioning().quantities().runsBetween(stage.term()));
         assertEquals(List.of("ON Prospecting", "OFF Qualified"), described);
     }
 
@@ -297,7 +297,7 @@ class ThresholdNormalizationTest {
         Axis amount = axis(read.partitioning(), "amount");
         assertEquals(List.of("0 <= x < 3000", "3000 <= x"), labels(amount));
 
-        NumericDomain.Bounds within = read.partitioning().domains().get(amount.term());
+        NumericDomain.Bounds within = read.partitioning().quantities().runsBetween(amount.term());
         assertNotNull(within, "the invariant's domain is what this asks the obligations about");
         List<String> described = pointsAgainstTheLines(amount, read.symbols(), within);
         assertTrue(described.contains("OFF 3000"), described.toString());

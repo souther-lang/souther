@@ -13,7 +13,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.Function;
 
 /**
  * Where each position has to stand for a row to be at one coverage item.
@@ -33,14 +32,23 @@ import java.util.function.Function;
  */
 public final class LevelRealizer {
 
-    private final Function<NumericTerm, NumericDomain.Bounds> within;
+    private final souther.compiler.inputs.Quantities rules;
 
     /**
-     * @param within what the rules leave each position, on its own carrier. A term nothing was
-     *               recorded about is one the rules leave everything
+     * @param rules what the declarations reaching this behavior's input leave its quantities, which
+     *              is what a row has to be written inside. Taken whole rather than as an end per
+     *              position: a rule relating two positions is not in either of their ranges, so a
+     *              search handed the ranges walks a box with a corner cut off it that it cannot see
+     *              — and offers a row in the corner
      */
-    public LevelRealizer(Function<NumericTerm, NumericDomain.Bounds> within) {
-        this.within = within;
+    public LevelRealizer(souther.compiler.inputs.Quantities rules) {
+        if (rules == null) {
+            throw new IllegalArgumentException(
+                    "a search looks inside what the rules leave, and there is always a reading of"
+                            + " them: an input nothing was written about is one they leave"
+                            + " everything, which is an answer and not an absence");
+        }
+        this.rules = rules;
     }
 
     /** Where the positions have to stand, or why this found nowhere. */
@@ -56,7 +64,7 @@ public final class LevelRealizer {
     private Realization ofOne(Standing.OfOneCoordinate one) {
         Place at = placeMeeting(one.where(), one.of(), bounds(one.term()));
         return at == null ? new Realization.Unknown(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE)
-                : new Realization.Found(Map.of(one.term(), at));
+                : found(Map.of(one.term(), at));
     }
 
     /**
@@ -92,7 +100,7 @@ public final class LevelRealizer {
         Map<NumericTerm, Place> fixing = new LinkedHashMap<>();
         fixing.put(two.on(), at);
         fixing.put(two.against(), common);
-        return new Realization.Found(fixing);
+        return found(fixing);
     }
 
     /**
@@ -145,9 +153,12 @@ public final class LevelRealizer {
         boolean bounded = true;
         for (Level level : LevelCandidateSource.forItem(over.where(), levels)) {
             Search search = new Search(terms, over.of(), whole);
-            Map<NumericTerm, Place> found = search.solve(level.asACount());
-            if (found != null) {
-                return new Realization.Found(found);
+            Map<NumericTerm, Place> standing = search.solve(level.asACount());
+            if (standing != null) {
+                Realization made = found(standing);
+                if (made instanceof Realization.Found) {
+                    return made;
+                }
             }
             bounded &= search.exhaustive();
         }
@@ -162,6 +173,13 @@ public final class LevelRealizer {
 
     /** How many assignments the search will try before it stops and says it did not settle it. */
     private static final int STEPS_A_SEARCH_MAY_TAKE = 200_000;
+
+    /** How often one search reads the declarations again with a position fixed. Each of them is a
+     *  reading of every rule reaching the form's positions, and what it buys is skipping
+     *  assignments the rules refuse — worth paying for a search that ends quickly and not for one
+     *  walking a box a hundred thousand wide. */
+    private static final int HOW_OFTEN_THE_RULES_ARE_ASKED_AGAIN = 2_000;
+
 
     /** How far a derived end is written out where the division that makes it does not end. Any
      *  number of them is sound while the rounding goes outward; this many keeps the bound close
@@ -181,7 +199,18 @@ public final class LevelRealizer {
         private final Carrier carrier;
         private final boolean whole;
         private final Place[] at;
+        /**
+         * Where each term runs before anything is fixed, worked out once.
+         *
+         * <p>What the positions from here on can add up to is asked at every step of the walk and
+         * of every term still to be chosen, and it is the same answer every time: it is asked of the
+         * rules as they stand and not of the rules as this walk has narrowed them. Asked afresh each
+         * time, a bounded walk of a wide box pays for a projection per step per term where it used
+         * to pay for a lookup.
+         */
+        private final NumericDomain.Bounds[] runsBetween;
         private int taken;
+        private int asked;
         private boolean everyEndKnown = true;
 
         Search(List<Map.Entry<NumericTerm, java.math.BigDecimal>> terms, Carrier carrier,
@@ -190,6 +219,10 @@ public final class LevelRealizer {
             this.carrier = carrier;
             this.whole = whole;
             this.at = new Place[terms.size()];
+            this.runsBetween = new NumericDomain.Bounds[terms.size()];
+            for (int i = 0; i < terms.size(); i++) {
+                runsBetween[i] = bounds(terms.get(i).getKey());
+            }
         }
 
         /** Whether what it walked was the whole of the box, which is what makes an empty answer a
@@ -199,7 +232,7 @@ public final class LevelRealizer {
         }
 
         Map<NumericTerm, Place> solve(Count target) {
-            return walk(0, target.at()) ? fixing() : null;
+            return walk(0, target.at(), rules) ? fixing() : null;
         }
 
         private Map<NumericTerm, Place> fixing() {
@@ -210,7 +243,7 @@ public final class LevelRealizer {
             return out;
         }
 
-        private boolean walk(int i, java.math.BigDecimal owed) {
+        private boolean walk(int i, java.math.BigDecimal owed, souther.compiler.inputs.Quantities here) {
             if (++taken > STEPS_A_SEARCH_MAY_TAKE) {
                 return false;
             }
@@ -224,7 +257,7 @@ public final class LevelRealizer {
                 return false;
             }
             java.math.BigDecimal coef = terms.get(i).getValue();
-            NumericDomain.Bounds within = bounds(terms.get(i).getKey());
+            NumericDomain.Bounds within = bounds(here, terms.get(i).getKey());
             // Narrowed by what the positions after this one can add up to. Used to reject a choice
             // after making it, a box a million wide is walked a million times and the budget runs
             // out on `a + b <= 2000000` — an equation with one answer. Used to bound the walk, that
@@ -259,6 +292,15 @@ public final class LevelRealizer {
                     return false;
                 }
                 at[i] = new Count(solved);
+                // And the rules with every position of the form fixed, which is the one place a
+                // whole assignment exists to be held against them. A value inside each position's
+                // own ends can still be one no value of the record has beside the others, and this
+                // is the step that is not given up: what is handed back is an assignment the rules
+                // were not shown to refuse.
+                if (!theRulesHaveNotRefused()) {
+                    at[i] = null;
+                    return false;
+                }
                 return true;
             }
             java.math.BigDecimal low = endOf(left.min(), true);
@@ -283,13 +325,25 @@ public final class LevelRealizer {
                 if (inside == null || !(inside instanceof Count taken)) {
                     return false;
                 }
+                souther.compiler.inputs.Quantities next = narrowing(here, terms.get(i).getKey(), taken.at());
+                if (next == null) {
+                    return false;
+                }
                 at[i] = taken;
-                return walk(i + 1, owed.subtract(coef.multiply(taken.at())));
+                return walk(i + 1, owed.subtract(coef.multiply(taken.at())), next);
             }
             for (java.math.BigDecimal x = low; x.compareTo(high) <= 0;
                     x = x.add(java.math.BigDecimal.ONE)) {
+                // What the rules leave once this position holds this value. A value they leave
+                // nothing beside is skipped here rather than offered and refused where the row is
+                // built: refused there, one candidate coming back rejected is reported as every
+                // value having been tried.
+                souther.compiler.inputs.Quantities next = narrowing(here, terms.get(i).getKey(), x);
+                if (next == null) {
+                    continue;
+                }
                 at[i] = new Count(x);
-                if (walk(i + 1, owed.subtract(coef.multiply(x)))) {
+                if (walk(i + 1, owed.subtract(coef.multiply(x)), next)) {
                     return true;
                 }
                 if (taken > STEPS_A_SEARCH_MAY_TAKE) {
@@ -297,6 +351,58 @@ public final class LevelRealizer {
                 }
             }
             return false;
+        }
+
+        /**
+         * The rules with one more position fixed, or null where they are then left nothing.
+         *
+         * <p>Narrowing, and only that. Null is a proof and the value is skipped on it, so a walk
+         * that skips every one of them has still walked everything there was.
+         *
+         * <p><b>Asked while it is worth asking.</b> Each of these reads the declarations reaching the
+         * positions again, and a box wide enough to walk for a hundred thousand steps is wide enough
+         * to read them a hundred thousand times. Past {@link #HOW_OFTEN_THE_RULES_ARE_ASKED_AGAIN}
+         * the walk carries on against what the rules left before anything was fixed, which is wider
+         * and is sound: it offers assignments this would have skipped, and skips none it would have
+         * kept.
+         *
+         * <p>What giving this up may not give up is the answer. An assignment out of the wider box
+         * that nothing held against the rules is one the record can refuse, and offered as a row it
+         * comes back refused where it is built — which is the defect this reading exists to remove,
+         * arriving by way of a budget. So the last step is {@link #theRulesHaveNotRefused} and is
+         * not budgeted.
+         */
+        private souther.compiler.inputs.Quantities narrowing(souther.compiler.inputs.Quantities here, NumericTerm term,
+                                    java.math.BigDecimal at) {
+            if (asked >= HOW_OFTEN_THE_RULES_ARE_ASKED_AGAIN) {
+                return here;
+            }
+            asked++;
+            souther.compiler.inputs.Quantities next = here.given(term, new Count(at));
+            return next.emptiness().isPresent() ? null : next;
+        }
+
+        /**
+         * Whether the rules, with every position of the form fixed at what the walk chose, were not
+         * shown to leave nothing.
+         *
+         * <p>Not that a value exists. Nothing here builds one, and the rules leaving something is
+         * not the same as something being writable — what settles that is the row itself, where it
+         * is built. What this refuses is narrower and is the whole of what was wrong: an assignment
+         * the rules are already known to refuse, offered as a row and reported as though the point
+         * had nothing at it.
+         *
+         * <p>Asked of the whole assignment and not of the last position, because that is what an
+         * assignment is. Where the narrowing above ran out, the values chosen before this one were
+         * never put to the rules at all, so asking about the last of them alone would hold the walk
+         * to nothing it had not already checked.
+         */
+        private boolean theRulesHaveNotRefused() {
+            java.util.Map<NumericTerm, Place> all = new LinkedHashMap<>();
+            for (int j = 0; j < terms.size(); j++) {
+                all.put(terms.get(j).getKey(), at[j]);
+            }
+            return LevelRealizer.this.theRulesHaveNotRefused(all);
         }
 
         /**
@@ -356,7 +462,7 @@ public final class LevelRealizer {
             java.math.BigDecimal least = java.math.BigDecimal.ZERO;
             java.math.BigDecimal most = java.math.BigDecimal.ZERO;
             for (int j = i; j < terms.size(); j++) {
-                NumericDomain.Bounds within = bounds(terms.get(j).getKey());
+                NumericDomain.Bounds within = runsBetween[j];
                 java.math.BigDecimal coef = terms.get(j).getValue();
                 java.math.BigDecimal low = numberOf(within.min());
                 java.math.BigDecimal high = numberOf(within.max());
@@ -557,7 +663,65 @@ public final class LevelRealizer {
     }
 
     private NumericDomain.Bounds bounds(NumericTerm term) {
-        NumericDomain.Bounds held = within == null ? null : within.apply(term);
+        return bounds(rules, term);
+    }
+
+    /**
+     * A placement handed back, or nothing composed where the rules were shown to leave none.
+     *
+     * <p><b>The one place a placement becomes an answer.</b> What a search may hand back is the same
+     * thing whatever it was searching for — one position at a place of its carrier, two of them a
+     * distance apart, a form at a level — and each of those was written on its own. Written on its
+     * own, each also had to remember the last step, and two of the three did not: a shape whose
+     * search is added later inherits the obligation only if there is one place that carries it.
+     *
+     * <p>What it means is that the rules were not shown to refuse this placement. Not that a value
+     * exists — nothing here builds one, and an emptiness nobody proved is not a value proven to
+     * exist. What it removes is narrower and is what a search over ranges gets wrong: a placement
+     * the rules are already known to refuse, offered as a row and then reported as though the point
+     * had nothing at it.
+     */
+    private Realization found(Map<NumericTerm, Place> fixing) {
+        return theRulesHaveNotRefused(fixing)
+                ? new Realization.Found(fixing)
+                : new Realization.Unknown(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE);
+    }
+
+    /**
+     * Whether the rules, with every position of an item fixed at what was chosen, were not shown to
+     * leave nothing.
+     *
+     * <p>Not that a value exists. Nothing here builds one, and an emptiness nobody proved is not a
+     * value proven to exist — what settles that is the row itself, where it is built. What this
+     * refuses is narrower and is the whole of what a search over ranges gets wrong: an assignment
+     * the rules are already known to refuse, offered as a row and then reported as though the point
+     * had nothing at it.
+     *
+     * <p>Of the whole assignment, because that is what an assignment is. A relation between two
+     * positions is in neither of their ranges, so a walk that held each of them to its own ends has
+     * checked nothing about the pair.
+     *
+     * <p><b>Places that are not numbers settle nothing here, so a placement made of them is handed
+     * back unheld.</b> A rule relating two strings is one the arithmetic has no word for, and what
+     * it leaves them is not something this can be asked — so what is promised is that a placement
+     * the rules were shown to refuse is not offered, and it is promised where the rules can be asked
+     * about the values in it. Anything more would be a claim about an order this reading does not
+     * reach.
+     */
+    private boolean theRulesHaveNotRefused(Map<NumericTerm, Place> fixing) {
+        Map<NumericTerm, Count> counted = new LinkedHashMap<>();
+        fixing.forEach((term, at) -> {
+            if (at instanceof Count count) {
+                counted.put(term, count);
+            }
+        });
+        return counted.isEmpty() || rules.given(counted).emptiness().isEmpty();
+    }
+
+    /** The same, of the rules as some of the positions have been fixed. */
+    private static NumericDomain.Bounds bounds(souther.compiler.inputs.Quantities rules,
+                                               NumericTerm term) {
+        NumericDomain.Bounds held = rules.runsBetween(term);
         return held == null ? new NumericDomain.Bounds(null, null) : held;
     }
 

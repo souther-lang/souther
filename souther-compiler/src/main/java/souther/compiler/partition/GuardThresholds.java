@@ -131,26 +131,41 @@ public final class GuardThresholds {
     /** The thresholds one behavior's body compares its parameters against, and both arms of each
      * comparison. {@code plan} supplies the guard each one belongs to, so a boundary can later ask
      * whether the comparison ran and an arm can be found by the probe that counts it. */
+
+    /**
+     * The same, reading the input's rules here.
+     *
+     * <p>For a caller that has no reading of them in hand. The pipeline that measures a behavior
+     * reads them once and hands the same one to everything that asks, since each of these reading
+     * its own is every rule of every parameter read again to arrive at the same answers.
+     */
     public static Guards of(String behavior, Core body, CoverageSites.Plan plan,
                             InputDomain inputs, Symbols symbols) {
+        return of(behavior, body, plan, inputs, inputs.quantities(symbols), symbols);
+    }
+
+    public static Guards of(String behavior, Core body, CoverageSites.Plan plan,
+                            InputDomain inputs, souther.compiler.inputs.Quantities quantities,
+                            Symbols symbols) {
         List<Threshold> found = new ArrayList<>();
         List<UnreadRule> unread = new ArrayList<>();
         List<Guards.AtAPosition> accounting = new ArrayList<>();
         List<Guards.Singled> singled = new ArrayList<>();
         List<LineDrawn> between = new ArrayList<>();
-        walk(behavior, body, plan, InputReads.of(inputs), symbols, found, unread,
-                singled, between, accounting);
+        walk(behavior, body, plan, InputReads.of(inputs), symbols, quantities,
+                found, unread, singled, between, accounting);
         return new Guards(found, unread, singled, between, accounting);
     }
 
     private static void walk(String behavior, Core e, CoverageSites.Plan plan,
-                             InputReads reads, Symbols symbols, List<Threshold> out,
+                             InputReads reads, Symbols symbols, souther.compiler.inputs.Quantities quantities,
+                             List<Threshold> out,
                              List<UnreadRule> unread,
                              List<Guards.Singled> singled, List<LineDrawn> between,
                              List<Guards.AtAPosition> accounting) {
         if (e instanceof Core.If iff) {
-            List<Core> read =
-                    read(behavior, iff, plan, reads, symbols, out, singled, between, accounting);
+            List<Core> read = read(behavior, iff, plan, reads, symbols, quantities, out, singled,
+                    between, accounting);
             // Every comparison this condition holds that nothing turned into a line — asked of the
             // comparisons and not of the positions. One position carries more than one statement,
             // and a line read at it says nothing about the rest: kept per position, a threshold on
@@ -170,8 +185,8 @@ public final class GuardThresholds {
         // walk that did not follow the binding would find its comparisons about nothing.
         InputReads inside = e instanceof Core.LetIn let ? reads.and(let.binder(), let.value())
                 : reads;
-        Core.forEachChild(e, child -> walk(behavior, child, plan, inside, symbols, out,
-                unread, singled, between, accounting));
+        Core.forEachChild(e, child -> walk(behavior, child, plan, inside, symbols, quantities,
+                out, unread, singled, between, accounting));
     }
 
     /**
@@ -369,6 +384,7 @@ public final class GuardThresholds {
      */
     private static List<Core> read(String behavior, Core.If iff, CoverageSites.Plan plan,
                                    InputReads reads, Symbols symbols,
+                                   souther.compiler.inputs.Quantities quantities,
                                    List<Threshold> out,
                                    List<Guards.Singled> singled, List<LineDrawn> between,
                                    List<Guards.AtAPosition> accounting) {
@@ -393,7 +409,7 @@ public final class GuardThresholds {
             // What the comparison cuts is one question with one answer ({@link Cutting}). What is
             // added here is what meeting the line takes, which is a guard's own answer and no other
             // rule's.
-            Cutting cutting = Cutting.of(behavior, each.comparison(), reads, symbols);
+            Cutting cutting = Cutting.of(behavior, each.comparison(), reads, symbols, quantities);
             if (cutting == null) {
                 raisesNoLine(accounting, behavior, iff, each.comparison(), reads, symbols);
                 continue;

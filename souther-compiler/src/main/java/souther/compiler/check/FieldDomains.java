@@ -65,7 +65,7 @@ public final class FieldDomains {
             new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), Set.of(), List.of(), List.of(), Map.of(),
                     Map.of(), new ReadingEvidence(), Map.of(), Set.of(THE_VALUE), NO_POSITIONS,
                     ConstraintState.top(), null, null, null, null, Map.of(), Set.of(THE_VALUE),
-                    Map.of(), Map.of(), Map.of());
+                    Map.of(), Map.of(), Map.of(), Map.of());
 
     private final Map<String, NumericDomain.Bounds> byField;
     /** The ends the record's own clauses place, which is a different question from the range they
@@ -119,7 +119,7 @@ public final class FieldDomains {
     private final TypeSymbol named;
     private final Hir.Data data;
     private final Symbols symbols;
-    private final Map<String, Count> settled;
+    private final Map<Coordinate, Count> settled;
     /** What this value was read under, so that reading it again for what one rule did reads it the
      *  same way. A second reading of one declaration under another policy would answer a position
      *  differently while both stayed sound, and what moved would be read as what the rule did. */
@@ -131,6 +131,9 @@ public final class FieldDomains {
     /** What the reading that builds the bounds made of each part of each rule. Per part, because a
      *  rule is represented where every part of it is. */
     private final Map<RuleRef, Map<Core, InvariantChecker.PartRead>> readBy;
+    /** How each atom's values are spaced, so that settling one afterwards states the same equality
+     *  the reading would have stated for it. */
+    private final Map<FactSubject, souther.compiler.numeric.Granularity> spacing;
 
     private FieldDomains(Map<String, NumericDomain.Bounds> byField,
                          Map<String, NumericDomain.Bounds> heldByField,
@@ -145,10 +148,11 @@ public final class FieldDomains {
                          SequencedMap<FactSubject, String> positions,
                          ConstraintState constraints, TypeSymbol named,
                          Hir.Data data, Symbols symbols, ReadingPolicy policy,
-                         Map<String, Count> settled,
+                         Map<Coordinate, Count> settled,
                          Set<String> unreadOfEveryValue,
                          Map<String, FactSubject> atomAt, Map<String, FactSubject> countAt,
-                         Map<RuleRef, Map<Core, InvariantChecker.PartRead>> readBy) {
+                         Map<RuleRef, Map<Core, InvariantChecker.PartRead>> readBy,
+                         Map<FactSubject, souther.compiler.numeric.Granularity> spacing) {
         this.byField = byField;
         this.heldByField = heldByField;
         this.admittedByField = admittedByField;
@@ -172,6 +176,7 @@ public final class FieldDomains {
         this.atomAt = atomAt;
         this.countAt = countAt;
         this.readBy = readBy;
+        this.spacing = spacing;
     }
 
     /**
@@ -205,6 +210,21 @@ public final class FieldDomains {
         return constraints.holdsNothing(positions);
     }
 
+    /**
+     * How many readings of a declaration have been made, for a test holding this to when it reads.
+     *
+     * <p>Counted rather than timed. What a caller is held to is that fixing a position reads
+     * nothing and asking a question reads once, which is a shape and not a speed — and a
+     * measurement of the second would pass on an implementation that had the first wrong.
+     */
+    private static final java.util.concurrent.atomic.AtomicLong READINGS =
+            new java.util.concurrent.atomic.AtomicLong();
+
+    /** How many times a declaration has been read into one of these. */
+    public static long readingsMade() {
+        return READINGS.get();
+    }
+
     /** What {@code data}, declared as {@code named}, leaves its fields able to hold. */
     public static FieldDomains of(TypeSymbol named, Hir.Data data, Symbols symbols,
                                   ReadingPolicy policy) {
@@ -221,7 +241,16 @@ public final class FieldDomains {
      */
     public static FieldDomains of(TypeSymbol named, Hir.Data data, Symbols symbols,
                                   ReadingPolicy policy, Map<String, Count> settled) {
-        return of(named, data, symbols, policy, settled, InvariantChecker.Reach.EVERYTHING);
+        return of(named, data, symbols, policy, atValues(settled),
+                InvariantChecker.Reach.EVERYTHING);
+    }
+
+    /** Settlings written as paths, read as the positions' own values. What a caller spelling a
+     *  path means is the value there; a count taken of one is a coordinate it has to name. */
+    private static Map<Coordinate, Count> atValues(Map<String, Count> settled) {
+        Map<Coordinate, Count> out = new LinkedHashMap<>();
+        settled.forEach((path, at) -> out.put(new Coordinate(path, false), at));
+        return out;
     }
 
     /**
@@ -242,12 +271,13 @@ public final class FieldDomains {
 
     /** The same, reading only as far as {@code reach} says — see {@link #narrowedBy}. */
     private static FieldDomains of(TypeSymbol named, Hir.Data data, Symbols symbols,
-                                   ReadingPolicy policy, Map<String, Count> settled,
+                                   ReadingPolicy policy, Map<Coordinate, Count> settled,
                                    InvariantChecker.Reach reach) {
         // A newtype is read the same way, and only its bounds are not worth handing back: its value
         // is the same position it is, so there are no siblings to relate. Everything else is the same
         // question — its own rules can hold a hole no range keeps, and they can contradict, and both
         // answers were being given away by treating it as a value with nothing to say.
+        READINGS.incrementAndGet();
         InvariantChecker.Seeded seeded =
                 InvariantChecker.seedFields(named, data, symbols, policy, settled, reach);
         Map<String, NumericDomain.Bounds> out = new LinkedHashMap<>();
@@ -347,7 +377,7 @@ public final class FieldDomains {
                 seeded.notGathered(), placeOf,
                 seeded.constraints(), named, data, symbols, policy, settled,
                 seeded.unreadOfEveryValue(), seeded.atoms(), seeded.held(),
-                seeded.readBy());
+                seeded.readBy(), seeded.spacing());
     }
 
     /**
@@ -475,6 +505,141 @@ public final class FieldDomains {
     private FieldDomains without(java.util.function.Predicate<TypeSymbol> skip) {
         return of(named, data, symbols, policy, settled,
                 InvariantChecker.Reach.withoutClausesOf(skip));
+    }
+
+    /**
+     * The same rules with these coordinates settled at these values, for the questions that read
+     * the constraints themselves.
+     *
+     * <p><b>The clauses are not read again.</b> A settling is an equality on an atom taken onto
+     * everything else the clauses came to, which is exactly what the reading does with one at the
+     * end of its own work ({@link ConstraintState#settling}) — so stating it here and stating it
+     * there are the same statement, and reading a declaration once per settled position is paying
+     * for the clauses over again to arrive where this already is.
+     *
+     * <p>What comes back answers about the constraints and not about a reading. Where a form runs
+     * and whether anything is left are read off the rules themselves; what a reading derives beside
+     * them — which values a position may hold, what it must hold, which rule placed an end — is not
+     * recomputed and is not offered, so nothing can read a settled state for an answer that was
+     * worked out before the settling.
+     */
+    public Settled given(Map<Coordinate, Count> fixed) {
+        ConstraintState taken = constraints;
+        for (Map.Entry<Coordinate, Count> each : fixed.entrySet()) {
+            Coordinate where = each.getKey();
+            FactSubject atom = where.measured()
+                    ? countAt.get(where.path()) : atomAt.get(where.path());
+            souther.compiler.numeric.Granularity spaced =
+                    atom == null ? null : spacing.get(atom);
+            // A coordinate no range is taken of here settles nothing, which is less than the caller
+            // said and is the safe direction: what is left is wider than what they asked about.
+            if (spaced != null) {
+                taken = ConstraintState.settling(taken, atom, each.getValue(), spaced);
+            }
+        }
+        return new Settled(taken, positions, atomAt, countAt, spacing);
+    }
+
+    /**
+     * The rules of one value with some of its coordinates settled.
+     *
+     * <p>Not a {@link FieldDomains}. What a reading of a declaration hands over is derived from the
+     * constraints and would have to be derived again under a settling; what a caller settling one
+     * wants is the constraints themselves. Kept apart so that the derived answers cannot be read
+     * off a state they were not worked out under.
+     */
+    public static final class Settled {
+
+        private final ConstraintState constraints;
+        private final SequencedMap<FactSubject, String> positions;
+        private final Map<String, FactSubject> atomAt;
+        private final Map<String, FactSubject> countAt;
+        private final Map<FactSubject, souther.compiler.numeric.Granularity> spacing;
+
+        private Settled(ConstraintState constraints, SequencedMap<FactSubject, String> positions,
+                        Map<String, FactSubject> atomAt, Map<String, FactSubject> countAt,
+                        Map<FactSubject, souther.compiler.numeric.Granularity> spacing) {
+            this.constraints = constraints;
+            this.positions = positions;
+            this.atomAt = atomAt;
+            this.countAt = countAt;
+            this.spacing = spacing;
+        }
+
+        /** Why the rules and what is settled leave no value, or empty where nothing proved they
+         *  leave none. */
+        public Optional<Emptiness> holdsNothing() {
+            return constraints.holdsNothing(positions);
+        }
+
+        /** Where a form over these coordinates runs — see {@link FieldDomains#boundsOf}. */
+        public NumericDomain.Bounds boundsOf(Map<Coordinate, java.math.BigDecimal> form) {
+            return boundsOfForm(constraints, atomAt, countAt, form);
+        }
+
+        /**
+         * The same rules, with these coordinates held between these ends as well.
+         *
+         * <p>For a caller that knows something about a coordinate this reading does not. What a
+         * position was read to hold is read by a reader of its own, and what a term guarantees of
+         * itself is true whether or not any clause says so — put in here, those facts are solved
+         * together with the rules that relate the coordinates instead of beside them.
+         *
+         * <p>Which is not the same answer. Taking a form's bounds under each of them and meeting
+         * afterwards is wider than taking them under both at once: a rule holding two coordinates at
+         * one apiece says nothing about a third the rules leave unbounded below, and met afterwards
+         * against a floor that reader did have, the rule is gone. Projecting does not distribute
+         * over meeting any more than meeting distributes over addition.
+         *
+         * <p>Ends that are not numbers are left out, since what is being added to is the arithmetic.
+         * A caller holding one of those is holding it about a position no form reaches.
+         */
+        public Settled within(Map<Coordinate, NumericDomain.Bounds> ends) {
+            ConstraintState taken = constraints;
+            for (Map.Entry<Coordinate, NumericDomain.Bounds> each : ends.entrySet()) {
+                FactSubject atom = each.getKey().measured()
+                        ? countAt.get(each.getKey().path()) : atomAt.get(each.getKey().path());
+                if (atom == null || each.getValue() == null) {
+                    continue;
+                }
+                souther.compiler.numeric.Granularity spaced = spacing.get(atom);
+                if (spaced == null) {
+                    continue;
+                }
+                taken = holding(taken, atom, each.getValue().min(), true, spaced);
+                taken = holding(taken, atom, each.getValue().max(), false, spaced);
+            }
+            return taken == constraints ? this
+                    : new Settled(taken, positions, atomAt, countAt, spacing);
+        }
+
+        /** One end taken onto the rules, where it is a number and there is one. */
+        private static ConstraintState holding(ConstraintState state, FactSubject atom,
+                                               Endpoint end, boolean least,
+                                               souther.compiler.numeric.Granularity spaced) {
+            if (end == null || !(end.at() instanceof Count at)) {
+                return state;
+            }
+            NumericDomain.Rel how = least
+                    ? (end.inclusive() ? NumericDomain.Rel.GE : NumericDomain.Rel.GT)
+                    : (end.inclusive() ? NumericDomain.Rel.LE : NumericDomain.Rel.LT);
+            return state.taking(
+                    NumericDomain.LinearForm.<FactSubject>atom(atom)
+                            .minus(NumericDomain.LinearForm.<FactSubject>constant(at.at())),
+                    how, Map.of(atom, spaced));
+        }
+
+        /**
+         * Whether a range is taken of this coordinate here, which is whether a rule about it could
+         * have been read into these at all.
+         *
+         * <p>Asked so that a caller can put the part of a form this can answer for on its own. A
+         * form with one coordinate this never named is one nothing can be said about as a whole, and
+         * said that way the rules relating the coordinates beside it are lost with it.
+         */
+        public boolean names(Coordinate at) {
+            return (at.measured() ? countAt.get(at.path()) : atomAt.get(at.path())) != null;
+        }
     }
 
     /**
@@ -831,17 +996,6 @@ public final class FieldDomains {
     }
 
     /**
-     * What every rule reaching this value leaves the position at {@code path}, the value's own
-     * position included.
-     *
-     * <p>A different question from {@link #at}, which is what the value a position sits in projects
-     * onto it — a sibling's business, and a newtype's value has no siblings, which is why that one
-     * has nothing to say about it. This is where the position stops once everything written about it
-     * has been taken in, and a caller that has to know where a line actually falls wants this: a
-     * clause placing an end at 0 beside one that takes the 0 away leaves a position whose first
-     * value is 1, and the end as written is not where the position starts.
-     */
-    /**
      * That the reading names the rule the algebra could not prove, since only the reading can.
      *
      * <p>An assertion beside the cause that is filed when it does not hold, and not instead of it.
@@ -870,12 +1024,82 @@ public final class FieldDomains {
         };
     }
 
+    /**
+     * What every rule reaching this value leaves the position at {@code path}, the value's own
+     * position included.
+     *
+     * <p>A different question from {@link #at}, which is what the value a position sits in projects
+     * onto it — a sibling's business, and a newtype's value has no siblings, which is why that one
+     * has nothing to say about it. This is where the position stops once everything written about it
+     * has been taken in, and a caller that has to know where a line actually falls wants this: a
+     * clause placing an end at 0 beside one that takes the 0 away leaves a position whose first
+     * value is 1, and the end as written is not where the position starts.
+     */
     public NumericDomain.Bounds leftAt(String path, boolean measured) {
         // The axis the caller is on, and not whichever of the two this position happens to have. A
         // `String` is measured two ways — its own order, and the length of it — and answering with
         // the wrong one clamps a line drawn on one axis by the range of the other.
         FactSubject atom = measured ? countAt.get(path) : atomAt.get(path);
         return atom == null ? null : constraints.numbers().boundsOf(atom);
+    }
+
+    /**
+     * One number of one position: the position's own value, or the count taken of it.
+     *
+     * <p>The pair {@link #leftAt} already asks by, written down so that a form over several
+     * positions can be. A position measured two ways is two coordinates at one path, and a form
+     * naming the other one is a form about another quantity.
+     */
+    public record Coordinate(String path, boolean measured) {
+
+        public Coordinate {
+            if (path == null) {
+                throw new IllegalArgumentException("a coordinate sits at a path");
+            }
+        }
+    }
+
+    /**
+     * The tightest bounds the rules prove on an arithmetic form over several of these coordinates.
+     *
+     * <p><b>Where a product of {@link #leftAt} cannot go.</b> Two fields each running from none to
+     * five come to ten taken one at a time, and a clause holding their sum at five is the whole
+     * reason the pair was written down — so what the form runs between is asked of the relations
+     * that reach it rather than composed from what each of them projects. Composed, a rule cutting
+     * the sum at eight drew a border on a quantity that never arrives there.
+     *
+     * <p>Asked in the vocabulary a caller here already has. What the reading called a position means
+     * nothing once the reading that named it is gone, so what crosses is a path and a form of paths
+     * — the same translation {@link #leftAt} makes, of a question with several coordinates in it.
+     *
+     * <p>Null where a coordinate of the form is one no range is taken of here, which is an answer
+     * about this reading rather than about the form: the atom that would carry it does not exist, so
+     * there is no relation to project and the caller is left with whatever it knows beside this.
+     */
+    public NumericDomain.Bounds boundsOf(Map<Coordinate, java.math.BigDecimal> form) {
+        return boundsOfForm(constraints, atomAt, countAt, form);
+    }
+
+    private static NumericDomain.Bounds boundsOfForm(ConstraintState constraints,
+                                                     Map<String, FactSubject> atomAt,
+                                                     Map<String, FactSubject> countAt,
+                                                     Map<Coordinate, java.math.BigDecimal> form) {
+        if (form.isEmpty()) {
+            return null;
+        }
+        Map<FactSubject, java.math.BigDecimal> coefs = new LinkedHashMap<>();
+        for (Map.Entry<Coordinate, java.math.BigDecimal> each : form.entrySet()) {
+            Coordinate at = each.getKey();
+            FactSubject atom = at.measured() ? countAt.get(at.path()) : atomAt.get(at.path());
+            if (atom == null) {
+                return null;
+            }
+            // Two coordinates of one form can be one atom — a form is written over the positions a
+            // rule names, and a rule may name one of them twice.
+            coefs.merge(atom, each.getValue(), java.math.BigDecimal::add);
+        }
+        return constraints.numbers().boundsOf(
+                new NumericDomain.LinearForm<>(java.math.BigDecimal.ZERO, coefs));
     }
 
     /**

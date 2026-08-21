@@ -214,7 +214,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
                 Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(spec.name()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return p.axes().stream()
                 .flatMap(axis -> Partitions.bordersOf(axis, symbols,
-                        p.domains().get(axis.term())).stream())
+                        p.quantities().runsBetween(axis.term())).stream())
                 .flatMap(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
                         .filter(role -> border.demand(role).criterion() != null)
                         .map(role -> role + " "

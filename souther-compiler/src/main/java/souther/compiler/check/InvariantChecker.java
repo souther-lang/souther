@@ -384,7 +384,8 @@ public final class InvariantChecker {
                   Map<String, FactSubject> held, Reading reading, ReadingEvidence took,
                   boolean everyClauseRead, Set<String> notGathered,
                   Set<String> unreadOfEveryValue,
-                  Map<RuleRef, Map<Core, PartRead>> readBy) {
+                  Map<RuleRef, Map<Core, PartRead>> readBy,
+                  Map<FactSubject, souther.compiler.numeric.Granularity> spacing) {
 
         public Seeded {
             notGathered = Set.copyOf(notGathered);
@@ -402,7 +403,7 @@ public final class InvariantChecker {
                     new Reading(List.of(), List.of(), Map.of(), Map.of(), Map.of()),
                     new ReadingEvidence(),
                     false, Set.of(FieldDomains.THE_VALUE), Set.of(FieldDomains.THE_VALUE),
-                    Map.of());
+                    Map.of(), Map.of());
         }
 
         /** The numbers alone, for the readers that are about intervals. Whether a value exists is
@@ -464,7 +465,7 @@ public final class InvariantChecker {
      * still take, which is where a row completing that assignment has to look.
      */
     static Seeded seedFields(TypeSymbol named, Hir.Data data, Symbols symbols,
-                             ReadingPolicy policy, Map<String, Count> settled) {
+                             ReadingPolicy policy, Map<FieldDomains.Coordinate, Count> settled) {
         return seedFields(named, data, symbols, policy, settled, Reach.EVERYTHING);
     }
 
@@ -479,7 +480,8 @@ public final class InvariantChecker {
      * says, and it is not that one — see {@link Reach}.
      */
     static Seeded seedFields(TypeSymbol named, Hir.Data data, Symbols symbols,
-                             ReadingPolicy policy, Map<String, Count> settled, Reach reach) {
+                             ReadingPolicy policy, Map<FieldDomains.Coordinate, Count> settled,
+                             Reach reach) {
         InvariantChecker c = new InvariantChecker(symbols, Map.of(), policy);
         Map<String, Type> fields = c.clauses.fieldsOf(data);
         Map<String, BindingId> bindings = c.clauses.bindingsOf(named, data);
@@ -640,20 +642,38 @@ public final class InvariantChecker {
             ConstraintState constraints = k.constraints()
                     .takingValuesRead(stated.values())
                     .taking(stated.ordered());
-            for (Map.Entry<String, Count> each : settled.entrySet()) {
-                FactSubject atom = atoms.get(each.getKey());
-                Type type = typeAt.get(each.getKey());
-                if (atom == null || type == null) {
+            // How each atom's values are spaced, kept so that settling one afterwards states the
+            // equality the same way this does. A count is a whole number of things whatever the
+            // things are spaced by; a position's own value is spaced by its type.
+            Map<FactSubject, souther.compiler.numeric.Granularity> spacing = new LinkedHashMap<>();
+            atoms.forEach((path, atom) -> {
+                Type type = typeAt.get(path);
+                if (type != null) {
+                    spacing.put(atom, c.terms.granularityOf(type));
+                }
+            });
+            held.forEach((path, atom) ->
+                    spacing.put(atom, souther.compiler.numeric.Granularity.DISCRETE));
+            for (Map.Entry<FieldDomains.Coordinate, Count> each : settled.entrySet()) {
+                FieldDomains.Coordinate where = each.getKey();
+                // The number the caller settled, which is the position's own value or the count
+                // taken of it. Two coordinates at one path and two atoms: a reading that resolved
+                // only the first left a rule over two counts unconditioned while the same rule was
+                // read whole when it was asked about.
+                FactSubject atom = where.measured()
+                        ? held.get(where.path()) : atoms.get(where.path());
+                if (atom == null) {
                     continue;
                 }
-                constraints = constraints.taking(
-                        NumericDomain.LinearForm.atom(atom)
-                                .minus(NumericDomain.LinearForm.constant(each.getValue().at())),
-                        NumericDomain.Rel.EQ,
-                        Map.of(atom, c.terms.granularityOf(type)));
+                // A count is a whole number of things, whatever the values counted are spaced by.
+                souther.compiler.numeric.Granularity spaced = spacing.get(atom);
+                if (spaced == null) {
+                    continue;
+                }
+                constraints = ConstraintState.settling(constraints, atom, each.getValue(), spaced);
             }
             return new Seeded(constraints, atoms, keys, held, reading, took, read,
-                    Set.copyOf(notGathered), unreadOfEveryValue, readBy);
+                    Set.copyOf(notGathered), unreadOfEveryValue, readBy, Map.copyOf(spacing));
         } catch (RuntimeException why) {
             gaveUp("seedFields " + named.name(), why);
             return Seeded.nothingRead();

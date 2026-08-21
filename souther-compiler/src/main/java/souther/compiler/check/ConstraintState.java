@@ -174,4 +174,20 @@ record ConstraintState(NumericDomain<FactSubject> numbers, PredicateFacts facts,
     ConstraintState taking(OrderedIntervals<FactSubject> bounded) {
         return new ConstraintState(numbers, facts, values, ordered.meet(bounded), shown);
     }
+
+    /**
+     * The same rules with one atom settled at a value.
+     *
+     * <p>The one place a settling is stated, so that a reading made with one and a reading settled
+     * after it was made say the same thing. Written twice, the second would be free to state it
+     * under a different spacing and answer a position differently while both stayed sound.
+     */
+    static ConstraintState settling(ConstraintState state, FactSubject atom,
+                                    souther.compiler.numeric.Count at,
+                                    souther.compiler.numeric.Granularity spacing) {
+        return state.taking(
+                NumericDomain.LinearForm.<FactSubject>atom(atom)
+                        .minus(NumericDomain.LinearForm.<FactSubject>constant(at.at())),
+                NumericDomain.Rel.EQ, java.util.Map.of(atom, spacing));
+    }
 }

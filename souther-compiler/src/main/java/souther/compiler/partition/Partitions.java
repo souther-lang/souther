@@ -75,7 +75,7 @@ public final class Partitions {
      *                nothing can classify into the denominator
      */
     public record Partitioning(List<Axis> axes, List<OmittedAxis> omitted,
-                               Map<NumericTerm, NumericDomain.Bounds> domains,
+                               souther.compiler.inputs.Quantities quantities,
                                java.util.Set<NumericTerm> uncertain,
                                List<UndividedPosition> undivided,
                                List<UnreadRule> unread,
@@ -87,7 +87,6 @@ public final class Partitions {
             compared = List.copyOf(compared);
             axes = List.copyOf(axes);
             omitted = List.copyOf(omitted);
-            domains = Map.copyOf(domains);
             uncertain = java.util.Set.copyOf(uncertain);
             undivided = List.copyOf(undivided);
             unread = List.copyOf(unread);
@@ -136,10 +135,23 @@ public final class Partitions {
      *
      * @param behavior what the axes are named after, which is the behavior the reading was made for
      */
+
+    /**
+     * The same, reading the input's rules here.
+     *
+     * <p>For a caller that has no reading of them in hand. The pipeline that measures a behavior
+     * reads them once and hands the same one to everything that asks, since each of these reading
+     * its own is every rule of every parameter read again to arrive at the same answers.
+     */
     public static Partitioning of(String behavior, InputDomain inputs, Symbols symbols,
                                   ReadingPolicy policy) {
+        return of(behavior, inputs, inputs.quantities(symbols), symbols, policy);
+    }
+
+    public static Partitioning of(String behavior, InputDomain inputs,
+                                  souther.compiler.inputs.Quantities quantities, Symbols symbols,
+                                  ReadingPolicy policy) {
         List<Axis> found = new ArrayList<>();
-        Map<NumericTerm, NumericDomain.Bounds> domains = new LinkedHashMap<>();
         java.util.Set<NumericTerm> uncertain = new java.util.LinkedHashSet<>();
         List<UnreadRule> unread = new ArrayList<>();
         // What the reading could not hold together, asked of every position it read rather than of
@@ -158,7 +170,7 @@ public final class Partitions {
                 notSeparated.add(
                         new souther.compiler.inputs.PositionValuesNotSeparated(position.path()));
             }
-            axisOf(behavior, position, symbols, policy, found, domains, uncertain, unread);
+            axisOf(behavior, position, symbols, policy, found, uncertain, unread);
         }
         List<Axis> kept = new ArrayList<>();
         List<OmittedAxis> omitted = new ArrayList<>();
@@ -186,7 +198,7 @@ public final class Partitions {
         for (Axis axis : kept) {
             keep(new ArrayList<>(), measured, axis, null, unread);
         }
-        return new Partitioning(kept, omitted, domains, uncertain, undividedIn(measured),
+        return new Partitioning(kept, omitted, quantities, uncertain, undividedIn(measured),
                 List.copyOf(unread), blockedIn(measured), List.copyOf(notSeparated),
                 List.of(), List.of());
     }
@@ -452,7 +464,7 @@ public final class Partitions {
                     reachable.stream().map(Threshold::parts).toList()),
                     reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), rules);
         }
-        return new Partitioning(out, base.omitted(), domainsOf(base, out), base.uncertain(),
+        return new Partitioning(out, base.omitted(), base.quantities(), base.uncertain(),
                 undividedIn(measured), List.copyOf(rules), blockedIn(measured),
                 // Carried across: what a reading could not hold together is a fact about the
                 // declarations, and a body drawing a line on a position does not make the product
@@ -599,23 +611,16 @@ public final class Partitions {
         return found;
     }
 
+    /**
+     * What the rules leave one term, including a term an axis only took on here.
+     *
+     * <p>Which numbers a position is measured at is not settled by the reading of the declarations
+     * alone: a bare list nothing bounds becomes an axis about its length where a body measures it,
+     * and what such a term guarantees of its own values is what bounds it. Asked of the reading
+     * rather than kept per term beside it, which is where the two came to disagree.
+     */
     private static NumericDomain.Bounds domainOf(Partitioning base, NumericTerm term) {
-        NumericDomain.Bounds read = base.domains().get(term);
-        return read != null ? read : term.ownBounds();
-    }
-
-    /** The domains, with an entry for a term an axis only took on here. What a term guarantees about
-     * its own values is what bounds it where no rule was written about it. */
-    private static Map<NumericTerm, NumericDomain.Bounds> domainsOf(Partitioning base,
-                                                                    List<Axis> axes) {
-        Map<NumericTerm, NumericDomain.Bounds> out = new LinkedHashMap<>(base.domains());
-        for (Axis axis : axes) {
-            NumericDomain.Bounds own = axis.term().ownBounds();
-            if (own != null) {
-                out.putIfAbsent(axis.term(), own);
-            }
-        }
-        return out;
+        return base.quantities().runsBetween(term);
     }
 
     /** The cuts a position has, with a rule that drew one already there recorded rather than repeated:
@@ -743,8 +748,8 @@ public final class Partitions {
      */
     private static void axisOf(String behavior, Position position, Symbols symbols,
                                ReadingPolicy policy,
-                               List<Axis> out, Map<NumericTerm, NumericDomain.Bounds> domains,
-                               java.util.Set<NumericTerm> uncertain, List<UnreadRule> unread) {
+                               List<Axis> out, java.util.Set<NumericTerm> uncertain,
+                               List<UnreadRule> unread) {
         for (UnreadRule each : position.unreadRules()) {
             if (unread.stream().noneMatch(had -> had.sameAs(each))) {
                 unread.add(each);
@@ -752,9 +757,6 @@ public final class Partitions {
         }
         NumericTerm term = position.term();
         AxisId id = AxisId.of(behavior, term);
-        if (position.numericDomain() != null && !position.numericDomain().saysNothing()) {
-            domains.put(term, position.numericDomain());
-        }
         switch (LocalInspection.of(position, symbols, policy)) {
             case LocalPartition.Divided divided -> {
                 if (position.structure() instanceof StructuralInspection.Children) {
