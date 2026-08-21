@@ -58,11 +58,20 @@ public sealed interface StructuralInspection {
      */
     record Leaf() implements Pending {}
 
-    /** The position is made of these, each of which is read the same way — in the order the
-     *  declaration writes them, which is the order they are walked and reported in. */
-    record Children(Map<String, Type> under) implements StructuralInspection {
-        public Children {
-            under = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(under));
+    /**
+     * The position is made of these, each of which is read the same way — in the order the
+     * declaration writes them, which is the order they are walked and reported in.
+     *
+     * <p>The descent's answer as it stands, rather than the fields taken out of it and put into a
+     * value of this reading's own. What is under a type is {@link StructuralDescent}'s to say, and
+     * unpacking its answer to repackage it leaves two values of one fact where the point of asking
+     * one owner was to have one.
+     */
+    record Children(StructuralDescent.Children descent) implements StructuralInspection {
+
+        /** The fields, as the descent answered them. */
+        Map<String, Type> under() {
+            return descent.under();
         }
     }
 
@@ -104,7 +113,7 @@ public sealed interface StructuralInspection {
             // Made of positions, and read one level down — unless this reading stops here, which is
             // a reading that declines to look rather than a record with nothing in it.
             case Shape.Product product -> deeper
-                    ? new Children(StructuralDescent.of(product).under())
+                    ? new Children(StructuralDescent.of(product))
                     : new Blocked(new BlockReason.DepthLimit());
             // Holds its values inside something. Which reaching is missing is kept apart, because
             // what would lift each is different work.
