@@ -295,13 +295,6 @@ final class Witnesses {
     }
 
     /**
-     * {@code seed} and up to {@code least} values in all, no two of them equal.
-     *
-     * <p>Fewer than asked where the type runs out, which is not the same as failing: a set of three
-     * booleans is a thing no value satisfies, and offering the two that exist is a proposal the decoder
-     * answers the way it answers any other.
-     */
-    /**
      * A collection of {@code carrier} holding {@code chosen} and counting at least {@code least}, or
      * null where none was built.
      *
@@ -327,6 +320,13 @@ final class Witnesses {
         return elements.size() < want ? null : FixtureTemplate.collection(elements);
     }
 
+    /**
+     * {@code seed} and up to {@code least} values in all, no two of them equal.
+     *
+     * <p>Fewer than asked where the type runs out, which is not the same as failing: a set of three
+     * booleans is a thing no value satisfies, and offering the two that exist is a proposal the decoder
+     * answers the way it answers any other.
+     */
     private static List<FixtureTemplate> distinctFrom(FixtureTemplate seed, Type type, int least,
                                                       ReadingPolicy policy,
                                                       Symbols symbols, Set<TypeSymbol> expanding) {

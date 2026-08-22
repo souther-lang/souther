@@ -659,14 +659,6 @@ final class Coverages {
     }
 
     /**
-     * One row's values, read one element at a time where a position holds several.
-     *
-     * <p>Which paths a line is over is the quantity's, asked as it reads them, so how many elements
-     * there are is not known until it has. The count is taken as the reading goes and the reading is
-     * run again for each, until one stands or they are used up — the paths a criterion reads do not
-     * turn on which element is being offered, so the count is the same every time round.
-     */
-    /**
      * One row's values under one reading of it: an element chosen at each step inside a sequence
      * the line's positions take.
      *

@@ -790,14 +790,6 @@ public final class Generator {
         return at;
     }
 
-    /**
-     * What one row covers, over every class it reached at every position.
-     *
-     * <p>A row reaching more than one class at a position covers each of them, and meets each of
-     * them against whatever the position beside it holds. Read as one class it would cover the
-     * first of them and leave the rest owed, which is a row the author already wrote being asked
-     * for again.
-     */
     /** The same, of a row this generation composed, which sits in one class per position. */
     private static void cover(Set<Pair> pairs, Set<Pair> singles, List<Axis> axes, int[] where) {
         List<int[]> each = new ArrayList<>(where.length);
@@ -807,6 +799,14 @@ public final class Generator {
         cover(pairs, singles, axes, each);
     }
 
+    /**
+     * What one row covers, over every class it reached at every position.
+     *
+     * <p>A row reaching more than one class at a position covers each of them, and meets each of
+     * them against whatever the position beside it holds. Read as one class it would cover the
+     * first of them and leave the rest owed, which is a row the author already wrote being asked
+     * for again.
+     */
     private static void cover(Set<Pair> pairs, Set<Pair> singles, List<Axis> axes,
                               List<int[]> where) {
         for (int i = 0; i < axes.size(); i++) {

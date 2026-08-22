@@ -180,11 +180,15 @@ public sealed interface BlockReason {
      */
     record ComparisonBetweenPositions() implements AboutARule {}
 
-    /** What a derivation would have to be able to reach into. */
+    /**
+     * What a derivation would have to be able to reach into.
+     *
+     * <p>What it can reach into is not here. The elements of a {@code List} or a {@code Set} were,
+     * and are positions of the input now — a word for a reaching that is made says a reader can
+     * still meet it, and the next one to read this would take its presence for evidence that a
+     * sequence is where the walk stops.
+     */
     enum Traversal {
-
-        /** The elements of a {@code List} or a {@code Set} (issue #626). */
-        SEQUENCE_ELEMENT,
 
         /** The value an {@code Option} holds when it holds one. */
         OPTIONAL_VALUE,

@@ -1995,6 +1995,15 @@ public final class Bodies {
      * whether there is a module to emit.
      */
     /**
+     * One body as the backend emits it, and what its operations handed their closures.
+     *
+     * <p>Together because the second cannot be read off the first. What handed a closure an element
+     * is gone from the tree the rewrite answers with, so a caller given only the body would have to
+     * recognise the shapes that rewrite produces — which is what carrying the pair avoids.
+     */
+    public record CheckedBody(Core body, souther.compiler.check.ElementBindings elements) {}
+
+    /**
      * What a successful check produced for the backend (issue #81): the Core of every body it typed,
      * carrying the type decided for each node. The backend emits from these rather than translating
      * the AST and inferring the same types a second time.
@@ -2012,15 +2021,6 @@ public final class Bodies {
      * <p>What the check found is not in here. A warning belongs to the question that raised it, which
      * is one body, and a caller that wants them reads them from there.
      */
-    /**
-     * One body as the backend emits it, and what its operations handed their closures.
-     *
-     * <p>Together because the second cannot be read off the first. What handed a closure an element
-     * is gone from the tree the rewrite answers with, so a caller given only the body would have to
-     * recognise the shapes that rewrite produces — which is what carrying the pair avoids.
-     */
-    public record CheckedBody(Core body, souther.compiler.check.ElementBindings elements) {}
-
     public static final class Elaborated {
 
         private final Map<String, Core> behaviorBodies;
