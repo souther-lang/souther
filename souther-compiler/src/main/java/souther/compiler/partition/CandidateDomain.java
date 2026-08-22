@@ -62,17 +62,6 @@ sealed interface CandidateDomain {
     record Somewhere(Count at) implements CandidateDomain {}
 
     /**
-     * There may be values here and this wrote none of them down.
-     *
-     * <p>Not {@link None}, which is a proof. A coset whose values fill has a member in any run wide
-     * enough to hold two of them, and naming that member takes as many decimal places as the run is
-     * narrow — so running out of places says nothing about the coset and everything about how far
-     * this was willing to write. Answered as a value of the run instead, a search was handed a
-     * candidate off the coset, spent the position on it, and reported that it had looked.
-     */
-    record NotNamed() implements CandidateDomain {}
-
-    /**
      * Where the position may stand: the coset, cut down to the run.
      *
      * <p>The position's own order is no argument here. Which kind of coset it is already says
@@ -143,76 +132,85 @@ sealed interface CandidateDomain {
     /**
      * A member of a coset whose values fill, inside the run.
      *
-     * <p>Dense, so a run holding two of its values holds one between any two of them and there is no
-     * walking it. What there is to do is name one, and where the run has both ends the member has to
-     * be named at enough decimal places to land between them — a coset of three holds
-     * {@code 1, 1.3, 1.03}, and a run a tenth wide holds one of them however narrow it is.
+     * <p>Dense, so a run holding two of its members holds one between any two of them and there is
+     * no walking it. What there is to do is name one, and naming one is arithmetic on the whole
+     * numbers rather than a search: the members inside the run are exactly {@code from + by·d} for
+     * the decimals {@code d} between the run's ends moved by {@code from} and divided by {@code by},
+     * and a run wider than nothing holds one of those however narrow it is. Written the other way —
+     * a member looked for at more and more decimal places until some allowance ran out — a run
+     * narrower than the allowance reached came back with a value of the run that was no member of
+     * the coset, which is the thing this whole type exists to stop.
      *
-     * <p>Where the ends are so close that no member is written within
-     * {@link #DIGITS_A_MEMBER_IS_NAMED_AT}, what comes back is {@link NotNamed} and not a value of
-     * the run. A value of the run that is no member of the coset is one the rest of the form cannot
-     * finish, and offered as a candidate it costs the position its whole turn; nothing is a proof
-     * here and running out of digits is not one.
+     * <p>An end this cannot read a number off is read as no end at all. Wider, and nothing here is a
+     * proof except the two that come out of the ends having crossed or of one point that is no
+     * member, both of which are decided on the numbers themselves.
      */
-    private static CandidateDomain filling(AffinePreimage.Filling on,
-                                           NumericDomain.Bounds within) {
-        BigDecimal from = on.from().asWrittenDecimal();
-        BigDecimal by = on.by().asWrittenDecimal();
-        if (from == null || by == null) {
+    private static CandidateDomain filling(AffinePreimage.Filling on, NumericDomain.Bounds within) {
+        Rational from = on.from();
+        Rational by = on.by();
+        Rational least = multiplier(within.min(), from, by);
+        Rational most = multiplier(within.max(), from, by);
+        boolean leastIsItsOwn = within.min() == null || within.min().inclusive();
+        boolean mostIsItsOwn = within.max() == null || within.max().inclusive();
+        if (least == null && most == null) {
+            return new Somewhere(at(from, by, Rational.ZERO));
+        }
+        if (least == null) {
+            return new Somewhere(at(from, by, wholeAt(most, mostIsItsOwn, false)));
+        }
+        if (most == null) {
+            return new Somewhere(at(from, by, wholeAt(least, leastIsItsOwn, true)));
+        }
+        int order = least.compareTo(most);
+        if (order > 0 || (order == 0 && !(leastIsItsOwn && mostIsItsOwn))) {
             return new None();
         }
-        if (within.min() == null && within.max() == null) {
-            return new Somewhere(new Count(from));
+        if (order == 0) {
+            // One point, and whether it is a member is decided rather than looked for.
+            return least.asWrittenDecimal() == null ? new None() : new One(at(from, by, least));
         }
-        Rational at = Rational.of(from);
-        Rational step = Rational.of(by);
-        for (int digits = 0; digits <= DIGITS_A_MEMBER_IS_NAMED_AT; digits++) {
-            // The member the rounding lands on, and the one a place further in. An end the rules
-            // exclude is a value the run does not hold, and a rounding towards it stays on it however
-            // many places it is asked for — `(0, 4.5]` on a coset of every decimal named nothing at
-            // all until this asked for the next one along.
-            BigDecimal member = admitted(within, memberAt(within, at, step, digits, 0));
-            if (member == null) {
-                member = admitted(within, memberAt(within, at, step, digits, 1));
-            }
-            if (member != null) {
-                // One end and the other at the same value is one member and not a run of them.
-                return within.min() != null && within.max() != null
-                        && within.min().at() instanceof Count low
-                        && within.max().at() instanceof Count high
-                        && low.at().compareTo(high.at()) == 0
-                        ? new One(new Count(member))
-                        : new Somewhere(new Count(member));
-            }
-        }
-        return new NotNamed();
+        return new Somewhere(at(from, by, between(least, leastIsItsOwn, most)));
     }
 
-    /** How many decimal places a member of a dense coset is looked for at. */
-    int DIGITS_A_MEMBER_IS_NAMED_AT = 24;
+    /** Where an end of the run falls on the multiplier, or null where the run has no end there or
+     *  none this reads a number off. */
+    private static Rational multiplier(Endpoint end, Rational from, Rational by) {
+        return end == null || !(end.at() instanceof Count count)
+                ? null
+                : Rational.of(count.at()).minus(from).dividedBy(by);
+    }
 
-    /** {@code member} where the run holds it, and null where it does not. */
-    private static BigDecimal admitted(NumericDomain.Bounds within, BigDecimal member) {
-        return member != null && within.admits(new Count(member)) ? member : null;
+    /** The member at one multiplier. Whole plus whole times a decimal is a decimal, so this is
+     *  always a value a model writes. */
+    private static Count at(Rational from, Rational by, Rational multiplier) {
+        return new Count(from.plus(by.times(multiplier)).asWrittenDecimal());
+    }
+
+    /** The whole number at or past one end of the multiplier's run, which is a decimal and needs no
+     *  places written out. */
+    private static Rational wholeAt(Rational end, boolean itsOwn, boolean upward) {
+        Rational on = Rational.of(upward ? end.ceiling() : end.floor());
+        return itsOwn || on.compareTo(end) != 0
+                ? on
+                : on.plus(Rational.of(upward ? 1 : -1));
     }
 
     /**
-     * The member of {@code at + step·D} nearest the run's near end with {@code digits} places in its
-     * multiplier, moved {@code ulps} of those places further in, or null where the run's ends are
-     * not numbers.
+     * A decimal strictly inside a run of multipliers wider than nothing.
+     *
+     * <p>At however many places it takes: past the point where a place is half the width, the value
+     * rounded up to one lands under the far end whatever the near end excludes. Which is why there
+     * is no allowance here to run out — the number of places is read off the ends rather than fixed,
+     * and the two are exact ratios.
      */
-    private static BigDecimal memberAt(NumericDomain.Bounds within, Rational at, Rational step,
-                                       int digits, int ulps) {
-        Endpoint end = within.min() != null ? within.min() : within.max();
-        if (!(end.at() instanceof Count count)) {
-            return null;
+    private static Rational between(Rational least, boolean leastIsItsOwn, Rational most) {
+        java.math.BigInteger places = java.math.BigInteger.ONE;
+        Rational half = most.minus(least).dividedBy(Rational.of(2));
+        while (Rational.of(java.math.BigInteger.ONE, places).compareTo(half) > 0) {
+            places = places.multiply(java.math.BigInteger.TEN);
         }
-        boolean upward = within.min() != null;
-        Rational away = Rational.of(count.at()).minus(at).dividedBy(step);
-        BigDecimal multiplier = away.asDecimal(
-                upward ? RoundingMode.CEILING : RoundingMode.FLOOR, digits);
-        BigDecimal further = BigDecimal.ONE.movePointLeft(digits)
-                .multiply(BigDecimal.valueOf(upward ? ulps : -ulps));
-        return at.plus(step.times(Rational.of(multiplier.add(further)))).asWrittenDecimal();
+        Rational step = Rational.of(java.math.BigInteger.ONE, places);
+        Rational on = Rational.of(least.times(Rational.of(places)).ceiling()).times(step);
+        return leastIsItsOwn || on.compareTo(least) != 0 ? on : on.plus(step);
     }
 }

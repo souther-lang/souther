@@ -218,6 +218,12 @@ public final class LevelRealizer {
      * past is what the rules take out — and a rule takes values out one region at a time. Nothing
      * here is a proof at any length: a run without an end is not walked to the end.
      *
+     * <p><b>Values and not distances.</b> Sixteen of the first is thirty-three of the second where
+     * both sides are open, and the two units were mixed here once: this was written as a count of
+     * distances and then handed to {@link Outwards}, which counts what it yields. Counted in values
+     * for the same reason that one does — it is what a run gives up, and a bound on anything else
+     * has to be turned into one before it means anything.
+     *
      * <p><b>Not a measured number.</b> Every one of the fifty-three progressions the suite reaches
      * gives up its row at the first value, so nothing here needs a second and this many is as
      * arbitrary as any other more than one. What says it should be more than one is the defect a
@@ -399,9 +405,6 @@ public final class LevelRealizer {
                 case CandidateDomain.Somewhere one ->
                         trying(i, one.at().at(), owed, coef, here) == Reached.FOUND
                                 ? Reached.FOUND : Reached.INCOMPLETE;
-                // Values may stand here and none of them was written down, which settles nothing
-                // either way about the level.
-                case CandidateDomain.NotNamed ignored -> Reached.INCOMPLETE;
                 case CandidateDomain.Walking every -> walking(i, every, owed, coef, here);
                 case CandidateDomain.Outward on -> outward(i, on, owed, coef, here);
             };

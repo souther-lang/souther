@@ -84,20 +84,29 @@ class ACosetWhoseValuesFillNamesAMemberTheRunHoldsTest {
     }
 
     /**
-     * A run too narrow for the places this writes says so, rather than naming a value off the coset.
+     * A run far narrower than any allowance would have reached still names a member.
      *
-     * <p>{@code (0, 1e-30]} holds {@code 1e-30}, which is a decimal and so a member of every
-     * decimal. Two dozen places do not reach it. What that settles is how far this was willing to
-     * write and nothing at all about the coset, so the answer is neither a member nor a proof that
-     * there is none.
+     * <p>{@code 0 + 3·D} on {@code (0, 5e-25]} holds {@code 3e-26}, and a member looked for at a
+     * fixed number of decimal places never gets there. How many places it takes is read off the
+     * ends, which are exact ratios, so there is nothing here to run out.
      */
     @Test
-    void aRunNoMemberIsWrittenInsideIsSaidToBeThatRatherThanAnsweredWithAnyValue() {
+    void aRunNarrowerThanAnyFixedNumberOfPlacesStillNamesAMember() {
         CandidateDomain may = CandidateDomain.of(
-                new AffinePreimage.Filling(Rational.ZERO, Rational.ONE),
-                between("0", false, "1e-30"));
+                new AffinePreimage.Filling(Rational.ZERO, Rational.of(3)),
+                between("0", false, "5e-25"));
 
-        assertInstanceOf(CandidateDomain.NotNamed.class, may);
+        assertTrue(between("0", false, "5e-25").admits(named(may)), named(may).toString());
+        assertTrue(onTheCoset(named(may), Rational.ZERO, Rational.of(3)), named(may).toString());
+    }
+
+    /** Ends that have crossed are the one thing an empty answer here means, and it is decided on the
+     *  numbers rather than looked for. */
+    @Test
+    void endsThatHaveCrossedAreTheEmptyAnswer() {
+        assertInstanceOf(CandidateDomain.None.class, CandidateDomain.of(
+                new AffinePreimage.Filling(Rational.ZERO, Rational.of(3)),
+                between("4", true, "1")));
     }
 
     /** An end that is its own value is taken as it stands, so the stepping above is not something

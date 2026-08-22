@@ -127,29 +127,6 @@ public sealed interface AdditiveImage {
         return divisor;
     }
 
-    /**
-     * What is left of a divisor once the factors a finite decimal can be divided by are taken out.
-     *
-     * <p>Ten is a unit among the finite decimals, so two and five are: dividing by either lands on a
-     * finite decimal again, above and below the line alike. Taking them out is what makes two
-     * divisors that generate one set one value — a quarter and a tenth both generate every decimal
-     * there is, and so does one.
-     */
-    private static Rational unitsRemoved(Rational divisor) {
-        java.math.BigInteger top = divisor.numerator().abs();
-        java.math.BigInteger bottom = divisor.denominator();
-        for (java.math.BigInteger unit : java.util.List.of(
-                java.math.BigInteger.TWO, java.math.BigInteger.valueOf(5))) {
-            while (top.mod(unit).signum() == 0) {
-                top = top.divide(unit);
-            }
-            while (bottom.mod(unit).signum() == 0) {
-                bottom = bottom.divide(unit);
-            }
-        }
-        return Rational.of(top, bottom);
-    }
-
     /** Every whole multiple of the generator, which is what a form over positions that step takes. */
     record OverWholeNumbers(Rational generator) implements AdditiveImage {
 
@@ -238,7 +215,7 @@ public sealed interface AdditiveImage {
             if (generator == null || generator.signum() <= 0) {
                 throw new IllegalArgumentException("a divisor is positive: " + generator);
             }
-            generator = unitsRemoved(generator);
+            generator = generator.unitsRemoved();
         }
 
         @Override
@@ -284,7 +261,7 @@ public sealed interface AdditiveImage {
             }
             Rational per = coefficient.dividedBy(generator);
             Rational owed = target.dividedBy(generator);
-            java.math.BigInteger spread = unitsRemoved(Rational.of(per.denominator())).numerator();
+            java.math.BigInteger spread = Rational.of(per.denominator()).unitsRemoved().numerator();
             if (owed.times(Rational.of(spread)).asWrittenDecimal() == null) {
                 return new AffinePreimage.None();
             }

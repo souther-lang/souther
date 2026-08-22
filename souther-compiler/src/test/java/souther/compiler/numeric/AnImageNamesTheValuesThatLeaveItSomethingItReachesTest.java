@@ -122,14 +122,36 @@ class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
                 rest.affinePreimage(at(1), at(1), Granularity.DENSE));
     }
 
-    /** One coset is one value however the inverse that found it came out. */
+    /**
+     * One coset is one value however the inverse that found it came out.
+     *
+     * <p>Two members are one where their difference is the generator times a decimal, and a tenth is
+     * a decimal — so a coset of three holds {@code 1} and {@code 1.3} as one member and not as two.
+     * Taking whole multiples of the generator away instead, the arithmetic answered a target of one
+     * and a target of thirteen tenths with different values of the same set, and a search that tries
+     * one member of a dense coset would try a different value depending on which it started from.
+     */
     @Test
     void aCosetComesBackAtTheSameMemberHoweverItWasFound() {
         AdditiveImage rest = new AdditiveImage.OverFiniteDecimals(at(3));
 
         assertEquals(new AffinePreimage.Filling(Rational.ZERO, at(3)),
                 rest.affinePreimage(at(2), at(6), Granularity.DENSE));
+        assertEquals(rest.affinePreimage(Rational.ONE, at(1), Granularity.DENSE),
+                rest.affinePreimage(Rational.ONE,
+                        Rational.of(new java.math.BigDecimal("1.3")), Granularity.DENSE));
+        assertEquals(new AffinePreimage.Filling(Rational.ONE, at(3)),
+                new AffinePreimage.Filling(
+                        Rational.of(new java.math.BigDecimal("1.3")), at(3)));
         assertEquals(new AffinePreimage.Stepping(at(1), at(2)),
                 new AffinePreimage.Stepping(at(7), at(2)));
+    }
+
+    /** And a generator the decimals treat as nothing is nothing: two is a unit among them, so a
+     *  coset of two is every decimal there is. */
+    @Test
+    void aGeneratorMadeOfUnitsHoldsEveryDecimal() {
+        assertEquals(new AffinePreimage.Filling(Rational.ZERO, Rational.ONE),
+                new AffinePreimage.Filling(Rational.ZERO, at(2)));
     }
 }

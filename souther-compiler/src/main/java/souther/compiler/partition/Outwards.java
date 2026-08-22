@@ -34,16 +34,18 @@ final class Outwards {
     }
 
     /**
-     * At most {@code howMany} values of {@code within}, from {@code first} outward, {@code by} apart.
+     * At most {@code howManyValues} values of {@code within}, from {@code first} outward, {@code by}
+     * apart.
      *
      * <p>Stops early where neither direction has a value left, which is what makes a bounded run
      * cost its own width rather than the whole allowance.
      *
-     * @param first a value of the run, which the caller has one of before it asks
-     * @param by    the distance between neighbouring candidates, positive
+     * @param first         a value of the run, which the caller has one of before it asks
+     * @param by            the distance between neighbouring candidates, positive
+     * @param howManyValues how many to yield, counting {@code first}
      */
     static List<Place> from(Place first, Count by, Carrier carrier, NumericDomain.Bounds within,
-                            int howMany) {
+                            int howManyValues) {
         if (first == null) {
             return List.of();
         }
@@ -54,7 +56,7 @@ final class Outwards {
         }
         List<Place> out = new ArrayList<>();
         out.add(first);
-        for (int step = 1; out.size() < howMany; step++) {
+        for (int step = 1; out.size() < howManyValues; step++) {
             BigDecimal away = BigDecimal.valueOf(step);
             Place above = carrier.onTheGrid(Count.number(first).plus(by.times(away)));
             Place below = carrier.onTheGrid(Count.number(first).minus(by.times(away)));
@@ -63,7 +65,7 @@ final class Outwards {
                 out.add(above);
                 took = true;
             }
-            if (below != null && within.admits(below) && out.size() < howMany) {
+            if (below != null && within.admits(below) && out.size() < howManyValues) {
                 out.add(below);
                 took = true;
             }

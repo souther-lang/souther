@@ -194,6 +194,28 @@ public record Rational(BigInteger numerator, BigInteger denominator) implements 
     }
 
     /**
+     * This with the factors a finite decimal can be divided by taken out of it.
+     *
+     * <p>Ten is a unit among the finite decimals, so two and five are: dividing by either lands on a
+     * finite decimal again, above and below the line alike. Taking them out is what makes two
+     * numbers that generate one set of decimals one value — a quarter and a tenth both generate
+     * every decimal there is, and so does one.
+     */
+    public Rational unitsRemoved() {
+        BigInteger top = numerator.abs();
+        BigInteger bottom = denominator;
+        for (BigInteger unit : java.util.List.of(BigInteger.TWO, FIVE)) {
+            while (top.mod(unit).signum() == 0) {
+                top = top.divide(unit);
+            }
+            while (bottom.mod(unit).signum() == 0) {
+                bottom = bottom.divide(unit);
+            }
+        }
+        return Rational.of(top, bottom);
+    }
+
+    /**
      * This as a decimal, rounded the way {@code towards} says where it is not one exactly.
      *
      * <p>For a bound that has to be handed over as a written number. The direction is the caller's
