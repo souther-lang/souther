@@ -21,10 +21,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * places put together", such a place came back settled — its arms were judged as though one rule
  * had been through them, and the count called itself complete over two.
  *
- * <p>Built here rather than compiled from a model, because nothing this compiler reads comes to an
- * unsettled decision today: a rule reaches a body only through a declared parameter, and which rule
- * arrived at one is recorded where the call site is. What this holds is the rule the reading follows
- * where that stops being true.
+ * <p>Built here rather than compiled from a model. A model whose rule is chosen while it runs is
+ * written in this language and is the case this is about, but its rows cannot be read at all -- the
+ * arms come back unavailable, so nothing downstream of them is reached. What this holds is the rule
+ * the reading follows on the day they can be, and
+ * {@code ARuleChosenWhileItRunsIsNeverACompleteMeasureTest} holds the end of it that a model can
+ * reach today.
  */
 class AnUnsettledDecisionIsUncertainHoweverManyPlacesItHasTest {
 
@@ -46,7 +48,7 @@ class AnUnsettledDecisionIsUncertainHoweverManyPlacesItHasTest {
     /** One place whose rule nothing settled is a fork this cannot say how many rules it stands for. */
     @Test
     void onePlaceNothingSettledIsSaidToBeUncertain() {
-        assertEquals(List.of(FORK), over(DecidedBy.NOT_SAID).countedTogether(),
+        assertEquals(List.of(FORK), over(DecidedBy.NOT_SAID).unsettledDecisions(),
                 "however many places it was counted at");
     }
 
@@ -61,7 +63,7 @@ class AnUnsettledDecisionIsUncertainHoweverManyPlacesItHasTest {
     /** A settled one is read like any other. */
     @Test
     void aSettledOneIsReadLikeAnyOther() {
-        assertEquals(List.of(), over(DecidedBy.THE_DECLARATION).countedTogether(),
+        assertEquals(List.of(), over(DecidedBy.THE_DECLARATION).unsettledDecisions(),
                 "nothing about it is in doubt");
     }
 }

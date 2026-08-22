@@ -1024,7 +1024,7 @@ public final class Adequacy {
             // that says every arm is covered while holding two predicates under one of them is the
             // sentence this is against, and a status of complete beside it is that sentence in the
             // one field a build reads.
-            return measured.countedTogether().isEmpty() ? measured
+            return measured.unsettledDecisions().isEmpty() ? measured
                     : new BranchEvidence(owed, counted, reachable.provedWrong(),
                             observation, MeasurementStatus.PARTIAL, null);
         }
@@ -1092,23 +1092,22 @@ public final class Adequacy {
         }
 
         /**
-         * The arms this counts as one that it cannot show are one.
+         * The forks whose arms are owed for a rule this could not work out.
          *
-         * <p>What tells two copies of a fork apart is which rule each was handed, and this is
-         * where the declaration says the caller decides and the occurrence could not say which rule
-         * arrived. Such occurrences are counted together, which is the answer that risks the least:
-         * split, each would be owed a row establishing what the row beside it already does, and a
-         * specific piece of work that is already done is worse to be told than nothing.
+         * <p>What an arm of a fork the caller decides is owed for is one rule, and this is where the
+         * declaration says the caller decides and the occurrence could not say which rule arrived.
+         * What that leaves open is how many rules the arm stands for: copies of the fork put
+         * together, or one place several rules reach. Counted as one, which is the answer that risks
+         * the least — split, each would be owed a row establishing what the row beside it already
+         * does, and a specific piece of work that is already done is worse to be told than nothing.
          *
          * <p>So it is said instead. A count that quietly holds two rules where it says one is the
          * shape of a measure reporting a behavior complete over something nothing ran, and naming
          * them is what keeps that from being silent.
          *
-         * <p>However many places it was counted at. What an unsettled rule leaves undecided is how
-         * many rules the obligation stands for, and one place can stand for several — a rule chosen
-         * while the behavior runs arrives at one call site. Which module wrote the fork does not
-         * come into it: a helper of this module's own deciding by a rule it was handed is the same
-         * shape as one the library wrote.
+         * <p>However many places it was counted at, which is why it is not named for that. Which
+         * module wrote the fork does not come into it either: a helper of this module's own deciding
+         * by a rule it was handed is the same shape as one the library wrote.
          */
         /**
          * Whether nothing established how many rules this obligation stands for.
@@ -1130,7 +1129,7 @@ public final class Adequacy {
             return !key.decided().isSettled();
         }
 
-        public List<souther.compiler.types.CoverageOrigin> countedTogether() {
+        public List<souther.compiler.types.CoverageOrigin> unsettledDecisions() {
             List<souther.compiler.types.CoverageOrigin> out = new ArrayList<>();
             byObligation().forEach((key, occurrences) -> {
                 // Of the fork and not of its arms. Both arms of one fork are counted together or

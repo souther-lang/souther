@@ -169,11 +169,22 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolea
         Set<String> on = new LinkedHashSet<>();
         rules.restsOn(cond, answersOn, bound, named, on);
         out.putIfAbsent(fork, on.isEmpty() ? DecisionSource.OWN
-                : new DecisionSource.Supplied(declaration, on));
+                : new DecisionSource.Supplied(declaration, rules.inTheOrderDeclared(on)));
     }
 
     /** The rules one declaration was handed: its function parameters, by binding and by place. */
     private record Rules(Map<BindingId, String> byBinding, java.util.List<String> inOrder) {
+
+        /** {@code some} of these, in the order the declaration names them. */
+        java.util.List<String> inTheOrderDeclared(Set<String> some) {
+            java.util.List<String> out = new java.util.ArrayList<>();
+            for (String parameter : inOrder) {
+                if (some.contains(parameter)) {
+                    out.add(parameter);
+                }
+            }
+            return out;
+        }
 
         static Rules of(Hir.FnDef fn) {
             Map<BindingId, String> byBinding = new LinkedHashMap<>();

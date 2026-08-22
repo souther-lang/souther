@@ -997,11 +997,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // reaches, since it qualifies the number above rather than adding to what is missing from
         // it: a count holding two predicates where it says one is what would otherwise report a
         // behavior complete over something nothing ran.
-        for (souther.compiler.types.CoverageOrigin together : branch.countedTogether()) {
+        for (souther.compiler.types.CoverageOrigin together : branch.unsettledDecisions()) {
             out.append(String.format(
-                    "      · arms of a fork `%s` wrote are counted as one: it decides by a rule"
-                            + " its caller supplies, and which rule these were handed could not be"
-                            + " read%n",
+                    "      · a fork `%s` wrote decides by a rule its caller supplies, and which"
+                            + " rule decides here could not be worked out: what its arms come to is"
+                            + " read over however many rules that is%n",
                     together.module()));
         }
         if (!decided) {
@@ -1658,8 +1658,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // Said here as well as in the prose, since a count that quietly holds two predicates where
         // it says one is the shape a consumer would read as a behavior complete over something
         // nothing ran — and a consumer reads this and not the prose.
-        ArrayNode together = out.putArray("countedTogether");
-        for (souther.compiler.types.CoverageOrigin each : branch.countedTogether()) {
+        ArrayNode together = out.putArray("unsettledDecisions");
+        for (souther.compiler.types.CoverageOrigin each : branch.unsettledDecisions()) {
             together.add(each.module());
         }
         // Only where every row was read. An arm a row that never finished might have gone through is

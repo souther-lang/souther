@@ -65,7 +65,7 @@ class OneDeclarationIsReachedUnderOneNameTest {
         assertEquals(8, twice.obligations(),
                 "the other module's fork is one obligation per rule handed to it, beside the two"
                         + " written here");
-        assertEquals(List.of(), twice.countedTogether(),
-                () -> "and which copy each is was said: " + twice.countedTogether());
+        assertEquals(List.of(), twice.unsettledDecisions(),
+                () -> "and which copy each is was said: " + twice.unsettledDecisions());
     }
 }

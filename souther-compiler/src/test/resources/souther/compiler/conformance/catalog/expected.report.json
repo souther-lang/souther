@@ -177,7 +177,7 @@
         "status" : "complete",
         "arms" : 2,
         "covered" : 2,
-        "countedTogether" : [ ],
+        "unsettledDecisions" : [ ],
         "unreached" : [ ]
       },
       "findings" : [ {
@@ -355,7 +355,7 @@
         "reason" : "no_body",
         "arms" : 0,
         "covered" : 0,
-        "countedTogether" : [ ],
+        "unsettledDecisions" : [ ],
         "unreached" : [ ]
       },
       "findings" : [ {
@@ -608,7 +608,7 @@
         "status" : "complete",
         "arms" : 10,
         "covered" : 10,
-        "countedTogether" : [ ],
+        "unsettledDecisions" : [ ],
         "unreached" : [ ]
       },
       "findings" : [ {

@@ -61,8 +61,8 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
 
         assertEquals(4, both.obligations(),
                 "the helper's two calls are one fork, beside the fork of the body itself");
-        assertEquals(List.of(), both.countedTogether(),
-                () -> "and nothing about them is uncertain: " + both.countedTogether());
+        assertEquals(List.of(), both.unsettledDecisions(),
+                () -> "and nothing about them is uncertain: " + both.unsettledDecisions());
     }
 
     /**
@@ -116,8 +116,8 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
 
         assertEquals(4, pick.obligations(),
                 "one fork written once, whatever number each call hands it");
-        assertEquals(List.of(), pick.countedTogether(),
-                () -> "and nothing uncertain about it: " + pick.countedTogether());
+        assertEquals(List.of(), pick.unsettledDecisions(),
+                () -> "and nothing uncertain about it: " + pick.unsettledDecisions());
     }
 
     /** A rule the call site writes is the rule, and two of them are two obligations. */
@@ -144,8 +144,8 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                 "two calls of one combinator, each deciding by the rule it was handed");
         assertEquals(2, twice.covered().size(),
                 "and the one row reaches one arm of each");
-        assertEquals(List.of(), twice.countedTogether(),
-                () -> "neither is in doubt: " + twice.countedTogether());
+        assertEquals(List.of(), twice.unsettledDecisions(),
+                () -> "neither is in doubt: " + twice.unsettledDecisions());
     }
 
     /** Told apart by the rule and not by what the rule compares: the same shape, two subjects. */
@@ -589,8 +589,8 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                 """, "twice");
 
         assertEquals(2, twice.obligations(), "one rule, bound under two names");
-        assertEquals(List.of(), twice.countedTogether(),
-                () -> "and nothing about it is uncertain: " + twice.countedTogether());
+        assertEquals(List.of(), twice.unsettledDecisions(),
+                () -> "and nothing about it is uncertain: " + twice.unsettledDecisions());
     }
 
     /**
