@@ -225,6 +225,11 @@ final class DerivedBounds {
      * counts and none is ruled out — an arm the reading says nothing about leaves the whole choice
      * unbounded, which is what an arm nothing is known of comes to.
      *
+     * <p>There is always an arm, so there is always a range: a choice is one of several and holding
+     * none is refused where a recipe is built rather than answered for here. A reader that took an
+     * empty list for a range with no ends would go on bounding nothing while the disagreement that
+     * produced it went unremarked.
+     *
      * <p>Each arm is read against the domain this was handed, and the arms are read one after
      * another out of the same memo. So a choice inside an arm is derived once however many arms
      * stand over it, and the nesting costs what the recipes cost and not what a reading of every
@@ -233,15 +238,12 @@ final class DerivedBounds {
     private static Bounds chosen(Derivation.Chosen chosen, NumericDomain<FactSubject> base,
                                  Terms terms, Memo done,
                                  Set<FactSubject> deriving) {
-        Bounds out = null;
-        for (LinearForm<FactSubject> arm : chosen.arms()) {
-            Bounds here = boundsOf(arm, base, terms, done, deriving);
-            out = out == null ? here : Bounds.spanning(out, here);
+        List<LinearForm<FactSubject>> arms = chosen.arms();
+        Bounds out = boundsOf(arms.get(0), base, terms, done, deriving);
+        for (LinearForm<FactSubject> arm : arms.subList(1, arms.size())) {
+            out = Bounds.spanning(out, boundsOf(arm, base, terms, done, deriving));
         }
-        // A choice with no arms answers nothing, and nothing derived is not an empty range: read as
-        // one it would go into the domain as a contradiction, and a contradictory domain proves
-        // every clause there is. The same reading `quotient` makes of a rule with nothing to fire on.
-        return out == null ? new Bounds(null, null) : out;
+        return out;
     }
 
     /**

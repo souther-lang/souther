@@ -532,9 +532,7 @@ final class Terms {
                 case DIV -> quotient(b, at);
                 default -> null;
             };
-            case Core.If iff -> chosen(List.of(iff.then(), iff.els()), at);
-            case Core.Match m -> chosen(m.cases().stream().map(Core.Case::body).toList(), at);
-            case null, default -> null;
+            case null, default -> chosen(Choice.of(asOperator(e)), at);
         };
         if (made == null) {
             return;
@@ -606,26 +604,36 @@ final class Terms {
     }
 
     /**
-     * The choice {@code arms} make, or null where any arm is one this cannot read.
+     * The recipe {@code choice} is, or null where it is no choice or an arm of it is one this cannot
+     * read.
      *
      * <p>Every arm or none. What the value is, is one of these, so a recipe over a subset of them is
-     * a range the value can be outside of — and an arm whose body reads a binder only that arm
-     * introduces is such an arm, since nothing here has entered it.
+     * a range the value can be outside of.
+     *
+     * <p>Which values those are is {@link Choice}'s answer and not this method's. Asked there so
+     * that the readers of that question cannot come to disagree about it, which they had — an
+     * attempted construction answers one of several and three spellings of the question left it out.
      *
      * <p>Read where the choice stands, in the environment the choice stands in. An arm is not
-     * entered: what a {@code match} arm binds and what an {@code if}'s condition settles are facts
-     * about the arm and this records none of them ({@link Derivation.Chosen}).
+     * entered: what a {@code match} arm binds, what an {@code if}'s condition settles, and what an
+     * attempt's construction guarantees are facts about the arm and this records none of them
+     * ({@link Derivation.Chosen}). So an arm whose body reads what the arm itself bound reads a name
+     * nothing here has entered, and answers a place with no facts against it — sound, and no range
+     * (#973).
      */
-    private Derivation chosen(List<Core> arms, Denotations at) {
+    private Derivation chosen(Choice choice, Denotations at) {
+        if (choice == null) {
+            return null;
+        }
         List<LinearForm<FactSubject>> forms = new ArrayList<>();
-        for (Core arm : arms) {
+        for (Core arm : choice.alternatives()) {
             LinearForm<FactSubject> form = affineOf(arm, at);
             if (form == null) {
                 return null;
             }
             forms.add(form);
         }
-        return forms.isEmpty() ? null : new Derivation.Chosen(forms);
+        return new Derivation.Chosen(forms);
     }
 
     /** The product {@code b} is, or null where either factor is a value nothing can be said of. A

@@ -2438,15 +2438,31 @@ public final class InvariantChecker {
                     .toList());
             default -> throw new IllegalStateException(
                     "a site was opened at " + split.getClass().getSimpleName()
-                            + ", which is not a case split — {@link #splitValueIn} and this answer for"
-                            + " the same forms and one of them was given a form the other has not");
+                            + ", which is not a case split — {@link #isASplit} and this answer for the"
+                            + " same forms and one of them was given a form the other has not");
         };
     }
 
-    /** Whether {@code e} is a case split — a node answering one of several arms, where which one is
-     * decided by something a reading can assume. */
+    /**
+     * Whether {@code e} is a case split this walk opens where it stands in a value position.
+     *
+     * <p>Not the same question as whether it is a choice, and answered from that one so the two
+     * cannot drift. Every choice is a value that is one of several ({@link Choice}); a split is a
+     * choice this walk reads by putting each arm where the choice stood and reading the body again.
+     * An attempt is a choice and is not one of these: it binds what it built, and the walk reads it
+     * where it stands with that binding entered ({@link PathEngine#enteringBuilt}) rather than by
+     * substituting its arms. Where it stands inside a value the walk does not read it that way and
+     * the value is bounded by its arms instead ({@link Derivation.Chosen}).
+     *
+     * <p>Written as a switch over {@link Choice.Kind} with no default, so a kind of choice added
+     * later is one this stops at until someone says which of the two it is.
+     */
     private static boolean isASplit(Core e) {
-        return e instanceof Core.If || e instanceof Core.Match;
+        Choice choice = Choice.of(e);
+        return choice != null && switch (choice.kind()) {
+            case A_CONDITION, A_CASE -> true;
+            case AN_ATTEMPT -> false;
+        };
     }
 
     /**

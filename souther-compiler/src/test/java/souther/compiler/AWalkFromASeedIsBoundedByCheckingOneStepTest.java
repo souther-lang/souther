@@ -51,6 +51,10 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
 
             data Kind = Counted | Skipped
 
+            data Small = Int
+                invariant nn = value >= 0
+                invariant cap = value <= 5
+
             data Classed =
                 { kind: Kind
                 , amount: NonNegInt
@@ -502,5 +506,93 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
                 let total (xs) = UpToAHundred(List.fold((sum, x) ->
                     if sum + x.amount.value < 100 then sum + x.amount.value else 100, 0, xs))
                 """)), "the condition is what holds the first arm below a hundred and it is not read");
+    }
+
+    /**
+     * An attempted construction answers one of several as plainly as an {@code if} does — what it
+     * built where the invariant held, and what it departs with where it did not — and it is read the
+     * same way.
+     *
+     * <p>Here because it is where the reading was missing. Three spellings of "which nodes answer
+     * one of several" all said {@code if} and {@code match}, so an attempt was named and nothing was
+     * recorded about the values it is one of, which is what this test's subject was under a third
+     * spelling.
+     */
+    @Test
+    void aStepWhoseArmsAreAnAttemptsBranchesIsReadTheSameWay() {
+        assertFalse(owed(compiled("""
+                behavior total : (xs: List<Flagged>) -> AtLeastTen
+                    constructs AtLeastTen, NonNegInt
+
+                let total (xs) = AtLeastTen(List.fold((acc, x) ->
+                    if NonNegInt(x.amount.value) as n then acc else acc, 10, xs))
+                """)), "both branches of the attempt are the accumulator, so the answer is the seed");
+    }
+
+    /**
+     * An attempt departs once per clause it names, and every departure is one of the values it
+     * answers.
+     *
+     * <p>Both directions over the same two-armed departure, differing in which arm is below the
+     * seed. A reading that took the built value and one departure would discharge whichever of these
+     * puts the low value in the arm it dropped — so the pair says every arm was read and not that
+     * some were.
+     */
+    @Test
+    void everyDepartureAnAttemptNamesIsOneOfTheValuesItAnswers() {
+        String walk = """
+                behavior total : (xs: List<Flagged>) -> AtLeastTen
+                    constructs AtLeastTen, Small
+
+                let total (xs) = AtLeastTen(List.fold((acc, x) ->
+                    if Small(x.amount.value) as s then acc
+                    else | nn -> %s | cap -> %s, 10, xs))
+                """;
+        assertFalse(owed(compiled(walk.formatted("acc", "acc"))),
+                "every arm is the accumulator, so the answer is the seed");
+        assertTrue(owed(compiled(walk.formatted("0", "acc"))),
+                "the first departure answers nought, which is below ten");
+        assertTrue(owed(compiled(walk.formatted("acc", "0"))),
+                "and so does the second, which a reading that stopped at the first would miss");
+    }
+
+    /** The neighbour that stays reported: a departure below the seed. So what discharged the one
+     * above was the branches and not the shape of the attempt. */
+    @Test
+    void anAttemptWhoseDepartureIsBelowTheSeedIsOwed() {
+        assertTrue(owed(compiled("""
+                behavior total : (xs: List<Flagged>) -> AtLeastTen
+                    constructs AtLeastTen, NonNegInt
+
+                let total (xs) = AtLeastTen(List.fold((acc, x) ->
+                    if NonNegInt(x.amount.value) as n then acc else 0, 10, xs))
+                """)), "where the invariant does not hold the walk answers nought, which is below ten");
+    }
+
+    /**
+     * What choosing an arm settles is not read, so an arm whose body reads what the arm itself bound
+     * gets no range.
+     *
+     * <p>The boundary as it stands. One gap and not three: a {@code match} arm's binding, an
+     * attempt's built value and an {@code if}'s condition are all what choosing an arm settles, and
+     * none of them is read. Written down beside a neighbour that differs only in reading the element
+     * instead, so what is owed is the binding and not the branch.
+     */
+    @Test
+    void anArmReadingWhatItBoundGetsNoRange() {
+        assertFalse(owed(compiled("""
+                behavior total : (xs: List<Flagged>) -> Money
+                    constructs Money, NonNegInt
+
+                let total (xs) = Money(List.fold((sum, x) ->
+                    if NonNegInt(x.amount.value) as n then sum + x.amount.value else sum, 0, xs))
+                """)), "this arm reads the element, which the walk entered, so the step is read");
+        assertTrue(owed(compiled("""
+                behavior total : (xs: List<Flagged>) -> Money
+                    constructs Money, NonNegInt
+
+                let total (xs) = Money(List.fold((sum, x) ->
+                    if NonNegInt(x.amount.value) as n then sum + n.value else sum, 0, xs))
+                """)), "and this one reads what the attempt built, which nothing here has entered");
     }
 }

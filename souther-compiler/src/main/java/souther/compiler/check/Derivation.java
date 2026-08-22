@@ -59,27 +59,38 @@ sealed interface Derivation {
      * about the thing that stands there — and until this arm existed nothing was filed under that
      * name, so the value came out with no range whatever its arms answered.
      *
-     * <p>What is recorded is the arms, and what chose between them is not here yet. The condition
-     * holds exactly where its arm is the answer, so an arm read under it says more than the arm
-     * alone — {@code if a + x < 100 then a + x else 100} lies below a hundred only by its conditions
-     * — and reading one needs the account of what a condition states that {@link
-     * Predicates#assumeCond} keeps, which is a thing to have once and not twice. Until that account
-     * is somewhere both readers can ask, the range is the arms together: sound, and narrower than
-     * what an author can write. The same is true of the operations the library defines by cases
-     * ({@code DischargeRules.CHOOSES}), which are choices this has no producer for yet.
+     * <p>What is recorded is the arms, and what choosing one settles is not here yet. What settles
+     * it holds exactly where that arm is the answer, so an arm read under it says more than the arm
+     * alone: {@code if a + x < 100 then a + x else 100} lies below a hundred only by its condition,
+     * and a {@code match} arm's body reading what the arm bound reads a value only that arm has.
+     * Reading either needs the account of what an arm settles that {@link PathEngine} keeps, which
+     * is a thing to have once and not twice. Until that account is somewhere both readers can ask,
+     * the range is the arms together — sound, and wider than the value's own range, so the fragment
+     * this recognises is narrower than what a source can express (#973).
      *
-     * <p>Both of those are this recipe unfinished and not this recipe's limit. What a choice is —
-     * a value that is one of several — is what is settled here; which choices are found and how
-     * finely each arm is read are the parts still to connect.
+     * <p>The operations the library defines by cases ({@code DischargeRules.CHOOSES}) are choices
+     * with no producer here yet (#974). Which values a choice is one of does have an owner
+     * ({@link Choice}), so a kind of choice is found by every reader at once or by none.
+     *
+     * <p>All of that is this recipe unfinished and not this recipe's limit. What a choice is — a
+     * value that is one of several — is what is settled here; how finely each arm is read, and which
+     * operations produce one, are the parts still to connect.
      *
      * @param arms what stands in each arm, as a form each. Every arm or none: an arm the walk could
      *             not read leaves the choice with no recipe at all, since a range that left one of
-     *             them out would be a range the value can be outside of.
+     *             them out would be a range the value can be outside of. Never none of them — one of
+     *             several is what this is, so a producer handing over an empty list has disagreed
+     *             with that rather than described a value, and a reader taking it for a range with
+     *             no ends would hide the disagreement as a loss of precision.
      */
     record Chosen(List<LinearForm<FactSubject>> arms) implements Derivation {
 
         public Chosen {
             arms = List.copyOf(arms);
+            if (arms.isEmpty()) {
+                throw new IllegalArgumentException("a value that is one of several was recorded with"
+                        + " none to be one of");
+            }
         }
 
         @Override
