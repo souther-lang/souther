@@ -70,14 +70,14 @@ final class Templates {
                         invariant String.length(value) >= 1
                     """.formatted(project.moduleName());
             case FULL -> """
-                    // A library desk takes a book back. What is left to decide is whether it is late,
-                    // and by how much.
+                    // A library desk takes a book back. What is left to decide is whether what the
+                    // desk was handed is a loan at all.
                     //
                     // Every rule the desk works by is written once, where the value is built: a title
                     // is not empty, a loan runs between one and twenty-eight days, and a book cannot
                     // come back before it went out. Nothing downstream checks any of them again.
                     module %s exposing
-                        ( Title, LoanDays, DaysLate, Returned
+                        ( Title, LoanDays, Returned
                         , NoTitle, NotALoanPeriod, ReturnedBeforeItWentOut
                         , returnBook
                         )
@@ -88,12 +88,9 @@ final class Templates {
                     data LoanDays = Int
                         invariant value >= 1 && value <= 28
 
-                    data DaysLate = Int
-                        invariant value >= 0
-
                     data Returned =
                         { title: Title
-                        , daysLate: DaysLate
+                        , lentFor: LoanDays
                         }
 
                     // The three ways the desk's own input is not a loan. They are cases of the answer
@@ -108,23 +105,14 @@ final class Templates {
                     // of the cases it answers with.
                     behavior %s : (title: String, borrowedOn: Date, days: Int, returnedOn: Date)
                         -> Returned | NoTitle | NotALoanPeriod | ReturnedBeforeItWentOut
-                        constructs Returned, Title, LoanDays, DaysLate
-
-                    let daysOut (borrowedOn: Date, returnedOn: Date): Int =
-                        Date.daysBetween(borrowedOn, returnedOn)
-
-                    let lateBy (out: Int, lent: LoanDays): Int =
-                        if out > lent.value then out - lent.value else 0
+                        constructs Returned, Title, LoanDays
 
                     let %s (title, borrowedOn, days, returnedOn) = {
                         guard Title(title) as name else NoTitle
                         guard LoanDays(days) as lent else NotALoanPeriod
                         guard borrowedOn <= returnedOn else ReturnedBeforeItWentOut
 
-                        Returned
-                            { title = name
-                            , daysLate = DaysLate(lateBy(daysOut(borrowedOn, returnedOn), lent))
-                            }
+                        Returned { title = name, lentFor = lent }
                     }
                     """.formatted(project.moduleName(), BEHAVIOR, BEHAVIOR);
         };
@@ -147,24 +135,30 @@ final class Templates {
                 examples for %s
 
                 example %s
-                    | "a book back inside its loan is not late" :
+                    | "a loan the desk can take back" :
                         ("Souther in Action", Date("2026-04-01"), 14, Date("2026-04-10"))
-                            -> Returned { title = Title("Souther in Action"), daysLate = DaysLate(0) }
-                    | "the day after it was due is one day late" :
-                        ("Souther in Action", Date("2026-04-01"), 14, Date("2026-04-16"))
-                            -> Returned { title = Title("Souther in Action"), daysLate = DaysLate(1) }
-                    | "the day it was due is not late" :
-                        ("Souther in Action", Date("2026-04-01"), 14, Date("2026-04-15"))
-                            -> Returned { title = Title("Souther in Action"), daysLate = DaysLate(0) }
-                    | "a book back the day it went out is not late" :
+                            -> Returned { title = Title("Souther in Action"), lentFor = LoanDays(14) }
+                    | "a book back the day it went out" :
                         ("Souther in Action", Date("2026-04-01"), 14, Date("2026-04-01"))
-                            -> Returned { title = Title("Souther in Action"), daysLate = DaysLate(0) }
+                            -> Returned { title = Title("Souther in Action"), lentFor = LoanDays(14) }
+                    | "the shortest loan there is" :
+                        ("Souther in Action", Date("2026-04-01"), 1, Date("2026-04-10"))
+                            -> Returned { title = Title("Souther in Action"), lentFor = LoanDays(1) }
+                    | "and the longest" :
+                        ("Souther in Action", Date("2026-04-01"), 28, Date("2026-04-10"))
+                            -> Returned { title = Title("Souther in Action"), lentFor = LoanDays(28) }
+                    | "a day under the shortest is not a loan period" :
+                        ("Souther in Action", Date("2026-04-01"), 0, Date("2026-04-10"))
+                            -> NotALoanPeriod
+                    | "nor a day over the longest" :
+                        ("Souther in Action", Date("2026-04-01"), 29, Date("2026-04-10"))
+                            -> NotALoanPeriod
                     | "an empty title is not a title" :
                         ("", Date("2026-04-01"), 14, Date("2026-04-10"))
                             -> NoTitle
-                    | "twenty-nine days is not a loan period" :
-                        ("Souther in Action", Date("2026-04-01"), 29, Date("2026-04-10"))
-                            -> NotALoanPeriod
+                    | "one character is a title" :
+                        ("S", Date("2026-04-01"), 14, Date("2026-04-10"))
+                            -> Returned { title = Title("S"), lentFor = LoanDays(14) }
                     | "a book cannot come back the day before it went out" :
                         ("Souther in Action", Date("2026-04-02"), 14, Date("2026-04-01"))
                             -> ReturnedBeforeItWentOut
@@ -203,13 +197,13 @@ final class Templates {
                 class %s {
 
                     @Test
-                    void aBookHandedBackLateSaysHowLate() {
+                    void aLoanTheDeskTakesBackComesBackAsAValue() {
                         %s answer = %s.of().apply(
                                 "Souther in Action", LocalDate.of(2026, 4, 1), 14L,
                                 LocalDate.of(2026, 4, 16));
 
                         Returned returned = assertInstanceOf(Returned.class, answer);
-                        assertEquals(1L, returned.daysLate().value());
+                        assertEquals(14L, returned.lentFor().value());
                     }
 
                     @Test
