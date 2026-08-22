@@ -397,16 +397,28 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
                 continue;
             }
             long constant = dice.nextInt(21) - 10;
-            Rel rel = switch (dice.nextInt(5)) {
-                case 0 -> Rel.LT;
-                case 1 -> Rel.GE;
-                case 2 -> Rel.GT;
-                case 3 -> Rel.EQ;
-                default -> Rel.LE;
-            };
-            out.add(new Written(coefs, num(constant), rel));
+            out.add(new Written(coefs, num(constant), someRelation(dice)));
         }
         return out;
+    }
+
+
+    /**
+     * One of the relations a rule can be written with, taken from the enum rather than from a list.
+     *
+     * <p>Written out, this was a copy of {@link Rel} that nothing compared against it, and the
+     * {@code default} arm meant it went on compiling however far the two drifted. They did: one
+     * generator here left out {@code /=} and the one beside it left out {@code /=} and {@code >},
+     * so the properties these tests hold — sound against the points, the same whatever order the
+     * rules arrived in, never wider for a narrower box — were never asked of a rule of that shape.
+     * The reading that decides which side of a hole a sum falls went unchecked by all three.
+     *
+     * <p>Taken from the values, a relation added to the language is generated here without anyone
+     * remembering to add it.
+     */
+    private static Rel someRelation(Random dice) {
+        Rel[] all = Rel.values();
+        return all[dice.nextInt(all.length)];
     }
 
     private static List<AffineConstraint<String>> read(List<Written> written) {

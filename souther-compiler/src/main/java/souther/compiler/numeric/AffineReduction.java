@@ -97,7 +97,7 @@ public final class AffineReduction {
         Map<A, RationalCut> atMost = new LinkedHashMap<>();
         for (AffineConstraint<A> each : constraints) {
             List<AffineConstraint.HalfSpace<A>> halves = each instanceof
-                    AffineConstraint.Disequality<A> hole ? sidedBy(hole, from) : each.halfSpaces();
+                    AffineConstraint.Disequality<A> hole ? sidedBy(hole, reading) : each.halfSpaces();
             if (halves == null) {
                 return new Reduction.NothingIsLeft<>();
             }
@@ -121,19 +121,27 @@ public final class AffineReduction {
      * to go above, then it goes below. And where it is known to be exactly {@code v}, nothing is
      * left.
      *
-     * <p>Asked of the box and so of everything known, rather than of what happened to be known when
-     * the rule was read. That is the whole difference: {@code x /= 0} beside {@code x >= 0} used to
-     * leave {@code x} at nought or above depending on which of the two was written first, because
-     * the answer was decided at the moment the disequality arrived and never revisited. Here it is
-     * decided against the same box every other rule is read against, and again next round if the
-     * box has moved.
+     * <p>Asked of everything known, rather than of what happened to be known when the rule was read.
+     * {@code x /= 0} beside {@code x >= 0} used to leave {@code x} at nought or above depending on
+     * which of the two was written first, because the answer was decided at the moment the
+     * disequality arrived and never revisited. Here it is decided against the same state every other
+     * rule is read against, and again next round if that state has moved.
+     *
+     * <p>Everything known is {@link FormReach} and not the ends alone. A sum is held by things no
+     * position's own range carries — a relation between two of them, a rule naming a third — and
+     * asking the ends for it left a {@code guard} that wrote {@code /=} beside a relation stating
+     * nothing, while the same {@code /=} beside a range on the value itself was read.
+     *
+     * <p>The hole cannot side itself. A disequality states no half-space
+     * ({@link AffineConstraint#halfSpaces}), so it is not among what the reading may take as a
+     * premise, and nothing here has to arrange for that.
      *
      * @return the half-spaces it comes to, empty where the sum can still fall either side, or null
      *         where the sum is pinned at the very value it is held away from
      */
     private static <A> List<AffineConstraint.HalfSpace<A>> sidedBy(
-            AffineConstraint.Disequality<A> hole, Box<A> from) {
-        Reach reach = reachOf(hole.form(), from);
+            AffineConstraint.Disequality<A> hole, FormReach<A> reading) {
+        Reach reach = reading.of(hole.form().coefs(), Rational.ZERO);
         Rational away = hole.at();
         boolean neverBelow = reach.least() != null && reach.least().at().compareTo(away) >= 0;
         boolean neverAbove = reach.most() != null && reach.most().at().compareTo(away) <= 0;
@@ -151,12 +159,6 @@ public final class AffineReduction {
                     hole.form(), RationalCut.exclusive(away)));
         }
         return List.of();
-    }
-
-    /** What the box leaves a whole form, summed the one way this arithmetic is written. */
-    private static <A> Reach reachOf(CanonicalForm<A> form, Box<A> from) {
-        return Reach.of(form.coefs(), Rational.ZERO,
-                atom -> Reach.between(from.leastOf(atom), from.mostOf(atom)));
     }
 
     /**
