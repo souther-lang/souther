@@ -3,26 +3,37 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Two arms counted as one are said to be, where nothing can show they are one.
+ * Two arms counted as one that nothing shows are one leave the measurement short of complete.
  *
- * <p>What tells two copies of a library fork apart is the predicate each was handed. A closure
- * comparing nothing an author wrote — a {@code filter} over a {@code Bool} field — leaves nothing to
- * tell them by, so they are counted together.
+ * <p>What tells two copies of a fork apart is what each decides, described far enough to tell one
+ * specialisation of a rule from another. A fork handed a value from outside the body decides
+ * something this can describe nothing of, so its copies describe alike without anything having been
+ * compared — and they are counted together.
  *
- * <p>Together rather than apart, and that is the safer of the two. Split, each would be owed a row
+ * <p>Together rather than apart, which is the safer of the two: split, each would be owed a row
  * establishing what the row beside it already does, and a specific piece of work that is already
- * done is worse to be told than nothing. What it costs is a count that holds two predicates where it
- * says one, and that is exactly the shape of a behavior reported complete over something nothing
- * ran — so it is said rather than left to be found.
+ * done is worse to be told than nothing.
+ *
+ * <p>What it costs is a count holding two decisions where it says one. That is exactly a behavior
+ * reported complete over something nothing ran, so the count does not call itself complete — in the
+ * prose, in the document, and in the one field a build reads.
+ *
+ * <p>Which module wrote the fork does not come into it. A helper of this module's own applying what
+ * it was handed is the same shape as one the library wrote, and a rule that asked where the fork was
+ * written would have said nothing about the one below.
  */
 class WhatIsCountedTogetherIsSaidTest {
 
@@ -31,21 +42,17 @@ class WhatIsCountedTogetherIsSaidTest {
     private static final String MODEL = """
             module example.flags
 
-            data Person =
-                { active: Bool
-                , retired: Bool
-                }
-            data Count = Int
+            data Yes
+            data No
+            data Verdict = Yes | No
 
-            behavior twice : (a: List<Person>, b: List<Person>) -> Count
-                constructs Count
-            let twice (a, b) =
-                Count(List.length(List.filter(x -> x.active, a))
-                    + List.length(List.filter(y -> y.retired, b)))
+            let decide (b: Bool): Verdict = if b then Yes else No
 
-            example twice
-                | "the second is never entered"
-                    : ([ Person { active = true, retired = false } ], [ ]) -> Count(1)
+            behavior both : (p: Bool, q: Bool) -> Verdict
+            let both (p, q) = if decide(p) == Yes then decide(q) else No
+
+            example both
+                | "the first holds and the second does not" : (true, false) -> No
             """;
 
     private static Compilation measured() {
@@ -55,74 +62,92 @@ class WhatIsCountedTogetherIsSaidTest {
         return compilation;
     }
 
-    /** The two calls come out under one pair of keys, since neither closure compares anything. */
-    @Test
-    void armsNothingCanTellApartAreCountedTogether() {
-        Adequacy.BranchEvidence twice = measured().db()
-                .ask(new Adequacy.BranchCoverage(MODULE)).value().get("twice");
-        assertNotNull(twice, "the model under test compiles");
-
-        assertEquals(4, twice.all().size(), "each call is emitted and probed on its own");
-        assertEquals(2, twice.obligations(), "and the four are counted under two keys");
-        assertEquals(1, twice.countedTogether().size(),
-                () -> "one fork whose copies cannot be told apart: " + twice.countedTogether());
+    private static Adequacy.BranchEvidence arms() {
+        Adequacy.BranchEvidence both = measured().db()
+                .ask(new Adequacy.BranchCoverage(MODULE)).value().get("both");
+        assertNotNull(both, "the model under test compiles");
+        return both;
     }
 
-    /** And the report says so, rather than printing a number that quietly holds both. */
+    /** The helper's two calls come out under one pair of keys: neither decides anything sayable. */
+    @Test
+    void armsNothingCanTellApartAreCountedTogether() {
+        Adequacy.BranchEvidence both = arms();
+
+        assertEquals(6, both.all().size(), "each call is emitted and probed on its own");
+        assertEquals(4, both.obligations(),
+                () -> "the helper's two calls are counted under one pair: " + both.all().stream()
+                        .map(each -> each.obligation().decides().said()).toList());
+        assertEquals(1, both.countedTogether().size(),
+                () -> "one fork whose copies cannot be told apart: " + both.countedTogether());
+    }
+
+    /**
+     * And the numbers do not call themselves complete.
+     *
+     * <p>The whole of what the collapse costs. A count holding two decisions where it says one, with
+     * a status of complete beside it, is a behavior reported complete over something nothing ran.
+     */
+    @Test
+    void theMeasurementIsNotComplete() {
+        assertNotEquals(MeasurementStatus.COMPLETE, arms().status(),
+                "what the count holds is more than what it says");
+    }
+
+    /** And the report says which fork that is, once for the fork. */
     @Test
     void theReportSaysWhichForkThatIs() {
         String human = AdequacyReport.of(measured()).human(SourceNameResolver.identity());
 
-        assertTrue(human.contains("arms of a fork `souther.list` wrote are counted as one"), human);
         assertEquals(1, human.lines().filter(line -> line.contains("counted as one")).count(),
                 () -> "said once for the fork and not once per arm: " + human);
     }
 
-    /**
-     * And a document says it too, not only the prose.
-     *
-     * <p>What a count holding two predicates where it says one costs is the same either way, and a
-     * consumer reads the document. Said in the prose alone, the numbers a build acts on carry the
-     * collapse with nothing beside them saying so.
-     */
+    /** And a document says it too, not only the prose. */
     @Test
     void theDocumentSaysItToo() {
-        String json = souther.compiler.report.AdequacyReport.of(measured())
-                .json(SourceNameResolver.identity());
+        String json = AdequacyReport.of(measured()).json(SourceNameResolver.identity());
 
-        assertTrue(json.contains("\"countedTogether\" : [ \"souther.list\" ]"), json);
+        assertTrue(json.contains("\"countedTogether\" : [ \"example.flags\" ]"), json);
     }
 
-    /** Nothing is said where the closures do compare something, since then they are told apart. */
+    /**
+     * Nothing is said where the two decide describably different things.
+     *
+     * <p>Including where neither compares anything: a field an author named is something they wrote,
+     * and two of them are two decisions.
+     */
     @Test
-    void nothingIsSaidWhereThePredicatesAreToldApart() {
+    void nothingIsSaidWhereTheDecisionsAreToldApart() {
         Compilation compilation = Compilation.ofSource("""
                 module example.flags
 
-                data Age = Int
                 data Person =
-                    { age: Age
+                    { active: Bool
+                    , retired: Bool
                     }
-                data Count = Int
+                data Yes
+                data No
+                data Verdict = Yes | No
 
-                behavior twice : (a: List<Person>, b: List<Person>) -> Count
-                    constructs Count
-                let twice (a, b) =
-                    Count(List.length(List.filter(x -> x.age.value >= 18, a))
-                        + List.length(List.filter(y -> y.age.value >= 65, b)))
+                let decide (b: Bool): Verdict = if b then Yes else No
 
-                example twice
-                    | "the second is never entered"
-                        : ([ Person { age = Age(20) } ], [ ]) -> Count(1)
+                behavior both : (x: Person) -> Verdict
+                let both (x) = if decide(x.active) == Yes then decide(x.retired) else No
+
+                example both
+                    | "active and not retired"
+                        : (Person { active = true, retired = false }) -> No
                 """, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
-        Adequacy.BranchEvidence twice = compilation.db()
-                .ask(new Adequacy.BranchCoverage(MODULE)).value().get("twice");
-        assertNotNull(twice, "the model under test compiles");
+        Adequacy.BranchEvidence both = compilation.db()
+                .ask(new Adequacy.BranchCoverage(MODULE)).value().get("both");
+        assertNotNull(both, "the model under test compiles");
 
-        assertEquals(4, twice.obligations(), "each call's arms are its own to cover");
-        assertEquals(java.util.List.of(), twice.countedTogether(),
-                "so there is nothing counted together to say");
+        assertEquals(List.of(), both.countedTogether(),
+                () -> "the two decide different things: " + both.all().stream()
+                        .map(each -> each.obligation().decides().said()).toList());
+        assertEquals(6, both.obligations(), "so each call's arms are its own to cover");
     }
 }

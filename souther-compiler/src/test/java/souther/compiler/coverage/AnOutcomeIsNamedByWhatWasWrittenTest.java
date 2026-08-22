@@ -248,7 +248,7 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
         assertThrows(IllegalArgumentException.class, () -> new CoverageSites.Site("b", built(), null,
                 0, 0, new CoverageSites.Obligation("b",
                         CoverageOrigin.written("m", 0, CoverageConstruct.COMPREHENSION), 0,
-                        java.util.List.of())));
+                        CoverageSites.Decides.NOTHING)));
     }
 
     /**
