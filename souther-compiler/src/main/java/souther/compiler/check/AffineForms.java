@@ -29,7 +29,8 @@ import java.math.BigDecimal;
  * values the arithmetic cannot read, and inside a reduction's step the only account there was
  * (ADR-0106). {@link Reading#readThrough} puts back a way to reach what a name was given, and its
  * answer is an expression: a caller can say which value a name denotes and cannot say what the
- * arithmetic of it comes to, so reading that expression is this walk's and no one else's.
+ * arithmetic of it comes to, so reading that expression is this walk's and no one else's
+ * (ADR-0111).
  *
  * @param <A> what the caller calls an atom
  * @param <E> what the caller carries as it goes inside a binding
