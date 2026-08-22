@@ -153,8 +153,15 @@ sealed interface CandidateDomain {
         Rational at = Rational.of(from);
         Rational step = Rational.of(by);
         for (int digits = 0; digits <= DIGITS_A_MEMBER_IS_NAMED_AT; digits++) {
-            BigDecimal member = memberAt(within, at, step, digits);
-            if (member != null && within.admits(new Count(member))) {
+            // The member the rounding lands on, and the one a place further in. An end the rules
+            // exclude is a value the run does not hold, and a rounding towards it stays on it however
+            // many places it is asked for — `(0, 4.5]` on a coset of every decimal named nothing at
+            // all until this asked for the next one along.
+            BigDecimal member = admitted(within, memberAt(within, at, step, digits, 0));
+            if (member == null) {
+                member = admitted(within, memberAt(within, at, step, digits, 1));
+            }
+            if (member != null) {
                 // One end and the other at the same value is one member and not a run of them.
                 return within.min() != null && within.max() != null
                         && within.min().at() instanceof Count low
@@ -171,19 +178,28 @@ sealed interface CandidateDomain {
     /** How many decimal places a member of a dense coset is looked for at. */
     int DIGITS_A_MEMBER_IS_NAMED_AT = 24;
 
+    /** {@code member} where the run holds it, and null where it does not. */
+    private static BigDecimal admitted(NumericDomain.Bounds within, BigDecimal member) {
+        return member != null && within.admits(new Count(member)) ? member : null;
+    }
+
     /**
-     * The member of {@code at + step·D} nearest the run's lower end with {@code digits} places in its
-     * multiplier, or null where the run's ends are not numbers.
+     * The member of {@code at + step·D} nearest the run's near end with {@code digits} places in its
+     * multiplier, moved {@code ulps} of those places further in, or null where the run's ends are
+     * not numbers.
      */
     private static BigDecimal memberAt(NumericDomain.Bounds within, Rational at, Rational step,
-                                       int digits) {
+                                       int digits, int ulps) {
         Endpoint end = within.min() != null ? within.min() : within.max();
         if (!(end.at() instanceof Count count)) {
             return null;
         }
+        boolean upward = within.min() != null;
         Rational away = Rational.of(count.at()).minus(at).dividedBy(step);
         BigDecimal multiplier = away.asDecimal(
-                within.min() != null ? RoundingMode.CEILING : RoundingMode.FLOOR, digits);
-        return at.plus(step.times(Rational.of(multiplier))).asWrittenDecimal();
+                upward ? RoundingMode.CEILING : RoundingMode.FLOOR, digits);
+        BigDecimal further = BigDecimal.ONE.movePointLeft(digits)
+                .multiply(BigDecimal.valueOf(upward ? ulps : -ulps));
+        return at.plus(step.times(Rational.of(multiplier.add(further)))).asWrittenDecimal();
     }
 }
