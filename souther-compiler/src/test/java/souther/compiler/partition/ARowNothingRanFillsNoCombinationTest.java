@@ -190,7 +190,7 @@ class ARowNothingRanFillsNoCombinationTest {
                     new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
                             sig.inputTypes(), symbols,
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                    partitioning.axes()),
+                    partitioning.axes(), HeldCounts.of(inputs, symbols)),
                     Interactions.of(body, plan, inputs, symbols));
         }
     }

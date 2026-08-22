@@ -207,8 +207,13 @@ final class Coverages {
         Map<Object, Incompleteness> byKind = new LinkedHashMap<>();
         for (Map<AxisId, Classification> where : byRow) {
             for (AxisId axis : order) {
-                if (where.get(axis) instanceof Classification.Unclassified could) {
-                    byKind.putIfAbsent(could.reason().identity(), could.reason());
+                // Asked of every reading and not of the ones that placed nothing. A row that put
+                // one value in a class and could not read the value beside it is counted among the
+                // rows that could not say, so the reason it could not say is owed here too — left
+                // to the arm, the count went up and the report said nothing about why.
+                Classification said = where.get(axis);
+                if (said != null && said.stopped() != null) {
+                    byKind.putIfAbsent(said.stopped().identity(), said.stopped());
                 }
             }
         }

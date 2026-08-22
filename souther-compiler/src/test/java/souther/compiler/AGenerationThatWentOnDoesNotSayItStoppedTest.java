@@ -73,10 +73,11 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("submit")).findFirst().orElseThrow();
         Sig sig = sigs.get("submit");
+        InputDomain domain = InputDomain.of(spec, sig, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return new Generator.Subject(new souther.compiler.partition.BehaviorInputs(
                 spec.params().stream().map(Hir.Param::name).toList(), sig.inputTypes(), symbols,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                Partitions.of(spec.name(), InputDomain.of(spec, sig, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).axes());
+                Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).axes(), souther.compiler.partition.HeldCounts.of(domain, symbols));
     }
 
     private static String written(Generator.GenerationResult result) {

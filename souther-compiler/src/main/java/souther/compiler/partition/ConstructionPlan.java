@@ -122,7 +122,7 @@ record ConstructionPlan(Node root) {
      */
     static ConstructionPlan of(Type declared, TermPath at, Symbols symbols, Set<String> decided,
                                Map<String, RepresentativeSource.Evaluation.Compose> recipes,
-                               java.util.function.ToIntFunction<TermPath> least) {
+                               java.util.function.ToIntBiFunction<TermPath, Type> least) {
         return new ConstructionPlan(node(declared, at, symbols, 0, decided, recipes, least));
     }
 
@@ -162,7 +162,7 @@ record ConstructionPlan(Node root) {
     private static Node node(Type declared, TermPath at, Symbols symbols, int depth,
                              Set<String> decided,
                              Map<String, RepresentativeSource.Evaluation.Compose> recipes,
-                             java.util.function.ToIntFunction<TermPath> least) {
+                             java.util.function.ToIntBiFunction<TermPath, Type> least) {
         // Before the recipe, because a position the caller fixed takes the value it was given
         // whatever a class would have built there.
         if (decided.contains(at.toString())) {
@@ -180,7 +180,7 @@ record ConstructionPlan(Node root) {
                     recipes, least);
             if (holdsAFixedPosition(inside)) {
                 return new Held(at, building, view.wrappers(), inside,
-                        Math.max(1, least.applyAsInt(at)));
+                        Math.max(1, least.applyAsInt(at, building)));
             }
         }
         StructuralDescent.Children children = StructuralDescent.of(view.shape());

@@ -757,7 +757,8 @@ public final class Adequacy {
             souther.compiler.partition.Partitions.Partitioning partitioning =
                     Coverages.partitioningOf(spec, domain, sig, symbols, policy, body, elements,
                             plan, arrives, stated);
-            Coverages.Probe probe = probing(partitioning, sig, symbols, policy, parameters, building);
+            Coverages.Probe probe =
+                    probing(partitioning, sig, symbols, policy, parameters, building, domain);
             // Two sources and not one. A line drawn at a count of a position comes off that position's
             // axis; a line drawn between two positions comes off the comparison and has no axis to come
             // off — the body of a behavior whose inputs are plain numbers nothing bounds draws lines
@@ -786,13 +787,13 @@ public final class Adequacy {
         private static Coverages.Probe probing(
                 souther.compiler.partition.Partitions.Partitioning partitioning, Sig sig,
                 Symbols symbols, souther.compiler.check.ReadingPolicy policy,
-                List<String> parameters, FixtureReader.Construction building) {
+                List<String> parameters, FixtureReader.Construction building, InputDomain domain) {
             if (building == null) {
                 return null;
             }
             Generator.Subject subject = new Generator.Subject(
                     new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
-                            symbols, policy), partitioning.axes());
+                            symbols, policy), partitioning.axes(), souther.compiler.partition.HeldCounts.of(domain, symbols));
             Generator.CandidateCheck check =
                     (at, candidate) -> building.refuse(sig.ins().get(at), candidate.value());
             return new Coverages.Probe() {
@@ -1643,7 +1644,8 @@ public final class Adequacy {
             souther.compiler.partition.Partitions.Partitioning partitioning =
                     Coverages.partitioningOf(spec, domain, sig, symbols, policy, body, elements,
                             plan, arrives, stated);
-            Generator.Subject subject = new Generator.Subject(inputs, partitioning.axes());
+            Generator.Subject subject =
+                    new Generator.Subject(inputs, partitioning.axes(), souther.compiler.partition.HeldCounts.of(domain, symbols));
             Generator.CandidateCheck check = building == null ? Generator.CandidateCheck.ANY
                     : (at, candidate) -> building.refuse(sig.ins().get(at), candidate.value());
 

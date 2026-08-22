@@ -132,23 +132,28 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
         }
         List<Standing> standing = List.of(new Standing(row.inputs().get(at), types.get(at),
                 TermPath.of(path.head()), Map.of()));
-        boolean[] broke = {false};
         for (TermPath.Step step : path.steps()) {
             List<Standing> next = new ArrayList<>();
+            int took = 0;
             for (Standing each : standing) {
-                if (!each.step(step, symbols, next)) {
-                    broke[0] = true;
+                if (each.step(step, symbols, next)) {
+                    took++;
                 }
+            }
+            // A step is taken by everything standing here or the reading stops. What decides it is
+            // the shape of a value against the type declared for it, and everything standing at one
+            // position of one row was written under one declaration -- so this is all or none, and
+            // a value nothing could read is carried down as one rather than failing the step. Kept
+            // as one flag for the whole walk, what survived was answered with and whatever could
+            // not be reached was left out with nothing saying so.
+            if (took != standing.size()) {
+                return null;
             }
             standing = next;
         }
-        // Nothing here, and two ways for that to be so. A step that could not be taken is the walk
-        // and the type disagreeing, which is what null has always said; a sequence holding no
-        // element is a row that wrote none, which is a reading that arrived. Answered alike, a row
-        // writing the empty list would be reported as one nothing could be read from.
-        if (standing.isEmpty() && broke[0]) {
-            return null;
-        }
+        // Nothing here is a row that wrote no element, which is a reading that arrived: a step that
+        // could not be taken has already answered null above. Answered alike, a row writing the
+        // empty list would be reported as one nothing could be read from.
         return standing.stream().map(each -> new Occurrence(each.at(), each.value())).toList();
     }
 

@@ -109,9 +109,11 @@ class GeneratorTest {
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
         Sig sig = sigs.get(behavior);
         List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
-        Partitions.Partitioning partitioning = Partitions.of(spec.name(), InputDomain.of(spec, sig, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        InputDomain domain = InputDomain.of(spec, sig, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Partitions.Partitioning partitioning = Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return new Model(new Generator.Subject(
-                new BehaviorInputs(parameters, sig.inputTypes(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), partitioning.axes()),
+                new BehaviorInputs(parameters, sig.inputTypes(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), partitioning.axes(),
+                HeldCounts.of(domain, symbols)),
                 symbols);
     }
 
@@ -193,9 +195,11 @@ class GeneratorTest {
                 List.of());
         Axis b = new Axis(new AxisId("f", "b"), new NumericTerm.ValueOf(TermPath.of("b")), Type.INT, right,
                 List.of());
+        // Axes written here rather than read off a model, so there is no reading of the input's
+        // counts to hand over and none is invented.
         return new Generator.Subject(
                 new BehaviorInputs(List.of("a", "b"), List.of(Type.INT, Type.INT), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                List.of(a, b));
+                List.of(a, b), HeldCounts.NONE);
     }
 
     private static PartitionClass number(String id, long... candidates) {
@@ -375,7 +379,8 @@ class GeneratorTest {
         Axis only = new Axis(new AxisId("f", "a"), new NumericTerm.ValueOf(TermPath.of("a")), Type.INT,
                 List.of(number("low", 1), number("high", 9)), List.of());
         Generator.Subject subject = new Generator.Subject(
-                new BehaviorInputs(List.of("a"), List.of(Type.INT), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), List.of(only));
+                new BehaviorInputs(List.of("a"), List.of(Type.INT), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), List.of(only),
+                HeldCounts.NONE);
 
         Generator.GenerationResult filled =
                 Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY);

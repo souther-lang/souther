@@ -77,7 +77,7 @@ class AConstructionPositionIsNotAnInputPositionTest {
     private static ConstructionPlan plan(Read read,
             Map<String, RepresentativeSource.Evaluation.Compose> recipes) {
         return ConstructionPlan.of(read.sig().inputTypes().get(0),
-                TermPath.of(read.spec().params().get(0).name()), read.symbols(), Set.of(), recipes, _ -> 0);
+                TermPath.of(read.spec().params().get(0).name()), read.symbols(), Set.of(), recipes, (_, _) -> 0);
     }
 
     private static List<String> slots(ConstructionPlan plan) {
@@ -179,9 +179,12 @@ class AConstructionPositionIsNotAnInputPositionTest {
      *
      * <p>Asked of the sources at the grain the reading's own rule is asked at. Naming the file that
      * holds a plan is where such a call would be written, so the first line of it turns this red;
-     * a helper in between defeats it, as it defeats every check of this kind here. The one file
-     * exempt is the plan's own, whose javadoc names the reading in order to say they are different
-     * things.
+     * a helper in between defeats it, as it defeats every check of this kind here.
+     *
+     * <p>Asked of the code and not of the comments. Saying that the two are different things means
+     * naming both, and a file doing that was the one thing this could not tell from a file asking
+     * one about the other — answered by exempting the file that said it, which is an exemption that
+     * grows by one every time somebody writes the sentence down.
      */
     @Test
     void nothingThatHoldsAPlanConsultsTheReading() throws IOException {
@@ -191,15 +194,19 @@ class AConstructionPositionIsNotAnInputPositionTest {
 
         List<String> both = new ArrayList<>();
         for (Path source : sources) {
-            String text = Files.readString(source, StandardCharsets.UTF_8);
-            if (source.endsWith(Path.of("partition", "ConstructionPlan.java"))
-                    || !text.contains("ConstructionPlan") || !text.contains("InputDomain")) {
+            String text = code(Files.readString(source, StandardCharsets.UTF_8));
+            if (!text.contains("ConstructionPlan") || !text.contains("InputDomain")) {
                 continue;
             }
             both.add(source.getParent().getFileName() + "/" + source.getFileName());
         }
         assertEquals(List.of(), both,
                 "a coordinate of the plan is not a position of the input, and these could ask");
+    }
+
+    /** {@code source} with its comments taken out, which is what this reads. */
+    private static String code(String source) {
+        return source.replaceAll("(?s)/\\*.*?\\*/", " ").replaceAll("//[^\n]*", " ");
     }
 
     private static List<Path> mainSources() throws IOException {

@@ -7,6 +7,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -52,12 +53,16 @@ class APairIsOneElementInTwoClassesTest {
                 | "ROW" : (PEOPLE) -> [ ]
             """;
 
-    private static PartitionEvidence measured(String people) {
+    private static Compilation compiled(String people) {
         Compilation compilation =
                 Compilation.ofSource(MODEL.replace("PEOPLE", people), "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
-        PartitionEvidence select = compilation.db()
+        return compilation;
+    }
+
+    private static PartitionEvidence measured(String people) {
+        PartitionEvidence select = compiled(people).db()
                 .ask(new Adequacy.Coverage(MODULE)).value().get("select");
         assertNotNull(select, () -> "the model under test compiles: " + people);
         return select;
@@ -86,6 +91,29 @@ class APairIsOneElementInTwoClassesTest {
         assertEquals(List.of(Set.of("people[*].age/x < 18", "people[*].age/18 <= x"),
                         Set.of("Active", "Inactive")),
                 select.axes().stream().map(PartitionEvidence.AxisCoverage::covered).toList());
+    }
+
+    /**
+     * And the search offers a row for the combinations that row is not evidence for.
+     *
+     * <p>The same counterexample, put to the other reader. What a row covers is one question, and a
+     * search answering it its own way went on treating every combination as filled while the report
+     * was still calling two of them untried -- so both are asked of one rule here.
+     */
+    @Test
+    void theSearchOffersARowForTheCombinationsNeitherElementIsIn() {
+        Map<String, Adequacy.Filling> generated = compiled("""
+                [ Person { age = 17, status = Active },
+                  Person { age = 20, status = Inactive } ]""").db()
+                .ask(new Adequacy.Generated(MODULE)).value();
+        assertNotNull(generated, "rows are offered");
+
+        assertEquals(List.of("[Person { age = 17, status = Inactive }]",
+                        "[Person { age = 18, status = Active }]"),
+                generated.get("select").pairs().rows().stream()
+                        .map(row -> row.inputs().get(0).text()).toList(),
+                () -> "one row for each combination no element of the written row is in: "
+                        + generated.get("select").pairs().reasons());
     }
 
     /** One element in both classes is a witness, and is counted as one. */

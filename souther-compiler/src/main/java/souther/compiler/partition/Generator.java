@@ -68,11 +68,25 @@ public final class Generator {
 
     /** The behavior a row would be written for: what its inputs are called, what they are, and where
      * the model divides them. */
-    public record Subject(BehaviorInputs inputs, List<Axis> axes) {
+    public record Subject(BehaviorInputs inputs, List<Axis> axes, HeldCounts held) {
 
         public Subject {
             axes = List.copyOf(axes);
         }
+
+        /**
+         * What the reading of the input says about how many its containers hold.
+         *
+         * <p>Handed in rather than read here, and answered about the positions of the input alone.
+         * A coordinate of a {@link ConstructionPlan} is spelled the same way and is not one of
+         * these, and what a plan's node holds is read off that node's own type -- which is the
+         * separation {@code AConstructionPositionIsNotAnInputPositionTest} keeps.
+         */
+        public HeldCounts held() {
+            return held;
+        }
+
+
 
         /**
          * The same three facts a row is read by, which is the point of holding one value.
@@ -406,7 +420,7 @@ public final class Generator {
         Set<Pair> pairs = pairsOf(axes);
         Set<Pair> singles = singlesOf(axes);
         for (ObservedRow row : existing) {
-            cover(pairs, singles, axes, reachedIn(row.at(), axes));
+            cover(pairs, singles, axes, row.at());
         }
 
         List<GeneratedRow> rows = new ArrayList<>();
@@ -746,7 +760,10 @@ public final class Generator {
     private static boolean readEverywhere(Axis axis, List<ObservedRow> existing) {
         for (ObservedRow row : existing) {
             Classification where = row.at().get(axis.id());
-            if (where != null && !(where instanceof Classification.Classified)) {
+            // Whether the reading stopped, and not whether it placed anything. A row whose list
+            // holds one value in a class and one nothing could read placed something and is short
+            // of the rest, so what it does not cover here is as unknown as if it had placed nothing.
+            if (where != null && where.stopped() != null) {
                 return false;
             }
         }
@@ -797,35 +814,77 @@ public final class Generator {
         return at;
     }
 
-    /** The same, of a row this generation composed, which sits in one class per position. */
+    /**
+     * The same, of a row this generation composed, which sits in one class per position.
+     *
+     * <p>One class apiece, so every pair of the positions it named is a pair one value of each made
+     * — there is no second value here for a pair to be assembled out of. That is what tells this
+     * apart from a row the author wrote, whose list can hold values in more than one class at once,
+     * and it is why the two are not one routine over a set of classes per position.
+     */
     private static void cover(Set<Pair> pairs, Set<Pair> singles, List<Axis> axes, int[] where) {
-        List<int[]> each = new ArrayList<>(where.length);
-        for (int at : where) {
-            each.add(at < 0 ? new int[0] : new int[] {at});
+        for (int i = 0; i < axes.size(); i++) {
+            if (where[i] < 0) {
+                continue;
+            }
+            singles.remove(Pair.alone(i, where[i]));
+            for (int j = i + 1; j < axes.size(); j++) {
+                if (where[j] >= 0) {
+                    pairs.remove(new Pair(i, where[i], j, where[j]));
+                }
+            }
         }
-        cover(pairs, singles, axes, each);
     }
 
     /**
-     * What one row covers, over every class it reached at every position.
+     * What one row the author wrote covers.
      *
-     * <p>A row reaching more than one class at a position covers each of them, and meets each of
-     * them against whatever the position beside it holds. Read as one class it would cover the
-     * first of them and leave the rest owed, which is a row the author already wrote being asked
-     * for again.
+     * <p>A row reaching more than one class at a position covers each of them: read as one class it
+     * would cover the first and leave the rest owed, which is a row the author already wrote being
+     * asked for again. What it covers of a <em>pair</em> is the narrower question, and the answer is
+     * {@link Classification#pairsOf}'s — the same one the report is measured by. Taken here as every
+     * combination of the two positions' classes, a list holding one element under a line and another
+     * that is active was counted as a row for an element both over the line and active, which none
+     * of its elements is; and the search then offered nothing for a combination the report was still
+     * calling untried.
      */
     private static void cover(Set<Pair> pairs, Set<Pair> singles, List<Axis> axes,
-                              List<int[]> where) {
+                              Map<AxisId, Classification> row) {
         for (int i = 0; i < axes.size(); i++) {
-            for (int one : where.get(i)) {
-                singles.remove(Pair.alone(i, one));
-                for (int j = i + 1; j < axes.size(); j++) {
-                    for (int other : where.get(j)) {
+            Classification here = row.get(axes.get(i).id());
+            if (here == null) {
+                continue;
+            }
+            for (String id : here.classIds()) {
+                int one = classIn(axes.get(i), id);
+                if (one >= 0) {
+                    singles.remove(Pair.alone(i, one));
+                }
+            }
+            for (int j = i + 1; j < axes.size(); j++) {
+                Classification beside = row.get(axes.get(j).id());
+                if (beside == null) {
+                    continue;
+                }
+                for (Map.Entry<String, String> both : Classification.pairsOf(here, beside)) {
+                    int one = classIn(axes.get(i), both.getKey());
+                    int other = classIn(axes.get(j), both.getValue());
+                    if (one >= 0 && other >= 0) {
                         pairs.remove(new Pair(i, one, j, other));
                     }
                 }
             }
         }
+    }
+
+    /** Where {@code id} sits among {@code axis}'s classes, or -1 where it is none of them. */
+    private static int classIn(Axis axis, String id) {
+        for (int c = 0; c < axis.classes().size(); c++) {
+            if (axis.classes().get(c).id().equals(id)) {
+                return c;
+            }
+        }
+        return -1;
     }
 
     /**
@@ -1303,7 +1362,8 @@ public final class Generator {
         FieldDomains under = rulesOf(subject.types().get(p), subject.symbols(),
                 subject.inputs().policy(), under(root, settled));
         ConstructionPlan plan = ConstructionPlan.of(subject.types().get(p), root, subject.symbols(),
-                decided.keySet(), recipes, path -> leastHeld(under, path));
+                decided.keySet(), recipes, (at, building) -> leastHeld(under, at, building,
+                        subject.symbols()));
         Choices choices = choicesOf(subject, p, plan, decided, settled);
         if (choices.missingAt() != null) {
             return new Outcome(null, UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
@@ -1338,24 +1398,21 @@ public final class Generator {
     }
 
     /**
-     * Whether {@code axis} is inside a collection the rules leave no room in.
+     * Whether {@code axis} stands inside a collection the rules leave no room in.
      *
-     * <p>Asked of the collection the position is inside and not of the position itself: what a rule
+     * <p>Asked of the collections the position is inside and not of the position itself: what a rule
      * capping a collection at none says is that nothing stands at any position under it, whatever
-     * the values there could otherwise be.
+     * the values there could otherwise be. Asked of every one of them, because a position two
+     * sequences deep needs each of them to hold something — read off the outermost alone, a list of
+     * lists whose inner lists hold nothing was offered rows for what the inner lists hold.
      */
     private static boolean holdsNothing(Subject subject, Axis axis) {
-        TermPath inside = axis.path().containingSequence();
-        if (inside.equals(axis.path())) {
-            return false;   // not inside a sequence at all
+        for (TermPath inside : axis.path().sequencesContainingIt()) {
+            if (subject.held().most(inside) < 1) {
+                return true;
+            }
         }
-        int at = subject.parameters().indexOf(inside.head());
-        if (at < 0 || at >= subject.types().size()) {
-            return false;
-        }
-        FieldDomains rules = rulesOf(subject.types().get(at), subject.symbols(),
-                subject.inputs().policy(), Map.of());
-        return mostHeld(rules, inside) < 1;
+        return false;
     }
 
     /**
@@ -1369,37 +1426,16 @@ public final class Generator {
      * value was refused at — over a position the rules leave no room in, and over the positions
      * beside it that have nothing to do with it.
      */
-    private static int mostHeld(FieldDomains rules, TermPath path) {
+    private static int mostHeld(FieldDomains rules, TermPath path, Type building, Symbols symbols) {
         String field = fieldUnder(path);
-        FieldDomains.Held held = field == null ? null : rules.heldAt(field);
-        if (held == null || held.bounds() == null) {
-            return Integer.MAX_VALUE;
-        }
-        souther.compiler.numeric.Endpoint cap = held.bounds().max();
-        if (cap == null || !(cap.at() instanceof souther.compiler.numeric.Count count)) {
-            return Integer.MAX_VALUE;
-        }
-        java.math.BigDecimal at = cap.inclusive() ? count.at()
-                : count.at().subtract(java.math.BigDecimal.ONE);
-        return at.signum() <= 0 ? 0
-                : at.min(java.math.BigDecimal.valueOf(Integer.MAX_VALUE)).intValue();
+        return Partitions.mostHeld(building, symbols, field == null ? null : rules.heldAt(field));
     }
 
-    /** How many the rules say the list at {@code path} holds at the fewest, or zero where they say
-     *  nothing about how many. */
-    private static int leastHeld(FieldDomains rules, TermPath path) {
+    /** How many the rules say the value built at {@code path} holds at the fewest, or zero where
+     *  they say nothing about how many. Read the same two ways as the cap beside it. */
+    private static int leastHeld(FieldDomains rules, TermPath path, Type building, Symbols symbols) {
         String field = fieldUnder(path);
-        FieldDomains.Held held = field == null ? null : rules.heldAt(field);
-        if (held == null || held.bounds() == null) {
-            return 0;
-        }
-        souther.compiler.numeric.Endpoint floor = held.bounds().min();
-        if (floor == null || !(floor.at() instanceof souther.compiler.numeric.Count count)) {
-            return 0;
-        }
-        java.math.BigDecimal at = floor.inclusive() ? count.at()
-                : count.at().add(java.math.BigDecimal.ONE);
-        return at.signum() <= 0 ? 0 : at.min(java.math.BigDecimal.valueOf(64)).intValue();
+        return Partitions.leastHeld(building, symbols, field == null ? null : rules.heldAt(field));
     }
 
     /**
@@ -1423,7 +1459,7 @@ public final class Generator {
         // saying every candidate was refused sends an author looking for a value where the rule
         // says there is no room for one.
         for (ConstructionPlan.Held each : plan.held()) {
-            if (mostHeld(rules, each.at()) < each.least()) {
+            if (mostHeld(rules, each.at(), each.type(), subject.symbols()) < each.least()) {
                 return UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE;
             }
         }

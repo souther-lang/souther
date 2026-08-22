@@ -119,6 +119,24 @@ public record TermPath(String head, List<Step> steps) {
     }
 
     /**
+     * Every sequence this position stands inside, outermost first.
+     *
+     * <p>One per element step. A position two sequences deep stands inside both, and a value stands
+     * at it only where each of them holds something — so a reader asking what has to hold a value
+     * for this one to exist is owed all of them. {@link #containingSequence} answers with the first
+     * and is asked the other question: which container a clause of the value can name.
+     */
+    public java.util.List<TermPath> sequencesContainingIt() {
+        java.util.List<TermPath> out = new java.util.ArrayList<>();
+        for (int i = 0; i < steps.size(); i++) {
+            if (steps.get(i) instanceof Step.Element) {
+                out.add(new TermPath(head, steps.subList(0, i)));
+            }
+        }
+        return java.util.List.copyOf(out);
+    }
+
+    /**
      * The dotted field name the clauses of a value name this position by, or null where no clause
      * can name it.
      *

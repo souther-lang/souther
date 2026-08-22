@@ -29,6 +29,17 @@ public sealed interface Classification {
     Incompleteness stopped();
 
     /**
+     * The classes the row's values here fell in, empty where nothing could be read.
+     *
+     * <p>Asked of the interface so that reading a row's classes never means taking this apart. A
+     * consumer that matched one arm to get at them read a partial answer as a whole one, and the
+     * classes a row did reach and the reading that stopped short are two facts, both of them here.
+     */
+    default java.util.List<String> classIds() {
+        return java.util.List.of();
+    }
+
+    /**
      * The classes the row's values at the position fell in.
      *
      * <p>Empty is an answer and not an absence: a row whose list holds no element was read there
@@ -56,6 +67,7 @@ public sealed interface Classification {
         }
 
         /** The classes the row's values fell in, whichever elements gave them. */
+        @Override
         public java.util.List<String> classIds() {
             java.util.List<String> out = new java.util.ArrayList<>();
             for (At each : at) {
