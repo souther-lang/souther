@@ -1367,7 +1367,7 @@ let build (rows) = {
 
 A size taken of a container built by an operation is read through that operation, by the rules in <<invariant-discharge-preservation>>. A size taken of anything else — of what a behavior answered — is not a term, and a clause needing it is left to the run-time check.
 
-Beyond those, a value is named by what computes it wherever that computation is a function of named parts. `+List.sum(xs)+` is a term, and so is `+a * b+`, which is not a form the fragment carries and is bounded by what its factors are bounded to (<<invariant-discharge-arithmetic>>), and so is a value chosen by an `+if+` or opened by a `+match+`, and one built by a construction. Naming a value says that two writings of it are one value, and says nothing else: nothing follows from `+List.sum+` being a sum, and nothing has to. A `+guard List.sum(xs) >= bill+` states a relation about that value, `+List.sum(xs) - bill+` is arithmetic over it, and the two meet because both mentions of the call are the same value. A term exists before anything is said about it, so the first guard to mention one states what it states, exactly as a later one does.
+Beyond those, a value is named by what computes it wherever that computation is a function of named parts. `+List.sum(xs)+` is a term, and so is `+a * b+`, which is not a form the fragment carries and is bounded by what its factors are bounded to (<<invariant-discharge-arithmetic>>), and so is a value chosen by an `+if+` or opened by a `+match+`, which is bounded by what its arms are bounded to (<<invariant-discharge-arithmetic>>), and one built by a construction. Naming a value says that two writings of it are one value, and says nothing else: nothing follows from `+List.sum+` being a sum, and nothing has to. A `+guard List.sum(xs) >= bill+` states a relation about that value, `+List.sum(xs) - bill+` is arithmetic over it, and the two meet because both mentions of the call are the same value. A term exists before anything is said about it, so the first guard to mention one states what it states, exactly as a later one does.
 
 What is named and what is known of it are two questions, and the second is the one that has rules. A named value the procedure has no rule about is still a value a guard can be written about, and a construction from one is reported as unproven rather than left unsaid — the author is told that the invariant was read here and not established, which is a different thing from its not having been read. Giving the procedure a rule about an operation moves such a construction from unproven to discharged without anything being named differently.
 
@@ -1612,9 +1612,9 @@ Over the cases that are reached, the clause is established where every one of th
 An operation not named here guarantees nothing that can be relied on, and a clause over what it answered is left to the run-time check. What is known of the arguments at one call is a different question: it is what the path establishes, and it is read where the clause is.
 
 [#invariant-discharge-arithmetic]
-==== What arithmetic outside the fragment lies between
+==== What a value outside the fragment lies between
 
-A product of two values and a truncating division are not linear, so neither is a form the procedure derives in and each names one value the guards may say nothing about (<<invariant-discharge-terms>>). What is known of such a value is read off what it was computed from, where the construction stands: a quantity times a unit price is not negative wherever both of them are, and there is no third `+guard+` about the product that an author could write instead.
+A product of two values and a truncating division are not linear, so neither is a form the procedure derives in and each names one value the guards may say nothing about (<<invariant-discharge-terms>>). A value chosen by an `+if+` or opened by a `+match+` is one for a reason of its own: nothing composes a choice, and it too is one value. What is known of such a value is read off what it was computed from, where the construction stands: a quantity times a unit price is not negative wherever both of them are, and there is no third `+guard+` about the product that an author could write instead.
 
 This is not a rule about `+*+` or `+/+`, in the way <<invariant-discharge-guarantees>> states rules about operations. Nothing holds of a product wherever it is written. What holds is decided by what the path establishes about the two factors at the point the clause is read, and a construction under guards that say nothing about them is reported exactly as before.
 
@@ -1642,6 +1642,23 @@ What is bounded is the values the operation produced. `+/+` does not answer ever
 Nothing follows from this rule unless what is established at the construction keeps zero out of every divisor it admits. That is the condition for stating anything and not a claim about the divides that do answer — over the whole numbers a divisor between zero and five divides by one at the nearest, and where those quotients lie is simply not what this rule says. Nothing follows either where the divisor is left no value an `+Int+` is — the arithmetic a form is read through composes numbers of any size, and what the operator divides by is an `+Int+`, so `+x / (9223372036854775807 + 1)+` divides by a value this operator never has. Neither is a finding about the path. The construction is owed its clause, as it is owed over any other value nothing is known of.
 
 `+/+` over `+Decimal+` is *not* read. It rounds half away from zero at a precision the run time sets (<<stdlib-decimal>>) rather than truncating, and where an end of the quotient lands under that rounding is not something the procedure states. A clause over one is left to the run-time check.
+
+*A choice.* A value chosen by an `+if+` or opened by a `+match+` is one of its arms, so it lies within the range holding every one of them: the lower of their lower ends and the higher of their higher ends, read where the construction stands. An arm the reading says nothing about leaves the whole choice unbounded that way, since the value may be that arm.
+
+What chose the arm is not read. The condition holds exactly where its arm is the answer, so reading it would say more — `+if n < 100 then n else 100+` is below a hundred by its condition and not by its arms — and it is left out rather than written twice, since what a condition establishes is what the walk into a branch already reads (<<invariant-discharge>>). Where a case split stands in a value position the walk does read it that way, once per arm, and this rule is what answers where that reading stops: inside a closure a container operation applies, and past the bound on how far the splits down one path are opened. A reading that opened the split is not weakened by this one standing beside it — both are sound, and a clause either of them discharges is discharged.
+
+[,souther]
+----
+data Money = Int
+    invariant value >= 0
+
+behavior pick : (a: Int, b: Int) -> Money | Bad
+let pick (a, b) = {
+    guard a >= 0 else Bad
+    guard b >= 0 else Bad
+    Money(if a > b then a else b) // discharged: both arms are at or above zero
+}
+----
 
 A bound derived this way is not a fact about the value that is kept and read back afterwards. A construction is read twice — under what the guards established, and under what holds of the values whatever the guards did (<<invariant-discharge>>) — and each reading derives its own from what that reading holds. So a bound that rests on a guard is in the first and not the second, and one that follows from what the values' own types guarantee is in both: a product of two values a type puts at or above zero is at or above zero wherever it is built, and a construction the two refuse is refused wherever it is built rather than on a path an author is told to guard. And it refuses as readily as it discharges — a product the guards put on the other side of zero is a construction the value fails, which is an error (<<construction-satisfies-its-invariant>>) and not a warning.
 
@@ -1673,7 +1690,7 @@ let total (xs) = Money(List.fold((sum, x) -> sum + x.amount.value, 0, xs))
 
 The ranges tried are made from the seed and there are four of them: the seed's own range, the range open above it, the range open below it, and the seed's range together with what the step answers where nothing is assumed about the accumulator — which is the whole answer for a step that does not read the accumulator at all. Where more than one is established the answer is what they all say. Which ranges are tried is not a rule an author has to predict: one that cannot be established costs nothing and settles nothing, and a range established is established whichever others were tried beside it.
 
-The seed and what the step answers must both be arithmetic the procedure derives in. A step that chooses between two answers is not read, and neither is one over a value that is what a behavior answered. A step whose answer is arithmetic the fragment cannot carry — a product of the accumulator and the element — is read, and it is read *under* the range being checked: the product is one value nothing is known of until its factors are, and one of its factors is the accumulator the range is about.
+The seed and what the step answers must both be values the procedure names. A step over a value that is what a behavior answered is not read. A step whose answer is one the fragment cannot carry — a product of the accumulator and the element, or a choice between two answers — is read, and it is read *under* the range being checked: such a value is one nothing is known of until what it was computed from is, and what it was computed from is the accumulator the range is about. So a step that chooses is read by reading its arms: every arm handed an accumulator inside the range answers inside it, or the range is not established. What chose the arm is not read (<<invariant-discharge-arithmetic>>), so a step whose arm stays inside the range only by its condition gets no range rather than a wrong one.
 
 [,souther]
 ----
@@ -1690,8 +1707,13 @@ let product (xs) = AtLeastOne(List.fold((acc, x) -> acc * x.value, 1, xs))
 ----
 behavior total : (xs: List<Line>) -> Money
 let total (xs) =
-    // not read: the step is a choice and not arithmetic, so the walk is left
-    // to the run-time check exactly as before
+    // discharged: one arm is the accumulator and the other adds an amount at
+    // or above zero, so every arm leaves the range where it was handed it
+    Money(List.fold((sum, x) -> if x.amount.value > 0 then sum + x.amount.value else sum, 0, xs))
+
+behavior other : (xs: List<Line>) -> Money
+let other (xs) =
+    // reported: the second arm is below the seed, and what chose it is not read
     Money(List.fold((sum, x) -> if x.amount.value > 0 then sum else 0 - 1, 0, xs))
 ----
 
