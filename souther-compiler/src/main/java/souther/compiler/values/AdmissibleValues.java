@@ -438,6 +438,39 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
     }
 
     /**
+     * Every subject this reading is filed under.
+     *
+     * <p>The vocabulary of one reading, and the one place it is answered. A caller relating several
+     * readings has to know which of them speaks about what — to rename one without colliding with
+     * another, and to conjoin two without expanding a product neither of them relates. Worked out
+     * from the same six places {@link #renamed} rewrites, because a subject the two disagreed about
+     * would be one filed under a name nothing else in the reading uses.
+     *
+     * <p><b>What a subject outside this is.</b> {@link #at} answers {@link ValueSet#ANY} for one: no
+     * box holds it, so the join over the alternatives is the join of ANY, and a reading that admits
+     * nothing has no alternatives to be asked about. So a reading says nothing about which values
+     * stand at a subject it does not name, which is what lets two readings over disjoint
+     * vocabularies be conjoined without being multiplied together.
+     *
+     * <p>Not the same of {@link #guaranteedAt}. What is guaranteed at a subject nothing was recorded
+     * for is {@link #defaultGuaranteed}, which is a lower bound and is {@link ValueSet#NONE}
+     * wherever nothing promised otherwise — weaker rather than absent, and never a refusal. A caller
+     * wanting a guarantee about a subject asks the reading that names it.
+     */
+    public Set<A> subjects() {
+        Set<A> out = new LinkedHashSet<>();
+        if (held instanceof Held.Alternatives<A> alternatives) {
+            alternatives.boxes().forEach(box -> out.addAll(box.at().keySet()));
+        }
+        out.addAll(perPosition.keySet());
+        out.addAll(standing.keySet());
+        out.addAll(guaranteed.keySet());
+        out.addAll(tangled);
+        out.addAll(widened);
+        return Collections.unmodifiableSet(out);
+    }
+
+    /**
      * The same reading of the same positions, under the names {@code naming} gives them.
      *
      * <p>The naming has to name two positions two positions. Two of them arriving under one name

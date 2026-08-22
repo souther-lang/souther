@@ -25,9 +25,17 @@ import java.util.function.Function;
  * One of these is threaded through every domain of one state, and it remembers what it has named, so
  * a collision between two domains is refused the same as a collision inside one.
  *
+ * <p><b>A function as well as an injection.</b> Java's {@link Function} promises neither, so what is
+ * held to is both: a subject asked about twice comes back with the name it was first given, and no
+ * second subject is given a name some subject already has. The first half is not a nicety. One of
+ * these renames a state and the places of that state's positions, and a naming free to answer twice
+ * would put the two in different vocabularies — which is the one thing the pair was made to rule
+ * out, and it would rule it out while both halves looked well formed.
+ *
  * <p>Reused across states on purpose. Two readings renamed into one vocabulary and then met are one
  * state, so what may not collide is every subject of both — and passing one of these to both is what
- * says so.
+ * says so. Where a caller makes one per reading instead, whatever keeps those readings apart is that
+ * caller's to name; nothing here is doing it.
  *
  * <p>The domains themselves take a plain function, because they sit below this package and may not
  * reach up to it. That costs nothing: each of them applies the naming to every subject it holds, so
@@ -37,7 +45,9 @@ import java.util.function.Function;
 public final class InjectiveRenaming<A, B> {
 
     private final Function<A, B> naming;
-    /** What each name has been given to, so that a second source arriving at one is seen. */
+    /** What each subject was given, so that asking twice answers once. */
+    private final Map<A, B> names = new HashMap<>();
+    /** What each name was given to, so that a second subject arriving at one is seen. */
     private final Map<B, A> named = new HashMap<>();
 
     private InjectiveRenaming(Function<A, B> naming) {
@@ -52,16 +62,24 @@ public final class InjectiveRenaming<A, B> {
     /**
      * What {@code source} is called in the new vocabulary.
      *
+     * <p>Settled once. The name a subject was first given is the name it keeps, whatever the
+     * function would answer on being asked again.
+     *
      * @throws IllegalStateException where some other source is already called that, which is this
      *                               renaming saying two subjects are one
      */
     public B apply(A source) {
+        B settled = names.get(source);
+        if (settled != null) {
+            return settled;
+        }
         B target = naming.apply(source);
         A had = named.putIfAbsent(target, source);
         if (had != null && !had.equals(source)) {
             throw new IllegalStateException("`" + had + "` and `" + source + "` are both called `"
                     + target + "`, so the renaming says they are one subject");
         }
+        names.put(source, target);
         return target;
     }
 }

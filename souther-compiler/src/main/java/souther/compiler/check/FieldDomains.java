@@ -7,6 +7,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.AdmissibleValues;
+import souther.compiler.values.ConjoinedAdmissibleValues;
 import souther.compiler.values.UnreadReason;
 import souther.compiler.values.ValueSet;
 
@@ -308,7 +309,7 @@ public final class FieldDomains {
         Set<String> positions = new LinkedHashSet<>(seeded.keys().keySet());
         positions.addAll(seeded.atoms().keySet());
         positions.forEach(field -> {
-            AdmissibleValues<FactSubject> values = seeded.constraints().values();
+            ConjoinedAdmissibleValues<FactSubject> values = seeded.constraints().values();
             // Both names of the position, since a number has one of each and a clause reaching it
             // is filed under whichever the reading recognised. Both are about the same values, so
             // what holds of it is what both leave.
@@ -587,10 +588,13 @@ public final class FieldDomains {
          * subject was settled here, and a caller inventing its own answer to that would put two
          * apart or two together.
          *
-         * <p>The naming is held to naming two subjects two subjects, across every domain at once
-         * ({@link InjectiveRenaming}). A caller whose {@code named} and {@code otherwise} send two
-         * of these subjects to one name is told so rather than handed a state where a predicate of
-         * one position settles another and an ordering of one bounds another.
+         * <p>The naming is held to naming two subjects two subjects, across every domain of
+         * <em>this</em> reading at once ({@link InjectiveRenaming}). A caller whose {@code named}
+         * and {@code otherwise} send two of these subjects to one name is told so rather than handed
+         * a state where a predicate of one position settles another and an ordering of one bounds
+         * another. What keeps two readings apart is not this — each of them is renamed under a
+         * renaming of its own — and is whatever the caller's names carry of where a subject came
+         * from.
          */
         public <B> Carried<B> constraintsOver(java.util.function.Function<Coordinate, B> named,
                                               java.util.function.Function<Object, B> otherwise) {

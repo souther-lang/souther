@@ -9,6 +9,8 @@ import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.values.AdmissibleValues;
+import souther.compiler.values.ConjoinedAdmissibleValues;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -145,6 +147,58 @@ class TheInputsEmptinessHasOneOwnerTest {
 
         assertEquals(Optional.of(new EmptyInput.ProvedByTheRules(new Emptiness.ConflictingRules())),
                 crossed.emptiness());
+    }
+
+    /**
+     * And saying them together does not multiply them.
+     *
+     * <p>One reading per parameter, each over positions the others do not name. A conjunction of
+     * readings is a union of products, so met into one it distributes — ten parameters of a record
+     * whose clauses leave two alternatives are a thousand and twenty-four alternatives, and the
+     * budget that admitted each reading was counted per declaration and says nothing about their
+     * conjunction. Held apart, thirteen parameters are thirteen readings of two.
+     *
+     * <p>Measured as the size of what is held rather than as the time it takes. A time is a fact
+     * about the machine it was taken on; what went wrong here is that a representation grew as the
+     * product of the parameters, and that is what this reads.
+     */
+    @Test
+    void theReadingsOfManyParametersAreNotMultipliedTogether() {
+        StringBuilder source = new StringBuilder("""
+                module example.many
+
+                data P = { a: String, b: String }
+                    invariant either = (a == "x" && b == "y") || (a == "p" && b == "q")
+
+                data Taken
+
+                behavior take : (""");
+        for (int at = 0; at < 13; at++) {
+            source.append(at == 0 ? "" : ", ").append("p").append(at).append(": P");
+        }
+        source.append(") -> Taken\n");
+
+        Read read = read(source.toString(), "take");
+        Quantities asked = read.inputs().quantities(read.symbols());
+        assertTrue(asked.emptiness().isEmpty(), "nothing here contradicts");
+
+        ConjoinedAdmissibleValues<?> held = valuesOf(asked);
+        assertEquals(13, held.factors().size(), "one reading per parameter");
+        for (AdmissibleValues<?> each : held.factors()) {
+            assertEquals(2, ((AdmissibleValues.Held.Alternatives<?>) each.held()).boxes().size(),
+                    "and each holds the two its own declaration left");
+        }
+    }
+
+    /** What the input's one state holds of the values, which is not something a caller asks for. */
+    private static ConjoinedAdmissibleValues<?> valuesOf(Quantities asked) {
+        try {
+            java.lang.reflect.Method held = asked.getClass().getDeclaredMethod("constraints");
+            held.setAccessible(true);
+            return ((souther.compiler.check.ConstraintState<?>) held.invoke(asked)).values();
+        } catch (ReflectiveOperationException e) {
+            throw new LinkageError(e.getMessage(), e);
+        }
     }
 
     /**

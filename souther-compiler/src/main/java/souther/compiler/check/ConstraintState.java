@@ -6,6 +6,7 @@ import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.NumericDomain.Rel;
 import souther.compiler.values.AdmissibleValues;
+import souther.compiler.values.ConjoinedAdmissibleValues;
 
 import java.util.Map;
 import java.util.Optional;
@@ -55,13 +56,13 @@ import java.util.Set;
  * happened to ask had nothing to say.
  */
 public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> facts,
-                                 AdmissibleValues<A> values, OrderedIntervals<A> ordered,
+                                 ConjoinedAdmissibleValues<A> values, OrderedIntervals<A> ordered,
                                  boolean shown) {
 
     /** Nothing taken in, so nothing ruled out. */
     public static <A> ConstraintState<A> top() {
         return new ConstraintState<>(NumericDomain.top(), PredicateFacts.none(),
-                AdmissibleValues.top(), OrderedIntervals.top(), false);
+                ConjoinedAdmissibleValues.top(), OrderedIntervals.top(), false);
     }
 
     /**
@@ -146,6 +147,16 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      * domains a conjunction reaches — and a domain added later would be left out of every such
      * caller without a word. Added here, it is in all of them.
      *
+     * <p><b>One of the four is not additive, and that is why it is a conjunction rather than a
+     * reading.</b> Rules union, predicates union, ranges merge at a position — three representations
+     * that grow by what is added to them. Admissible values are a union of products, so a
+     * conjunction of two distributes: {@code m} alternatives against {@code n} are {@code m × n},
+     * and over vocabularies that share no position not one of those products is ever dropped. Ten
+     * parameters of a record leaving two alternatives would be a thousand and twenty-four, outside
+     * the budget that admitted each reading and counted per declaration. So that component holds the
+     * readings apart ({@link ConjoinedAdmissibleValues}) and pays the product only where two of them
+     * name the same position.
+     *
      * <p>Both sides have to be said in one vocabulary already. Two readings of two values name their
      * positions the way each value declares them, and met without being renamed first they would
      * hold each other's rules — which is {@link #renamed} and not this.
@@ -213,10 +224,14 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
         // twice would keep the second reading and drop the first without a word, which is the one
         // way this can be got wrong now that it cannot combine two of them. An assertion because a
         // throw would be caught by the fail-open around the reading and leave it silently dropped.
-        assert values.equals(AdmissibleValues.<A>top())
+        assert values.equals(ConjoinedAdmissibleValues.<A>top())
                 : "the values of a state are read once, and these were read over " + values;
-        return new ConstraintState<>(numbers, facts, AdmissibleValues.<A>top().meet(read),
-                ordered, shown);
+        // The reading met with what nothing read leaves, and then held as a conjunction of one.
+        // Met and not assigned, which is not the same answer, and the difference is a reading of one
+        // declaration's clauses — so it is worked out here and the conjunction takes what it comes
+        // to. Written the other way round, a factor would be a reading nobody had met with top.
+        return new ConstraintState<>(numbers, facts,
+                ConjoinedAdmissibleValues.of(AdmissibleValues.<A>top().meet(read)), ordered, shown);
     }
 
     /** This, with {@code bounded} taken as holding of the positions it bounds. */

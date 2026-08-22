@@ -8,7 +8,15 @@ package souther.compiler.inputs;
  * each parameter holds, and what they are about there are that declaration's own positions. Asked
  * about as rules of the input, they are about the same numbers under other names — so what is here
  * is the vocabulary those rules are carried into, and carrying them is a renaming
- * ({@link souther.compiler.numeric.NumericDomain#over}) rather than a second reading of them.
+ * ({@link souther.compiler.check.ConstraintState#renamed}) rather than a second reading of them.
+ *
+ * <p><b>Two parameters cannot collide here, and that is this type's to guarantee.</b> Every one of
+ * these carries the parameter it sits under, in both kinds, so two subjects arriving from two
+ * parameters are two of these whatever the declarations called them — {@code x} of one record and
+ * {@code x} of another are {@code p.x} and {@code q.x} and nothing has to check it. Which matters
+ * because the readings are renamed one parameter at a time, each under a renaming of its own: what
+ * holds inside one of them is that renaming's to refuse, and what holds between two of them is held
+ * by these constructors and by nothing else.
  *
  * <p><b>Two kinds, and the second is what keeps the carrying from widening.</b> A reading of a
  * declaration relates numbers the input has a term for and numbers it has none for, and a rule

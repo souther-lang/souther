@@ -76,10 +76,40 @@ class ARenamingNamesTwoSubjectsTwoSubjectsTest {
                 said.numbers().boundsOf(LinearForm.<String>atom("p.n")).max());
     }
 
-    /** A subject the naming sends to where it already was is that subject, not a second one. */
+    /**
+     * One subject gets one name, however many times it is asked about.
+     *
+     * <p>A renaming is a function as well as an injection, and Java's {@link
+     * java.util.function.Function} promises neither. The first half is not a nicety: one of these
+     * renames a state and the places of that state's positions, and a naming free to answer twice
+     * would put the two in different vocabularies — a state whose rules are about {@code p.x#0} and
+     * a report pointing at {@code p.x#1}, both well formed and about different things.
+     */
     @Test
-    void aSubjectMayArriveAtItsOwnNameTwice() {
-        assertEquals("x", InjectiveRenaming.<String, String>of(subject -> "x").apply("x"));
+    void aSubjectAskedAboutTwiceKeepsItsFirstName() {
+        java.util.concurrent.atomic.AtomicInteger asked = new java.util.concurrent.atomic.AtomicInteger();
+        InjectiveRenaming<String, String> counting =
+                InjectiveRenaming.of(subject -> subject + "#" + asked.getAndIncrement());
+
+        assertEquals("x#0", counting.apply("x"));
+        assertEquals("x#0", counting.apply("x"), "the name it was given is the name it keeps");
+        assertEquals("y#1", counting.apply("y"), "and another subject is another subject");
+    }
+
+    /** The same, through the domains a state is renamed by: one subject in facts and in the values
+     *  arrives under one name from both. */
+    @Test
+    void aSubjectHeldByTwoDomainsIsRenamedOnce() {
+        ConstraintState<FactSubject> both = ConstraintState.<FactSubject>top()
+                .taking(ONLY_IN_FACTS, true)
+                .takingValuesRead(AdmissibleValues.at(ONLY_IN_FACTS, ValueSet.just(Value.text("A"))));
+        java.util.concurrent.atomic.AtomicInteger asked = new java.util.concurrent.atomic.AtomicInteger();
+
+        ConstraintState<String> said = both.renamed(
+                InjectiveRenaming.of(subject -> "p#" + asked.getAndIncrement()));
+
+        assertTrue(said.facts().entails("p#0", true));
+        assertEquals(ValueSet.just(Value.text("A")), said.values().at("p#0"));
     }
 
     /** One subject in each domain, and no subject in two of them. */
