@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.Carrier;
 import souther.compiler.numeric.AffinePreimage;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
@@ -58,7 +57,7 @@ class ACosetWhoseValuesFillNamesAMemberTheRunHoldsTest {
     void aMemberOnAnExcludedEndIsSteppedOffRatherThanGivenUpOn() {
         CandidateDomain may = CandidateDomain.of(
                 new AffinePreimage.Filling(Rational.ZERO, Rational.of(3)),
-                between("0", false, "4"), new Carrier.Dense());
+                between("0", false, "4"));
 
         Count at = named(may);
         assertTrue(between("0", false, "4").admits(at), "the run holds it: " + at);
@@ -78,10 +77,27 @@ class ACosetWhoseValuesFillNamesAMemberTheRunHoldsTest {
     void aRunNarrowerThanTheGeneratorStillHoldsAMember() {
         CandidateDomain may = CandidateDomain.of(
                 new AffinePreimage.Filling(Rational.ZERO, Rational.of(3)),
-                between("0", false, "0.05"), new Carrier.Dense());
+                between("0", false, "0.05"));
 
         assertTrue(between("0", false, "0.05").admits(named(may)), named(may).toString());
         assertTrue(onTheCoset(named(may), Rational.ZERO, Rational.of(3)), named(may).toString());
+    }
+
+    /**
+     * A run too narrow for the places this writes says so, rather than naming a value off the coset.
+     *
+     * <p>{@code (0, 1e-30]} holds {@code 1e-30}, which is a decimal and so a member of every
+     * decimal. Two dozen places do not reach it. What that settles is how far this was willing to
+     * write and nothing at all about the coset, so the answer is neither a member nor a proof that
+     * there is none.
+     */
+    @Test
+    void aRunNoMemberIsWrittenInsideIsSaidToBeThatRatherThanAnsweredWithAnyValue() {
+        CandidateDomain may = CandidateDomain.of(
+                new AffinePreimage.Filling(Rational.ZERO, Rational.ONE),
+                between("0", false, "1e-30"));
+
+        assertInstanceOf(CandidateDomain.NotNamed.class, may);
     }
 
     /** An end that is its own value is taken as it stands, so the stepping above is not something
@@ -90,7 +106,7 @@ class ACosetWhoseValuesFillNamesAMemberTheRunHoldsTest {
     void aMemberOnAnIncludedEndIsTheOneNamed() {
         CandidateDomain may = CandidateDomain.of(
                 new AffinePreimage.Filling(Rational.ZERO, Rational.of(3)),
-                between("0", true, "4"), new Carrier.Dense());
+                between("0", true, "4"));
 
         assertEquals(Count.of(BigDecimal.ZERO), named(may));
     }

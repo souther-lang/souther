@@ -217,6 +217,12 @@ public final class LevelRealizer {
      * ones that leave the rest a residue their coefficients land on, so what stepping along it walks
      * past is what the rules take out — and a rule takes values out one region at a time. Nothing
      * here is a proof at any length: a run without an end is not walked to the end.
+     *
+     * <p><b>Not a measured number.</b> Every one of the fifty-three progressions the suite reaches
+     * gives up its row at the first value, so nothing here needs a second and this many is as
+     * arbitrary as any other more than one. What says it should be more than one is the defect a
+     * pair on a line was repaired for: the arithmetic names values the rules may still refuse, and
+     * refusing one is no reason to stop.
      */
     private static final int VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT = 16;
 
@@ -331,9 +337,22 @@ public final class LevelRealizer {
             return walk(0, target.at(), within);
         }
 
+        /**
+         * Where every position stands, which exists only after a walk that reached a row.
+         *
+         * <p>Refused otherwise rather than answered with the positions that happen to be fixed. A
+         * walk that came back {@link Reached#EXHAUSTED} leaves the ones it gave up on standing
+         * nowhere, and a map with nothing under a key is a row somebody is offered with a position
+         * missing from it.
+         */
         Map<NumericTerm, Place> fixing() {
             Map<NumericTerm, Place> out = new LinkedHashMap<>();
             for (int i = 0; i < terms.size(); i++) {
+                if (at[i] == null) {
+                    throw new IllegalStateException(
+                            "a walk that did not reach a row has no assignment to hand over:"
+                                    + " nothing stands at `" + terms.get(i).getKey() + "`");
+                }
                 out.put(terms.get(i).getKey(), at[i]);
             }
             return out;
@@ -371,7 +390,7 @@ public final class LevelRealizer {
                             souther.compiler.numeric.Rational.of(coef),
                             souther.compiler.numeric.Rational.of(owed),
                             carrier.spacing()),
-                    left, carrier);
+                    left);
             return switch (may) {
                 case CandidateDomain.None ignored -> Reached.EXHAUSTED;
                 case CandidateDomain.One only -> trying(i, only.at().at(), owed, coef, here);
@@ -380,6 +399,9 @@ public final class LevelRealizer {
                 case CandidateDomain.Somewhere one ->
                         trying(i, one.at().at(), owed, coef, here) == Reached.FOUND
                                 ? Reached.FOUND : Reached.INCOMPLETE;
+                // Values may stand here and none of them was written down, which settles nothing
+                // either way about the level.
+                case CandidateDomain.NotNamed ignored -> Reached.INCOMPLETE;
                 case CandidateDomain.Walking every -> walking(i, every, owed, coef, here);
                 case CandidateDomain.Outward on -> outward(i, on, owed, coef, here);
             };

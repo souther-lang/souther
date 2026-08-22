@@ -1,11 +1,9 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.Carrier;
 import souther.compiler.numeric.AffinePreimage;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rational;
 
 import java.math.BigDecimal;
@@ -64,15 +62,29 @@ sealed interface CandidateDomain {
     record Somewhere(Count at) implements CandidateDomain {}
 
     /**
+     * There may be values here and this wrote none of them down.
+     *
+     * <p>Not {@link None}, which is a proof. A coset whose values fill has a member in any run wide
+     * enough to hold two of them, and naming that member takes as many decimal places as the run is
+     * narrow — so running out of places says nothing about the coset and everything about how far
+     * this was willing to write. Answered as a value of the run instead, a search was handed a
+     * candidate off the coset, spent the position on it, and reported that it had looked.
+     */
+    record NotNamed() implements CandidateDomain {}
+
+    /**
      * Where the position may stand: the coset, cut down to the run.
      *
-     * @param carrier the position's own order, which is what says whether its values step
+     * <p>The position's own order is no argument here. Which kind of coset it is already says
+     * whether its values step, since the coset is the image's answer about a position of that image
+     * — asked of the carrier as well, the two could differ and there would be nothing to say which
+     * of them the set was cut from.
      */
-    static CandidateDomain of(AffinePreimage on, NumericDomain.Bounds within, Carrier carrier) {
+    static CandidateDomain of(AffinePreimage on, NumericDomain.Bounds within) {
         return switch (on) {
             case AffinePreimage.None ignored -> new None();
             case AffinePreimage.Stepping stepping -> stepping(stepping, within);
-            case AffinePreimage.Filling filling -> filling(filling, within, carrier);
+            case AffinePreimage.Filling filling -> filling(filling, within);
         };
     }
 
@@ -137,11 +149,13 @@ sealed interface CandidateDomain {
      * {@code 1, 1.3, 1.03}, and a run a tenth wide holds one of them however narrow it is.
      *
      * <p>Where the ends are so close that no member is written within
-     * {@link #DIGITS_A_MEMBER_IS_NAMED_AT}, what comes back is a value of the run rather than
-     * nothing: nothing is a proof here, and running out of digits is not one.
+     * {@link #DIGITS_A_MEMBER_IS_NAMED_AT}, what comes back is {@link NotNamed} and not a value of
+     * the run. A value of the run that is no member of the coset is one the rest of the form cannot
+     * finish, and offered as a candidate it costs the position its whole turn; nothing is a proof
+     * here and running out of digits is not one.
      */
-    private static CandidateDomain filling(AffinePreimage.Filling on, NumericDomain.Bounds within,
-                                           Carrier carrier) {
+    private static CandidateDomain filling(AffinePreimage.Filling on,
+                                           NumericDomain.Bounds within) {
         BigDecimal from = on.from().asWrittenDecimal();
         BigDecimal by = on.by().asWrittenDecimal();
         if (from == null || by == null) {
@@ -171,8 +185,7 @@ sealed interface CandidateDomain {
                         : new Somewhere(new Count(member));
             }
         }
-        Place inside = carrier.somethingInside(within.min(), within.max());
-        return inside instanceof Count count ? new Somewhere(count) : new None();
+        return new NotNamed();
     }
 
     /** How many decimal places a member of a dense coset is looked for at. */
