@@ -41,7 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Two subjects rather than one, because there were two. An unreached arm is what was reported
  * — of {@code List.filter}, in the model this was found on. A line a guard drew is the other, and it
  * was found by looking for the first one's shape somewhere else: the same compile said
- * {@code guard@7:22} two lines above an arm of the same body saying where it was written.
+ * {@code comparison@7:22} two lines above an arm of the same body saying where it was written.
  *
  * <p>Of one compile, and every rendering held to the same declaration. Renderings read from separate
  * runs are compared by way of the compiler answering the same thing twice, which is a different
@@ -174,7 +174,7 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
      *
      * <p>Found by asking the first subject's question of the next report-facing value along. The
      * origin of a boundary is a string a report prints and a document carries, and it was built from
-     * the place — so one compile said {@code guard@7:22} two lines above an arm of that same body
+     * the place — so one compile said {@code comparison@7:22} two lines above an arm of that same body
      * saying it properly.
      */
     @Test
@@ -244,7 +244,7 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
 
         assertFalse(said.boundaryLines().isEmpty(), "the comparison drew lines");
         for (String line : said.boundaryLines()) {
-            assertTrue(line.contains("if@up.sou:"),
+            assertTrue(line.contains("comparison@up.sou:"),
                     () -> "the line names the file the fork is written in: " + line);
         }
     }
@@ -339,7 +339,7 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
         Said said = saidAbout(IN_SIGHT);
         assertFalse(said.boundaryOrigins().isEmpty(), "the comparison drew lines");
         for (String origin : said.boundaryOrigins()) {
-            assertTrue(origin.startsWith("if@"),
+            assertTrue(origin.startsWith("comparison@"),
                     () -> "the fork is where the report says it is: " + origin);
         }
     }

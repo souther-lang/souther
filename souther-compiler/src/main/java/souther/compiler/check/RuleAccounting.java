@@ -82,7 +82,7 @@ public final class RuleAccounting {
         return switch (rule) {
             case RuleRef.Invariant it -> RuleCitation.named(it);
             case RuleRef.Ensures it -> RuleCitation.named(it);
-            case RuleRef.Guard _ -> throw new IllegalArgumentException(
+            case RuleRef.Comparison _ -> throw new IllegalArgumentException(
                     "a comparison is written rather than named, so it is cited by where it is"
                             + " written and not through this");
         };

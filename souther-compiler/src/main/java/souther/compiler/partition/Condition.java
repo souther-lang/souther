@@ -38,11 +38,13 @@ import souther.compiler.inputs.InputReads;
  * every reader threading one alongside. Carried as a shape instead, each reader would have to know
  * to look through it, which is the arrangement this replaces.
  *
- * <p>What is not here is which comparisons appear <em>anywhere</em> in a condition — inside an
- * argument to a call, under an operator this does not read. That is a different question, asked of
- * the whole subtree rather than of the condition's structure, and it is answered where it is asked
- * ({@code GuardThresholds.compared}). Reading one for the other is how a comparison nothing could
- * turn into a line would come back as a line.
+ * <p><b>Not a way of finding comparisons.</b> This says what a boolean subtree means, and it used to
+ * be walked to visit the comparisons inside one as well. A walk of a subtree needs a root, the root
+ * anything ever gave it was a fork's condition, and so what a row had satisfied on the way to a
+ * comparison was established only where a fork was written — {@code A && B} said nothing about
+ * {@code B} where {@code if A then B else false} did. Which comparisons a body holds is
+ * {@link souther.compiler.coverage.ComparisonCatalog}'s and where each of them stands is
+ * {@link ComparisonReadings}'s, and neither has a root to be given.
  */
 sealed interface Condition {
 
@@ -75,12 +77,25 @@ sealed interface Condition {
         if (e instanceof Core.LetIn let) {
             return of(let.body(), reads.and(let.binder(), let.value()));
         }
+        // A name standing for a truth is that truth. What a `let` binds is already carried for the
+        // sake of which position a term names, and stopping at the name here left a fork on one
+        // proving nothing while the same condition written out proved a comparison — the reading
+        // being transparent to one reader and opaque to the other, over one binding.
+        //
+        // It terminates because a binder's value can only mention binders introduced before it, so
+        // each step of this goes strictly outwards.
+        if (e instanceof Core.Read name && name.binding() != null) {
+            Core bound = reads.bound().get(name.binding());
+            if (bound != null) {
+                return of(bound, reads);
+            }
+        }
         if (e instanceof Core.Binary binary && combines(binary.op())) {
             Condition left = of(binary.left(), reads);
             Condition right = of(binary.right(), reads);
             return binary.op() == Hir.BinOp.AND ? new Both(left, right) : new Either(left, right);
         }
-        if (e instanceof Core.Binary comparison) {
+        if (e instanceof Core.Binary comparison && comparison.op().compares()) {
             return new Compares(comparison, reads);
         }
         return new NotRead(e);
@@ -90,4 +105,8 @@ sealed interface Condition {
     static boolean combines(Hir.BinOp op) {
         return op == Hir.BinOp.AND || op == Hir.BinOp.OR;
     }
+
+    // Which operators compare is `Hir.BinOp#compares` and is asked rather than spelled out again.
+    // Written here as "a binary that is not `&&` or `||`", this said arithmetic was a comparison —
+    // which nothing in a condition is, so it was a spelling that happened to be right.
 }

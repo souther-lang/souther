@@ -66,7 +66,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return asked.level();
     }
 
-    public static final int SCHEMA_VERSION = 3;
+    public static final int SCHEMA_VERSION = 4;
 
     /**
      * Whether the rows meet what the asked measures require of them.
@@ -1194,7 +1194,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * the two are different questions: a handle finds a rule and an identity distinguishes one.
      */
     private static void ruleId(ObjectNode into, souther.compiler.check.RuleRef rule) {
-        into.put("kind", ruleWord(rule));
+        into.put("kind", schemaRuleKind(rule));
         // Every part of the identity and not the parts that read well. A declaration is its module
         // and its name — two modules may each declare an `Amount` and they are two types — and a
         // construct is numbered from zero in each source, so the module is what tells one behavior's
@@ -1218,7 +1218,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             }
             // The comparison, by the behavior it is written in and the construct it was numbered
             // as. The numbering starts at zero in each source, so the source is part of it.
-            case souther.compiler.check.RuleRef.Guard it -> {
+            case souther.compiler.check.RuleRef.Comparison it -> {
                 into.put("declaredIn", it.origin().module());
                 into.put("behavior", it.behavior());
                 into.put("ordinal", it.origin().ordinal());
@@ -1228,17 +1228,28 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
-     * The word a document writes for which kind of rule an identity is of.
+     * How schema 3 spells which kind of rule an identity is of.
+     *
+     * <p>A wire value and not a word for the rule, which is what the name used to say. What a rule
+     * is called is {@link souther.compiler.check.RuleCitation}'s answer, and the two say one thing
+     * again as of version 4 — they are still separate values, because what a document groups by is a
+     * contract a version pins and what a reader is shown is not.
      *
      * <p>Here rather than at the one place it is written, for the reason the others are. No
-     * {@code default}, so a rule shape added and not given a word stops the compile rather than
+     * {@code default}, so a rule shape added and not given a spelling stops the compile rather than
      * arriving in a document as one that already existed.
      */
-    public static String ruleWord(souther.compiler.check.RuleRef rule) {
+    public static String schemaRuleKind(souther.compiler.check.RuleRef rule) {
         return switch (rule) {
             case souther.compiler.check.RuleRef.Invariant _ -> "invariant";
             case souther.compiler.check.RuleRef.Ensures _ -> "ensures";
-            case souther.compiler.check.RuleRef.Guard _ -> "guard";
+            // The rule and not the construct it is written in. A comparison may stand in the
+            // condition of an `if` or a `guard`, be given a name above the fork that tests it, or be
+            // what the behavior answers with, and it is one rule in all of those — so `guard` was a
+            // word for where some of them happen to be written, and false of the rest. Documents of
+            // version 3 carry `guard` here; the word moved with the version rather than under one,
+            // because a document already written groups by what it was told.
+            case souther.compiler.check.RuleRef.Comparison _ -> "comparison";
         };
     }
 

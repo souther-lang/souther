@@ -167,7 +167,7 @@ class AGroupIsOnlyOfferedWhereARunPassesItOnceTest {
             };
             return new CoverageSites.Plan(plan.sites(), plan.guards(), plan.byNode(),
                     plan.byComparison(), plan.armsByNode(), plan.controlByComparison(),
-                    everywhere, plan.forkByNode());
+                    everywhere, plan.forkByNode(), plan.comparisons());
         }
     }
 }

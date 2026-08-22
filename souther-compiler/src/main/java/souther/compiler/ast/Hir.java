@@ -2025,7 +2025,25 @@ public interface Hir {
                   Region region) implements Expr {}
 
 
-    enum BinOp { EQ, NE, LT, LE, GT, GE, AND, OR, ADD, SUB, MUL, DIV, CONCAT }
+    enum BinOp {
+        EQ, NE, LT, LE, GT, GE, AND, OR, ADD, SUB, MUL, DIV, CONCAT;
+
+        /**
+         * Whether this settles a comparison, which is the one place that says so.
+         *
+         * <p>Read by everything that has to tell a comparison from what is written the same way.
+         * {@code &&} and {@code ||} put comparisons together rather than being ones; the arithmetic
+         * operators answer a number. Each reader used to spell the membership out for itself — one
+         * as "not {@code &&} or {@code ||}", one as "places something on an order" — and two
+         * spellings of one set are two sets an operator added later can land in differently.
+         */
+        public boolean compares() {
+            return switch (this) {
+                case EQ, NE, LT, LE, GT, GE -> true;
+                case AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
+            };
+        }
+    }
 
     /**
      * {@code e} with each of its slots replaced by what the operator for that slot answers, its own

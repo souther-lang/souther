@@ -67,16 +67,17 @@ class AComparisonInAnEnsuresIsOfferedARowTest {
      * {@code a.n.value > 100} — the fork's line at a hundred is unmet, and the clause's is met,
      * because every rule of a declaration runs whenever the behavior answers.
      *
-     * <p>The fork is named {@code if} because that is what this body writes. Matched on the word so
-     * that the two rules are told apart by what drew each of them; a report naming every fork
-     * {@code guard} would have this pass while sending a reader after a construct that is not there.
+     * <p>Matched on the word each rule is written with, so that the two are told apart by what
+     * each is rather than by the value they name: a comparison is found where it is written and a
+     * clause by the name the author gave it, and a report that called them one thing would have
+     * this pass while saying nothing about which rule went unmet.
      */
     @Test
     void aClausesLineIsMetByWritingTheValueAndAForksIsNot() throws Exception {
         List<String> gaps = boundaryGaps(reportOf(REACHED_BY_ONE_RULE_ONLY));
 
         assertTrue(gaps.stream().anyMatch(line -> line.contains("charge/a.n = 100")
-                        && line.contains("if@")),
+                        && line.contains("comparison@")),
                 () -> "no row got the fork's comparison to answer at a hundred: " + gaps);
         assertFalse(gaps.stream().anyMatch(line -> line.contains("charge/a.n = 100")
                         && line.contains("ensures")),
@@ -119,7 +120,7 @@ class AComparisonInAnEnsuresIsOfferedARowTest {
         List<String> gaps = boundaryGaps(reportOf(A_LINE_BETWEEN_TWO_POSITIONS));
 
         assertTrue(gaps.stream().anyMatch(line -> line.contains("point book/from = to (")
-                        && line.contains("if@")),
+                        && line.contains("comparison@")),
                 () -> "no row got the fork's comparison to answer on the line: " + gaps);
         assertFalse(gaps.stream().anyMatch(line -> line.contains("point book/from = to (")
                         && line.contains("ensures")),

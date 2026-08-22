@@ -14,7 +14,6 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.UnreadRule;
-import souther.compiler.types.CoverageConstruct;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
@@ -192,19 +191,25 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
      * And the rule is named, by what tells one from another and by what a reader looks for.
      *
      * <p>The position was all this used to carry, so a report could say a rule about `+p.x+` went
-     * unread and name no rule. What identifies a comparison is the behavior it is
-     * written in and the construct the author wrote; what finds it is the fork it stands in and the
-     * place. Neither is the plan\u0027s: a condition nothing can be measured about is numbered nowhere,
-     * and the model states the rule regardless.
+     * unread and name no rule. What identifies a comparison is the behavior it is written in and
+     * the construct the author wrote; what finds it is where it is written. Neither is the
+     * plan\u0027s: a condition nothing can be measured about is numbered nowhere, and the model
+     * states the rule regardless.
      */
     @Test
     void aFindingNamesTheComparisonThatWentUnread() {
         UnreadRule said = read("p: Pair", "Int.multiply(p.x, p.x) < 10").unread().getFirst();
 
-        assertInstanceOf(RuleRef.Guard.class, said.rule());
+        assertInstanceOf(RuleRef.Comparison.class, said.rule());
         RuleCitation.WrittenAt cited = assertInstanceOf(RuleCitation.WrittenAt.class, said.cited());
-        assertEquals(CoverageConstruct.IF, cited.construct(),
-                "a rule with no name is found by the construct it is written in");
+        souther.compiler.diag.Citation.Written where = assertInstanceOf(
+                souther.compiler.diag.Citation.Written.class, cited.at(),
+                "a rule with no name is found where it is written");
+        // Line 14 column 31 is the `<`, and column 8 is the `if` that tests it. The two are
+        // on one line, so a citation taken from the fork would be a plausible place on the right
+        // line — which is what this used to say and what a reader would go to the wrong token for.
+        assertEquals(31, where.at().column(),
+                () -> "the comparison and not the fork that tests it: " + where.at());
     }
 
     /**

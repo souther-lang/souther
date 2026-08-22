@@ -85,7 +85,7 @@ class BothSurfacesSayWhatWasFoundAboutAPositionTest {
         // The handle too, because that is the half a person is shown. Keyed on the position and the
         // reason alone, two rules stopped alike here were one entry and the document could not say
         // which of them a reader was being told about.
-        assertEquals(List.of("n:unsupported_syntax:guard@0:11:32"),
+        assertEquals(List.of("n:unsupported_syntax:comparison@0:11:32"),
                 documentSaysNotRead(MEASURED_AND_UNREAD),
                 "the document says what the report said");
     }

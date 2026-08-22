@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Every word the shipped schema allows is one somebody accounted for.
  *
- * <p>Every enumerated field of {@code adequacy-schema-3.json} is a second spelling of a Java enum.
+ * <p>Every enumerated field of {@code adequacy-schema-4.json} is a second spelling of a Java enum.
  * The two are edited in different files by different hands, and until this test nothing noticed when
  * one moved: `ROW_TIMED_OUT` became `ROW_UNDECIDED` when a row stopped being held to a clock, the
  * rename was right, and the schema went on promising a word that had not been emitted since.
@@ -60,7 +60,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class EverySchemaWordIsAccountedForTest {
 
-    private static final String SCHEMA = "/souther/adequacy-schema-3.json";
+    private static final String SCHEMA = "/souther/adequacy-schema-4.json";
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     /**
@@ -363,15 +363,15 @@ class EverySchemaWordIsAccountedForTest {
         souther.compiler.types.TypeSymbol on = souther.compiler.types.TypeSymbols.declared(
                 new souther.compiler.types.TypeKey("m", "L"));
         assertEquals(Set.of(
-                        AdequacyReport.ruleWord(new souther.compiler.check.RuleRef.Invariant(
+                        AdequacyReport.schemaRuleKind(new souther.compiler.check.RuleRef.Invariant(
                                 new souther.compiler.check.Clause.Ref(
                                         new souther.compiler.check.Clause.Id(on, 0),
                                         java.util.Optional.empty()))),
-                        AdequacyReport.ruleWord(new souther.compiler.check.RuleRef.Ensures(
+                        AdequacyReport.schemaRuleKind(new souther.compiler.check.RuleRef.Ensures(
                                 new souther.compiler.check.BehaviorContract.RuleId(
                                         new souther.compiler.types.ValueName.Behavior("m", "f"),
                                         0, 0, on), "Found")),
-                        AdequacyReport.ruleWord(new souther.compiler.check.RuleRef.Guard("f",
+                        AdequacyReport.schemaRuleKind(new souther.compiler.check.RuleRef.Comparison("f",
                                 new souther.compiler.types.CoverageOrigin("m", 0, 0,
                                         souther.compiler.types.CoverageConstruct.IF)))),
                 allowedAt(schema(), List.of("$defs", "ruleId", "properties", "kind")));
@@ -530,7 +530,7 @@ class EverySchemaWordIsAccountedForTest {
 
     private static JsonNode schema() {
         try (InputStream in = AdequacyReport.class.getResourceAsStream(SCHEMA)) {
-            assertNotNull(in, "adequacy-schema-3.json ships beside the compiler");
+            assertNotNull(in, "adequacy-schema-4.json ships beside the compiler");
             return JSON.readTree(new String(in.readAllBytes(), StandardCharsets.UTF_8));
         } catch (java.io.IOException e) {
             throw new AssertionError(e);

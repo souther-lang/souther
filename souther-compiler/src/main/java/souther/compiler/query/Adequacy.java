@@ -2267,7 +2267,7 @@ public final class Adequacy {
                         // different criteria and are told under different codes.
                         case About.APointOfABorder(var point) ->
                                 point.role().againstTheLine()
-                                        ? againstTheLine(point).rule().wasDrawnInABodyFork()
+                                        ? againstTheLine(point).rule().isWrittenRatherThanNamed()
                                                 ? new ExampleMessage
                                                         .NoRowIsAtThePointOfTheBorderAConstructDrew(
                                                         point.role().name(), point.border().axis(),
@@ -2277,7 +2277,7 @@ public final class Adequacy {
                                                         point.role().name(), point.border().axis(),
                                                         point.against(),
                                                         point.border().rule().named())
-                                        : point.border().rule().wasDrawnInABodyFork()
+                                        : point.border().rule().isWrittenRatherThanNamed()
                                                 ? new ExampleMessage
                                                         .NoRowIsAtThePointAwayFromTheBorderAConstructDrew(
                                                         point.role().name(), point.border().axis(),
@@ -2412,11 +2412,12 @@ public final class Adequacy {
             return point.border();
         }
 
-        /** Which construct of the language drew a boundary's line, as a phrase the reader's
-         *  language supplies. Asked of the rule, which is where the source's own answer is. */
+        /** What a sentence calls a rule that has no name, as a phrase the reader's language
+         *  supplies. One phrase, because a rule found by where it is written is a comparison —
+         *  which construct stands around it is a fact about the body and not about the rule. */
         private static souther.compiler.diag.Localizable constructOf(
                 BorderAssessment.Point point) {
-            return point.border().rule().constructThatDrewIt().said();
+            return souther.compiler.diag.Localizable.of("construct.comparison");
         }
 
         /**

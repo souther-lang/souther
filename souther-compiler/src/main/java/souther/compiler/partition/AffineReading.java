@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.check.AffineForms;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
@@ -46,7 +45,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
      * value and the rule about it is one this does not model.
      */
     static AffineReading of(Core.Binary comparison, InputReads reads, Symbols symbols) {
-        if (ComparisonClaim.of(comparison.op()) instanceof ComparisonClaim.Nothing) {
+        if (!comparison.op().compares()) {
             return null;
         }
         LinearForm<NumericTerm> left = affine(comparison.left(), reads, symbols);
@@ -242,8 +241,4 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
         return claim instanceof ComparisonClaim.Cut;
     }
 
-    /** Whether an operator is one this reads at all. */
-    static boolean places(Hir.BinOp op) {
-        return ComparisonClaim.places(op);
-    }
 }
