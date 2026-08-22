@@ -69,10 +69,10 @@ class AGuardsRelationReachesAConstructionMovedIntoAHelperTest {
                         else 組めない
                 }
 
-                behavior 買う : (投入: 硬貨束, ストック: 硬貨束, 値段: Int) -> 釣り銭の組み方
+                behavior 買う : (投入: 硬貨束, ストック: 硬貨束, 値段: Int, 他: Int) -> 釣り銭の組み方
                     constructs 組めた, 硬貨束, 硬貨枚数
 
-                let 買う (投入, ストック, 値段) = {
+                let 買う (投入, ストック, 値段, 他) = {
                     guard %s else 組めない
                     釣り銭を組む(%s, ストック)
                 }
@@ -105,12 +105,18 @@ class AGuardsRelationReachesAConstructionMovedIntoAHelperTest {
                 reported("合計金額(投入) - 値段 >= 0", "合計金額(投入) - 値段"));
     }
 
-    /** Two places rather than a computed value, which is the same relation with nothing computed
-     *  anywhere in it. */
+    /**
+     * The same relation with nothing computed anywhere in it, which is what says the loss was never
+     * about computed values.
+     *
+     * <p>Both sides are places and the argument is their difference, and this was reported too. So
+     * the report did not turn on whether the argument was a place — the report the issue opened
+     * with names that as the cause, and it is not: what decides it is whether the fact is one each
+     * position carries in a range of its own or one the two only hold together.
+     */
     @Test
-    void aRelationBetweenTwoPlacesDischargesItAsWell() {
-        assertEquals(List.of(),
-                reported("値段 >= 0 && 合計金額(投入) >= 値段", "合計金額(投入) - 値段"));
+    void aRelationBetweenTwoPlacesIsLostTheSameWay() {
+        assertEquals(List.of(), reported("値段 >= 他", "値段 - 他"));
     }
 
     /**
