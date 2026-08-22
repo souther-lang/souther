@@ -36,10 +36,14 @@ import java.util.List;
  * accounting is right to say they were read. What an accounting cannot say is that the measure was
  * then left with nothing, and that is what this reads the refusals for.
  *
- * <p>All three leave every measure short, because what is not known about them is not known for
- * either. A refusal names the rule and not which measure loses by it: which line would have been
- * drawn, and which classes would have stood either side of it, are both unknown once the rule is
- * out.
+ * <p>Which measures each of the three costs is each one's own answer, and they do not agree. A
+ * position whose rules were never enumerated and one the walk could not reach into leave both short,
+ * because what is not known about them is not known for either. A dropped axis leaves the partition
+ * measure short always and the border measure short only where it was carrying a line — what it was
+ * carrying is recorded where it was dropped, since neither kind leaves anything behind to read it
+ * off afterwards. And a rule set aside answers through its own reason
+ * ({@link souther.compiler.inputs.BlockReason.AboutARule#leavesShort}), which for a comparison
+ * relating two positions is neither measure.
  */
 public final class MeasureClosure {
 
@@ -48,10 +52,28 @@ public final class MeasureClosure {
     /** Whether the partition measure's reading ran out. */
     public sealed interface OfThePartition {
 
-        /** It did: every question this measure answers was accounted for, everywhere. */
+        /**
+         * It did: every question this measure answers was accounted for, everywhere.
+         *
+         * <p>Two of these are one conclusion and compare equal. Costing something to say is about
+         * who may say it and not about which instance said it — an answer that never equals its own
+         * recomputation is one {@code Db} reports as changed on every run, and everything that read
+         * it runs again over a model nobody edited. {@link UndividedPosition.Why.Absent} carries
+         * the same pair for the same reason.
+         */
         final class Closed implements OfThePartition {
 
             private Closed() {}
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof Closed;
+            }
+
+            @Override
+            public int hashCode() {
+                return Closed.class.hashCode();
+            }
 
             @Override
             public String toString() {
@@ -67,10 +89,20 @@ public final class MeasureClosure {
      *  separate type so that neither can be answered with the other's answer. */
     public sealed interface OfTheBorder {
 
-        /** It did: every question this measure answers was accounted for, everywhere. */
+        /** It did, and two of these are one conclusion — see {@link OfThePartition.Closed}. */
         final class Closed implements OfTheBorder {
 
             private Closed() {}
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof Closed;
+            }
+
+            @Override
+            public int hashCode() {
+                return Closed.class.hashCode();
+            }
 
             @Override
             public String toString() {
@@ -97,27 +129,29 @@ public final class MeasureClosure {
      * @param omitted positions dropped past the axis limit, which leave both measures short: what
      *                they were carrying went with them and no question stands for it
      * @param refused the rules of the model this reading set aside, each from the reader that did.
-     *                Asked whether it is short of them rather than counted: a comparison relating
-     *                two positions is set aside by what it says and not by anything missing here
-     *                ({@link souther.compiler.inputs.BlockReason.AboutARule#leavesAMeasureShort})
+     *                Asked which measures it leaves short rather than counted: a comparison relating
+     *                two positions is set aside by what it says and not by anything missing here,
+     *                and it is the rule's own reason that answers
+     *                ({@link souther.compiler.inputs.BlockReason.AboutARule#leavesShort})
      */
     static Both of(List<Axis> axes, List<GuardThresholds.Guards.AtAPosition> compared,
                    List<Partitions.OmittedAxis> omitted,
                    List<souther.compiler.inputs.UnreadRule> refused) {
-        boolean short_ = refused.stream()
-                .anyMatch(each -> each.why().leavesAMeasureShort());
+        java.util.Set<CoverageObligation.Measure> short_ = new java.util.LinkedHashSet<>();
+        refused.forEach(each -> short_.addAll(each.why().leavesShort()));
         // A dropped axis, asked which measure lost by it. What it was carrying is recorded where it
         // was dropped, because it cannot be read back afterwards: one that was carrying a line took
         // the border's evidence with it, and one that was only classifying took the partition's.
         // Counted as one fact, a model dropping an axis that divides nothing anybody bounds was
         // held open over a measure it never had.
-        boolean partition = !short_ && omitted.isEmpty();
-        boolean border = !short_
+        boolean partition = !short_.contains(CoverageObligation.Measure.PARTITION)
+                && omitted.isEmpty();
+        boolean border = !short_.contains(CoverageObligation.Measure.BOUNDARY)
                 && omitted.stream().noneMatch(Partitions.OmittedAxis::carriedAnObligation);
         for (Axis axis : axes) {
             // A position whose rules nothing enumerated, and one the walk could not reach into.
             // Neither raises a question, so neither can be short of one — which is why they are
-            // asked here and not among the questions (issue #791).
+            // asked here and not among the questions.
             if (axis.rulesNotReached() || axis.pending() instanceof StructuralInspection.Blocked) {
                 partition = false;
                 border = false;

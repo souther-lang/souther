@@ -1,5 +1,7 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.CoverageObligation;
+
 /**
  * Why a derivation did not finish, in this compiler's own terms.
  *
@@ -32,30 +34,33 @@ public sealed interface BlockReason {
     sealed interface AboutARule extends BlockReason {
 
         /**
-         * Whether a measure that would have had this rule's evidence is thereby short of something.
+         * Which measures of coverage are thereby short of something.
          *
-         * <p>Not every rule a reading set aside was one it fell short of. A comparison relating two
-         * positions divides neither of them however well it is read, so a measure without it is a
-         * measure that read the model and found no class there — while a comparison in a form no
-         * reader takes apart may have divided the position or bounded it, and nothing knows which.
-         * The first is the model, the second is this compiler, and a measure told they were one
-         * thing reports whichever it happens to meet.
+         * <p>Not every rule a reading set aside was one it fell short of, and the ones that were
+         * are not all short of the same measure. A comparison in a form no reader takes apart may
+         * have divided the position or bounded it, and nothing knows which — so both. A comparison
+         * relating two positions divides neither of them however well it is read, and the line it
+         * draws where they hold one count is drawn: neither.
+         *
+         * <p>Per measure and not one answer for all of them, which is the fold this whole
+         * arrangement exists to undo. Every reason here happens to answer alike for the two today,
+         * and a single boolean would say that they must — so the arm added next would be filed
+         * under whichever measure its author had in mind, and read as an answer about the other.
          *
          * <p>A switch and no {@code default}, so a reason added answers this on the day it is added
          * rather than falling into whichever arm stands nearest.
-         *
-         * <p>Which measure is short is not asked, and there is nothing here to ask it of. A rule
-         * this could not read is one whose line and whose classes are both unknown: what it would
-         * have said is exactly what nobody has.
          */
-        default boolean leavesAMeasureShort() {
+        default java.util.Set<CoverageObligation.Measure> leavesShort() {
             return switch (this) {
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                     UnreadValueRule _, CompetingCoordinates _ -> true;
-                // Nothing is missing. The rule is read and settled beside the partition rather than
-                // in it, and a measure counting it short would hold a verdict open over a model
-                // whose every rule this compiler understood.
-                case ComparisonBetweenPositions _ -> false;
+                     UnreadValueRule _, CompetingCoordinates _ ->
+                        java.util.Set.of(CoverageObligation.Measure.PARTITION,
+                                CoverageObligation.Measure.BOUNDARY);
+                // Neither. The rule is read and settled beside the partition rather than in it, and
+                // the border it places where two moving terms hold one count is drawn from the same
+                // rule — a measure counting either short would hold a verdict open over a model
+                // whose rule this compiler understood and measured.
+                case ComparisonBetweenPositions _ -> java.util.Set.of();
             };
         }
     }
