@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.Emptiness;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
@@ -331,14 +332,18 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
             Map<String, Count> settled = Map.of("x", count(at));
             souther.compiler.check.FieldDomains readIn = souther.compiler.check.FieldDomains.of(
                     name, data, read.symbols(), ReadAs.THE_COMPILATION_DOES, settled);
-            souther.compiler.check.FieldDomains.Settled taken = whole.given(Map.of(
-                    new souther.compiler.check.FieldDomains.Coordinate("x", false), count(at)));
+            souther.compiler.check.FieldDomains.Carried<String> taken = whole.given(Map.of(
+                    new souther.compiler.check.FieldDomains.Coordinate("x", false), count(at)))
+                    .constraintsOver(coordinate -> coordinate.measured()
+                                    ? "#" + coordinate.path() : coordinate.path(),
+                            subject -> "?" + subject);
 
-            assertEquals(readIn.holdsNothing().isPresent(), taken.holdsNothing().isPresent(),
+            assertEquals(readIn.holdsNothing().isPresent(),
+                    taken.constraints().holdsNothing(taken.positions()).isPresent(),
                     "whether anything is left, with x at " + at);
-            assertEquals(readIn.leftAt("y", false), taken.boundsOf(Map.of(
-                            new souther.compiler.check.FieldDomains.Coordinate("y", false),
-                            BigDecimal.ONE)),
+            assertEquals(readIn.leftAt("y", false),
+                    taken.constraints().numbers().boundsOf(
+                            NumericDomain.LinearForm.<String>atom("y")),
                     "where y runs, with x at " + at);
         }
     }
@@ -346,12 +351,10 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
     /**
      * A proof of emptiness says where it sits, in this input's words.
      *
-     * <p>What proves it names a position the way the declaration does — {@code x} for a field of the
-     * record the clause was written on — and a caller out here holds {@code p.x}. Said in the
+     * <p>The rules of every parameter are said together under names this input can spell, so the
+     * place the proof names is already {@code p.x} and nothing re-spells it. Said in the
      * declaration's words a report would name a field of nothing, and said as the parameter alone it
-     * would name the whole of what the behavior takes for a contradiction at one field of it. That
-     * translation is the reason this vocabulary exists beside the proof the declarations hold, so it
-     * is what is checked.
+     * would name the whole of what the behavior takes for a contradiction at one field of it.
      */
     @Test
     void aProofThatNamesAPositionIsSaidUnderTheParameter() {
@@ -359,27 +362,28 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
 
         EmptyInput why = read.inputs().quantities(read.symbols()).emptiness().orElseThrow();
 
-        assertEquals(new EmptyInput.At(TermPath.of("p").then("x"),
-                        new EmptyInput.ProvedByTheDeclarationsReading()),
+        assertEquals(new EmptyInput.ProvedByTheRules(
+                        new Emptiness.AtAField("p.x", new Emptiness.EmptyOrderedInterval())),
                 why);
     }
 
     /**
-     * And where the proof names no position, the parameter is where it sits.
+     * And where the proof names no position, it says so rather than naming one.
      *
      * <p>A pair the rules refuse is a fact about the value and not about one field of it, so there
-     * is no field to name and naming one would be inventing a place.
+     * is no field to name and naming one would be inventing a place. It used to be named all the
+     * same — the parameter stood in for the place, because the proof arrived from a reading that
+     * could only be about one parameter. Said over the whole input, there is no such stand-in to
+     * reach for.
      */
     @Test
-    void aProofAboutTheWholeValueSitsAtTheParameter() {
+    void aProofAboutNoOnePositionNamesNone() {
         Read read = read(SOURCE, "take");
 
         EmptyInput why = read.inputs().quantities(read.symbols())
                 .given(fixing(X, 4, Y, 4)).emptiness().orElseThrow();
 
-        assertEquals(new EmptyInput.At(TermPath.of("p"),
-                        new EmptyInput.ProvedByTheDeclarationsReading()),
-                why);
+        assertEquals(new EmptyInput.ProvedByTheRules(new Emptiness.ConflictingRules()), why);
     }
 
     /** A field whose own type the rules leave no value of, so the proof names that field. */

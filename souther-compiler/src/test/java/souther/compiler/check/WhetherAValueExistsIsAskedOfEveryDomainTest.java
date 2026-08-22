@@ -50,7 +50,7 @@ class WhetherAValueExistsIsAskedOfEveryDomainTest {
     /** Nothing taken in leaves every value there was. */
     @Test
     void aStateNothingWasTakenIntoHoldsWhateverItHeld() {
-        assertFalse(ConstraintState.top().isBottom());
+        assertFalse(ConstraintState.<FactSubject>top().isBottom());
     }
 
     /** Numbers that cannot both hold, which is the one the reading always asked. */
@@ -102,34 +102,34 @@ class WhetherAValueExistsIsAskedOfEveryDomainTest {
         assertFalse(shownAtBottom().ordered().isBottom());
     }
 
-    private static ConstraintState numbersAtBottom() {
+    private static ConstraintState<FactSubject> numbersAtBottom() {
         // `1 <= 0`, which is how a reading already says that what it stands in is never reached.
-        return ConstraintState.top()
+        return ConstraintState.<FactSubject>top()
                 .taking(LinearForm.constant(BigDecimal.ONE), Rel.LE, Map.of());
     }
 
-    private static ConstraintState factsAtBottom() {
-        return ConstraintState.top().taking(A_PREDICATE, true).taking(A_PREDICATE, false);
+    private static ConstraintState<FactSubject> factsAtBottom() {
+        return ConstraintState.<FactSubject>top().taking(A_PREDICATE, true).taking(A_PREDICATE, false);
     }
 
-    private static ConstraintState valuesAtBottom() {
+    private static ConstraintState<FactSubject> valuesAtBottom() {
         // Met as one reading and handed over as one. Two readings are combined where the
         // clauses of a declaration are read, and never at the state's boundary.
-        return ConstraintState.top().takingValuesRead(
+        return ConstraintState.<FactSubject>top().takingValuesRead(
                 AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("A")))
                         .meet(AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("B")))));
     }
 
-    private static ConstraintState orderedAtBottom() {
-        return ConstraintState.top()
+    private static ConstraintState<FactSubject> orderedAtBottom() {
+        return ConstraintState.<FactSubject>top()
                 .taking(OrderedIntervals.at(A_POSITION,
                         new OrderedInterval(Endpoint.inclusive(Count.of(6)), null)))
                 .taking(OrderedIntervals.at(A_POSITION,
                         new OrderedInterval(null, Endpoint.inclusive(Count.of(2)))));
     }
 
-    private static ConstraintState shownAtBottom() {
-        return ConstraintState.top().shownToHoldNothing();
+    private static ConstraintState<FactSubject> shownAtBottom() {
+        return ConstraintState.<FactSubject>top().shownToHoldNothing();
     }
 
     /**

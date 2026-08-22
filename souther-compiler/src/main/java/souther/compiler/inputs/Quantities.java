@@ -52,13 +52,19 @@ import java.util.Optional;
  * the words of a contradiction in the model. Whether a path names a field the type has is settled
  * where the term is made.
  *
- * <p><b>Across parameters, a product is the answer rather than a gap.</b> Rules reach this input
- * from the declarations of its parameters and from nowhere else: one reading per parameter, and
- * nothing a body writes reaches any of them. Two parameters are therefore related by nothing, and a
- * form spanning both is answered by solving each parameter's part of it against that parameter's
- * rules and adding the results — the parts stay forms, and only the answers are added. A day when a
- * behavior's own clauses relate its parameters is the day that composition has to change, and it is
- * the only place it does.
+ * <p><b>Across parameters, one space and not a product of them.</b> Rules reach this input from the
+ * declarations of its parameters and from nowhere else: one reading per parameter, and nothing a
+ * body writes reaches any of them. Two parameters are therefore related by nothing the declarations
+ * say — which is a fact about what has been read and not a reason to keep the readings apart. They
+ * are renamed into this input's own names and said together, so a form spanning both is answered by
+ * projecting out of that one space rather than by adding up what each parameter's rules leave its
+ * own part. Adding the parts is what a rule relating two of them cannot survive, and a day when
+ * something does relate them — a condition a body wrote — is a day this needs no rearranging for.
+ *
+ * <p>Which is why nothing here asks a parameter whether anything is left. Every parameter's reading
+ * is in that space, so a reading kept beside it could answer the same question over the same rules
+ * renamed, and which of the two spoke would be settled by the order they were asked in — with the
+ * one that cannot see across two parameters asked first.
  */
 public sealed interface Quantities permits ReadQuantities {
 

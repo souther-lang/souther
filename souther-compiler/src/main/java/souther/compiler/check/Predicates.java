@@ -156,7 +156,7 @@ final class Predicates {
      */
     record Fact(List<FactSubject> keys, boolean positive) {
 
-        boolean entailedBy(PredicateFacts facts) {
+        boolean entailedBy(PredicateFacts<FactSubject> facts) {
             for (FactSubject key : keys) {
                 if (facts.entails(key, positive)) {
                     return true;
@@ -165,7 +165,7 @@ final class Predicates {
             return false;
         }
 
-        boolean refutedBy(PredicateFacts facts) {
+        boolean refutedBy(PredicateFacts<FactSubject> facts) {
             return facts.refutes(keys.get(0), positive);
         }
     }
@@ -317,13 +317,13 @@ final class Predicates {
             return out;
         }
 
-        boolean dischargedBy(NumericDomain<FactSubject> d, PredicateFacts facts) {
+        boolean dischargedBy(NumericDomain<FactSubject> d, PredicateFacts<FactSubject> facts) {
             return numeric != null && d.entails(numeric.form(), numeric.rel())
                     || fact != null && fact.entailedBy(facts)
                     || piecewise != null && !decidedAsWritten(d, facts) && piecewise.entailedBy(d);
         }
 
-        boolean refutedBy(NumericDomain<FactSubject> d, PredicateFacts facts) {
+        boolean refutedBy(NumericDomain<FactSubject> d, PredicateFacts<FactSubject> facts) {
             return numeric != null && d.refutes(numeric.form(), numeric.rel())
                     || fact != null && fact.refutedBy(facts)
                     || piecewise != null && !decidedAsWritten(d, facts) && piecewise.refutedBy(d);
@@ -340,7 +340,7 @@ final class Predicates {
          * contradicting itself rather than an answer. What the cases are for is a clause the reading
          * that takes the call as an unknown cannot settle, and that is untouched.
          */
-        private boolean decidedAsWritten(NumericDomain<FactSubject> d, PredicateFacts facts) {
+        private boolean decidedAsWritten(NumericDomain<FactSubject> d, PredicateFacts<FactSubject> facts) {
             return numeric != null
                     && (d.entails(numeric.form(), numeric.rel())
                             || d.refutes(numeric.form(), numeric.rel()))
