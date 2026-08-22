@@ -38,7 +38,7 @@ class OneCallSettlesOneSignatureTest {
     /** {@code List.filter(x -> true, [])} — nothing in the call says what the list holds. */
     private static Hir.Expr filterOverAnEmptyList() {
         Hir.Block predicate = new Hir.Block(List.of(BINDERS.binder("x", POS)),
-                new Hir.BoolLit(true, POS, null), POS, null);
+                new Hir.BoolLit(true, POS, null), souther.compiler.types.RuleOrigin.unwritten(), POS, null);
         return new Hir.Apply("List.filter", new ValueName.Stdlib("List", "filter"),
                 new ReachName.OfLibrary(new ValueName.Stdlib("List", "filter")),
                 List.of(predicate, new Hir.ListLit(List.of(), POS, null)), ConstructionOrigin.own(), POS, null);

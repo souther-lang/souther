@@ -282,7 +282,8 @@ public final class Elaborator {
                     joined = TypeOps.joinAt(expected, tt, et);
                 }
                 if (joined != null) {
-                    yield new Core.If(cond, then, els, iff.origin(), joined, iff.pos());
+                    yield new Core.If(cond, then, els, iff.origin(), joined, iff.pos(),
+                            ctx.within());
                 }
                 throw CompileException.of(Diagnostic
                                 .at(iff.pos(), 2)
@@ -338,8 +339,8 @@ public final class Elaborator {
                     }
                     joined = next;
                 }
-                yield new Core.IfConstructed(construct, ic.binder(), then, arms, ic.origin(), joined,
-                        ic.pos());
+                yield new Core.IfConstructed(construct, ic.binder(), then, arms, ic.origin(),
+                        joined, ic.pos(), ctx.within());
             }
             case Hir.ListLit lit -> {
                 if (lit.elements().isEmpty()) {
@@ -743,7 +744,9 @@ public final class Elaborator {
         // application has settled it — before that it names variables, and a variable states no type.
         Type want = declaredResult != null && !decided.open(declaredResult)
                 ? decided.zonk(declaredResult) : expected;
-        Core body = elaborate(ex.body(), inner.deciding(decided), ctx, want);
+        // Everything the copy holds stands in this expansion, which is what a fork inside it needs
+        // in order to say which copy it is — the call site is here and nowhere below.
+        Core body = elaborate(ex.body(), inner.deciding(decided), ctx.inside(ex.application()), want);
         Type type = body.type();
         if (declaredResult != null) {
             // What the body answers decides a variable the arguments left open — a result the
@@ -1296,7 +1299,7 @@ public final class Elaborator {
                                     Type.show(t), Type.show(f)))
                             .build());
                 }
-                yield new Core.If(cond, then, els, iff.origin(), t, iff.pos());
+                yield new Core.If(cond, then, els, iff.origin(), t, iff.pos(), ctx.within());
             }
             // a helper that answers a function: `adder(5)` expands to the lambda under the bindings
             // its arguments became, and what those captured is what the lambda closes over

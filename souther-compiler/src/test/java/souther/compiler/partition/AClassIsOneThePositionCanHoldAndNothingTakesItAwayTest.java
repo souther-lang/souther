@@ -83,7 +83,8 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                 .ask(new souther.compiler.query.Adequacy.Inputs(read.module())).value()
                 .get(behavior);
         GuardThresholds.Guards guards = GuardThresholds.of(behavior, body,
-                CoverageSites.of(checked.behaviorBodies()), inputs, read.symbols());
+                CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
+                checked.supplied()), inputs, read.symbols());
         Partitions.Partitioning base =
                 Partitions.of(read.spec().name(), inputs, read.symbols(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return classesOf(Partitions.withThresholds(base, guards.thresholds(), read.symbols(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES,
@@ -398,7 +399,8 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
         Core body = checked.behaviorBodies().get(read.spec().name());
         assertNotNull(body, "the behavior under test has a body");
         GuardThresholds.Guards guards = GuardThresholds.of(read.spec().name(), body,
-                CoverageSites.of(checked.behaviorBodies()),
+                CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
+                checked.supplied()),
                 read.compilation().db()
                         .ask(new souther.compiler.query.Adequacy.Inputs(read.module())).value()
                         .get(read.spec().name()),

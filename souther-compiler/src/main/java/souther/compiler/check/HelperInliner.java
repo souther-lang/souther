@@ -344,6 +344,20 @@ public final class HelperInliner {
     /** Bindings holding the same elements as another binding, and bindings holding elements made
      *  from another's. Written where an expansion removes the operation that says so. */
     private final ElementProvenance.Builder provenance = new ElementProvenance.Builder();
+    /** Which rule each expansion was handed, by the parameter it was handed to. Read here for the
+     *  same reason the element bindings are: this is where the call site still stands. */
+    private final souther.compiler.coverage.SuppliedRules.Builder supplied =
+            new souther.compiler.coverage.SuppliedRules.Builder();
+    /** Which rule each binding that holds one stands for. Kept by binding rather than by the writing
+     *  it was made in: a binding tells itself from every other, and what a name stands for is the
+     *  same question wherever the name is read. */
+    private final Map<BindingId, souther.compiler.coverage.SuppliedRules.RuleIdentity> rules = new LinkedHashMap<>();
+    /** Which declaration each binding that holds a callable stands for. A name is where a callable
+     *  was put, and the copies a call through it makes are copies of what it holds. Read by the same
+     *  thing that reads it where the declarations are walked, so the two cannot come to disagree
+     *  about what a name means. */
+    private souther.compiler.coverage.NamedCallables callables =
+            souther.compiler.coverage.NamedCallables.NONE;
 
     /** Every recursion in reach, which is exactly what {@link #inline} leaves a call standing to —
      *  this module's own, what its imports publish to it, and the library underneath both. What a
@@ -395,6 +409,11 @@ public final class HelperInliner {
      */
     public ElementProvenance provenance() {
         return provenance.built();
+    }
+
+    /** Which rule each expansion of this body was handed, taken from the same place. */
+    public souther.compiler.coverage.SuppliedRules suppliedRules() {
+        return supplied.built();
     }
 
     /**
@@ -462,6 +481,12 @@ public final class HelperInliner {
      */
     public Map<String, Hir.FnDef> held() {
         return table.held();
+    }
+
+    /** Every declaration this body can reach, this module's own and the library's. What a reader
+     *  asking about a fork wants: the fork may have been written in either. */
+    public Map<String, Hir.FnDef> reachable() {
+        return table.reachable();
     }
 
     /**
@@ -806,6 +831,68 @@ public final class HelperInliner {
      * is the namespace the table is keyed by, and which namespace to look in is decided by what it
      * denotes, never by the text. A name that names nothing has neither, so it is not asked at all.
      */
+    /**
+     * What a rule handed to the function parameter {@code parameter} is expanded under.
+     *
+     * <p>Written here and read by whoever asks which rule a call site supplied, so the name and the
+     * question about it are one thing. Two spellings of it would agree until the day one of them
+     * changed, and what would go wrong then is that copies of a fork deciding by two different
+     * rules would quietly be counted as one.
+     */
+    public static String suppliedAs(String parameter) {
+        return SUPPLIED + parameter;
+    }
+
+    /** The one spelling for a rule written at a call site. */
+    private static final String SUPPLIED = "$";
+
+    /**
+     * Which rule {@code named} stands for, or null where nothing here says.
+     *
+     * <p>A name bound to a rule is not the rule: two names for one declaration are one rule, and one
+     * name in two copies of a body is one rule as well, while the bindings behind them are as many
+     * as there are copies. So a local is looked through to what it was given, and what is answered
+     * is what the author wrote.
+     */
+    private souther.compiler.coverage.SuppliedRules.RuleIdentity ruleOf(Hir.Var.Denoting named) {
+        if (!(named.denotes() instanceof ValueName.Local local)) {
+            return named.denotes() == null ? null
+                    : new souther.compiler.coverage.SuppliedRules.RuleIdentity.Named(
+                            named.denotes());
+        }
+        return rules.get(local.id());
+    }
+
+    /**
+     * Which declaration {@code named} reaches, following a name to what it was bound to.
+     *
+     * <p>Null where nothing here says. A parameter holding a function is one: which callable it is
+     * was decided by whoever called this, and answering with the parameter's own spelling would be
+     * a declaration of that name, of which there is none.
+     */
+    private String reaches(Hir.Var.Denoting named) {
+        return callables.reached(named);
+    }
+
+    /** Says that {@code binding} holds whatever {@code value} is. */
+    private void holds(BindingId binding, Hir.Expr value) {
+        callables = callables.and(binding, value);
+    }
+
+    /** Says that {@code binding} holds {@code rule}, where anything says what it holds. */
+    private void stands(BindingId binding, souther.compiler.coverage.SuppliedRules.RuleIdentity rule) {
+        if (rule != null) {
+            rules.put(binding, rule);
+        }
+    }
+
+    /** The same, of a rule written out where it stands. */
+    private static souther.compiler.coverage.SuppliedRules.RuleIdentity ruleOf(Hir.Block written) {
+        return written.rule().isWritten()
+                ? new souther.compiler.coverage.SuppliedRules.RuleIdentity.Written(written.rule())
+                : null;
+    }
+
     private Hir.FnDef expands(Hir.Var.Denoting named) {
         String reachedBy = named.reaches();
         return switch (named.denotes()) {
@@ -1033,6 +1120,8 @@ public final class HelperInliner {
                 if (aliased != null) {
                     BindingId alias = li.binder().id();
                     writing.scopedLambdas().put(alias, new ScopedLambda(aliased));
+                    stands(alias, ruleOf((Hir.Var.Denoting) value));
+                    holds(alias, value);
                     Hir.Expr aliasBody = inline(li.body());
                     writing.scopedLambdas().remove(alias);
                     yield references(aliasBody, alias)
@@ -1060,6 +1149,12 @@ public final class HelperInliner {
                 writing.scopedLambdas().put(bound, new ScopedLambda(
                         Hir.FnDef.lambda(li.name(), params, null,
                                 new Hir.FnBody.Written(lambda.body()), li.pos())));
+                // Read off what the author bound, not off what it became: a name reaching a place
+                // that wants a function is wrapped in a block written at that place, and two names
+                // for one declaration would come out as two rules written in two places.
+                stands(bound, li.value() instanceof Hir.Var.Denoting named ? ruleOf(named)
+                        : ruleOf(lambda));
+                holds(bound, li.value());
                 Hir.Expr body = inline(li.body());
                 writing.scopedLambdas().remove(bound);
                 // if the binding is still read, the function was used as a value, not just applied —
@@ -1078,7 +1173,8 @@ public final class HelperInliner {
                     tg.region());
             case Hir.ListComp comp -> new Hir.ListComp(inline(comp.element()), inlineList(comp.guards()),
                     comp.origin(), comp.pos(), comp.region());
-            case Hir.Block block -> new Hir.Block(block.params(), inline(block.body()), block.pos(),
+            case Hir.Block block -> new Hir.Block(block.params(), inline(block.body()), block.rule(),
+                    block.pos(),
                     block.region());
             case Hir.IntLit _ -> e;
             case Hir.DecimalLit _ -> e;
@@ -1160,7 +1256,12 @@ public final class HelperInliner {
         // is what would otherwise lose that: each binding's type would be read on its own,
         // and nothing left afterwards says the two came from one application.
         Map<String, Type> applied = instantiation(helper, mine);
-        Arguments arguments = bindArguments(rawCall, call, helper, args, applied, ours);
+        // Which declaration this copy is of, following a name to what it holds. The name is where
+        // a callable was put and is not the callable: read as one, a copy made through a name is a
+        // copy of a declaration nobody wrote, and nothing downstream can match it to the one whose
+        // parameters were named.
+        Arguments arguments =
+                bindArguments(rawCall, call, helper, args, applied, ours, mine, reaches(callee));
         // A body this compile cannot show is copied with the call site stamped over it, so a report
         // from inside it points at the user's call rather than at a line nobody holds — and the
         // stamp says that is what it is doing, so nothing downstream reads the call as the place the
@@ -1235,7 +1336,7 @@ public final class HelperInliner {
      */
     private Arguments bindArguments(Hir.Apply rawCall, Hir.Apply call, Hir.FnDef helper,
                                     List<Hir.Expr> args, Map<String, Type> applied,
-                                    Hir.Binders ours) {
+                                    Hir.Binders ours, BindingOwner mine, String declaration) {
         // what stands in the body for each of the callee's parameters: the name it is written
         // as and what that name resolved to at the call site, so the expansion carries the
         // argument's own answer rather than deciding one for it
@@ -1257,6 +1358,24 @@ public final class HelperInliner {
                 given.add(new Hir.Given(instantiated(p.type(), applied), arg,
                         references(helper.writtenBody(), p.binder().id()), arrivesAs(arg)));
                 Hir.FnType declares = declaredFn(p.type(), applied);
+                // Which rule this call handed to this parameter, said where the call site is
+                // still here to say it. What the expansion holds afterwards is the rule's own body
+                // standing where the parameter was, and nothing in that says whether the caller
+                // supplied the rule or what the rule reads.
+                // Taken from the call as the author wrote it. A name handed to a function
+                // parameter is wrapped in a lambda before it gets here where the arities have to be
+                // made to meet, and the wrapper is written at the call site -- so read off what
+                // arrives, naming one declaration at two call sites would be two rules.
+                Hir.Expr authored = rawCall.args().size() == args.size()
+                        ? rawCall.args().get(i) : arg;
+                souther.compiler.coverage.SuppliedRules.RuleIdentity handedIn = authored instanceof Hir.Var.Denoting handed ? ruleOf(handed)
+                        : authored instanceof Hir.Block written ? ruleOf(written) : null;
+                // Both, or nothing. A copy whose declaration nothing here names cannot be matched
+                // against the one whose parameters were named, and recording it under a name that
+                // is not a declaration's would put it under one nobody wrote.
+                if (handedIn != null && declaration != null) {
+                    supplied.handed(mine, declaration, p.name(), handedIn);
+                }
                 if (arg instanceof Hir.Var.Denoting fnName) {
                     // A name handed to a function parameter is substituted through: what
                     // applies it applies what it stands for. What it stands for is declared
@@ -1265,7 +1384,7 @@ public final class HelperInliner {
                     // so the two are read against each other without either being re-typed.
                     subst.put(p.binder().id(), new Substituted(fnName.name(), fnName.denotes()));
                 } else if (arg instanceof Hir.Block lambda) {
-                    Hir.Binder f = ours.binder("$" + p.name(), lambda.pos());
+                    Hir.Binder f = ours.binder(suppliedAs(p.name()), lambda.pos());
                     subst.put(p.binder().id(), Substituted.of(f));
                     // The lambda is registered under what the callee declared of the
                     // parameter it was given to, this application's variables written in. So
@@ -1288,6 +1407,7 @@ public final class HelperInliner {
                                     declares == null ? null : declares.result(),
                                     new Hir.FnBody.Written(lambda.body()), lambda.pos()),
                             new LambdaOrigin(p.name(), helper.name(), lambda.pos())));
+                    stands(f.id(), ruleOf(lambda));
                     unreduced.put(f.id(),
                             new Hir.Bound(f, instantiated(p.type(), applied), lambda));
                 } else {
@@ -1352,7 +1472,7 @@ public final class HelperInliner {
         // name, and these are the parameters and the call it stands for.
         return new Hir.Block(params,
                 new Hir.Apply(function, args, ConstructionOrigin.own(), function.pos(), null),
-                function.pos(), null);
+                souther.compiler.types.RuleOrigin.unwritten(), function.pos(), null);
     }
 
     /**
@@ -1858,8 +1978,10 @@ public final class HelperInliner {
                 for (Hir.Binder p : block.params()) {
                     params.add(renaming.copy().of(p));
                 }
+                // The rule is the block's own and is not renamed. What a copy is stamped with is
+                // where a reader is sent, and which rule this is has to be the same in every copy.
                 yield new Hir.Block(params,
-                        rename(block.body(), renaming),
+                        rename(block.body(), renaming), block.rule(),
                         renaming.at(block.pos()), renaming.over(block.region()));
             }
             case Hir.IntLit lit -> renaming.stamps()

@@ -396,7 +396,11 @@ public final class Adequacy {
                 return Answer.of(Ordered.map(Map.of()));
             }
             souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.of(bodies);
+                    souther.compiler.coverage.CoverageSites.of(bodies,
+                            checked == null
+                                    ? souther.compiler.coverage.DecisionSources.NONE
+                                    : checked.decisions(),
+                            checked == null ? souther.compiler.coverage.SuppliedRules.NONE : checked.supplied());
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             Map<String, souther.compiler.check.PathReachability.Answers> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
@@ -653,7 +657,11 @@ public final class Adequacy {
             Map<String, souther.compiler.core.Core> producing =
                     checkedBodies == null ? Map.of() : checkedBodies.behaviorBodies();
             souther.compiler.coverage.CoverageSites.Plan producingPlan =
-                    souther.compiler.coverage.CoverageSites.of(producing);
+                    souther.compiler.coverage.CoverageSites.of(producing,
+                            checkedBodies == null
+                                    ? souther.compiler.coverage.DecisionSources.NONE
+                                    : checkedBodies.decisions(),
+                            checkedBodies == null ? souther.compiler.coverage.SuppliedRules.NONE : checkedBodies.supplied());
             Map<String, souther.compiler.check.PathReachability.Answers.AsRun> reachableArms = db.ask(new Arrived(name)).value();
             Map<String, SignatureEvidence> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
@@ -706,7 +714,11 @@ public final class Adequacy {
             Map<String, souther.compiler.check.ElementBindings> elementsOf =
                     checked == null ? Map.of() : checked.elementBindings();
             souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.of(bodies);
+                    souther.compiler.coverage.CoverageSites.of(bodies,
+                            checked == null
+                                    ? souther.compiler.coverage.DecisionSources.NONE
+                                    : checked.decisions(),
+                            checked == null ? souther.compiler.coverage.SuppliedRules.NONE : checked.supplied());
             Map<String, Observed> byTarget = rowsOf(db, name);
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What the guards above each place leave, asked once for the module and read by
@@ -786,7 +798,11 @@ public final class Adequacy {
             Map<String, souther.compiler.check.ElementBindings> elementsOf =
                     checked == null ? Map.of() : checked.elementBindings();
             souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.of(bodies);
+                    souther.compiler.coverage.CoverageSites.of(bodies,
+                            checked == null
+                                    ? souther.compiler.coverage.DecisionSources.NONE
+                                    : checked.decisions(),
+                            checked == null ? souther.compiler.coverage.SuppliedRules.NONE : checked.supplied());
             Map<String, Observed> byTarget = rowsOf(db, name);
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What the guards above each place leave, asked once for the module and read by
@@ -925,7 +941,23 @@ public final class Adequacy {
      */
     public record BranchEvidence(List<souther.compiler.coverage.CoverageSites.Site> all,
                                  Set<Integer> covered, Set<Integer> contradicted,
-                                 MeasurementStatus status, Reason reason) {
+                                 MeasurementStatus observation, MeasurementStatus status,
+                                 Reason reason) {
+
+        /**
+         * Whether every row that bears on these arms could be read, and whether this analysis
+         * stands.
+         *
+         * <p>Beside {@link #status} and not the same question. Two things leave a measurement short
+         * of complete and only one of them is about the rows: a row nothing could read leaves every
+         * arm undecided, while an obligation nothing can tell from its neighbour leaves that one
+         * obligation undecided and says nothing about the rest. Folded into one number, the second
+         * took the first's meaning -- an arm no row goes through, and nothing uncertain about it,
+         * stopped being reported because a helper elsewhere in the body could not be told apart.
+         */
+        public MeasurementStatus observation() {
+            return observation;
+        }
 
         /**
          * Why a behavior's arms have no number, in the order the measurement asks.
@@ -961,7 +993,8 @@ public final class Adequacy {
         }
 
         public static BranchEvidence unavailable(Reason reason) {
-            return new BranchEvidence(List.of(), Set.of(), Set.of(), reason.status(), reason);
+            return new BranchEvidence(List.of(), Set.of(), Set.of(), reason.status(),
+                    reason.status(), reason);
         }
 
         /**
@@ -982,8 +1015,18 @@ public final class Adequacy {
             // A proof a row has already disproved is not something to report a complete measurement
             // over. What is wrong is this analysis, not the model's rows, and a number given as though
             // nothing had happened is the one thing that must not come out of it.
-            return new BranchEvidence(owed, counted, reachable.provedWrong(),
-                    reachable.provedWrong().isEmpty() ? status : MeasurementStatus.PARTIAL, null);
+            MeasurementStatus observation =
+                    reachable.provedWrong().isEmpty() ? status : MeasurementStatus.PARTIAL;
+            BranchEvidence measured = new BranchEvidence(owed, counted,
+                    reachable.provedWrong(), observation, observation, null);
+            // Arms counted as one that nothing shows are one. What the numbers then hold is more
+            // than they say, so they are not a complete measurement of what they name — a count
+            // that says every arm is covered while holding two predicates under one of them is the
+            // sentence this is against, and a status of complete beside it is that sentence in the
+            // one field a build reads.
+            return measured.unsettledDecisions().isEmpty() ? measured
+                    : new BranchEvidence(owed, counted, reachable.provedWrong(),
+                            observation, MeasurementStatus.PARTIAL, null);
         }
 
         public BranchEvidence {
@@ -1049,6 +1092,57 @@ public final class Adequacy {
         }
 
         /**
+         * The forks whose arms are owed for a rule this could not work out.
+         *
+         * <p>What an arm of a fork the caller decides is owed for is one rule, and this is where the
+         * declaration says the caller decides and the occurrence could not say which rule arrived.
+         * What that leaves open is how many rules the arm stands for: copies of the fork put
+         * together, or one place several rules reach. Counted as one, which is the answer that risks
+         * the least — split, each would be owed a row establishing what the row beside it already
+         * does, and a specific piece of work that is already done is worse to be told than nothing.
+         *
+         * <p>So it is said instead. A count that quietly holds two rules where it says one is the
+         * shape of a measure reporting a behavior complete over something nothing ran, and naming
+         * them is what keeps that from being silent.
+         *
+         * <p>However many places it was counted at, which is why it is not named for that. Which
+         * module wrote the fork does not come into it either: a helper of this module's own deciding
+         * by a rule it was handed is the same shape as one the library wrote.
+         */
+        /**
+         * Whether nothing established how many rules this obligation stands for.
+         *
+         * <p>Not how many places it was counted at. Which rule decides at a fork the caller decides
+         * is what says what one obligation is, and where nothing said, one place can be as many
+         * obligations as there are rules reaching it — a rule chosen while the behavior runs arrives
+         * at one call site, and the arms one of them takes say nothing about the arms another would.
+         * Asked as "were several places put together", a single place came back settled and its arms
+         * were judged as though one rule had been through them.
+         *
+         * <p>One question and one answer, asked by what says so and by what acts on it. Asked one
+         * way where it is reported and another where a row is judged against it, a fork could be
+         * left out of what the rows are owed and named nowhere — an arm nothing reaches, missing
+         * from the findings, over a measurement still calling itself complete.
+         */
+        private static boolean unsettledDecision(
+                souther.compiler.coverage.CoverageSites.Obligation key) {
+            return !key.decided().isSettled();
+        }
+
+        public List<souther.compiler.types.CoverageOrigin> unsettledDecisions() {
+            List<souther.compiler.types.CoverageOrigin> out = new ArrayList<>();
+            byObligation().forEach((key, occurrences) -> {
+                // Of the fork and not of its arms. Both arms of one fork are counted together or
+                // neither is, so saying it per arm says one thing twice.
+                if (unsettledDecision(key)
+                        && !out.contains(key.origin())) {
+                    out.add(key.origin());
+                }
+            });
+            return List.copyOf(out);
+        }
+
+        /**
          * The arms no row goes through, one entry per arm.
          *
          * <p>Named at the first occurrence the body holds. Where the copies keep the positions they
@@ -1065,8 +1159,18 @@ public final class Adequacy {
          */
         public List<souther.compiler.coverage.CoverageSites.Site> unreached() {
             List<souther.compiler.coverage.CoverageSites.Site> out = new ArrayList<>();
-            for (List<souther.compiler.coverage.CoverageSites.Site> occurrences
-                    : byObligation().values()) {
+            for (Map.Entry<souther.compiler.coverage.CoverageSites.Obligation,
+                    List<souther.compiler.coverage.CoverageSites.Site>> each
+                    : byObligation().entrySet()) {
+                // An obligation whose occurrences were put together without anything establishing
+                // that they are one is not one this can say a row misses: a row through either of
+                // them may or may not be a row through this one. Asked the same way it is said —
+                // one occurrence is nothing to be told from another, and what its arms did is read
+                // like any other's.
+                if (unsettledDecision(each.getKey())) {
+                    continue;
+                }
+                List<souther.compiler.coverage.CoverageSites.Site> occurrences = each.getValue();
                 if (occurrences.stream().noneMatch(site -> covered.contains(site.index()))) {
                     out.add(occurrences.get(0));
                 }
@@ -1389,7 +1493,11 @@ public final class Adequacy {
             Map<String, souther.compiler.check.ElementBindings> elementsOf =
                     checked == null ? Map.of() : checked.elementBindings();
             souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.of(bodies);
+                    souther.compiler.coverage.CoverageSites.of(bodies,
+                            checked == null
+                                    ? souther.compiler.coverage.DecisionSources.NONE
+                                    : checked.decisions(),
+                            checked == null ? souther.compiler.coverage.SuppliedRules.NONE : checked.supplied());
             Map<String, Observed> byTarget = rowsOf(db, name);
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What the guards above each place leave, asked once for the module and read by
@@ -2227,7 +2335,11 @@ public final class Adequacy {
          *  exists. */
         private static void armFindings(Hir.BehaviorDef behavior, BranchEvidence branch,
                                         List<Finding> out) {
-            if (branch == null || branch.status() != MeasurementStatus.COMPLETE) {
+            // Asked of what was observed and not of the measurement as a whole. An obligation
+            // nothing can tell from its neighbour is undecidable on its own and is left out of
+            // BranchEvidence#unreached already; gating on the number that falls for it as well threw
+            // away every arm the rows certainly do not reach.
+            if (branch == null || branch.observation() != MeasurementStatus.COMPLETE) {
                 return;
             }
             for (souther.compiler.coverage.CoverageSites.Site arm : branch.unreached()) {

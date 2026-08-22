@@ -247,7 +247,8 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
     void aSiteCannotHoldAPairTheLanguageDoesNotHave() {
         assertThrows(IllegalArgumentException.class, () -> new CoverageSites.Site("b", built(), null,
                 0, 0, new CoverageSites.Obligation("b",
-                        CoverageOrigin.written("m", 0, CoverageConstruct.COMPREHENSION), 0)));
+                        CoverageOrigin.written("m", 0, CoverageConstruct.COMPREHENSION), 0,
+                        souther.compiler.coverage.DecidedBy.THE_DECLARATION)));
     }
 
     /**
@@ -289,10 +290,10 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
         Core answer = new Core.Int(1, souther.compiler.types.Type.INT, at);
         Core fork = new Core.If(new Core.Bool(true, souther.compiler.types.Type.BOOL, at),
                 answer, new Core.Int(2, souther.compiler.types.Type.INT, at),
-                CoverageOrigin.unwritten(), souther.compiler.types.Type.INT, at);
+                CoverageOrigin.unwritten(), souther.compiler.types.Type.INT, at, java.util.List.of());
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> CoverageSites.of(Map.of("b", fork)));
+                () -> CoverageSites.of(Map.of("b", fork), souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE));
 
         assertTrue(refused.getMessage().contains("no source wrote it"),
                 () -> "the walk says what is wrong with the tree: " + refused.getMessage());
@@ -367,6 +368,6 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
     }
 
     private static CoverageSites.Plan planOf(String source) {
-        return CoverageSites.of(bodiesOf(source));
+        return CoverageSites.of(bodiesOf(source), souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE);
     }
 }

@@ -56,7 +56,7 @@ class CoverageSitesTest {
     }
 
     private static CoverageSites.Plan planOf(String source) {
-        return CoverageSites.of(bodiesOf(source));
+        return CoverageSites.of(bodiesOf(source), souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE);
     }
 
     private static List<String> labels(CoverageSites.Plan plan) {
@@ -187,7 +187,7 @@ class CoverageSitesTest {
                                 | No  -> Score(3)
                         }
                 """);
-        CoverageSites.Plan plan = CoverageSites.of(bodies);
+        CoverageSites.Plan plan = CoverageSites.of(bodies, souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE);
 
         Core.Match outer = (Core.Match) unwrap(bodies.get("scoreFor"));
         Core.Match inner = innerMatch(outer.cases().get(1).body());
@@ -316,7 +316,7 @@ class CoverageSitesTest {
                         | Yes -> unreachable "the caller has already refused a yes"
                         | No  -> Score(0)
                 """);
-        CoverageSites.Plan plan = CoverageSites.of(bodies);
+        CoverageSites.Plan plan = CoverageSites.of(bodies, souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE);
 
         Core.Match match = (Core.Match) unwrap(bodies.get("scoreFor"));
         assertArrayEquals(new int[] {CoverageSites.NO_SITE, 0}, plan.probesOf(match),
@@ -384,7 +384,7 @@ class CoverageSitesTest {
     @Test
     void aSiteIsFoundByTheNodeInstanceTheEmitterHolds() {
         Map<String, Core> bodies = bodiesOf(MODEL);
-        CoverageSites.Plan plan = CoverageSites.of(bodies);
+        CoverageSites.Plan plan = CoverageSites.of(bodies, souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE);
 
         Core body = bodies.get("daysFor");
         Core.Match match = (Core.Match) unwrap(body);
@@ -394,7 +394,7 @@ class CoverageSitesTest {
         assertEquals("case UnderThirty", souther.compiler.report.ArmVocabulary.label(plan.site(arms[0])));
 
         Core.Match copy = new Core.Match(match.scrutinee(), match.cases(), match.origin(),
-                match.type(), match.pos());
+                match.type(), match.pos(), java.util.List.of());
         assertEquals(match, copy, "an equal node is easy to make");
         assertNull(plan.probesOf(copy),
                 "and it is not this one: a value-keyed plan would hand the emitter another arm's probe");
@@ -467,6 +467,6 @@ class CoverageSitesTest {
 
     @Test
     void aModuleWithNoBodiesPlansNothing() {
-        assertSame(true, CoverageSites.of(Map.of()).hasNoProbes());
+        assertSame(true, CoverageSites.of(Map.of(), souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE).hasNoProbes());
     }
 }

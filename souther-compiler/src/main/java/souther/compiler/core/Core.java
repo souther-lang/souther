@@ -254,8 +254,15 @@ public sealed interface Core {
 
     /** {@code origin} is the fork the source wrote this as, carried from the AST so that the copies
      * an expansion made of one fork are one coverage obligation ({@link CoverageOrigin}). */
-    record If(Core cond, Core then, Core els, CoverageOrigin origin, Type type, SourcePos pos)
-            implements Core {}
+    /**
+     * {@code expansion} is which copy of a body this fork stands in, innermost first, empty where it
+     * stands in the body as written. What settles a fork can be a rule the caller supplied, and which rule that
+     * was is a fact about this copy — so it travels with the fork rather than being recovered from
+     * whatever names the fork's own subtree happens to hold. A rewrite that keeps a fork keeps this.
+     */
+    record If(Core cond, Core then, Core els, CoverageOrigin origin, Type type, SourcePos pos,
+              List<souther.compiler.types.BindingOwner> expansion) implements Core {
+    }
 
     /**
      * An attempted construction: {@code construct}'s invariant decides the branch. It is built and
@@ -268,8 +275,16 @@ public sealed interface Core {
      * the {@code Result} carries selects one; the checker has already established that every named
      * clause is answered, so one always matches.
      */
+    /**
+     * {@code expansion} is which copy of a body this fork stands in, innermost first, empty where it
+     * stands in the body as written. What settles a fork can be a rule the caller supplied, and which rule that
+     * was is a fact about this copy — so it travels with the fork rather than being recovered from
+     * whatever names the fork's own subtree happens to hold. A rewrite that keeps a fork keeps this.
+     */
     record IfConstructed(Construct construct, Hir.Binder binder, Core then, List<ElseArm> els,
-                         CoverageOrigin origin, Type type, SourcePos pos) implements Core {}
+                         CoverageOrigin origin, Type type, SourcePos pos,
+                         List<souther.compiler.types.BindingOwner> expansion) implements Core {
+    }
 
     /** One departure of an attempted construction: the clause it answers ({@link Optional#empty()}
      * for any failure) and the value taken. */
@@ -445,8 +460,15 @@ public sealed interface Core {
         }
     }
 
-    record Match(Core scrutinee, List<Case> cases, CoverageOrigin origin, Type type, SourcePos pos)
-            implements Core {}
+    /**
+     * {@code expansion} is which copy of a body this fork stands in, innermost first, empty where it
+     * stands in the body as written. What settles a fork can be a rule the caller supplied, and which rule that
+     * was is a fact about this copy — so it travels with the fork rather than being recovered from
+     * whatever names the fork's own subtree happens to hold. A rewrite that keeps a fork keeps this.
+     */
+    record Match(Core scrutinee, List<Case> cases, CoverageOrigin origin, Type type, SourcePos pos,
+                 List<souther.compiler.types.BindingOwner> expansion) implements Core {
+    }
 
     /** {@code unreachable "reason"}: the position it stands in gets no value, and the reason is the
      * message the abort carries. Its type is {@link Type.Never}, which fits whatever was expected. */
@@ -524,7 +546,8 @@ public sealed interface Core {
                 Core then = atExpr.apply(iff.then());
                 Core els = atExpr.apply(iff.els());
                 yield cond == iff.cond() && then == iff.then() && els == iff.els() ? iff
-                        : new If(cond, then, els, iff.origin(), iff.type(), iff.pos());
+                        : new If(cond, then, els, iff.origin(), iff.type(), iff.pos(),
+                                iff.expansion());
             }
             case IfConstructed ic -> {
                 Construct construct = atConstruction.apply(ic.construct());
@@ -534,8 +557,8 @@ public sealed interface Core {
                     return body == arm.body() ? arm : new ElseArm(arm.clause(), body);
                 });
                 yield construct == ic.construct() && then == ic.then() && els == ic.els() ? ic
-                        : new IfConstructed(construct, ic.binder(), then, els, ic.origin(), ic.type(),
-                                ic.pos());
+                        : new IfConstructed(construct, ic.binder(), then, els, ic.origin(),
+                                ic.type(), ic.pos(), ic.expansion());
             }
             case LetIn li -> {
                 Core value = atExpr.apply(li.value());
@@ -570,7 +593,8 @@ public sealed interface Core {
                 Core scrutinee = atExpr.apply(m.scrutinee());
                 List<Case> cases = each(m.cases(), c -> c.answering(atExpr.apply(c.body())));
                 yield scrutinee == m.scrutinee() && cases == m.cases() ? m
-                        : new Match(scrutinee, cases, m.origin(), m.type(), m.pos());
+                        : new Match(scrutinee, cases, m.origin(), m.type(), m.pos(),
+                                m.expansion());
             }
         };
     }
@@ -586,7 +610,9 @@ public sealed interface Core {
      * would be recomputed by both. Comparing this instead is what tells the two apart.
      *
      * <p>Every place comes out null rather than blank, so a tree that escapes here and is asked
-     * where it is says so at once. Nothing emits one of these, reports on one, or measures one.
+     * where it is says so at once. Which copy of a body a fork stands in is one of them: it is where
+     * the fork is and not what it says, and two readings of one term are the same term whichever
+     * copy each was read out of. Nothing emits one of these, reports on one, or measures one.
      *
      * <p>Written out a case at a time, like {@link #atSlots}: a node's place is on the node, so
      * there is no slot to hand a rewrite. The switch is over a sealed type, so a node kind added
@@ -616,13 +642,13 @@ public sealed interface Core {
                     new PreservedCall(p.operation(), allWithoutTheirPlace(p.args()), p.type(), null);
             case Apply a -> new Apply(readWithoutItsPlace(a.fn()), allWithoutTheirPlace(a.args()), a.type(), null);
             case If iff -> new If(withoutItsPlace(iff.cond()), withoutItsPlace(iff.then()),
-                    withoutItsPlace(iff.els()), null, iff.type(), null);
+                    withoutItsPlace(iff.els()), null, iff.type(), null, List.of());
             case IfConstructed ic -> new IfConstructed(constructWithoutItsPlace(ic.construct()),
                     binderWithoutItsPlace(ic.binder()), withoutItsPlace(ic.then()),
                     ic.els().stream()
                             .map(arm -> new ElseArm(arm.clause(), withoutItsPlace(arm.body())))
                             .toList(),
-                    null, ic.type(), null);
+                    null, ic.type(), null, List.of());
             case LetIn li -> new LetIn(binderWithoutItsPlace(li.binder()), withoutItsPlace(li.value()),
                     withoutItsPlace(li.body()), li.type(), null);
             case Block b -> new Block(b.params().stream().map(Core::binderWithoutItsPlace).toList(),
@@ -638,7 +664,7 @@ public sealed interface Core {
                             .map(c -> new Case(c.pattern(), binderWithoutItsPlace(c.binding()),
                                     withoutItsPlace(c.body()), null))
                             .toList(),
-                    null, m.type(), null);
+                    null, m.type(), null, List.of());
         };
     }
 

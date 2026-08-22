@@ -1268,7 +1268,17 @@ public interface Hir {
      * field, or bound by {@code let}. The parser only accepts one in an argument position, and
      * because it cannot escape, the backend inlines it rather than building a closure.
      */
-    record Block(List<Binder> params, Expr body, SourcePos pos, Region region) implements Expr {
+    /**
+     * {@code x -> expr} — a block.
+     *
+     * <p>{@code rule} is which block of the source this is, minted where the syntax is read and
+     * carried by every copy. A block handed to a function parameter is the rule the fork that
+     * applies it decides by, and telling two of those apart has to survive the body being spliced —
+     * which a position does not, being stamped with the call site wherever the body is one a reader
+     * cannot open.
+     */
+    record Block(List<Binder> params, Expr body, souther.compiler.types.RuleOrigin rule,
+                 SourcePos pos, Region region) implements Expr {
 
         /** How the parameters were written, in order. */
         public List<String> paramNames() {
@@ -2094,7 +2104,7 @@ public interface Hir {
                     x.opens(), x.body(), x.pos(), region);
             case Expansion x -> new Expansion(x.callee(), x.application(), x.bound(), x.given(),
                     x.declaredReturn(), x.body(), x.pos(), region);
-            case Block x -> new Block(x.params(), x.body(), x.pos(), region);
+            case Block x -> new Block(x.params(), x.body(), x.rule(), x.pos(), region);
             case ListLit x -> new ListLit(x.elements(), x.pos(), region);
             case RowCollection x -> new RowCollection(x.elements(), x.pos(), region);
             case ListComp x -> new ListComp(x.element(), x.guards(), x.origin(), x.pos(), region);
@@ -2176,7 +2186,8 @@ public interface Hir {
             }
             case Block bl -> {
                 Expr body = atExpr.apply(bl.body());
-                yield body == bl.body() ? bl : new Block(bl.params(), body, bl.pos(), bl.region());
+                yield body == bl.body() ? bl
+                        : new Block(bl.params(), body, bl.rule(), bl.pos(), bl.region());
             }
             case ListLit l -> {
                 List<Expr> elements = each(l.elements(), atExpr);

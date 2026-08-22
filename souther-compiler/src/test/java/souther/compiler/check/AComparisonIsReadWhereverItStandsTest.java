@@ -106,7 +106,8 @@ class AComparisonIsReadWhereverItStandsTest {
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
+        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
+                checked.supplied());
         Map<ControlPointId, Reachability> found = compilation.db()
                 .ask(new Adequacy.PathReached(module)).value().get(behavior).found();
         List<String> out = new ArrayList<>();

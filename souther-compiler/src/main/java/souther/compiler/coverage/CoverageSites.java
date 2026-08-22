@@ -3,6 +3,8 @@ package souther.compiler.coverage;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.BindingOwner;
 import souther.compiler.types.CoverageConstruct;
 import souther.compiler.types.CoverageOrigin;
 
@@ -45,6 +47,63 @@ import java.util.Map;
 public final class CoverageSites {
 
     /**
+     * Which rule one occurrence of a fork decides by.
+     *
+     * <p>Beside the fork's own construct in what an arm is counted under. A non-recursive helper is
+     * spliced into each body that calls it, and the copies are one arm the author wrote — which
+     * holds while the helper decides for itself. Where the caller hands the rule in, each call
+     * decides by a different rule, and those are different things to cover: a row through one of
+     * them establishes nothing about the next.
+     *
+     * <p>Which of the two a fork is, is {@link DecisionSources}'s answer, read off the declaration
+     * that wrote the fork. Not read off the condition standing here: after expansion the argument
+     * the call site supplied is standing where the parameter was, whether it was the rule or what
+     * the rule reads, and no description of what is left can tell those apart. Two descriptions
+     * that came out alike were counted as one obligation, and a rule nothing exercised was reported
+     * as covered.
+     */
+    private static DecidedBy decidedAt(CoverageOrigin fork, List<BindingOwner> within,
+                                       DecisionSources decisions, SuppliedRules supplied) {
+        if (!(decisions.at(fork) instanceof DecisionSource.Supplied by)) {
+            return DecidedBy.THE_DECLARATION;
+        }
+        // The rules this copy was handed, asked of the copy it is and of the parameters the
+        // declaration named. Both are answers somebody else already had: which copy this is, the
+        // elaboration stamped on the fork; what was handed to each parameter, the call site
+        // recorded. Worked out here instead — from whatever names the fork's own subtree happens to
+        // hold — a fork deciding by a rule that reduced to a constant is a fork with nothing to ask
+        // about, and a combinator nested inside one answered for the fork above it.
+        // The copy of the declaration that wrote this fork, which is not always the innermost copy
+        // the fork stands in: a helper's own fork can be written inside a block it hands to
+        // something else, and what is nearest round it is then that something else's. Which copy is
+        // meant is a copy of that declaration — asked by the names of its parameters instead, a copy
+        // of anything else that spells one the same way answers first, and it answers with its own
+        // rule.
+        for (BindingOwner owner : within) {
+            // Both sides say which declaration by the name this module reaches it under, which is
+            // one name because both took it from one place: the reading walked the table of what
+            // this body can reach, and the expansion looked its callee up in that same table under
+            // the name the call resolved to. A second way of saying which declaration -- one side
+            // naming it, the other spelling it -- would agree until a declaration came to be reached
+            // under two names, and nothing would say which of them a copy was of.
+            if (!by.declaration().equals(supplied.declarationOf(owner))) {
+                continue;
+            }
+            List<SuppliedRules.RuleIdentity> rules = new ArrayList<>();
+            for (String parameter : by.parameters()) {
+                SuppliedRules.RuleIdentity rule = supplied.at(owner, parameter);
+                if (rule != null) {
+                    rules.add(rule);
+                }
+            }
+            if (rules.size() == by.parameters().size()) {
+                return new DecidedBy.BySupplied(rules);
+            }
+        }
+        return DecidedBy.NOT_SAID;
+    }
+
+    /**
      * What stands in an arm's place where the arm answers nothing.
      *
      * <p>The arms of a node are handed to the emitter as an array it indexes by the arm's position, so
@@ -71,8 +130,8 @@ public final class CoverageSites {
      *             comparison, whose origin is its own rather than the fork's: a comparison is one
      *             construct, and what a fork holds several of is arms
      */
-    public record Obligation(String behavior, CoverageOrigin origin, int part) {}
-
+    public record Obligation(String behavior, CoverageOrigin origin, int part,
+                             DecidedBy decided) {}
 
     /**
      * One outcome of one construct, as it stands in the tree that runs.
@@ -143,13 +202,13 @@ public final class CoverageSites {
      *           the pair, and a value that can hold two answers about one place is one a reader
      *           can pick the wrong half of.
      */
-    public record GuardRef(String behavior, CoverageOrigin origin, int siteIndexThen,
-                           int siteIndexElse, SourcePos at) {
+    public record GuardRef(String behavior, CoverageOrigin origin, DecidedBy decided,
+                           int siteIndexThen, int siteIndexElse, SourcePos at) {
 
         /** The fork this is one occurrence of. Two calls of one helper give two of these, and a line
          * drawn on the condition is one line however many of them there are. */
         public Obligation fork() {
-            return new Obligation(behavior, origin, 0);
+            return new Obligation(behavior, origin, 0, decided);
         }
     }
 
@@ -342,12 +401,13 @@ public final class CoverageSites {
 
     /** The sites of every behavior body in one module, numbered in the order the bodies are declared
      * and, within one, in the order the arms are written. */
-    public static Plan of(Map<String, Core> behaviorBodies) {
+    public static Plan of(Map<String, Core> behaviorBodies, DecisionSources decisions,
+                          SuppliedRules supplied) {
         // Which comparisons there are is not this walk's to decide. Asked here and answered once,
         // so that what gets a number and what a line is drawn on are the same collection read twice
         // rather than two descents that happen to agree.
         ComparisonCatalog comparisons = ComparisonCatalog.of(behaviorBodies);
-        Walk walk = new Walk(comparisons);
+        Walk walk = new Walk(comparisons, decisions, supplied);
         for (Map.Entry<String, Core> body : behaviorBodies.entrySet()) {
             walk.behavior(body.getKey(), body.getValue());
         }
@@ -393,8 +453,13 @@ public final class CoverageSites {
          *  whichever behavior it is in — the same rule the probe numbers are under. */
         private int controls;
 
-        Walk(ComparisonCatalog comparisons) {
+        private final DecisionSources decisions;
+        private final SuppliedRules supplied;
+
+        Walk(ComparisonCatalog comparisons, DecisionSources decisions, SuppliedRules supplied) {
             this.comparisons = comparisons;
+            this.decisions = decisions;
+            this.supplied = supplied;
         }
 
         void behavior(String name, Core body) {
@@ -417,12 +482,13 @@ public final class CoverageSites {
          */
         private ControlPointId.ArmOccurrence armOf(SourceOutcome outcome, Core owner,
                                                    CoverageOrigin origin, int part, Core arm,
-                                                   boolean reachable) {
+                                                   boolean reachable,
+                                                   DecidedBy decided) {
             // The arm is made either way. Whether a run through it can be recorded is the second
             // question and only the probe turns on it — an arm nothing could record is still an arm,
             // and the readings that judge one need to be able to name it.
             int probe = reachable && answers(arm) && answering.mayEnter(owner, part)
-                    ? site(outcome, owner, origin, part) : NO_SITE;
+                    ? site(outcome, owner, origin, part, decided) : NO_SITE;
             return new ControlPointId.ArmOccurrence(controls++,
                     probe == NO_SITE ? OptionalInt.empty() : OptionalInt.of(probe),
                     // The fork's own coordinate, as a site takes it: an arm's body is what lowering
@@ -478,7 +544,8 @@ public final class CoverageSites {
          * @param owner the {@code if}, {@code match} or attempted construction the arm is one of
          * @param arm   the arm's body, which says what the arm is made of and not where it is
          */
-        private int site(SourceOutcome outcome, Core owner, CoverageOrigin origin, int part) {
+        private int site(SourceOutcome outcome, Core owner, CoverageOrigin origin, int part,
+                         DecidedBy decided) {
             // Said here because this is where anything is numbered, and the rule is about numbering
             // rather than about comparisons: an arm of a fork nothing wrote is as much a row nobody
             // can be owed as a comparison of one. Stated for the comparisons alone, it left the arms
@@ -495,7 +562,7 @@ public final class CoverageSites {
             // source carried here beside the position would be the wrong half of two
             // answers about one place. The walk holds none for that reason.
             sites.add(new Site(behavior, outcome, Citation.of(owner.pos()),
-                    index, ordinal++, new Obligation(behavior, origin, part)));
+                    index, ordinal++, new Obligation(behavior, origin, part, decided)));
             return index;
         }
 
@@ -565,27 +632,38 @@ public final class CoverageSites {
                 case Core.Construct nd -> nd.values().forEach(given -> walk(given.value(), inside));
                 case Core.If iff -> {
                     walk(iff.cond(), inside);
+                    // Which rule this fork decides by, taken before its arms are numbered: two
+                    // calls of one library combinator are one fork inlined twice and are not one
+                    // thing to cover, and what tells them apart is the rule each was handed.
+                    DecidedBy decided =
+                            decidedAt(iff.origin(), iff.expansion(), decisions, supplied);
                     ControlPointId.ArmOccurrence then =
-                            armOf(HELD, iff, iff.origin(), 0, iff.then(), inside);
+                            armOf(HELD, iff, iff.origin(), 0, iff.then(), inside, decided);
                     walk(iff.then(), inside);
                     ControlPointId.ArmOccurrence els =
-                            armOf(FAILED, iff, iff.origin(), 1, iff.els(), inside);
+                            armOf(FAILED, iff, iff.origin(), 1, iff.els(), inside, decided);
                     walk(iff.els(), inside);
                     byNode.put(iff, probesOf(then, els));
                     arms(iff, new ControlPointId.ArmOccurrence[] {then, els});
                     if (then.isMeasured() || els.isMeasured()) {
-                        guards.add(new GuardRef(behavior, iff.origin(),
+                        guards.add(new GuardRef(behavior, iff.origin(), decided,
                                 then.probe().orElse(NO_SITE), els.probe().orElse(NO_SITE),
                                 iff.pos()));
                     }
                 }
                 case Core.Match m -> {
                     walk(m.scrutinee(), inside);
+                    // What a `match` decides by is its subject, as an `if` decides by its condition.
+                    // A subject the caller's rule answered is a decision the caller made, and its
+                    // arms are one obligation per rule handed in.
+                    DecidedBy decided =
+                            decidedAt(m.origin(), m.expansion(), decisions, supplied);
                     ControlPointId.ArmOccurrence[] arms =
                             new ControlPointId.ArmOccurrence[m.cases().size()];
                     for (int i = 0; i < m.cases().size(); i++) {
                         Core.Case arm = m.cases().get(i);
-                        arms[i] = armOf(matched(arm), m, m.origin(), i, arm.body(), inside);
+                        arms[i] = armOf(matched(arm), m, m.origin(), i, arm.body(), inside,
+                                decided);
                         walk(arm.body(), inside);
                     }
                     byNode.put(m, probesOf(arms));
@@ -593,15 +671,17 @@ public final class CoverageSites {
                 }
                 case Core.IfConstructed ic -> {
                     ic.construct().values().forEach(given -> walk(given.value(), inside));
+                    // And what an attempted construction decides by is the value it is given.
+                    DecidedBy decided =
+                            decidedAt(ic.origin(), ic.expansion(), decisions, supplied);
                     ControlPointId.ArmOccurrence[] arms =
                             new ControlPointId.ArmOccurrence[1 + ic.els().size()];
-                    arms[0] = armOf(BUILT, ic, ic.origin(), 0,
-                            ic.then(), inside);
+                    arms[0] = armOf(BUILT, ic, ic.origin(), 0, ic.then(), inside, decided);
                     walk(ic.then(), inside);
                     for (int i = 0; i < ic.els().size(); i++) {
                         Core.ElseArm arm = ic.els().get(i);
                         arms[i + 1] = armOf(refused(arm), ic, ic.origin(), i + 1,
-                                arm.body(), inside);
+                                arm.body(), inside, decided);
                         walk(arm.body(), inside);
                     }
                     byNode.put(ic, probesOf(arms));
@@ -644,7 +724,7 @@ public final class CoverageSites {
             // one, neither of which a fork can say.
             byComparison.put(comparison,
                     site(new SourceOutcome.Compared(comparison.op()), comparison,
-                            comparison.origin(), 0));
+                            comparison.origin(), 0, DecidedBy.THE_DECLARATION));
             controlByComparison.put(comparison, controls++);
         }
 

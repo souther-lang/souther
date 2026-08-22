@@ -121,7 +121,7 @@ class CallElaboratorNoCalleeTest {
      */
     @Test
     void anApplicationOfSomethingThatIsNotANameIsAnInternalError() {
-        Hir.Expr block = new Hir.Block(List.of(), new Hir.IntLit(1, AT, null), AT, null);
+        Hir.Expr block = new Hir.Block(List.of(), new Hir.IntLit(1, AT, null), souther.compiler.types.RuleOrigin.unwritten(), AT, null);
         RuntimeException e = CallElaborator.noCallee(new Hir.Apply(block,
                 List.of(new Hir.IntLit(1, AT, null)), ConstructionOrigin.own(), AT, null));
 

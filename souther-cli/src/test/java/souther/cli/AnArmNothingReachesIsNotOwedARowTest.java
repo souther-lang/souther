@@ -315,7 +315,8 @@ class AnArmNothingReachesIsNotOwedARowTest {
         compilation.answerEverything();
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
-        return CoverageSites.of(checked.behaviorBodies()).arms("classify").stream()
+        return CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
+                checked.supplied()).arms("classify").stream()
                 .map(CoverageSites.Site::index).toList();
     }
 
@@ -332,7 +333,8 @@ class AnArmNothingReachesIsNotOwedARowTest {
                 null, index, index,
                 new CoverageSites.Obligation("classify",
                         CoverageOrigin.written("t", index,
-                                souther.compiler.types.CoverageConstruct.IF), 0));
+                                souther.compiler.types.CoverageConstruct.IF), 0,
+                        souther.compiler.coverage.DecidedBy.THE_DECLARATION));
     }
 
     /**

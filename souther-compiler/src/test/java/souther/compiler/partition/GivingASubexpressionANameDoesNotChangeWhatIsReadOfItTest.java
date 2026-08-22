@@ -213,7 +213,8 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
                 .filter(each -> each.name().equals(behavior)).findFirst().orElseThrow();
         Core body = checked.behaviorBodies().get(spec.name());
         GuardThresholds.Guards guards = GuardThresholds.of(behavior, body,
-                CoverageSites.of(checked.behaviorBodies()),
+                CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
+                        checked.supplied()),
                 compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior), symbols);
         List<String> out = new java.util.ArrayList<>();
         // The quantity a line is on and where it cuts it, with what names the behavior left out:

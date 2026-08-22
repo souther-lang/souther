@@ -175,6 +175,11 @@
         },
         "arms": { "type": "integer", "minimum": 0 },
         "covered": { "type": "integer", "minimum": 0 },
+        "unsettledDecisions": {
+          "type": "array",
+          "description": "The modules that wrote a fork deciding by a rule its caller supplies, where which rule decides could not be worked out. What an arm of such a fork is owed for is one rule, and this leaves open how many rules it stands for -- copies of it put together, or one place a rule chosen while the behavior runs arrives at. Present and empty where every arm is owed for a rule that was worked out. What it qualifies is `arms` and `covered`: those are read over however many rules that is wherever this is not empty, so a reader taking the pair as complete over each of them would be taking it further than it goes.",
+          "items": { "type": "string" }
+        },
         "unreached": {
           "type": "array",
           "description": "Arms no row goes through.",

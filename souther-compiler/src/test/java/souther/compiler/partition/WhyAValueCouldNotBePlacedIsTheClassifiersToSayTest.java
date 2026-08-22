@@ -86,7 +86,8 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("submit")).findFirst().orElseThrow();
         Core body = checked.behaviorBodies().get("submit");
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
+        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
+                checked.supplied());
         List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
         Partitions.Partitioning partitioning = Partitions.withThresholds(
                 Partitions.of(spec.name(), InputDomain.of(spec, sigs.get("submit"), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),

@@ -65,7 +65,8 @@ class ACallIsAValueOnlyWhenItIsTheConstructionTest {
         assertNotNull(checked, () -> "the model under test compiles: " + primitive);
         Core body = checked.behaviorBodies().get("pick");
         assertNotNull(body);
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
+        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
+                checked.supplied());
         return GuardThresholds.of("pick", body, plan, compilation.db()
                 .ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("pick"), symbols);
     }

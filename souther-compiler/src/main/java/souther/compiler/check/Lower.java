@@ -74,7 +74,7 @@ public final class Lower {
         // What this expansion could not remove travels with what it produced. The inliner was made
         // for this body, so what it left standing is this body's and nothing else's.
         return new Expansion<>(fn.withBody(new Hir.FnBody.Written(desugar(expanded))),
-                inliner.leftStanding(), inliner.provenance());
+                inliner.leftStanding(), inliner.provenance(), inliner.suppliedRules());
     }
 
     /** Which bindings the {@code depends on} names are: the trailing parameters that carry them. A

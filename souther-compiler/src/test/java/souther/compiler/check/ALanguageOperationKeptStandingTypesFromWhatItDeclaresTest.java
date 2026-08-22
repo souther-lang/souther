@@ -55,7 +55,7 @@ class ALanguageOperationKeptStandingTypesFromWhatItDeclaresTest {
         // answered.
         Hir.Binders binders = new Hir.Binders(new BindingOwner.OfValue("demo", "test"));
         Hir.Block step = new Hir.Block(List.of(binders.binder("x", POS)),
-                new Hir.ListLit(List.of(new Hir.IntLit(1, POS, null)), POS, null), POS, null);
+                new Hir.ListLit(List.of(new Hir.IntLit(1, POS, null)), POS, null), souther.compiler.types.RuleOrigin.unwritten(), POS, null);
         Hir.Expr call = new Hir.Apply("List.flatMap", new ValueName.Stdlib("List", "flatMap"),
                 new ReachName.OfLibrary(new ValueName.Stdlib("List", "flatMap")),
                 List.of(step, new Hir.ListLit(List.of(new Hir.IntLit(2, POS, null)), POS, null)),

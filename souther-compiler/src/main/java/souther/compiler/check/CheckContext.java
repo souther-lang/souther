@@ -18,12 +18,97 @@ import java.util.Map;
 public record CheckContext(Symbols symbols, Hir.Data data, Map<ValueName.Behavior, ReqSig> reqs,
                            Map<ValueName.Behavior, ReqSig> callees, boolean makingAnOptional,
                            Preserved preserved,
-                           Map<souther.compiler.types.BindingId, ValueName.Behavior> dependencies) {
+                           Map<souther.compiler.types.BindingId, ValueName.Behavior> dependencies,
+                           java.util.List<souther.compiler.types.BindingOwner> within) {
 
     public CheckContext(Symbols symbols, Hir.Data data, Map<ValueName.Behavior, ReqSig> reqs,
                         Map<ValueName.Behavior, ReqSig> callees, boolean makingAnOptional,
                         Preserved preserved) {
-        this(symbols, data, reqs, callees, makingAnOptional, preserved, Map.of());
+        this(symbols, data, reqs, callees, makingAnOptional, preserved, Map.of(),
+                java.util.List.of());
+    }
+
+    public CheckContext(Symbols symbols, Hir.Data data, Map<ValueName.Behavior, ReqSig> reqs,
+                        Map<ValueName.Behavior, ReqSig> callees, boolean makingAnOptional,
+                        Preserved preserved,
+                        Map<souther.compiler.types.BindingId, ValueName.Behavior> dependencies) {
+        this(symbols, data, reqs, callees, makingAnOptional, preserved, dependencies,
+                java.util.List.of());
+    }
+
+    /**
+     * The same, elaborating what {@code expansion} put here.
+     *
+     * <p>Which copy of a helper's body a fork stands in is known here and nowhere later: the
+     * expansion is the node being elaborated, and what comes out of it is a body with the call site
+     * substituted through. Recovered afterwards from the bindings a fork's condition happens to
+     * read, a fork deciding by something with no name in it — a rule that reduced to a constant —
+     * is a fork nothing can say the copy of.
+     */
+    public CheckContext inside(souther.compiler.types.BindingOwner expansion) {
+        java.util.List<souther.compiler.types.BindingOwner> deeper = new java.util.ArrayList<>();
+        deeper.add(expansion);
+        deeper.addAll(within);
+        return same().within(java.util.List.copyOf(deeper));
+    }
+
+    /**
+     * This context, to change one thing about.
+     *
+     * <p>Every {@code the same context, but} above goes through this, so what one of them does not
+     * name it keeps. Written out a constructor call at a time, each of them left out whatever was
+     * added last -- and the day that was which copy of a body a fork stands in, a fork inside a
+     * helper stopped saying so as soon as the value it was in reached a field.
+     */
+    private Same same() {
+        return new Same(symbols, data, reqs, callees, makingAnOptional, preserved, dependencies,
+                within);
+    }
+
+    /** One context being written out of another. */
+    private record Same(Symbols symbols, Hir.Data data, Map<ValueName.Behavior, ReqSig> reqs,
+                        Map<ValueName.Behavior, ReqSig> callees, boolean makingAnOptional,
+                        Preserved preserved,
+                        Map<souther.compiler.types.BindingId, ValueName.Behavior> dependencies,
+                        java.util.List<souther.compiler.types.BindingOwner> within) {
+
+        CheckContext data(Hir.Data other) {
+            return built(other, reqs, callees, makingAnOptional, preserved, dependencies, within);
+        }
+
+        CheckContext reqs(Map<ValueName.Behavior, ReqSig> required) {
+            return built(data, required, callees, makingAnOptional, preserved, dependencies, within);
+        }
+
+        CheckContext callees(Map<ValueName.Behavior, ReqSig> callable) {
+            return built(data, reqs, callable, makingAnOptional, preserved, dependencies, within);
+        }
+
+        CheckContext makingAnOptional(boolean making) {
+            return built(data, reqs, callees, making, preserved, dependencies, within);
+        }
+
+        CheckContext preserved(Preserved kept) {
+            return built(data, reqs, callees, makingAnOptional, kept, dependencies, within);
+        }
+
+        CheckContext dependencies(
+                Map<souther.compiler.types.BindingId, ValueName.Behavior> bound) {
+            return built(data, reqs, callees, makingAnOptional, preserved, bound, within);
+        }
+
+        CheckContext within(java.util.List<souther.compiler.types.BindingOwner> expansion) {
+            return built(data, reqs, callees, makingAnOptional, preserved, dependencies, expansion);
+        }
+
+        private CheckContext built(Hir.Data data, Map<ValueName.Behavior, ReqSig> reqs,
+                                   Map<ValueName.Behavior, ReqSig> callees,
+                                   boolean makingAnOptional, Preserved preserved,
+                                   Map<souther.compiler.types.BindingId, ValueName.Behavior> deps,
+                                   java.util.List<souther.compiler.types.BindingOwner> within) {
+            return new CheckContext(symbols, data, reqs, callees, makingAnOptional, preserved, deps,
+                    within);
+        }
     }
 
     /**
@@ -42,7 +127,7 @@ public record CheckContext(Symbols symbols, Hir.Data data, Map<ValueName.Behavio
      *  checked stands for. */
     public CheckContext withDependencies(
             Map<souther.compiler.types.BindingId, ValueName.Behavior> bound) {
-        return new CheckContext(symbols, data, reqs, callees, makingAnOptional, preserved, bound);
+        return same().dependencies(bound);
     }
 
     public CheckContext(Symbols symbols, Hir.Data data, Map<ValueName.Behavior, ReqSig> reqs,
@@ -69,21 +154,18 @@ public record CheckContext(Symbols symbols, Hir.Data data, Map<ValueName.Behavio
 
     /** The same context checking a different {@code data}'s invariant, decoder, or encoder. */
     public CheckContext forData(Hir.Data other) {
-        return new CheckContext(symbols, other, reqs, callees, makingAnOptional, preserved,
-                dependencies);
+        return same().data(other);
     }
 
     /** The same context with the behaviors a body may call in scope. */
     public CheckContext withReqs(Map<ValueName.Behavior, ReqSig> required) {
-        return new CheckContext(symbols, data, required, callees, makingAnOptional, preserved,
-                dependencies);
+        return same().reqs(required);
     }
 
     /** The same context with the behaviors a body may call by name in scope — the ones that require
      *  nothing (spec {@code [#calling-a-behavior]}). */
     public CheckContext withCallees(Map<ValueName.Behavior, ReqSig> callable) {
-        return new CheckContext(symbols, data, reqs, callable, makingAnOptional, preserved,
-                dependencies);
+        return same().callees(callable);
     }
 
     /**
@@ -96,7 +178,7 @@ public record CheckContext(Symbols symbols, Hir.Data data, Map<ValueName.Behavio
      * that value.
      */
     public CheckContext makingAnOptional(boolean making) {
-        return new CheckContext(symbols, data, reqs, callees, making, preserved, dependencies);
+        return same().makingAnOptional(making);
     }
 
     /**
@@ -107,8 +189,7 @@ public record CheckContext(Symbols symbols, Hir.Data data, Map<ValueName.Behavio
      * become another representation part-way down.
      */
     public CheckContext preserving(Preserved kept) {
-        return new CheckContext(symbols, data, reqs, callees, makingAnOptional, kept,
-                dependencies);
+        return same().preserved(kept);
     }
 
     /**

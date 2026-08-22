@@ -155,7 +155,8 @@ public final class NewtypeDesugar {
                     new Hir.IfConstructed(go(ic.construct(), symbols), ic.binder(),
                             go(ic.then(), symbols), arms(ic.els(), symbols), ic.origin(), ic.pos(),
                             ic.region());
-            case Hir.Block b -> new Hir.Block(b.params(), go(b.body(), symbols), b.pos(), b.region());
+            case Hir.Block b -> new Hir.Block(b.params(), go(b.body(), symbols), b.rule(), b.pos(),
+                    b.region());
             case Hir.Tuple tup -> new Hir.Tuple(mapExprs(tup.elements(), symbols), tup.pos(),
                     tup.region());
             case Hir.TupleGet tg -> new Hir.TupleGet(go(tg.tuple(), symbols), tg.index(), tg.arity(),

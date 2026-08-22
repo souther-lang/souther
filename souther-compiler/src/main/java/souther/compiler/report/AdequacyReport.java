@@ -959,7 +959,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * arms and says nothing about their combinations, and a report that said "paths covered" would
      * invite an author to stop looking exactly where there is more to find.
      */
-    private void branch(StringBuilder out, BehaviorReport behavior,
+    void branch(StringBuilder out, BehaviorReport behavior,
                                SourceId declaredIn, SourceNameResolver names) {
         Adequacy.BranchEvidence branch = behavior.branch();
         if (branch == null) {
@@ -984,16 +984,32 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             }
             return;
         }
-        boolean decided = branch.status() == MeasurementStatus.COMPLETE;
+        // Two questions and two answers. Whether every row could be read is what says an arm
+        // nothing was seen to reach may still be reached; whether the numbers are a whole measure
+        // falls for that and for a fork whose rule could not be worked out as well. Read as one, a
+        // build whose rows all ran was told a row was not read, and every arm it certainly does not
+        // reach went unsaid.
+        boolean observed = branch.observation() == MeasurementStatus.COMPLETE;
         out.append(String.format("    branch      %d/%d%s%n", branch.coveredObligations(),
-                branch.obligations(), decided ? "" : "   (undecided: a row was not read)"));
+                branch.obligations(), observed ? "" : "   (undecided: a row was not read)"));
         // The position alone where the arm is in the module's own source, which the section this is
         // under already names. It is not always: a body is spliced into whatever calls it, so an arm
         // written in a helper another module declares is in that module's file, and there the file is
         // named with it. Named only where every row was read: an arm a row that never finished might
         // have gone through is undecided, and calling it unreached sends the author after a row that
         // exists.
-        if (!decided) {
+        // Arms this counts as one that it cannot show are one. Said before the arms nothing
+        // reaches, since it qualifies the number above rather than adding to what is missing from
+        // it: a count holding two predicates where it says one is what would otherwise report a
+        // behavior complete over something nothing ran.
+        for (souther.compiler.types.CoverageOrigin together : branch.unsettledDecisions()) {
+            out.append(String.format(
+                    "      · a fork `%s` wrote decides by a rule its caller supplies, and which"
+                            + " rule decides here could not be worked out: what its arms come to is"
+                            + " read over however many rules that is%n",
+                    together.module()));
+        }
+        if (!observed) {
             return;
         }
         for (Adequacy.Finding f : behavior.findings()) {
@@ -1634,7 +1650,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         partition.omitted().forEach(o -> omitted.add(o.axis().toString()));
     }
 
-    private static void branch(ObjectNode behavior, Adequacy.BranchEvidence branch,
+    static void branch(ObjectNode behavior, Adequacy.BranchEvidence branch,
                                DocumentSources sources) {
         if (branch == null) {
             return;
@@ -1643,12 +1659,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         measured(out, branch.status(), branch.reason());
         out.put("arms", branch.obligations());
         out.put("covered", branch.coveredObligations());
-        // Only where every row was read. An arm a row that never finished might have gone through is
-        // undecided, and a field called `unreached` holding it says something that is not so — which
-        // reading `status` beside it does not undo.
+        // Arms counted as one that nothing can show are one, which qualifies the two numbers above.
+        // Said here as well as in the prose, since a count that quietly holds two predicates where
+        // it says one is the shape a consumer would read as a behavior complete over something
+        // nothing ran — and a consumer reads this and not the prose.
+        ArrayNode together = out.putArray("unsettledDecisions");
+        for (souther.compiler.types.CoverageOrigin each : branch.unsettledDecisions()) {
+            together.add(each.module());
+        }
+        // Only where every row was read. An arm a row that never finished might have gone through
+        // is undecided, and a field called `unreached` holding it says something that is not so —
+        // which reading `status` beside it does not undo. Asked of what was observed and not of the
+        // measure as a whole: a fork whose rule could not be worked out leaves that fork's arms out
+        // of `unreached` where they are collected, and says nothing about the arms beside it.
         ArrayNode unreached = out.putArray("unreached");
         List<souther.compiler.coverage.CoverageSites.Site> named =
-                branch.status() == MeasurementStatus.COMPLETE ? branch.unreached() : List.of();
+                branch.observation() == MeasurementStatus.COMPLETE ? branch.unreached() : List.of();
         for (souther.compiler.coverage.CoverageSites.Site arm : named) {
             ObjectNode a = unreached.addObject();
             a.put("label", ArmVocabulary.label(arm));
