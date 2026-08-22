@@ -93,7 +93,7 @@ public record AnswerDependencies(Map<String, Set<Integer>> bySlot) {
             }
         }
         Set<Integer> out = new LinkedHashSet<>();
-        dependsOn(written.expr(), params, bySlot, new LinkedHashMap<>(), out);
+        dependsOn(written.expr(), params, bySlot, new LinkedHashMap<>(), NamedCallables.NONE, out);
         return out;
     }
 
@@ -106,9 +106,9 @@ public record AnswerDependencies(Map<String, Set<Integer>> bySlot) {
      */
     static void dependsOn(Hir.Expr e, Map<BindingId, Integer> params,
                           Map<String, Set<Integer>> bySlot, Map<BindingId, Set<Integer>> bound,
-                          Set<Integer> out) {
+                          NamedCallables named, Set<Integer> out) {
         switch (e) {
-            case Hir.Var.Denoting named when named.denotes() instanceof ValueName.Local local -> {
+            case Hir.Var.Denoting read when read.denotes() instanceof ValueName.Local local -> {
                 Integer slot = params.get(local.id());
                 if (slot != null) {
                     out.add(slot);
@@ -120,32 +120,37 @@ public record AnswerDependencies(Map<String, Set<Integer>> bySlot) {
             }
             case Hir.LetIn let when let.binder() != null && let.binder().binding() != null -> {
                 Set<Integer> holds = new LinkedHashSet<>();
-                dependsOn(let.value(), params, bySlot, bound, holds);
+                dependsOn(let.value(), params, bySlot, bound, named, holds);
                 Map<BindingId, Set<Integer>> wider = new LinkedHashMap<>(bound);
                 wider.put(let.binder().binding(), holds);
-                dependsOn(let.body(), params, bySlot, wider, out);
+                dependsOn(let.body(), params, bySlot, wider,
+                        named.and(let.binder().binding(), let.value()), out);
                 return;
             }
-            // A call through a name is a call to whatever that name was given, and what that is
-            // this does not follow. Read as a call to a declaration of that name, nothing answers
-            // for it and the argument it answers out of goes unread.
-            case Hir.Apply call when call.function() instanceof Hir.Var.Denoting callee
-                    && !(callee.denotes() instanceof ValueName.Local) -> {
+            // A call through a name is a call to whatever that name was bound to, which is what
+            // says who answers for it. Read as a call to a declaration of the name itself, nothing
+            // answers, and every argument is read for want of anything better.
+            case Hir.Apply call when call.function() instanceof Hir.Var.Denoting callee -> {
                 // Only the arguments the callee answers out of. One it never reads is not something
                 // this call's value depends on, whatever else that argument would decide elsewhere.
-                Set<Integer> uses = bySlot.get(callee.reaches());
+                String reaches = named.reached(callee);
+                Set<Integer> uses = reaches == null ? null : bySlot.get(reaches);
                 for (int i = 0; i < call.args().size(); i++) {
                     // Every argument where nothing says which of them this call rests on. What is
                     // lost by reading one it does not is a value said to reach further than it
                     // does; what is lost the other way is a value that reaches and is not followed.
                     if (uses == null || uses.contains(i)) {
-                        dependsOn(call.args().get(i), params, bySlot, bound, out);
+                        dependsOn(call.args().get(i), params, bySlot, bound, named, out);
                     }
                 }
+                // And what is being applied. Applying a parameter is answering out of it, and a
+                // reading that only followed the arguments called a helper that applies what it was
+                // handed a helper that answers out of nothing.
+                dependsOn(call.function(), params, bySlot, bound, named, out);
                 return;
             }
             default -> { }
         }
-        Hir.forEachChild(e, child -> dependsOn(child, params, bySlot, bound, out));
+        Hir.forEachChild(e, child -> dependsOn(child, params, bySlot, bound, named, out));
     }
 }

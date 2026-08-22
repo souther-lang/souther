@@ -109,7 +109,8 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolea
         if (!(fn.body() instanceof Hir.FnBody.Written written)) {
             return;
         }
-        forks(written.expr(), declaration, Rules.of(fn), answersOn, new LinkedHashMap<>(), out);
+        forks(written.expr(), declaration, Rules.of(fn), answersOn, new LinkedHashMap<>(),
+                NamedCallables.NONE, out);
     }
 
     /**
@@ -122,19 +123,19 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolea
      */
     private static void forks(Hir.Expr e, String declaration, Rules rules,
                               AnswerDependencies answersOn, Map<BindingId, Set<String>> bound,
-                              Map<CoverageOrigin, DecisionSource> out) {
+                              NamedCallables named, Map<CoverageOrigin, DecisionSource> out) {
         switch (e) {
             case Hir.If iff ->
-                    said(iff.origin(), iff.cond(), declaration, rules, answersOn, bound, out);
+                    said(iff.origin(), iff.cond(), declaration, rules, answersOn, bound, named, out);
             // Every construct that bears arms, and by what settles which arm is taken. A `match`
             // decides by its subject as an `if` decides by its condition, and a construction that
             // may fail by the value it is given — so a rule the caller supplied reaches all three
             // the same way. Left out, the arms of a `match` over a rule the caller wrote were one
             // obligation however many rules were handed in.
             case Hir.Match match -> said(match.origin(), match.scrutinee(), declaration, rules,
-                    answersOn, bound, out);
+                    answersOn, bound, named, out);
             case Hir.IfConstructed made -> said(made.origin(), made.construct(), declaration, rules,
-                    answersOn, bound, out);
+                    answersOn, bound, named, out);
             // The guards of a comprehension are forks of the lowering rather than of the source, and
             // the lowering runs after the rule has been substituted in. Read here, where the rule is
             // still a parameter: read afterwards, a guard resting on a rule the caller supplied is a
@@ -142,29 +143,31 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolea
             case Hir.ListComp comp -> {
                 for (int i = 0; i < comp.guards().size(); i++) {
                     said(comp.origin().lowered(i), comp.guards().get(i), declaration, rules,
-                            answersOn, bound, out);
+                            answersOn, bound, named, out);
                 }
             }
             case Hir.LetIn let when let.binder() != null && let.binder().binding() != null -> {
                 Set<String> holds = new LinkedHashSet<>();
-                rules.restsOn(let.value(), answersOn, bound, holds);
-                forks(let.value(), declaration, rules, answersOn, bound, out);
+                rules.restsOn(let.value(), answersOn, bound, named, holds);
+                forks(let.value(), declaration, rules, answersOn, bound, named, out);
                 Map<BindingId, Set<String>> wider = new LinkedHashMap<>(bound);
                 wider.put(let.binder().binding(), holds);
-                forks(let.body(), declaration, rules, answersOn, wider, out);
+                forks(let.body(), declaration, rules, answersOn, wider,
+                        named.and(let.binder().binding(), let.value()), out);
                 return;
             }
             default -> { }
         }
-        Hir.forEachChild(e, child -> forks(child, declaration, rules, answersOn, bound, out));
+        Hir.forEachChild(e,
+                child -> forks(child, declaration, rules, answersOn, bound, named, out));
     }
 
     private static void said(CoverageOrigin fork, Hir.Expr cond, String declaration, Rules rules,
                              AnswerDependencies answersOn,
-                             Map<BindingId, Set<String>> bound,
+                             Map<BindingId, Set<String>> bound, NamedCallables named,
                              Map<CoverageOrigin, DecisionSource> out) {
         Set<String> on = new LinkedHashSet<>();
-        rules.restsOn(cond, answersOn, bound, on);
+        rules.restsOn(cond, answersOn, bound, named, on);
         out.putIfAbsent(fork, on.isEmpty() ? DecisionSource.OWN
                 : new DecisionSource.Supplied(declaration, on));
     }
@@ -196,9 +199,9 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolea
          * followed through that helper's own summary.
          */
         void restsOn(Hir.Expr e, AnswerDependencies answersOn,
-                     Map<BindingId, Set<String>> bound, Set<String> out) {
+                     Map<BindingId, Set<String>> bound, NamedCallables named, Set<String> out) {
             switch (e) {
-                case Hir.Var.Denoting named when named.denotes() instanceof ValueName.Local local -> {
+                case Hir.Var.Denoting read when read.denotes() instanceof ValueName.Local local -> {
                     String rule = byBinding.get(local.id());
                     if (rule != null) {
                         out.add(rule);
@@ -210,14 +213,16 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolea
                 }
                 case Hir.LetIn let when let.binder() != null && let.binder().binding() != null -> {
                     Set<String> holds = new LinkedHashSet<>();
-                    restsOn(let.value(), answersOn, bound, holds);
+                    restsOn(let.value(), answersOn, bound, named, holds);
                     Map<BindingId, Set<String>> wider = new LinkedHashMap<>(bound);
                     wider.put(let.binder().binding(), holds);
-                    restsOn(let.body(), answersOn, wider, out);
+                    restsOn(let.body(), answersOn, wider,
+                            named.and(let.binder().binding(), let.value()), out);
                     return;
                 }
                 case Hir.Apply call when call.function() instanceof Hir.Var.Denoting callee -> {
-                    Set<Integer> uses = answersOn.of(callee.reaches());
+                    String reaches = named.reached(callee);
+                    Set<Integer> uses = reaches == null ? null : answersOn.of(reaches);
                     for (int i = 0; i < call.args().size(); i++) {
                         // Only the arguments the callee's answer rests on. An argument it never
                         // reads decides nothing about what this call comes to, whatever the rule
@@ -225,15 +230,15 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolea
                         // wrapped in a lambda and handed to a helper that ignores it made every copy
                         // of the fork above its own obligation.
                         if (uses == null || uses.contains(i)) {
-                            restsOn(call.args().get(i), answersOn, bound, out);
+                            restsOn(call.args().get(i), answersOn, bound, named, out);
                         }
                     }
-                    restsOn(call.function(), answersOn, bound, out);
+                    restsOn(call.function(), answersOn, bound, named, out);
                     return;
                 }
                 default -> { }
             }
-            Hir.forEachChild(e, child -> restsOn(child, answersOn, bound, out));
+            Hir.forEachChild(e, child -> restsOn(child, answersOn, bound, named, out));
         }
     }
 }

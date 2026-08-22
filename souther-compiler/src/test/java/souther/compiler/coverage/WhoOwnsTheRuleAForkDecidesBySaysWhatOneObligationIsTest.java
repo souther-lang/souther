@@ -788,4 +788,80 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
         assertEquals(6, twice.obligations(),
                 "the helper's fork rests on none of the rules, so it is one obligation");
     }
+
+    /**
+     * A name a body binds a callable to is a call to what it holds, not to a declaration of that
+     * name.
+     *
+     * <p>Read as the second, nothing answers what the call rests on -- there is no declaration
+     * spelled that way -- and every argument is read for want of anything better. So a helper that
+     * never reads the rule it was handed was called one that rests on it, and its one fork was owed
+     * a row at every call site.
+     */
+    @Test
+    void aCallThroughANameIsACallToWhatTheNameHolds() {
+        Adequacy.BranchEvidence twice = arms("""
+                module example.rules
+
+                data Yes
+                data No
+                data Verdict = Yes | No
+                data Count = Int
+
+                let ignore (p: (Int) -> Bool, x: Int): Bool = x > 0
+
+                let decide (p: (Int) -> Bool, x: Int): Verdict = {
+                    let f = ignore
+                    if f(p, x) then Yes else No
+                }
+
+                behavior twice : (a: Int, b: Int) -> Count
+                    constructs Count
+                let twice (a, b) =
+                    Count((if decide(n -> n < 18, a) == Yes then 1 else 0)
+                        + (if decide(m -> 18 < m, b) == Yes then 1 else 0))
+
+                example twice
+                    | "both over" : (1, 1) -> Count(2)
+                """, "twice");
+
+        assertEquals(6, twice.obligations(),
+                "the helper answers out of none of the rules, so its fork is one obligation");
+    }
+
+    /**
+     * And applying what a body was handed is answering out of it.
+     *
+     * <p>A call is what it applies as well as what it is given. Read for its arguments alone, a
+     * helper that applies the rule it was handed answers out of nothing, and the fork resting on
+     * what it answered was the declaration's own -- so the rules two call sites wrote were counted
+     * as one.
+     */
+    @Test
+    void applyingWhatWasHandedInIsAnsweringOutOfIt() {
+        Adequacy.BranchEvidence twice = arms("""
+                module example.rules
+
+                data Yes
+                data No
+                data Verdict = Yes | No
+                data Count = Int
+
+                let ask (p: (Int) -> Bool, x: Int): Bool = p(x)
+
+                let decide (p: (Int) -> Bool, x: Int): Verdict =
+                    if ask(p, x) then Yes else No
+
+                behavior twice : (a: Int, b: Int) -> Count
+                    constructs Count
+                let twice (a, b) =
+                    Count((if decide(n -> n < 18, a) == Yes then 1 else 0)
+                        + (if decide(m -> 18 < m, b) == Yes then 1 else 0))
+
+                example twice
+                    | "under and under" : (1, 1) -> Count(1)
+                """, "twice");
+
+        assertEquals(8, twice.obligations(), "one obligation per rule handed in");
+    }
 }

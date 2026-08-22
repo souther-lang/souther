@@ -352,6 +352,9 @@ public final class HelperInliner {
      *  it was made in: a binding tells itself from every other, and what a name stands for is the
      *  same question wherever the name is read. */
     private final Map<BindingId, souther.compiler.coverage.SuppliedRules.RuleIdentity> rules = new LinkedHashMap<>();
+    /** Which declaration each binding that holds a callable stands for. A name is where a callable
+     *  was put, and the copies a call through it makes are copies of what it holds. */
+    private final Map<BindingId, String> callables = new LinkedHashMap<>();
 
     /** Every recursion in reach, which is exactly what {@link #inline} leaves a call standing to —
      *  this module's own, what its imports publish to it, and the library underneath both. What a
@@ -857,6 +860,25 @@ public final class HelperInliner {
         return rules.get(local.id());
     }
 
+    /**
+     * Which declaration {@code named} reaches, following a name to what it was bound to.
+     *
+     * <p>Null where nothing here says. A parameter holding a function is one: which callable it is
+     * was decided by whoever called this, and answering with the parameter's own spelling would be
+     * a declaration of that name, of which there is none.
+     */
+    private String reaches(Hir.Var.Denoting named) {
+        return named.denotes() instanceof ValueName.Local local ? callables.get(local.id())
+                : named.reaches();
+    }
+
+    /** Says that {@code binding} holds the callable {@code declaration}. */
+    private void holds(BindingId binding, String declaration) {
+        if (declaration != null) {
+            callables.put(binding, declaration);
+        }
+    }
+
     /** Says that {@code binding} holds {@code rule}, where anything says what it holds. */
     private void stands(BindingId binding, souther.compiler.coverage.SuppliedRules.RuleIdentity rule) {
         if (rule != null) {
@@ -1099,6 +1121,7 @@ public final class HelperInliner {
                     BindingId alias = li.binder().id();
                     writing.scopedLambdas().put(alias, new ScopedLambda(aliased));
                     stands(alias, ruleOf((Hir.Var.Denoting) value));
+                    holds(alias, reaches((Hir.Var.Denoting) value));
                     Hir.Expr aliasBody = inline(li.body());
                     writing.scopedLambdas().remove(alias);
                     yield references(aliasBody, alias)
@@ -1131,6 +1154,9 @@ public final class HelperInliner {
                 // for one declaration would come out as two rules written in two places.
                 stands(bound, li.value() instanceof Hir.Var.Denoting named ? ruleOf(named)
                         : ruleOf(lambda));
+                if (li.value() instanceof Hir.Var.Denoting named) {
+                    holds(bound, reaches(named));
+                }
                 Hir.Expr body = inline(li.body());
                 writing.scopedLambdas().remove(bound);
                 // if the binding is still read, the function was used as a value, not just applied —
@@ -1232,8 +1258,12 @@ public final class HelperInliner {
         // is what would otherwise lose that: each binding's type would be read on its own,
         // and nothing left afterwards says the two came from one application.
         Map<String, Type> applied = instantiation(helper, mine);
+        // Which declaration this copy is of, following a name to what it holds. The name is where
+        // a callable was put and is not the callable: read as one, a copy made through a name is a
+        // copy of a declaration nobody wrote, and nothing downstream can match it to the one whose
+        // parameters were named.
         Arguments arguments =
-                bindArguments(rawCall, call, helper, args, applied, ours, mine, callee.reaches());
+                bindArguments(rawCall, call, helper, args, applied, ours, mine, reaches(callee));
         // A body this compile cannot show is copied with the call site stamped over it, so a report
         // from inside it points at the user's call rather than at a line nobody holds — and the
         // stamp says that is what it is doing, so nothing downstream reads the call as the place the
@@ -1342,7 +1372,10 @@ public final class HelperInliner {
                         ? rawCall.args().get(i) : arg;
                 souther.compiler.coverage.SuppliedRules.RuleIdentity handedIn = authored instanceof Hir.Var.Denoting handed ? ruleOf(handed)
                         : authored instanceof Hir.Block written ? ruleOf(written) : null;
-                if (handedIn != null) {
+                // Both, or nothing. A copy whose declaration nothing here names cannot be matched
+                // against the one whose parameters were named, and recording it under a name that
+                // is not a declaration's would put it under one nobody wrote.
+                if (handedIn != null && declaration != null) {
                     supplied.handed(mine, declaration, p.name(), handedIn);
                 }
                 if (arg instanceof Hir.Var.Denoting fnName) {
