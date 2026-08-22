@@ -60,7 +60,7 @@ import java.util.Set;
 public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy.Level askedLevel,
                              MeasurementStatus status, List<ModuleReport> modules) {
 
-    public static final int SCHEMA_VERSION = 3;
+    public static final int SCHEMA_VERSION = 4;
 
     /**
      * Whether the rows meet what the asked measures require of them.
@@ -1237,9 +1237,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * How schema 3 spells which kind of rule an identity is of.
      *
      * <p>A wire value and not a word for the rule, which is what the name used to say. What a rule
-     * is called is {@link souther.compiler.check.RuleCitation}'s answer and a reader sees
-     * {@code comparison} there; this is what a document already written against schema 3 groups by,
-     * and the two have to be allowed to disagree because one of them shipped.
+     * is called is {@link souther.compiler.check.RuleCitation}'s answer, and the two say one thing
+     * again as of version 4 — they are still separate values, because what a document groups by is a
+     * contract a version pins and what a reader is shown is not.
      *
      * <p>Here rather than at the one place it is written, for the reason the others are. No
      * {@code default}, so a rule shape added and not given a spelling stops the compile rather than
@@ -1249,11 +1249,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return switch (rule) {
             case souther.compiler.check.RuleRef.Invariant _ -> "invariant";
             case souther.compiler.check.RuleRef.Ensures _ -> "ensures";
-            // `guard` and not `comparison`. A `const` of schema 3 (`{ "kind": { "const": "guard" }
-            // }`), so it is the spelling that version has for a rule found by where it is written —
-            // historical from the day a comparison stopped being something a fork owns, and a thing
-            // to change with the schema version rather than under one.
-            case souther.compiler.check.RuleRef.Comparison _ -> "guard";
+            // The rule and not the construct it is written in. A comparison may stand in the
+            // condition of an `if` or a `guard`, be given a name above the fork that tests it, or be
+            // what the behavior answers with, and it is one rule in all of those — so `guard` was a
+            // word for where some of them happen to be written, and false of the rest. Documents of
+            // version 3 carry `guard` here; the word moved with the version rather than under one,
+            // because a document already written groups by what it was told.
+            case souther.compiler.check.RuleRef.Comparison _ -> "comparison";
         };
     }
 
