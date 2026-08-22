@@ -152,6 +152,38 @@ public final class InputPath {
                         callsStand, through + 1, made);
     }
 
+    /**
+     * The position an element handed to {@code binding} stands at, or null where it stands at none.
+     *
+     * <p>What an operation of the language hands its closure is an element of the container it was
+     * given, so the name it arrives under stands at that container's position, inside it. Asked of
+     * the binding rather than of the container's expression: a container built by one operation and
+     * handed to the next names no position of its own, and the elements are the same elements.
+     */
+    public static TermPath elementAt(BindingId binding, Map<BindingId, String> roots,
+                                     Map<BindingId, Core> bound,
+                                     souther.compiler.check.ElementBindings elements,
+                                     Symbols symbols, boolean callsStand) {
+        return elementOf(binding, roots, bound, elements, symbols, callsStand, 0, false);
+    }
+
+    private static TermPath elementOf(BindingId binding, Map<BindingId, String> roots,
+                                      Map<BindingId, Core> bound,
+                                      souther.compiler.check.ElementBindings elements,
+                                      Symbols symbols, boolean callsStand, int through,
+                                      boolean made) {
+        Core container = elements.containerOf(binding);
+        if (container == null) {
+            return null;
+        }
+        TermPath at = containerPath(container, roots, bound, elements, symbols,
+                callsStand, through + 1, made);
+        // The container names no position of this behavior's input — it is what another operation
+        // answered, or something this does not read — so neither does an element of it. Where a
+        // reading of provenance goes on from there is not this walk's.
+        return at == null ? null : at.element();
+    }
+
     /** How many operations deep the elements of one container are followed. */
     private static final int FOLLOWED = 8;
 
@@ -188,16 +220,8 @@ public final class InputPath {
                     // holds what the first walk made, and it is what the second was handed. Stopping
                     // at the first left every rule inside the second reading as being about nothing.
                 }
-                Core container = elements.containerOf(r.binding());
-                if (container == null) {
-                    yield null;
-                }
-                TermPath at = containerPath(container, roots, bound, elements, symbols,
-                        callsStand, through + 1, made);
-                // The container names no position of this behavior's input — it is what another
-                // operation answered, or something this does not read — so neither does an element
-                // of it. Where a reading of provenance goes on from there is not this walk's.
-                yield at == null ? null : at.element();
+                yield elementOf(r.binding(), roots, bound, elements, symbols, callsStand,
+                        through, made);
             }
             case Core.FieldAccess fa -> {
                 TermPath base = of(fa.target(), roots, bound, elements, symbols, callsStand,

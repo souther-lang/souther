@@ -92,6 +92,12 @@ public record InputReads(InputDomain read, Map<BindingId, String> roots,
         return InputPath.of(e, roots, bound, elements, symbols, callsStand);
     }
 
+    /** The position an element handed to {@code binding} stands at, or null where it stands at
+     *  none ({@link InputPath#elementAt}). */
+    public TermPath elementAt(BindingId binding, Symbols symbols) {
+        return InputPath.elementAt(binding, roots, bound, elements, symbols, callsStand);
+    }
+
     /** The position {@code e}'s value came from, or null where it came from none. Not where it is:
      *  a value made from a position is not that position ({@link InputPath#cameFrom}). */
     public TermPath cameFrom(Core e, Symbols symbols) {

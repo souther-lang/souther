@@ -142,7 +142,7 @@ final class ComparisonReadings {
             // this is the step it applies per element, the elements are what it applies it to and the
             // input walk has a position for one of them.
             case Core.Block step -> walk(step.body(), plan, reads, symbols, flow, assumed, live,
-                    each && perElement(step, reads), out);
+                    each && perElement(step, reads, symbols), out);
             default -> Core.forEachChild(e, child ->
                     walk(child, plan, reads, symbols, flow, assumed, live, each, out));
         }
@@ -157,9 +157,17 @@ final class ComparisonReadings {
      * read off the shape of the call here: after the rewrite that fuses the walks there is no call
      * left to match, and a reading that matched one would narrow with nothing saying so.
      */
-    private static boolean perElement(Core.Block step, InputReads reads) {
-        return step.params().stream().anyMatch(param -> param.binding() != null
-                && reads.elements().containers().containsKey(param.binding()));
+    private static boolean perElement(Core.Block step, InputReads reads, Symbols symbols) {
+        // Applied once per element of the container the parameter is handed elements of, and each
+        // of those elements at a position the input walk names. A container the walk names nothing
+        // at is one no row can be read at, so what repeats there is still a number of passes and not
+        // a number of occurrences, and a line drawn on it would be owed by nothing.
+        for (Hir.Binder param : step.params()) {
+            if (param.binding() != null && reads.elementAt(param.binding(), symbols) != null) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
