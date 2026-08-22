@@ -58,10 +58,17 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
         return out;
     }
 
+
+    /** The constraint {@code read} states, where it states one. Asked through the reading's own
+     *  type, so that what comes back is a constraint over the same positions the reading was of. */
+    private static AffineConstraint<String> stated(Read<String> read) {
+        assertInstanceOf(Read.Stated.class, read);
+        return ((Read.Stated<String>) read).constraint();
+    }
+
     private static AffineConstraint<String> rule(Map<String, Rational> coefs, long constant,
                                                  Rel rel, Granularity spacing) {
-        return assertInstanceOf(Read.Stated.class,
-                AffineConstraint.of(coefs, num(constant), rel, atom -> spacing)).constraint();
+        return stated(AffineConstraint.of(coefs, num(constant), rel, atom -> spacing));
     }
 
     private static Box<String> between(Object... triples) {
@@ -77,8 +84,9 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
 
     private static Reduction.Tightened<String> reduce(List<AffineConstraint<String>> rules,
                                                       Box<String> from, Granularity spacing) {
-        return assertInstanceOf(Reduction.Tightened.class,
-                AffineReduction.over(reading(rules, from), atom -> spacing));
+        Reduction<String> reduced = AffineReduction.over(reading(rules, from), atom -> spacing);
+        assertInstanceOf(Reduction.Tightened.class, reduced);
+        return (Reduction.Tightened<String>) reduced;
     }
 
     /**

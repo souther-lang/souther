@@ -6,6 +6,7 @@ package souther.compiler.examples;
  * because nothing was compared.
  */
 final class StackExhaustedException extends RuntimeException {
+    private static final long serialVersionUID = 1L;
     StackExhaustedException(String message) {
         super(message);
     }

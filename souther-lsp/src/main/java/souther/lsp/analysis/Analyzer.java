@@ -39,7 +39,6 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.DiagnosticView;
-import souther.compiler.diag.LabeledRegion;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Spot;
@@ -182,12 +181,6 @@ public final class Analyzer {
     }
 
     /**
-     * A marker for the compiler answering with something that is not a diagnostic. Analysis must not
-     * take the session with it, but staying silent is its own failure: the author is left looking at
-     * a file the editor calls clean. {@code StackOverflowError} is included deliberately — it is an
-     * {@code Error}, not a {@code RuntimeException}, and a deeply nested expression raises it.
-     */
-    /**
      * What the recovering parser found, as the editor reads it.
      *
      * <p>One reader for both routes. The single-file route and the workspace route asked the parser
@@ -206,6 +199,12 @@ public final class Analyzer {
         return found;
     }
 
+    /**
+     * A marker for the compiler answering with something that is not a diagnostic. Analysis must not
+     * take the session with it, but staying silent is its own failure: the author is left looking at
+     * a file the editor calls clean. {@code StackOverflowError} is included deliberately — it is an
+     * {@code Error}, not a {@code RuntimeException}, and a deeply nested expression raises it.
+     */
     private LspDiagnostic internalError(LineIndex lines, Throwable t) {
         return new LspDiagnostic(range(lines, 0, 1), LspDiagnostic.ERROR, null,
                 "the compiler could not finish reading this file ("

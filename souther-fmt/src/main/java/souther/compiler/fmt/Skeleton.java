@@ -34,6 +34,7 @@ public final class Skeleton {
 
     /** Raised where the tokens do not make a declaration, or where the formatted text is not them. */
     public static final class Mismatch extends RuntimeException {
+        private static final long serialVersionUID = 1L;
         Mismatch(String message) {
             super(message);
         }

@@ -8,7 +8,6 @@ import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
-import java.util.Optional;
 
 /**
  * A rule of the model, as a boundary reader met it.

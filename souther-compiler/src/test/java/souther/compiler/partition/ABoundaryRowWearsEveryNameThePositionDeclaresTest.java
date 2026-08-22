@@ -7,7 +7,6 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeChecker;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;

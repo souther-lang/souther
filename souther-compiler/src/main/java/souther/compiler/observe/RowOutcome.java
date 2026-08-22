@@ -4,7 +4,6 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
-import java.util.Set;
 
 /**
  * What one {@code example} row turned out to be — the observation every adequacy measure reads.

@@ -196,7 +196,7 @@ class OptionAsAWrittenTypeTest {
                     behavior write : (n: Int) -> Note
                         constructs Note
                     let orZero (o: Option<Int>) : Int = Option.withDefault(0, o)
-                    let write (n) = Note { value = """ + value + " }\n");
+                    let write (n) = Note { value =""" + value + " }\n");
             assertTrue(e.getMessage().contains("E1303"), value + " :: " + e.getMessage());
         }
     }

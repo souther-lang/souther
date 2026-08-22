@@ -155,7 +155,7 @@ class AMeasurementIsNeverStrongerThanWhatItIsAssembledFromTest {
      */
     private static List<String> contradictionsIn(JsonNode at, String path) {
         List<String> out = new ArrayList<>();
-        if (at.isObject() && "complete".equals(at.path("status").asText(null))
+        if (at.isObject() && "complete".equals(at.path("status").asString(null))
                 && hasBeneath(at, "partial")) {
             out.add(path.isEmpty() ? "<root>" : path);
         }
@@ -172,7 +172,7 @@ class AMeasurementIsNeverStrongerThanWhatItIsAssembledFromTest {
 
     private static boolean hasBeneath(JsonNode at, String word) {
         for (JsonNode child : children(at)) {
-            if (word.equals(child.path("status").asText(null)) || hasBeneath(child, word)) {
+            if (word.equals(child.path("status").asString(null)) || hasBeneath(child, word)) {
                 return true;
             }
         }
@@ -189,7 +189,7 @@ class AMeasurementIsNeverStrongerThanWhatItIsAssembledFromTest {
 
     private static String statusOfTheOneBehaviorIn(String source) {
         return documentOf(source).path("modules").get(0).path("behaviors").get(0)
-                .path("status").asText();
+                .path("status").asString();
     }
 
     /** The corpus the checked-in answers are about, read as a person reads it. */

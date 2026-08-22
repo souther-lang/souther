@@ -102,10 +102,10 @@ public final class AstBuilder {
         return new AstBuilder(source, read).module(sourceFile, defaultModuleName);
     }
 
-    /** The next construct of this source a coverage obligation can be about. Called once where a
-     * construct is recognised, never per node the construct is built as. */
     /**
      * The next construct of this source, said as what the author wrote it as.
+     *
+     * <p>Called once where a construct is recognised, never once per node it is built as.
      *
      * <p>The kind is taken here and nowhere else. This is the one place that has the syntax in front
      * of it — every stage below reads a tree that has already been lowered, where a {@code guard},
@@ -1394,12 +1394,6 @@ public final class AstBuilder {
         };
     }
 
-    /**
-     * A pattern binding {@code value}, with {@code rest} in its scope. Every shape lowers to the
-     * ordinary reads it stands for — a tuple to indexed gets, a newtype to {@code .value}, a record
-     * to field reads — so nothing past this point has to know a pattern was written. It is the same
-     * lowering a {@code match} arm does; the difference is only that here there is one arm.
-     */
     /** How many bindings {@code patterns} introduce between them — what they cost, counted from
      *  what the source wrote rather than from the shape {@link #bindPattern} folds them into. */
     private int bindingsIntroducedBy(List<SyntaxNode> patterns) {
@@ -1438,6 +1432,12 @@ public final class AstBuilder {
         };
     }
 
+    /**
+     * A pattern binding {@code value}, with {@code rest} in its scope. Every shape lowers to the
+     * ordinary reads it stands for — a tuple to indexed gets, a newtype to {@code .value}, a record
+     * to field reads — so nothing past this point has to know a pattern was written. It is the same
+     * lowering a {@code match} arm does; the difference is only that here there is one arm.
+     */
     private Ast.Expr bindPattern(SyntaxNode pat, Ast.Expr value, Ast.Expr rest, SourcePos pos,
                                  Region held) {
         return switch (pat.kind()) {
@@ -1579,9 +1579,6 @@ public final class AstBuilder {
     }
 
 
-    /** The name a top-level declaration declares: the first identifier in it. This is how the
-     * builder names a {@code data}, a {@code behavior} and a {@code let}, and how the declaration's
-     * source is filed under the same name when a module publishes what it declares. */
     /**
      * The name an identifier token spells, canonicalized to NFC.
      *
@@ -1599,6 +1596,9 @@ public final class AstBuilder {
         return souther.compiler.Reserved.name(t.text());
     }
 
+    /** The name a top-level declaration declares: the first identifier in it. This is how the
+     * builder names a {@code data}, a {@code behavior} and a {@code let}, and how the declaration's
+     * source is filed under the same name when a module publishes what it declares. */
     static String firstIdentText(SyntaxNode n) {
         return ident(firstIdentToken(n));
     }

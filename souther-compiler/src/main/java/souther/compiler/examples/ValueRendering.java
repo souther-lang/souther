@@ -5,7 +5,6 @@ import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * A structured value written the way a fixture writes one.

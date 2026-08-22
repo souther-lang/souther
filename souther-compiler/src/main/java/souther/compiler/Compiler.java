@@ -354,14 +354,6 @@ public final class Compiler {
     }
 
     /**
-     * Links a set of sources by asking one compilation for its classes.
-     *
-     * <p>What is left here is only what a batch compile decides and an editor decides differently:
-     * that a structural problem stops everything, that the first error is raised rather than
-     * collected, and that every module's examples are evaluated before any failing one is reported
-     * (issue #114) — so a change to a widely-imported data says how far it reaches in one compile.
-     */
-    /**
      * The compilation of a module set, driven to completion, with the first error raised — what
      * {@link #linking} returns the classes of, for a caller that wants more than the classes.
      *
@@ -379,6 +371,14 @@ public final class Compiler {
         return linked(sources, path, warningsOut, measure);
     }
 
+    /**
+     * Links a set of sources by asking one compilation for its classes.
+     *
+     * <p>What is left here is only what a batch compile decides and an editor decides differently:
+     * that a structural problem stops everything, that the first error is raised rather than
+     * collected, and that every module's examples are evaluated before any failing one is reported
+     * (issue #114) — so a change to a widely-imported data says how far it reaches in one compile.
+     */
     private static Map<String, byte[]> linking(List<String> sources, ModulePath path,
                                                List<Located> warningsOut) {
         return driven(() -> new LinkedHashMap<>(

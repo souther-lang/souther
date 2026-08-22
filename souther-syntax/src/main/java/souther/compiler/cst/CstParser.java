@@ -64,6 +64,7 @@ public final class CstParser {
      * filled in: nothing reads it, and the depth this unwinds is the reason to not pay for one.
      */
     private static final class TooDeep extends RuntimeException {
+        private static final long serialVersionUID = 1L;
         TooDeep() {
             super(null, null, false, false);
         }

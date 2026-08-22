@@ -74,12 +74,13 @@ public final class Runner {
      * failures are read in the same language as the compiler's diagnostics.
      */
     public static final class RunException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
         final int exitCode;
         private final String messageKey;
-        private final Object[] args;
+        private final transient Object[] args;
         /** The decoder's own issues, when this is a decode failure: their text is written by the
          * decoder's catalog, so it is resolved per locale rather than fixed at throw time. */
-        private final Issues issues;
+        private final transient Issues issues;
 
         RunException(String messageKey, String message, int exitCode, Issues issues, Object... args) {
             super(message);

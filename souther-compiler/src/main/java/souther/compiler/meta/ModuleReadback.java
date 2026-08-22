@@ -12,7 +12,6 @@ import souther.compiler.frontend.CstFrontend;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
-import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

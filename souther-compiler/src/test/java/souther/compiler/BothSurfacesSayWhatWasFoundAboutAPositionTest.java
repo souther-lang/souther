@@ -72,8 +72,8 @@ class BothSurfacesSayWhatWasFoundAboutAPositionTest {
     private static List<String> documentSaysNotRead(String source) {
         List<String> said = new ArrayList<>();
         partitionOf(source).get("notRead").forEach(each ->
-                said.add(each.get("position").asText() + ":" + each.get("reason").asText()
-                        + ":" + (each.has("rule") ? each.get("rule").asText() : "-")));
+                said.add(each.get("position").asString() + ":" + each.get("reason").asString()
+                        + ":" + (each.has("rule") ? each.get("rule").asString() : "-")));
         return said;
     }
 

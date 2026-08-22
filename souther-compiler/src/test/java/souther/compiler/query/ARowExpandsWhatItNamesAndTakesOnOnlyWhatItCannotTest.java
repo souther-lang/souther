@@ -56,7 +56,7 @@ class ARowExpandsWhatItNamesAndTakesOnOnlyWhatItCannotTest {
         return """
                 module app exposing ( In, Out, run )
 
-                import rules ( """ + imported + """
+                import rules (""" + imported + """
                  )
 
                 data In  = { n: Int }

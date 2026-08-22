@@ -10,7 +10,6 @@ import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.LabeledRegion;
 import souther.compiler.diag.QuotedFrom;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.diag.Region;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
 import souther.compiler.report.AdequacyReport;

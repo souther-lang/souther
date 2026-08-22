@@ -19,9 +19,7 @@ import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 
-import souther.compiler.values.AdmissibleSet;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;

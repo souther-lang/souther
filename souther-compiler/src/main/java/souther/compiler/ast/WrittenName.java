@@ -6,7 +6,6 @@ import souther.compiler.diag.SourcePos;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 /**
  * A name, and the occurrence of it in the source that this one came from.

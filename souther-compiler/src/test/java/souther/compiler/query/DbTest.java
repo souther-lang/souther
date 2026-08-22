@@ -69,8 +69,8 @@ class DbTest {
         }
     }
 
-    /** A key that reports rather than answers. */
-    /** Two questions that report one rule at one place, about different values. */
+    /** A key that reports rather than answers: two questions that report one rule at one place,
+     *  about different values. */
     record ComplainsAbout(String field, String data) implements Key<String> {
         @Override
         public String module() {

@@ -5,13 +5,9 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.ClauseHelpers;
-import souther.compiler.check.Shape;
-import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
-import souther.compiler.check.TypeView;
 import souther.compiler.check.FieldDomains;
-import souther.compiler.check.Rules;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.codegen.InvariantConstraints;
 import souther.compiler.inputs.BlockReason;
@@ -29,7 +25,6 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
-import souther.compiler.values.AdmissibleSet;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
@@ -136,15 +131,6 @@ public final class Partitions {
         }
     }
 
-    /**
-     * The axes of one behavior, derived from the one reading of its input.
-     *
-     * <p>Nothing is read here. Which positions the input has and what can stand at each of them is
-     * {@link InputDomain}'s, asked once and read by every measure; what this adds is which of them
-     * an axis is drawn at, what each class is called and how a row for it is written.
-     *
-     * @param behavior what the axes are named after, which is the behavior the reading was made for
-     */
 
     /**
      * The same, reading the input's rules here.
@@ -158,6 +144,15 @@ public final class Partitions {
         return of(behavior, inputs, inputs.quantities(symbols), symbols, policy);
     }
 
+    /**
+     * The axes of one behavior, derived from the one reading of its input.
+     *
+     * <p>Nothing is read here. Which positions the input has and what can stand at each of them is
+     * {@link InputDomain}'s, asked once and read by every measure; what this adds is which of them
+     * an axis is drawn at, what each class is called and how a row for it is written.
+     *
+     * @param behavior what the axes are named after, which is the behavior the reading was made for
+     */
     public static Partitioning of(String behavior, InputDomain inputs,
                                   souther.compiler.inputs.Quantities quantities, Symbols symbols,
                                   ReadingPolicy policy) {
@@ -214,14 +209,6 @@ public final class Partitions {
                 List.of(), List.of(), ReachingCuts.NONE, closed.partition(), closed.border());
     }
 
-    /**
-     * The positions with no classes, each saying which of the two it is.
-     *
-     * <p>Derived from the axes rather than recorded beside them, so that a position measured after a
-     * threshold arrives leaves this list by the same rule it entered it. {@code stopped} names the
-     * ones the walk did not finish, which is the one thing the axes cannot say for themselves: an
-     * axis that was never descended into looks exactly like one there was nothing under.
-     */
     /**
      * One position, and what the rules written about it came to.
      *
@@ -657,8 +644,6 @@ public final class Partitions {
         return base.quantities().runsBetween(term);
     }
 
-    /** The cuts a position has, with a rule that drew one already there recorded rather than repeated:
-     * an invariant and a guard that state the same bound are one cut and two obligations. */
     /**
      * Where the rules part each of this behavior's quantities, by the quantity they are on.
      *

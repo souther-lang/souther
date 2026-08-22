@@ -49,7 +49,7 @@ class ABoundIsADifferenceFromNoughtTest {
 
         Rules say(Map<String, Rational> coefs, Rational constant, Rel rel) {
             Read<String> read = AffineConstraint.of(coefs, constant, rel, atom -> spacing);
-            stated.add(assertInstanceOf(Read.Stated.class, read).constraint());
+            stated.add(stated(read));
             return this;
         }
 
@@ -162,11 +162,19 @@ class ABoundIsADifferenceFromNoughtTest {
 
     // --- what it does not hold ---------------------------------------------------------------------
 
+
+    /** The constraint {@code read} states, where it states one. Asked through the reading's own
+     *  type, so that what comes back is a constraint over the same positions the reading was of. */
+    private static AffineConstraint<String> stated(Read<String> read) {
+        assertInstanceOf(Read.Stated.class, read);
+        return ((Read.Stated<String>) read).constraint();
+    }
+
     @Test
     void aSumOfTwoPositionsIsNotOfThisShape() {
-        AffineConstraint<String> sum = assertInstanceOf(Read.Stated.class,
+        AffineConstraint<String> sum = stated(
                 AffineConstraint.of(weighing(A, 1, B, 1), num(-10), Rel.LE,
-                        atom -> Granularity.DISCRETE)).constraint();
+                        atom -> Granularity.DISCRETE));
         assertFalse(DifferenceBounds.canHold(sum));
         assertTrue(DifferenceBounds.over(List.of(sum)).positions().isEmpty(),
                 "so it leaves the positions to whatever holds the rest");
@@ -174,17 +182,17 @@ class ABoundIsADifferenceFromNoughtTest {
 
     @Test
     void aWeightedDifferenceThatDoesNotReduceIsNotOfThisShape() {
-        AffineConstraint<String> skew = assertInstanceOf(Read.Stated.class,
+        AffineConstraint<String> skew = stated(
                 AffineConstraint.of(weighing(A, 2, B, -3), num(-10), Rel.LE,
-                        atom -> Granularity.DISCRETE)).constraint();
+                        atom -> Granularity.DISCRETE));
         assertFalse(DifferenceBounds.canHold(skew));
     }
 
     @Test
     void aHoleIsNotABound() {
-        AffineConstraint<String> hole = assertInstanceOf(Read.Stated.class,
+        AffineConstraint<String> hole = stated(
                 AffineConstraint.of(weighing(A, 1), Rational.ZERO, Rel.NE,
-                        atom -> Granularity.DISCRETE)).constraint();
+                        atom -> Granularity.DISCRETE));
         assertFalse(DifferenceBounds.canHold(hole));
     }
 

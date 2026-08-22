@@ -887,7 +887,6 @@ public final class TypeOps {
         };
     }
 
-    /** The set of leaf (non-sum) case names a data-like type covers, flattening nested sums. */
     /**
      * Two effective members of {@code out} that go by one written name, or null when every member's
      * name is its own. Asked after a named sum is expanded to its leaves, since the leaves are what a
@@ -939,6 +938,7 @@ public final class TypeOps {
         return t instanceof Type.Union || t instanceof Type.Ref ? leafCases(t, symbols) : Set.of();
     }
 
+    /** The set of leaf (non-sum) case names a data-like type covers, flattening nested sums. */
     public static Set<TypeSymbol> leafCases(Type t, Symbols symbols) {
         Set<TypeSymbol> out = new LinkedHashSet<>();
         collectLeafCases(t, symbols, out, new HashSet<>());
@@ -1640,12 +1640,6 @@ public final class TypeOps {
     }
 
     /**
-     * The type {@code ref} denotes, computed from the reference and the scope it was written in. The
-     * one place a written type becomes a {@link Type}; {@code Resolve} calls it once per reference and
-     * everything else reads {@link Hir.TypeRef#denotes()}. Its own arguments are already resolved, so
-     * a nested reference is read rather than recomputed.
-     */
-    /**
      * A reference whose parts have been resolved and whose own type has not been decided yet.
      *
      * <p>The one moment there is such a thing, and it is inside {@code Resolve}: the arguments are
@@ -1669,6 +1663,12 @@ public final class TypeOps {
         }
     }
 
+    /**
+     * The type {@code ref} denotes, computed from the reference and the scope it was written in. The
+     * one place a written type becomes a {@link Type}; {@code Resolve} calls it once per reference and
+     * everything else reads {@link Hir.TypeRef#denotes()}. Its own arguments are already resolved, so
+     * a nested reference is read rather than recomputed.
+     */
     static Type denoted(Reference ref, NameSense symbols) {
         if (ref.isTuple()) {
             List<Type> elems = new ArrayList<>();

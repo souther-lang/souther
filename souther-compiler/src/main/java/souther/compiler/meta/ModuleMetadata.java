@@ -11,7 +11,6 @@ import souther.compiler.types.ValueName;
 import souther.compiler.codegen.Backend;
 import souther.compiler.codegen.Emissions;
 import souther.compiler.jvm.GeneratedClass;
-import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.frontend.CstFrontend;
 
 import java.lang.classfile.Annotation;

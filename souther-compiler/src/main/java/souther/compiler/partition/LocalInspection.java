@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
-import souther.compiler.check.Clause;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.Symbols;

@@ -176,6 +176,9 @@ public final class LibraryDocs {
         }
     }
 
+    /** A part a file named: where its declaration is, and what is read of it. */
+    private record Named(String name, String title, int level, int declaredAt, int from, int to) {}
+
     /**
      * The parts {@code text} names of itself, each running to the heading that closes it.
      *
@@ -183,9 +186,6 @@ public final class LibraryDocs {
      * text: the name would be published, answered with whatever followed it, and moved the next
      * time the file was edited. It is refused where the set is read.
      */
-    /** A part a file named: where its declaration is, and what is read of it. */
-    private record Named(String name, String title, int level, int declaredAt, int from, int to) {}
-
     private static List<Named> named(String topic, String text) {
         // Every heading, whether the file names it or not: what closes a part is the next heading
         // that is not under it, and a heading the set chose not to name still is not under it.

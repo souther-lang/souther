@@ -150,13 +150,13 @@ final class Descriptors {
     /** The failure side of a behavior's declared relation: which clause of which behavior did not
      *  hold, and which case of the answer it was about. */
     static final ClassDesc CD_EnsuresFailure = ClassDesc.of("souther.runtime.EnsuresFailure");
-    /** Its constructor. Written rather than a factory per shape of the two nullable parts, which
-     *  would be four names for one value; a null is pushed for the part that is not there. */
     /** The case a failure names, as the module that declares it and the name written there. */
     static final ClassDesc CD_DeclaredCase = ClassDesc.of("souther.runtime.DeclaredCase");
     /** Its constructor. */
     static final MethodTypeDesc MTD_declaredCase =
             MethodTypeDesc.of(ConstantDescs.CD_void, CD_String, CD_String);
+    /** Its constructor. Written rather than a factory per shape of the two nullable parts, which
+     *  would be four names for one value; a null is pushed for the part that is not there. */
     static final MethodTypeDesc MTD_ensuresFailure = MethodTypeDesc.of(ConstantDescs.CD_void,
             CD_String, CD_String, CD_String, CD_DeclaredCase, CD_DeclaredCase);
     /** The one abort either kind of broken constraint leaves by. */

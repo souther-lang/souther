@@ -3,11 +3,9 @@ package souther.compiler.partition;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Symbols;
 import souther.compiler.coverage.ComparisonOccurrence;
-import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.Citation;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
-import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.NumericDomain.Rel;
 

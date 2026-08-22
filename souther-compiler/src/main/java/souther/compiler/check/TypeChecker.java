@@ -6,7 +6,6 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticRenderer;
-import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
@@ -51,8 +50,7 @@ public final class TypeChecker {
      * report them all. It hands back the exceptions rather than the diagnostics because a diagnostic
      * does not carry the English body a throw site passed alongside it, and a caller that has to
      * raise one should raise what the pass raised.
-     */
-    /**
+     *
      * @param errors what the check found wrong
      * @param abandoned the units it could not read at all, each resting on a name that denotes
      *                  nothing — reported already, and each a reason the module cannot be emitted
@@ -139,8 +137,6 @@ public final class TypeChecker {
         return HelperTyping.recursiveHelperConstructs(names, loweredBodies, inliner, symbols);
     }
 
-    /** Runs one independent unit's check, recording its first error instead of throwing so the next
-     * unit is still checked — the recovery boundary that lets a module report more than one error. */
     /**
      * Runs one unit's check, recording its first error instead of throwing so the next unit is still
      * checked — the recovery boundary that lets a module report more than one error.

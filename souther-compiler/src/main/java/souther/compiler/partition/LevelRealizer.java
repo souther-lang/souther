@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
-import souther.compiler.inputs.BoundaryDomain;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.AdditiveImage;
 import souther.compiler.numeric.Count;
@@ -12,7 +11,6 @@ import souther.compiler.numeric.Place;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * Where each position has to stand for a row to be at one coverage item.

@@ -10,7 +10,6 @@ import souther.compiler.check.StatedContract;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;

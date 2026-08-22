@@ -83,9 +83,9 @@ class AMeasuredPositionSaysHowFarItsRulesWereReadTest {
     @Test
     void aMeasuredPositionIsToldApartFromOneWithNoAxis() {
         JsonNode axis = partitionOf(MEASURED_IN_PART).get("axes").get(0);
-        assertEquals("i.assignee", axis.get("path").asText());
+        assertEquals("i.assignee", axis.get("path").asString());
         assertEquals(2, axis.get("classes").size(), axis.toString());
-        assertEquals("partial", axis.get("read").get("extent").asText(),
+        assertEquals("partial", axis.get("read").get("extent").asString(),
                 "the axis says that something about its position's rules is left standing");
         // Which of the two it is, and not only that there is one. Nothing here reached the rules
         // behind the option — which is not a rule this read and could not use, and saying so would
@@ -108,7 +108,7 @@ class AMeasuredPositionSaysHowFarItsRulesWereReadTest {
         String human = humanOf(READ_IN_FULL);
 
         JsonNode read = partitionOf(READ_IN_FULL).get("axes").get(0).get("read");
-        assertEquals("complete", read.get("extent").asText());
+        assertEquals("complete", read.get("extent").asString());
         assertFalse(read.has("rulesNotReached"), "nothing was left standing: " + read);
         assertFalse(read.has("unanswered"), "nothing was left standing: " + read);
     }

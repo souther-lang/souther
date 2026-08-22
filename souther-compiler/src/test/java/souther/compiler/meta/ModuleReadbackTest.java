@@ -15,7 +15,6 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -364,7 +363,6 @@ class ModuleReadbackTest {
         return new PublishedClasses.Declarations(null, declaration, null, null);
     }
 
-    /** {@code classes}, with whatever their `$Module` annotation says rewritten by {@code as}. */
     /**
      * A jar written before a behavior carried where its body comes from.
      *

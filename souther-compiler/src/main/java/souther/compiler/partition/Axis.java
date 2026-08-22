@@ -7,9 +7,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.types.Type;
 import souther.compiler.check.RuleAccounting;
 
-import java.util.Collection;
 import java.util.List;
-import java.util.Set;
 
 /**
  * One input position that a model distinguishes values at, and the classes it distinguishes them into.
@@ -26,6 +24,14 @@ import java.util.Set;
  * and what such a position gets is {@link #cuts} and no classes — which is what {@link #measurable}
  * is for. What a bound does contribute to a partition is the range the classes are clipped to: the
  * two either side of a {@code guard} at 50 run from the bound and not from the type's own ends.
+ *
+ * <p>{@link #classes} is the one denominator. What a report counts, what a pair space is the
+ * product of, and what the generator offers rows for all come from there — three derivations of the
+ * same universe are three chances to disagree about it, which is how a class nothing can reach came
+ * to be asked for by three measures at once. Nothing a body writes narrows it: a case an arm
+ * declares cannot arrive is a claim about the same position, and what became of the claim is said
+ * beside the report rather than taken out of the count — a claim the rules bear out has already
+ * left, because the reading these classes come from is what took it out.
  *
  * @param term     the number this axis is of: a location's own content, or something taken of it
  * @param classes  exclusive and exhaustive over the term's values, or empty where the model does
@@ -131,19 +137,6 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
         return term.path();
     }
 
-    /**
-     * The classes a row can be written at.
-     *
-     * <p>The one denominator. What a report counts, what a pair space is the product of, and what
-     * the generator offers rows for all come from here — three derivations of the same universe are
-     * three chances to disagree about it, which is how a class nothing can reach came to be asked
-     * for by three measures at once.
-     *
-     * <p>Nothing a body writes narrows this. A case an arm declares cannot arrive is a claim about
-     * the same position, and what became of the claim is said beside the report rather than taken
-     * out of the count here — a claim the rules bear out has already left, because the reading these
-     * classes come from is what took it out.
-     */
     /** Whether the model divides this position into classes to cover. */
     public boolean derivable() {
         return !classes.isEmpty();

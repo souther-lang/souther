@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
-import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 

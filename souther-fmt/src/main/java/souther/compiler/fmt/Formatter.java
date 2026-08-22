@@ -2082,17 +2082,17 @@ public final class Formatter {
 
     /** Where the comments of a file go, decided before any of it is written. */
     private record Attachments(
-            /** Above the line the node opens. */
+            // Above the line the node opens.
             Map<SyntaxNode, List<SyntaxToken>> above,
-            /** At the end of the line the node ends. */
+            // At the end of the line the node ends.
             Map<SyntaxNode, List<SyntaxToken>> after,
-            /** On lines of its own below the line the node ends, with a member still to come. */
+            // On lines of its own below the line the node ends, with a member still to come.
             Map<SyntaxNode, List<SyntaxToken>> below,
-            /** Inside the node, under its last member and before it closes. */
+            // Inside the node, under its last member and before it closes.
             Map<SyntaxNode, List<SyntaxToken>> atEnd,
-            /** Against a name rather than a node — the identifiers a sum's case or a clause's
-             * member is written as, and a token in the middle of a construct, which is a line of
-             * the canonical form without being a construct of the source. */
+            // Against a name rather than a node — the identifiers a sum's case or a clause's
+            // member is written as, and a token in the middle of a construct, which is a line of
+            // the canonical form without being a construct of the source.
             Map<Written, OnAName> aboveToken,
             Map<Written, OnAName> afterToken) {
 
@@ -2701,11 +2701,6 @@ public final class Formatter {
 
     // --- CST navigation ---
 
-    private TokenDoc qualifiedName(SyntaxNode n, Place at) {
-        places.within(n, at);
-        return TokenDoc.node(n.kind(), dottedName(idents(n)));
-    }
-
     /**
      * A name written through the module or the alias that declares it: its identifiers, and the
      * dots the canonical form writes between them. What goes at each of those boundaries is the
@@ -2713,6 +2708,11 @@ public final class Formatter {
      * one — assembling it is deciding, and a name is one of the places the same decision used to be
      * written out again.
      */
+    private TokenDoc qualifiedName(SyntaxNode n, Place at) {
+        places.within(n, at);
+        return TokenDoc.node(n.kind(), dottedName(idents(n)));
+    }
+
     /** A token of the source, written back as itself. */
     private static TokenDoc token(SyntaxToken t) {
         return TokenDoc.token(t.kind(), t.text());

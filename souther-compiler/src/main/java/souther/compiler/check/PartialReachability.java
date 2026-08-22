@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayDeque;

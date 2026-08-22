@@ -19,7 +19,6 @@ import souther.compiler.check.InjectionSigs;
 import souther.compiler.check.InliningPolicy;
 import souther.compiler.check.InvariantChecker;
 import souther.compiler.check.Lower;
-import souther.compiler.check.ModuleUniverse;
 import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.ModuleUniverse.InSight.Read.PublishedHelper;
 import souther.compiler.check.ReqSig;
@@ -36,8 +35,6 @@ import souther.compiler.core.Core;
 import souther.compiler.core.GrowingFold;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.SourcePos;
-import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -2069,15 +2066,6 @@ public final class Bodies {
     }
 
     /**
-     * The result of type-checking a module. Absent when anything in it is wrong: a module that does
-     * not check must not reach codegen, and an importer of it is skipped rather than compiled
-     * against a broken module.
-     *
-     * <p>What each body came to is asked for one body at a time, and each of those reports what it
-     * found. What is left here is the decision they and the module's own check come to together:
-     * whether there is a module to emit.
-     */
-    /**
      * One body as the backend emits it, and what its operations handed their closures.
      *
      * <p>Together because the second cannot be read off the first. What handed a closure an element
@@ -2193,6 +2181,15 @@ public final class Bodies {
         }
     }
 
+    /**
+     * The result of type-checking a module. Absent when anything in it is wrong: a module that does
+     * not check must not reach codegen, and an importer of it is skipped rather than compiled
+     * against a broken module.
+     *
+     * <p>What each body came to is asked for one body at a time, and each of those reports what it
+     * found. What is left here is the decision they and the module's own check come to together:
+     * whether there is a module to emit.
+     */
     public record Checked(String name) implements Key<Elaborated> {
         @Override
         public String module() {

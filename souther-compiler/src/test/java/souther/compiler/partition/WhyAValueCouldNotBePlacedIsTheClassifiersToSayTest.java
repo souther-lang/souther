@@ -7,7 +7,6 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeChecker;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
@@ -204,11 +203,11 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
     void aReadableValueIsStillPlacedInTheClassThatHoldsIt() {
         Read read = read();
 
-        assertEquals((Classification) Classification.in("request.cost/0 <= x <= 100"),
+        assertEquals(Classification.in("request.cost/0 <= x <= 100"),
                 at(read, read.row(), "request.cost"));
-        assertEquals((Classification) Classification.in("request.plain/x <= 10"),
+        assertEquals(Classification.in("request.plain/x <= 10"),
                 at(read, read.row(), "request.plain"));
-        assertEquals((Classification) Classification.in("Domestic"),
+        assertEquals(Classification.in("Domestic"),
                 at(read, read.row(), "request.kind"));
     }
 
@@ -242,7 +241,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
                 _ -> new Membership.Incomplete(Incompleteness.Code.VALUE_UNREADABLE),
                 _ -> Membership.MATCH);
 
-        assertEquals((Classification) Classification.in("c2"),
+        assertEquals(Classification.in("c2"),
                 RowClasses.of(read.row(), read.inputs(), axes).values().iterator().next());
     }
 

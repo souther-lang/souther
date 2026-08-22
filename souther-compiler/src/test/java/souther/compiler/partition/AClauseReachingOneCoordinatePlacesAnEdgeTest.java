@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
-import souther.compiler.query.ItemAssessment;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.ValueName;
@@ -593,16 +592,6 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     }
 
     /**
-     * Which counts the projection may not stand behind, held at the rule rather than through it.
-     *
-     * <p>Through the measure there is nothing to hold. A length edge in a model this size is settled
-     * by the value the generator builds for it, so it stays counted whether or not the projection was
-     * entitled to say so, and an assertion on its verdict would pass with the rule reverted. What
-     * shows the difference is a corpus: declining the proof at every count takes twenty
-     * `String.length` edges out of the denominator across `souther-examples`, and the suite stays
-     * green throughout. So the distinction is pinned where it is decided.
-     */
-    /**
      * A wrapper whose clause relates two of the record's fields, beside the record without it.
      *
      * <p>Both fields stop at 10 by their own types, and `a < b` leaves `a` stopping at 9 — the
@@ -800,6 +789,16 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                 "nothing inhabits `Loop`, so nothing holds a list of one");
     }
 
+    /**
+     * Which counts the projection may not stand behind, held at the rule rather than through it.
+     *
+     * <p>Through the measure there is nothing to hold. A length edge in a model this size is settled
+     * by the value the generator builds for it, so it stays counted whether or not the projection was
+     * entitled to say so, and an assertion on its verdict would pass with the rule reverted. What
+     * shows the difference is a corpus: declining the proof at every count takes twenty
+     * `String.length` edges out of the denominator across `souther-examples`, and the suite stays
+     * green throughout. So the distinction is pinned where it is decided.
+     */
     @Test
     void onlyAStringsLengthIsACountEveryValueHas() {
         assertTrue(NumericMeasures.everyCountHasAValue(

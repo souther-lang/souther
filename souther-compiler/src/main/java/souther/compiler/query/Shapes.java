@@ -1,20 +1,12 @@
 package souther.compiler.query;
 
-import souther.compiler.check.ReadingPolicy;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.ClauseDischarge;
 import souther.compiler.check.InvariantSettled;
-import souther.compiler.check.HelperInliner;
 import souther.compiler.check.ClauseHelpers;
 import souther.compiler.check.ClausesForDischarge;
-import souther.compiler.check.HelperNames;
-import souther.compiler.check.InliningPolicy;
 import souther.compiler.check.InvariantChecker;
-import souther.compiler.check.NewtypeDesugar;
-import souther.compiler.check.TypeChecker;
-import souther.compiler.check.ValueCycles;
 import souther.compiler.check.Symbols;
-import souther.compiler.derive.Deriver;
 import souther.compiler.diag.CompileException;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.TypeKey;
@@ -22,7 +14,6 @@ import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 

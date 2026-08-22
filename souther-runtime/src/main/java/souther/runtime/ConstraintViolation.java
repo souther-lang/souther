@@ -18,6 +18,7 @@ package souther.runtime;
  * are different: they are carried by Raoh's {@code Result} failure, not by this (spec §decoder-error).
  */
 public final class ConstraintViolation extends RuntimeException {
+    private static final long serialVersionUID = 1L;
 
     public ConstraintViolation(String message) {
         super(message);

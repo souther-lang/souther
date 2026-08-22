@@ -22,6 +22,7 @@ package souther.compiler.check;
  * would notice it.
  */
 public final class ExpansionCycle extends RuntimeException {
+    private static final long serialVersionUID = 1L;
 
     ExpansionCycle(String message) {
         super(message);

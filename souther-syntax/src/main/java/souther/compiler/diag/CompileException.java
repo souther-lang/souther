@@ -20,6 +20,7 @@ import java.util.List;
  * is then the first: the one a single-diagnostic caller reads.
  */
 public class CompileException extends RuntimeException {
+    private static final long serialVersionUID = 1L;
 
     /**
      * What this error found, each with what the compile can say about where it is listed.

@@ -7,7 +7,6 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.inputs.InputDomain;
 import souther.compiler.reach.Reachability;
 
 import java.util.ArrayList;
@@ -16,7 +15,6 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A comparison is read under what holds where it stands, wherever that is.

@@ -2,7 +2,6 @@ package souther.compiler.claims;
 
 import souther.compiler.check.PathReachability;
 import souther.compiler.reach.Reachability;
-import souther.compiler.reach.WhyUnsettled;
 
 import java.util.ArrayList;
 import java.util.List;

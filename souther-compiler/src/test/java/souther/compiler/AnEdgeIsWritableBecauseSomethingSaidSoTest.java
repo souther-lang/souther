@@ -3,7 +3,6 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
-import souther.compiler.partition.Generator;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.ItemAssessment;
