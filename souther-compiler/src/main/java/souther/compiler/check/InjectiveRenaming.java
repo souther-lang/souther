@@ -65,6 +65,8 @@ public final class InjectiveRenaming<A, B> {
      * <p>Settled once. The name a subject was first given is the name it keeps, whatever the
      * function would answer on being asked again.
      *
+     * @throws NullPointerException where the naming gives this subject no name
+
      * @throws IllegalStateException where some other source is already called that, which is this
      *                               renaming saying two subjects are one
      */
@@ -73,7 +75,12 @@ public final class InjectiveRenaming<A, B> {
         if (settled != null) {
             return settled;
         }
-        B target = naming.apply(source);
+        // A name and not the absence of one. Held to here rather than left to the map: a subject
+        // whose name were null would be one this could not tell from a subject it has not named, so
+        // it would be asked of the function again and could come back called something else — which
+        // is the one thing a renaming is held to not doing.
+        B target = java.util.Objects.requireNonNull(naming.apply(source),
+                "a renaming gives a subject a name, and null is not one");
         A had = named.putIfAbsent(target, source);
         if (had != null && !had.equals(source)) {
             throw new IllegalStateException("`" + had + "` and `" + source + "` are both called `"

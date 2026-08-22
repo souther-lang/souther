@@ -96,6 +96,19 @@ class ARenamingNamesTwoSubjectsTwoSubjectsTest {
         assertEquals("y#1", counting.apply("y"), "and another subject is another subject");
     }
 
+    /**
+     * A naming that gives a subject no name is refused rather than remembered.
+     *
+     * <p>The one hole a name kept in a map cannot cover. A subject called null could not be told
+     * from a subject this has not named, so it would be asked of the function again and could come
+     * back called something else — the function it was held to being a function.
+     */
+    @Test
+    void aNamingThatGivesNoNameIsRefused() {
+        assertThrows(NullPointerException.class,
+                () -> InjectiveRenaming.<String, String>of(_ -> null).apply("x"));
+    }
+
     /** The same, through the domains a state is renamed by: one subject in facts and in the values
      *  arrives under one name from both. */
     @Test

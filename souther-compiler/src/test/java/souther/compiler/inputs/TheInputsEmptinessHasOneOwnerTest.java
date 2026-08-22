@@ -10,7 +10,6 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.values.AdmissibleValues;
-import souther.compiler.values.ConjoinedAdmissibleValues;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -18,6 +17,7 @@ import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 
 import java.lang.reflect.Method;
+import java.util.List;
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -182,20 +182,31 @@ class TheInputsEmptinessHasOneOwnerTest {
         Quantities asked = read.inputs().quantities(read.symbols());
         assertTrue(asked.emptiness().isEmpty(), "nothing here contradicts");
 
-        ConjoinedAdmissibleValues<?> held = valuesOf(asked);
-        assertEquals(13, held.factors().size(), "one reading per parameter");
-        for (AdmissibleValues<?> each : held.factors()) {
-            assertEquals(2, ((AdmissibleValues.Held.Alternatives<?>) each.held()).boxes().size(),
+        List<?> factors = factorsOf(asked);
+        assertEquals(13, factors.size(), "one reading per parameter");
+        for (Object each : factors) {
+            assertEquals(2, ((AdmissibleValues.Held.Alternatives<?>)
+                            ((AdmissibleValues<?>) each).held()).boxes().size(),
                     "and each holds the two its own declaration left");
         }
     }
 
-    /** What the input's one state holds of the values, which is not something a caller asks for. */
-    private static ConjoinedAdmissibleValues<?> valuesOf(Quantities asked) {
+    /**
+     * How the input's one state holds the readings of its parameters apart.
+     *
+     * <p>Reached by reflection because neither the state nor the factoring is anybody's to ask for.
+     * What went wrong was a representation growing as the product of the parameters, and reading it
+     * is the only way to measure that it does not — a time would be a fact about the machine it was
+     * taken on.
+     */
+    private static List<?> factorsOf(Quantities asked) {
         try {
             java.lang.reflect.Method held = asked.getClass().getDeclaredMethod("constraints");
             held.setAccessible(true);
-            return ((souther.compiler.check.ConstraintState<?>) held.invoke(asked)).values();
+            Object values = ((souther.compiler.check.ConstraintState<?>) held.invoke(asked)).values();
+            java.lang.reflect.Method factors = values.getClass().getDeclaredMethod("factors");
+            factors.setAccessible(true);
+            return (List<?>) factors.invoke(values);
         } catch (ReflectiveOperationException e) {
             throw new LinkageError(e.getMessage(), e);
         }

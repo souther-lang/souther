@@ -8,6 +8,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.function.Function;
 
 /**
@@ -89,8 +91,16 @@ public final class ConjoinedAdmissibleValues<A> {
         return new ConjoinedAdmissibleValues<>(List.of(read));
     }
 
-    /** The readings this holds, in the order they arrived. */
-    public List<AdmissibleValues<A>> factors() {
+    /**
+     * The readings this holds, in the order they arrived.
+     *
+     * <p>Not public. How a conjunction is held apart is this type's own business — every question
+     * anybody asks of it is asked of the conjunction and answered from whichever factor names the
+     * subject — and a caller counting the factors would be reading a representation as though it
+     * were an answer. What is here for is a test measuring that a conjunction of readings over
+     * disjoint vocabularies is not multiplied into one.
+     */
+    List<AdmissibleValues<A>> factors() {
         return factors;
     }
 
@@ -183,7 +193,21 @@ public final class ConjoinedAdmissibleValues<A> {
         return new ConjoinedAdmissibleValues<>(out);
     }
 
-    /** One factor per connected component of "these two name a subject in common". */
+    /**
+     * One factor per connected component of "these two name a subject in common".
+     *
+     * <p><b>Which factors are one is found by walking; the order they are met in is not.</b> The
+     * walk reaches a component's members through whichever subject it happens to look at first, and
+     * met as they are reached, a component of three would be folded in the order its vocabularies
+     * were iterated. {@link AdmissibleValues#meet} does not answer the same either way — what stopped
+     * a position's rules from being read is the first reason given for it, so two readings that
+     * both went unread at one position are told apart by which of them was met first. Read off a
+     * walk, that reason would be settled by which subject a factor's vocabulary happened to list
+     * first rather than by which reading arrived first.
+     *
+     * <p>So the members are collected, and then the readings are folded in the order they arrived.
+     * Connectivity decides who is met with whom; arrival decides in what order.
+     */
     private static <A> List<AdmissibleValues<A>> byComponent(List<AdmissibleValues<A>> of) {
         List<Set<A>> vocabularies = new ArrayList<>(of.size());
         of.forEach(each -> vocabularies.add(each.subjects()));
@@ -201,8 +225,10 @@ public final class ConjoinedAdmissibleValues<A> {
             if (taken[at]) {
                 continue;
             }
+            // Every reading this one reaches, gathered before any of them is met.
+            SortedSet<Integer> members = new TreeSet<>();
             taken[at] = true;
-            AdmissibleValues<A> component = of.get(at);
+            members.add(at);
             Deque<Integer> reaching = new ArrayDeque<>();
             reaching.add(at);
             while (!reaching.isEmpty()) {
@@ -210,11 +236,16 @@ public final class ConjoinedAdmissibleValues<A> {
                     for (int also : naming.getOrDefault(subject, List.of())) {
                         if (!taken[also]) {
                             taken[also] = true;
-                            component = component.meet(of.get(also));
+                            members.add(also);
                             reaching.add(also);
                         }
                     }
                 }
+            }
+            // And then met in the order they arrived, which is the order they are held in.
+            AdmissibleValues<A> component = null;
+            for (int each : members) {
+                component = component == null ? of.get(each) : component.meet(of.get(each));
             }
             out.add(component);
         }

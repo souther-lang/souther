@@ -87,6 +87,44 @@ class ReadingsConjoinedAreNotMultipliedTest {
     }
 
     /**
+     * The readings of a component are met in the order they arrived, not in the order they were
+     * reached.
+     *
+     * <p>{@link AdmissibleValues#meet} does not answer the same either way. What stopped a
+     * position's rules from being read is the first reason given for it, so two readings that both
+     * went unread at one position are told apart by which of them was met first — and that has to be
+     * which of them arrived, since the order a conjunction holds its readings in is the order they
+     * came.
+     *
+     * <p>Three readings met at once, in a shape where the two orders differ. Held apart are one over
+     * {@code {a, b}} and one over {@code {x}}, which share nothing; met with them is one over
+     * {@code {b, x}}, which reaches both. Walking out of the first, {@code b} leads to the bridge and
+     * the bridge leads to the third — so the bridge is reached second and the third last, while the
+     * order they arrived in is the other way round. Both of the last two say why {@code x} went
+     * unread, and which of them is heard is the whole difference.
+     */
+    @Test
+    void aComponentIsMetInTheOrderItsReadingsArrived() {
+        AdmissibleValues<String> named = AdmissibleValues.at("a", just("x"))
+                .meet(AdmissibleValues.at("b", just("y")));
+        AdmissibleValues<String> arrivedSecond =
+                AdmissibleValues.unreadable(Set.of("x"), UnreadReason.FORM_NOT_READ);
+        AdmissibleValues<String> bridge =
+                AdmissibleValues.unreadable(Set.of("b", "x"), UnreadReason.RELATES_TWO_POSITIONS);
+
+        ConjoinedAdmissibleValues<String> apart = ConjoinedAdmissibleValues.of(named)
+                .meet(ConjoinedAdmissibleValues.of(arrivedSecond));
+        assertEquals(2, apart.factors().size(), "these two share nothing");
+
+        ConjoinedAdmissibleValues<String> joined =
+                apart.meet(ConjoinedAdmissibleValues.of(bridge));
+
+        assertEquals(1, joined.factors().size(), "and the third reaches both of them");
+        assertEquals(UnreadReason.FORM_NOT_READ, joined.whyUnread("x"),
+                "the reading that arrived first is the one that says why");
+    }
+
+    /**
      * A reading says nothing about a subject it does not name.
      *
      * <p>Which is what makes the two answers above exact rather than approximate: a factor that does
