@@ -559,4 +559,37 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
         assertEquals(4, twice.obligations(), "one match per rule handed in");
         assertEquals(2, twice.covered().size(), "and the one row reaches one arm of each");
     }
+
+    /**
+     * A name a body binds a rule to is where the rule was put, and is not the rule.
+     *
+     * <p>There are as many bindings as there are copies of the body that made them, and two names
+     * for one declaration are two bindings — so a rule read off the binding is as many rules as
+     * that, and each call site is owed a row establishing what another already does.
+     */
+    @Test
+    void twoNamesForOneRuleAreOneRule() {
+        Adequacy.BranchEvidence twice = arms("""
+                module example.rules
+
+                data Count = Int
+
+                let adult (x: Int): Bool = x >= 18
+
+                behavior twice : (a: List<Int>, b: List<Int>) -> Count
+                    constructs Count
+                let twice (a, b) = {
+                    let p = adult
+                    let q = adult
+                    Count(List.length(List.filter(p, a)) + List.length(List.filter(q, b)))
+                }
+
+                example twice
+                    | "one over and one under" : ([ 20 ], [ 1 ]) -> Count(1)
+                """, "twice");
+
+        assertEquals(2, twice.obligations(), "one rule, bound under two names");
+        assertEquals(List.of(), twice.countedTogether(),
+                () -> "and nothing about it is uncertain: " + twice.countedTogether());
+    }
 }

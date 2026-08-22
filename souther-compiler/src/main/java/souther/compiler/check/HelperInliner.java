@@ -348,6 +348,10 @@ public final class HelperInliner {
      *  same reason the element bindings are: this is where the call site still stands. */
     private final souther.compiler.coverage.SuppliedRules.Builder supplied =
             new souther.compiler.coverage.SuppliedRules.Builder();
+    /** Which rule each binding that holds one stands for. Kept by binding rather than by the writing
+     *  it was made in: a binding tells itself from every other, and what a name stands for is the
+     *  same question wherever the name is read. */
+    private final Map<BindingId, souther.compiler.coverage.SuppliedRules.RuleIdentity> rules = new LinkedHashMap<>();
 
     /** Every recursion in reach, which is exactly what {@link #inline} leaves a call standing to —
      *  this module's own, what its imports publish to it, and the library underneath both. What a
@@ -836,6 +840,37 @@ public final class HelperInliner {
     /** The one spelling for a rule written at a call site. */
     private static final String SUPPLIED = "$";
 
+    /**
+     * Which rule {@code named} stands for, or null where nothing here says.
+     *
+     * <p>A name bound to a rule is not the rule: two names for one declaration are one rule, and one
+     * name in two copies of a body is one rule as well, while the bindings behind them are as many
+     * as there are copies. So a local is looked through to what it was given, and what is answered
+     * is what the author wrote.
+     */
+    private souther.compiler.coverage.SuppliedRules.RuleIdentity ruleOf(Hir.Var.Denoting named) {
+        if (!(named.denotes() instanceof ValueName.Local local)) {
+            return named.denotes() == null ? null
+                    : new souther.compiler.coverage.SuppliedRules.RuleIdentity.Named(
+                            named.denotes());
+        }
+        return rules.get(local.id());
+    }
+
+    /** Says that {@code binding} holds {@code rule}, where anything says what it holds. */
+    private void stands(BindingId binding, souther.compiler.coverage.SuppliedRules.RuleIdentity rule) {
+        if (rule != null) {
+            rules.put(binding, rule);
+        }
+    }
+
+    /** The same, of a rule written out where it stands. */
+    private static souther.compiler.coverage.SuppliedRules.RuleIdentity ruleOf(Hir.Block written) {
+        return written.rule().isWritten()
+                ? new souther.compiler.coverage.SuppliedRules.RuleIdentity.Written(written.rule())
+                : null;
+    }
+
     private Hir.FnDef expands(Hir.Var.Denoting named) {
         String reachedBy = named.reaches();
         return switch (named.denotes()) {
@@ -1063,6 +1098,7 @@ public final class HelperInliner {
                 if (aliased != null) {
                     BindingId alias = li.binder().id();
                     writing.scopedLambdas().put(alias, new ScopedLambda(aliased));
+                    stands(alias, ruleOf((Hir.Var.Denoting) value));
                     Hir.Expr aliasBody = inline(li.body());
                     writing.scopedLambdas().remove(alias);
                     yield references(aliasBody, alias)
@@ -1090,6 +1126,11 @@ public final class HelperInliner {
                 writing.scopedLambdas().put(bound, new ScopedLambda(
                         Hir.FnDef.lambda(li.name(), params, null,
                                 new Hir.FnBody.Written(lambda.body()), li.pos())));
+                // Read off what the author bound, not off what it became: a name reaching a place
+                // that wants a function is wrapped in a block written at that place, and two names
+                // for one declaration would come out as two rules written in two places.
+                stands(bound, li.value() instanceof Hir.Var.Denoting named ? ruleOf(named)
+                        : ruleOf(lambda));
                 Hir.Expr body = inline(li.body());
                 writing.scopedLambdas().remove(bound);
                 // if the binding is still read, the function was used as a value, not just applied —
@@ -1298,14 +1339,10 @@ public final class HelperInliner {
                 // arrives, naming one declaration at two call sites would be two rules.
                 Hir.Expr authored = rawCall.args().size() == args.size()
                         ? rawCall.args().get(i) : arg;
-                if (authored instanceof Hir.Var.Denoting handed) {
-                    supplied.handed(mine, p.name(),
-                            new souther.compiler.coverage.SuppliedRules.RuleIdentity.Named(
-                                    handed.denotes()));
-                } else if (authored instanceof Hir.Block written && written.rule().isWritten()) {
-                    supplied.handed(mine, p.name(),
-                            new souther.compiler.coverage.SuppliedRules.RuleIdentity.Written(
-                                    written.rule()));
+                souther.compiler.coverage.SuppliedRules.RuleIdentity handedIn = authored instanceof Hir.Var.Denoting handed ? ruleOf(handed)
+                        : authored instanceof Hir.Block written ? ruleOf(written) : null;
+                if (handedIn != null) {
+                    supplied.handed(mine, p.name(), handedIn);
                 }
                 if (arg instanceof Hir.Var.Denoting fnName) {
                     // A name handed to a function parameter is substituted through: what
@@ -1338,6 +1375,7 @@ public final class HelperInliner {
                                     declares == null ? null : declares.result(),
                                     new Hir.FnBody.Written(lambda.body()), lambda.pos()),
                             new LambdaOrigin(p.name(), helper.name(), lambda.pos())));
+                    stands(f.id(), ruleOf(lambda));
                     unreduced.put(f.id(),
                             new Hir.Bound(f, instantiated(p.type(), applied), lambda));
                 } else {

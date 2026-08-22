@@ -68,8 +68,24 @@ public record SuppliedRules(Map<BindingOwner, Map<String, RuleIdentity>> byExpan
      */
     public sealed interface RuleIdentity {
 
-        /** A declaration named at the call site. Naming it twice hands in one rule. */
-        record Named(ValueName declaration) implements RuleIdentity {}
+        /**
+         * A declaration named at the call site. Naming it twice hands in one rule.
+         *
+         * <p>A declaration and never a binding. A binding is where a rule was put, and there are as
+         * many of those as there are copies of the body that put it there — so one rule read out of
+         * a name would be as many rules as the body has copies, and two names for one declaration
+         * would be two.
+         */
+        record Named(ValueName declaration) implements RuleIdentity {
+
+            public Named {
+                if (declaration instanceof ValueName.Local) {
+                    throw new IllegalArgumentException(
+                            "a rule is a declaration, and a binding is where one was put: "
+                                    + declaration);
+                }
+            }
+        }
 
         /**
          * A rule the source wrote out, told from every other by which block of that source it is.
