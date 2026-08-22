@@ -124,7 +124,7 @@ class AMeasureWithNoNumberSaysWhyTest {
     @Test
     void aSignatureWithCasesAndNoRowSaysNobodyMeasuredIt() {
         Compilation compilation = Compilation.ofSource(NO_ROWS, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String judge = behaviorBlock(
                 AdequacyReport.of(compilation).human(SourceNameResolver.identity()), "judge");
@@ -134,7 +134,7 @@ class AMeasureWithNoNumberSaysWhyTest {
 
     private static Compilation compiled() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return compilation;
     }
@@ -353,7 +353,7 @@ class AMeasureWithNoNumberSaysWhyTest {
     private static Compilation unseen() {
         Compilation compilation = Compilation.ofSources(UNSEEN,
                 souther.compiler.meta.ModulePath.EMPTY);
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return compilation;
     }

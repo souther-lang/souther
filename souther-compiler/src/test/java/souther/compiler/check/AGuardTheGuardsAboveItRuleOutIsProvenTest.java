@@ -190,7 +190,7 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
 
     private static String rowsAskedOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "d");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return souther.compiler.report.GeneratedRows.of(compilation, "d", "charge", true,
                 SourceNameResolver.identity());

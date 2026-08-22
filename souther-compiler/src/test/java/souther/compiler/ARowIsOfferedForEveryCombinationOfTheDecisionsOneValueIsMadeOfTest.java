@@ -63,7 +63,7 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
 
     private static String block(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, Adequacy.Filling> filling = compilation.db()
                 .ask(new Adequacy.Generated(compilation.modules().get(0))).value();

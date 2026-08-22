@@ -139,7 +139,7 @@ class WhichFindingsABuildRefusesOverIsWrittenDownTest {
                     | (Ask { flag = Yes }) -> Res { n = 1 }
                     | (Ask { flag = No }) -> Res { n = 1 }
                 """, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         AdequacyReport report = AdequacyReport.of(compilation);
         String human = report.human(SourceNameResolver.identity());
@@ -207,7 +207,7 @@ class WhichFindingsABuildRefusesOverIsWrittenDownTest {
                 example check
                     | "both fit" : (Req { small = Amount(20), large = Amount(50) }) -> Ok
                 """, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         JsonNode check = JSON.readTree(
                         AdequacyReport.of(compilation).json(SourceNameResolver.identity()))
@@ -296,7 +296,7 @@ class WhichFindingsABuildRefusesOverIsWrittenDownTest {
 
     private static AdequacyReport report() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation);
     }

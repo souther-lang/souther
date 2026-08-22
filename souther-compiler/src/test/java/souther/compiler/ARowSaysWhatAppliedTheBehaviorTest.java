@@ -104,7 +104,7 @@ class ARowSaysWhatAppliedTheBehaviorTest {
 
     private static List<RowOutcome> rowsOf(String source) {
         Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         List<RowOutcome> rows = new ArrayList<>();
         for (String module : compilation.modules()) {

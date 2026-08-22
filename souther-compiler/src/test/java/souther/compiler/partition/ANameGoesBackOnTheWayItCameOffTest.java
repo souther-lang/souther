@@ -161,7 +161,7 @@ class ANameGoesBackOnTheWayItCameOffTest {
     @Test
     void aRowIsWrittenUnderTheNameAndReadBackThroughIt() {
         Compilation compilation = Compilation.ofSource(MODULE, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         PartitionEvidence evidence = compilation.db()
                 .ask(new Adequacy.Coverage("demo")).value().get("run");
@@ -181,7 +181,7 @@ class ANameGoesBackOnTheWayItCameOffTest {
                 example run
                     | (DecisionN(Approved { id = 1 })) -> Ok
                 """, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         PartitionEvidence evidence = compilation.db()
                 .ask(new Adequacy.Coverage("demo")).value().get("run");

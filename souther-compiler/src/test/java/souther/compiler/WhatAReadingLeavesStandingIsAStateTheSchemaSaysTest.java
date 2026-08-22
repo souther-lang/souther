@@ -109,7 +109,7 @@ class WhatAReadingLeavesStandingIsAStateTheSchemaSaysTest {
 
     private static JsonNode partitionOf(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         JsonNode document = JSON.readTree(
                 AdequacyReport.of(compilation).json(SourceNameResolver.identity()));

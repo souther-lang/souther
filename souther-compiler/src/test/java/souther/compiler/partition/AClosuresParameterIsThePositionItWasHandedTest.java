@@ -56,7 +56,7 @@ class AClosuresParameterIsThePositionItWasHandedTest {
 
     private static Map<String, PartitionEvidence> measured() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, PartitionEvidence> coverage =
                 compilation.db().ask(new Adequacy.Coverage(MODULE)).value();
@@ -133,7 +133,7 @@ class AClosuresParameterIsThePositionItWasHandedTest {
                     List.map(q -> Score(q.age.value + 100), people))
             """;
         Compilation compilation = Compilation.ofSource(derived, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         PartitionEvidence scored =
                 compilation.db().ask(new Adequacy.Coverage(MODULE)).value().get("scored");

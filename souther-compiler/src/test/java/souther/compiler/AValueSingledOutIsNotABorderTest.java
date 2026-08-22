@@ -50,7 +50,7 @@ class AValueSingledOutIsNotABorderTest {
     private static Set<CoverageObligation> raisedBy(String condition) {
         Compilation compilation = Compilation.ofSource(
                 SOURCE.formatted(condition), "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         PartitionEvidence partition = AdequacyReport.of(compilation)
                 .modules().get(0).behaviors().get(0).partition();
@@ -62,7 +62,7 @@ class AValueSingledOutIsNotABorderTest {
     /** The questions themselves, for a row that is about what they are about. */
     private static java.util.List<PartitionEvidence.Unanswered> raisedWith(String condition) {
         Compilation compilation = Compilation.ofSource(SOURCE.formatted(condition), "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
                 .modules().get(0).behaviors().get(0).partition().unanswered();

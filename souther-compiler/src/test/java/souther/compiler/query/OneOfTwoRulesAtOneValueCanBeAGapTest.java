@@ -51,7 +51,7 @@ class OneOfTwoRulesAtOneValueCanBeAGapTest {
         Compilation compilation = Compilation.ofSource(MODULE, "Main");
         // Set before anything is asked. The lines are measured only where the arms are, and that is
         // what puts two obligations at one value in front of the reading under test.
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String module = compilation.modules().get(0);
 

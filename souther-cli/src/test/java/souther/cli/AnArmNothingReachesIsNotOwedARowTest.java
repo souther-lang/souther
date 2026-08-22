@@ -160,15 +160,19 @@ class AnArmNothingReachesIsNotOwedARowTest {
     // --- the cases behind such an arm -------------------------------------------------------------
 
     /**
-     * The row at the cap, which the record's own clause draws a line at.
+     * The rows at the cap and away from the lines, which the record's own clauses draw.
      *
      * <p>Written here and not into {@link #CAPPED}, because the arm tests below move the guard down
      * to 5 and a `b` of 10 would then reach the arm they are about. What is checked here is that
      * nothing is left over once the arms have been accounted for, and `b <= 10` is a bound on one
-     * coordinate against a constant, so it is owed a row like any other (ADR-0090).
+     * coordinate against a constant, so it is owed a row like any other (ADR-0090). The second row
+     * sits well inside both bounds, which is the other pair of points a border owes: the report a
+     * report command writes is held to reliable domain coverage, so a model with nothing left over
+     * has a row away from each line as well as against it.
      */
     private static final String AT_THE_CAP = CAPPED
-            + "    | \"at the cap\" : (Pair { a = Count(0), b = Count(10) }) -> Small\n";
+            + "    | \"at the cap\" : (Pair { a = Count(0), b = Count(10) }) -> Small\n"
+            + "    | \"well within\" : (Pair { a = Count(5), b = Count(9) }) -> Small\n";
 
     @Test
     void aCaseOnlyThatArmProducesIsNotOwedEither() throws Exception {

@@ -56,7 +56,7 @@ class AComparisonInsideAConjunctionIsStillTheModelsLineTest {
 
     private static String blockOf(String behavior) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String human = AdequacyReport.of(compilation).human(SourceNameResolver.identity());
         StringBuilder block = new StringBuilder();
@@ -111,7 +111,7 @@ class AComparisonInsideAConjunctionIsStillTheModelsLineTest {
     private static ItemAssessment.Coverage coverageAt(String behavior, String axis,
                                                           String value) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, List<BorderAssessment>> boundaries =
                 compilation.db().ask(new Adequacy.Boundaries("example.repro")).value();

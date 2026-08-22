@@ -136,7 +136,7 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
     @Test
     void anEdgeNoSearchReachedIsStillSaidInTheBlock() {
         Compilation compilation = Compilation.ofSource(PROVEN_BUT_UNREACHED, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
 
         String block = souther.compiler.report.GeneratedRows.of(
@@ -322,7 +322,7 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
     private static List<BorderAssessment.Point> pointsAt(String model, String module,
                                                          String behavior) {
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, List<BorderAssessment>> boundaries =
                 compilation.db().ask(new Adequacy.Boundaries(module)).value();
@@ -375,7 +375,7 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
 
             Compilation compilation =
                     Compilation.ofSource(TEMPORAL_EDGE_NOTHING_COMPOSED, "Main");
-            compilation.measure(Adequacy.Asked.reportOnly());
+            compilation.measure(Adequacy.Asked.fullReport());
             compilation.answerEverything();
             String block = souther.compiler.report.GeneratedRows.of(
                     compilation, "example.temporal", each[0], true, SourceNameResolver.identity());

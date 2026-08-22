@@ -47,7 +47,7 @@ class ARuleChosenWhileItRunsIsNeverACompleteMeasureTest {
     @Test
     void itsArmsAreNeverCountedAsAWholeMeasure() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Adequacy.BranchEvidence tally = compilation.db()
                 .ask(new Adequacy.BranchCoverage(MODULE)).value().get("tally");

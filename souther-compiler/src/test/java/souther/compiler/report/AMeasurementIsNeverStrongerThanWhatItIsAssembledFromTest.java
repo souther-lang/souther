@@ -201,7 +201,7 @@ class AMeasurementIsNeverStrongerThanWhatItIsAssembledFromTest {
             }
         }
         Compilation compilation = Compilation.ofSources(sources, souther.compiler.meta.ModulePath.EMPTY);
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
     }
@@ -212,7 +212,7 @@ class AMeasurementIsNeverStrongerThanWhatItIsAssembledFromTest {
 
     private static AdequacyReport reportOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation);
     }

@@ -52,7 +52,7 @@ class CompileExampleBoundaryTest {
     private static PartitionEvidence evidence(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         // Measuring the arms is opted into, so a test about them opts in.
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
@@ -206,7 +206,7 @@ class CompileExampleBoundaryTest {
                 example keep
                     | (Note("x")) -> Kept { note = Note("x") }
                 """, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();

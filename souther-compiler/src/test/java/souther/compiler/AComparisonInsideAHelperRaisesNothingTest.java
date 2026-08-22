@@ -24,7 +24,7 @@ class AComparisonInsideAHelperRaisesNothingTest {
 
     private static List<PartitionEvidence.Unanswered> standing(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
                 .modules().get(0).behaviors().get(0).partition().unanswered();

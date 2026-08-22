@@ -44,7 +44,7 @@ class AnElementReachedThroughAnOperationIsStillThePositionsTest {
     private static List<String> axesOf(String filtered) {
         Compilation compilation =
                 Compilation.ofSource(MODEL.replace("FILTERED", filtered), "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, PartitionEvidence> coverage =
                 compilation.db().ask(new Adequacy.Coverage(MODULE)).value();

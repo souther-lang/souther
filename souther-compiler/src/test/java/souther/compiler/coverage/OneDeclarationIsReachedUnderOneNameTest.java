@@ -56,7 +56,7 @@ class OneDeclarationIsReachedUnderOneNameTest {
     void aHelperOfAnotherModuleIsOneObligationPerRuleHandedIn() {
         Compilation compilation = Compilation.ofSources(List.of(LIB, APP),
                 souther.compiler.meta.ModulePath.EMPTY);
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Adequacy.BranchEvidence twice = compilation.db()
                 .ask(new Adequacy.BranchCoverage("ex.app")).value().get("twice");

@@ -65,7 +65,7 @@ class EveryKeyThisWritesIsOneTheSchemaDeclaresTest {
 
     private static JsonNode document() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return JSON.readTree(AdequacyReport.of(compilation).json(SourceNameResolver.identity()));
     }

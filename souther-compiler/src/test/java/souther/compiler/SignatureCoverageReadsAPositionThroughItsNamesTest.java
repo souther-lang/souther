@@ -200,7 +200,7 @@ class SignatureCoverageReadsAPositionThroughItsNamesTest {
 
     private static Compilation measured(String rows) {
         Compilation compilation = Compilation.ofSource(DECLARATIONS + "\n" + rows, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return compilation;
     }

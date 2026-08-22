@@ -48,7 +48,7 @@ class WhatASequenceHoldsIsAPositionTest {
 
     private static List<Position> positionsOfRoster() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, InputDomain> inputs =
                 compilation.db().ask(new Adequacy.Inputs(MODULE)).value();

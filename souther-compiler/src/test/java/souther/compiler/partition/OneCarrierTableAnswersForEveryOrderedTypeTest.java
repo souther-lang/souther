@@ -444,7 +444,7 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
     @Test
     void aClassOpenAtBothEndsOffersAValueOfItsOwnOrNone() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
 
         String dense = souther.compiler.report.GeneratedRows.of(
@@ -480,7 +480,7 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
     @Test
     void theClassOfEverythingElseIsOfferedAValueThatIsNoneOfThem() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
 
         String dense = souther.compiler.report.GeneratedRows.of(
@@ -501,7 +501,7 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
     /** What the measures answered for each named behavior. */
     private static Map<String, Measured> measured(Iterable<String> behaviors) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, PartitionEvidence> coverage =
                 compilation.db().ask(new Adequacy.Coverage("example.matrix")).value();
@@ -544,7 +544,7 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
     void howTheValuesStepIsAskedOfTheCarrier() {
         for (String behavior : List.of("twoLinesDense", "twoLinesMoment")) {
             Compilation compilation = Compilation.ofSource(MODEL, "Main");
-            compilation.measure(Adequacy.Asked.reportOnly());
+            compilation.measure(Adequacy.Asked.fullReport());
             compilation.answerEverything();
             String block = souther.compiler.report.GeneratedRows.of(
                     compilation, "example.matrix", behavior, true, SourceNameResolver.identity());

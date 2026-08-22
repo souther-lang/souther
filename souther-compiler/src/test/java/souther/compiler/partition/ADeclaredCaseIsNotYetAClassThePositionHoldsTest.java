@@ -84,7 +84,7 @@ class ADeclaredCaseIsNotYetAClassThePositionHoldsTest {
 
     private static List<String> measured(String behavior) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         PartitionEvidence evidence = compilation.db()
                 .ask(new Adequacy.Coverage("demo")).value().get(behavior);

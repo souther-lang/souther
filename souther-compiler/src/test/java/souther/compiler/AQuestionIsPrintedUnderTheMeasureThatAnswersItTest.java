@@ -42,7 +42,7 @@ class AQuestionIsPrintedUnderTheMeasureThatAnswersItTest {
 
     private static String report() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
     }

@@ -45,7 +45,7 @@ class APositionInsideASequenceInsideOneIsPlacedTooTest {
 
     private static Compilation measured() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return compilation;
     }

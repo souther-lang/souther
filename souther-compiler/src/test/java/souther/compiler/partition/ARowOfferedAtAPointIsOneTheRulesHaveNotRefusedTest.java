@@ -176,7 +176,7 @@ class ARowOfferedAtAPointIsOneTheRulesHaveNotRefusedTest {
 
     private static String report(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
     }
 }
