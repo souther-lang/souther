@@ -59,21 +59,6 @@ class TheAbiIsSpelledInOnePlaceTest {
      * say what was true when it was written: a module added to the build and not to the list would
      * leave this passing over a tree it never read, which is the shape it exists to refuse.
      */
-    private static List<String> modules() {
-        String pom;
-        try {
-            pom = Files.readString(repoRoot().resolve("pom.xml"));
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-        List<String> modules = new ArrayList<>();
-        Matcher m = Pattern.compile("<module>([^<]+)</module>").matcher(pom);
-        while (m.find()) {
-            modules.add(m.group(1));
-        }
-        assertFalse(modules.isEmpty(), "the reactor names no modules");
-        return modules;
-    }
 
     /** What a string-concatenation recipe stands each argument as, so a joint in an assembled name is
      *  visible where a word in a sentence is not. */
@@ -99,7 +84,7 @@ class TheAbiIsSpelledInOnePlaceTest {
 
         List<String> violations = new ArrayList<>();
         List<String> scanned = new ArrayList<>();
-        List<String> modules = modules();
+        List<String> modules = Reactor.modules();
         for (String module : modules) {
             for (String where : List.of("target/classes", "target/test-classes")) {
                 Path classes = repoRoot().resolve(module).resolve(where);
@@ -154,7 +139,7 @@ class TheAbiIsSpelledInOnePlaceTest {
     @Test
     void andNothingOutsideTheAbiCapitalizesABehaviorsFirstLetter() {
         List<String> callers = new ArrayList<>();
-        for (String module : modules()) {
+        for (String module : Reactor.modules()) {
             Path classes = repoRoot().resolve(module).resolve("target/classes");
             assertTrue(Files.isDirectory(classes), module + " has no built classes");
             walkFor(classes, callers, TheAbiIsSpelledInOnePlaceTest::capitalizes);

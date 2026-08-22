@@ -81,5 +81,11 @@ public record OutputCaseEvidence(Set<TypeSymbol> declared, Set<TypeSymbol> speci
         public MeasurementStatus status() {
             return status;
         }
+
+        /** Nothing was read and nothing needed to be: the type has no case to cover. */
+        @Override
+        public boolean somethingWasUnreadable() {
+            return false;
+        }
     }
 }

@@ -15,16 +15,17 @@ import java.util.List;
  * answer at one and another at the other. Shared, each would be reported on the strength of whatever
  * stopped its neighbour.
  *
- * <p><b>{@link Absent} costs a proof.</b> #521 is what that protects. A boundary measure that
- * derived nothing may have been reading a model whose bounds sit where this could not get to, and
- * calling it measured says the rows carrying a model's whole risk earned nothing. That case cannot
- * reach an absence here because a reading that stopped produces no {@code Closed} — the protection
- * is the shape of the type and not a condition anybody has to remember to write.
+ * <p><b>{@link Absent} costs a proof.</b> A boundary measure that derived nothing may have been
+ * reading a model whose bounds sit where this could not get to, and calling it measured says the
+ * rows carrying a model's whole risk earned nothing. That case cannot reach an absence here
+ * because a reading that stopped produces no {@code Closed} — the protection is the shape of the
+ * type and not a condition anybody has to remember to write.
  *
- * <p>And {@link Partial} is #521's other half, which was missing while the question was only about
- * empty answers. A behavior one of whose rules drew a line and another of whose lines nothing could
- * read has borders to show and a measure that was not made in full; reported complete, a build was
- * held to what this compiler managed rather than to what the model states.
+ * <p>And {@link Partial} is the same argument on the other side, which had nowhere to be said
+ * while the question was only about empty answers. A behavior one of whose rules drew a line and
+ * another of whose lines nothing could read has borders to show and a measure that was not made in
+ * full; reported complete, a build was held to what this compiler managed rather than to what the
+ * model states.
  */
 public sealed interface BoundaryDerivation {
 
@@ -45,10 +46,10 @@ public sealed interface BoundaryDerivation {
          * could not be turned into a line, a position whose rules were never reached, a position
          * dropped past the axis limit.
          *
-         * <p>What {@code NO_LINES_DERIVED} said of every empty answer. #521 made it
+         * <p>What {@code NO_LINES_DERIVED} said of every empty answer. It was made
          * {@code NOT_MEASURED} because nothing could tell a model whose bounds sit one type away
-         * from a model with no bound at all; the closure tells them apart, and this is what is left
-         * of the first.
+         * from a model with no bound at all; the closure tells them apart, and this is what is
+         * left of the first.
          */
         THE_READING_DID_NOT_RUN_OUT(MeasurementStatus.NOT_MEASURED),
 
@@ -77,6 +78,12 @@ public sealed interface BoundaryDerivation {
         @Override
         public MeasurementStatus status() {
             return status;
+        }
+
+        /** Exactly {@link #THE_READING_DID_NOT_RUN_OUT}, which is what the words say: the other two are answers about the model, and no row and no reading would change either. */
+        @Override
+        public boolean somethingWasUnreadable() {
+            return this == THE_READING_DID_NOT_RUN_OUT;
         }
     }
 

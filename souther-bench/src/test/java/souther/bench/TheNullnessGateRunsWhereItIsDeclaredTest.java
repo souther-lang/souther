@@ -66,7 +66,7 @@ class TheNullnessGateRunsWhereItIsDeclaredTest {
 
     @Test
     void theGateIsConfiguredForEveryModuleThatDeclaresItAndNoOther() {
-        List<String> modules = modules();
+        List<String> modules = Reactor.modules();
         Set<String> declared = new LinkedHashSet<>();
         Set<String> configured = new LinkedHashSet<>();
         boolean rootGates = gateIsInTheBuildOf(repoRoot().resolve("pom.xml"));
@@ -225,21 +225,6 @@ class TheNullnessGateRunsWhereItIsDeclaredTest {
      * Everything this covers, read off the reactor rather than listed here, for the reason the ABI
      * check gives: a list of its own would say what was true when it was written.
      */
-    private static List<String> modules() {
-        String pom;
-        try {
-            pom = Files.readString(repoRoot().resolve("pom.xml"));
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-        List<String> modules = new ArrayList<>();
-        Matcher m = Pattern.compile("<module>([^<]+)</module>").matcher(pom);
-        while (m.find()) {
-            modules.add(m.group(1));
-        }
-        assertFalse(modules.isEmpty(), "the reactor names no modules");
-        return modules;
-    }
 
     private static Path repoRoot() {
         return Path.of("").toAbsolutePath().getParent();

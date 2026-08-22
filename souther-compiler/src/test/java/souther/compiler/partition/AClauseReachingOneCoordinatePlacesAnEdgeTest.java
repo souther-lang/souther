@@ -313,10 +313,10 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         assertTrue(report.contains("""
                   onSpan                   implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
-                    partition   not applicable (the model divides no position of this behavior)
+                    partition   not applicable (the rules of this behavior divide no position)
                       · not read: invariant Span #1 — it relates two positions rather than dividing one, about `v.startsAt`
                       · not read: invariant Span #1 — it relates two positions rather than dividing one, about `v.endsAt`
-                    border      not applicable (no rule of the model draws a line on this behavior)
+                    border      not applicable (the rules of this behavior draw no line)
                 """), report);
     }
 
@@ -329,10 +329,10 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         assertTrue(report.contains("""
                   onFloor                  implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
-                    partition   not applicable (the model divides no position of this behavior)
+                    partition   not applicable (the rules of this behavior divide no position)
                       · not read: invariant Floor #1 — it relates two positions rather than dividing one, about `v.n`
                       · not read: invariant Floor #1 — it relates two positions rather than dividing one, about `v.min`
-                    border      not applicable (no rule of the model draws a line on this behavior)
+                    border      not applicable (the rules of this behavior draw no line)
                 """), report);
     }
 

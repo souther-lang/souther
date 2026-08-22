@@ -1,5 +1,7 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.CoverageObligation;
+
 /**
  * Why a derivation did not finish, in this compiler's own terms.
  *
@@ -32,30 +34,41 @@ public sealed interface BlockReason {
     sealed interface AboutARule extends BlockReason {
 
         /**
-         * Whether a measure that would have had this rule's evidence is thereby short of something.
+         * Whether {@code measure} is thereby short of something.
          *
-         * <p>Not every rule a reading set aside was one it fell short of. A comparison relating two
-         * positions divides neither of them however well it is read, so a measure without it is a
-         * measure that read the model and found no class there — while a comparison in a form no
-         * reader takes apart may have divided the position or bounded it, and nothing knows which.
-         * The first is the model, the second is this compiler, and a measure told they were one
-         * thing reports whichever it happens to meet.
+         * <p>Not every rule a reading set aside was one it fell short of, and the ones that were
+         * are not all short of the same measure. A comparison in a form no reader takes apart may
+         * have divided the position or bounded it, and nothing knows which — so both.
          *
-         * <p>A switch and no {@code default}, so a reason added answers this on the day it is added
-         * rather than falling into whichever arm stands nearest.
+         * <p>Relating two positions leaves neither, and not because a line is always drawn from
+         * such a rule: an invariant clause that relates two positions raises no question either
+         * measure answers, and a body's comparison that places a relational border has that border
+         * accounted for by the reading that placed it. Either way nothing is missing here, which is
+         * what this answers.
          *
-         * <p>Which measure is short is not asked, and there is nothing here to ask it of. A rule
-         * this could not read is one whose line and whose classes are both unknown: what it would
-         * have said is exactly what nobody has.
+         * <p><b>Two switches and no {@code default} on either.</b> Asked per measure rather than
+         * answered with a set of them: a set is open at the measure end, so a third measure would
+         * be one every reason had silently answered "not short of" — which is the shape this whole
+         * arrangement is against, a new measure inheriting what two others happened to share. This
+         * way a reason added fails the inner switch and a measure added fails the outer, and
+         * whichever axis grows has to be answered for.
          */
-        default boolean leavesAMeasureShort() {
-            return switch (this) {
-                case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                     UnreadValueRule _, CompetingCoordinates _ -> true;
-                // Nothing is missing. The rule is read and settled beside the partition rather than
-                // in it, and a measure counting it short would hold a verdict open over a model
-                // whose every rule this compiler understood.
-                case ComparisonBetweenPositions _ -> false;
+        default boolean leavesShort(CoverageObligation.Measure measure) {
+            return switch (measure) {
+                case PARTITION -> switch (this) {
+                    case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
+                         UnreadValueRule _, CompetingCoordinates _ -> true;
+                    // The rule was read and it divides neither position, which is what it says and
+                    // not something missing here.
+                    case ComparisonBetweenPositions _ -> false;
+                };
+                case BOUNDARY -> switch (this) {
+                    case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
+                         UnreadValueRule _, CompetingCoordinates _ -> true;
+                    // Whatever line such a rule places is placed by the reading that reaches it, and
+                    // where none is placed none was owed.
+                    case ComparisonBetweenPositions _ -> false;
+                };
             };
         }
     }

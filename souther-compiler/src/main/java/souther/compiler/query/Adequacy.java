@@ -242,6 +242,12 @@ public final class Adequacy {
             public MeasurementStatus status() {
                 return status;
             }
+
+            /** Neither of these is a reading that stopped: one is a shape of the model and one is a row nobody wrote. */
+            @Override
+            public boolean somethingWasUnreadable() {
+                return false;
+            }
         }
 
         public static SignatureEvidence unavailable(OutputCaseEvidence output,
@@ -989,6 +995,12 @@ public final class Adequacy {
             @Override
             public MeasurementStatus status() {
                 return status;
+            }
+
+            /** The rows ran without instrumentation, so what they went through went with it. The other three are a measurement nobody asked for, or arms this behavior does not have. */
+            @Override
+            public boolean somethingWasUnreadable() {
+                return this == UNREADABLE;
             }
         }
 
