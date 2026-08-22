@@ -52,6 +52,26 @@ public sealed interface AdditiveImage {
     RationalCut tightenLower(RationalCut cut);
 
     /**
+     * Which values of a position leave a residue this image reaches — {@code { x | t - c·x ∈ this }}.
+     *
+     * <p>The generating side of {@link #contains}. A search that only asks whether a residue is
+     * reached can reject a value it has already chosen, and where a position offers one candidate a
+     * rejection leaves nothing; asked this way the same arithmetic names the values worth choosing.
+     *
+     * <p>What comes back is a coset of whatever the position is made of, which is why the spacing is
+     * an argument rather than read off this. An image over whole numbers is asked about by a position
+     * whose values fill wherever a form's positions are not all spaced alike — and the two mixed
+     * pairings are answered by the whole of the position's own values, which is wider than the truth
+     * and safe for the reason given on this interface. Every caller today weighs positions that share
+     * a carrier, so the mixed pairings are answered rather than refused and are not searched over.
+     *
+     * @param coefficient this position's weight in the form, never zero
+     * @param target      what the positions from this one on still owe
+     * @param source      how this position's own values are spaced
+     */
+    AffinePreimage affinePreimage(Rational coefficient, Rational target, Granularity source);
+
+    /**
      * The image of {@code Σ coefs·atom} over positions spaced as {@code spacing} says.
      *
      * @param coefs   never empty and never zero-valued: a form that names no position is a constant,
@@ -161,6 +181,37 @@ public sealed interface AdditiveImage {
                     : steps.ceiling().add(java.math.BigInteger.ONE);
             return RationalCut.inclusive(generator.times(Rational.of(above)));
         }
+
+        /**
+         * The solutions of {@code c·x ≡ t (mod g)}, found the way Bézout's are.
+         *
+         * <p>With {@code d} the divisor of the coefficient and the generator, the residue has to be
+         * a whole multiple of {@code d} or no value of the position leaves one this reaches — which
+         * is the same test a search makes to prune, said as a set rather than as a rejection. Where
+         * it passes, {@code c/d} and {@code g/d} share nothing, so the coefficient has an inverse
+         * modulo the second and the solutions are one residue class of it.
+         */
+        @Override
+        public AffinePreimage affinePreimage(Rational coefficient, Rational target,
+                                             Granularity source) {
+            if (source != Granularity.DISCRETE) {
+                return new AffinePreimage.Filling(Rational.ZERO, Rational.ONE);
+            }
+            Rational divisor = Rational.gcd(coefficient, generator);
+            Rational steps = target.dividedBy(divisor);
+            if (!steps.isWhole()) {
+                return new AffinePreimage.None();
+            }
+            java.math.BigInteger modulus = generator.dividedBy(divisor).numerator();
+            if (modulus.equals(java.math.BigInteger.ONE)) {
+                return new AffinePreimage.Stepping(Rational.ZERO, Rational.ONE);
+            }
+            java.math.BigInteger weight = coefficient.dividedBy(divisor).numerator().mod(modulus);
+            java.math.BigInteger at = steps.numerator()
+                    .multiply(weight.modInverse(modulus))
+                    .mod(modulus);
+            return new AffinePreimage.Stepping(Rational.of(at), Rational.of(modulus));
+        }
     }
 
     /**
@@ -208,6 +259,40 @@ public sealed interface AdditiveImage {
         @Override
         public RationalCut tightenLower(RationalCut cut) {
             return contains(cut.at()) ? cut : RationalCut.exclusive(cut.at());
+        }
+
+        /**
+         * The values of the position leaving a residue this reaches, which are dense and are not all
+         * of them.
+         *
+         * <p>Written {@code c/g = m/n} in lowest terms, what the position contributes is the coset
+         * {@code (m/n)·D}, and a residue lands in this image exactly where {@code t/g} is a finite
+         * decimal once multiplied by {@code n}. Two and five drop out of {@code n} first: they are
+         * units among the finite decimals, so a position held to a multiple of two is held to nothing
+         * — which is the same reduction {@link #OverFiniteDecimals} makes of its own generator, and
+         * making it in one place and not the other is what would let the two disagree.
+         *
+         * <p>The value named is {@code n·(t/g)} moved by the inverse of {@code m}, and it is itself
+         * a finite decimal wherever there is one at all: {@code n} differs from the reduced {@code n}
+         * by units, and an inverse is a whole number.
+         */
+        @Override
+        public AffinePreimage affinePreimage(Rational coefficient, Rational target,
+                                             Granularity source) {
+            if (source != Granularity.DENSE) {
+                return new AffinePreimage.Stepping(Rational.ZERO, Rational.ONE);
+            }
+            Rational per = coefficient.dividedBy(generator);
+            Rational owed = target.dividedBy(generator);
+            java.math.BigInteger spread = unitsRemoved(Rational.of(per.denominator())).numerator();
+            if (owed.times(Rational.of(spread)).asWrittenDecimal() == null) {
+                return new AffinePreimage.None();
+            }
+            java.math.BigInteger shift = spread.equals(java.math.BigInteger.ONE)
+                    ? java.math.BigInteger.ZERO
+                    : per.numerator().mod(spread).modInverse(spread);
+            Rational at = owed.times(Rational.of(per.denominator())).times(Rational.of(shift));
+            return new AffinePreimage.Filling(at, Rational.of(spread));
         }
     }
 }
