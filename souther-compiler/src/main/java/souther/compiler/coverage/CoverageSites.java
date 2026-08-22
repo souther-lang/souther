@@ -75,11 +75,14 @@ public final class CoverageSites {
         // about, and a combinator nested inside one answered for the fork above it.
         // The copy of the declaration that wrote this fork, which is not always the innermost copy
         // the fork stands in: a helper's own fork can be written inside a block it hands to
-        // something else, and what is nearest round it is then that something else's. The parameters
-        // the declaration named say which copy is meant — only the expansion of the declaration that
-        // has them was handed rules at them — so the copies this stands in are read from the nearest
-        // outward until one answers for all of them.
+        // something else, and what is nearest round it is then that something else's. Which copy is
+        // meant is a copy of that declaration — asked by the names of its parameters instead, a copy
+        // of anything else that spells one the same way answers first, and it answers with its own
+        // rule.
         for (BindingOwner owner : within) {
+            if (!by.declaration().equals(supplied.declarationOf(owner))) {
+                continue;
+            }
             List<SuppliedRules.RuleIdentity> rules = new ArrayList<>();
             for (String parameter : by.parameters()) {
                 SuppliedRules.RuleIdentity rule = supplied.at(owner, parameter);

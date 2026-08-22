@@ -26,17 +26,24 @@ public sealed interface DecisionSource {
      * is a fork neither predicate settles on its own, and a reader taking the first of them would
      * call two call sites alike that agree about {@code p} and differ about {@code q}.
      *
-     * <p>Named rather than numbered because the name is what an occurrence's record of the rules it
-     * was handed is keyed by ({@link SuppliedRules}). A place would have to be turned into the name
-     * to ask, which is the same lookup with a step in front of it that can be got wrong.
+     * <p>{@code declaration} is whose parameters those are. A name says which of one declaration's
+     * parameters it is and nothing more — two declarations name a parameter alike as often as not —
+     * so a reader looking for the copy that owns them by their names finds whichever copy spells one
+     * that way. Asked that way, a fork written in a helper and handed to another that happens to
+     * name a parameter the same was answered with the inner one's rule, and the rules two call sites
+     * wrote were counted as one.
      */
-    record Supplied(Set<String> parameters) implements DecisionSource {
+    record Supplied(String declaration, Set<String> parameters) implements DecisionSource {
 
         public Supplied {
             parameters = Set.copyOf(parameters);
             if (parameters.isEmpty()) {
                 throw new IllegalArgumentException(
                         "a supplied decision is supplied through something");
+            }
+            if (declaration == null) {
+                throw new IllegalArgumentException(
+                        "a parameter is one of some declaration's, and says which");
             }
         }
     }

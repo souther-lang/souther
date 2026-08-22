@@ -22,11 +22,15 @@ import java.util.Set;
  * covered.
  *
  * <p>Taken to a fixed point rather than in an order, so nothing here has to know which declaration
- * calls which. It is reached: what each declaration answers out of is a set of its own argument
- * places, so there are finitely many of them, and a pass only ever adds — a declaration that rests
- * on an argument on one pass rests on it on the next. A recursive helper is read like any other and
- * takes as many passes as its own answer needs, which is why the walk runs until nothing moves
- * rather than for a number of passes worked out from how many declarations there are.
+ * calls which. Every declaration being read starts at resting on nothing, and a pass reads each of
+ * them against what the others have come to so far; the walk runs until nothing moves. A recursive
+ * helper is read like any other and takes as many passes as its own answer needs, which is why it is
+ * not stopped after a number of passes worked out from how many declarations there are.
+ *
+ * <p>Starting at nothing is what makes the answer the same whatever order the declarations are
+ * written in. Started at nothing known — which is what a callable this never reads is — a call to
+ * something declared below would be read as resting on every argument on the first pass, and there
+ * is no pass that takes it back.
  */
 public record AnswerDependencies(Map<String, Set<Integer>> bySlot) {
 
@@ -55,17 +59,19 @@ public record AnswerDependencies(Map<String, Set<Integer>> bySlot) {
 
     /** What {@code declarations} answer out of. */
     public static AnswerDependencies of(Map<String, Hir.FnDef> declarations) {
+        // Everything being read starts at nothing, so a declaration this has not got to yet is
+        // told from a callable it will never read. Started from an empty map, the two were the same
+        // absence: a call to something declared further down was read as resting on every argument,
+        // and the passes only ever add — so the answer stayed at what the first pass could not
+        // know, and forks resting on nothing were owed a row per call site.
         Map<String, Set<Integer>> bySlot = new LinkedHashMap<>();
+        declarations.keySet().forEach(each -> bySlot.put(each, Set.of()));
         boolean moved = true;
         while (moved) {
             moved = false;
             for (Map.Entry<String, Hir.FnDef> each : declarations.entrySet()) {
                 Set<Integer> was = bySlot.get(each.getKey());
                 Set<Integer> now = answeredOutOf(each.getValue(), bySlot);
-                if (was != null) {
-                    now = new LinkedHashSet<>(now);
-                    now.addAll(was);
-                }
                 if (!now.equals(was)) {
                     bySlot.put(each.getKey(), Set.copyOf(now));
                     moved = true;

@@ -1232,7 +1232,8 @@ public final class HelperInliner {
         // is what would otherwise lose that: each binding's type would be read on its own,
         // and nothing left afterwards says the two came from one application.
         Map<String, Type> applied = instantiation(helper, mine);
-        Arguments arguments = bindArguments(rawCall, call, helper, args, applied, ours, mine);
+        Arguments arguments =
+                bindArguments(rawCall, call, helper, args, applied, ours, mine, callee.reaches());
         // A body this compile cannot show is copied with the call site stamped over it, so a report
         // from inside it points at the user's call rather than at a line nobody holds — and the
         // stamp says that is what it is doing, so nothing downstream reads the call as the place the
@@ -1307,7 +1308,7 @@ public final class HelperInliner {
      */
     private Arguments bindArguments(Hir.Apply rawCall, Hir.Apply call, Hir.FnDef helper,
                                     List<Hir.Expr> args, Map<String, Type> applied,
-                                    Hir.Binders ours, BindingOwner mine) {
+                                    Hir.Binders ours, BindingOwner mine, String declaration) {
         // what stands in the body for each of the callee's parameters: the name it is written
         // as and what that name resolved to at the call site, so the expansion carries the
         // argument's own answer rather than deciding one for it
@@ -1342,7 +1343,7 @@ public final class HelperInliner {
                 souther.compiler.coverage.SuppliedRules.RuleIdentity handedIn = authored instanceof Hir.Var.Denoting handed ? ruleOf(handed)
                         : authored instanceof Hir.Block written ? ruleOf(written) : null;
                 if (handedIn != null) {
-                    supplied.handed(mine, p.name(), handedIn);
+                    supplied.handed(mine, declaration, p.name(), handedIn);
                 }
                 if (arg instanceof Hir.Var.Denoting fnName) {
                     // A name handed to a function parameter is substituted through: what

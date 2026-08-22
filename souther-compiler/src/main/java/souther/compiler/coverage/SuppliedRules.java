@@ -20,42 +20,66 @@ import java.util.Map;
  * sites writing the same expression are two rules — the author wrote two, and nothing here says they
  * agree.
  */
-public record SuppliedRules(Map<BindingOwner, Map<String, RuleIdentity>> byExpansion) {
+public record SuppliedRules(Map<BindingOwner, Handed> byExpansion) {
 
     /** Nothing recorded, which is what a body handing no rule to anything comes to. */
     public static final SuppliedRules NONE = new SuppliedRules(Map.of());
 
     public SuppliedRules {
-        Map<BindingOwner, Map<String, RuleIdentity>> copy = new LinkedHashMap<>();
-        byExpansion.forEach((owner, rules) -> copy.put(owner, Map.copyOf(rules)));
-        byExpansion = Map.copyOf(copy);
+        byExpansion = Map.copyOf(byExpansion);
+    }
+
+    /**
+     * What one copy of a declaration was handed.
+     *
+     * <p>Which declaration it is a copy of, beside what it was handed. A parameter's name says which
+     * of a declaration's own parameters it is and nothing more — two declarations name a parameter
+     * alike as often as not — so a reader looking for the copy that owns a parameter by its name
+     * finds whichever copy spells one that way, which is the innermost one as often as the right
+     * one.
+     */
+    public record Handed(String declaration, Map<String, RuleIdentity> rules) {
+
+        public Handed {
+            rules = Map.copyOf(rules);
+        }
     }
 
     /** What {@code expansion} was handed at {@code parameter}, or null where it was handed none. */
     public RuleIdentity at(BindingOwner expansion, String parameter) {
-        Map<String, RuleIdentity> rules = byExpansion.get(expansion);
-        return rules == null ? null : rules.get(parameter);
+        Handed handed = byExpansion.get(expansion);
+        return handed == null ? null : handed.rules().get(parameter);
     }
 
-    /** Which rules {@code expansion} was handed, empty where it was handed none. */
-    public Map<String, RuleIdentity> of(BindingOwner expansion) {
-        return byExpansion.getOrDefault(expansion, Map.of());
+    /** Which declaration {@code expansion} is a copy of, or null where nothing here says. */
+    public String declarationOf(BindingOwner expansion) {
+        Handed handed = byExpansion.get(expansion);
+        return handed == null ? null : handed.declaration();
     }
 
     /** What is being built while a body is read. */
     public static final class Builder {
 
+        private final Map<BindingOwner, String> of = new LinkedHashMap<>();
         private final Map<BindingOwner, Map<String, RuleIdentity>> byExpansion =
                 new LinkedHashMap<>();
 
-        /** Says that {@code expansion} was handed {@code rule} at {@code parameter}. */
-        public void handed(BindingOwner expansion, String parameter, RuleIdentity rule) {
+        /** Says that {@code expansion} is a copy of {@code declaration} and was handed {@code rule}
+         *  at {@code parameter}. */
+        public void handed(BindingOwner expansion, String declaration, String parameter,
+                           RuleIdentity rule) {
+            of.putIfAbsent(expansion, declaration);
             byExpansion.computeIfAbsent(expansion, _ -> new LinkedHashMap<>())
                     .putIfAbsent(parameter, rule);
         }
 
         public SuppliedRules built() {
-            return byExpansion.isEmpty() ? NONE : new SuppliedRules(byExpansion);
+            if (byExpansion.isEmpty()) {
+                return NONE;
+            }
+            Map<BindingOwner, Handed> out = new LinkedHashMap<>();
+            byExpansion.forEach((owner, rules) -> out.put(owner, new Handed(of.get(owner), rules)));
+            return new SuppliedRules(out);
         }
     }
 

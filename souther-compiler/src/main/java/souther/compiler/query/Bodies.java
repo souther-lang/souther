@@ -2225,8 +2225,8 @@ public final class Bodies {
             // about a fork does not have to know which behavior's check happened to reach it.
             Map<souther.compiler.types.CoverageOrigin,
                     souther.compiler.coverage.DecisionSource> decisions = new LinkedHashMap<>();
-            Map<souther.compiler.types.BindingOwner, Map<String,
-                    souther.compiler.coverage.SuppliedRules.RuleIdentity>> supplied = new LinkedHashMap<>();
+            Map<souther.compiler.types.BindingOwner,
+                    souther.compiler.coverage.SuppliedRules.Handed> supplied = new LinkedHashMap<>();
             boolean bodiesCheck = true;
             // A module whose own check stopped built nothing for a body to be checked against, so
             // asking would report not being able to see what has already been reported missing.

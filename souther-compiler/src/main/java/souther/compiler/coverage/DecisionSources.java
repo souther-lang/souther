@@ -100,18 +100,16 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolea
         }
         AnswerDependencies answersOn = AnswerDependencies.of(declarations);
         Map<CoverageOrigin, DecisionSource> byFork = new LinkedHashMap<>();
-        for (Hir.FnDef fn : declarations.values()) {
-            forks(fn, answersOn, byFork);
-        }
+        declarations.forEach((declaration, fn) -> forks(declaration, fn, answersOn, byFork));
         return new DecisionSources(byFork);
     }
 
-    private static void forks(Hir.FnDef fn, AnswerDependencies answersOn,
+    private static void forks(String declaration, Hir.FnDef fn, AnswerDependencies answersOn,
                               Map<CoverageOrigin, DecisionSource> out) {
         if (!(fn.body() instanceof Hir.FnBody.Written written)) {
             return;
         }
-        forks(written.expr(), Rules.of(fn), answersOn, new LinkedHashMap<>(), out);
+        forks(written.expr(), declaration, Rules.of(fn), answersOn, new LinkedHashMap<>(), out);
     }
 
     /**
@@ -122,51 +120,53 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolea
      * afresh at each fork found the name and not what it stands for — and called a fork the caller
      * decides the declaration's own.
      */
-    private static void forks(Hir.Expr e, Rules rules, AnswerDependencies answersOn,
-                              Map<BindingId, Set<String>> bound,
+    private static void forks(Hir.Expr e, String declaration, Rules rules,
+                              AnswerDependencies answersOn, Map<BindingId, Set<String>> bound,
                               Map<CoverageOrigin, DecisionSource> out) {
         switch (e) {
-            case Hir.If iff -> said(iff.origin(), iff.cond(), rules, answersOn, bound, out);
+            case Hir.If iff ->
+                    said(iff.origin(), iff.cond(), declaration, rules, answersOn, bound, out);
             // Every construct that bears arms, and by what settles which arm is taken. A `match`
             // decides by its subject as an `if` decides by its condition, and a construction that
             // may fail by the value it is given — so a rule the caller supplied reaches all three
             // the same way. Left out, the arms of a `match` over a rule the caller wrote were one
             // obligation however many rules were handed in.
-            case Hir.Match match ->
-                    said(match.origin(), match.scrutinee(), rules, answersOn, bound, out);
-            case Hir.IfConstructed made ->
-                    said(made.origin(), made.construct(), rules, answersOn, bound, out);
+            case Hir.Match match -> said(match.origin(), match.scrutinee(), declaration, rules,
+                    answersOn, bound, out);
+            case Hir.IfConstructed made -> said(made.origin(), made.construct(), declaration, rules,
+                    answersOn, bound, out);
             // The guards of a comprehension are forks of the lowering rather than of the source, and
             // the lowering runs after the rule has been substituted in. Read here, where the rule is
             // still a parameter: read afterwards, a guard resting on a rule the caller supplied is a
             // fork nothing wrote and every copy of it is counted as one.
             case Hir.ListComp comp -> {
                 for (int i = 0; i < comp.guards().size(); i++) {
-                    said(comp.origin().lowered(i), comp.guards().get(i), rules, answersOn, bound,
-                            out);
+                    said(comp.origin().lowered(i), comp.guards().get(i), declaration, rules,
+                            answersOn, bound, out);
                 }
             }
             case Hir.LetIn let when let.binder() != null && let.binder().binding() != null -> {
                 Set<String> holds = new LinkedHashSet<>();
                 rules.restsOn(let.value(), answersOn, bound, holds);
-                forks(let.value(), rules, answersOn, bound, out);
+                forks(let.value(), declaration, rules, answersOn, bound, out);
                 Map<BindingId, Set<String>> wider = new LinkedHashMap<>(bound);
                 wider.put(let.binder().binding(), holds);
-                forks(let.body(), rules, answersOn, wider, out);
+                forks(let.body(), declaration, rules, answersOn, wider, out);
                 return;
             }
             default -> { }
         }
-        Hir.forEachChild(e, child -> forks(child, rules, answersOn, bound, out));
+        Hir.forEachChild(e, child -> forks(child, declaration, rules, answersOn, bound, out));
     }
 
-    private static void said(CoverageOrigin fork, Hir.Expr cond, Rules rules,
+    private static void said(CoverageOrigin fork, Hir.Expr cond, String declaration, Rules rules,
                              AnswerDependencies answersOn,
                              Map<BindingId, Set<String>> bound,
                              Map<CoverageOrigin, DecisionSource> out) {
         Set<String> on = new LinkedHashSet<>();
         rules.restsOn(cond, answersOn, bound, on);
-        out.putIfAbsent(fork, on.isEmpty() ? DecisionSource.OWN : new DecisionSource.Supplied(on));
+        out.putIfAbsent(fork, on.isEmpty() ? DecisionSource.OWN
+                : new DecisionSource.Supplied(declaration, on));
     }
 
     /** The rules one declaration was handed: its function parameters, by binding and by place. */

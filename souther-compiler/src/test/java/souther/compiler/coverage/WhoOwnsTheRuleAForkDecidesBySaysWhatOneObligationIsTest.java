@@ -714,4 +714,78 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
         assertEquals(4, twice.obligations(),
                 "the fork is in the helper's copy, whatever it was written into");
     }
+
+    /**
+     * Which copy owns the fork is a copy of that declaration, and not one spelling its parameters.
+     *
+     * <p>A parameter's name says which of one declaration's parameters it is and nothing more, and
+     * two declarations name one alike as often as not. Asked by the names, a copy of whatever the
+     * fork was handed to answers first where it happens to spell one the same way — with its own
+     * rule, which is one rule at every call site, so the rules the call sites wrote are counted as
+     * one.
+     */
+    @Test
+    void theCopyThatOwnsTheForkIsOneOfThatDeclaration() {
+        Adequacy.BranchEvidence twice = arms("""
+                module example.rules
+
+                data Count = Int
+
+                let apply (p: (Int) -> Int, x: Int): Int = p(x)
+
+                let decide (p: (Int) -> Bool, x: Int): Int =
+                    apply(y -> if p(y) then 1 else 0, x)
+
+                behavior twice : (a: Int, b: Int) -> Count
+                    constructs Count
+                let twice (a, b) =
+                    Count(decide(n -> n < 18, a) + decide(m -> 65 <= m, b))
+
+                example twice
+                    | "different sides" : (1, 1) -> Count(1)
+                """, "twice");
+
+        assertEquals(4, twice.obligations(),
+                "one fork per rule the call sites handed `decide`, not one per lambda it writes");
+        assertEquals(2, twice.covered().size(), "and the one row reaches one arm of each");
+    }
+
+    /**
+     * And what a call answers out of does not turn on where the callee is written down.
+     *
+     * <p>Every declaration being read starts at resting on nothing, so one this has not got to yet
+     * is told from a callable it will never read. Started at nothing known, a call to something
+     * declared below is read as resting on every argument, and nothing takes that back — so a fork
+     * resting on none of the rules is owed a row at every call site.
+     */
+    @Test
+    void andWhatACallAnswersOutOfDoesNotTurnOnWhereItIsWritten() {
+        Adequacy.BranchEvidence twice = arms("""
+                module example.rules
+
+                data Yes
+                data No
+                data Verdict = Yes | No
+                data Count = Int
+
+                let relay (p: (Int) -> Bool, x: Int): Bool = ignore(p, x)
+
+                let ignore (p: (Int) -> Bool, x: Int): Bool = x > 0
+
+                let decide (p: (Int) -> Bool, x: Int): Verdict =
+                    if relay(p, x) then Yes else No
+
+                behavior twice : (a: Int, b: Int) -> Count
+                    constructs Count
+                let twice (a, b) =
+                    Count((if decide(n -> n < 18, a) == Yes then 1 else 0)
+                        + (if decide(m -> 18 < m, b) == Yes then 1 else 0))
+
+                example twice
+                    | "both over" : (1, 1) -> Count(2)
+                """, "twice");
+
+        assertEquals(6, twice.obligations(),
+                "the helper's fork rests on none of the rules, so it is one obligation");
+    }
 }
