@@ -384,6 +384,13 @@ public final class Generator {
         List<GenerationReason> undecided = new ArrayList<>();
         List<Axis> axes = new ArrayList<>();
         for (Axis axis : ordered) {
+            // A position inside a collection the rules leave no room in. No value stands there in
+            // any row, so no class of it is a cell to fill — and left in, every combination of the
+            // row would be one no row can be written for, including the ones that name a position
+            // beside it and have nothing to do with this one.
+            if (holdsNothing(subject, axis)) {
+                continue;
+            }
             if (readEverywhere(axis, existing)) {
                 axes.add(axis);
             } else {
@@ -1330,6 +1337,54 @@ public final class Generator {
         return held == null ? product : new Outcome(null, held, null);
     }
 
+    /**
+     * Whether {@code axis} is inside a collection the rules leave no room in.
+     *
+     * <p>Asked of the collection the position is inside and not of the position itself: what a rule
+     * capping a collection at none says is that nothing stands at any position under it, whatever
+     * the values there could otherwise be.
+     */
+    private static boolean holdsNothing(Subject subject, Axis axis) {
+        TermPath inside = axis.path().containingSequence();
+        if (inside.equals(axis.path())) {
+            return false;   // not inside a sequence at all
+        }
+        int at = subject.parameters().indexOf(inside.head());
+        if (at < 0 || at >= subject.types().size()) {
+            return false;
+        }
+        FieldDomains rules = rulesOf(subject.types().get(at), subject.symbols(),
+                subject.inputs().policy(), Map.of());
+        return mostHeld(rules, inside) < 1;
+    }
+
+    /**
+     * How many the rules say the list at {@code path} holds at the most, or every number where they
+     * say nothing about how many.
+     *
+     * <p>Beside the floor and asked separately, because a collection built around an element has to
+     * meet both: the floor says how many it needs beside the one being placed, and this says whether
+     * there is room for that one at all. Read only for the floor, a rule capping a collection at
+     * none was met with a collection of one and every combination of the row came back as one every
+     * value was refused at — over a position the rules leave no room in, and over the positions
+     * beside it that have nothing to do with it.
+     */
+    private static int mostHeld(FieldDomains rules, TermPath path) {
+        String field = fieldUnder(path);
+        FieldDomains.Held held = field == null ? null : rules.heldAt(field);
+        if (held == null || held.bounds() == null) {
+            return Integer.MAX_VALUE;
+        }
+        souther.compiler.numeric.Endpoint cap = held.bounds().max();
+        if (cap == null || !(cap.at() instanceof souther.compiler.numeric.Count count)) {
+            return Integer.MAX_VALUE;
+        }
+        java.math.BigDecimal at = cap.inclusive() ? count.at()
+                : count.at().subtract(java.math.BigDecimal.ONE);
+        return at.signum() <= 0 ? 0
+                : at.min(java.math.BigDecimal.valueOf(Integer.MAX_VALUE)).intValue();
+    }
+
     /** How many the rules say the list at {@code path} holds at the fewest, or zero where they say
      *  nothing about how many. */
     private static int leastHeld(FieldDomains rules, TermPath path) {
@@ -1363,6 +1418,15 @@ public final class Generator {
         FieldDomains rules = rulesOf(declared, subject.symbols(), subject.inputs().policy(),
                 under(root, settled));
         UnresolvedCombination.Reason held = null;
+        // A collection asked to hold a value in a class, whose rules say it holds fewer than that.
+        // Nothing composes one: what the search would offer is a collection the rules refuse, and
+        // saying every candidate was refused sends an author looking for a value where the rule
+        // says there is no room for one.
+        for (ConstructionPlan.Held each : plan.held()) {
+            if (mostHeld(rules, each.at()) < each.least()) {
+                return UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE;
+            }
+        }
         for (ConstructionPlan.Slot each : plan.slots()) {
             String field = fieldUnder(each.at());
             UnresolvedCombination.Reason here = Partitions.notBuilt(each.type(), subject.symbols(),

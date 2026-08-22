@@ -126,6 +126,24 @@ record ConstructionPlan(Node root) {
         return new ConstructionPlan(node(declared, at, symbols, 0, decided, recipes, least));
     }
 
+    /** The collections this plan builds out of what stands at their element. */
+    List<Held> held() {
+        List<Held> out = new ArrayList<>();
+        collectHeld(root, out);
+        return List.copyOf(out);
+    }
+
+    private static void collectHeld(Node node, List<Held> out) {
+        switch (node) {
+            case Slot _ -> { }
+            case Built built -> built.under().values().forEach(each -> collectHeld(each, out));
+            case Held held -> {
+                out.add(held);
+                collectHeld(held.under(), out);
+            }
+        }
+    }
+
     /** Every position a value is chosen at, in the order they are composed. */
     List<Slot> slots() {
         List<Slot> out = new ArrayList<>();
