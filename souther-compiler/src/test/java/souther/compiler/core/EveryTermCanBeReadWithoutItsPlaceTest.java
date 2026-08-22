@@ -127,9 +127,10 @@ class EveryTermCanBeReadWithoutItsPlaceTest {
                     continue;
                 }
                 for (String behavior : new TreeSet<>(names)) {
-                    Core body = c.db().ask(new Bodies.CheckedBehavior(module, behavior)).value();
-                    if (body != null) {
-                        out.add(body);
+                    Bodies.CheckedBody checked =
+                            c.db().ask(new Bodies.CheckedBehavior(module, behavior)).value();
+                    if (checked != null && checked.body() != null) {
+                        out.add(checked.body());
                     }
                 }
                 Map<String, souther.compiler.check.StatedContract> stated =

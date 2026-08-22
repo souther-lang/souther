@@ -137,6 +137,18 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         TYPE_UNRESOLVED,
         /**
+         * A rule is written about a value that came from this position rather than about it.
+         *
+         * <p>The rule was read and where its value came from is known. What it says about the values
+         * at this position is not: an operation made them into something else first, and reading the
+         * rule back through that is a capability nothing here has.
+         *
+         * <p>Its own word, so that a reader is not sent after a form this compiler cannot parse.
+         * What would lift it is a reading of what a closure does to a value, and not a wider
+         * fragment of comparisons.
+         */
+        RULE_ABOUT_A_DERIVED_VALUE,
+        /**
          * The position holds its values inside something this does not reach into — the elements of
          * a collection, what an optional holds, what a map holds. One word for all of them: which
          * reaching is missing is a fact about this compiler, and the model reads the same either

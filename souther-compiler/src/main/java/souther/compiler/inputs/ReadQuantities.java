@@ -522,7 +522,10 @@ final class ReadQuantities implements Quantities {
 
     /** The coordinate of one term, in the words the rules of its parameter are read in. */
     private static FieldDomains.Coordinate coordinateOf(NumericTerm term) {
-        return new FieldDomains.Coordinate(String.join(".", term.path().fields()),
+        // Spelled with the steps inside a sequence in it, so two positions never come to one name.
+        // No clause is written at such a name, so a lookup finds nothing — which is what a clause
+        // of the value says about a position inside a collection.
+        return new FieldDomains.Coordinate(term.path().stepsSpelled(),
                 term instanceof NumericTerm.SizeOf);
     }
 

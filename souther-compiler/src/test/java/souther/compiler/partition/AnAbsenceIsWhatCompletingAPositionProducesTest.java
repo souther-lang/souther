@@ -167,7 +167,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
     @Test
     void aReadingThatStoppedOutranksWhatTheRulesCameTo() {
         PendingPosition blocked = new PendingPosition.Blocked(AT,
-                new BlockReason.UnsupportedTraversal(BlockReason.Traversal.SEQUENCE_ELEMENT));
+                new BlockReason.UnsupportedTraversal(BlockReason.Traversal.OPTIONAL_VALUE));
         UndividedPosition.Why expected = new UndividedPosition.Why.CannotDerive();
 
         assertEquals(expected, blocked.complete(new BodyCutInspection.Exhausted()).why());
@@ -176,7 +176,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
         // position the walk could not enter describes that same stop from the other end.
         assertEquals(new souther.compiler.inputs.PositionReadingBlocked(AT,
                         new BlockReason.UnsupportedTraversal(
-                                BlockReason.Traversal.SEQUENCE_ELEMENT)),
+                                BlockReason.Traversal.OPTIONAL_VALUE)),
                 blocked.reportable());
     }
 

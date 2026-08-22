@@ -153,7 +153,7 @@ class MainExamplesSubcommandTest {
     void theJsonCarriesTheNumbersABuildReads() throws Exception {
         JsonNode root = JSON.readTree(run("--format", "json"));
 
-        assertEquals(3, root.get("schemaVersion").asInt());
+        assertEquals(4, root.get("schemaVersion").asInt());
         assertEquals("complete", root.get("status").asString());
         assertNotNull(root.get("compilerVersion"));
 
@@ -182,8 +182,8 @@ class MainExamplesSubcommandTest {
     @Test
     void theEmittedJsonHasTheShippedSchemaShape() throws Exception {
         JsonNode schema;
-        try (var in = Main.class.getResourceAsStream("/souther/adequacy-schema-3.json")) {
-            assertNotNull(in, "adequacy-schema-3.json ships beside the compiler");
+        try (var in = Main.class.getResourceAsStream("/souther/adequacy-schema-4.json")) {
+            assertNotNull(in, "adequacy-schema-4.json ships beside the compiler");
             schema = JSON.readTree(new String(in.readAllBytes(), StandardCharsets.UTF_8));
         }
         JsonNode root = JSON.readTree(run("--format", "json"));
@@ -304,7 +304,7 @@ class MainExamplesSubcommandTest {
     void aKeyAddedSinceIsNotDemandedOfADocumentWrittenBeforeIt() throws Exception {
         JsonNode schema;
         try (java.io.InputStream in =
-                     Main.class.getResourceAsStream("/souther/adequacy-schema-3.json")) {
+                     Main.class.getResourceAsStream("/souther/adequacy-schema-4.json")) {
             assertNotNull(in);
             schema = JSON.readTree(new String(in.readAllBytes(), StandardCharsets.UTF_8));
         }

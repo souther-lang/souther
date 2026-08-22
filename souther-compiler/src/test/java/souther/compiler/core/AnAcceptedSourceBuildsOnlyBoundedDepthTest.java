@@ -334,7 +334,7 @@ class AnAcceptedSourceBuildsOnlyBoundedDepthTest {
                                     .ask(new Bodies.LoweredBody(module, behavior)).value().value()));
                     say(tooDeep, one.what(), behavior, "the Core it elaborated",
                             Depth.of(compilation.db()
-                                    .ask(new Bodies.CheckedBehavior(module, behavior)).value()));
+                                    .ask(new Bodies.CheckedBehavior(module, behavior)).value().body()));
                 }
             }
         }

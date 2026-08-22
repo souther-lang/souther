@@ -117,6 +117,21 @@ public sealed interface BlockReason {
     record UnreadComparisonDomain() implements AboutARule {}
 
     /**
+     * A rule is written about a value that came from the position rather than about the position.
+     *
+     * <p>An operation answered what a closure made of what stands here, and a rule was written about
+     * that. Where the values came from is known; what the rule says about the values <em>here</em>
+     * is not, and working it out means inverting whatever the closure did — which is a different
+     * capability and not one this compiler has.
+     *
+     * <p>Its own case and not {@link UnreadComparisonForm}. The form was read perfectly well and the
+     * position it is about was found; an author told the first would go looking for a syntax that
+     * is not the difficulty. It is here at all so that such a rule is not silent: read as nothing,
+     * a model whose predicate this cannot follow is one that states no rule.
+     */
+    record RuleAboutADerivedValue() implements AboutARule {}
+
+    /**
      * A rule naming which values the position may hold is written in a form no reader here takes
      * apart as a set of them: a call, a pattern, a comparison against something other than a value
      * written out.
@@ -165,11 +180,15 @@ public sealed interface BlockReason {
      */
     record ComparisonBetweenPositions() implements AboutARule {}
 
-    /** What a derivation would have to be able to reach into. */
+    /**
+     * What a derivation would have to be able to reach into.
+     *
+     * <p>What it can reach into is not here. The elements of a {@code List} or a {@code Set} were,
+     * and are positions of the input now — a word for a reaching that is made says a reader can
+     * still meet it, and the next one to read this would take its presence for evidence that a
+     * sequence is where the walk stops.
+     */
     enum Traversal {
-
-        /** The elements of a {@code List} or a {@code Set} (issue #626). */
-        SEQUENCE_ELEMENT,
 
         /** The value an {@code Option} holds when it holds one. */
         OPTIONAL_VALUE,
