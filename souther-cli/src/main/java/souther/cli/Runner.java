@@ -276,16 +276,17 @@ public final class Runner {
         // What `--behavior` was given is a name arriving from outside, and it is looked up
         // against names the source settled.
         String requested = Reserved.name(requestedSpelling);
-        java.util.Set<String> implemented = module.fns().stream()
-                .map(souther.compiler.check.Desugared.Fn::name).collect(Collectors.toSet());
         Map<String, List<BehaviorRequirement>> requirements = requirementsOf(compilation, module);
         Map<String, Hir.BehaviorDef> drivable = new java.util.LinkedHashMap<>();
         for (Hir.BehaviorDef b : module.behaviors()) {
             if (!exposes(module, b.name())) {
                 continue;
             }
+            // Two facts, and each is asked of whoever owns it. Whether there is a body here to run
+            // is the module's classification; whether anything has to be handed to it is what the
+            // declaration says it depends on.
             if (b instanceof Hir.SpecBehavior spec
-                    && implemented.contains(spec.name()) && spec.dependsOn().isEmpty()) {
+                    && module.implementationOf(spec).hasBody() && spec.dependsOn().isEmpty()) {
                 drivable.put(spec.name(), spec);
             } else if (b instanceof Hir.PipeBehavior pipe
                     && pipelineBlocker(pipe, requirements) == null) {
@@ -384,8 +385,6 @@ public final class Runner {
     private static RunException whyNotRunnable(Compilation compilation, Prepared module,
                                                String name, java.util.Set<String> drivable) {
         String available = drivable.isEmpty() ? "none" : String.join(", ", drivable);
-        java.util.Set<String> implemented = module.fns().stream()
-                .map(souther.compiler.check.Desugared.Fn::name).collect(Collectors.toSet());
         Map<String, List<BehaviorRequirement>> requirements = requirementsOf(compilation, module);
         for (Hir.BehaviorDef b : module.behaviors()) {
             if (!b.name().equals(name)) {
@@ -409,10 +408,22 @@ public final class Runner {
                 return fail(blocker.key(), blocker.message() + " Available to run: " + available + ".", args);
             }
             if (b instanceof Hir.SpecBehavior spec) {
-                if (!implemented.contains(name)) {
-                    return fail("run.behavior.noimpl",
-                            "`" + name + "` has no implementation (it is injected from Java). "
-                                    + "Available to run: " + available + ".", name, available);
+                // Two ways to have no body, and they send an author to different places: one is
+                // supplied from Java and the other is a `let` this model has not written yet. Which
+                // of them this is, is the module's answer and not a table read again here.
+                switch (module.implementationOf(spec)) {
+                    case IMPLEMENTED -> { }
+                    case INJECTION_TARGET -> {
+                        return fail("run.behavior.noimpl",
+                                "`" + name + "` has no implementation (it is injected from Java)."
+                                        + " Available to run: " + available + ".", name, available);
+                    }
+                    case UNIMPLEMENTED -> {
+                        return fail("run.behavior.unwritten",
+                                "`" + name + "` declares what it depends on and has no `let` yet,"
+                                        + " so there is nothing to run. Available to run: "
+                                        + available + ".", name, available);
+                    }
                 }
                 if (!spec.dependsOn().isEmpty()) {
                     String dependencies = dependencyNames(spec);

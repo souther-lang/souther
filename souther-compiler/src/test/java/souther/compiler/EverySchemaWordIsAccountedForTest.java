@@ -16,6 +16,7 @@ import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.report.AdequacyReport;
 
 import tools.jackson.databind.JsonNode;
@@ -272,17 +273,15 @@ class EverySchemaWordIsAccountedForTest {
     }
 
     /**
-     * The one enumerated field with no enum behind it.
+     * Where a behavior's body comes from, which the schema and the enum have to spell alike.
      *
-     * <p>{@code implementation} is written from a boolean — a behavior has a {@code let} or it does
-     * not — so there is nothing to hold it against. Named here rather than left out, because a field
-     * absent from the table above and absent from the schema are indistinguishable to a reader, and
-     * only one of them is deliberate.
+     * <p>Read off {@link BehaviorImplementation#values()} rather than listed here, so a state added
+     * to the enum and not to the schema is this test failing and not a document nothing validates.
      */
     @Test
-    void theFieldWithNoEnumBehindItIsTheOneThatIsWrittenFromABoolean() {
-        assertEquals(Set.of(AdequacyReport.implementationWord(false),
-                        AdequacyReport.implementationWord(true)),
+    void theWordsForWhereABodyComesFromAreTheStatesThereAre() {
+        assertEquals(java.util.Arrays.stream(BehaviorImplementation.values())
+                        .map(BehaviorImplementation::written).collect(java.util.stream.Collectors.toSet()),
                 allowedAt(schema(), List.of("$defs", "behavior", "properties", "implementation")));
     }
 

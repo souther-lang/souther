@@ -739,6 +739,66 @@ public final class SpecChecker {
      * `事前承認待ち AND 却下者ID`); requiring the whole chain to be single-input would reject the
      * very line 14.1 cites.
      */
+    /**
+     * Nothing built here may hold a behavior Souther is to implement and nobody has (spec
+     * §unwritten-behavior).
+     *
+     * <p>Declaring one is not an error and neither is resting on one from another that is itself
+     * unwritten: that graph is the specification, and a model written example-first passes through
+     * it. What is refused is a behavior with a body — a {@code let} of its own, or a {@code >->} that
+     * is its own implementation — which would hold the unwritten one as an injected field. Nothing
+     * can supply it: Java has no base to extend, because the model says the body is Souther's to
+     * write, and Souther has not written it.
+     *
+     * <p>One clause deep and not the whole requirement closure. A behavior with a body that rests on
+     * one that rests on something unwritten is refused at the middle one, which has a body too — so
+     * walking further would report the same model twice and name a behavior the author did not
+     * write the clause on.
+     */
+    static void checkNothingBuiltHereRestsOnAnUnwrittenBehavior(
+            Hir.Module module, Set<ValueName.Behavior> importedUnwritten) {
+        Set<String> fns = new HashSet<>();
+        for (Hir.FnDef fn : module.fns()) {
+            fns.add(fn.name());
+        }
+        Set<ValueName.Behavior> unwritten = new HashSet<>(importedUnwritten);
+        for (Hir.BehaviorDef b : module.behaviors()) {
+            if (Requirements.implementationOf(b, fns) == BehaviorImplementation.UNIMPLEMENTED) {
+                unwritten.add(new ValueName.Behavior(module.name(), b.name()));
+            }
+        }
+        if (unwritten.isEmpty()) {
+            return;
+        }
+        Map<ValueName.Behavior, List<Hir.Var>> pipeStages = PipelineSigs.pipelineStages(module);
+        for (Hir.BehaviorDef b : module.behaviors()) {
+            switch (b) {
+                case Hir.SpecBehavior spec when fns.contains(spec.name()) ->
+                        refuseFirstUnwritten(spec.name(), spec.dependsOn(), unwritten);
+                case Hir.PipeBehavior pipe -> refuseFirstUnwritten(pipe.name(),
+                        PipelineSigs.flattenStages(pipe.stages(), pipeStages, pipe.pos()), unwritten);
+                default -> { }
+            }
+        }
+    }
+
+    /** The first of {@code named} that nobody has written, reported where it is named. */
+    private static void refuseFirstUnwritten(String behavior, List<Hir.Var> named,
+                                             Set<ValueName.Behavior> unwritten) {
+        for (Hir.Var each : named) {
+            ValueName.Behavior reached = behaviorReached(each);
+            if (reached == null || !unwritten.contains(reached)) {
+                continue;
+            }
+            throw CompileException.of(Diagnostic.at(each.written().reportedAt())
+                    .say(new DeclarationMessage.ItRestsOnABehaviorNobodyHasWritten(
+                            behavior, reached.name()))
+                    .hint(new DeclarationMessage.WriteItsLetOrLeaveThisOneUnwrittenToo(
+                            reached.name(), behavior))
+                    .build());
+        }
+    }
+
     static void checkStagesAreSingleInput(Hir.Module module) {
         Map<ValueName.Behavior, Integer> arity = new HashMap<>();
         for (Hir.BehaviorDef b : module.behaviors()) {

@@ -25,6 +25,7 @@ import souther.compiler.check.ModuleUniverse.InSight.Read.PublishedHelper;
 import souther.compiler.check.ReqSig;
 import souther.compiler.check.Resolve;
 import souther.compiler.check.Scoping;
+import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.Sig;
 import souther.compiler.check.SpecChecker;
 import souther.compiler.check.Symbols;
@@ -63,8 +64,48 @@ public final class Bodies {
 
     private Bodies() {}
 
-    /** The behaviors of a module that are injection targets — declared with a spec and no fn, so
-     * something else supplies the body. */
+    /**
+     * Where each behavior of a module gets its body: written here, Souther's to write and not
+     * written, or Java's to supply (spec §injected-behavior, §unwritten-behavior).
+     *
+     * <p>One question asked once. Every reader that used to ask whether a behavior has a {@code let}
+     * asks this instead, so that the two things an absent {@code let} can mean are two answers
+     * rather than one (issue #936).
+     */
+    public record Implementation(String name) implements Key<Map<String, BehaviorImplementation>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, BehaviorImplementation>> compute(Db db) {
+            Front.FromPath.OnThePath onThePath = Front.onThePath(db, name);
+            if (onThePath != null) {
+                // A module off the path published where each of its behaviors gets its body,
+                // because the fn that decides is not published with it.
+                return Answer.of(onThePath.behaviorImplementations());
+            }
+            Ast.Module m = db.ask(new Front.Available(name)).value();
+            if (m == null) {
+                return Answer.of(Map.of());
+            }
+            Set<String> fns = new LinkedHashSet<>();
+            for (Ast.FnDef f : m.fns()) {
+                fns.add(f.name());
+            }
+            Map<String, BehaviorImplementation> states = new LinkedHashMap<>();
+            for (Ast.BehaviorDef b : m.behaviors()) {
+                states.put(b.name(), b instanceof Ast.SpecBehavior spec
+                        ? BehaviorImplementation.of(fns.contains(spec.name()),
+                                !spec.dependsOn().isEmpty())
+                        : BehaviorImplementation.IMPLEMENTED);
+            }
+            return Answer.of(Collections.unmodifiableMap(states));
+        }
+    }
+
+    /** The behaviors of a module Java supplies, read off {@link Implementation}. */
     public record Injected(String name) implements Key<Set<String>> {
         @Override
         public String module() {
@@ -73,28 +114,40 @@ public final class Bodies {
 
         @Override
         public Answer<Set<String>> compute(Db db) {
-            Front.FromPath.OnThePath onThePath = Front.onThePath(db, name);
-            if (onThePath != null) {
-                // A module off the path published which of its behaviors are injection targets,
-                // because the fn that decides is not published with it.
-                return Answer.of(onThePath.injectedBehaviors());
-            }
-            Ast.Module m = db.ask(new Front.Available(name)).value();
-            if (m == null) {
-                return Answer.of(Set.of());
-            }
-            Set<String> fns = new LinkedHashSet<>();
-            for (Ast.FnDef f : m.fns()) {
-                fns.add(f.name());
-            }
-            Set<String> injected = new LinkedHashSet<>();
-            for (Ast.BehaviorDef b : m.behaviors()) {
-                if (b instanceof Ast.SpecBehavior && !fns.contains(b.name())) {
-                    injected.add(b.name());
-                }
-            }
-            return Answer.of(Ordered.set(injected));
+            return where(db, name, BehaviorImplementation::isInjectionTarget);
         }
+    }
+
+    /** The behaviors of a module Souther is to implement and nobody has, read off the same. */
+    public record Unwritten(String name) implements Key<Set<String>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Set<String>> compute(Db db) {
+            return where(db, name, s -> s == BehaviorImplementation.UNIMPLEMENTED);
+        }
+    }
+
+    private static Answer<Set<String>> where(Db db, String module,
+                                             java.util.function.Predicate<BehaviorImplementation> is) {
+        Answer<Map<String, BehaviorImplementation>> states =
+                db.ask(new Implementation(module));
+        // Absent rather than empty. A module whose classification could not be asked has not been
+        // shown to have no unwritten behaviors, and a caller told there are none rests on it: the
+        // rule that nothing built here may hold one would then pass for want of an answer.
+        if (!states.present() || states.value() == null) {
+            return Answer.absent();
+        }
+        Set<String> named = new LinkedHashSet<>();
+        states.value().forEach((name, state) -> {
+            if (is.test(state)) {
+                named.add(name);
+            }
+        });
+        return Answer.of(Ordered.set(named));
     }
 
     /**
@@ -745,6 +798,23 @@ public final class Bodies {
                 return Answer.of(Set.of());
             }
             return Answer.of(Ordered.set(borrowedWhere(db, name, Injected::new)));
+        }
+    }
+
+    /** The behaviors a module borrows that Souther is to implement and nobody has where they are
+     * declared, so nothing here may rest on one. */
+    public record ImportedUnwritten(String name) implements Key<Set<ValueName.Behavior>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Set<ValueName.Behavior>> compute(Db db) {
+            if (db.ask(new Front.Available(name)).value() == null) {
+                return Answer.of(Set.of());
+            }
+            return Answer.of(Ordered.set(borrowedWhere(db, name, Unwritten::new)));
         }
     }
 
@@ -1937,12 +2007,14 @@ public final class Bodies {
             // there, and what went wrong was reported where signatures are made.
             Answer<Map<String, Sig>> signatures = db.ask(new Signatures(name));
             Answer<Set<ValueName.Behavior>> injected = db.ask(new ImportedInjected(name));
+            Answer<Set<ValueName.Behavior>> unwritten = db.ask(new ImportedUnwritten(name));
             Answer<Map<ValueName.Behavior, ReqSig>> reqSigs = db.ask(new ReqSigs(name));
             Answer<Map<String, Type>> sigs = db.ask(new RecursiveCallSigs(name, InliningPolicy.FULL));
             Answer<Map<ValueName.Behavior, ReqSig>> calleeSigs = db.ask(new CalleeSigs(name));
             Answer<Map<String, Hir.FnDef>> published = db.ask(new ImportedDefinitions(name));
             if (!lowering.present() || !scope.present()
-                    || !injected.present() || !reqSigs.present() || !sigs.present()
+                    || !injected.present() || !unwritten.present()
+                    || !reqSigs.present() || !sigs.present()
                     || !calleeSigs.present() || !published.present()) {
                 return Answer.absent();
             }
@@ -1962,7 +2034,7 @@ public final class Bodies {
                 reported = TypeChecker.checkModule(lowering.value().settled(), scope.value(),
                         db.ask(new Front.Reading()).value(),
                         signatures.present() ? signatures.value() : null,
-                        injected.value(), lowering.value().lowered(),
+                        injected.value(), unwritten.value(), lowering.value().lowered(),
                         reqSigs.value(), calleeSigs.value(), sigs.value(), published.value(),
                         settled);
             } catch (CompileException e) {

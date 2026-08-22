@@ -1,6 +1,7 @@
 package souther.compiler.meta;
 
 import souther.compiler.Compiler;
+import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.ast.Ast;
 import souther.compiler.codegen.Backend;
 import souther.compiler.frontend.CstFrontend;
@@ -106,19 +107,29 @@ class ModuleReadbackTest {
                 read.module().imports().stream().map(Ast.Import::module).toList());
     }
 
-    /** No `let` comes back for any behavior, so which ones are injection targets cannot be read off
-     * the module; it is carried beside it. */
+    /** No `let` comes back for any behavior, so where each one's body comes from cannot be read off
+     * the module; it is carried beside it. Three states and not two: a behavior Souther is to
+     * implement and nobody has would arrive as one Java supplies if a reader worked it out again,
+     * and an importer would be told it may hand an implementation in (issue #936). */
     @Test
-    void whichBehaviorsAreInjectedIsCarried() {
+    void whereEachBehaviorsBodyComesFromIsCarried() {
         ReadableModule read = readBack("shared.ledger", Compiler.compile("""
-                module shared.ledger exposing ( Entry, record, double )
+                module shared.ledger exposing ( Entry, record, double, audited )
                 data Entry = { amount: Int }
                 behavior record : (e: Entry) -> Entry
                 behavior double : (e: Entry) -> Entry constructs Entry
                 let double (e) = Entry { amount = e.amount * 2 }
+                behavior audited : (e: Entry) -> Entry
+                    depends on record
                 """));
 
+        assertEquals(Map.of(
+                        "record", BehaviorImplementation.INJECTION_TARGET,
+                        "double", BehaviorImplementation.IMPLEMENTED,
+                        "audited", BehaviorImplementation.UNIMPLEMENTED),
+                read.behaviorImplementations());
         assertEquals(Set.of("record"), read.injectedBehaviors());
+        assertEquals(Set.of("audited"), read.unwrittenBehaviors());
     }
 
     /** A composition declares stages; what comes back is the signature it computes to, with every
@@ -354,6 +365,55 @@ class ModuleReadbackTest {
     }
 
     /** {@code classes}, with whatever their `$Module` annotation says rewritten by {@code as}. */
+    /**
+     * A jar written before a behavior carried where its body comes from.
+     *
+     * <p>Its behavior annotation holds the flag that word replaced, and this compiler asks for the
+     * word. Which answer the reading gives turns on the number: at a boundary this compiler does not
+     * share the module is refused for the reason it was refused, and at one it does share the same
+     * bytes come back as metadata of this compiler's name carrying something else. The second is what
+     * would have shipped had the number stayed where it was (issue #936).
+     */
+    @Test
+    void aJarWritingTheOlderBehaviorMemberIsRefusedAtItsOwnBoundaryAndNotAtThisOne() {
+        Map<String, byte[]> classes = Compiler.compile("""
+                module shared.ledger exposing ( Entry, record )
+                data Entry = { amount: Int }
+                behavior record : (e: Entry) -> Entry
+                """);
+
+        Readback.Failure.Incompatible why = assertInstanceOf(Readback.Failure.Incompatible.class,
+                refusalOf("shared.ledger", asItWasWritten(classes, Backend.BOUNDARY_VERSION - 1)),
+                "the number it was written under says so before a member is read");
+        assertEquals("0.0.1-before", why.compiler());
+
+        assertInstanceOf(Readback.Failure.UnreadableMetadata.class,
+                refusalOf("shared.ledger", asItWasWritten(classes, Backend.BOUNDARY_VERSION)),
+                "at this number the same bytes are ours and say something else");
+    }
+
+    /** {@code classes} as a compiler that wrote {@code injected} rather than {@code implementation}
+     *  published them, at {@code boundary}. */
+    private static PublishedClasses asItWasWritten(Map<String, byte[]> classes, int boundary) {
+        ClassFileDeclarations read = new ClassFileDeclarations(classes::get);
+        return binaryName -> {
+            if (!(read.of(binaryName)
+                    instanceof PublishedClasses.Carried.Declared(
+                            PublishedClasses.Declarations d))) {
+                return read.of(binaryName);
+            }
+            PublishedClasses.SoutherModuleView m = d.module();
+            return new PublishedClasses.Carried.Declared(new PublishedClasses.Declarations(
+                    m == null ? null : new PublishedClasses.SoutherModuleView(
+                            boundary, "0.0.1-before", m.header(), m.imports(), m.types(),
+                            m.behaviors(), m.invariantHelpers()),
+                    d.data(), d.behaviorSignature(),
+                    // What the older compiler wrote in its place is a flag, and no word of ours
+                    // reads as one.
+                    d.behaviorSignature() == null ? null : "true"));
+        };
+    }
+
     private static PublishedClasses viewing(
             Map<String, byte[]> classes,
             java.util.function.UnaryOperator<PublishedClasses.SoutherModuleView> as) {
@@ -366,7 +426,8 @@ class ModuleReadbackTest {
                 return read.of(binaryName);
             }
             return new PublishedClasses.Carried.Declared(new PublishedClasses.Declarations(
-                    as.apply(d.module()), d.data(), d.behaviorSignature(), d.behaviorInjected()));
+                    as.apply(d.module()), d.data(), d.behaviorSignature(),
+                    d.behaviorImplementation()));
         };
     }
 

@@ -70,7 +70,8 @@ class EveryGapTheBuildRefusesGetsAnAnswerTest {
         Map<String, List<Adequacy.Finding>> found =
                 compilation.db().ask(new Adequacy.Findings(module)).value();
         assertNotNull(found, "the model under test compiles");
-        return found.get(behavior).stream().filter(Adequacy.Finding::isAdequacyGap).toList();
+        return found.get(behavior).stream()
+                .filter(f -> f.isAdequacyGap(Adequacy.Criterion.SIMPLIFIED_DOMAIN)).toList();
     }
 
     private static Adequacy.Filling filling(Compilation compilation, String module,

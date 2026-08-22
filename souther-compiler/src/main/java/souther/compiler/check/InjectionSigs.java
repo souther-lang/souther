@@ -22,8 +22,10 @@ public final class InjectionSigs {
     private InjectionSigs() {}
 
     /**
-     * Builds the map. Whether a behavior is an injection target is decided the same way in both
-     * callers — it is a {@code SpecBehavior} this module writes no {@code let} for.
+     * Builds the map. Where a behavior's body comes from is decided the same way in both callers,
+     * by {@link BehaviorImplementation}, and what lands here is every behavior whose requirement set
+     * is not empty: one Java supplies requires itself, and one that writes {@code depends on}
+     * requires what it writes — whether or not its {@code let} has been written yet.
      *
      * <p>Keyed by the declaration each signature belongs to. A behavior this module declares and one
      * it borrows may share a name, and they are two behaviors: under the spelling, one of them
@@ -35,24 +37,25 @@ public final class InjectionSigs {
                                                      Map<ValueName.Behavior, Sig> importedSigs,
                                                      Set<ValueName.Behavior> importedInjected) {
         Set<String> own = new HashSet<>();
+        Set<String> defined = definedNames(fns);
         for (Hir.BehaviorDef b : behaviors) {
             if (b instanceof Hir.SpecBehavior spec
-                    && (isInjectionTarget(fns, spec) || !spec.dependsOn().isEmpty())) {
+                    && (Requirements.implementationOf(b, defined).isInjectionTarget()
+                            || !spec.dependsOn().isEmpty())) {
                 own.add(spec.name());
             }
         }
         return dependencies(module, behaviors, symbols, own, importedSigs, importedInjected);
     }
 
-    /** Whether {@code spec} is written with no {@code let} of its own, so something else supplies
-     *  the body (spec {@code [#injected-behavior]}). */
-    private static boolean isInjectionTarget(List<Hir.FnDef> fns, Hir.SpecBehavior spec) {
+    /** The names the definitions handed in are written under, which is what
+     *  {@link Requirements#implementationOf(Hir.BehaviorDef, Set)} reads. */
+    private static Set<String> definedNames(List<Hir.FnDef> fns) {
+        Set<String> names = new HashSet<>();
         for (Hir.FnDef fn : fns) {
-            if (fn.name().equals(spec.name())) {
-                return false;
-            }
+            names.add(fn.name());
         }
-        return true;
+        return names;
     }
 
     /**
