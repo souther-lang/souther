@@ -1,5 +1,6 @@
 package souther.compiler.meta;
 
+import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.HelperInliner;
@@ -82,13 +83,13 @@ public final class ModuleMetadata {
      * {@code out} with each definition's declaration written onto the class it generated, plus the
      * module's own {@code $Module}. {@code module} is the module as parsed, before anything derived
      * or inlined, so the invariants read as they were written. {@code sigs} supplies the signature
-     * of a {@code >->} composition, which declares stages instead of one; {@code injected} names the
-     * behaviors this module leaves to be injected (spec §injected-behavior), which is the compiler's rule to state
-     * and not a fact about any one class.
+     * of a {@code >->} composition, which declares stages instead of one; {@code implementations}
+     * says where each behavior's body comes from (spec §injected-behavior, §unwritten-behavior),
+     * which is the compiler's rule to state and not a fact about any one class.
      */
     public static void stamp(Emissions out, Ast.Module module, Hir.Module resolved,
-                             CstFrontend.Slices slices,
-                             Map<String, Sig> sigs, Set<String> injected) {
+                             CstFrontend.Slices slices, Map<String, Sig> sigs,
+                             Map<String, BehaviorImplementation> implementations) {
         List<String> types = new ArrayList<>();
         for (Ast.Def def : module.defs()) {
             types.add(def.name());
@@ -106,7 +107,8 @@ public final class ModuleMetadata {
             add(out, new GeneratedClass.BehaviorInterface(module.name(), b.name()),
                     Annotation.of(BEHAVIOR_ANN,
                             AnnotationElement.ofString("signature", signature),
-                            AnnotationElement.ofBoolean("injected", injected.contains(b.name()))));
+                            AnnotationElement.ofString("implementation",
+                                    implementations.get(b.name()).written())));
         }
         out.put(new GeneratedClass.ModuleDeclarations(module.name()),
                 Backend.moduleClass(module.name(), moduleAnnotation(module, resolved, slices, types, behaviors)));

@@ -194,11 +194,13 @@ public final class Main {
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "--adequacy" -> {
-                    if (adequacyLevel(args[++i]) == null) {
-                        System.err.println("`--adequacy` takes off, witness or all");
+                    Adequacy.Asked named = adequacyAsked(args[++i]);
+                    if (named == null) {
+                        System.err.println(
+                                "`--adequacy` takes off, witness, all or reliable-domain");
                         return 2;
                     }
-                    measure = Adequacy.Asked.warningsAt(adequacyLevel(args[i]));
+                    measure = named;
                 }
                 case "--warnings" -> {
                     if (!(args[++i].equals("report") || args[i].equals("error"))) {
@@ -466,12 +468,21 @@ public final class Main {
         return args.length == 1 ? CliCommand.named(args[0]) : null;
     }
 
-    /** The level {@code --adequacy} names, or null where it names none. */
-    private static Adequacy.Level adequacyLevel(String written) {
+    /**
+     * What {@code --adequacy} names, or null where it names none.
+     *
+     * <p>A preset and not a level. Each of these says both how much to measure and what the build is
+     * held to, and the two are not one dial: the points a row is owed away from a line are measured
+     * whenever the ones against it are, so what {@code reliable-domain} adds over {@code all} is a
+     * bar and not a measurement (issue #937).
+     */
+    private static Adequacy.Asked adequacyAsked(String written) {
         return switch (written) {
-            case "off" -> Adequacy.Level.OFF;
-            case "witness" -> Adequacy.Level.WITNESS;
-            case "all" -> Adequacy.Level.ALL;
+            case "off" -> Adequacy.Asked.warningsAt(Adequacy.Level.OFF);
+            case "witness" -> Adequacy.Asked.warningsAt(Adequacy.Level.WITNESS);
+            case "all" -> Adequacy.Asked.warningsAt(Adequacy.Level.ALL);
+            case "reliable-domain" -> Adequacy.Asked.warningsAt(Adequacy.Level.ALL,
+                    Adequacy.Criterion.RELIABLE_DOMAIN);
             default -> null;
         };
     }

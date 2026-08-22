@@ -5,19 +5,19 @@ import souther.compiler.diag.CompileException;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * {@code depends on} names what an implementation calls (spec §depends-on). An injection target — a behavior
- * with a type but no {@code fn}, implemented from Java (spec §injected-behavior) — has no implementation here, so
- * it cannot declare {@code depends on}: the behavior that calls or composes it carries the requirement
- * instead. A fn-bearing behavior keeps declaring the behaviors its body calls.
+ * {@code depends on} names what an implementation calls (spec §depends-on), and what may be named is
+ * a behavior whose requirement set is not empty. A behavior with a {@code let} and no clause of its
+ * own requires nothing, so it is called by name rather than injected, and naming it is refused where
+ * the clause is written. A fn-bearing behavior keeps declaring the behaviors its body calls.
  */
 class CompileInjectionDependsOnTest {
 
     @Test
-    void anInjectionTargetCannotDeclareDependsOn() {
+    void aBehaviorThatRequiresNothingIsNotNamedInDependsOn() {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
                 module demo
                 data N = Int
@@ -25,8 +25,7 @@ class CompileInjectionDependsOnTest {
                 let bar (n) = n
                 behavior foo : (n: N) -> N depends on bar
                 """));
-        assertTrue(e.getMessage().contains("injection target"), e.getMessage());
-        assertTrue(e.getMessage().contains("depends on"), e.getMessage());
+        assertEquals("E1607", e.code(), e.getMessage());
     }
 
     @Test

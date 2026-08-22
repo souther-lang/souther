@@ -149,15 +149,19 @@ public final class Prepared {
     }
 
     /**
-     * Whether {@code behavior} is written here with no implementation to run — an injected one (spec
-     * §injected-behavior).
+     * Where {@code behavior}'s body comes from (spec §injected-behavior, §unwritten-behavior).
      *
      * <p>How the behavior is written. What a compile emitted for it and what a run can apply are
      * different questions with owners of their own, and this is not an answer to either: a reader
      * wanting to know whether anything will run a behavior asks what will run it.
+     *
+     * <p>The state and not a flag, so that a reader says which of the two questions about a
+     * body-less behavior it is asking: whether there is anything here to run, or whether Java is the
+     * one supplying it. Those are the same answer for a behavior with no {@code depends on} and
+     * different answers for one that declares it (issue #936).
      */
-    public boolean injected(Hir.BehaviorDef behavior) {
-        return Requirements.injected(module(), behavior);
+    public BehaviorImplementation implementationOf(Hir.BehaviorDef behavior) {
+        return Requirements.implementationOf(module(), behavior);
     }
 
     /** The names its source offers to whatever reads it, which no stage rewrites. */
@@ -357,10 +361,11 @@ public final class Prepared {
             return module.fns();
         }
 
-        /** Whether {@code behavior} is written with no implementation to run — an injected one, which
-         *  is what a fake stands in for. How it is written, and no answer to what will run it. */
-        public boolean injected(Hir.BehaviorDef behavior) {
-            return module.injected(behavior);
+        /** Where {@code behavior}'s body comes from. How it is written, and no answer to what will
+         *  run it. A fake stands in for an injection target; a row waits for either state with no
+         *  body here. */
+        public BehaviorImplementation implementationOf(Hir.BehaviorDef behavior) {
+            return module.implementationOf(behavior);
         }
 
         /**

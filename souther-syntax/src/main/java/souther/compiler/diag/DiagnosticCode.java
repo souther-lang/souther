@@ -116,7 +116,6 @@ public enum DiagnosticCode {
     E1609("exposing-lists-this-modules-own-definitions", "check.module.title"),
     E1610("exposing-is-type-granular", "check.module.title"),
     E1611("an-exposed-signature-names-only-exposed-types", "check.module.title"),
-    E1612("an-injection-target-declares-no-depends-on", "check.module.title"),
     E1613("a-union-member-is-nameable-in-an-arm", "check.boundary.title"),
     E1614("a-composition-has-no-let", "check.impl.title"),
     E1615("an-implementing-let-takes-its-shape-from-the-behavior", "check.impl.title"),
@@ -130,6 +129,7 @@ public enum DiagnosticCode {
     E1623("an-ensures-clause-name-is-not-underscore", "check.boundary.title"),
     E1624("a-composition-carries-no-ensures", "check.pipe.title"),
     E1626("an-attached-files-values-are-for-its-rows", "check.example.title"),
+    E1627("nothing-built-rests-on-an-unwritten-behavior", "check.module.title"),
     E1701("composition-stages-type-route", "e1701.title"),
     E1702("a-stage-after-the-first-takes-one-input", "check.pipe.title"),
     E1703("a-pipeline-composes-behaviors", "check.pipe.title"),
@@ -168,6 +168,7 @@ public enum DiagnosticCode {
     E1913("every-output-case-is-expected-by-a-row", "check.example.title"),
     E1915("every-input-case-is-used-by-a-row", "check.example.title"),
     E1916("every-border-has-a-row-against-its-line", "check.example.title"),
+    E1917("every-border-has-a-row-away-from-its-line", "check.example.title"),
     E1918("every-arm-has-a-row", "check.example.title"),
     E1919("stand-in-and-recorded-row-agree", "check.example.title"),
     E1920("stand-in-comparison-completes", "check.example.title"),
@@ -262,7 +263,7 @@ public enum DiagnosticCode {
 
     /** The rules that are reported without failing the build. */
     private static final java.util.Set<DiagnosticCode> WARNINGS =
-            java.util.EnumSet.of(E1327, E1913, E1915, E1916, E1918, E1919, E1920, E1921,
+            java.util.EnumSet.of(E1327, E1913, E1915, E1916, E1917, E1918, E1919, E1920, E1921,
                     E1922, E2011);
 
     public String titleKey() {

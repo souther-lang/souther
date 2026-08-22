@@ -570,7 +570,8 @@
       }, {
         "kind" : "domain_point_uncovered",
         "disposition" : "reported",
-        "subject" : "出荷する/指示.重量 in 30001 < 指示.重量"
+        "subject" : "出荷する/指示.重量 in 30001 < 指示.重量",
+        "code" : "E1917"
       }, {
         "kind" : "partition_not_derivable",
         "disposition" : "reported",

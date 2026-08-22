@@ -61,7 +61,7 @@ final class SoutherAnnotations {
                 module == null ? null : moduleView(module),
                 data == null ? null : required(data, "value"),
                 behavior == null ? null : required(behavior, "signature"),
-                behavior == null ? null : requiredFlag(behavior, "injected"));
+                behavior == null ? null : required(behavior, "implementation"));
     }
 
     /**
@@ -139,14 +139,6 @@ final class SoutherAnnotations {
     private static String required(Annotation a, String name) {
         if (member(a, name) instanceof AnnotationValue.OfString s) {
             return s.stringValue();
-        }
-        throw notOurs(name);
-    }
-
-    /** A boolean member the schema declares with no default. */
-    private static boolean requiredFlag(Annotation a, String name) {
-        if (member(a, name) instanceof AnnotationValue.OfBoolean b) {
-            return b.booleanValue();
         }
         throw notOurs(name);
     }

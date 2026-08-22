@@ -1,0 +1,133 @@
+package souther.cli;
+
+import souther.compiler.check.Carrier;
+import souther.compiler.check.Clause;
+import souther.compiler.check.ClauseName;
+import souther.compiler.check.RuleRef;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.NumericDomain;
+import souther.compiler.observe.MeasurementStatus;
+import souther.compiler.partition.AxisId;
+import souther.compiler.partition.Border;
+import souther.compiler.partition.BorderQuantity;
+import souther.compiler.partition.BoundaryTarget;
+import souther.compiler.partition.Demand;
+import souther.compiler.partition.OriginRef;
+import souther.compiler.partition.Partitions;
+import souther.compiler.partition.PointRole;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.ItemAssessment;
+import souther.compiler.query.PartitionEvidence;
+import souther.compiler.report.AdequacyReport;
+import souther.compiler.source.SourceId;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+
+import java.util.EnumMap;
+import java.util.List;
+import java.util.function.Function;
+
+/**
+ * A report of one behavior whose partition is one border, written from the evidence.
+ *
+ * <p>Shared because two tests ask what a verdict makes of a border and each would otherwise carry
+ * its own way of building one. Two fixtures for one shape is two things to keep in step, and the
+ * one that was not kept would be a test asserting a verdict about a border the report no longer
+ * builds that way.
+ *
+ * <p>Written from the evidence rather than from a source on purpose: what these are about is what a
+ * verdict does with a point that came to an answer and one that did not, and a model that produces
+ * that pair says less about it than these fifteen lines do.
+ */
+final class AReportOfOneBorder {
+
+    private AReportOfOneBorder() {}
+
+    /** A bound at 100 over a position the rules run from 1 to 1000, so all four points are owed. */
+    static Border aBoundedBorder() {
+        OriginRef origin = new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
+                new Clause.Id(TypeSymbols.declared(new TypeKey("example.rate", "Amount")), 0),
+                java.util.Optional.of(new ClauseName("cap")))), true);
+        return Border.at(
+                BoundaryTarget.at(
+                        new BorderQuantity.OfACoordinate(new AxisId("weigh", "w.a"),
+                                new NumericTerm.ValueOf(TermPath.of("w").then("a")), Carrier.WHOLE),
+                        new souther.compiler.partition.Level.OnACarrier(Carrier.WHOLE,
+                                Count.of(100))),
+                origin,
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(1)),
+                        Endpoint.inclusive(Count.of(1000))));
+    }
+
+    /** The same border a rule leaves at 100 and up, where the ON point is the whole of what it owes. */
+    static Border aBorderAtTheEdgeOfItsDomain() {
+        OriginRef origin = new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
+                new Clause.Id(TypeSymbols.declared(new TypeKey("example.rate", "Amount")), 0),
+                java.util.Optional.of(new ClauseName("cap")))), true);
+        return Border.at(
+                BoundaryTarget.at(
+                        new BorderQuantity.OfACoordinate(new AxisId("weigh", "w.a"),
+                                new NumericTerm.ValueOf(TermPath.of("w").then("a")), Carrier.WHOLE),
+                        new souther.compiler.partition.Level.OnACarrier(Carrier.WHOLE,
+                                Count.of(100))),
+                origin,
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(100)), null));
+    }
+
+    /**
+     * {@code border} assessed point by point, with {@code coverage} saying what each point came to.
+     *
+     * <p>A point the border does not owe is not one a coverage answer is invented for: what it is,
+     * is not owed, and a fixture saying anything else about it would be describing a border other
+     * than the one handed in.
+     */
+    static BorderAssessment assessed(Border border,
+                                     Function<PointRole, ItemAssessment.Coverage> coverage) {
+        EnumMap<PointRole, ItemAssessment> items = new EnumMap<>(PointRole.class);
+        for (PointRole role : PointRole.values()) {
+            if (border.demand(role) instanceof Demand.NotOwed not) {
+                items.put(role, new ItemAssessment.NotOwed(not.reason()));
+                continue;
+            }
+            items.put(role, new ItemAssessment.Owed(border.demand(role).criterion(),
+                    coverage.apply(role),
+                    new ItemAssessment.Writability.WitnessedByRow(),
+                    new ItemAssessment.Attempt.NotAttempted(
+                            ItemAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE)));
+        }
+        return new BorderAssessment(border, items);
+    }
+
+    /** A row is at every point the border owes. */
+    static ItemAssessment.Coverage hit(PointRole role) {
+        return new ItemAssessment.Coverage.Hit();
+    }
+
+    static PartitionEvidence partition(BorderAssessment boundary,
+                                       Partitions.OmittedAxis... omitted) {
+        return new PartitionEvidence(PartitionEvidence.Partitioned.of(List.of()),
+                PartitionEvidence.Bounded.of(List.of(boundary)), PartitionEvidence.PairSpace.NONE,
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(omitted),
+                List.of());
+    }
+
+    /** What one behavior's partition makes of the whole report, held to {@code criterion}. */
+    static AdequacyReport.AdequacyStatus verdictOf(PartitionEvidence partition,
+                                                   Adequacy.Criterion criterion) {
+        AdequacyReport.BehaviorReport behavior = new AdequacyReport.BehaviorReport(
+                "weigh", souther.compiler.check.BehaviorImplementation.IMPLEMENTED,
+                1, 0, MeasurementStatus.COMPLETE, null, partition,
+                souther.compiler.query.ClaimAnnotations.NONE, null, List.of());
+        return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test",
+                Adequacy.Asked.warningsAt(Adequacy.Level.ALL, criterion),
+                MeasurementStatus.COMPLETE,
+                List.of(new AdequacyReport.ModuleReport("example.wide",
+                        new SourceId("wide.sou"), MeasurementStatus.COMPLETE,
+                        List.of(), List.of(behavior))))
+                .adequacy();
+    }
+}

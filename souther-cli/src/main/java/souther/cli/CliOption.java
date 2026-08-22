@@ -30,7 +30,7 @@ import java.util.Set;
 enum CliOption {
 
     DIRECTORY("compile/init", "<path>", "where what this command writes goes", "-d", "--dir"),
-    ADEQUACY("compile", "off|witness|all",
+    ADEQUACY("compile", "off|witness|all|reliable-domain",
             "warn about what the `example`s do not cover (default off)", "--adequacy"),
     WARNINGS("compile", "report|error", "refuse a compile that warns (default report)",
             "--warnings"),

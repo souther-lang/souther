@@ -4,6 +4,7 @@ import souther.compiler.query.ClaimAnnotations;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.diag.QuotedFrom;
@@ -57,8 +58,13 @@ import java.util.Set;
  * answers differently for each. It is an input carried through rather than a value derived from the
  * modules, so filtering the report leaves it alone.
  */
-public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy.Level askedLevel,
+public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy.Asked asked,
                              MeasurementStatus status, List<ModuleReport> modules) {
+
+    /** How much was measured, which decides which measures have a number to show. */
+    public Adequacy.Level askedLevel() {
+        return asked.level();
+    }
 
     public static final int SCHEMA_VERSION = 4;
 
@@ -97,7 +103,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * @param findings  what the measures found and nothing filled, which is what the lines under this
      *                  behavior print and what a build is warned about — one list, read three ways
      */
-    public record BehaviorReport(String name, boolean injected, int rows, int pending,
+    public record BehaviorReport(String name, BehaviorImplementation implementation,
+                                 int rows, int pending,
                                  MeasurementStatus status,
                                  Adequacy.SignatureEvidence signature,
                                  PartitionEvidence partition,
@@ -130,7 +137,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         }
         Adequacy.Asked asked = compilation.db().ask(new Adequacy.Requested()).value();
         return new AdequacyReport(SCHEMA_VERSION, ModuleMetadata.compilerVersion(),
-                asked == null ? Adequacy.Level.OFF : asked.level(), overall, List.copyOf(modules));
+                asked == null ? Adequacy.Asked.NOTHING : asked, overall, List.copyOf(modules));
     }
 
     /**
@@ -233,7 +240,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             Adequacy.BranchEvidence branch =
                     branches == null ? null : branches.get(behavior.name());
             behaviors.add(new BehaviorReport(behavior.name(),
-                    module.injected(behavior),
+                    module.implementationOf(behavior),
                     rows.size(), pending,
                     unreadable ? MeasurementStatus.PARTIAL : statusOf(signature, partition, branch),
                     signature, partition,
@@ -283,7 +290,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             kept.add(new ModuleReport(m.module(), m.declaredIn(), status, gaps, behaviors));
             overall = overall.and(status);
         }
-        return new AdequacyReport(schemaVersion, compilerVersion, askedLevel, overall,
+        return new AdequacyReport(schemaVersion, compilerVersion, asked, overall,
                 List.copyOf(kept));
     }
 
@@ -305,7 +312,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     /** The findings a build is entitled to refuse: an asked measure came to an answer and the answer
      *  was that something the rows are asked for is not there. */
     public List<Adequacy.Finding> adequacyGaps() {
-        return findings().stream().filter(Adequacy.Finding::isAdequacyGap).toList();
+        return findings().stream().filter(f -> f.isAdequacyGap(asked.criterion())).toList();
     }
 
     /**
@@ -348,10 +355,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         List<MeasurementStatus> measures = new ArrayList<>();
         for (ModuleReport module : modules) {
             for (BehaviorReport behavior : module.behaviors()) {
-                if (askedLevel.reports() && behavior.signature() != null) {
+                if (askedLevel().reports() && behavior.signature() != null) {
                     add(measures, behavior.signature().status());
                 }
-                if (!askedLevel.measuresArms()) {
+                if (!askedLevel().measuresArms()) {
                     continue;
                 }
                 add(measures, behavior.branch() == null ? null : behavior.branch().status());
@@ -369,15 +376,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // boundary measure is made in full. Holding the verdict open for it would say a
                 // model was unmeasured on the strength of the one measure that was.
                 add(measures, behavior.partition().bounded().status());
-                // And of a border's four points, the two a build refuses over. Which of them is a
-                // gap a build is held to is decided per measure, and a measure that refuses nothing
-                // cannot leave a verdict undetermined for want of an answer — read that way, a row
-                // whose value could not be read at an IN point held a model open while every point
-                // a build asks about had been measured in full. What the report says about itself
-                // still reads all four: how much of the measurement was made and what a build is
-                // held to are two questions.
+                // And of a border's four points, the ones the criterion asks for. A measure that
+                // refuses nothing cannot leave a verdict undetermined for want of an answer — read
+                // the other way, a row whose value could not be read at a point no build is held to
+                // held a model open while every point it does ask about had been measured in full.
+                // Which points those are is the criterion's answer and not a second reading of it
+                // here: a build refusing over a missing IN row and calling a model satisfied while
+                // the IN point could not be measured would be held to one criterion in one place
+                // and another in the other. What the report says about itself still reads all four:
+                // how much of the measurement was made and what a build is held to are two
+                // questions.
                 BorderAssessment.pointsOf(behavior.partition().boundaries()).stream()
-                        .filter(p -> p.role().againstTheLine())
+                        .filter(p -> asked.criterion().requires(p.role()))
                         .forEach(p -> add(measures, p.item().status()));
                 // A dropped axis that was carrying a line some rule drew took boundaries with it, and
                 // nothing can ask about them now. One that was only classifying took a measure no
@@ -401,7 +411,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * counted and is exactly what stops a verdict of satisfied: it is the case where a gap could have
      * been found and nobody looked.
      */
-    private static void add(List<MeasurementStatus> measures, MeasurementStatus status) {
+    private void add(List<MeasurementStatus> measures, MeasurementStatus status) {
         if (status != null && status != MeasurementStatus.NOT_APPLICABLE) {
             measures.add(status);
         }
@@ -420,22 +430,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     public String human(SourceNameResolver names) {
         StringBuilder out = new StringBuilder();
-        int implemented = 0;
-        int injected = 0;
+        Map<BehaviorImplementation, Integer> counted = new java.util.EnumMap<>(BehaviorImplementation.class);
+        for (BehaviorImplementation each : BehaviorImplementation.values()) {
+            counted.put(each, 0);
+        }
         for (ModuleReport module : modules) {
             out.append(String.format("%s measurement: %s%n",
                     DisplayColumns.padRight(module.module(), 56),
                     module.status().name().toLowerCase(java.util.Locale.ROOT)));
             for (BehaviorReport behavior : module.behaviors()) {
-                if (behavior.injected()) {
-                    injected++;
-                } else {
-                    implemented++;
-                }
+                counted.merge(behavior.implementation(), 1, Integer::sum);
                 out.append(String.format("  %s %s rows %-4d pending %d%n",
                         DisplayColumns.padRight(behavior.name(), 24),
-                        DisplayColumns.padRight(
-                                behavior.injected() ? "injected" : "implemented", 13),
+                        DisplayColumns.padRight(behavior.implementation().written(), 13),
                         behavior.rows(), behavior.pending()));
                 signature(out, behavior);
                 partition(out, behavior, module.declaredIn(), names);
@@ -450,9 +457,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             said(out, module.incompleteness().stream()
                     .filter(gap -> gap.behavior().isEmpty()).toList(), names);
         }
-        int total = implemented + injected;
-        out.append(String.format("%n%d %s: %d implemented, %d injected; %d %s waiting for a `let`.%n",
-                total, total == 1 ? "behavior" : "behaviors", implemented, injected,
+        int total = counted.values().stream().mapToInt(Integer::intValue).sum();
+        out.append(String.format("%n%d %s: %d implemented, %d unimplemented, %d injected;"
+                        + " %d %s waiting for a `let`.%n",
+                total, total == 1 ? "behavior" : "behaviors",
+                counted.get(BehaviorImplementation.IMPLEMENTED),
+                counted.get(BehaviorImplementation.UNIMPLEMENTED),
+                counted.get(BehaviorImplementation.INJECTION_TARGET),
                 pendingRows(), pendingRows() == 1 ? "row" : "rows"));
         // Last, and its own line. What the measurement managed is said above, per module; this is the
         // other question, and the two were one word until they disagreed in front of a reader.
@@ -475,7 +486,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /** The reasons, in the one shape a reason is printed in wherever it sits. */
-    private static void said(StringBuilder out, List<Incompleteness> gaps,
+    private void said(StringBuilder out, List<Incompleteness> gaps,
                              SourceNameResolver names) {
         for (Incompleteness gap : gaps) {
             out.append(String.format("    · %s%n", Reasons.said(gap, names)));
@@ -490,7 +501,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * second says somebody has, and nothing has confirmed the model gives it. For a behavior with no
      * body only the first can be answered at all, so the second is not printed against one.
      */
-    private static void signature(StringBuilder out, BehaviorReport behavior) {
+    private void signature(StringBuilder out, BehaviorReport behavior) {
         Adequacy.SignatureEvidence signature = behavior.signature();
         if (signature == null) {
             return;
@@ -567,8 +578,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * classification to keep in step with the one a build refuses on, and the two would agree until
      * a kind changed sides.
      */
-    private static String mark(Adequacy.Finding finding) {
-        return finding.isAdequacyGap() ? "!" : "·";
+    private String mark(Adequacy.Finding finding) {
+        return finding.isAdequacyGap(asked.criterion()) ? "!" : "·";
     }
 
     /**
@@ -578,25 +589,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * claims. The summary already says partial; each line has to say it too, or the lines read as the
      * finding and the word in the margin as a footnote.
      */
-    private static String noRow(Adequacy.Finding finding) {
+    private String noRow(Adequacy.Finding finding) {
         return finding.status() == MeasurementStatus.COMPLETE
                 ? "no row " : "undecided whether a row ";
     }
 
     /** The positions this report has an axis for, which is what tells a claim it can print beside
      *  one from a claim it has to name a position for. */
-    private static List<String> measuredPaths(PartitionEvidence partition) {
+    private List<String> measuredPaths(PartitionEvidence partition) {
         return partition.axes().stream().map(PartitionEvidence.AxisCoverage::path).toList();
     }
 
     /** The model's own words for a claim, where there is one to print. */
-    private static String because(List<String> reasons) {
+    private String because(List<String> reasons) {
         return reasons.size() == 1 ? ": " + reasons.get(0)
                 : reasons.isEmpty() ? "" : " on every path";
     }
 
     /** What a reader is told about a claim nothing settled, in this report's own words. */
-    private static String unproven(ClaimAnnotations.Why why) {
+    private String unproven(ClaimAnnotations.Why why) {
         return switch (why) {
             case A_RULE_WENT_UNREAD -> "a rule about this position went unread";
             case THE_RULES_LEAVE_THE_POSITION_NOTHING ->
@@ -616,7 +627,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * <p>A boundary a guard drew is printed as not measured rather than as missed. Meeting it takes
      * more than writing the value — the comparison has to have run — and nothing counts that yet.
      */
-    private static void partition(StringBuilder out, BehaviorReport behavior,
+    private void partition(StringBuilder out, BehaviorReport behavior,
                                   SourceId declaredIn, SourceNameResolver names) {
         PartitionEvidence partition = behavior.partition();
         if (partition == null || (partition.axes().isEmpty() && partition.boundaries().isEmpty()
@@ -806,12 +817,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /** The owed half of a point this report has already filtered to the owed ones. */
-    private static ItemAssessment.Owed owed(BorderAssessment.Point point) {
+    private ItemAssessment.Owed owed(BorderAssessment.Point point) {
         return (ItemAssessment.Owed) point.item();
     }
 
     /** What settled a point nobody is owed a row at, in the words the report promises its reader. */
-    private static String whyNotOwed(souther.compiler.partition.NotOwedReason reason) {
+    private String whyNotOwed(souther.compiler.partition.NotOwedReason reason) {
         return switch (reason) {
             case THE_RULES_REFUSE_IT -> "excluded — the rules leave no value there";
             case THE_CARRIER_NAMES_NO_NEIGHBOUR ->
@@ -829,7 +840,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * the position went undivided sat two rows under a boundary count that was counting the line that
      * very comparison drew — one measure's silence printed as though it were the other's.
      */
-    private static void undivided(StringBuilder out, BehaviorReport behavior,
+    private void undivided(StringBuilder out, BehaviorReport behavior,
                                   SourceNameResolver names, SourceId declaredIn) {
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.APositionNoLineDivides(var position)) {
@@ -948,7 +959,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * arms and says nothing about their combinations, and a report that said "paths covered" would
      * invite an author to stop looking exactly where there is more to find.
      */
-    private static void branch(StringBuilder out, BehaviorReport behavior,
+    private void branch(StringBuilder out, BehaviorReport behavior,
                                SourceId declaredIn, SourceNameResolver names) {
         Adequacy.BranchEvidence branch = behavior.branch();
         if (branch == null) {
@@ -1120,17 +1131,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
-     * The same, for the one field with no enum behind it.
-     *
-     * <p>Whether a behavior has a {@code let} is a boolean, and these are the two words it is written
-     * as. Having no enum is why it needs this more than the others rather than less: nothing else in
-     * the compiler says what these words are.
-     */
-    public static String implementationWord(boolean injected) {
-        return injected ? "injected" : "implemented";
-    }
-
-    /**
      * Whether the partition measure is the one that answers this question.
      *
      * <p>Which values may stand somewhere, which classes hold them, and which value a rule tells
@@ -1157,7 +1157,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * the question is raised; a report chooses where to print it, and nothing here decides what the
      * model asked.
      */
-    private static void unaccounted(StringBuilder out, BehaviorReport behavior,
+    private void unaccounted(StringBuilder out, BehaviorReport behavior,
                                     SourceNameResolver names,
                                     souther.compiler.source.SourceId declaredIn,
                                     java.util.function.Predicate<
@@ -1333,7 +1333,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             for (BehaviorReport behavior : module.behaviors()) {
                 ObjectNode b = behaviors.addObject();
                 b.put("name", behavior.name());
-                b.put("implementation", implementationWord(behavior.injected()));
+                b.put("implementation", behavior.implementation().written());
                 b.put("rows", behavior.rows());
                 b.put("pending", behavior.pending());
                 b.put("status", wire(behavior.status()));
@@ -1439,7 +1439,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         }
     }
 
-    private static void partition(ObjectNode behavior, PartitionEvidence partition,
+    private void partition(ObjectNode behavior, PartitionEvidence partition,
                                   ClaimAnnotations claimed, DocumentSources sources) {
         if (partition == null) {
             return;
@@ -1682,12 +1682,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * under every finding of a behavior the entry already names — and where the finding is about a
      * line or a class, that coordinate is not where the reader would go.
      */
-    private static void findings(ObjectNode behavior, BehaviorReport of, DocumentSources sources) {
+    private void findings(ObjectNode behavior, BehaviorReport of, DocumentSources sources) {
         ArrayNode out = behavior.putArray("findings");
         for (Adequacy.Finding finding : of.findings()) {
             ObjectNode f = out.addObject();
             f.put("kind", word(finding.kind()));
-            f.put("disposition", word(finding.disposition()));
+            f.put("disposition", word(finding.disposition(asked.criterion())));
             f.put("subject", subject(finding, sources));
             // Which rule this is about, where the finding is about one. The words in `subject` are
             // how a reader finds it, and two rules an author named alike have the same words — so a
