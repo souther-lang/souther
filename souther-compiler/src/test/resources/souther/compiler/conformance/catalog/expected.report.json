@@ -1,5 +1,5 @@
 {
-  "schemaVersion" : 3,
+  "schemaVersion" : 4,
   "compilerVersion" : "<version>",
   "status" : "complete",
   "adequacy" : "satisfied",
@@ -461,22 +461,11 @@
         },
         "notDerivable" : [ "指示.記録時刻" ],
         "notRead" : [ {
-          "position" : "指示.集荷時刻",
-          "reason" : "unsupported_syntax",
-          "rule" : "comparison@1:54:50",
-          "ruleId" : {
-            "kind" : "guard",
-            "declaredIn" : "conformance.shipping",
-            "behavior" : "出荷する",
-            "ordinal" : 5,
-            "lowered" : 0
-          }
-        }, {
           "position" : "指示.受付日",
           "reason" : "unsupported_syntax",
           "rule" : "comparison@1:52:57",
           "ruleId" : {
-            "kind" : "guard",
+            "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
             "behavior" : "出荷する",
             "ordinal" : 4,
@@ -487,10 +476,21 @@
           "reason" : "unsupported_syntax",
           "rule" : "comparison@1:52:57",
           "ruleId" : {
-            "kind" : "guard",
+            "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
             "behavior" : "出荷する",
             "ordinal" : 4,
+            "lowered" : 0
+          }
+        }, {
+          "position" : "指示.集荷時刻",
+          "reason" : "unsupported_syntax",
+          "rule" : "comparison@1:54:50",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.shipping",
+            "behavior" : "出荷する",
+            "ordinal" : 5,
             "lowered" : 0
           }
         }, {
@@ -516,21 +516,9 @@
       }, {
         "kind" : "partition_not_read",
         "disposition" : "reported",
-        "subject" : "指示.集荷時刻",
-        "ruleId" : {
-          "kind" : "guard",
-          "declaredIn" : "conformance.shipping",
-          "behavior" : "出荷する",
-          "ordinal" : 5,
-          "lowered" : 0
-        },
-        "reason" : "unsupported_syntax"
-      }, {
-        "kind" : "partition_not_read",
-        "disposition" : "reported",
         "subject" : "指示.受付日",
         "ruleId" : {
-          "kind" : "guard",
+          "kind" : "comparison",
           "declaredIn" : "conformance.shipping",
           "behavior" : "出荷する",
           "ordinal" : 4,
@@ -542,10 +530,22 @@
         "disposition" : "reported",
         "subject" : "指示.締切",
         "ruleId" : {
-          "kind" : "guard",
+          "kind" : "comparison",
           "declaredIn" : "conformance.shipping",
           "behavior" : "出荷する",
           "ordinal" : 4,
+          "lowered" : 0
+        },
+        "reason" : "unsupported_syntax"
+      }, {
+        "kind" : "partition_not_read",
+        "disposition" : "reported",
+        "subject" : "指示.集荷時刻",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.shipping",
+          "behavior" : "出荷する",
+          "ordinal" : 5,
           "lowered" : 0
         },
         "reason" : "unsupported_syntax"
