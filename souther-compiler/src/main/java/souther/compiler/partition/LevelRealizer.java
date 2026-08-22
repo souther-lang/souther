@@ -133,33 +133,8 @@ public final class LevelRealizer {
      * the one the ranges leave is the whole of what there is to try.
      */
     private static List<Place> alongTheLine(NumericDomain.Bounds together, Carrier carrier) {
-        Place first = carrier.somethingInside(together.min(), together.max());
-        if (first == null) {
-            return List.of();
-        }
-        if (!carrier.counts()) {
-            return List.of(first);
-        }
-        List<Place> out = new java.util.ArrayList<>();
-        out.add(first);
-        for (int step = 1; out.size() < HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT; step++) {
-            Place above = carrier.onTheGrid(Count.number(first).plus(Count.of(step)));
-            Place below = carrier.onTheGrid(Count.number(first).plus(Count.of(-step)));
-            boolean took = false;
-            if (above != null && together.admits(above)) {
-                out.add(above);
-                took = true;
-            }
-            if (below != null && together.admits(below)
-                    && out.size() < HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT) {
-                out.add(below);
-                took = true;
-            }
-            if (!took) {
-                break;
-            }
-        }
-        return List.copyOf(out);
+        return Outwards.from(carrier.somethingInside(together.min(), together.max()),
+                Count.of(1), carrier, together, HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT);
     }
 
     /**
@@ -468,31 +443,23 @@ public final class LevelRealizer {
          * many of its values as this is willing to take says only that those values were not the
          * one.
          *
-         * <p>Outward rather than upward, and more than one of them, for what the rules can do to a
-         * value the arithmetic leaves: the coset says which values leave the rest something they
-         * reach, and a rule the region carries can refuse one of those without refusing the next.
+         * <p>More than one of them, for what the rules can do to a value the arithmetic leaves: the
+         * coset says which values leave the rest something they reach, and a rule the region carries
+         * can refuse one of those without refusing the next. How many are worth trying is this
+         * search's own answer — {@link Outwards} carries the order they are tried in and no
+         * allowance of its own, and what a step past a refused value buys is not the same question
+         * here as it is for a pair on a line.
          */
         private Reached outward(int i, CandidateDomain.Outward on, java.math.BigDecimal owed,
                                 java.math.BigDecimal coef,
                                 souther.compiler.inputs.SearchRegion here) {
-            if (on.within().admits(new Count(on.from()))
-                    && trying(i, on.from(), owed, coef, here) == Reached.FOUND) {
-                return Reached.FOUND;
-            }
-            for (int step = 1; step <= VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT; step++) {
-                java.math.BigDecimal away =
-                        on.by().multiply(java.math.BigDecimal.valueOf(step));
-                for (java.math.BigDecimal x
-                        : List.of(on.from().add(away), on.from().subtract(away))) {
-                    if (!on.within().admits(new Count(x))) {
-                        continue;
-                    }
-                    if (trying(i, x, owed, coef, here) == Reached.FOUND) {
-                        return Reached.FOUND;
-                    }
-                    if (taken > STEPS_A_SEARCH_MAY_TAKE) {
-                        return Reached.INCOMPLETE;
-                    }
+            for (Place x : Outwards.from(new Count(on.from()), new Count(on.by()), carrier,
+                    on.within(), VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT)) {
+                if (trying(i, Count.number(x).at(), owed, coef, here) == Reached.FOUND) {
+                    return Reached.FOUND;
+                }
+                if (taken > STEPS_A_SEARCH_MAY_TAKE) {
+                    return Reached.INCOMPLETE;
                 }
             }
             return Reached.INCOMPLETE;
