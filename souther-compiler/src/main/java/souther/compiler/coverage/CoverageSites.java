@@ -62,49 +62,26 @@ public final class CoverageSites {
      * that came out alike were counted as one obligation, and a rule nothing exercised was reported
      * as covered.
      */
-    private static DecidedBy decidedAt(CoverageOrigin fork, Core decision,
+    private static DecidedBy decidedAt(CoverageOrigin fork, BindingOwner within,
                                        DecisionSources decisions, SuppliedRules supplied) {
         if (!(decisions.at(fork) instanceof DecisionSource.Supplied by)) {
             return DecidedBy.THE_DECLARATION;
         }
-        // The expansion this copy of the fork belongs to, which is the one that was handed rules at
-        // the parameters the declaration named. Asked of those parameters and not of whatever
-        // supplied-looking thing stands in the condition: a fork resting on one of them can hold a
-        // combinator of its own inside it, and the rule that one was handed decides nothing here.
-        for (BindingOwner owner : within(decision)) {
-            List<SuppliedRules.RuleIdentity> rules = new ArrayList<>();
-            for (String parameter : by.parameters()) {
-                SuppliedRules.RuleIdentity rule = supplied.at(owner, parameter);
-                if (rule != null) {
-                    rules.add(rule);
-                }
-            }
-            if (rules.size() == by.parameters().size()) {
-                return new DecidedBy.BySupplied(rules);
+        // The rules this copy was handed, asked of the copy it is and of the parameters the
+        // declaration named. Both are answers somebody else already had: which copy this is, the
+        // elaboration stamped on the fork; what was handed to each parameter, the call site
+        // recorded. Worked out here instead — from whatever names the fork's own subtree happens to
+        // hold — a fork deciding by a rule that reduced to a constant is a fork with nothing to ask
+        // about, and a combinator nested inside one answered for the fork above it.
+        List<SuppliedRules.RuleIdentity> rules = new ArrayList<>();
+        for (String parameter : by.parameters()) {
+            SuppliedRules.RuleIdentity rule = within == null ? null : supplied.at(within, parameter);
+            if (rule != null) {
+                rules.add(rule);
             }
         }
-        return DecidedBy.NOT_SAID;
-    }
-
-    /** The expansions what settles this fork stands inside, innermost first. */
-    private static List<BindingOwner> within(Core decision) {
-        List<BindingOwner> out = new ArrayList<>();
-        owners(decision, out);
-        return out;
-    }
-
-    private static void owners(Core e, List<BindingOwner> out) {
-        if (e instanceof Core.Read r && r.binding() != null) {
-            for (BindingOwner owner = r.binding().owner(); owner != null;
-                    owner = owner instanceof BindingOwner.Expansion in ? in.within()
-                            : owner instanceof BindingOwner.Synthesized made ? made.within()
-                            : null) {
-                if (!out.contains(owner)) {
-                    out.add(owner);
-                }
-            }
-        }
-        Core.forEachChild(e, child -> owners(child, out));
+        return rules.size() == by.parameters().size() ? new DecidedBy.BySupplied(rules)
+                : DecidedBy.NOT_SAID;
     }
 
     /**
@@ -640,7 +617,7 @@ public final class CoverageSites {
                     // calls of one library combinator are one fork inlined twice and are not one
                     // thing to cover, and what tells them apart is the rule each was handed.
                     DecidedBy decided =
-                            decidedAt(iff.origin(), iff.cond(), decisions, supplied);
+                            decidedAt(iff.origin(), iff.expansion(), decisions, supplied);
                     ControlPointId.ArmOccurrence then =
                             armOf(HELD, iff, iff.origin(), 0, iff.then(), inside, decided);
                     walk(iff.then(), inside);
@@ -661,7 +638,7 @@ public final class CoverageSites {
                     // A subject the caller's rule answered is a decision the caller made, and its
                     // arms are one obligation per rule handed in.
                     DecidedBy decided =
-                            decidedAt(m.origin(), m.scrutinee(), decisions, supplied);
+                            decidedAt(m.origin(), m.expansion(), decisions, supplied);
                     ControlPointId.ArmOccurrence[] arms =
                             new ControlPointId.ArmOccurrence[m.cases().size()];
                     for (int i = 0; i < m.cases().size(); i++) {
@@ -676,7 +653,8 @@ public final class CoverageSites {
                 case Core.IfConstructed ic -> {
                     ic.construct().values().forEach(given -> walk(given.value(), inside));
                     // And what an attempted construction decides by is the value it is given.
-                    DecidedBy decided = decidedAt(ic.origin(), ic.construct(), decisions, supplied);
+                    DecidedBy decided =
+                            decidedAt(ic.origin(), ic.expansion(), decisions, supplied);
                     ControlPointId.ArmOccurrence[] arms =
                             new ControlPointId.ArmOccurrence[1 + ic.els().size()];
                     arms[0] = armOf(BUILT, ic, ic.origin(), 0, ic.then(), inside, decided);

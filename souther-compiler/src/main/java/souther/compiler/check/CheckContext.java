@@ -18,12 +18,34 @@ import java.util.Map;
 public record CheckContext(Symbols symbols, Hir.Data data, Map<ValueName.Behavior, ReqSig> reqs,
                            Map<ValueName.Behavior, ReqSig> callees, boolean makingAnOptional,
                            Preserved preserved,
-                           Map<souther.compiler.types.BindingId, ValueName.Behavior> dependencies) {
+                           Map<souther.compiler.types.BindingId, ValueName.Behavior> dependencies,
+                           souther.compiler.types.BindingOwner within) {
 
     public CheckContext(Symbols symbols, Hir.Data data, Map<ValueName.Behavior, ReqSig> reqs,
                         Map<ValueName.Behavior, ReqSig> callees, boolean makingAnOptional,
                         Preserved preserved) {
-        this(symbols, data, reqs, callees, makingAnOptional, preserved, Map.of());
+        this(symbols, data, reqs, callees, makingAnOptional, preserved, Map.of(), null);
+    }
+
+    public CheckContext(Symbols symbols, Hir.Data data, Map<ValueName.Behavior, ReqSig> reqs,
+                        Map<ValueName.Behavior, ReqSig> callees, boolean makingAnOptional,
+                        Preserved preserved,
+                        Map<souther.compiler.types.BindingId, ValueName.Behavior> dependencies) {
+        this(symbols, data, reqs, callees, makingAnOptional, preserved, dependencies, null);
+    }
+
+    /**
+     * The same, elaborating what {@code expansion} put here.
+     *
+     * <p>Which copy of a helper's body a fork stands in is known here and nowhere later: the
+     * expansion is the node being elaborated, and what comes out of it is a body with the call site
+     * substituted through. Recovered afterwards from the bindings a fork's condition happens to
+     * read, a fork deciding by something with no name in it — a rule that reduced to a constant —
+     * is a fork nothing can say the copy of.
+     */
+    public CheckContext inside(souther.compiler.types.BindingOwner expansion) {
+        return new CheckContext(symbols, data, reqs, callees, makingAnOptional, preserved,
+                dependencies, expansion);
     }
 
     /**
