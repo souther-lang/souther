@@ -28,7 +28,13 @@ import java.util.SequencedSet;
  * @param value what the expansion produced
  * @param standing every recursive helper it left a call to, in the order they were met
  */
-public record Expansion<T>(T value, SequencedSet<String> standing) {
+public record Expansion<T>(T value, SequencedSet<String> standing,
+                          ElementProvenance provenance) {
+
+    /** The same, of an expansion nothing needs the element provenance of. */
+    public Expansion(T value, SequencedSet<String> standing) {
+        this(value, standing, ElementProvenance.NONE);
+    }
 
     public Expansion {
         standing = Collections.unmodifiableSequencedSet(new LinkedHashSet<>(standing));

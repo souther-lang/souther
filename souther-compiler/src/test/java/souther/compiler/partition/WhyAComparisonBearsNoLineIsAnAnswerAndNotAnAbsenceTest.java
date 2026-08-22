@@ -23,13 +23,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * one the behavior may well draw a boundary on and this cannot show a row to have met: a recording
  * holds that a place was passed and not how many times, so two outcomes of one comparison in one run
  * cannot be told from two rows' outcomes. Folded into one {@code false}, the second becomes silence
- * that reads like the first — and the day the reading of a collection's elements arrives, whoever
- * widens it has to work out again why this was ever left out.
+ * that reads like the first.
  *
- * <p>Asked of the policy and not of a report. No report can tell these apart today: the position a
- * repeated comparison names is one the reading of the inputs stops at for its own reasons, so the
- * two arrive downstream as the same emptiness. That is exactly why the distinction is kept where it
- * is decided.
+ * <p>What tells the passes apart is a position for what is passed. A step applied once per element
+ * of a container the input walk names is passed once per element of that container, and the row's
+ * own values there say which pass came out which way — so that one is a line, and it is the same
+ * comparison, written the same way, as the one below it whose container the walk names nothing at.
+ * The two stand together here because the difference between them is the whole of the reason.
  */
 class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
 
@@ -44,8 +44,9 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
                 let cold = temp.value < 240
                 let unread = temp.value < 100
                 let kept = filter(x -> x < 50, xs)
+                let fixed = filter(y -> y < 70, [ 1, 2, 3 ])
 
-                if cold then kept else xs
+                if cold then kept else fixed
             }
             """;
 
@@ -74,7 +75,9 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
 
         Map<Integer, BoundaryPolicy.Standing> byLine = new LinkedHashMap<>();
         for (ComparisonReadings.Reading each
-                : ComparisonReadings.of(body, plan, InputReads.of(inputs), symbols).all()) {
+                : ComparisonReadings.of(body, plan,
+                        InputReads.of(inputs, checked.elementBindings().get("read")),
+                        symbols).all()) {
             byLine.put(each.comparison().pos().line(), each.standing());
         }
         return byLine;
@@ -93,10 +96,21 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
         assertEquals(NotABoundary.NOTHING_READS_IT, whyOf(standingAt(9)));
     }
 
-    /** A truth one run reaches once per element is a boundary nothing can measure a row against. */
+    /** A truth one run reaches once per element of an input bears a line at that element. */
+    @Test
+    void aTruthReachedOncePerElementOfAnInputBearsALine() {
+        assertEquals(BoundaryPolicy.Standing.DrawsALine.class,
+                standingAt(10).getClass(),
+                "each pass is one occurrence of a position, so a row can be read at it");
+    }
+
+    /**
+     * The same comparison over a container the input walk names nothing at is a boundary nothing can
+     * measure a row against.
+     */
     @Test
     void aTruthOneRunReachesMoreThanOnceIsOneNothingCanMeasure() {
-        assertEquals(NotABoundary.REPEATED_IN_ONE_RUN, whyOf(standingAt(10)));
+        assertEquals(NotABoundary.REPEATED_IN_ONE_RUN, whyOf(standingAt(11)));
     }
 
     private static NotABoundary whyOf(BoundaryPolicy.Standing standing) {

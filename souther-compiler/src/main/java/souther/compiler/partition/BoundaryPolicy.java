@@ -69,8 +69,13 @@ final class BoundaryPolicy {
      *
      * @param live whether what is computed at this position is read on the way to what the behavior
      *             answers with, which is {@link LiveFlow}'s answer carried down the walk
+     * @param eachPassIsAnOccurrence whether every pass of this position in one run is one occurrence
+     *                               of a position of the input, which is
+     *                               {@link souther.compiler.check.ElementBindings}'s answer carried
+     *                               down the walk beside {@code live}
      */
-    static Standing standingOf(Core.Binary comparison, CoverageSites.Plan plan, boolean live) {
+    static Standing standingOf(Core.Binary comparison, CoverageSites.Plan plan, boolean live,
+                               boolean eachPassIsAnOccurrence) {
         if (!live) {
             return new Standing.DrawsNone(comparison, NotABoundary.NOTHING_READS_IT);
         }
@@ -81,8 +86,12 @@ final class BoundaryPolicy {
             return new Standing.DrawsNone(comparison, NotABoundary.NOTHING_RECORDS_IT);
         }
         // A recording holds that a place was passed and not how many times, so two outcomes of one
-        // comparison in one run cannot be told from two rows' outcomes.
-        if (plan.mayRepeat(comparison)) {
+        // comparison in one run cannot be told from two rows' outcomes — unless something else tells
+        // the passes apart. Where the closure that repeats this one is applied to the elements of a
+        // container the input walk has a position for, each pass is one occurrence of that position,
+        // and the row's own values there say which pass came out which way. The comparison is one
+        // rule about the element and not several about the container.
+        if (plan.mayRepeat(comparison) && !eachPassIsAnOccurrence) {
             return new Standing.DrawsNone(comparison, NotABoundary.REPEATED_IN_ONE_RUN);
         }
         return new Standing.DrawsALine(comparison);

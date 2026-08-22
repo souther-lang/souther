@@ -83,7 +83,7 @@ final class ComparisonReadings {
     static ComparisonReadings of(Core body, CoverageSites.Plan plan, InputReads reads,
                                  Symbols symbols) {
         List<Reading> readings = new ArrayList<>();
-        walk(body, plan, reads, symbols, LiveFlow.of(body), List.of(), true, readings);
+        walk(body, plan, reads, symbols, LiveFlow.of(body), List.of(), true, true, readings);
         return new ComparisonReadings(readings);
     }
 
@@ -92,13 +92,17 @@ final class ComparisonReadings {
      * @param live    whether what is computed here is read on the way to what the behavior answers
      *                with. Carried down because everything inside a value nothing reads is read by
      *                nothing either
+     * @param each    whether every pass of this position in one run is one occurrence of a position
+     *                of the input. Carried down for the same reason: a closure applied once per
+     *                element stands inside whatever applies the closure above it, and one that
+     *                nothing says the applications of settles it for everything under it
      */
     private static void walk(Core e, CoverageSites.Plan plan, InputReads reads, Symbols symbols,
                              LiveFlow flow, List<ReachingCuts.Cut> assumed, boolean live,
-                             List<Reading> out) {
+                             boolean each, List<Reading> out) {
         if (e instanceof Core.Binary comparison && plan.comparisons().at(comparison).isPresent()) {
             out.add(new Reading(comparison, reads, assumed,
-                    BoundaryPolicy.standingOf(comparison, plan, live)));
+                    BoundaryPolicy.standingOf(comparison, plan, live, each)));
         }
         switch (e) {
             // The right operand runs only where the left came out the way that leaves the answer
@@ -106,36 +110,64 @@ final class ComparisonReadings {
             // any fork above it: there need not be one, and where there is, this is what the fork
             // would have been reading anyway.
             case Core.Binary both when both.op() == Hir.BinOp.AND -> {
-                walk(both.left(), plan, reads, symbols, flow, assumed, live, out);
+                walk(both.left(), plan, reads, symbols, flow, assumed, live, each, out);
                 walk(both.right(), plan, reads, symbols, flow,
-                        taking(both.left(), true, reads, assumed, symbols), live, out);
+                        taking(both.left(), true, reads, assumed, symbols), live, each, out);
             }
             case Core.Binary either when either.op() == Hir.BinOp.OR -> {
-                walk(either.left(), plan, reads, symbols, flow, assumed, live, out);
+                walk(either.left(), plan, reads, symbols, flow, assumed, live, each, out);
                 walk(either.right(), plan, reads, symbols, flow,
-                        taking(either.left(), false, reads, assumed, symbols), live, out);
+                        taking(either.left(), false, reads, assumed, symbols), live, each, out);
             }
             // The condition under what stood above the fork, and each arm under what that arm proves
             // of it. A comparison inside a condition is not below the fork: it runs to decide it.
             case Core.If iff -> {
-                walk(iff.cond(), plan, reads, symbols, flow, assumed, live, out);
+                walk(iff.cond(), plan, reads, symbols, flow, assumed, live, each, out);
                 walk(iff.then(), plan, reads, symbols, flow,
-                        taking(iff.cond(), true, reads, assumed, symbols), live, out);
+                        taking(iff.cond(), true, reads, assumed, symbols), live, each, out);
                 walk(iff.els(), plan, reads, symbols, flow,
-                        taking(iff.cond(), false, reads, assumed, symbols), live, out);
+                        taking(iff.cond(), false, reads, assumed, symbols), live, each, out);
             }
             // What a `let` computes is read on the way to the answer only where the name is read;
             // everywhere else a value stands in a body it is consumed by what it stands in. And its
             // body is where the name stands for what was bound to it.
             case Core.LetIn let -> {
                 walk(let.value(), plan, reads, symbols, flow, assumed,
-                        live && flow.reads(let), out);
+                        live && flow.reads(let), each, out);
                 walk(let.body(), plan, reads.and(let.binder(), let.value()), symbols, flow, assumed,
-                        live, out);
+                        live, each, out);
             }
+            // What runs inside a function value runs once per application, and how many applications
+            // there are is the caller's to say. Where the caller is an operation over a container and
+            // this is the step it applies per element, the elements are what it applies it to and the
+            // input walk has a position for one of them.
+            case Core.Block step -> walk(step.body(), plan, reads, symbols, flow, assumed, live,
+                    each && perElement(step, reads, symbols), out);
             default -> Core.forEachChild(e, child ->
-                    walk(child, plan, reads, symbols, flow, assumed, live, out));
+                    walk(child, plan, reads, symbols, flow, assumed, live, each, out));
         }
+    }
+
+    /**
+     * Whether {@code step} is applied once per element of a container, which is what makes its
+     * applications occurrences of one position rather than an unknown number of passes.
+     *
+     * <p>Read off the binding of the parameter the elements arrive at, which is what
+     * {@link souther.compiler.check.ElementBindings} recorded where the operation is written. Not
+     * read off the shape of the call here: after the rewrite that fuses the walks there is no call
+     * left to match, and a reading that matched one would narrow with nothing saying so.
+     */
+    private static boolean perElement(Core.Block step, InputReads reads, Symbols symbols) {
+        // Applied once per element of the container the parameter is handed elements of, and each
+        // of those elements at a position the input walk names. A container the walk names nothing
+        // at is one no row can be read at, so what repeats there is still a number of passes and not
+        // a number of occurrences, and a line drawn on it would be owed by nothing.
+        for (Hir.Binder param : step.params()) {
+            if (param.binding() != null && reads.elementAt(param.binding(), symbols) != null) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

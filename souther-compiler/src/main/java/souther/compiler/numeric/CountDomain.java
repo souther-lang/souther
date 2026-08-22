@@ -35,6 +35,26 @@ public final class CountDomain {
         return min.inclusive() ? at : at + 1;
     }
 
+    /**
+     * The most a range reaching up to {@code max} allows, or every number where it reaches to no
+     * end.
+     *
+     * <p>Beside {@link #leastFrom} and read from the same end rule: an end the range stops short of
+     * is the count below it, so {@code < 3} allows two and not three. Written here rather than
+     * beside each caller, because a cap and a floor that disagree about what an exclusive end means
+     * refuse a value at one of them and offer it at the other.
+     */
+    public static int mostFrom(Endpoint max) {
+        if (max == null) {
+            return Integer.MAX_VALUE;
+        }
+        int at = asCount(max.at());
+        if (at < 0) {
+            return Integer.MAX_VALUE;
+        }
+        return max.inclusive() ? at : at - 1;
+    }
+
     /** {@code at} as a number of things, or -1 where it is not one. */
     public static int asCount(Place at) {
         if (!(at instanceof Count count) || !count.whole()

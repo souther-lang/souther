@@ -110,8 +110,8 @@ class RowClassesTest {
         Map<AxisId, Classification> classes =
                 RowClasses.of(read.rows().get(0), read.inputs(), read.axes());
 
-        assertEquals(new Classification.Classified("Domestic"), at(classes, "request.kind"));
-        assertEquals(new Classification.Classified("request.cost/0 <= x <= 100"),
+        assertEquals((Classification) Classification.in("Domestic"), at(classes, "request.kind"));
+        assertEquals((Classification) Classification.in("request.cost/0 <= x <= 100"),
                 at(classes, "request.cost"));
     }
 
@@ -126,8 +126,8 @@ class RowClassesTest {
         Map<AxisId, Classification> classes =
                 RowClasses.of(read.rows().get(0), read.inputs(), read.axes());
 
-        assertEquals(new Classification.Classified("Overseas"), at(classes, "request.kind"));
-        assertEquals(new Classification.Classified("request.cost/100 < x"),
+        assertEquals((Classification) Classification.in("Overseas"), at(classes, "request.kind"));
+        assertEquals((Classification) Classification.in("request.cost/100 < x"),
                 at(classes, "request.cost"));
     }
 
@@ -170,7 +170,7 @@ class RowClassesTest {
         Map<AxisId, Classification> classes =
                 RowClasses.of(damaged, read.inputs(), read.axes());
 
-        assertEquals(new Classification.Classified("Domestic"), at(classes, "request.kind"),
+        assertEquals((Classification) Classification.in("Domestic"), at(classes, "request.kind"),
                 "the readable field still answers");
         Classification.Unclassified cost = assertInstanceOf(Classification.Unclassified.class,
                 at(classes, "request.cost"));

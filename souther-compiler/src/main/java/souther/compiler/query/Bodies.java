@@ -1763,10 +1763,10 @@ public final class Bodies {
      * another body — so a mistake in one behavior is that behavior's, and editing one leaves the rest
      * of the file alone.
      */
-    public record CheckedBehavior(String module, String behavior) implements Key<Core> {
+    public record CheckedBehavior(String module, String behavior) implements Key<CheckedBody> {
 
         @Override
-        public Answer<Core> compute(Db db) {
+        public Answer<CheckedBody> compute(Db db) {
             Answer<Hir.SpecBehavior> spec = db.ask(new Spec(module, behavior));
             Answer<Hir.FnDef> fn = db.ask(new SettledFn(module, behavior));
             Answer<Expansion<Hir.FnDef>> body = db.ask(new LoweredBody(module, behavior));
@@ -1816,7 +1816,14 @@ public final class Bodies {
                 }
                 // The last thing done to a body before it is emitted, and the only one that is not a
                 // check: a fold that only grows a list is turned into a build (see GrowingFold).
-                return Answer.of(GrowingFold.rewrite(core), reports);
+                // What the operations of the language hand their closures, read here because here
+                // is where they are still operations. The rewrite below turns a fold that only
+                // grows a collection into a walk over a builder and joins two such walks into one,
+                // after which nothing in the tree says which container an element came from. It
+                // renames no binding, so what is read now is as true of what it answers with.
+                return Answer.of(new CheckedBody(GrowingFold.rewrite(core),
+                        souther.compiler.check.ElementBindings.of(core,
+                                body.value().provenance())), reports);
             } catch (Unanswerable _) {
                 // The name it rested on was reported where it was written. This body has no meaning
                 // to emit, which the absence says, and nothing further to add.
@@ -1988,6 +1995,15 @@ public final class Bodies {
      * whether there is a module to emit.
      */
     /**
+     * One body as the backend emits it, and what its operations handed their closures.
+     *
+     * <p>Together because the second cannot be read off the first. What handed a closure an element
+     * is gone from the tree the rewrite answers with, so a caller given only the body would have to
+     * recognise the shapes that rewrite produces — which is what carrying the pair avoids.
+     */
+    public record CheckedBody(Core body, souther.compiler.check.ElementBindings elements) {}
+
+    /**
      * What a successful check produced for the backend (issue #81): the Core of every body it typed,
      * carrying the type decided for each node. The backend emits from these rather than translating
      * the AST and inferring the same types a second time.
@@ -2010,12 +2026,20 @@ public final class Bodies {
         private final Map<String, Core> behaviorBodies;
         private final Map<String, Core> emittedHelpers;
         private final Map<String, souther.compiler.claims.Claims> claims;
+        private final Map<String, souther.compiler.check.ElementBindings> elements;
 
         private Elaborated(Map<String, Core> behaviorBodies, Map<String, Core> emittedHelpers,
-                           Map<String, souther.compiler.claims.Claims> claims) {
+                           Map<String, souther.compiler.claims.Claims> claims,
+                           Map<String, souther.compiler.check.ElementBindings> elements) {
             this.behaviorBodies = behaviorBodies;
             this.emittedHelpers = emittedHelpers;
             this.claims = claims;
+            this.elements = elements;
+        }
+
+        /** Which of each body's bindings hold an element of a container, by the behavior's name. */
+        public Map<String, souther.compiler.check.ElementBindings> elementBindings() {
+            return elements;
         }
 
         /** The Core of each behavior body, by the behavior's name. */
@@ -2094,6 +2118,7 @@ public final class Bodies {
                 implemented.add(fn.name());
             }
             Map<String, Core> bodies = new LinkedHashMap<>();
+            Map<String, souther.compiler.check.ElementBindings> elements = new LinkedHashMap<>();
             boolean bodiesCheck = true;
             // A module whose own check stopped built nothing for a body to be checked against, so
             // asking would report not being able to see what has already been reported missing.
@@ -2106,9 +2131,10 @@ public final class Bodies {
                     if (!(b instanceof Hir.SpecBehavior spec) || !implemented.contains(spec.name())) {
                         continue;
                     }
-                    Answer<Core> core = db.ask(new CheckedBehavior(name, spec.name()));
+                    Answer<CheckedBody> core = db.ask(new CheckedBehavior(name, spec.name()));
                     if (core.present()) {
-                        bodies.put(spec.name(), core.value());
+                        bodies.put(spec.name(), core.value().body());
+                        elements.put(spec.name(), core.value().elements());
                     } else {
                         bodiesCheck = false;
                     }
@@ -2138,7 +2164,8 @@ public final class Bodies {
             // compiler, which is true and is not what the author of a mistyped model needs.
             Map<String, souther.compiler.claims.Claims> claims =
                     judged(db, name, settled.value(), bodies);
-            return Answer.of(new Elaborated(bodies, module.value().emittedHelpers(), claims),
+            return Answer.of(
+                    new Elaborated(bodies, module.value().emittedHelpers(), claims, elements),
                     contradicted(db, name, claims));
         }
     }

@@ -229,7 +229,7 @@ class ACandidateThatMissedIsNotOfferedTest {
                             sig.inputTypes(), symbols,
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                     Partitions.of(spec.name(), inputs, symbols,
-                            souther.compiler.query.ReadAs.THE_COMPILATION_DOES).axes()),
+                            souther.compiler.query.ReadAs.THE_COMPILATION_DOES).axes(), HeldCounts.of(inputs, symbols)),
                     Interactions.of(body, CoverageSites.of(checked.behaviorBodies()), inputs,
                             symbols));
         }

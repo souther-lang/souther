@@ -50,8 +50,7 @@ class WhyADerivationStoppedIsNotWhatAReportPromisesTest {
      */
     @Test
     void theTraversalsToldApartAreTheOnesLiftedByDifferentWork() {
-        assertEquals(Set.of(BlockReason.Traversal.SEQUENCE_ELEMENT,
-                        BlockReason.Traversal.OPTIONAL_VALUE,
+        assertEquals(Set.of(BlockReason.Traversal.OPTIONAL_VALUE,
                         BlockReason.Traversal.MAPPING_CONTENT),
                 Set.of(BlockReason.Traversal.values()));
     }
@@ -63,7 +62,7 @@ class WhyADerivationStoppedIsNotWhatAReportPromisesTest {
         for (BlockReason reason : new BlockReason[] {
                 new BlockReason.TypeUnresolved(),
                 new BlockReason.DepthLimit(),
-                new BlockReason.UnsupportedTraversal(BlockReason.Traversal.SEQUENCE_ELEMENT)}) {
+                new BlockReason.UnsupportedTraversal(BlockReason.Traversal.OPTIONAL_VALUE)}) {
             assertNotNull(ReportedReason.of(reason), reason + " is reported as something");
         }
     }

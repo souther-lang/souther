@@ -28,6 +28,8 @@ public final class ReportedReason {
      */
     public static UndividedPosition.Reason of(BlockReason reason) {
         return switch (reason) {
+            case BlockReason.RuleAboutADerivedValue _ ->
+                    UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE;
             case BlockReason.TypeUnresolved _ -> UndividedPosition.Reason.TYPE_UNRESOLVED;
             case BlockReason.DepthLimit _ -> UndividedPosition.Reason.DEPTH_LIMIT;
             case BlockReason.UnsupportedTraversal _ ->

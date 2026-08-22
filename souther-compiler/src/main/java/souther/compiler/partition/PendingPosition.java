@@ -72,6 +72,13 @@ sealed interface PendingPosition {
             // whatever a body says; it is a rule the model states, so an absence may not follow.
             case StructuralInspection.Leaf _ -> axis.unread() == null ? new Leaf(axis.path())
                     : new Blocked(axis.path(), axis.unread());
+            // A sequence, whose elements were reached and are a position of their own. Nothing
+            // stopped here, so this is the same state a leaf is in: what the list itself divides
+            // into is what its own rules say about how many it holds, and an absence may follow
+            // where they say nothing. What is written about what it holds is answered at the
+            // element and is not this position's to be short of.
+            case StructuralInspection.Inside _ -> axis.unread() == null ? new Leaf(axis.path())
+                    : new Blocked(axis.path(), axis.unread());
             // A position with no evidence that was never read. Nothing about a model follows from
             // it — an answer here would be this compiler's state written down as what the model
             // divides, which is the sentence the whole protocol is against.
