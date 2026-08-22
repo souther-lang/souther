@@ -297,8 +297,12 @@ public final class Main {
         boolean generate = false;
         boolean boundaries = false;
         // The report is this command's whole output, so everything is measured and nothing is said
-        // twice: what the warnings would say, the report says in one place.
-        Adequacy.Asked measure = Adequacy.Asked.reportOnly();
+        // twice: what the warnings would say, the report says in one place. And held to the whole of
+        // what the syllabus asks for, which is not a word on this command's line: measuring is not a
+        // choice it makes, so a criterion would be the only thing left to choose, and choosing a bar
+        // is what a build does. `--strict` decides the exit status of the verdict below
+        // and no more — the report a reader is given is the same either way.
+        Adequacy.Asked measure = Adequacy.Asked.fullReport();
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "-cp", "--class-path" -> {

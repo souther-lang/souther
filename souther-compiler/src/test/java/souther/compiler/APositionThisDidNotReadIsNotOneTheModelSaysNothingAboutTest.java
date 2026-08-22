@@ -94,7 +94,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
 
     private static String blockOf(String behavior) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String human = AdequacyReport.of(compilation).human(SourceNameResolver.identity());
         StringBuilder block = new StringBuilder();
@@ -124,7 +124,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     /** Every line one behavior's rules drew, which is what says the position was read at all. */
     private static List<BorderAssessment> linesOf(String behavior) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, List<BorderAssessment>> boundaries =
                 compilation.db().ask(new Adequacy.Boundaries("example.repro")).value();
@@ -233,7 +233,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     @Test
     void theRowAtADatesBoundIsWrittenAsADate() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
 
         String block = souther.compiler.report.GeneratedRows.of(
@@ -252,7 +252,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     @Test
     void theRowAtADateTimesLineIsWrittenAsADateTime() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
 
         String block = souther.compiler.report.GeneratedRows.of(

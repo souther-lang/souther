@@ -67,7 +67,7 @@ class ACaseIsBuiltAtItsPositionWithoutBeingNamedHereTest {
 
     private static Generator.GenerationResult filled() {
         Compilation compilation = Compilation.ofSources(List.of(DOMAIN, CONSUMER), ModulePath.EMPTY);
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, Adequacy.Filling> all = compilation.db()
                 .ask(new Adequacy.Generated("consumer")).value();

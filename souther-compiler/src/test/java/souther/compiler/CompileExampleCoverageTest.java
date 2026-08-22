@@ -47,7 +47,7 @@ class CompileExampleCoverageTest {
     private static Adequacy.BranchEvidence branch(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         // Measuring the arms is opted into, so a test about them opts in.
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, Adequacy.BranchEvidence> all = compilation.db()
                 .ask(new Adequacy.BranchCoverage(compilation.modules().get(0))).value();
@@ -253,7 +253,7 @@ class CompileExampleCoverageTest {
                 """;
         Compilation compilation = Compilation.ofSource(spinning, "Main")
                 .withDeadline(DoesNotComeBack.overrunningOn(DoesNotComeBack.everyRowOf("go")));
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         SourceId sourceId = compilation.exampleSourcesOf(module).getFirst();
@@ -368,7 +368,7 @@ class CompileExampleCoverageTest {
                 """;
         Compilation compilation = Compilation.ofSource(source, "Main");
         // Measuring the arms is opted into, so a test about them opts in.
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String module = compilation.modules().get(0);
 

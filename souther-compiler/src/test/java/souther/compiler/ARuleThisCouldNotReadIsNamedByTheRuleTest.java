@@ -333,14 +333,14 @@ class ARuleThisCouldNotReadIsNamedByTheRuleTest {
 
     private static PartitionEvidence measured(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0).partition();
     }
 
     private static String human(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
     }
@@ -353,7 +353,7 @@ class ARuleThisCouldNotReadIsNamedByTheRuleTest {
 
     private static String json(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation).json(SourceNameResolver.identity());
     }

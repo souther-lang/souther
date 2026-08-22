@@ -164,7 +164,7 @@ class EveryForkIsReadUnderWhatItsBindingCarriesTest {
                 }
                 """;
         Compilation c = Compilation.ofSource(model, "demo");
-        c.measure(Adequacy.Asked.reportOnly());
+        c.measure(Adequacy.Asked.fullReport());
         c.answerEverything();
         List<String> codes = c.reports().stream()
                 .map(each -> each.report().diagnostic().code())

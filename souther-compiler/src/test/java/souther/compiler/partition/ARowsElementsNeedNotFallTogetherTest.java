@@ -48,7 +48,7 @@ class ARowsElementsNeedNotFallTogetherTest {
     private static PartitionEvidence.AxisCoverage elementAxis(String people, String count) {
         Compilation compilation = Compilation.ofSource(
                 MODEL.replace("PEOPLE", people).replace("N", count), "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, PartitionEvidence> coverage =
                 compilation.db().ask(new Adequacy.Coverage(MODULE)).value();

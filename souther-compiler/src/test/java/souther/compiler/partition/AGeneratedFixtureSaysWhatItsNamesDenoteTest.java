@@ -59,7 +59,7 @@ class AGeneratedFixtureSaysWhatItsNamesDenoteTest {
     /** Every expression of every row the model is offered, at every depth. */
     private static List<Hir.Expr> everyNodeOfEveryRow() {
         Compilation compilation = Compilation.ofSources(List.of(LIB, APP), ModulePath.EMPTY);
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Adequacy.Filling filling =
                 compilation.db().ask(new Adequacy.Generated("app")).value().get("f");

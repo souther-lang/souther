@@ -27,7 +27,7 @@ class AQuestionAboutACountIsNotOneAboutTheValueItCountsTest {
 
     private static PartitionEvidence partitionOf(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         for (AdequacyReport.BehaviorReport each
                 : AdequacyReport.of(compilation).modules().get(0).behaviors()) {

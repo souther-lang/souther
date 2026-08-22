@@ -48,7 +48,7 @@ class AGuardsQuestionIsCitedByWhereItIsWrittenTest {
 
     private static PartitionEvidence partition() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0).partition();
     }
@@ -96,7 +96,7 @@ class AGuardsQuestionIsCitedByWhereItIsWrittenTest {
                 example price
                     | "one" : (Length(5)) -> 1
                 """, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         PartitionEvidence evidence = AdequacyReport.of(compilation)
                 .modules().get(0).behaviors().get(0).partition();

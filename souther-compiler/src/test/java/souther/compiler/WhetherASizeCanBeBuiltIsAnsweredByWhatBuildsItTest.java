@@ -51,7 +51,7 @@ class WhetherASizeCanBeBuiltIsAnsweredByWhatBuildsItTest {
     /** What the generator answers for the lines that behavior draws and no row sits on. */
     private static Generator.GenerationResult boundaries(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                 .flatMap(List::stream).toList(), "the model under test compiles");

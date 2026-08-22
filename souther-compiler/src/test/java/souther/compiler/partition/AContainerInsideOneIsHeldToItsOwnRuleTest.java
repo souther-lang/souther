@@ -50,7 +50,7 @@ class AContainerInsideOneIsHeldToItsOwnRuleTest {
     private static Adequacy.Filling offered(String how, String rule, String held) {
         Compilation compilation = Compilation.ofSource(
                 MODEL.replace("HOW", how).replace("RULE", rule).replace("HELD", held), "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, Adequacy.Filling> generated =
                 compilation.db().ask(new Adequacy.Generated(MODULE)).value();

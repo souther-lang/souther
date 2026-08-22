@@ -46,7 +46,7 @@ class ARuleWrittenInMultiplesStillDividesThePositionTest {
                 example f
                     | (1) -> Yes { n = 1 }
                 """.formatted(guards), "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();

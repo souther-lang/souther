@@ -206,7 +206,7 @@ public final class Partitions {
         // of them was left unread — settled beside each axis, as it is once a body has spoken.
         List<Measured> measured = new ArrayList<>();
         for (Axis axis : kept) {
-            keep(new ArrayList<>(), measured, axis, unread);
+            keep(new ArrayList<>(), measured, axis, null, unread);
         }
         MeasureClosure.Both closed = MeasureClosure.of(kept, List.of(), omitted, unread);
         return new Partitioning(kept, omitted, quantities, uncertain, undividedIn(measured),
@@ -236,13 +236,10 @@ public final class Partitions {
      *  went unread. Kept beside the axis rather than looked up afterwards by how its path is
      *  spelled. */
     private static void keep(List<Axis> out, List<Measured> measured, Axis axis,
-                             List<UnreadRule> rules) {
+                             BodyCutInspection drew, List<UnreadRule> rules) {
         out.add(axis);
-        // Asked of the axis rather than taken from the caller. What the body drew and what the
-        // position is left with are the same fact read twice, and a caller passing the first was
-        // the second's only account of itself.
-        if (axis.measurable()) {
-            measured.add(new Measured(axis, new BodyCutInspection.Evidence()));
+        if (drew != null) {
+            measured.add(new Measured(axis, drew));
             return;
         }
         // Whether this phase left anything at the position unread, and not which limit it was.
@@ -432,7 +429,7 @@ public final class Partitions {
                         () -> singledClasses(points, at, here2.type(), only, symbols),
                         mergedPoints(axis.cuts(), points, at.carrierAt(axis.type(), symbols)),
                         axis.parted()),
-                        rules);
+                        new BodyCutInspection.Evidence(), rules);
                 continue;
             }
             if (here.isEmpty()) {
@@ -442,7 +439,7 @@ public final class Partitions {
                 // for it to be about, and dropping the threshold would lose a line the body draws.
                 NumericTerm drawn = axis.measurable() ? null : soleTermAt(thresholds, axis.path());
                 if (drawn == null) {
-                    keep(out, measured, axis, rules);
+                    keep(out, measured, axis, null, rules);
                     continue;
                 }
                 term = drawn;
@@ -497,7 +494,7 @@ public final class Partitions {
                             within == null ? null : within.max()),
                     merged(axis.cuts(), reachable, carrier),
                     reachable.stream().map(Threshold::parts).toList()),
-                    rules);
+                    reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), rules);
         }
         MeasureClosure.Both closed = MeasureClosure.of(out, compared, base.omitted(), rules);
         return new Partitioning(out, base.omitted(), base.quantities(), base.uncertain(),

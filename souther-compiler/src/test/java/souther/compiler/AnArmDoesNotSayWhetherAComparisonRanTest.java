@@ -50,7 +50,7 @@ class AnArmDoesNotSayWhetherAComparisonRanTest {
     private static List<BorderAssessment> linesFor(String rank, String cost, String out) {
         Compilation compilation = Compilation.ofSource(
                 MODEL.replace("RANK", rank).replace("COST", cost).replace("OUT", out), "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, List<BorderAssessment>> boundaries =
                 compilation.db().ask(new Adequacy.Boundaries(MODULE)).value();
@@ -146,7 +146,7 @@ class AnArmDoesNotSayWhetherAComparisonRanTest {
         Compilation compilation = Compilation.ofSource(
                 MODEL.replace("RANK", "0").replace("COST", "100001").replace("OUT", "Manual"),
                 "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, Adequacy.BranchEvidence> branches =
                 compilation.db().ask(new Adequacy.BranchCoverage(MODULE)).value();

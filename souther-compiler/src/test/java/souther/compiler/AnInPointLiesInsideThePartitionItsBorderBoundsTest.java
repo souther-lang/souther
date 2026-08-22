@@ -55,7 +55,7 @@ class AnInPointLiesInsideThePartitionItsBorderBoundsTest {
 
     private static BorderAssessment borderAt(String rows, String value) {
         Compilation compilation = Compilation.ofSource(BANDS.formatted(rows), "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
@@ -138,7 +138,7 @@ class AnInPointLiesInsideThePartitionItsBorderBoundsTest {
                 example f
                     | "one" : (Bound(1), Bound(1)) -> Yes { v = 1 }
                 """, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
@@ -186,7 +186,7 @@ class AnInPointLiesInsideThePartitionItsBorderBoundsTest {
                 example f
                     | "one" : (Bound(1), Bound(1)) -> No { why = 0 }
                 """, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
@@ -241,7 +241,7 @@ class AnInPointLiesInsideThePartitionItsBorderBoundsTest {
                     | "low" : (0.1m) -> No { why = 0 }
                     | "high" : (0.5m) -> Yes { v = 1 }
                 """, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();

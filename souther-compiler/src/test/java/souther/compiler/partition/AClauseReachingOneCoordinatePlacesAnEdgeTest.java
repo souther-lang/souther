@@ -313,10 +313,10 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         assertTrue(report.contains("""
                   onSpan                   implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
-                    partition   not applicable (the model divides no position of this behavior)
+                    partition   not applicable (the rules of this behavior divide no position)
                       · not read: invariant Span #1 — it relates two positions rather than dividing one, about `v.startsAt`
                       · not read: invariant Span #1 — it relates two positions rather than dividing one, about `v.endsAt`
-                    border      not applicable (no rule of the model draws a line on this behavior)
+                    border      not applicable (the rules of this behavior draw no line)
                 """), report);
     }
 
@@ -329,10 +329,10 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         assertTrue(report.contains("""
                   onFloor                  implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
-                    partition   not applicable (the model divides no position of this behavior)
+                    partition   not applicable (the rules of this behavior divide no position)
                       · not read: invariant Floor #1 — it relates two positions rather than dividing one, about `v.n`
                       · not read: invariant Floor #1 — it relates two positions rather than dividing one, about `v.min`
-                    border      not applicable (no rule of the model draws a line on this behavior)
+                    border      not applicable (the rules of this behavior draw no line)
                 """), report);
     }
 
@@ -566,7 +566,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aLineTheRecordPlacedIsSettledLikeOneOnANewtype() {
         Map<String, BorderAssessment> lines = new LinkedHashMap<>();
         Compilation compilation = Compilation.ofSource(UNMEETABLE, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         compilation.db().ask(new Adequacy.Coverage("unmeetable")).value()
                 .forEach((behavior, evidence) -> evidence.boundaries()
@@ -817,7 +817,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     /** Every line one module draws, by the behavior and label it is reported under. */
     private static Map<String, BorderAssessment> linesOf(String source, String module) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, BorderAssessment> lines = new LinkedHashMap<>();
         compilation.db().ask(new Adequacy.Coverage(module)).value()
@@ -828,7 +828,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
 
     private static String report(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
     }

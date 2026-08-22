@@ -69,7 +69,7 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
 
     private static String blockOf(String behavior) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String human = AdequacyReport.of(compilation).human(SourceNameResolver.identity());
         StringBuilder block = new StringBuilder();
@@ -192,7 +192,7 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
                 behavior stage : (q: AtLeastQualified) -> Ok
                 let stage (q) = Ok
                 """, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String human = AdequacyReport.of(compilation).human(SourceNameResolver.identity());
 

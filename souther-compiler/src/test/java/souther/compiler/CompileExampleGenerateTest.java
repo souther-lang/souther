@@ -52,7 +52,7 @@ class CompileExampleGenerateTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         // What `souther examples` asks for. A line a `guard` drew is only decidable where the arms
         // were measured, so below this the generator has nothing to say about one.
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, Adequacy.Filling> all = compilation.db()
                 .ask(new Adequacy.Generated(compilation.modules().get(0))).value();
@@ -798,7 +798,7 @@ class CompileExampleGenerateTest {
 
         Compilation compilation = Compilation.ofSources(List.of(model, companion),
                 souther.compiler.meta.ModulePath.EMPTY);
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String block = GeneratedRows.of(compilation, null, null, false, SourceNameResolver.identity());
 
@@ -820,6 +820,61 @@ class CompileExampleGenerateTest {
 
         assertEquals("", GeneratedRows.of("example.trip", generated(covered), Map.of(), false,
                 SourceNameResolver.identity()));
+    }
+
+    /**
+     * A model with a gap at every point of a border, and a search that composes a row for none of
+     * them: the string the rules admit is one the generator's candidates never spell.
+     *
+     * <p>What it is for is the note beside a withheld row. A run asking for no edges withholds the
+     * rows at them, so a line saying why one could not be composed is a line about work that run did
+     * not ask for — and an author reads it as a report on the rows above it.
+     */
+    private static final String EVERY_POINT_UNFILLED = """
+            module sz.gen
+
+            data Size = Int
+                invariant value >= 1
+
+            data Tag = Big | Small
+
+            data C = String
+                invariant String.length(value) >= 2 && String.matches("[0-9]+", value)
+
+            behavior label : (c: C, s: Size) -> Tag
+
+            let label (c, s) = if s.value >= 5 then Big else Small
+
+            example label
+                | "digits" : (C("123"), Size(9)) -> Big
+            """;
+
+    /**
+     * The edges are said where the edges were asked for, at every point of them.
+     *
+     * <p>A border owes rows at four points and they are reported under two kinds — the two against
+     * the line and the two away from it. Written to one of the kinds, the flag withheld the rows at
+     * all four and printed the notes for two of them.
+     */
+    @Test
+    void aNoteAboutABorderPointIsSaidWhereTheBordersWereAskedFor() {
+        Map<String, Adequacy.Filling> generated = generated(EVERY_POINT_UNFILLED);
+
+        String asked = GeneratedRows.of("sz.gen", generated, Map.of(), true,
+                SourceNameResolver.identity());
+        String notAsked = GeneratedRows.of("sz.gen", generated, Map.of(), false,
+                SourceNameResolver.identity());
+
+        // One against the line and one away from it, so neither kind is answering for the other.
+        assertTrue(asked.contains("// no row for `s = 5` in `label`"), asked);
+        assertTrue(asked.contains("// no row for `1 < s < 5` in `label`"), asked);
+        assertFalse(notAsked.contains("`s = 5`"),
+                "no edge is spoken of in a run that asked for none: " + notAsked);
+        assertFalse(notAsked.contains("`1 < s < 5`"),
+                "and no point away from one either: " + notAsked);
+        // And what a run that asked for no edges does still say, so this is not passing on a block
+        // with nothing in it.
+        assertTrue(notAsked.contains("nothing offers a row for `else` in `label`"), notAsked);
     }
 
     /**

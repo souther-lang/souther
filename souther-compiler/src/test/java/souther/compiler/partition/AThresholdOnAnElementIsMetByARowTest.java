@@ -49,7 +49,7 @@ class AThresholdOnAnElementIsMetByARowTest {
     /** Every point against the line of {@code countOverThreshold}, as the rows leave it. */
     private static List<BorderAssessment.Point> pointsFor(String operator) {
         Compilation compilation = Compilation.ofSource(MODEL.replace("OP", operator), "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, List<BorderAssessment>> boundaries =
                 compilation.db().ask(new Adequacy.Boundaries(MODULE)).value();
@@ -120,7 +120,7 @@ class AThresholdOnAnElementIsMetByARowTest {
     void aRowHoldingAnItemAtTheThresholdReachesThePoint() {
         Compilation compilation = Compilation.ofSource(MODEL.replace("OP", ">=")
                 .replace("Item { charge = 1000 }", "Item { charge = 21000 }"), "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         List<BorderAssessment> lines = compilation.db().ask(new Adequacy.Boundaries(MODULE))
                 .value().get("countOverThreshold");

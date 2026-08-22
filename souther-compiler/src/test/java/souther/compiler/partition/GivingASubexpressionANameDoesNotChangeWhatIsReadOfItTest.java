@@ -115,7 +115,7 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
 
     private static Map<String, PartitionEvidence> measured(String model, String module) {
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return compilation.db().ask(new Adequacy.Coverage(module)).value();
     }

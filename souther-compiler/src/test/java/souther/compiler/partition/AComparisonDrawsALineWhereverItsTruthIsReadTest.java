@@ -73,7 +73,7 @@ class AComparisonDrawsALineWhereverItsTruthIsReadTest {
 
     private static Map<String, PartitionEvidence> measured() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();

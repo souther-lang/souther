@@ -176,6 +176,22 @@ public record BorderAssessment(Border border, Map<PointRole, ItemAssessment> ite
             return border.against(role);
         }
 
+        /**
+         * The class a row here falls in, as one line of a class list is written.
+         *
+         * <p>One place, because more than one reader names it: the document a consumer joins a
+         * finding to its item by, and the class a generated row is offered against. Written twice,
+         * the two agreed for a point on the line and had nothing to say to each other away from it.
+         *
+         * <p>A point on the line is the value it is at. A point away from it carries the relation as
+         * well, because {@link #against()} alone names the border there rather than the side of it a
+         * row is owed in.
+         */
+        public String said() {
+            return role.againstTheLine() ? border.axis() + " = " + against()
+                    : border.axis() + " " + asked();
+        }
+
         /** The measured half, or null where no row is owed here. */
         public ItemAssessment.Owed owed() {
             return item instanceof ItemAssessment.Owed owed ? owed : null;

@@ -60,7 +60,7 @@ class EveryGapTheBuildRefusesGetsAnAnswerTest {
 
     private static Compilation compiled(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return compilation;
     }
@@ -71,7 +71,17 @@ class EveryGapTheBuildRefusesGetsAnAnswerTest {
                 compilation.db().ask(new Adequacy.Findings(module)).value();
         assertNotNull(found, "the model under test compiles");
         return found.get(behavior).stream()
-                .filter(f -> f.isAdequacyGap(Adequacy.Criterion.SIMPLIFIED_DOMAIN)).toList();
+                // Asked of the compilation, which is what was measured. Named here instead — even by
+                // spelling the same call the fixture above makes — and the two lists this compares
+                // are answers to two questions that agree until one of them moves.
+                .filter(f -> f.isAdequacyGap(askedOf(compilation).criterion())).toList();
+    }
+
+    /** What the compilation under test asked for, from the compilation. */
+    private static Adequacy.Asked askedOf(Compilation compilation) {
+        Adequacy.Asked asked = compilation.db().ask(new Adequacy.Requested()).value();
+        assertNotNull(asked, "the compilation under test was measured");
+        return asked;
     }
 
     private static Adequacy.Filling filling(Compilation compilation, String module,

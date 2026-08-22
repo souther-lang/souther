@@ -83,7 +83,7 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
 
     private static String block(String source, String module) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, Adequacy.Filling> generated =
                 compilation.db().ask(new Adequacy.Generated(module)).value();

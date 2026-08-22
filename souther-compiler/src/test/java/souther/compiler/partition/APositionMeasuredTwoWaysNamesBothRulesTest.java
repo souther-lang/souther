@@ -125,7 +125,7 @@ class APositionMeasuredTwoWaysNamesBothRulesTest {
 
     private static List<PartitionEvidence.NotRead> notRead(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0)
                 .partition().notRead();
@@ -133,7 +133,7 @@ class APositionMeasuredTwoWaysNamesBothRulesTest {
 
     private static String human(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
     }

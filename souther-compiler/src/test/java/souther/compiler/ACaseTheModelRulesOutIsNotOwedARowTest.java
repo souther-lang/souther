@@ -98,7 +98,7 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
 
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return compilation;
     }

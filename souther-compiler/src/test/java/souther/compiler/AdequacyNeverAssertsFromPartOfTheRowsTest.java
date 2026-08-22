@@ -181,7 +181,7 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
         if (overrun != null) {
             compilation.withDeadline(overrun);
         }
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return compilation;
     }

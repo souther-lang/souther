@@ -54,7 +54,7 @@ class AnArmOfALibraryForkIsNotTheAuthorsPredicateTest {
 
     private static Adequacy.BranchEvidence armsOfTwice() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, Adequacy.BranchEvidence> arms =
                 compilation.db().ask(new Adequacy.BranchCoverage(MODULE)).value();
@@ -110,7 +110,7 @@ class AnArmOfALibraryForkIsNotTheAuthorsPredicateTest {
                 example both
                     | "both grown" : (Person { age = Age(20) }, Person { age = Age(30) }) -> Yes
                 """, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Adequacy.BranchEvidence both = compilation.db()
                 .ask(new Adequacy.BranchCoverage(MODULE)).value().get("both");

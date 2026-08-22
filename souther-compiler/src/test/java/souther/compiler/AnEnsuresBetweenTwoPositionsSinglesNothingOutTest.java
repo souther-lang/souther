@@ -37,7 +37,7 @@ class AnEnsuresBetweenTwoPositionsSinglesNothingOutTest {
                 example f
                     | "one" : (R { a = 1, other = 2 }) -> No
                 """.formatted(clause), "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         PartitionEvidence partition = AdequacyReport.of(compilation)
                 .modules().get(0).behaviors().get(0).partition();
