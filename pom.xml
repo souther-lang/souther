@@ -58,6 +58,21 @@
         <build.test.classes>${project.basedir}/target/test-classes</build.test.classes>
         <errorprone.version>2.50.0</errorprone.version>
         <nullaway.version>0.13.8</nullaway.version>
+        <!-- What NullAway is asked for, written once. The gate below and the `lint` profile both
+             ask, and a gate configured differently in each is a gate whose answer depends on which
+             build asked. -->
+        <nullaway.args>-Xep:NullAway:ERROR -XepOpt:NullAway:OnlyNullMarked=true -XepOpt:NullAway:JSpecifyMode=true</nullaway.args>
+        <!-- The nullness gate an ordinary build runs, carried by the modules that declare
+             `@NullMarked` — souther-runtime, today. Nothing else in Error Prone: this is the one
+             rule those modules state about themselves, and the other five hundred checks are the
+             `lint` profile's.
+
+             It is a property because the profile empties it. javac takes one `-Xplugin:ErrorProne`
+             per compilation and reports the second as a plugin it cannot find, so under `lint`,
+             which puts the plugin on every module, a module carrying its own would be handing javac
+             two. Emptying this leaves the profile's the only one, and NullAway is in both spellings,
+             so the gate does not lift when the profile takes over. -->
+        <errorprone.gate>-Xplugin:ErrorProne -XepDisableAllChecks ${nullaway.args}</errorprone.gate>
         <!-- The build protocol souther-build-driver implements. Not this project's version and not
              tracked to it: it moves when the interface between a build plugin and a driver moves,
              which is why it is released from souther-lang/souther-build-api and named here like any
@@ -267,6 +282,11 @@
                     <name>env.CI</name>
                 </property>
             </activation>
+            <properties>
+                <!-- The gate a module carries, emptied: this profile's plugin argument below is the
+                     only one javac may be given. -->
+                <errorprone.gate/>
+            </properties>
             <build>
                 <plugins>
                     <plugin>
@@ -280,7 +300,7 @@
                                      as a thing that confuses a reader, and this compiler's tests
                                      call methods the language named in Japanese: the check would be
                                      asking the tests to stop covering what Souther supports. -->
-                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:NullAway:ERROR -XepOpt:NullAway:OnlyNullMarked=true -XepOpt:NullAway:JSpecifyMode=true</arg>
+                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF ${nullaway.args}</arg>
                             </compilerArgs>
                             <annotationProcessorPaths>
                                 <path>
