@@ -41,22 +41,43 @@ class ARowOfATableIsWrittenAtItsTablesColumnTest {
                 | "yy" : (F) -> Q(2)
             """;
 
-    /** The canonical form of a source, with its tokens read back. */
-    private record Written(Formatter.CanonicalForm form, List<SyntaxToken> code) {
+    /**
+     * A source that reaches the column with a tab where the canonical form writes spaces. Its rows
+     * line up on a screen and its text is not the canonical form, which is the pair of facts a rule
+     * reading only the column the source arrived at cannot tell apart.
+     */
+    private static final String A_TAB_REACHING_THE_COLUMN =
+            "examples for demo\n\nexample f\n"
+                    + "    | \"1234567\" : (A) -> X\n"
+                    + "    | \"a\"\t: (B) -> Y\n";
+
+    /** A source with a tab inside a token written after a column, where how far the tab advances
+     *  depends on the padding in front of it. */
+    private static final String A_TAB_AFTER_A_COLUMN =
+            "examples for demo\n\nexample f\n"
+                    + "    | \"long description\" : (\"abc\") -> X\n"
+                    + "    | \"short\" : (\"\t\") -> Y\n";
+
+    /** The canonical form of a source, with both texts' tokens read back. */
+    private record Written(Formatter.CanonicalForm form, Witnesses.Pairing pairing) {
 
         static Written of(String source) {
             Formatter.CanonicalForm form =
                     Formatter.canonicalize(CstParser.parse(source).root());
-            return new Written(form, new Witnesses.Pairing(source, form).writesCode());
+            return new Written(form, new Witnesses.Pairing(source, form));
+        }
+
+        List<SyntaxToken> code() {
+            return pairing.writesCode();
         }
 
         List<Witnesses.CanonicalStop> stops() {
-            return Witnesses.stops(form, code);
+            return Witnesses.stops(form, code());
         }
 
         /** The display column the connector of one stop was written at. */
         int columnOf(Witnesses.CanonicalStop stop) {
-            return Witnesses.columnAt(form.text(), code.get(stop.adjacency() + 1).start());
+            return Witnesses.columnAt(form.text(), code().get(stop.adjacency() + 1).start());
         }
 
         /** Where each column of each table was settled, in the order the tables are written. */
@@ -169,7 +190,11 @@ class ARowOfATableIsWrittenAtItsTablesColumnTest {
         assertEquals(without.columns(), with.columns(), "the columns the other rows settle");
         assertEquals(without.stops().size(), with.stops().size(),
                 "the long row is written to no column");
-        assertTrue(with.form().text().contains("d".repeat(60)), "and it is still written");
+        // And the row is still written. Said as the tokens the two texts share rather than as a
+        // stretch of the output: what could go wrong here is a row dropped, and a row dropped is
+        // tokens the canonical form does not have.
+        assertEquals(with.pairing().hadCode().size(), with.code().size(),
+                "the canonical form writes every code token the source had");
     }
 
     /**
@@ -258,6 +283,53 @@ class ARowOfATableIsWrittenAtItsTablesColumnTest {
                 "the spacing rule is not asked at a stop");
     }
 
+    /**
+     * A source that reaches the column by other characters is told so all the same.
+     *
+     * <p>The column rule answers about a column and a tab reaches one as well as spaces do, so what
+     * the two texts differ by there is not something a column can be the answer about. The spacing
+     * rule says it — the run before a connector is its answer and then the column's padding, and
+     * that split is made on the source's side as well as on the canonical form's.
+     *
+     * <p>What this is really about is {@link Deviations.Report#whole}. Left to the column rule
+     * alone, this source has nothing at all reported against it and is still not the canonical
+     * form.
+     */
+    @Test
+    void aSourceThatReachesTheColumnByOtherCharactersIsToldWhatItWrote() {
+        Deviations.Report report = Deviations.of(A_TAB_REACHING_THE_COLUMN);
+
+        Set<String> rules = new LinkedHashSet<>();
+        report.deviations().forEach(d -> rules.add(d.rule()));
+        assertTrue(rules.contains("what goes between two tokens on a line"),
+                "the rule that quotes characters says what was written: " + rules);
+        assertTrue(report.whole(), "every difference from the canonical form was named");
+    }
+
+    /**
+     * A tab written after a column advances from where it stands, not from where it would have
+     * stood unpadded.
+     *
+     * <p>How far a token carries a line depends on the column it starts at, which is the whole of
+     * what a tab is. So the column a row reaches is counted on its own and not as what the width
+     * measured plus the padding so far — the second is right for every token but that one, and
+     * wrong for the rows of a table that holds it.
+     */
+    @Test
+    void aTabWrittenAfterAColumnIsMeasuredFromWhereItStands() {
+        Written written = Written.of(A_TAB_AFTER_A_COLUMN);
+
+        Set<Integer> arrows = new LinkedHashSet<>();
+        for (Witnesses.CanonicalStop stop : written.stops()) {
+            if (stop.occurrence().unit().stop() == Columns.Stop.THE_RESULT_OF_AN_EXAMPLE) {
+                arrows.add(written.columnOf(stop));
+            }
+        }
+        assertEquals(1, arrows.size(), "the two rows write their arrow at " + arrows);
+        assertTrue(Deviations.of(A_TAB_AFTER_A_COLUMN).whole(),
+                "and repairing what the rules say writes it");
+    }
+
     /** Every stop the rule lists is one some source in the repository writes. */
     @Test
     void everyStopIsReached() {
@@ -270,10 +342,35 @@ class ARowOfATableIsWrittenAtItsTablesColumnTest {
         assertEquals(Set.of(Columns.Stop.values()), reached);
     }
 
-    /** The fixtures here and every source the repository holds. */
+    /**
+     * What these properties are held over: the fixtures above, the corpus the formatter's rules are
+     * measured against — chosen to reach every kind of node the grammar has — and every {@code .sou}
+     * file the repository holds.
+     *
+     * <p>The third of those is the one that makes this about the formatter rather than about a
+     * fixture. The first two are what makes it about the cases a repository of well-written sources
+     * does not contain: a corpus written by hand reaches no tab and no row too long for a line.
+     */
     private static List<String> sources() {
-        List<String> out = new ArrayList<>(List.of(TWO_TABLES));
+        List<String> out = new ArrayList<>(
+                List.of(TWO_TABLES, A_TAB_REACHING_THE_COLUMN, A_TAB_AFTER_A_COLUMN));
         out.addAll(WhatGoesBetweenTwoTokensOnALineTest.corpus());
+        out.addAll(inTheRepository());
         return out;
+    }
+
+    /** Every {@code .sou} the repository holds, a build's copies of them left out. */
+    private static List<String> inTheRepository() {
+        try (java.util.stream.Stream<java.nio.file.Path> walk =
+                java.nio.file.Files.walk(java.nio.file.Path.of(".."))) {
+            List<String> out = new ArrayList<>();
+            for (java.nio.file.Path p : walk.filter(q -> q.toString().endsWith(".sou"))
+                    .filter(q -> !q.toString().contains("target")).sorted().toList()) {
+                out.add(java.nio.file.Files.readString(p));
+            }
+            return out;
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
     }
 }

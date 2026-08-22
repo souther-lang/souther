@@ -301,9 +301,7 @@ final class Repair {
      */
     private static List<Edit> columns(Round round, Witness.AtAColumn witness) {
         String source = round.source();
-        String text = round.canonical().layout().text();
         List<SyntaxToken> had = round.pairing().hadCode();
-        List<SyntaxToken> writes = round.pairing().writesCode();
         List<Edit> out = new ArrayList<>();
         for (Witnesses.CanonicalStop stop
                 : round.atAColumn().getOrDefault(witness.unit(), List.of())) {
@@ -314,7 +312,10 @@ final class Repair {
             if (between.indexOf('\n') >= 0 || between.contains("//")) {
                 continue;   // the source broke the row, or wrote a comment there
             }
-            String separator = text.substring(writes.get(i).end(), stop.occurrence().at());
+            if (!Witnesses.padsWithSpaces(source, had.get(i), had.get(i + 1))) {
+                continue;   // the spacing rule is writing this run, and two of us must not
+            }
+            String separator = stop.separator();
             if (separator.chars().anyMatch(c -> c != ' ')) {
                 throw new IllegalStateException(
                         "a column stop whose separator is not spaces ([" + separator + "]); what is"

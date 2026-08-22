@@ -276,18 +276,25 @@ sealed interface Doc {
         StringBuilder sb = new StringBuilder();
         Deque<Item> todo = new ArrayDeque<>();
         todo.push(new Item(0, Mode.BREAK, this));   // the outermost context breaks
-        // Two counts run side by side here and they are not interchangeable. `displayCol` is where
-        // the line has reached on the screen, which is what the width is about and what a
-        // full-width character advances by two. Everything taken from `sb.length()` — an extent, an
-        // opportunity, a newline's offset — is an index into the text, which is what the readers of
-        // a layout use to cut and search the same Java string, and stays in UTF-16 units.
-        int displayCol = 0;
-        // And a third, which is neither. `padded` is how many columns of a table's padding have been
-        // written on this line. It is not in `displayCol` because the width rule does not read
-        // padding — a group whose flatness depended on it would be decided by a column that is
-        // decided by which rows came out flat — and it is not out of the reckoning either, because
-        // where a row's second connector lands is where its first one pushed it to.
-        int padded = 0;
+        // Three counts run side by side here and no two of them are interchangeable. Everything
+        // taken from `sb.length()` — an extent, an opportunity, a newline's offset — is an index
+        // into the text, which is what the readers of a layout use to cut and search the same Java
+        // string, and stays in UTF-16 units. The other two are columns on the screen, which is what
+        // a full-width character advances by two and what a tab advances to the next multiple of
+        // eight of.
+        //
+        // `measuredCol` is what the width reads, and a table's padding is not in it: a group whose
+        // flatness depended on padding would be decided by a column that is decided by which rows
+        // came out flat. `writtenCol` is where the line has actually reached, padding and all, and
+        // it is what a column is settled in — a row's second connector stands where its first one
+        // pushed it to.
+        //
+        // Two counts and not one with a correction added to it. How far a token advances a column
+        // depends on the column it starts at, which is the whole of what a tab is; a written column
+        // reconstructed as `measuredCol` plus the padding so far is right for every token but that
+        // one, and wrong for the rows of a table that holds it.
+        int measuredCol = 0;
+        int writtenCol = 0;
         while (!todo.isEmpty()) {
             Item it = todo.pop();
             if (it.closes != null) {
@@ -298,7 +305,8 @@ sealed interface Doc {
                 case Nil _ -> { }
                 case Text t -> {
                     sb.append(t.s());
-                    displayCol = DisplayColumns.advance(t.s(), displayCol);
+                    measuredCol = DisplayColumns.advance(t.s(), measuredCol);
+                    writtenCol = DisplayColumns.advance(t.s(), writtenCol);
                 }
                 case Concat c -> {
                     List<Doc> parts = c.parts();
@@ -319,9 +327,9 @@ sealed interface Doc {
                     todo.push(it.within(a.doc()));
                 }
                 case Group g -> {
-                    Outcome outcome = flatnessOf(displayCol, width,
+                    Outcome outcome = flatnessOf(measuredCol, width,
                             new Item(it.indent, Mode.FLAT, g.doc()), todo);
-                    decisions.add(new GroupDecision(g.ref(), displayCol, outcome));
+                    decisions.add(new GroupDecision(g.ref(), measuredCol, outcome));
                     todo.push(new Item(it.indent,
                             outcome instanceof Outcome.Flat ? Mode.FLAT : Mode.BREAK, g.doc(),
                             null, it.under, g.ref()));
@@ -337,39 +345,41 @@ sealed interface Doc {
                     }
                     if (it.mode == Mode.FLAT) {
                         sb.append(l.flat());
-                        displayCol = DisplayColumns.advance(l.flat(), displayCol);
+                        measuredCol = DisplayColumns.advance(l.flat(), measuredCol);
+                        writtenCol = DisplayColumns.advance(l.flat(), writtenCol);
                     } else {
                         breaks.add(newline(sb, it, it.indent,
                                 new Newline.Cause.Settled(l.ref()), true));
-                        displayCol = it.indent;
-                        padded = 0;
+                        measuredCol = it.indent;
+                        writtenCol = it.indent;
                     }
                 }
                 case Hard h -> {
                     int indent = h.indents() ? it.indent : 0;
                     breaks.add(newline(sb, it, indent,
                             new Newline.Cause.Forced(h.ref().obligation()), h.indents()));
-                    displayCol = indent;
-                    padded = 0;
+                    measuredCol = indent;
+                    writtenCol = indent;
                 }
                 case Trailing t -> {
                     sb.append(' ').append(t.s());
-                    displayCol = DisplayColumns.advance(t.s(), displayCol + 1);
+                    measuredCol = DisplayColumns.advance(t.s(), measuredCol + 1);
+                    writtenCol = DisplayColumns.advance(t.s(), writtenCol + 1);
                 }
                 case MustBreak _ -> { }
                 case ColumnStop cs -> {
                     // A row written down the page has its connector opening a line, and there is no
                     // column to be at there. It neither reaches for one nor says how wide it is.
                     if (it.mode == Mode.FLAT) {
-                        int natural = displayCol + padded;
                         Integer column = columns.get(cs.unit());
                         // Nothing to write on the pass that is finding out where the column is, and
                         // nothing on a pass whose column is one an earlier pass measured short. The
                         // pass after it has the room this one asked for.
-                        int pad = column == null ? 0 : Math.max(0, column - natural);
-                        stops.add(new ColumnOccurrence(cs.unit(), sb.length(), natural));
+                        int pad = column == null ? 0 : Math.max(0, column - writtenCol);
+                        stops.add(new ColumnOccurrence(cs.unit(), sb.length(), writtenCol));
                         sb.append(" ".repeat(pad));
-                        padded += pad;
+                        // What the width reads is untouched, which is the whole of the rule.
+                        writtenCol += pad;
                     }
                 }
             }

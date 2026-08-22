@@ -512,18 +512,27 @@ final class Witnesses {
                             + " asks what the source has between the same two");
         }
         List<Gaps.Boundary> boundaries = between(canonical.construction().doc(), writes.size());
-        // A stop is the column rule's whole run, so this is not asked there. Both rules would be
-        // answering about the same characters, and the composition of a repair refuses that.
-        Set<Integer> atAColumn = new LinkedHashSet<>();
+        // At a stop the run holds this rule's answer and then the column's padding, and this is
+        // asked about the first of them. Where the source wrote spaces there, all of it is the
+        // column's and this says nothing; where it wrote anything else, what it wrote is not
+        // padding and the column rule has no answer about it, so this one does — and the round
+        // after it, with the separator written, is where the column is asked.
+        Map<Integer, String> atAColumn = new LinkedHashMap<>();
+        Set<Integer> padded = new LinkedHashSet<>();
         for (CanonicalStop stop : stops(canonical, writes)) {
-            atAColumn.add(stop.adjacency());
+            atAColumn.put(stop.adjacency(), stop.separator());
+            if (padsWithSpaces(source, had.get(stop.adjacency()),
+                    had.get(stop.adjacency() + 1))) {
+                padded.add(stop.adjacency());
+            }
         }
         List<Witness> out = new ArrayList<>();
         for (int i = 0; i + 1 < writes.size(); i++) {
-            if (atAColumn.contains(i)) {
+            if (padded.contains(i)) {
                 continue;
             }
-            String wrote = text.substring(writes.get(i).end(), writes.get(i + 1).start());
+            String wrote = atAColumn.containsKey(i) ? atAColumn.get(i)
+                    : text.substring(writes.get(i).end(), writes.get(i + 1).start());
             if (wrote.indexOf('\n') >= 0) {
                 continue;   // the canonical form breaks here, so it writes no spacing
             }
@@ -553,7 +562,24 @@ final class Witnesses {
      * one thing the two share — so the offset is read once, here, and everything downstream is
      * about the adjacency.
      */
-    record CanonicalStop(ColumnOccurrence occurrence, int adjacency) {
+    record CanonicalStop(ColumnOccurrence occurrence, int adjacency, String separator) {
+    }
+
+    /**
+     * Whether what the source writes at a stop is padding this rule can answer for.
+     *
+     * <p>Spaces, and nothing else. A column says where a connector begins and the padding that
+     * carries it there is spaces; a source that wrote a tab has written something a column cannot
+     * be the answer about, and it is the spacing rule that quotes characters. So this is what
+     * divides the two families at a stop, and it is asked in one place because the two must not
+     * both answer and must not both stay silent — the first is a conflict the repair refuses, and
+     * the second leaves a difference no rule accounts for.
+     *
+     * <p>A tab reaches a column as well as spaces do, so a rule reading only the column the source
+     * arrived at would find nothing wrong with a text that is not the canonical form.
+     */
+    static boolean padsWithSpaces(String source, SyntaxToken before, SyntaxToken after) {
+        return source.substring(before.end(), after.start()).chars().allMatch(c -> c == ' ');
     }
 
     /**
@@ -576,7 +602,8 @@ final class Witnesses {
                                 + " canonical form's tokens; a stop is written between the"
                                 + " separator and the connector after it");
             }
-            out.add(new CanonicalStop(stop, i));
+            out.add(new CanonicalStop(stop, i,
+                    canonical.layout().text().substring(writes.get(i).end(), stop.at())));
         }
         return out;
     }
@@ -615,6 +642,9 @@ final class Witnesses {
             String between = source.substring(had.get(i).end(), had.get(i + 1).start());
             if (between.indexOf('\n') >= 0 || between.contains("//")) {
                 continue;
+            }
+            if (!padsWithSpaces(source, had.get(i), had.get(i + 1))) {
+                continue;   // the spacing rule is answering this run; asked again once it has
             }
             hadAt.computeIfAbsent(stop.occurrence().unit(), _ -> new LinkedHashSet<>())
                     .add(columnAt(source, had.get(i + 1).start()));

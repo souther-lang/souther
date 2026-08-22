@@ -251,7 +251,9 @@ a table's rows are written at one column — the `:` and the `->` of an `example
 new one is the widest, which is the diff a table asks for. Whatever the author lined up by hand is
 derived again like everything else, and a row too long for one line is written down the page and
 takes no part in the columns. The padding is measured in columns on the screen, so a table whose
-descriptions are Japanese lines up on a screen rather than on a character count.
+descriptions are Japanese lines up on a screen rather than on a character count, and it is written
+as spaces — a tab reaches a column too, and what a source wrote there is the rule about what goes
+between two tokens' to say rather than the column's.
 
 ```
 example priceOfTheFirstGlass
@@ -285,7 +287,9 @@ rest of the rules are about:
 What stands between two tokens the same line holds:
 
 - what goes between two tokens on a line — one space, or none. The two answers quote the characters,
-  so a source that wrote a line break where neither text ends a line reads it back as `\n`.
+  so a source that wrote a line break where neither text ends a line reads it back as `\n`. At a
+  table's column this answers about the separator and the column rule about the padding after it,
+  which is why a tab written there is quoted here rather than counted as a column.
 
 Whether a construct is written down the page at all. The two answers are `on one line` and `down the
 page`, and which rule is named is which one decided the form:
