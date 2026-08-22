@@ -6,6 +6,7 @@ import java.math.BigInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -163,6 +164,30 @@ class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
         assertEquals(Rational.ONE, at(20).unitsRemoved());
         // One below zero is a unit as well, so three and minus three generate the same decimals.
         assertEquals(at(3), at(-3).unitsRemoved());
+    }
+
+    /**
+     * A progression of a position whose values step is written in whole numbers, and says so.
+     *
+     * <p>What the arithmetic here makes is always one. What the type used to accept was any ratio,
+     * and a coset of halves handed to a position that counts is a value it does not hold offered as
+     * one it does. The same of a coset whose values fill, whose own two sentences — a generator with
+     * no factor of two or five in it, a member that is a decimal — were doc comments before they
+     * were anything.
+     */
+    @Test
+    void aProgressionIsWrittenInTheNumbersThePositionHolds() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new AffinePreimage.Stepping(new Rational(BigInteger.ONE, BigInteger.TWO),
+                        at(2)));
+        // And a coset of the decimals: a generator that is no whole number once the units are out of
+        // it, and a member that is no decimal a model writes.
+        assertThrows(IllegalArgumentException.class,
+                () -> new AffinePreimage.Filling(Rational.ZERO,
+                        new Rational(BigInteger.valueOf(3), BigInteger.valueOf(7))));
+        assertThrows(IllegalArgumentException.class,
+                () -> new AffinePreimage.Filling(
+                        new Rational(BigInteger.ONE, BigInteger.valueOf(3)), at(2)));
     }
 
     /** And a generator the decimals treat as nothing is nothing: two is a unit among them, so a

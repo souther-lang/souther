@@ -45,7 +45,17 @@ sealed interface CandidateDomain {
      *
      * @param by always positive, so {@code first} is below {@code last} and the walk runs upward
      */
-    record Walking(BigDecimal first, BigDecimal by, BigDecimal last) implements CandidateDomain {}
+    record Walking(BigDecimal first, BigDecimal by, BigDecimal last) implements CandidateDomain {
+
+        public Walking {
+            if (by == null || by.signum() <= 0 || first == null || last == null
+                    || first.compareTo(last) > 0) {
+                throw new IllegalArgumentException(
+                        "a run of candidates goes upward from its first to its last, a positive step"
+                                + " at a time: " + first + " to " + last + " by " + by);
+            }
+        }
+    }
 
     /**
      * A progression with a next value and no end, tried from {@code from} outward.

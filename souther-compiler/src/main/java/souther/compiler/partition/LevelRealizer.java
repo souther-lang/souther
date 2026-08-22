@@ -233,18 +233,15 @@ public final class LevelRealizer {
      * for the same reason that one does — it is what a run gives up, and a bound on anything else
      * has to be turned into one before it means anything.
      *
-     * <p><b>Nothing this language can state needs a second value.</b> What a step past the first one
-     * buys is a value the arithmetic names and a rule takes out of the middle of a run — and a rule
-     * that takes one value out without moving an end is an inequation. The models here have no
-     * spelling for one, and the only place a region is handed the negation of an equality is the
-     * side of a cut a form's border is never reached from. So all fifty-three progressions the suite
-     * reaches give up their row at the first value, and none of them could do otherwise.
+     * <p><b>More than one is needed by models that exist.</b> A disequality takes one value out of
+     * the middle of a run without moving either end, so a position carrying one looks unbounded to
+     * anything reading ranges and is refused at exactly one place — which is where the coset's own
+     * member can land. Cut to one value, {@code a + b = 0} over two positions held away from zero
+     * comes back as a search that stopped, and the row at it is one step along.
      *
-     * <p>Kept all the same, because what makes it unreachable is a fact about the surface and not
-     * about this search: the day a model can say a value is out, or a reading hands a region one,
-     * the first member of a coset is refusable and the next is the answer. That is the day this
-     * number starts mattering and the day it can be measured; until then it is as arbitrary as any
-     * other more than one.
+     * <p>How many past that is not measured. Every progression the suite reaches gives up its row by
+     * the second value, and what would ask for a third is a run with two holes in it beside each
+     * other.
      */
     private static final int VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT = 16;
 

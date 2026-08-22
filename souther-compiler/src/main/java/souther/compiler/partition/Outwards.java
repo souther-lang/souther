@@ -48,6 +48,11 @@ final class Outwards {
      */
     static List<Place> from(Place first, Count by, Carrier carrier, NumericDomain.Bounds within,
                             int howManyValues) {
+        if (by == null || by.signum() <= 0) {
+            throw new IllegalArgumentException(
+                    "neighbouring candidates are a positive distance apart, or there is no outward:"
+                            + " " + by);
+        }
         if (first == null || !within.admits(first)) {
             throw new IllegalArgumentException(
                     "walking outward starts from a value of the run, and a caller that has none has"

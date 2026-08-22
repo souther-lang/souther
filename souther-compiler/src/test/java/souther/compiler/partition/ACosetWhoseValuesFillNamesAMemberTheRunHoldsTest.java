@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -30,6 +31,32 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * work.
  */
 class ACosetWhoseValuesFillNamesAMemberTheRunHoldsTest {
+
+    /**
+     * The two values a walk reads its shape off refuse anything else.
+     *
+     * <p>A run of candidates is walked upward from its first by adding its step, and a walk outward
+     * steps by a distance. Written the other way round, neither of them ends — and each was a
+     * sentence in a doc comment with nothing to make it true.
+     */
+    @Test
+    void aRunAndAWalkRefuseTheShapesTheyCannotWalk() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new CandidateDomain.Walking(new BigDecimal("5"), new BigDecimal("1"),
+                        new BigDecimal("0")));
+        assertThrows(IllegalArgumentException.class,
+                () -> new CandidateDomain.Walking(new BigDecimal("0"), new BigDecimal("-1"),
+                        new BigDecimal("5")));
+        assertThrows(IllegalArgumentException.class,
+                () -> Outwards.from(Count.of(BigDecimal.ZERO), Count.of(BigDecimal.ZERO),
+                        new souther.compiler.check.Carrier.Dense(),
+                        between("0", true, "5"), 4));
+        // And a caller with no value to start from, which is not a run with nothing in it.
+        assertThrows(IllegalArgumentException.class,
+                () -> Outwards.from(null, Count.of(BigDecimal.ONE),
+                        new souther.compiler.check.Carrier.Dense(),
+                        between("0", true, "5"), 4));
+    }
 
     private static NumericDomain.Bounds between(String low, boolean lowIsItsOwn, String high) {
         return new NumericDomain.Bounds(

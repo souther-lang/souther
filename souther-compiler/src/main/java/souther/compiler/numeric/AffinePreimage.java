@@ -45,6 +45,11 @@ public sealed interface AffinePreimage {
             if (from == null || by == null || by.signum() <= 0) {
                 throw new IllegalArgumentException("a progression steps by something positive: " + by);
             }
+            if (!from.isWhole() || !by.isWhole()) {
+                throw new IllegalArgumentException(
+                        "a position whose values step takes whole numbers, so a progression of them"
+                                + " is written in whole numbers: " + from + " by " + by);
+            }
             from = from.minus(by.times(Rational.of(from.dividedBy(by).floor())));
         }
     }
