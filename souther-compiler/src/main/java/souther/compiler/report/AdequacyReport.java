@@ -389,14 +389,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 BorderAssessment.pointsOf(behavior.partition().boundaries()).stream()
                         .filter(p -> asked.criterion().requires(p.role()))
                         .forEach(p -> add(measures, p.item().status()));
-                // A dropped axis that was carrying a line some rule drew took boundaries with it, and
-                // nothing can ask about them now. One that was only classifying took a measure no
-                // build refuses over, so it costs a line in the report and not the verdict. The pair
-                // space is neither: a combination is not where a boundary comes from.
-                if (behavior.partition().omitted().stream()
-                        .anyMatch(Partitions.OmittedAxis::carriedAnObligation)) {
-                    measures.add(MeasurementStatus.PARTIAL);
-                }
+                // A dropped axis is not asked after here. What it was carrying went with it and no
+                // question stands for it, which is a fact about the measure's reading — so it
+                // leaves the measure's own answer short of complete, and reading it back off the
+                // list of what was dropped would be this report deciding a measure's status again.
             }
         }
         return measures;
@@ -1072,16 +1068,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         };
     }
 
-    private static String whyNoPartition(PartitionEvidence.Partitioned.Reason reason) {
+    private static String whyNoPartition(souther.compiler.query.PartitionDerivation.Reason reason) {
         return switch (reason) {
-            case NO_AXIS_DERIVED -> "not measured (no partition axis was derived at any position)";
+            case THE_READING_DID_NOT_RUN_OUT ->
+                    "not measured (no partition axis was derived at any position)";
+            case NOTHING_IS_DIVIDED ->
+                    "not applicable (the model divides no position of this behavior)";
             case NO_SUBJECT -> "not applicable (this behavior is measured at its stages)";
         };
     }
 
-    private static String whyNoBoundary(PartitionEvidence.Bounded.Reason reason) {
+    private static String whyNoBoundary(souther.compiler.query.BoundaryDerivation.Reason reason) {
         return switch (reason) {
-            case NO_LINES_DERIVED -> "not measured (no line was derived at any position)";
+            case THE_READING_DID_NOT_RUN_OUT ->
+                    "not measured (no line was derived at any position)";
+            case NO_RULE_DRAWS_A_LINE ->
+                    "not applicable (no rule of the model draws a line on this behavior)";
             case NO_SUBJECT -> "not applicable (this behavior is measured at its stages)";
         };
     }
@@ -1149,21 +1151,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     /**
      * Whether the partition measure is the one that answers this question.
      *
-     * <p>Which values may stand somewhere, which classes hold them, and which value a rule tells
-     * from every other: a singling makes the two classes {@code {c}} and everything else, so that
-     * measure is what counts a row for it. A border is the other one's, and is the only one.
-     * Filed by what the question asks and not by which producer raised it.
+     * <p>Asked of the question and not decided here. Which measure answers a question is the
+     * question's own answer ({@link souther.compiler.check.CoverageObligation#answeredBy}), and the
+     * measures read the same table to know what they are short of. Filed by what the question asks
+     * and not by which producer raised it.
      */
     private static boolean aboutTheClasses(souther.compiler.check.CoverageObligation question) {
-        return switch (question) {
-            // A value singled out is one class of the position and everything else is the other,
-            // which is what this measure counts. Printed under the borders it would say a border is
-            // what the rule placed, in a section whose words are about an order across one and a
-            // role for each side — the order the rule never drew, arriving in the report after
-            // being kept out of the question.
-            case ADMITTED_VALUES, PARTITION, SINGLETON -> true;
-            case BOUNDARY -> false;
-        };
+        return question.answeredBy()
+                == souther.compiler.check.CoverageObligation.Measure.PARTITION;
     }
 
     /**

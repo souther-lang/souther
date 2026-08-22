@@ -29,7 +29,36 @@ public sealed interface BlockReason {
      * fact about that rule and this compiler. So a finding built on one of these owes an identity
      * for the rule, and the type is what makes owing it unavoidable.
      */
-    sealed interface AboutARule extends BlockReason {}
+    sealed interface AboutARule extends BlockReason {
+
+        /**
+         * Whether a measure that would have had this rule's evidence is thereby short of something.
+         *
+         * <p>Not every rule a reading set aside was one it fell short of. A comparison relating two
+         * positions divides neither of them however well it is read, so a measure without it is a
+         * measure that read the model and found no class there — while a comparison in a form no
+         * reader takes apart may have divided the position or bounded it, and nothing knows which.
+         * The first is the model, the second is this compiler, and a measure told they were one
+         * thing reports whichever it happens to meet.
+         *
+         * <p>A switch and no {@code default}, so a reason added answers this on the day it is added
+         * rather than falling into whichever arm stands nearest.
+         *
+         * <p>Which measure is short is not asked, and there is nothing here to ask it of. A rule
+         * this could not read is one whose line and whose classes are both unknown: what it would
+         * have said is exactly what nobody has.
+         */
+        default boolean leavesAMeasureShort() {
+            return switch (this) {
+                case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
+                     UnreadValueRule _, CompetingCoordinates _ -> true;
+                // Nothing is missing. The rule is read and settled beside the partition rather than
+                // in it, and a measure counting it short would hold a verdict open over a model
+                // whose every rule this compiler understood.
+                case ComparisonBetweenPositions _ -> false;
+            };
+        }
+    }
 
     /**
      * The reading did not get to the rules of the position, so there is no rule to name.

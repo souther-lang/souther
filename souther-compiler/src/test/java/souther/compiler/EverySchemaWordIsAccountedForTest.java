@@ -178,20 +178,26 @@ class EverySchemaWordIsAccountedForTest {
             // schema move together or the compile stops.
             new Vocabulary("coverageQuestion", List.of("$defs", "coverageQuestion"),
                     souther.compiler.check.CoverageObligation.class),
+            // `no_axis_derived` is what `the_reading_did_not_run_out` was called while it also
+            // stood for a reading that ran out and found nothing to divide. Retired rather than
+            // gone: reports of this version were written carrying it.
             new Vocabulary("partition.axesMeasure.reason",
                     List.of("$defs", "partition", "properties", "axesMeasure", "properties",
                             "reason"),
-                    PartitionEvidence.Partitioned.Reason.class),
+                    souther.compiler.query.PartitionDerivation.Reason.class,
+                    Set.of("no_axis_derived")),
             // Written once and referred to twice: a position's reading and a rule left unread are
             // the same question asked of two things, and two copies of the words would be two
             // places for one of them to gain a word the other does not have.
             new Vocabulary("notReadReason",
                     List.of("$defs", "notReadReason"),
                     souther.compiler.partition.UndividedPosition.Reason.class),
+            // And `no_lines_derived` likewise.
             new Vocabulary("partition.boundariesMeasure.reason",
                     List.of("$defs", "partition", "properties", "boundariesMeasure", "properties",
                             "reason"),
-                    PartitionEvidence.Bounded.Reason.class),
+                    souther.compiler.query.BoundaryDerivation.Reason.class,
+                    Set.of("no_lines_derived")),
             new Vocabulary("partition.axes[].reason",
                     List.of("$defs", "partition", "properties", "axes", "items", "properties",
                             "reason"),

@@ -182,8 +182,14 @@ final class Coverages {
                         measureSaid(open.owed().subject(), each)));
             }
         }
-        return new PartitionEvidence(PartitionEvidence.Partitioned.of(axes),
-                PartitionEvidence.Bounded.of(boundaries), pairsOf(divided, readings),
+        // Each measure asked its own closure, and neither told from the length of what came back.
+        // What one of them is short of says nothing about the other: a rule whose line nothing
+        // could read leaves the border measure short while the classes either side of it were read
+        // in full, and the enumeration above is the same case the other way round.
+        return new PartitionEvidence(
+                PartitionDerivation.of(axes, partitioning.partitionClosure()),
+                BoundaryDerivation.of(boundaries, partitioning.borderClosure()),
+                pairsOf(divided, readings),
                 partitioning.undivided(), partitioning.unread(), partitioning.blocked(),
                 partitioning.notSeparated(), List.copyOf(standing),
                 partitioning.omitted(),

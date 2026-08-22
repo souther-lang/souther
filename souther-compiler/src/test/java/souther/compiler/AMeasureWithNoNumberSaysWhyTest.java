@@ -156,22 +156,22 @@ class AMeasureWithNoNumberSaysWhyTest {
                 example.repro                                            measurement: complete
                   widen                    implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
-                    partition   not measured (no partition axis was derived at any position)
+                    partition   not applicable (the model divides no position of this behavior)
                       · not derivable: w.v
-                    border      not measured (no line was derived at any position)
+                    border      not applicable (no rule of the model draws a line on this behavior)
                     branch      not measured (no row names this behavior)
                   narrow                   implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
-                    partition   not measured (no partition axis was derived at any position)
+                    partition   not applicable (the model divides no position of this behavior)
                       · not derivable: m.v
-                    border      not measured (no line was derived at any position)
+                    border      not applicable (no rule of the model draws a line on this behavior)
                     branch      not measured (no row names this behavior)
                   both                     implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     branch      not applicable (this behavior has no body)
                   baseRate                 injected      rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
-                    partition   not measured (no partition axis was derived at any position)
+                    partition   not applicable (the model divides no position of this behavior)
                     border      borders 2   coverage items 0/0   excluded 4   (4 not measured: no row names this behavior)
                       · no OFF point is owed at r.cost = 0 (invariant Amount #1): excluded — the rules leave no value there
                       · no OUT point is owed at r.cost = 0 (invariant Amount #1): excluded — the rules leave no value there
@@ -180,7 +180,7 @@ class AMeasureWithNoNumberSaysWhyTest {
                     branch      not applicable (this behavior has no body)
                   rated                    implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
-                    partition   not measured (no partition axis was derived at any position)
+                    partition   not applicable (the model divides no position of this behavior)
                     border      borders 2   coverage items 0/0   excluded 4   (4 not measured: no row names this behavior)
                       · no OFF point is owed at r.cost = 0 (invariant Amount #1): excluded — the rules leave no value there
                       · no OUT point is owed at r.cost = 0 (invariant Amount #1): excluded — the rules leave no value there
@@ -191,12 +191,12 @@ class AMeasureWithNoNumberSaysWhyTest {
                     signature   not applicable (this behavior's output is not a sum)
                     partition   axes 1   equivalence partitions 1/2
                       · no row is in `No` at q.flag
-                    border      not measured (no line was derived at any position)
+                    border      not applicable (no rule of the model draws a line on this behavior)
                     branch      0/0
                   sift                     implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   axes 2   equivalence partitions 0/0   (2 not measured: no row names this behavior)
-                    border      not measured (no line was derived at any position)
+                    border      not applicable (no rule of the model draws a line on this behavior)
                     branch      not measured (no row names this behavior)
 
                 7 behaviors: 6 implemented, 0 unimplemented, 1 injected; 0 rows waiting for a `let`.
@@ -493,14 +493,31 @@ class AMeasureWithNoNumberSaysWhyTest {
         return measures;
     }
 
-    /** Held where the value is built, so that no measure can be assembled without it. */
+    /**
+     * Held where the value is built, so that no measure can be assembled without it.
+     *
+     * <p>The two measures whose evidence is a list keep it by shape now rather than by check: an
+     * answer that has entries is an arm that carries them and an answer that has none is an arm
+     * with nowhere to put any, so a status paired with the wrong list is not a value anybody can
+     * write. What is left to assert of them is the one pairing the arms could still get wrong —
+     * an arm that promises entries and holds none.
+     */
     @Test
     void aMeasureCannotBeBuiltWithoutKeepingThatContract() {
-        assertThrows(IllegalArgumentException.class, () -> new PartitionEvidence.Partitioned(
-                List.of(), MeasurementStatus.NOT_MEASURED, null));
-        assertThrows(IllegalArgumentException.class, () -> new PartitionEvidence.Bounded(
-                List.of(), MeasurementStatus.COMPLETE,
-                PartitionEvidence.Bounded.Reason.NO_LINES_DERIVED));
+        assertThrows(IllegalStateException.class,
+                () -> new souther.compiler.query.PartitionDerivation.Complete(List.of()));
+        assertThrows(IllegalStateException.class,
+                () -> new souther.compiler.query.PartitionDerivation.Partial(List.of()));
+        assertThrows(IllegalStateException.class,
+                () -> new souther.compiler.query.BoundaryDerivation.Complete(List.of()));
+        assertThrows(IllegalStateException.class,
+                () -> new souther.compiler.query.BoundaryDerivation.Partial(List.of()));
+        // And an absence that nothing proved. The proof is the argument, so this is the whole of
+        // what "the model divides nothing anywhere" costs to say.
+        assertThrows(NullPointerException.class,
+                () -> new souther.compiler.query.PartitionDerivation.Absent(null));
+        assertThrows(NullPointerException.class,
+                () -> new souther.compiler.query.BoundaryDerivation.Absent(null));
         assertThrows(IllegalArgumentException.class, () -> new Adequacy.BranchEvidence(
                 List.of(), java.util.Set.of(), java.util.Set.of(),
                 MeasurementStatus.NOT_MEASURED, MeasurementStatus.NOT_MEASURED, null));
@@ -522,12 +539,6 @@ class AMeasureWithNoNumberSaysWhyTest {
         // reason of the other kind is the confusion the two words were split to prevent: it says its
         // arms do not apply and asks somebody to go and measure them, and a report reading either
         // half of it is right about one and wrong about the other.
-        assertThrows(IllegalArgumentException.class, () -> new PartitionEvidence.Bounded(
-                List.of(), MeasurementStatus.NOT_APPLICABLE,
-                PartitionEvidence.Bounded.Reason.NO_LINES_DERIVED));
-        assertThrows(IllegalArgumentException.class, () -> new PartitionEvidence.Partitioned(
-                List.of(), MeasurementStatus.NOT_MEASURED,
-                PartitionEvidence.Partitioned.Reason.NO_SUBJECT));
         assertThrows(IllegalArgumentException.class, () -> new Adequacy.BranchEvidence(
                 List.of(), java.util.Set.of(), java.util.Set.of(),
                 MeasurementStatus.NOT_MEASURED, MeasurementStatus.NOT_MEASURED,

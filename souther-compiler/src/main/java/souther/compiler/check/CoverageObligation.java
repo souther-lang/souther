@@ -76,5 +76,43 @@ public enum CoverageObligation {
      * are owed in the classes it makes. Both shapes raise this, and a measure counting one for the
      * other reports a model divided where nothing said so.
      */
-    PARTITION
+    PARTITION;
+
+    /**
+     * Which measure of coverage answers this question.
+     *
+     * <p>Settled here, where the question is, and read by everything that has to know. A report
+     * chooses which section to print a standing question under, and a measure has to know which
+     * questions it is short of before it may say it read the model — two readings of one table, and
+     * the table was a renderer's private method while the second reader did not exist. Written
+     * twice, the day a question is added is the day one of them files it somewhere and the other
+     * silently answers for it.
+     *
+     * <p>A singling belongs to the partition measure. It makes the two classes {@code {c}} and
+     * everything else, and that is what counts a row for it; a border has an order across it and a
+     * role for each side, which a singled value has no sides for.
+     */
+    public Measure answeredBy() {
+        return switch (this) {
+            case ADMITTED_VALUES, PARTITION, SINGLETON -> Measure.PARTITION;
+            case BOUNDARY -> Measure.BOUNDARY;
+        };
+    }
+
+    /**
+     * A measure of coverage, as the questions are filed under it.
+     *
+     * <p>Two, and each answers for itself. What one of them is short of says nothing about the
+     * other: a rule whose line nothing could read leaves the border measure short while the classes
+     * either side of it were read in full, and a completeness shared between the two would report
+     * both on the strength of whichever failed.
+     */
+    public enum Measure {
+
+        /** Which values may stand where, which classes hold them, and which value is singled out. */
+        PARTITION,
+
+        /** Where a line falls, and the rows either side of it. */
+        BOUNDARY
+    }
 }
