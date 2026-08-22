@@ -96,12 +96,12 @@ sealed interface Derivation {
     /**
      * A divide rounded to a scale the call states (spec §stdlib-decimal).
      *
-     * <p>{@code scale} is the number of places, where the reading holds the argument as a number,
-     * and null where it does not. A number and not a form: nothing composes with it — it says which
-     * grid the answer lands on, and a grid is not a value the domain relates anything to — and where
-     * it is not a number there is no grid to state, which is a rule not applying rather than a rule
-     * over an unknown. A name given a constant is that constant, as everywhere else the check reads
-     * a value (spec §invariant-discharge-terms).
+     * <p>{@code scale} is a form, as the divisor is, and for the same reason: whether it comes to
+     * one number is what a reading proves of it, and one expression is read under more than one
+     * reading. Held as a written number, this asked the question where the recipe was recorded, so a
+     * scale a rule of the model settles — a parameter whose type admits one value, a name a guard
+     * equates to two — was a scale no reading could recover. What is stated where a reading has no
+     * one number for it is the half that does not need one.
      *
      * <p>The mode is not here at all. Every mode the library has lands the answer on one of the two
      * grid points the exact quotient lies between, so what a range can say is the same for all seven
@@ -109,12 +109,12 @@ sealed interface Derivation {
      * of which value this is — {@link NumericMeaning} keeps it — and not part of where it lies.
      */
     record RoundedQuotient(LinearForm<FactSubject> numerator, LinearForm<FactSubject> divisor,
-                           NumericDomain.Bounds divisorExtent, java.math.BigDecimal scale)
+                           NumericDomain.Bounds divisorExtent, LinearForm<FactSubject> scale)
             implements Derivation {
 
         @Override
         public List<LinearForm<FactSubject>> operands() {
-            return List.of(numerator, divisor);
+            return List.of(numerator, divisor, scale);
         }
     }
 }

@@ -41,6 +41,12 @@ class AnIntDivideAndTheOperatorAnswerOneQuotientTest {
 
             behavior byTheOperator : (p: Pair) -> Outcome constructs Outcome
             let byTheOperator (p) = Outcome { q = p.a / p.b, ok = true }
+
+            behavior whatIsLeft : (p: Pair) -> Outcome constructs Outcome
+            let whatIsLeft (p) =
+                match Int.truncatingRemainder(p.a, p.b) with
+                    | Int as r -> Outcome { q = r, ok = true }
+                    | DivisionByZero -> Outcome { q = 0, ok = false }
             """;
 
     private final BytesClassLoader loader =
@@ -67,6 +73,21 @@ class AnIntDivideAndTheOperatorAnswerOneQuotientTest {
         assertThrows(ConstraintViolation.class,
                 () -> answered("byTheFunction", Long.MIN_VALUE, -1),
                 "the function answers a case for a zero divisor, not for an overflow");
+    }
+
+    /**
+     * The remainder answers on the pair the quotient aborts on, and answers nought.
+     *
+     * <p>Which is why it stays a raw {@code lrem}: what is left is exact for every pair — the
+     * quotient of {@code Long.MIN_VALUE} by {@code -1} is one past what an {@code Int} holds, and
+     * what it leaves is nothing at all. A remainder held to the quotient's abort would refuse a pair
+     * it answers for.
+     */
+    @Test
+    void theRemainderAnswersOnThePairTheQuotientAbortsOn() throws Exception {
+        Map<?, ?> out = answered("whatIsLeft", Long.MIN_VALUE, -1);
+        assertEquals(0L, out.get("q"));
+        assertEquals(true, out.get("ok"));
     }
 
     @Test

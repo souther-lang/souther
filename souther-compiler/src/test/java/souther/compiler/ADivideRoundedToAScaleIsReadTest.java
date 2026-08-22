@@ -88,6 +88,44 @@ class ADivideRoundedToAScaleIsReadTest {
     }
 
     /**
+     * The scale is what the reading holds it to and not what was written at the call.
+     *
+     * <p>A guard settling the scale is a scale, exactly as a written number is. Asked where the
+     * recipe was recorded, this could only see what folded there, so a scale the model settles was a
+     * scale no reading could recover — which is the same rule turning on where a value was written
+     * rather than on what it is. What is owed here is an upper end, which the sign alone does not
+     * give: the reading that holds the scale to nothing gets the half that needs no grid, and that
+     * half does not discharge this.
+     */
+    @Test
+    void aScaleAGuardSettlesIsAScale() {
+        String model = """
+                module demo
+
+                data Rate = Decimal
+                    invariant inRange = value >= 0m && value <= 100m
+
+                data Bad
+
+                behavior share : (x: Decimal, y: Decimal, places: Int) -> Rate | Bad
+                    constructs Rate
+                let share (x, y, places) = {
+                    guard x >= 0m else Bad
+                    guard x <= 10m else Bad
+                    guard y >= 1m else Bad
+                    guard places == 2 else Bad
+                    match Decimal.divide(x, y, places, HALF_UP) with
+                        | Decimal as q -> Rate(q)
+                        | DivisionByZero -> unreachable "y >= 1"
+                }
+                """;
+        assertEquals(List.of(), Compiler.compileWithWarnings(model).warnings().stream()
+                .map(Diagnostic::code).distinct().toList(),
+                "ten at most over one at least is ten at most, and at two places it lands on that"
+                        + " grid — which is the upper end, and needs the scale rather than the sign");
+    }
+
+    /**
      * The control. Nothing puts the divisor on a side of nought — the guard bounds {@code y} and
      * the divide is by one less — so this rule has no divisor to fire on and the construction is
      * owed its clause.

@@ -660,8 +660,8 @@ final class Terms {
     }
 
     /** The recipe a divide rounded to a scale is, or null where the fragment derives nothing in it.
-     * The scale is read as a number where the reading holds one, and the recipe stands without it —
-     * which side of nought such a quotient is on is the same at every scale. */
+     * The scale is a form, as the divisor is: whether it comes to one number is what a reading
+     * proves of it, and one expression is read under more than one reading. */
     private Derivation rounded(Core over, Core by, Core places, Denotations at) {
         LinearForm<FactSubject> numerator = affineOf(over, at);
         LinearForm<FactSubject> divisor = affineOf(by, at);
@@ -670,8 +670,8 @@ final class Terms {
             return null;
         }
         LinearForm<FactSubject> scale = affineOf(places, at);
-        return new Derivation.RoundedQuotient(numerator, divisor, extent,
-                scale != null && scale.coefs().isEmpty() ? scale.constant() : null);
+        return scale == null ? null
+                : new Derivation.RoundedQuotient(numerator, divisor, extent, scale);
     }
 
     /** Which of the two answers of one division a recipe is about. Both are read off the same three
@@ -946,17 +946,32 @@ final class Terms {
         if (e instanceof Core.Read read) {
             return at.numericOf(read.binding());
         }
-        Core read = asOperator(e);
-        if (!(read instanceof Core.Binary b) || !isArith(b.op())) {
-            return null;
+        // The table, of a call, whatever the row says it computes. Asked through `asOperator`
+        // instead, this read the rows that are operators and no others — so a row the library was
+        // answered for was a row this could not see, which is the silence the table exists to
+        // remove. `asOperator` still writes a call as the operator it stands for, which is what
+        // names the value; what it computes is answered here.
+        DischargeRules.NumericResult result =
+                DischargeRules.numericResult(operationOf(e));
+        if (result != null && result.at() instanceof DischargeRules.Answered.Directly) {
+            return theOneOf(result.computes().of(argsOf(e)), e.type());
         }
-        // A divide of whole numbers is a truncating quotient however it was spelled, so the operator
-        // and the value case of `Int.divide` are one meaning and one recipe. Over `Decimal` the
-        // operator rounds at a precision the run time sets, which is arithmetic of its own.
-        if (b.op() == BinOp.DIV && granularityOf(b.type()) == Granularity.DISCRETE) {
-            return new NumericMeaning.TruncatingQuotient(b.left(), b.right());
+        if (e instanceof Core.Binary b && isArith(b.op())) {
+            return theOneOf(new NumericMeaning.Operator(b.op(), b.left(), b.right()), b.type());
         }
-        return new NumericMeaning.Operator(b.op(), b.left(), b.right());
+        return null;
+    }
+
+    /** {@code meaning}, as the arithmetic it is where the language writes that arithmetic two ways.
+     * A divide of whole numbers is a truncating quotient however it was spelled, so the operator and
+     * the value case of {@code Int.divide} are one meaning and one recipe; over {@code Decimal} the
+     * operator rounds at a precision the run time sets, which is arithmetic of its own. */
+    private NumericMeaning theOneOf(NumericMeaning meaning, Type answered) {
+        if (meaning instanceof NumericMeaning.Operator(BinOp op, Core left, Core right)
+                && op == BinOp.DIV && granularityOf(answered) == Granularity.DISCRETE) {
+            return new NumericMeaning.TruncatingQuotient(left, right);
+        }
+        return meaning;
     }
 
     /**

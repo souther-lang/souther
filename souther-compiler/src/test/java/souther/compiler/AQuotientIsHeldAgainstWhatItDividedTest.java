@@ -18,10 +18,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * is built on: the first denomination discharged and the second did not, because what the first left
  * was unknown and so was the quotient taken of it.
  *
- * <p>{@code 0 <= a - b * (a / b) < b} is not unconditional. {@code /} truncates toward zero (spec
- * §stdlib-int), so what is left takes the sign of the dividend — {@code -7 / 2} is {@code -3} and
- * {@code -7 - 2 * -3} is {@code -1}. Which side the dividend is on is what the path establishes, and
- * it is read where the clause is read, as a product's bound is.
+ * <p>What holds is not {@code 0 <= a - b * (a / b) < b} in general. {@code /} truncates toward zero
+ * (spec §stdlib-int), so what is left keeps the sign of the <em>dividend</em> and is smaller than
+ * the <em>magnitude</em> of the divisor: {@code -7 / 2} is {@code -3} and {@code -7 - 2 * -3} is
+ * {@code -1}, and {@code 7 / -10} is nought and leaves seven. Which side the dividend is on is what
+ * the path establishes, and it is read where the clause is read, as a product's bound is.
  */
 class AQuotientIsHeldAgainstWhatItDividedTest {
 
@@ -115,5 +116,38 @@ class AQuotientIsHeldAgainstWhatItDividedTest {
     @Test
     void aDividendAtOrBelowNoughtLeavesSomethingAtOrBelowIt() {
         assertEquals(List.of(), reported("額 <= 0", "硬貨枚数(額 / 10 * 10 - 額)"));
+    }
+
+    /**
+     * A negative divisor leaves something of the dividend's sign and smaller than the divisor's
+     * magnitude, which is what the relation says and is not what {@code 0 <= r < b} would say.
+     *
+     * <p>{@code 額 / -10 * -10} is the multiple of ten at or below the dividend for a non-negative
+     * dividend, so what is left is at or above nought — over a divisor on the other side of it.
+     */
+    @Test
+    void aNegativeDivisorLeavesSomethingOfTheDividendsSign() {
+        assertEquals(List.of(), reported("額 >= 0", "硬貨枚数(額 - 額 / (0 - 10) * (0 - 10))"));
+    }
+
+    /**
+     * Taking the {@code DivisionByZero} arm establishes that the divisor was zero, which is what
+     * that case means and is a fact about a value the caller handed over.
+     */
+    @Test
+    void theFailureArmEstablishesThatTheDivisorWasZero() {
+        assertEquals(List.of(), reported("額 <= 100", """
+                match Int.divide(100, 額) with
+                        | Int as k -> 硬貨枚数(0)
+                        | DivisionByZero -> 硬貨枚数(額)"""));
+    }
+
+    /** The control beside it: the same construction on the arm that does not say so. */
+    @Test
+    void theValueArmSaysNothingAboutWhereTheDivisorIs() {
+        assertEquals(List.of("E2011"), reported("額 <= 100", """
+                match Int.divide(100, 額) with
+                        | Int as k -> 硬貨枚数(額)
+                        | DivisionByZero -> 硬貨枚数(0)"""));
     }
 }

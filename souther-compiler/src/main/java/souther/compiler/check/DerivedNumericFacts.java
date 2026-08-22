@@ -33,8 +33,9 @@ import java.util.Set;
  * <p><b>A range is not the whole of what a recipe says.</b> A quotient's own range comes off its
  * operands' and says nothing about what it divides, so a remainder — the thing every step of a
  * change-making loop is built on — was a value nothing put at or above nought (#960). What relates
- * the two is {@code 0 <= a - b * (a / b) < b} under the sign facts the path establishes, which is a
- * rule over two positions and not a range either of them has. So what a recipe answers with is a
+ * the two is that what a divide leaves keeps the dividend's sign and is smaller than the divisor's
+ * magnitude — {@code 0 <= a - b * (a / b) < b} where the dividend is at or above nought and the
+ * divisor above it — which is a rule over two positions and not a range either of them has. So what a recipe answers with is a
  * list of {@link Fact}s: a range where that is what it has to say, a relation where it has more.
  * Two shapes because the domain has two doors and each fact says which it goes through — a range's
  * ends read as assertions is {@link NumericDomain#assuming}'s reading and not a second one written
@@ -375,7 +376,7 @@ final class DerivedNumericFacts {
             return List.of();
         }
         Bounds numerator = boundsOf(rounded.numerator(), base, terms, done, deriving);
-        Integer places = placesOf(rounded.scale());
+        Integer places = placesOf(boundsOf(rounded.scale(), base, terms, done, deriving));
         Bounds answered = Intervals.roundedQuotient(numerator, divisor,
                 places == null ? 0 : places);
         if (places != null) {
@@ -391,15 +392,26 @@ final class DerivedNumericFacts {
         return facts;
     }
 
-    /** The scale as the run time takes it, or null where the reading has no number or the number is
-     * not one a scale can be — the backend narrows it to an {@code int}, so a place count outside
-     * that is a division at a scale no proof here was about. */
-    private static Integer placesOf(BigDecimal scale) {
-        if (scale == null) {
+    /**
+     * The scale as the run time takes it, or null where this reading does not hold the argument to
+     * one such number.
+     *
+     * <p>One number, which is a range holding a single value and reaching both of its ends. A scale
+     * the reading leaves anywhere else is a grid this cannot name — the answer lands on one grid and
+     * a rule stated over two of them is a rule about neither.
+     *
+     * <p>And a number the run time divides at. The backend narrows the scale to an {@code int}, so a
+     * place count outside that is a division at a scale nothing proved here was about.
+     */
+    private static Integer placesOf(Bounds scale) {
+        Endpoint low = scale.min();
+        Endpoint high = scale.max();
+        if (low == null || high == null || !low.inclusive() || !high.inclusive()
+                || Count.number(low.at()).compareTo(high.at()) != 0) {
             return null;
         }
         try {
-            return scale.intValueExact();
+            return Count.number(low.at()).at().intValueExact();
         } catch (ArithmeticException _) {
             return null;
         }

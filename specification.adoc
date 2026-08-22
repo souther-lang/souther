@@ -1643,13 +1643,17 @@ What is bounded is the values the operation produced. `+/+` does not answer ever
 
 Nothing follows from this rule unless what is established at the construction keeps zero out of every divisor it admits. That is the condition for stating anything and not a claim about the divides that do answer — over the whole numbers a divisor between zero and five divides by one at the nearest, and where those quotients lie is simply not what this rule says. Nothing follows either where the divisor is left no value an `+Int+` is — the arithmetic a form is read through composes numbers of any size, and what the operator divides by is an `+Int+`, so `+x / (9223372036854775807 + 1)+` divides by a value this operator never has. Neither is a finding about the path. The construction is owed its clause, as it is owed over any other value nothing is known of.
 
-*What a truncating division leaves.* A quotient bounded on its own says nothing about the value it was taken of, and what is left of that value — the thing every step of a change-making loop is built on — is where the two have to be related:
+*What a truncating division leaves.* A quotient bounded on its own says nothing about the value it was taken of, and what is left of that value — the thing every step of a change-making loop is built on — is where the two have to be related. Writing `+r+` for `+a - b * (a / b)+`, what holds is
 
 ----
-0 <= a - b * (a / b) < b
+-|b| < r < |b|
+a >= 0  =>  0 <= r
+a <= 0  =>  r <= 0
 ----
 
-Both halves are wanted. The lower one is what a construction over the remainder owes, and the upper one is what says the next denomination's quotient is bounded.
+so for a dividend at or above nought and a divisor above it, `+0 <= r < b+`. Both halves are wanted. The sign is what a construction over the remainder owes, and the magnitude is what says the next denomination's quotient is bounded.
+
+The divisor's own sign is not in either of them, which is why they are written this way. Truncation toward zero leaves what is divided on its own side of nought whichever side the divisor is on: `+7 / -10+` is nought and `+7 - -10 * 0+` is seven, so a rule stated as `+0 <= r < b+` in general would be a rule the values fail wherever the divisor is negative. What the divisor decides is how far from nought the remainder can get, and that is its magnitude.
 
 Neither half is unconditional, and the two hold under different conditions. The sign is the dividend's: truncation toward zero leaves the remainder on the dividend's side of nought — `+-7 / 2+` is `+-3+` and `+-7 - 2 * -3+` is `+-1+` — so a rule stated without the sign facts would be wrong for every negative dividend. Which side the dividend is on is what the path establishes, and it is read where the clause is read, as a product's bound is; a reading that puts it on neither side gets neither half. The magnitude is below the divisor's, and that half is stated where the divisor reads as a constant. What is left is smaller than the divisor it was divided by, and the largest of a range is the only value of it a rule stated over ends could use — which for a range open above is no number at all. A name given a constant is that constant, as it is for `+Int.floorMod+` (<<invariant-discharge-guarantees>>), which states its own ends under the same condition and for the same reason.
 

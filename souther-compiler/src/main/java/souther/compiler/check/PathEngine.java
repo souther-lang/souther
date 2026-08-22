@@ -207,8 +207,70 @@ final class PathEngine {
         Entered in = arm.binder() == null || arm.bindType() == null
                 ? new Entered(k, at)
                 : opening(arm, scrutinee, k, at);
-        return assuming(answeredBy(scrutinee, in.at()), answered(arm, scrutinee),
-                guard -> impliedBy(guard, arm.pattern()), in);
+        return whatTakingThisCaseSays(arm, scrutinee,
+                assuming(answeredBy(scrutinee, in.at()), answered(arm, scrutinee),
+                        guard -> impliedBy(guard, arm.pattern()), in));
+    }
+
+    /**
+     * {@code in} with what taking this arm's case says about what the operation was given.
+     *
+     * <p>An operation answering its number as one case of a union answers none under a condition it
+     * declares ({@link DischargeRules.AnsweredUnless}), and which arm was taken settles that
+     * condition both ways: the arm carrying the number was taken because it does not hold, and any
+     * other arm because it does. So a {@code DivisionByZero} arm has established that the divisor is
+     * zero, which is a fact about a value the caller handed over and not about the case.
+     *
+     * <p>Taken in through the door a written condition goes through, which is what keeps this one
+     * statement rather than two: what a comparison establishes is {@link Predicates}' to say, and a
+     * reader that asserted the relation itself would be a second account of what {@code == 0} means.
+     *
+     * <p>An arm naming several cases says neither thing where the number's case is among them: it
+     * may have been taken for that one or for another, and a rule about a value this arm may not
+     * have is a rule about nothing.
+     */
+    private Entered whatTakingThisCaseSays(Core.Case arm, Core scrutinee, Entered in) {
+        Core called = originating(scrutinee, in.at(), new HashSet<>());
+        DischargeRules.NumericResult result = called == null ? null
+                : DischargeRules.numericResult(Terms.operationOf(called));
+        if (result == null || result.unless() == null
+                || !(result.at() instanceof DischargeRules.Answered.InTheCaseCarrying(
+                        Type answersIn))) {
+            return in;
+        }
+        Boolean answered = whetherItAnswered(arm, answersIn);
+        if (answered == null) {
+            return in;
+        }
+        Core args = Terms.argsOf(called)
+                .get(result.unless().argument().positionIn(Terms.operationOf(called)));
+        Core condition = new Core.Binary(result.unless().op(), args,
+                numberOf(result.unless().than(), args.type(), args.pos()),
+                souther.compiler.types.CoverageOrigin.unwritten(), Type.BOOL, args.pos());
+        return new Entered(assuming(condition, in.known(), in.at(), !answered).known(), in.at());
+    }
+
+    /** Whether {@code arm} was taken because the operation answered its number, or because it did
+     * not — and null where the arm says neither. */
+    private static Boolean whetherItAnswered(Core.Case arm, Type answersIn) {
+        boolean itsCase = false;
+        boolean another = false;
+        for (CaseSelector selector : arm.pattern().selectors()) {
+            if (answersIn.equals(selector.refinement().bound())) {
+                itsCase = true;
+            } else {
+                another = true;
+            }
+        }
+        return itsCase == another ? null : itsCase;
+    }
+
+    /** {@code n} written at the type the argument is, so that the condition compares two values of
+     * one type as a source-written one would. */
+    private static Core numberOf(long n, Type type, souther.compiler.diag.SourcePos pos) {
+        return type == Type.DECIMAL
+                ? new Core.Decimal(java.math.BigDecimal.valueOf(n), type, pos)
+                : new Core.Int(n, type, pos);
     }
 
     /**
