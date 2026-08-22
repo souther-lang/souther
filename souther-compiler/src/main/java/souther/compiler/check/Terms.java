@@ -108,13 +108,22 @@ final class Terms {
     }
 
     /**
-     * Every atom {@code form} reaches: the ones it names, and the ones the arithmetic those stand
-     * for names, however deep.
+     * Every atom {@code form} reaches: the ones it names, and the ones a recipe filed against those
+     * is read from, however deep.
      *
      * <p>Naming one is not the same as being about one. {@code acc * x.value} is a product the
      * fragment cannot carry, so the form is a single atom and the two it was computed from are under
      * the recipe filed against that atom — and a reader that took the form's own atoms for what the
      * expression is about would miss both of them. Answered here because both tables are here.
+     *
+     * <p>What is followed is what the recipe is <em>read from</em> and not what it is arithmetic
+     * over. The two are the same for a product, whose operands are its arithmetic, and they come
+     * apart the moment a recipe holds something that decides which of its parts answers rather than
+     * being one of them. Which is which is the recipe's own answer ({@link Derivation#formsRead})
+     * and not this walk's: a reader deciding it by which components happen to be forms would be
+     * answering a semantic question by a naming convention, and this is the reader that would go
+     * wrong quietly — a form it does not reach leaves the places under it unbounded and nothing else
+     * says so ({@link StepInputFacts}).
      */
     Set<FactSubject> reached(LinearForm<FactSubject> form) {
         Set<FactSubject> out = new java.util.LinkedHashSet<>();
@@ -124,16 +133,9 @@ final class Terms {
             if (!out.add(atom)) {
                 continue;
             }
-            switch (derivations.get(atom)) {
-                case Derivation.Product p -> {
-                    todo.addAll(p.left().coefs().keySet());
-                    todo.addAll(p.right().coefs().keySet());
-                }
-                case Derivation.Quotient q -> {
-                    todo.addAll(q.numerator().coefs().keySet());
-                    todo.addAll(q.divisor().coefs().keySet());
-                }
-                case null -> { }
+            Derivation recipe = derivations.get(atom);
+            if (recipe != null) {
+                recipe.formsRead().forEach(f -> todo.addAll(f.coefs().keySet()));
             }
             InductiveBounds.Walk under = reductions.get(atom);
             if (under != null) {
@@ -524,13 +526,13 @@ final class Terms {
             recordingWalk(atom, call, e, at);
             return;
         }
-        if (!(asOperator(e) instanceof Core.Binary b)) {
-            return;
-        }
-        Derivation made = switch (b.op()) {
-            case MUL -> product(b, at);
-            case DIV -> quotient(b, at);
-            default -> null;
+        Derivation made = switch (asOperator(e)) {
+            case Core.Binary b -> switch (b.op()) {
+                case MUL -> product(b, at);
+                case DIV -> quotient(b, at);
+                default -> null;
+            };
+            case null, default -> chosen(Choice.of(asOperator(e)), at);
         };
         if (made == null) {
             return;
@@ -557,9 +559,11 @@ final class Terms {
      * evaluation of the node it is written at would give one parameter two atoms where the step reads
      * it twice.
      *
-     * <p>A step this cannot read as arithmetic is recorded as nothing rather than as a walk with a
-     * part missing. That is the fragment this proves over, stated once: a step branching on its
-     * element is outside it, and so is a seed that is what some behavior answered.
+     * <p>A step this cannot read as a form is recorded as nothing rather than as a walk with a part
+     * missing. What it cannot read is narrower than the arithmetic: a step is one value, and a value
+     * this composes nothing out of is named all the same, so a step that branches is a form over the
+     * choice it is and is bounded by what its arms answer ({@link Derivation.Chosen}). What stays
+     * outside is a seed that is what some behavior answered.
      */
     private void recordingWalk(FactSubject atom, Core.PreservedCall call, Core e, Denotations at) {
         Reductions.Reducing walk = Reductions.reducing(call, at);
@@ -597,6 +601,39 @@ final class Terms {
             throw new OneTermTwoDerivations("atom `" + atom.rendered() + "` is the answer of two"
                     + " different walks");
         }
+    }
+
+    /**
+     * The recipe {@code choice} is, or null where it is no choice or an arm of it is one this cannot
+     * read.
+     *
+     * <p>Every arm or none. What the value is, is one of these, so a recipe over a subset of them is
+     * a range the value can be outside of.
+     *
+     * <p>Which values those are is {@link Choice}'s answer and not this method's. Asked there so
+     * that the readers of that question cannot come to disagree about it, which they had — an
+     * attempted construction answers one of several and three spellings of the question left it out.
+     *
+     * <p>Read where the choice stands, in the environment the choice stands in. An arm is not
+     * entered: what a {@code match} arm binds, what an {@code if}'s condition settles, and what an
+     * attempt's construction guarantees are facts about the arm and this records none of them
+     * ({@link Derivation.Chosen}). So an arm whose body reads what the arm itself bound reads a name
+     * nothing here has entered, and answers a place with no facts against it — sound, and no range
+     * (#973).
+     */
+    private Derivation chosen(Choice choice, Denotations at) {
+        if (choice == null) {
+            return null;
+        }
+        List<LinearForm<FactSubject>> forms = new ArrayList<>();
+        for (Core arm : choice.alternatives()) {
+            LinearForm<FactSubject> form = affineOf(arm, at);
+            if (form == null) {
+                return null;
+            }
+            forms.add(form);
+        }
+        return new Derivation.Chosen(forms);
     }
 
     /** The product {@code b} is, or null where either factor is a value nothing can be said of. A
@@ -676,7 +713,25 @@ final class Terms {
                     && sameForm(one.numerator(), other.numerator())
                     && sameForm(one.divisor(), other.divisor())
                     && sameExtent(one.divisorExtent(), other.divisorExtent());
+            case Derivation.Chosen one -> b instanceof Derivation.Chosen other
+                    && sameArms(one.arms(), other.arms());
         };
+    }
+
+    /** Whether two readings found the same arms in the same order. An arm answers where the
+     * condition beside it does, so a choice reordered is a different recipe and not this one read
+     * twice. */
+    private static boolean sameArms(List<LinearForm<FactSubject>> a,
+                                    List<LinearForm<FactSubject>> b) {
+        if (a.size() != b.size()) {
+            return false;
+        }
+        for (int i = 0; i < a.size(); i++) {
+            if (!sameForm(a.get(i), b.get(i))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Whether two extents run between the same places. Asked on the order and not of the record's

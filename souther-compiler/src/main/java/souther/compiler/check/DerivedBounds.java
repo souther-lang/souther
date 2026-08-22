@@ -6,6 +6,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.Bounds;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -19,11 +20,13 @@ import java.util.Set;
  * <p>A product of two values and a truncating quotient are not linear, so the domain holds them as
  * atoms and knows nothing of them. What their factors lie between it does know, and that is enough
  * to bound them — so this reads the factors out of a domain, puts the arithmetic through
- * {@link Intervals}, and hands back the domain with what came out taken as holding. A reduction's
- * answer is an atom for a different reason — it is what a library operation computed by applying a
- * closure over and over — and it is bounded by {@link InductiveBounds} rather than by a projection.
- * The two are one walk here because a fold's seed may be a product and a product's factor may be a
- * fold, and one graph with one memo is what keeps either from being derived twice.
+ * {@link Intervals}, and hands back the domain with what came out taken as holding. A value that is
+ * one of several is an atom for a reason of its own — nothing composes an {@code if} — and it is
+ * bounded by the range its arms span. A reduction's answer is one for a third reason, being what a
+ * library operation computed by applying a closure over and over, and it is bounded by
+ * {@link InductiveBounds} rather than by a projection. They are one walk here because a fold's seed
+ * may be a product and a product's factor may be a fold and an arm may be either, and one graph with
+ * one memo is what keeps any of them from being derived twice.
  *
  * <p>A projection and not an inference. Every bound is derived from the domain it was given, once,
  * and the results are taken in together at the end; nothing derived here is read back to derive
@@ -49,6 +52,13 @@ final class DerivedBounds {
      * any diagnostic says: a reading that derived every recipe in the behavior answers exactly what
      * a reading that derived three of them answers. So the property has nowhere else to be read,
      * and one that nothing reads stops being true without anything failing.
+     *
+     * <p>A reading is one evaluation of the recipes against one domain, and a walk's own readings
+     * are among them: what a step names is evaluated there and nowhere else, so a walk whose
+     * readings were unwatched would be exactly where the memo could stop holding unremarked. What
+     * the memo makes true is a claim about one reading and not about a body — a recipe asked twice
+     * under two domains is evaluated twice and rightly so, and what may not happen is the same
+     * recipe evaluated twice for one of them.
      */
     static List<List<FactSubject>> WATCHING;
 
@@ -78,15 +88,15 @@ final class DerivedBounds {
      * interval reasoning that tightens under its own answers that this declines to be.
      */
     static NumericDomain<FactSubject> refine(NumericDomain<FactSubject> base, Terms terms, Set<FactSubject> asked) {
-        Map<FactSubject, Bounds> derived = new LinkedHashMap<>();
+        Memo derived = new Memo();
         if ((!terms.derivations().isEmpty() || !terms.reductions().isEmpty()) && !base.isBottom()) {
             for (FactSubject atom : roots(terms, base, asked)) {
                 derive(atom, base, terms, derived, new LinkedHashSet<>());
             }
         }
-        watched(derived.keySet());
+        derived.watched();
         NumericDomain<FactSubject> out = base;
-        for (Map.Entry<FactSubject, Bounds> one : derived.entrySet()) {
+        for (Map.Entry<FactSubject, Bounds> one : derived.answered.entrySet()) {
             out = taking(out, one.getKey(), one.getValue(), terms);
         }
         return out;
@@ -118,13 +128,40 @@ final class DerivedBounds {
         return out;
     }
 
-    /** Records the recipes this reading evaluated, where a test is reading them. Every atom here
-     * had its recipe put through {@link Intervals}: {@link #derive} answers a second ask from what
-     * it remembered, so an atom is written once however many forms name it. */
-    private static void watched(Set<FactSubject> evaluated) {
-        List<List<FactSubject>> watching = WATCHING;
-        if (watching != null) {
-            watching.add(List.copyOf(evaluated));
+    /**
+     * What one reading has answered, and the recipes it evaluated to answer it.
+     *
+     * <p>Two halves and not one, because they say different things. What was answered is what a
+     * second ask of the same atom comes back with, which is what makes the recipes an evaluation over
+     * a graph rather than over the tree of paths through it. What was evaluated is how much of that
+     * was done, and it is a list because an atom appearing twice in it is the memo not holding —
+     * which is exactly what a set cannot say. Counted where a recipe is really put through, past the
+     * answer a second ask comes back with, so what it holds is work and not asks.
+     *
+     * <p>The second half is kept only while a test is reading it. Every compilation would otherwise
+     * write a value per recipe evaluated for nobody, and a hook a compilation pays for is one its
+     * answer could come to depend on.
+     */
+    private static final class Memo {
+
+        private final Map<FactSubject, Bounds> answered = new LinkedHashMap<>();
+
+        /** Null wherever no test is reading, which is every compilation but a test's. Kept as
+         * whether-to-record rather than as a list nobody reads, for the reason
+         * {@link InvariantChecker#OPENING} is: a hook that costs a compilation something is one the
+         * answer could come to depend on, and this one records a value per recipe evaluated. */
+        private final List<FactSubject> evaluated = WATCHING == null ? null : new ArrayList<>();
+
+        void evaluating(FactSubject atom) {
+            if (evaluated != null) {
+                evaluated.add(atom);
+            }
+        }
+
+        void watched() {
+            if (evaluated != null) {
+                WATCHING.add(List.copyOf(evaluated));
+            }
         }
     }
 
@@ -137,47 +174,86 @@ final class DerivedBounds {
      * being answered would mean the naming built an atom out of itself.
      */
     private static Bounds derive(FactSubject atom, NumericDomain<FactSubject> base, Terms terms,
-                                 Map<FactSubject, Bounds> done, Set<FactSubject> deriving) {
-        Bounds had = done.get(atom);
+                                 Memo done, Set<FactSubject> deriving) {
+        Bounds had = done.answered.get(atom);
         if (had != null) {
             return had;
         }
         if (!deriving.add(atom)) {
             throw new AnAtomComputedFromItself(atom);
         }
+        done.evaluating(atom);
         Bounds bounds = boundsFor(atom, base, terms, done, deriving);
         deriving.remove(atom);
-        done.put(atom, bounds);
+        done.answered.put(atom, bounds);
         return bounds;
     }
 
     /**
-     * What {@code atom} lies between, by whichever of the two things recorded about it says so.
+     * What {@code atom} lies between, by whichever of the things recorded about it says so.
      *
      * <p>Arithmetic outside the fragment is put through {@link Intervals}, which is a projection of
-     * what its operands lie between. A walk's answer is put through {@link InductiveBounds}, which
-     * proves a range holds it by checking one step. Both read the same {@code base} and neither reads
-     * what the other answered about the same atom, so the two compose the way the recipe graph does:
+     * what its operands lie between. A choice is spanned by its arms. A walk's answer is put through
+     * {@link InductiveBounds}, which proves a range holds it by checking one step. Each reads the
+     * same {@code base} and none reads what another answered about the same atom, so they compose the
+     * way the recipe graph does:
      * a fold whose seed is a product reaches the product through the form its walk was recorded with,
      * and a product of two folds reaches them through its factors.
      */
     private static Bounds boundsFor(FactSubject atom, NumericDomain<FactSubject> base, Terms terms,
-                                    Map<FactSubject, Bounds> done, Set<FactSubject> deriving) {
+                                    Memo done, Set<FactSubject> deriving) {
         InductiveBounds.Walk walk = terms.reductions().get(atom);
         if (walk != null) {
             // Each reading of the walk's own forms gets a memo of its own, since each is against a
             // different domain — the caller's, and the caller's with a candidate assumed. What is
             // shared is `deriving`, which is what says an atom was built out of itself, and that is
             // true of a recipe whatever domain it is read in.
-            return InductiveBounds.provenOf(walk, base, terms,
-                    (form, domain) -> boundsOf(form, domain, terms, new LinkedHashMap<>(), deriving));
+            return InductiveBounds.provenOf(walk, base, terms, (form, domain) -> {
+                Memo memo = new Memo();
+                Bounds answer = boundsOf(form, domain, terms, memo, deriving);
+                // A reading, and watched as one. What the walk reads is where a step's own recipes
+                // are evaluated, so a reading that could not be seen here was the one place the
+                // memo could stop holding without anything saying so.
+                memo.watched();
+                return answer;
+            });
         }
         return switch (terms.derivations().get(atom)) {
             case Derivation.Product product -> Intervals.product(
                     boundsOf(product.left(), base, terms, done, deriving),
                     boundsOf(product.right(), base, terms, done, deriving));
             case Derivation.Quotient quotient -> quotient(quotient, base, terms, done, deriving);
+            case Derivation.Chosen chosen -> chosen(chosen, base, terms, done, deriving);
         };
+    }
+
+    /**
+     * What a value that is one of several lies between: the range holding what every arm answers.
+     *
+     * <p>The value is one of the arms, so a range holding all of them holds it. Which arm it is
+     * depends on what chose it and this does not read that ({@link Derivation.Chosen}), so every arm
+     * counts and none is ruled out — an arm the reading says nothing about leaves the whole choice
+     * unbounded, which is what an arm nothing is known of comes to.
+     *
+     * <p>There is always an arm, so there is always a range: a choice is one of several and holding
+     * none is refused where a recipe is built rather than answered for here. A reader that took an
+     * empty list for a range with no ends would go on bounding nothing while the disagreement that
+     * produced it went unremarked.
+     *
+     * <p>Each arm is read against the domain this was handed, and the arms are read one after
+     * another out of the same memo. So a choice inside an arm is derived once however many arms
+     * stand over it, and the nesting costs what the recipes cost and not what a reading of every
+     * path through them would.
+     */
+    private static Bounds chosen(Derivation.Chosen chosen, NumericDomain<FactSubject> base,
+                                 Terms terms, Memo done,
+                                 Set<FactSubject> deriving) {
+        List<LinearForm<FactSubject>> arms = chosen.arms();
+        Bounds out = boundsOf(arms.get(0), base, terms, done, deriving);
+        for (LinearForm<FactSubject> arm : arms.subList(1, arms.size())) {
+            out = Bounds.spanning(out, boundsOf(arm, base, terms, done, deriving));
+        }
+        return out;
     }
 
     /**
@@ -209,7 +285,7 @@ final class DerivedBounds {
      * one above and not one this rule needs.
      */
     private static Bounds quotient(Derivation.Quotient quotient, NumericDomain<FactSubject> base,
-                                   Terms terms, Map<FactSubject, Bounds> done,
+                                   Terms terms, Memo done,
                                    Set<FactSubject> deriving) {
         Bounds divisor = boundsOf(quotient.divisor(), base, terms, done, deriving)
                 .meet(quotient.divisorExtent());
@@ -229,7 +305,7 @@ final class DerivedBounds {
      * everything else the reading has recorded.
      */
     private static Bounds boundsOf(LinearForm<FactSubject> form, NumericDomain<FactSubject> base, Terms terms,
-                                   Map<FactSubject, Bounds> done, Set<FactSubject> deriving) {
+                                   Memo done, Set<FactSubject> deriving) {
         NumericDomain<FactSubject> with = base;
         for (FactSubject atom : form.coefs().keySet()) {
             if (recorded(terms, atom)) {
