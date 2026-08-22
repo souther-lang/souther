@@ -592,4 +592,126 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
         assertEquals(List.of(), twice.countedTogether(),
                 () -> "and nothing about it is uncertain: " + twice.countedTogether());
     }
+
+    /**
+     * A rule reaching a fork through a call nothing was read about is still the caller's.
+     *
+     * <p>What a call answers out of is read off declarations that were written out, and the
+     * language implements some of its own and writes others as sugar over one another. Answered
+     * "this call rests on none of its arguments" where nothing was read, the rule reaching the fork
+     * through one was not followed — so the rules two call sites wrote were counted as one.
+     */
+    @Test
+    void aRuleReachingTheForkThroughACallNothingWasReadAboutIsStillTheCallers() {
+        Adequacy.BranchEvidence twice = arms("""
+                module example.rules
+
+                data Yes
+                data No
+                data Verdict = Yes | No
+                data Count = Int
+
+                let decide (p: (Int) -> String, x: Int): Verdict =
+                    if String.length(p(x)) > 0 then Yes else No
+
+                behavior twice : (a: Int, b: Int) -> Count
+                    constructs Count
+                let twice (a, b) =
+                    Count((if decide(n -> "x", a) == Yes then 1 else 0)
+                        + (if decide(m -> "", b) == Yes then 1 else 0))
+
+                example twice
+                    | "one each" : (1, 1) -> Count(1)
+                """, "twice");
+
+        assertEquals(8, twice.obligations(),
+                "the helper's fork is one obligation per rule handed to it, beside the two here");
+    }
+
+    /** And so is one reaching it through a name the body bound a function to. */
+    @Test
+    void andThroughANameTheBodyBoundAFunctionTo() {
+        Adequacy.BranchEvidence twice = arms("""
+                module example.rules
+
+                data Yes
+                data No
+                data Verdict = Yes | No
+                data Count = Int
+
+                let relay (b: Bool): Bool = b
+
+                let decide (p: (Int) -> Bool, x: Int): Verdict = {
+                    let f = relay
+                    if f(p(x)) then Yes else No
+                }
+
+                behavior twice : (a: Int, b: Int) -> Count
+                    constructs Count
+                let twice (a, b) =
+                    Count((if decide(n -> n < 18, a) == Yes then 1 else 0)
+                        + (if decide(m -> 18 < m, b) == Yes then 1 else 0))
+
+                example twice
+                    | "under and under" : (1, 1) -> Count(1)
+                """, "twice");
+
+        assertEquals(8, twice.obligations(), "one obligation per rule handed in");
+    }
+
+    /**
+     * A fork a helper wrote inside a block it hands away is still that helper's to be a copy of.
+     *
+     * <p>What stands nearest round it is then the copy of whatever the block was handed to, and the
+     * parameters the declaration named are not that one's. Read off the nearest copy alone, a fork
+     * whose rule the call site is holding says nothing about which rule it was.
+     */
+    @Test
+    void aForkWrittenInsideABlockItHandsAwayIsStillTheHelpersCopy() {
+        Adequacy.BranchEvidence twice = arms("""
+                module example.rules
+
+                data Count = Int
+
+                let classify (p: (Int) -> Bool, xs: List<Int>): List<Int> =
+                    List.map(x -> if p(x) then 1 else 0, xs)
+
+                behavior twice : (a: List<Int>, b: List<Int>) -> Count
+                    constructs Count
+                let twice (a, b) =
+                    Count(List.length(classify(n -> n < 18, a))
+                        + List.length(classify(m -> 18 < m, b)))
+
+                example twice
+                    | "one each" : ([ 1 ], [ 1 ]) -> Count(2)
+                """, "twice");
+
+        assertEquals(4, twice.obligations(), "one fork per rule handed to the helper");
+        assertEquals(2, twice.covered().size(), "and the one row reaches one arm of each");
+    }
+
+    /** And it says so wherever the value it stands in reaches. */
+    @Test
+    void andItSaysSoWhereverTheValueItStandsInReaches() {
+        Adequacy.BranchEvidence twice = arms("""
+                module example.rules
+
+                data Box = { value: Int }
+                data Count = Int
+
+                let decide (p: (Int) -> Bool, x: Int): Box =
+                    Box { value = if p(x) then 1 else 0 }
+
+                behavior twice : (a: Int, b: Int) -> Count
+                    constructs Count, Box
+                let twice (a, b) =
+                    Count(decide(n -> n < 18, a).value + decide(m -> 18 < m, b).value)
+
+                example twice
+                    | "under and under" : (1, 1) -> Count(1)
+                """, "twice");
+
+        assertEquals(4, twice.obligations(),
+                "the fork is in the helper's copy, whatever it was written into");
+    }
 }

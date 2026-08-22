@@ -16,10 +16,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Every fork the numbering reaches is one the declarations were read for.
  *
- * <p>Who owns the rule a fork decides by is read off the declarations, and asked of a fork the
- * reading never saw it answers that the declaration decides — which counts every copy of that fork
- * as one. That is the right answer for a fork nobody wrote a rule into and the wrong one for a fork
- * whose rule the caller supplies, and nothing about an absent entry says which of the two it is.
+ * <p>Who owns the rule a fork decides by is read off the declarations, and a fork the reading never
+ * saw is one it can say neither answer about. It is refused rather than answered, so a gap here
+ * stops a build instead of counting every copy of that fork as one — but a refusal is a poor place
+ * to find out, and what this is for is finding out before one is written.
  *
  * <p>So the two are held to each other here. A construct that becomes a fork somewhere the reading
  * of the declarations does not look — a lowering that makes forks out of something else, a pass

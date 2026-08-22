@@ -62,7 +62,7 @@ public final class CoverageSites {
      * that came out alike were counted as one obligation, and a rule nothing exercised was reported
      * as covered.
      */
-    private static DecidedBy decidedAt(CoverageOrigin fork, BindingOwner within,
+    private static DecidedBy decidedAt(CoverageOrigin fork, List<BindingOwner> within,
                                        DecisionSources decisions, SuppliedRules supplied) {
         if (!(decisions.at(fork) instanceof DecisionSource.Supplied by)) {
             return DecidedBy.THE_DECLARATION;
@@ -73,15 +73,25 @@ public final class CoverageSites {
         // recorded. Worked out here instead — from whatever names the fork's own subtree happens to
         // hold — a fork deciding by a rule that reduced to a constant is a fork with nothing to ask
         // about, and a combinator nested inside one answered for the fork above it.
-        List<SuppliedRules.RuleIdentity> rules = new ArrayList<>();
-        for (String parameter : by.parameters()) {
-            SuppliedRules.RuleIdentity rule = within == null ? null : supplied.at(within, parameter);
-            if (rule != null) {
-                rules.add(rule);
+        // The copy of the declaration that wrote this fork, which is not always the innermost copy
+        // the fork stands in: a helper's own fork can be written inside a block it hands to
+        // something else, and what is nearest round it is then that something else's. The parameters
+        // the declaration named say which copy is meant — only the expansion of the declaration that
+        // has them was handed rules at them — so the copies this stands in are read from the nearest
+        // outward until one answers for all of them.
+        for (BindingOwner owner : within) {
+            List<SuppliedRules.RuleIdentity> rules = new ArrayList<>();
+            for (String parameter : by.parameters()) {
+                SuppliedRules.RuleIdentity rule = supplied.at(owner, parameter);
+                if (rule != null) {
+                    rules.add(rule);
+                }
+            }
+            if (rules.size() == by.parameters().size()) {
+                return new DecidedBy.BySupplied(rules);
             }
         }
-        return rules.size() == by.parameters().size() ? new DecidedBy.BySupplied(rules)
-                : DecidedBy.NOT_SAID;
+        return DecidedBy.NOT_SAID;
     }
 
     /**

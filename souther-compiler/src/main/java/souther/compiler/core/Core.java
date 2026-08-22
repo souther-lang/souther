@@ -255,16 +255,16 @@ public sealed interface Core {
     /** {@code origin} is the fork the source wrote this as, carried from the AST so that the copies
      * an expansion made of one fork are one coverage obligation ({@link CoverageOrigin}). */
     /**
-     * {@code expansion} is which copy of a body this fork stands in, or null where it stands in the
-     * body as written. What settles a fork can be a rule the caller supplied, and which rule that
+     * {@code expansion} is which copy of a body this fork stands in, innermost first, empty where it
+     * stands in the body as written. What settles a fork can be a rule the caller supplied, and which rule that
      * was is a fact about this copy — so it travels with the fork rather than being recovered from
      * whatever names the fork's own subtree happens to hold. A rewrite that keeps a fork keeps this.
      */
     record If(Core cond, Core then, Core els, CoverageOrigin origin, Type type, SourcePos pos,
-              souther.compiler.types.BindingOwner expansion) implements Core {
+              List<souther.compiler.types.BindingOwner> expansion) implements Core {
 
         public If(Core cond, Core then, Core els, CoverageOrigin origin, Type type, SourcePos pos) {
-            this(cond, then, els, origin, type, pos, null);
+            this(cond, then, els, origin, type, pos, List.of());
         }
     }
 
@@ -280,18 +280,18 @@ public sealed interface Core {
      * clause is answered, so one always matches.
      */
     /**
-     * {@code expansion} is which copy of a body this fork stands in, or null where it stands in the
-     * body as written. What settles a fork can be a rule the caller supplied, and which rule that
+     * {@code expansion} is which copy of a body this fork stands in, innermost first, empty where it
+     * stands in the body as written. What settles a fork can be a rule the caller supplied, and which rule that
      * was is a fact about this copy — so it travels with the fork rather than being recovered from
      * whatever names the fork's own subtree happens to hold. A rewrite that keeps a fork keeps this.
      */
     record IfConstructed(Construct construct, Hir.Binder binder, Core then, List<ElseArm> els,
                          CoverageOrigin origin, Type type, SourcePos pos,
-                         souther.compiler.types.BindingOwner expansion) implements Core {
+                         List<souther.compiler.types.BindingOwner> expansion) implements Core {
 
         public IfConstructed(Construct construct, Hir.Binder binder, Core then, List<ElseArm> els,
                              CoverageOrigin origin, Type type, SourcePos pos) {
-            this(construct, binder, then, els, origin, type, pos, null);
+            this(construct, binder, then, els, origin, type, pos, List.of());
         }
     }
 
@@ -470,17 +470,17 @@ public sealed interface Core {
     }
 
     /**
-     * {@code expansion} is which copy of a body this fork stands in, or null where it stands in the
-     * body as written. What settles a fork can be a rule the caller supplied, and which rule that
+     * {@code expansion} is which copy of a body this fork stands in, innermost first, empty where it
+     * stands in the body as written. What settles a fork can be a rule the caller supplied, and which rule that
      * was is a fact about this copy — so it travels with the fork rather than being recovered from
      * whatever names the fork's own subtree happens to hold. A rewrite that keeps a fork keeps this.
      */
     record Match(Core scrutinee, List<Case> cases, CoverageOrigin origin, Type type, SourcePos pos,
-                 souther.compiler.types.BindingOwner expansion) implements Core {
+                 List<souther.compiler.types.BindingOwner> expansion) implements Core {
 
         public Match(Core scrutinee, List<Case> cases, CoverageOrigin origin, Type type,
                      SourcePos pos) {
-            this(scrutinee, cases, origin, type, pos, null);
+            this(scrutinee, cases, origin, type, pos, List.of());
         }
     }
 

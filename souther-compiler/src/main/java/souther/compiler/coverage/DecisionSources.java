@@ -224,7 +224,7 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolea
                         // inside it would decide somewhere else — read for what it holds, a rule
                         // wrapped in a lambda and handed to a helper that ignores it made every copy
                         // of the fork above its own obligation.
-                        if (uses.contains(i)) {
+                        if (uses == null || uses.contains(i)) {
                             restsOn(call.args().get(i), answersOn, bound, out);
                         }
                     }

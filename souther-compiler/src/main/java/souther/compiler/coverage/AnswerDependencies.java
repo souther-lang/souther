@@ -22,7 +22,11 @@ import java.util.Set;
  * covered.
  *
  * <p>Taken to a fixed point rather than in an order, so nothing here has to know which declaration
- * calls which. Declarations are not recursive, so the point is reached.
+ * calls which. It is reached: what each declaration answers out of is a set of its own argument
+ * places, so there are finitely many of them, and a pass only ever adds — a declaration that rests
+ * on an argument on one pass rests on it on the next. A recursive helper is read like any other and
+ * takes as many passes as its own answer needs, which is why the walk runs until nothing moves
+ * rather than for a number of passes worked out from how many declarations there are.
  */
 public record AnswerDependencies(Map<String, Set<Integer>> bySlot) {
 
@@ -35,26 +39,37 @@ public record AnswerDependencies(Map<String, Set<Integer>> bySlot) {
         bySlot = Map.copyOf(copy);
     }
 
-    /** Which of {@code declaration}'s arguments its answer depends on, empty where none or unknown. */
+    /**
+     * Which of {@code declaration}'s arguments its answer depends on, or null where nothing here
+     * says.
+     *
+     * <p>Null and not empty. Nothing said is not the same as nothing depended on, and folded
+     * together the second swallows the first: a call this never read — one the language implements
+     * rather than writes, one written as sugar over another, one reached through a name — was
+     * answered "this call rests on none of its arguments", and a rule reaching a fork through it
+     * was not followed at all. Which is a rule two call sites wrote counted as one.
+     */
     public Set<Integer> of(String declaration) {
-        return bySlot.getOrDefault(declaration, Set.of());
+        return bySlot.get(declaration);
     }
 
     /** What {@code declarations} answer out of. */
     public static AnswerDependencies of(Map<String, Hir.FnDef> declarations) {
         Map<String, Set<Integer>> bySlot = new LinkedHashMap<>();
-        for (int pass = 0; pass < declarations.size() + 1; pass++) {
-            boolean moved = false;
+        boolean moved = true;
+        while (moved) {
+            moved = false;
             for (Map.Entry<String, Hir.FnDef> each : declarations.entrySet()) {
-                Set<Integer> was = bySlot.getOrDefault(each.getKey(), Set.of());
+                Set<Integer> was = bySlot.get(each.getKey());
                 Set<Integer> now = answeredOutOf(each.getValue(), bySlot);
+                if (was != null) {
+                    now = new LinkedHashSet<>(now);
+                    now.addAll(was);
+                }
                 if (!now.equals(was)) {
-                    bySlot.put(each.getKey(), now);
+                    bySlot.put(each.getKey(), Set.copyOf(now));
                     moved = true;
                 }
-            }
-            if (!moved) {
-                break;
             }
         }
         return bySlot.isEmpty() ? NONE : new AnswerDependencies(bySlot);
@@ -105,13 +120,19 @@ public record AnswerDependencies(Map<String, Set<Integer>> bySlot) {
                 dependsOn(let.body(), params, bySlot, wider, out);
                 return;
             }
+            // A call through a name is a call to whatever that name was given, and what that is
+            // this does not follow. Read as a call to a declaration of that name, nothing answers
+            // for it and the argument it answers out of goes unread.
             case Hir.Apply call when call.function() instanceof Hir.Var.Denoting callee
                     && !(callee.denotes() instanceof ValueName.Local) -> {
                 // Only the arguments the callee answers out of. One it never reads is not something
                 // this call's value depends on, whatever else that argument would decide elsewhere.
-                Set<Integer> uses = bySlot.getOrDefault(callee.reaches(), Set.of());
+                Set<Integer> uses = bySlot.get(callee.reaches());
                 for (int i = 0; i < call.args().size(); i++) {
-                    if (uses.contains(i)) {
+                    // Every argument where nothing says which of them this call rests on. What is
+                    // lost by reading one it does not is a value said to reach further than it
+                    // does; what is lost the other way is a value that reaches and is not followed.
+                    if (uses == null || uses.contains(i)) {
                         dependsOn(call.args().get(i), params, bySlot, bound, out);
                     }
                 }

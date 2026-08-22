@@ -68,23 +68,34 @@ class ARewriteThatKeepsAForkKeepsWhichCopyItIsTest {
         assertNotNull(forks, "the behavior under test has a body");
         assertTrue(forks.size() >= 4,
                 () -> "the model under test writes forks inside copies: " + forks.size());
+        assertTrue(forks.stream().anyMatch(fork -> writtenInACopy(forks, fork)
+                        && MODULE.equals(origin(fork).module())),
+                "and one of them is a helper of this module's own, spliced twice");
 
         // Every fork the passes answered with that stands in a copy says which copy, and the ones
         // written where they stand say they are in none. Both are answers; what is refused is a
         // fork inside a copy that lost it on the way through.
         List<String> lost = new ArrayList<>();
         for (Core fork : forks) {
-            BindingOwner within = within(fork);
-            if (writtenInACopy(fork) && within == null) {
+            java.util.List<BindingOwner> within = within(fork);
+            if (writtenInACopy(forks, fork) && within.isEmpty()) {
                 lost.add(fork.toString());
             }
         }
         assertEquals(List.of(), lost, () -> "forks that lost which copy they are in: " + lost);
     }
 
-    /** Whether {@code fork} came out of a body spliced into this one. */
-    private static boolean writtenInACopy(Core fork) {
-        return origin(fork) != null && !MODULE.equals(origin(fork).module());
+    /**
+     * Whether {@code fork} came out of a body spliced into this one.
+     *
+     * <p>Asked of how many of it there are and not of which module wrote it. A helper of this
+     * module's own is spliced into each body that calls it as surely as the library's is, and a
+     * reading that told them apart by the module left every copy this module wrote unchecked —
+     * which is the case the provenance is most needed for.
+     */
+    private static boolean writtenInACopy(List<Core> forks, Core fork) {
+        return forks.stream().filter(each -> origin(each) != null
+                && origin(each).equals(origin(fork))).count() > 1;
     }
 
     private static souther.compiler.types.CoverageOrigin origin(Core fork) {
@@ -96,12 +107,12 @@ class ARewriteThatKeepsAForkKeepsWhichCopyItIsTest {
         };
     }
 
-    private static BindingOwner within(Core fork) {
+    private static java.util.List<BindingOwner> within(Core fork) {
         return switch (fork) {
             case Core.If iff -> iff.expansion();
             case Core.Match m -> m.expansion();
             case Core.IfConstructed ic -> ic.expansion();
-            default -> null;
+            default -> java.util.List.of();
         };
     }
 
