@@ -521,8 +521,8 @@ final class Witnesses {
         Set<Integer> padded = new LinkedHashSet<>();
         for (CanonicalStop stop : stops(canonical, writes)) {
             atAColumn.put(stop.adjacency(), stop.separator());
-            if (padsWithSpaces(source, had.get(stop.adjacency()),
-                    had.get(stop.adjacency() + 1))) {
+            if (padsAfterTheSeparator(source, had.get(stop.adjacency()),
+                    had.get(stop.adjacency() + 1), stop.separator())) {
                 padded.add(stop.adjacency());
             }
         }
@@ -566,20 +566,31 @@ final class Witnesses {
     }
 
     /**
-     * Whether what the source writes at a stop is padding this rule can answer for.
+     * Whether what the source writes at a stop reads as the separator and then this rule's padding.
      *
-     * <p>Spaces, and nothing else. A column says where a connector begins and the padding that
-     * carries it there is spaces; a source that wrote a tab has written something a column cannot
-     * be the answer about, and it is the spacing rule that quotes characters. So this is what
-     * divides the two families at a stop, and it is asked in one place because the two must not
-     * both answer and must not both stay silent — the first is a conflict the repair refuses, and
-     * the second leaves a difference no rule accounts for.
+     * <p>The canonical form writes a separator and then the spaces that carry the connector out to
+     * the column, and this asks whether the source's run comes apart the same way: the separator
+     * itself, and after it spaces and nothing else. That is the whole of what divides the two
+     * families at a stop, and it is asked in one place because they must neither both answer about
+     * the same characters — a conflict the repair refuses — nor both stay silent, which leaves a
+     * difference no rule accounts for.
      *
-     * <p>A tab reaches a column as well as spaces do, so a rule reading only the column the source
-     * arrived at would find nothing wrong with a text that is not the canonical form.
+     * <p>Both halves are the question. Asked only whether what stands there is spaces, a run that
+     * is <em>empty</em> answers yes — a source that wrote no separator at all would be this rule's,
+     * and a one-row table with no space before its arrow would be told that its rows do not line up
+     * with each other. And a tab reaches a column as well as spaces do, so a run this admitted on
+     * the strength of the column it arrived at would leave a text that is not the canonical form
+     * with nothing said against it.
+     *
+     * <p>Written against {@code separator} rather than against one space, so a stop whose separator
+     * is nothing needs no second reading of this: the prefix is there vacuously and all of the run
+     * is padding.
      */
-    static boolean padsWithSpaces(String source, SyntaxToken before, SyntaxToken after) {
-        return source.substring(before.end(), after.start()).chars().allMatch(c -> c == ' ');
+    static boolean padsAfterTheSeparator(String source, SyntaxToken before, SyntaxToken after,
+            String separator) {
+        String run = source.substring(before.end(), after.start());
+        return run.startsWith(separator)
+                && run.substring(separator.length()).chars().allMatch(c -> c == ' ');
     }
 
     /**
@@ -643,7 +654,7 @@ final class Witnesses {
             if (between.indexOf('\n') >= 0 || between.contains("//")) {
                 continue;
             }
-            if (!padsWithSpaces(source, had.get(i), had.get(i + 1))) {
+            if (!padsAfterTheSeparator(source, had.get(i), had.get(i + 1), stop.separator())) {
                 continue;   // the spacing rule is answering this run; asked again once it has
             }
             hadAt.computeIfAbsent(stop.occurrence().unit(), _ -> new LinkedHashSet<>())

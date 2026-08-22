@@ -58,6 +58,14 @@ class ARowOfATableIsWrittenAtItsTablesColumnTest {
                     + "    | \"long description\" : (\"abc\") -> X\n"
                     + "    | \"short\" : (\"\t\") -> Y\n";
 
+    /**
+     * A table of one row that wrote no separator at all. There is no question about lining rows up
+     * here — a table of one row is at its own width — so what is wrong with it is that a space is
+     * missing, and nothing else.
+     */
+    private static final String NO_SEPARATOR =
+            "examples for demo\n\nfake f\n    | (A)-> X\n";
+
     /** The canonical form of a source, with both texts' tokens read back. */
     private record Written(Formatter.CanonicalForm form, Witnesses.Pairing pairing) {
 
@@ -330,6 +338,29 @@ class ARowOfATableIsWrittenAtItsTablesColumnTest {
                 "and repairing what the rules say writes it");
     }
 
+    /**
+     * A row that wrote no separator is told that, and not that its rows do not line up.
+     *
+     * <p>What the canonical form writes at a stop is the separator and then the padding, and which
+     * of the two rules answers is settled by whether the source's run comes apart the same way. A
+     * run of spaces and no separator comes apart that way only if the separator is nothing — so a
+     * source that wrote no space at all is the spacing rule's, and the table is not brought into
+     * it. Asked instead whether what stands there is spaces, an empty run answers yes, and this
+     * one-row table is told its rows disagree with each other.
+     */
+    @Test
+    void aRowThatWroteNoSeparatorIsToldThatAndNotAboutItsColumn() {
+        Deviations.Report report = Deviations.of(NO_SEPARATOR);
+
+        Set<String> rules = new LinkedHashSet<>();
+        report.deviations().forEach(d -> rules.add(d.rule()));
+        assertEquals(Set.of("what goes between two tokens on a line"), rules);
+        assertTrue(report.whole(), "and repairing what the rules say writes the canonical form");
+        assertEquals(List.of(), Witnesses.columns(NO_SEPARATOR,
+                Formatter.canonicalize(CstParser.parse(NO_SEPARATOR).root())),
+                "the column rule has nothing to say about this run");
+    }
+
     /** Every stop the rule lists is one some source in the repository writes. */
     @Test
     void everyStopIsReached() {
@@ -353,7 +384,8 @@ class ARowOfATableIsWrittenAtItsTablesColumnTest {
      */
     private static List<String> sources() {
         List<String> out = new ArrayList<>(
-                List.of(TWO_TABLES, A_TAB_REACHING_THE_COLUMN, A_TAB_AFTER_A_COLUMN));
+                List.of(TWO_TABLES, A_TAB_REACHING_THE_COLUMN, A_TAB_AFTER_A_COLUMN,
+                        NO_SEPARATOR));
         out.addAll(WhatGoesBetweenTwoTokensOnALineTest.corpus());
         out.addAll(inTheRepository());
         return out;

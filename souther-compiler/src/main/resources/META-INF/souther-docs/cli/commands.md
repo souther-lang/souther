@@ -289,7 +289,8 @@ What stands between two tokens the same line holds:
 - what goes between two tokens on a line — one space, or none. The two answers quote the characters,
   so a source that wrote a line break where neither text ends a line reads it back as `\n`. At a
   table's column this answers about the separator and the column rule about the padding after it,
-  which is why a tab written there is quoted here rather than counted as a column.
+  so what is written there is this rule's until the separator is what the canonical form has —
+  a tab, or no space at all, is quoted here rather than reported as a column the row missed.
 
 Whether a construct is written down the page at all. The two answers are `on one line` and `down the
 page`, and which rule is named is which one decided the form:

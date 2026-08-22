@@ -312,10 +312,10 @@ final class Repair {
             if (between.indexOf('\n') >= 0 || between.contains("//")) {
                 continue;   // the source broke the row, or wrote a comment there
             }
-            if (!Witnesses.padsWithSpaces(source, had.get(i), had.get(i + 1))) {
+            String separator = stop.separator();
+            if (!Witnesses.padsAfterTheSeparator(source, had.get(i), had.get(i + 1), separator)) {
                 continue;   // the spacing rule is writing this run, and two of us must not
             }
-            String separator = stop.separator();
             if (separator.chars().anyMatch(c -> c != ' ')) {
                 throw new IllegalStateException(
                         "a column stop whose separator is not spaces ([" + separator + "]); what is"
