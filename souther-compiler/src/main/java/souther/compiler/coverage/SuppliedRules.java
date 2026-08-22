@@ -1,7 +1,7 @@
 package souther.compiler.coverage;
 
-import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.RuleOrigin;
 import souther.compiler.types.ValueName;
 
 import java.util.LinkedHashMap;
@@ -71,7 +71,22 @@ public record SuppliedRules(Map<BindingOwner, Map<String, RuleIdentity>> byExpan
         /** A declaration named at the call site. Naming it twice hands in one rule. */
         record Named(ValueName declaration) implements RuleIdentity {}
 
-        /** A rule written out at the call site, told from every other by where it is written. */
-        record Written(SourcePos at) implements RuleIdentity {}
+        /**
+         * A rule the source wrote out, told from every other by which block of that source it is.
+         *
+         * <p>Its origin and not its position. A copy of a body a reader cannot open is stamped with
+         * the call site that spliced it, so two rules written in one library helper come to one
+         * position and one rule copied to two call sites comes to two — the first counts two rules
+         * as one, and the second asks for a row establishing what another already does.
+         */
+        record Written(RuleOrigin rule) implements RuleIdentity {
+
+            public Written {
+                if (!rule.isWritten()) {
+                    throw new IllegalArgumentException(
+                            "a rule told apart by which block it is was written by some source");
+                }
+            }
+        }
     }
 }

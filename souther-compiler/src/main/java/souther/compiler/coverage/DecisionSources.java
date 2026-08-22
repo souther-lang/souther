@@ -69,7 +69,13 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork) {
      * second reads the forks with those summaries in hand. The first is taken to a fixed point
      * rather than in an order, so nothing here has to know which declaration calls which.
      */
-    public static DecisionSources of(Map<String, Hir.FnDef> declarations) {
+    public static DecisionSources of(Map<String, Hir.FnDef> reachable, Hir.FnDef... own) {
+        Map<String, Hir.FnDef> declarations = new LinkedHashMap<>(reachable);
+        for (Hir.FnDef each : own) {
+            if (each != null) {
+                declarations.put(each.name(), each);
+            }
+        }
         Map<String, Set<Integer>> answersOn = new LinkedHashMap<>();
         for (int pass = 0; pass < declarations.size() + 1; pass++) {
             boolean moved = false;
@@ -110,21 +116,53 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork) {
         if (!(fn.body() instanceof Hir.FnBody.Written written)) {
             return;
         }
-        forks(written.expr(), Rules.of(fn), answersOn, out);
+        forks(written.expr(), Rules.of(fn), answersOn, new LinkedHashMap<>(), out);
     }
 
+    /**
+     * Every fork {@code e} writes, under the names in force where each of them stands.
+     *
+     * <p>Carried down rather than taken again at the fork. A rule bound to a name a line above the
+     * fork that reads it is in force there and nowhere in the condition, so a reading that started
+     * afresh at each fork found the name and not what it stands for — and called a fork the caller
+     * decides the declaration's own.
+     */
     private static void forks(Hir.Expr e, Rules rules, Map<String, Set<Integer>> answersOn,
+                              Map<BindingId, Set<String>> bound,
                               Map<CoverageOrigin, DecisionSource> out) {
-        if (e instanceof Hir.If iff) {
-            Set<String> on = new LinkedHashSet<>();
-            rules.restsOn(iff.cond(), answersOn, new LinkedHashMap<>(), on);
-            // Written down whichever it came to. A fork with an entry saying `Own` is one this walk
-            // reached and read; one with no entry is one it never saw, and the two are answered
-            // alike by design rather than by both being absent.
-            out.putIfAbsent(iff.origin(), on.isEmpty() ? DecisionSource.OWN
-                    : new DecisionSource.Supplied(on));
+        switch (e) {
+            case Hir.If iff -> said(iff.origin(), iff.cond(), rules, answersOn, bound, out);
+            // The guards of a comprehension are forks of the lowering rather than of the source, and
+            // the lowering runs after the rule has been substituted in. Read here, where the rule is
+            // still a parameter: read afterwards, a guard resting on a rule the caller supplied is a
+            // fork nothing wrote and every copy of it is counted as one.
+            case Hir.ListComp comp -> {
+                for (int i = 0; i < comp.guards().size(); i++) {
+                    said(comp.origin().lowered(i), comp.guards().get(i), rules, answersOn, bound,
+                            out);
+                }
+            }
+            case Hir.LetIn let when let.binder() != null && let.binder().binding() != null -> {
+                Set<String> holds = new LinkedHashSet<>();
+                rules.restsOn(let.value(), answersOn, bound, holds);
+                forks(let.value(), rules, answersOn, bound, out);
+                Map<BindingId, Set<String>> wider = new LinkedHashMap<>(bound);
+                wider.put(let.binder().binding(), holds);
+                forks(let.body(), rules, answersOn, wider, out);
+                return;
+            }
+            default -> { }
         }
-        Hir.forEachChild(e, child -> forks(child, rules, answersOn, out));
+        Hir.forEachChild(e, child -> forks(child, rules, answersOn, bound, out));
+    }
+
+    private static void said(CoverageOrigin fork, Hir.Expr cond, Rules rules,
+                             Map<String, Set<Integer>> answersOn,
+                             Map<BindingId, Set<String>> bound,
+                             Map<CoverageOrigin, DecisionSource> out) {
+        Set<String> on = new LinkedHashSet<>();
+        rules.restsOn(cond, answersOn, bound, on);
+        out.putIfAbsent(fork, on.isEmpty() ? DecisionSource.OWN : new DecisionSource.Supplied(on));
     }
 
     /** The rules one declaration was handed: its function parameters, by binding and by place. */
@@ -181,10 +219,12 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork) {
                 case Hir.Apply call when call.function() instanceof Hir.Var.Denoting callee -> {
                     Set<Integer> uses = answersOn.getOrDefault(callee.reaches(), Set.of());
                     for (int i = 0; i < call.args().size(); i++) {
-                        // An argument the callee's answer does not rest on is read for what it is:
-                        // the rule may still be applied inside it, and passing over it would call a
-                        // fork of a lambda written here the declaration's own.
-                        if (uses.contains(i) || !(call.args().get(i) instanceof Hir.Var)) {
+                        // Only the arguments the callee's answer rests on. An argument it never
+                        // reads decides nothing about what this call comes to, whatever the rule
+                        // inside it would decide somewhere else — read for what it holds, a rule
+                        // wrapped in a lambda and handed to a helper that ignores it made every copy
+                        // of the fork above its own obligation.
+                        if (uses.contains(i)) {
                             restsOn(call.args().get(i), answersOn, bound, out);
                         }
                     }

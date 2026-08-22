@@ -315,7 +315,7 @@ class CompilePostfixApplicationTest {
                 new ReachName.OfLibrary(map), java.util.List.of(),
                 souther.compiler.types.ConstructionOrigin.own(), at, null);
         Hir.Apply nameless = new Hir.Apply(new Hir.Block(java.util.List.of(),
-                new Hir.IntLit(1, at, null), at, null), java.util.List.of(),
+                new Hir.IntLit(1, at, null), souther.compiler.types.RuleOrigin.unwritten(), at, null), java.util.List.of(),
                 souther.compiler.types.ConstructionOrigin.own(), at, null);
 
         assertTrue(named.appliesAName());

@@ -364,4 +364,127 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
         assertEquals(6, twice.obligations(),
                 "the helper's fork is one obligation, beside the two written here");
     }
+
+    /**
+     * A rule bound to a name a line above the fork is in force where the fork stands.
+     *
+     * <p>Read afresh at each fork, the environment the {@code let} put the rule in is gone and the
+     * condition names something the reading knows nothing about — so the fork is called the
+     * declaration's own, and the rules two call sites wrote are counted as one.
+     */
+    @Test
+    void aRuleBoundAboveTheForkIsInForceAtIt() {
+        Adequacy.BranchEvidence twice = arms("""
+                module example.rules
+
+                data Yes
+                data No
+                data Verdict = Yes | No
+                data Count = Int
+
+                let decide (p: (Int) -> Bool, x: Int): Verdict = {
+                    let q = p
+                    if q(x) then Yes else No
+                }
+
+                behavior twice : (a: Int, b: Int) -> Count
+                    constructs Count
+                let twice (a, b) =
+                    Count((if decide(n -> n < 18, a) == Yes then 1 else 0)
+                        + (if decide(m -> 18 < m, b) == Yes then 1 else 0))
+
+                example twice
+                    | "under and under" : (1, 1) -> Count(1)
+                """, "twice");
+
+        assertEquals(8, twice.obligations(),
+                "the helper's fork is one obligation per rule handed to it, beside the two here");
+    }
+
+    /**
+     * And so are the guards of a comprehension, which are forks the lowering makes.
+     *
+     * <p>Read after the lowering, the rule has been substituted in and the guard is a fork nothing
+     * declared — so every copy of it is counted as one, whatever each call site supplied.
+     */
+    @Test
+    void andSoAreTheGuardsOfAComprehension() {
+        Adequacy.BranchEvidence twice = arms("""
+                module example.rules
+
+                data Count = Int
+
+                let choose (p: (Int) -> Bool, x: Int): List<Int> = [ x | p(x) ]
+
+                behavior twice : (a: Int, b: Int) -> Count
+                    constructs Count
+                let twice (a, b) =
+                    Count(List.length(choose(n -> n < 18, a))
+                        + List.length(choose(m -> 65 <= m, b)))
+
+                example twice
+                    | "under the first and under the second" : (1, 1) -> Count(1)
+                """, "twice");
+
+        assertEquals(4, twice.obligations(), "one guard per rule handed to it");
+        assertEquals(2, twice.covered().size(), "and the one row reaches one arm of each");
+    }
+
+    /**
+     * A rule wrapped in a lambda and handed to a helper that never reads it decides nothing.
+     *
+     * <p>The wrapper is not a name, so a reading that descended into every argument that is not one
+     * found the rule inside it and called the fork above the caller's to decide — which owes each
+     * call site a row for a rule that settles nothing there.
+     */
+    @Test
+    void aRuleWrappedAndHandedToAHelperThatIgnoresItDecidesNothing() {
+        Adequacy.BranchEvidence twice = arms("""
+                module example.rules
+
+                data Yes
+                data No
+                data Verdict = Yes | No
+                data Count = Int
+
+                let ignore (p: (Int) -> Bool, x: Int): Bool = x > 0
+
+                let decide (p: (Int) -> Bool, x: Int): Verdict =
+                    if ignore(y -> p(y), x) then Yes else No
+
+                behavior twice : (a: Int, b: Int) -> Count
+                    constructs Count
+                let twice (a, b) =
+                    Count((if decide(n -> n < 18, a) == Yes then 1 else 0)
+                        + (if decide(m -> 18 < m, b) == Yes then 1 else 0))
+
+                example twice
+                    | "both over" : (1, 1) -> Count(2)
+                """, "twice");
+
+        assertEquals(6, twice.obligations(),
+                "the helper's fork is one obligation, beside the two written here");
+    }
+
+    /** One rule copied into two bodies is one rule, wherever the copy is stamped. */
+    @Test
+    void oneRuleCopiedIntoTwoBodiesIsOneRule() {
+        Adequacy.BranchEvidence twice = arms("""
+                module example.rules
+
+                data Count = Int
+
+                let evens (xs: List<Int>): List<Int> = List.filter(x -> x > 0, xs)
+
+                behavior twice : (a: List<Int>, b: List<Int>) -> Count
+                    constructs Count
+                let twice (a, b) =
+                    Count(List.length(evens(a)) + List.length(evens(b)))
+
+                example twice
+                    | "one each" : ([ 1 ], [ 1 ]) -> Count(2)
+                """, "twice");
+
+        assertEquals(2, twice.obligations(), "one rule, copied twice");
+    }
 }

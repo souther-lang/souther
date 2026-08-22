@@ -65,6 +65,10 @@ public final class AstBuilder {
      * number is taken once, where the construct is recognised.
      */
     private int constructCounter = 0;
+    /** How many blocks this source has been read to hold, which is what numbers the next one. Counted
+     *  apart from the constructs: a block is not a fork, and one counter for both would make each
+     *  one's numbers turn on how many of the other stood before it. */
+    private int ruleCounter = 0;
     /**
      * How many rows this source has been read to write for each behavior, which is what numbers the
      * next one ({@link RowIdentity.Unnamed}).
@@ -109,6 +113,12 @@ public final class AstBuilder {
      */
     private CoverageOrigin construct(CoverageConstruct kind) {
         return CoverageOrigin.written(moduleName, constructCounter++, kind);
+    }
+
+    /** Which block of this source the next one is. Taken here for the same reason the construct's
+     *  number is: this is the one place reading the syntax, and a copy has to carry it. */
+    private souther.compiler.types.RuleOrigin rule() {
+        return souther.compiler.types.RuleOrigin.written(moduleName, ruleCounter++);
     }
 
     // --- module ---
@@ -987,7 +997,7 @@ public final class AstBuilder {
                         at, bodyRegion);
             }
         }
-        return new Ast.Block(List.copyOf(params), body, pos, region(n));
+        return new Ast.Block(List.copyOf(params), body, rule(), pos, region(n));
     }
 
     private Ast.Expr fieldGetter(SyntaxNode n) {
@@ -1002,7 +1012,7 @@ public final class AstBuilder {
         // them: the parameter is a name nobody typed, and the characters here are the field's.
         Ast.Expr body = new Ast.FieldAccess(Ast.Var.desugared(param, pos), nameOf(field),
                 posOf(field), region(n));
-        return Ast.Block.desugared(List.of(param), body, pos, region(n));
+        return Ast.Block.desugared(List.of(param), body, rule(), pos, region(n));
     }
 
     private Ast.Expr newData(SyntaxNode n) {

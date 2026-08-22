@@ -1108,7 +1108,8 @@ public final class HelperInliner {
                     tg.region());
             case Hir.ListComp comp -> new Hir.ListComp(inline(comp.element()), inlineList(comp.guards()),
                     comp.origin(), comp.pos(), comp.region());
-            case Hir.Block block -> new Hir.Block(block.params(), inline(block.body()), block.pos(),
+            case Hir.Block block -> new Hir.Block(block.params(), inline(block.body()), block.rule(),
+                    block.pos(),
                     block.region());
             case Hir.IntLit _ -> e;
             case Hir.DecimalLit _ -> e;
@@ -1301,10 +1302,10 @@ public final class HelperInliner {
                     supplied.handed(mine, p.name(),
                             new souther.compiler.coverage.SuppliedRules.RuleIdentity.Named(
                                     handed.denotes()));
-                } else if (authored instanceof Hir.Block written) {
+                } else if (authored instanceof Hir.Block written && written.rule().isWritten()) {
                     supplied.handed(mine, p.name(),
                             new souther.compiler.coverage.SuppliedRules.RuleIdentity.Written(
-                                    written.pos()));
+                                    written.rule()));
                 }
                 if (arg instanceof Hir.Var.Denoting fnName) {
                     // A name handed to a function parameter is substituted through: what
@@ -1401,7 +1402,7 @@ public final class HelperInliner {
         // name, and these are the parameters and the call it stands for.
         return new Hir.Block(params,
                 new Hir.Apply(function, args, ConstructionOrigin.own(), function.pos(), null),
-                function.pos(), null);
+                souther.compiler.types.RuleOrigin.unwritten(), function.pos(), null);
     }
 
     /**
@@ -1907,8 +1908,10 @@ public final class HelperInliner {
                 for (Hir.Binder p : block.params()) {
                     params.add(renaming.copy().of(p));
                 }
+                // The rule is the block's own and is not renamed. What a copy is stamped with is
+                // where a reader is sent, and which rule this is has to be the same in every copy.
                 yield new Hir.Block(params,
-                        rename(block.body(), renaming),
+                        rename(block.body(), renaming), block.rule(),
                         renaming.at(block.pos()), renaming.over(block.region()));
             }
             case Hir.IntLit lit -> renaming.stamps()
