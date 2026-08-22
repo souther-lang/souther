@@ -1614,7 +1614,7 @@ An operation not named here guarantees nothing that can be relied on, and a clau
 [#invariant-discharge-arithmetic]
 ==== What arithmetic outside the fragment lies between
 
-A product of two values and a truncating division are not linear, so neither is a form the procedure derives in and each names one value the guards may say nothing about (<<invariant-discharge-terms>>). What is known of such a value is read off what it was computed from, where the construction stands: a quantity times a unit price is not negative wherever both of them are, and there is no third `+guard+` about the product that an author could write instead.
+A product of two values, a truncating division and a division rounded to a scale are not linear, so none of them is a form the procedure derives in and each names one value the guards may say nothing about (<<invariant-discharge-terms>>). What is known of such a value is read off what it was computed from, where the construction stands: a quantity times a unit price is not negative wherever both of them are, and there is no third `+guard+` about the product that an author could write instead.
 
 This is not a rule about `+*+` or `+/+`, in the way <<invariant-discharge-guarantees>> states rules about operations. Nothing holds of a product wherever it is written. What holds is decided by what the path establishes about the two factors at the point the clause is read, and a construction under guards that say nothing about them is reported exactly as before.
 
@@ -1635,13 +1635,47 @@ let total (a, b) = {
 }
 ----
 
-*A quotient.* `+x / y+` over `+Int+` truncates toward zero (<<stdlib-int>>). Where what is established at the construction holds every divisor it admits away from zero, the quotient lies within the hull of the quotients of the two ranges' ends — the four of them, as a product's are. A divisor held off zero is of one sign throughout, and over such a range the divide moves one way along each operand with the other held, in a direction that may turn with that other's sign; so what the rule is about is the corners and not an order the ends are taken in. Truncation toward zero never sends a larger value to a smaller one, so the corners put through it are still where the answer stops. A divisor the reading reads as a constant is this with both ends at one number, and a name given a constant is that constant (<<invariant-discharge-terms>>).
+*A truncating division.* Division of whole numbers truncates toward zero (<<stdlib-int>>). Which spelling it was written with does not enter into what is known of it: `+/+` aborts on a zero divisor and `+Int.divide+` answers one as a case, and where both answer they answer the same number, so the `+Int+` the second's value arm binds *is* the quotient the first computes and the two are one value (<<invariant-discharge-terms>>). What decides the rule is that the value is a truncating quotient of two operands, which both spellings have and neither owns; an author who writes the function because the divisor is not a literal they can argue about is told exactly what an author who writes the operator is told.
+
+Where what is established at the construction holds every divisor it admits away from zero, the quotient lies within the hull of the quotients of the two ranges' ends — the four of them, as a product's are. A divisor held off zero is of one sign throughout, and over such a range the divide moves one way along each operand with the other held, in a direction that may turn with that other's sign; so what the rule is about is the corners and not an order the ends are taken in. Truncation toward zero never sends a larger value to a smaller one, so the corners put through it are still where the answer stops. A divisor the reading reads as a constant is this with both ends at one number, and a name given a constant is that constant (<<invariant-discharge-terms>>).
 
 What is bounded is the values the operation produced. `+/+` does not answer everywhere — a zero divisor aborts, and so does the one pair whose quotient no `+Int+` holds (<<stdlib-int>>) — and a pair it aborts on leaves no value to bound. So what is stated here says nothing about whether every pair the construction admits is one the operator answers. Whether a divide can abort at all is a separate question, and it is the divisor's own type or a `+require+` that settles it (<<primitive-arm>>).
 
 Nothing follows from this rule unless what is established at the construction keeps zero out of every divisor it admits. That is the condition for stating anything and not a claim about the divides that do answer — over the whole numbers a divisor between zero and five divides by one at the nearest, and where those quotients lie is simply not what this rule says. Nothing follows either where the divisor is left no value an `+Int+` is — the arithmetic a form is read through composes numbers of any size, and what the operator divides by is an `+Int+`, so `+x / (9223372036854775807 + 1)+` divides by a value this operator never has. Neither is a finding about the path. The construction is owed its clause, as it is owed over any other value nothing is known of.
 
-`+/+` over `+Decimal+` is *not* read. It rounds half away from zero at a precision the run time sets (<<stdlib-decimal>>) rather than truncating, and where an end of the quotient lands under that rounding is not something the procedure states. A clause over one is left to the run-time check.
+*What a truncating division leaves.* A quotient bounded on its own says nothing about the value it was taken of, and what is left of that value — the thing every step of a change-making loop is built on — is where the two have to be related:
+
+----
+0 <= a - b * (a / b) < b
+----
+
+Both halves are wanted. The lower one is what a construction over the remainder owes, and the upper one is what says the next denomination's quotient is bounded.
+
+Neither half is unconditional, and the two hold under different conditions. The sign is the dividend's: truncation toward zero leaves the remainder on the dividend's side of nought — `+-7 / 2+` is `+-3+` and `+-7 - 2 * -3+` is `+-1+` — so a rule stated without the sign facts would be wrong for every negative dividend. Which side the dividend is on is what the path establishes, and it is read where the clause is read, as a product's bound is; a reading that puts it on neither side gets neither half. The magnitude is below the divisor's, and that half is stated where the divisor reads as a constant. What is left is smaller than the divisor it was divided by, and the largest of a range is the only value of it a rule stated over ends could use — which for a range open above is no number at all. A name given a constant is that constant, as it is for `+Int.floorMod+` (<<invariant-discharge-guarantees>>), which states its own ends under the same condition and for the same reason.
+
+`+Int.truncatingRemainder+` answers that value directly, and its value arm binds it. What holds of it is the same two halves under the same conditions. It is stated of that value rather than of `+a - a / b * b+` rewritten: the identity above relates the two answers of one division and is not a way of computing either, and reading it as one would make what a remainder is depend on `+/+` answering at all — which for one pair of `+Int+`s it does not (<<stdlib-int>>).
+
+[,souther]
+----
+data 硬貨枚数 = Int
+    invariant value >= 0
+
+behavior 買う : (額: Int) -> 硬貨枚数
+    constructs 硬貨枚数
+let 買う (額) = {
+    guard 額 >= 0 else 硬貨枚数(0)
+    let k0 = 額 / 100
+    let r0 = 額 - k0 * 100 // at or above nought, and below a hundred
+    let k1 = r0 / 10 // so between nought and nine
+    硬貨枚数(k0 + k1) // discharged
+}
+----
+
+*A quotient rounded to a scale.* `+Decimal.divide(a, b, scale, mode)+` rounds at a scale the domain chose, and its value arm binds what it answered. Under the same condition on the divisor, that answer lies between the two points of the scale's grid the exact quotient lies between. The mode is not read: every mode the library declares picks one of those two points, so the pair holds all seven of them, and a rule per mode would be seven statements of one fact. The scale is read as a number and the rule is stated only where it is one — a scale the procedure cannot read leaves no grid to state — and only where that number is one the run time divides at.
+
+Where the scale is not read, which side of nought the answer is on still is. Rounding to a grid never crosses zero, so a quotient at or above nought lands at or above nought at every scale.
+
+`+/+` over `+Decimal+` is *not* read, and is not a coarser statement of the rule above. It rounds half away from zero at a significant-digit precision the run time sets (<<stdlib-decimal>>) rather than at a scale the domain wrote down, so there is no grid for an end to land on — how many places the answer keeps depends on how large it is. That is different arithmetic and not the same operation read less sharply. A clause over one is left to the run-time check.
 
 A bound derived this way is not a fact about the value that is kept and read back afterwards. A construction is read twice — under what the guards established, and under what holds of the values whatever the guards did (<<invariant-discharge>>) — and each reading derives its own from what that reading holds. So a bound that rests on a guard is in the first and not the second, and one that follows from what the values' own types guarantee is in both: a product of two values a type puts at or above zero is at or above zero wherever it is built, and a construction the two refuse is refused wherever it is built rather than on a path an author is told to guard. And it refuses as readily as it discharges — a product the guards put on the other side of zero is a construction the value fails, which is an error (<<construction-satisfies-its-invariant>>) and not a warning.
 
@@ -3989,7 +4023,7 @@ abs  min  max  clamp
 
 `+Int+` is signed 64-bit (<<primitives>>). If an operation exceeds that range it *aborts* — it does not wrap. Overflow is a model bug, not a business result, so like an invariant violation it throws `+ConstraintViolation+` (<<algebraic-types>>, <<violation-destination>>, <<jvm-abort>>).
 
-Division by zero returns `+Int | DivisionByZero+`. This is a possible input on the business flow (a divisor of 0), so it is returned as a case rather than aborting. The arm that takes the quotient names the primitive and binds it with `+as+` — `+| Int as n+` (<<primitive-arm>>).
+Division by zero returns `+Int | DivisionByZero+`. This is a possible input on the business flow (a divisor of 0), so it is returned as a case rather than aborting. Overflow is not a second such case: `+divide+` *aborts* on the one pair whose quotient no `+Int+` holds, exactly as `+/+` does, because the case is about a divisor the model admits and not about a result that will not fit. The arm that takes the quotient names the primitive and binds it with `+as+` — `+| Int as n+` (<<primitive-arm>>).
 
 The four operations may also be written with the operators `{plus}` `+-+` `+*+` `+/+` (the symbol table of <<primitives>>). `+/+` is truncating division and *aborts* on division by zero (like overflow). To receive `+Int | DivisionByZero+` as a case, use the functions `+divide+` / `+truncatingRemainder+` — operator = casual and aborting, function = safe with a case. All three take the dividend first and the divisor second: a binary arithmetic operation keeps its operands in the order the mathematics writes them, and the pipe's subject-last rule is for the unary ones (<<pipe>>).
 
