@@ -194,6 +194,38 @@ public record Rational(BigInteger numerator, BigInteger denominator) implements 
     }
 
     /**
+     * This with the factors a finite decimal can be divided by taken out of it.
+     *
+     * <p>Ten is a unit among the finite decimals, so two and five are: dividing by either lands on a
+     * finite decimal again, above and below the line alike. Taking them out is what makes two
+     * numbers that generate one set of decimals one value — a quarter and a tenth both generate
+     * every decimal there is, and so does one.
+     *
+     * <p><b>Total, and the two ends of it say why.</b> One below zero is a unit as well, so what
+     * comes back is never negative: three and minus three generate the same decimals. And nothing
+     * divides into zero, or rather everything does — taking a factor out of it leaves it where it
+     * was, which is the answer and not a loop looking for the last one. This was a helper of the one
+     * caller that had already refused both when it was moved here, and a method on a value takes its
+     * own callers.
+     */
+    public Rational unitsRemoved() {
+        if (isZero()) {
+            return ZERO;
+        }
+        BigInteger top = numerator.abs();
+        BigInteger bottom = denominator;
+        for (BigInteger unit : java.util.List.of(BigInteger.TWO, FIVE)) {
+            while (top.mod(unit).signum() == 0) {
+                top = top.divide(unit);
+            }
+            while (bottom.mod(unit).signum() == 0) {
+                bottom = bottom.divide(unit);
+            }
+        }
+        return Rational.of(top, bottom);
+    }
+
+    /**
      * This as a decimal, rounded the way {@code towards} says where it is not one exactly.
      *
      * <p>For a bound that has to be handed over as a written number. The direction is the caller's

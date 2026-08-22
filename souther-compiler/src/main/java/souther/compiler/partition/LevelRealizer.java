@@ -3,11 +3,11 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.BoundaryDomain;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.numeric.AdditiveImage;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
-import souther.compiler.numeric.Towards;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -133,33 +133,11 @@ public final class LevelRealizer {
      * the one the ranges leave is the whole of what there is to try.
      */
     private static List<Place> alongTheLine(NumericDomain.Bounds together, Carrier carrier) {
+        // Nothing composed, which is this one's own answer and not something to ask a walk about.
         Place first = carrier.somethingInside(together.min(), together.max());
-        if (first == null) {
-            return List.of();
-        }
-        if (!carrier.counts()) {
-            return List.of(first);
-        }
-        List<Place> out = new java.util.ArrayList<>();
-        out.add(first);
-        for (int step = 1; out.size() < HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT; step++) {
-            Place above = carrier.onTheGrid(Count.number(first).plus(Count.of(step)));
-            Place below = carrier.onTheGrid(Count.number(first).plus(Count.of(-step)));
-            boolean took = false;
-            if (above != null && together.admits(above)) {
-                out.add(above);
-                took = true;
-            }
-            if (below != null && together.admits(below)
-                    && out.size() < HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT) {
-                out.add(below);
-                took = true;
-            }
-            if (!took) {
-                break;
-            }
-        }
-        return List.copyOf(out);
+        return first == null ? List.of()
+                : Outwards.from(first, Count.of(1), carrier, together,
+                        HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT);
     }
 
     /**
@@ -182,15 +160,21 @@ public final class LevelRealizer {
     /**
      * Every position of a form, at values that put the form where the item asks.
      *
-     * <p>A bounded search over the whole numbers: each position runs between the ends its own rules
-     * leave, the coefficients are the form's, and what is asked for is a level. Pruned by the two
-     * things that settle it without looking — what the positions still to be chosen can add up to,
-     * and whether the residue is a multiple of what their coefficients can make.
+     * <p>Depth-first over the positions, each of them standing where {@link CandidateDomain} says it
+     * may: inside the run its own rules leave, and on the coset the coefficients of the rest can
+     * land on. Both are facts that settle the position without looking and both are in the set
+     * rather than beside it — held as a test applied after choosing, the second one settled nothing
+     * wherever the first left a single candidate to choose.
      *
-     * <p><b>Three answers, and the difference between them is the point.</b> Exhausting a box every
-     * position of which is bounded proves the level is out of reach; running past the budget, or
-     * meeting a position nothing bounds, proves nothing at all (ADR-0091). Reported as one, a search
-     * that ran out would take a coverage item away.
+     * <p>Over whole numbers and over decimals alike. A position whose values fill is held to a coset
+     * that is dense and is still not every value, so what it can be given is one member of that and
+     * never the next one along.
+     *
+     * <p><b>Three answers, and the difference between them is the point.</b> A walk of a position
+     * every value of which could be tried and was proves the level is out of reach; running past the
+     * budget, or standing a position somewhere it has more values than this looked at, proves
+     * nothing at all (ADR-0091). Reported as one, a search that ran out would take a coverage item
+     * away.
      *
      * <p>A side is asked for at the first level past the one it starts from, and then at the next,
      * for as many as {@link LevelCandidateSource} offers. Which levels those are, and how many, is
@@ -206,21 +190,22 @@ public final class LevelRealizer {
         // nothing a reader can see.
         List<Map.Entry<NumericTerm, java.math.BigDecimal>> terms =
                 AffineReading.ordered(over.form());
-        // A position whose values step takes whole numbers, and the level it is solved for has to be
-        // one of them. Asked of the order the form's own values sit on, which is the one place that
-        // says whether they step at all.
-        boolean whole = levels.neighbour(new Level.ACount(Count.ZERO), Towards.ABOVE).isPresent();
         boolean bounded = true;
         for (Level level : LevelCandidateSource.forItem(over.where(), levels)) {
-            Search search = new Search(terms, over.of(), whole, within);
-            Map<NumericTerm, Place> standing = search.solve(level.asACount());
-            if (standing != null) {
-                Realization made = found(standing, within);
+            Search search = new Search(terms, over.of(), within);
+            Reached reached = search.solve(level.asACount());
+            if (reached == Reached.FOUND) {
+                Realization made = found(search.fixing(), within);
                 if (made instanceof Realization.Found) {
                     return made;
                 }
+                // An assignment the walk reached that no row came of. Nothing about the level
+                // follows from it: what refused the row is the writing of it and not the rules the
+                // walk held the assignment to.
+                bounded = false;
+            } else {
+                bounded &= reached == Reached.EXHAUSTED;
             }
-            bounded &= search.exhaustive();
         }
         // A point asks for one level and a side asks for any level past one, so only the first can
         // be settled by looking: a walk of the whole box that reaches the level nothing else does is
@@ -233,6 +218,54 @@ public final class LevelRealizer {
 
     /** How many assignments the search will try before it stops and says it did not settle it. */
     private static final int STEPS_A_SEARCH_MAY_TAKE = 200_000;
+
+    /**
+     * How many values of a progression nothing bounds are tried.
+     *
+     * <p>Small on purpose, and it buys something narrower than it looks. The values are already the
+     * ones that leave the rest a residue their coefficients land on, so what stepping along it walks
+     * past is what the rules take out — and a rule takes values out one region at a time. Nothing
+     * here is a proof at any length: a run without an end is not walked to the end.
+     *
+     * <p><b>Values and not distances.</b> Sixteen of the first is thirty-three of the second where
+     * both sides are open, and the two units were mixed here once: this was written as a count of
+     * distances and then handed to {@link Outwards}, which counts what it yields. Counted in values
+     * for the same reason that one does — it is what a run gives up, and a bound on anything else
+     * has to be turned into one before it means anything.
+     *
+     * <p><b>More than one is needed by models that exist.</b> A disequality takes one value out of
+     * the middle of a run without moving either end, so a position carrying one looks unbounded to
+     * anything reading ranges and is refused at exactly one place — which is where the coset's own
+     * member can land. Cut to one value, {@code a + b = 0} over two positions held away from zero
+     * comes back as a search that stopped, and the row at it is one step along.
+     *
+     * <p>How many past that is not measured. Every progression the suite reaches gives up its row by
+     * the second value, and what would ask for a third is a run with two holes in it beside each
+     * other.
+     */
+    private static final int VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT = 16;
+
+    /**
+     * What a walk of one position came to.
+     *
+     * <p><b>Three, because two of them mean opposite things about an empty hand.</b> A position
+     * every value of which was tried leaves nothing more to try, and a walk of the whole form that
+     * ends this way is what makes {@link Realization.Impossible} a proof. A position that ran on, or
+     * that has no next value, leaves the question exactly where it was. Held as one boolean and set
+     * from wherever a walk gave up, the two were the same answer and a level nothing reached could
+     * not be told from a level nothing looked for.
+     */
+    private enum Reached {
+
+        /** An assignment of every position, standing where the item asks. */
+        FOUND,
+
+        /** Every value there was to try was tried, and none of them was one. A proof. */
+        EXHAUSTED,
+
+        /** The walk stopped short of that, and nothing follows from its coming back empty. */
+        INCOMPLETE
+    }
 
     /** How often one search reads the declarations again with a position fixed. Each of them is a
      *  reading of every rule reaching the form's positions, and what it buys is skipping
@@ -249,14 +282,29 @@ public final class LevelRealizer {
     /**
      * The search itself: an assignment of every position of a form, or nothing.
      *
-     * <p>Depth-first over the positions, each between the ends its rules leave. Two prunings, both
-     * of them proofs rather than heuristics: what the remaining positions can sum to, and the
-     * greatest common divisor of their coefficients, which the residue has to be a multiple of.
+     * <p>Depth-first over the positions, each of them standing where {@link CandidateDomain} says
+     * it may. Both of the things that settle a position without looking are in that set rather than
+     * beside it: what the remaining positions can add up to, and what their coefficients can land on.
+     * Held as a test the walk applied after choosing, the second one settled nothing wherever the
+     * first left one candidate to choose.
+     *
+     * <p>What a walk comes to is {@link Reached}, and the three answers do not collapse. A position
+     * whose values could all be tried and were is what makes an empty-handed walk a proof; one that
+     * ran on, or that has no next value to step to, leaves the question open however far it was
+     * taken.
      */
     private final class Search {
 
         private final List<Map.Entry<NumericTerm, java.math.BigDecimal>> terms;
         private final Carrier carrier;
+        /**
+         * Whether the position's own values step, which the carrier answers.
+         *
+         * <p>Asked of the carrier and not of the level space. Both say the same thing about every
+         * form the suite reaches, and only one of them is about the positions: a level space steps
+         * because the positions under it do, so reading the answer off the levels is reading it from
+         * the thing it follows from.
+         */
         private final boolean whole;
         /** Where a row for the item being searched for may be written. */
         private final souther.compiler.inputs.SearchRegion within;
@@ -271,149 +319,232 @@ public final class LevelRealizer {
          * to pay for a lookup.
          */
         private final NumericDomain.Bounds[] runsBetween;
+        /**
+         * What the positions from each one on can add up to, worked out once.
+         *
+         * <p>A form names no position twice and weighs none of them by nothing — {@link
+         * NumericDomain.LinearForm} drops a coefficient the moment it comes to zero — so every
+         * suffix of it is a form and has an image.
+         */
+        private final AdditiveImage[] fromHere;
         private int taken;
         private int asked;
-        private boolean everyEndKnown = true;
 
         Search(List<Map.Entry<NumericTerm, java.math.BigDecimal>> terms, Carrier carrier,
-               boolean whole, souther.compiler.inputs.SearchRegion within) {
+               souther.compiler.inputs.SearchRegion within) {
             this.terms = terms;
             this.carrier = carrier;
-            this.whole = whole;
+            this.whole = carrier.spacing() == souther.compiler.numeric.Granularity.DISCRETE;
             this.within = within;
             this.at = new Place[terms.size()];
             this.runsBetween = new NumericDomain.Bounds[terms.size()];
             for (int i = 0; i < terms.size(); i++) {
                 runsBetween[i] = bounds(within, terms.get(i).getKey());
             }
+            this.fromHere = new AdditiveImage[terms.size()];
+            for (int i = 0; i < terms.size(); i++) {
+                Map<NumericTerm, souther.compiler.numeric.Rational> coefs = new LinkedHashMap<>();
+                for (int j = i; j < terms.size(); j++) {
+                    coefs.put(terms.get(j).getKey(),
+                            souther.compiler.numeric.Rational.of(terms.get(j).getValue()));
+                }
+                fromHere[i] = AdditiveImage.of(coefs, ignored -> carrier.spacing());
+            }
         }
 
-        /** Whether what it walked was the whole of the box, which is what makes an empty answer a
-         *  proof. */
-        boolean exhaustive() {
-            return everyEndKnown && taken < STEPS_A_SEARCH_MAY_TAKE;
+        Reached solve(Count target) {
+            return walk(0, target.at(), within);
         }
 
-        Map<NumericTerm, Place> solve(Count target) {
-            return walk(0, target.at(), within) ? fixing() : null;
-        }
-
-        private Map<NumericTerm, Place> fixing() {
+        /**
+         * Where every position stands, which exists only after a walk that reached a row.
+         *
+         * <p>Refused otherwise rather than answered with the positions that happen to be fixed. A
+         * walk that came back {@link Reached#EXHAUSTED} leaves the ones it gave up on standing
+         * nowhere, and a map with nothing under a key is a row somebody is offered with a position
+         * missing from it.
+         */
+        Map<NumericTerm, Place> fixing() {
             Map<NumericTerm, Place> out = new LinkedHashMap<>();
             for (int i = 0; i < terms.size(); i++) {
+                if (at[i] == null) {
+                    throw new IllegalStateException(
+                            "a walk that did not reach a row has no assignment to hand over:"
+                                    + " nothing stands at `" + terms.get(i).getKey() + "`");
+                }
                 out.put(terms.get(i).getKey(), at[i]);
             }
             return out;
         }
 
-        private boolean walk(int i, java.math.BigDecimal owed, souther.compiler.inputs.SearchRegion here) {
+        /**
+         * The walk from one position on, given what the positions before it left owed.
+         *
+         * <p>The last position is solved and every other is chosen from {@link CandidateDomain}. What
+         * comes back says which of the three things happened, and the difference between the last two
+         * is the whole reason this is not a boolean: a position all of whose values were tried leaves
+         * an empty-handed walk a proof, and one that was cut short leaves it nothing at all.
+         */
+        private Reached walk(int i, java.math.BigDecimal owed,
+                             souther.compiler.inputs.SearchRegion here) {
             if (++taken > STEPS_A_SEARCH_MAY_TAKE) {
-                return false;
-            }
-            // What the positions from here on can add up to, and what their coefficients can make.
-            // Both are proofs: a residue outside the reach of everything still to be chosen is one
-            // no assignment of them arrives at, and a residue that is not a multiple of what their
-            // coefficients can make is one none of them lands on. Without them a wide box is walked
-            // one step at a time until the budget runs out, and a level the rules truly leave
-            // nothing at comes back as a search that stopped rather than as the proof it is.
-            if (outOfReach(i, owed) || offTheLattice(i, owed)) {
-                return false;
+                return Reached.INCOMPLETE;
             }
             java.math.BigDecimal coef = terms.get(i).getValue();
-            NumericDomain.Bounds within = bounds(here, terms.get(i).getKey());
-            // Narrowed by what the positions after this one can add up to. Used to reject a choice
-            // after making it, a box a million wide is walked a million times and the budget runs
-            // out on `a + b <= 2000000` — an equation with one answer. Used to bound the walk, that
-            // answer is the only value tried.
-            NumericDomain.Bounds left = leaving(i + 1, owed, coef, within);
+            // Narrowed by what the positions after this one can add up to. Left at the position's own
+            // ends, a box a million wide is walked a million times and the budget runs out on
+            // `a + b <= 2000000` — an equation with one answer.
+            NumericDomain.Bounds left =
+                    leaving(i + 1, owed, coef, bounds(here, terms.get(i).getKey()));
             if (i == terms.size() - 1) {
-                // The last position is solved rather than tried. Where its values step, what is left
-                // over has to be its coefficient's multiple; where they fill, it is a division and
-                // the answer is whatever number it comes to — asked for a whole number there, a form
-                // over decimals came back unsolvable at every level it holds.
-                java.math.BigDecimal solved;
-                if (whole) {
-                    java.math.BigDecimal[] divided = owed.divideAndRemainder(coef);
-                    if (divided[1].signum() != 0) {
-                        return false;
-                    }
-                    solved = divided[0];
-                } else {
-                    try {
-                        solved = owed.divide(coef);
-                    } catch (ArithmeticException nonTerminating) {
-                        // A quotient with no end is not a value a model writes, and rounding one
-                        // would offer a row that misses the level by however much was rounded off.
-                        everyEndKnown = false;
-                        return false;
-                    }
-                }
-                // Held against the ends themselves, which say whether they are their own values. A
-                // bound of `> 0` leaves one and not zero, and rounding the end to a number first
-                // loses which of the two it is.
-                if (!left.admits(new Count(solved))) {
-                    return false;
-                }
-                at[i] = new Count(solved);
-                // And the rules with every position of the form fixed, which is the one place a
-                // whole assignment exists to be held against them. A value inside each position's
-                // own ends can still be one no value of the record has beside the others, and this
-                // is the step that is not given up: what is handed back is an assignment the rules
-                // were not shown to refuse.
-                if (!theRulesHaveNotRefused()) {
-                    at[i] = null;
-                    return false;
-                }
-                return true;
+                return solving(i, owed, coef, left);
             }
-            java.math.BigDecimal low = endOf(left.min(), true);
-            java.math.BigDecimal high = endOf(left.max(), false);
-            if (low == null || high == null || !whole) {
-                // Not a position this can walk. One nothing bounds has no ends to run between; one
-                // whose values fill has no next value to step to, so there is no enumeration of it
-                // at all. Either way this takes one value the rules admit and goes on, and says that
-                // what it walked was not the whole of the box — a proof may only come out of a walk
-                // that was.
-                //
-                // Which value is the carrier's answer and not this one's. Worked out from the
-                // numbers, an end the rules exclude was taken as one they leave and an end above was
-                // not consulted at all, so the row offered was one the position refuses and the
-                // report said every candidate had been rejected.
-                everyEndKnown = false;
-                // Which value it takes is chosen against what the rest can reach, not off the end of
-                // its own range: the residue has to be something the positions after it arrive at,
-                // and a value picked without asking leaves a form over three or more filled
-                // positions unsolved wherever the first guess happens not to work out.
-                Place inside = carrier.somethingInside(left.min(), left.max());
-                if (inside == null || !(inside instanceof Count taken)) {
-                    return false;
-                }
-                souther.compiler.inputs.SearchRegion next = narrowing(here, terms.get(i).getKey(), taken.at());
-                if (next == null) {
-                    return false;
-                }
-                at[i] = taken;
-                return walk(i + 1, owed.subtract(coef.multiply(taken.at())), next);
+            // Where this position may stand: the run, and the values of it that leave the rest a
+            // residue their coefficients land on. Both are proofs, and the second is in the set
+            // rather than beside it — a residue off what the rest can reach is one no assignment of
+            // them arrives at, and a position offering one candidate has nothing for a test applied
+            // afterwards to leave.
+            CandidateDomain may = CandidateDomain.of(
+                    fromHere[i + 1].affinePreimage(
+                            souther.compiler.numeric.Rational.of(coef),
+                            souther.compiler.numeric.Rational.of(owed),
+                            carrier.spacing()),
+                    left);
+            return switch (may) {
+                case CandidateDomain.None ignored -> Reached.EXHAUSTED;
+                case CandidateDomain.One only -> trying(i, only.at().at(), owed, coef, here);
+                // One value out of a coset whose values fill. There is no next one to step to, so
+                // what this walked was never the whole of it however the value turned out.
+                case CandidateDomain.Somewhere one ->
+                        trying(i, one.at().at(), owed, coef, here) == Reached.FOUND
+                                ? Reached.FOUND : Reached.INCOMPLETE;
+                case CandidateDomain.Walking every -> walking(i, every, owed, coef, here);
+                case CandidateDomain.Outward on -> outward(i, on, owed, coef, here);
+            };
+        }
+
+        /**
+         * This position held at one value, and the walk of everything after it.
+         *
+         * <p>A value the rules are left nothing beside is stepped past here rather than offered and
+         * refused where the row is built: refused there, one candidate coming back rejected is
+         * reported as every value having been tried. Nothing being left is proved by the rules, so
+         * stepping past it takes nothing out of a walk that reaches the end.
+         */
+        private Reached trying(int i, java.math.BigDecimal x, java.math.BigDecimal owed,
+                               java.math.BigDecimal coef, souther.compiler.inputs.SearchRegion here) {
+            souther.compiler.inputs.SearchRegion next =
+                    narrowing(here, terms.get(i).getKey(), x);
+            if (next == null) {
+                return Reached.EXHAUSTED;
             }
-            for (java.math.BigDecimal x = low; x.compareTo(high) <= 0;
-                    x = x.add(java.math.BigDecimal.ONE)) {
-                // What the rules leave once this position holds this value. A value they leave
-                // nothing beside is skipped here rather than offered and refused where the row is
-                // built: refused there, one candidate coming back rejected is reported as every
-                // value having been tried.
-                souther.compiler.inputs.SearchRegion next = narrowing(here, terms.get(i).getKey(), x);
-                if (next == null) {
-                    continue;
+            at[i] = new Count(x);
+            Reached reached = walk(i + 1, owed.subtract(coef.multiply(x)), next);
+            if (reached != Reached.FOUND) {
+                at[i] = null;
+            }
+            return reached;
+        }
+
+        /**
+         * Every value of a run, in order, and what the walk of them all came to.
+         *
+         * <p>Only this and a position with one value or none can end in a proof. A walk that ends
+         * because every value was tried is a proof exactly where each of those values was itself
+         * walked to the end, which is why what comes back is the weakest of the children rather than
+         * the last of them.
+         */
+        private Reached walking(int i, CandidateDomain.Walking every, java.math.BigDecimal owed,
+                                java.math.BigDecimal coef,
+                                souther.compiler.inputs.SearchRegion here) {
+            Reached weakest = Reached.EXHAUSTED;
+            for (java.math.BigDecimal x = every.first();
+                    x.compareTo(every.last()) <= 0; x = x.add(every.by())) {
+                Reached reached = trying(i, x, owed, coef, here);
+                if (reached == Reached.FOUND) {
+                    return Reached.FOUND;
                 }
-                at[i] = new Count(x);
-                if (walk(i + 1, owed.subtract(coef.multiply(x)), next)) {
-                    return true;
+                if (reached == Reached.INCOMPLETE) {
+                    weakest = Reached.INCOMPLETE;
                 }
                 if (taken > STEPS_A_SEARCH_MAY_TAKE) {
-                    return false;
+                    return Reached.INCOMPLETE;
                 }
             }
-            return false;
+            return weakest;
+        }
+
+        /**
+         * A progression nothing bounds, from the value it names outward.
+         *
+         * <p>Never a proof. What is walked is a run without an end, so an empty-handed walk of as
+         * many of its values as this is willing to take says only that those values were not the
+         * one.
+         *
+         * <p>More than one of them, for what the rules can do to a value the arithmetic leaves: the
+         * coset says which values leave the rest something they reach, and a rule the region carries
+         * can refuse one of those without refusing the next. How many are worth trying is this
+         * search's own answer — {@link Outwards} carries the order they are tried in and no
+         * allowance of its own, and what a step past a refused value buys is not the same question
+         * here as it is for a pair on a line.
+         */
+        private Reached outward(int i, CandidateDomain.Outward on, java.math.BigDecimal owed,
+                                java.math.BigDecimal coef,
+                                souther.compiler.inputs.SearchRegion here) {
+            for (Place x : Outwards.from(new Count(on.from()), new Count(on.by()), carrier,
+                    on.within(), VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT)) {
+                if (trying(i, Count.number(x).at(), owed, coef, here) == Reached.FOUND) {
+                    return Reached.FOUND;
+                }
+                if (taken > STEPS_A_SEARCH_MAY_TAKE) {
+                    return Reached.INCOMPLETE;
+                }
+            }
+            return Reached.INCOMPLETE;
+        }
+
+        /**
+         * The last position, solved rather than tried, and every way it can fail is a proof.
+         *
+         * <p>Where its values step, what is left over has to be its coefficient's multiple; where
+         * they fill, it is a division and the answer is whatever number it comes to. A quotient with
+         * no end is the one that used to be read as a search giving up, and it is not: a value a
+         * model cannot write is a value the position does not hold, so what it says is that this
+         * prefix has no last value and never that this compiler could not find one.
+         *
+         * <p>Then the ends themselves, which say whether they are their own values, and then the
+         * rules with every position fixed — the one place a whole assignment exists to be held
+         * against them. Each of the three refuses on something proved, so a walk that ends here
+         * empty-handed has ended.
+         */
+        private Reached solving(int i, java.math.BigDecimal owed, java.math.BigDecimal coef,
+                                NumericDomain.Bounds left) {
+            java.math.BigDecimal solved;
+            if (whole) {
+                java.math.BigDecimal[] divided = owed.divideAndRemainder(coef);
+                if (divided[1].signum() != 0) {
+                    return Reached.EXHAUSTED;
+                }
+                solved = divided[0];
+            } else {
+                try {
+                    solved = owed.divide(coef);
+                } catch (ArithmeticException noEnd) {
+                    return Reached.EXHAUSTED;
+                }
+            }
+            // Held against the ends themselves, which say whether they are their own values. A bound
+            // of `> 0` leaves one and not zero, and rounding the end to a number first loses which of
+            // the two it is.
+            if (!left.admits(new Count(solved))) {
+                return Reached.EXHAUSTED;
+            }
+            at[i] = new Count(solved);
+            if (!theRulesHaveNotRefused()) {
+                at[i] = null;
+                return Reached.EXHAUSTED;
+            }
+            return Reached.FOUND;
         }
 
         /**
@@ -469,13 +600,18 @@ public final class LevelRealizer {
         }
 
         /**
-         * What the rules leave this position, narrowed to the values that leave the rest a residue
-         * they can reach.
+         * The run this position has, narrowed by what the positions after it can add up to.
          *
-         * <p>What the positions after this one can add up to is an interval; what this one has to
-         * contribute for the residue to land in it is another. Both are proofs — a value outside
-         * either is one no assignment of the rest completes — so the walk runs between them rather
-         * than between the position's own ends.
+         * <p>The interval half of where it may stand and not the whole of it. What the rest can add
+         * up to is an interval; what this one has to contribute for the residue to land in it is
+         * another; both are proofs, so the run is the tighter of them and not the position's own
+         * ends. Which values of that run leave the rest a residue their coefficients land on is the
+         * other half, and {@link CandidateDomain} is where the two meet.
+         *
+         * <p>Read off the rules as they stood before anything was fixed. A form's suffix has a run
+         * inside the region at hand as well, and it is narrower wherever a rule relates the
+         * positions — asking for that one is the change the walk's own cost note argues against, and
+         * it is a question of its own rather than part of where a position may stand.
          */
         private NumericDomain.Bounds leaving(int rest, java.math.BigDecimal owed,
                                              java.math.BigDecimal coef,
@@ -540,58 +676,8 @@ public final class LevelRealizer {
             return new java.math.BigDecimal[] {least, most};
         }
 
-        /** Whether the residue is outside everything the positions from {@code i} on can add up to,
-         *  which no assignment of them arrives at. */
-        private boolean outOfReach(int i, java.math.BigDecimal owed) {
-            java.math.BigDecimal[] rest = reach(i);
-            return rest != null && (owed.compareTo(rest[0]) < 0 || owed.compareTo(rest[1]) > 0);
-        }
-
-        /**
-         * Whether the residue is off the lattice the positions from {@code i} on can land on.
-         *
-         * <p>Only where their values step: over whole numbers what {@code Σ c·x} takes is exactly
-         * the multiples of the coefficients' greatest common divisor (Bézout), so a residue that is
-         * not one is a residue none of them reaches. Where the values fill there is no lattice and
-         * this says nothing.
-         */
-        private boolean offTheLattice(int i, java.math.BigDecimal owed) {
-            if (!whole) {
-                return false;
-            }
-            java.math.BigDecimal step = LevelSpace.stepOf(
-                    terms.subList(i, terms.size()).stream().map(Map.Entry::getValue).toList());
-            return step.signum() != 0 && owed.remainder(step).signum() != 0;
-        }
-
         private static java.math.BigDecimal numberOf(Endpoint end) {
             return end == null || !(end.at() instanceof Count count) ? null : count.at();
-        }
-
-        /**
-         * One end of what the rules leave a position, as a whole number this can start or stop at.
-         *
-         * <p>Asked only to bound an enumeration, which only a position whose values step has. Where
-         * they fill, what a value inside the ends is is the carrier's answer and whether a solved one
-         * is inside them is the ends' own.
-         *
-         * <p>Rounded inwards and never outwards, and the excluded end excluded. A bound of
-         * {@code > 0} leaves one, not zero; a bound of {@code >= 2.4} over whole numbers leaves
-         * three, not two. Rounded the other way, the search offers a value the position refuses and
-         * the decoder turns the row down — which arrives as every candidate having been rejected,
-         * and reads as the model refusing an edge it admits.
-         */
-        private java.math.BigDecimal endOf(Endpoint end, boolean low) {
-            if (end == null || !(end.at() instanceof Count count)) {
-                return null;
-            }
-            java.math.BigDecimal number = count.at();
-            java.math.BigDecimal onTheGrid = number.setScale(0,
-                    low ? java.math.RoundingMode.CEILING : java.math.RoundingMode.FLOOR);
-            // An end the rules exclude, already on the grid, is one value further in.
-            boolean atTheEnd = onTheGrid.compareTo(number) == 0;
-            return end.inclusive() || !atTheEnd ? onTheGrid
-                    : onTheGrid.add(java.math.BigDecimal.valueOf(low ? 1 : -1));
         }
 
     }
