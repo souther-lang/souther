@@ -26,6 +26,14 @@ import java.util.Map;
  * a local slot, a Wasm block — those belong to whichever output is emitting, and two outputs may
  * settle them differently without the program meaning anything different.
  *
+ * <p>What this is says nothing of a machine; getting one still runs one. The language accepts a
+ * program only where its constant constructions hold and its rows do, both of which are decided by
+ * running the program — which today means running the classes the JVM backend emits (ADR-0032). So
+ * a program the JVM cannot emit is refused here whether or not the language had anything against
+ * it, and an output that is not the JVM inherits that. The snapshot itself carries none of it: what
+ * carries it is how an accepted one is obtained, and that moves when what acceptance runs a program
+ * with stops being named by the thing that asks.
+ *
  * <p>Only the modules this compile checked are here. A call in a body may name a behavior of a
  * module read off the path, and that module is not among {@link #modules()}: what such a call
  * carries is the identity resolution gave it, and neither the behavior's own signature nor its
