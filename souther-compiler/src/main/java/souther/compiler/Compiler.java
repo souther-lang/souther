@@ -13,7 +13,6 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Acceptance;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Front;
 
 import java.io.IOException;
 import java.nio.file.Files;
