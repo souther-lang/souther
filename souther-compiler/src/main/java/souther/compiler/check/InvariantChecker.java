@@ -136,6 +136,24 @@ public final class InvariantChecker {
      */
     static List<Said> WATCHING;
 
+    /** One case split this walk decided about: what a reading of the body had already cost where the
+     * split stood, how many arms it has, and whether it was opened. */
+    record Opening(int cost, int width, boolean opened) {}
+
+    /**
+     * Where a test in this package reads how far the splits down a path were opened, and null
+     * everywhere else.
+     *
+     * <p>Beside {@link #WATCHING} and for the same reason, which this rule ran into rather than
+     * being written for. How far splits are opened says nothing on its own: a split left unopened
+     * leaves a value the reading has to bound some other way, and where another way answers — the
+     * arms of a choice, taken together ({@link Derivation.Chosen}) — the construction over it is
+     * discharged exactly as it is where the split was opened. So a test reading a warning was
+     * reading the two together, and the day a second route bounded the same value it stopped
+     * observing the bound at all.
+     */
+    static List<Opening> OPENING;
+
     /**
      * What this check reads: one behavior's body and the invariants of the types around it, both in
      * the representation the rules are written at ({@link InliningPolicy#DISCHARGE}) rather than the
@@ -2388,7 +2406,12 @@ public final class InvariantChecker {
      * something it is protecting against. So the bound is on the multiplying, and a path costs at
      * most the widest split on it or this bound, whichever is the larger. */
     private static boolean opens(int cost, int width) {
-        return cost == 1 || (long) cost * width <= READINGS_A_PATH_MAY_COST;
+        boolean opened = cost == 1 || (long) cost * width <= READINGS_A_PATH_MAY_COST;
+        List<Opening> watching = OPENING;
+        if (watching != null) {
+            watching.add(new Opening(cost, width, opened));
+        }
+        return opened;
     }
 
     /**

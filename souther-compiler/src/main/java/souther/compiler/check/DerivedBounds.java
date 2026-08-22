@@ -19,11 +19,13 @@ import java.util.Set;
  * <p>A product of two values and a truncating quotient are not linear, so the domain holds them as
  * atoms and knows nothing of them. What their factors lie between it does know, and that is enough
  * to bound them — so this reads the factors out of a domain, puts the arithmetic through
- * {@link Intervals}, and hands back the domain with what came out taken as holding. A reduction's
- * answer is an atom for a different reason — it is what a library operation computed by applying a
- * closure over and over — and it is bounded by {@link InductiveBounds} rather than by a projection.
- * The two are one walk here because a fold's seed may be a product and a product's factor may be a
- * fold, and one graph with one memo is what keeps either from being derived twice.
+ * {@link Intervals}, and hands back the domain with what came out taken as holding. A value that is
+ * one of several is an atom for a reason of its own — nothing composes an {@code if} — and it is
+ * bounded by the range its arms span. A reduction's answer is one for a third reason, being what a
+ * library operation computed by applying a closure over and over, and it is bounded by
+ * {@link InductiveBounds} rather than by a projection. They are one walk here because a fold's seed
+ * may be a product and a product's factor may be a fold and an arm may be either, and one graph with
+ * one memo is what keeps any of them from being derived twice.
  *
  * <p>A projection and not an inference. Every bound is derived from the domain it was given, once,
  * and the results are taken in together at the end; nothing derived here is read back to derive
@@ -152,12 +154,13 @@ final class DerivedBounds {
     }
 
     /**
-     * What {@code atom} lies between, by whichever of the two things recorded about it says so.
+     * What {@code atom} lies between, by whichever of the things recorded about it says so.
      *
      * <p>Arithmetic outside the fragment is put through {@link Intervals}, which is a projection of
-     * what its operands lie between. A walk's answer is put through {@link InductiveBounds}, which
-     * proves a range holds it by checking one step. Both read the same {@code base} and neither reads
-     * what the other answered about the same atom, so the two compose the way the recipe graph does:
+     * what its operands lie between. A choice is spanned by its arms. A walk's answer is put through
+     * {@link InductiveBounds}, which proves a range holds it by checking one step. Each reads the
+     * same {@code base} and none reads what another answered about the same atom, so they compose the
+     * way the recipe graph does:
      * a fold whose seed is a product reaches the product through the form its walk was recorded with,
      * and a product of two folds reaches them through its factors.
      */
@@ -177,7 +180,35 @@ final class DerivedBounds {
                     boundsOf(product.left(), base, terms, done, deriving),
                     boundsOf(product.right(), base, terms, done, deriving));
             case Derivation.Quotient quotient -> quotient(quotient, base, terms, done, deriving);
+            case Derivation.Chosen chosen -> chosen(chosen, base, terms, done, deriving);
         };
+    }
+
+    /**
+     * What a value that is one of several lies between: the range holding what every arm answers.
+     *
+     * <p>The value is one of the arms, so a range holding all of them holds it. Which arm it is
+     * depends on what chose it and this does not read that ({@link Derivation.Chosen}), so every arm
+     * counts and none is ruled out — an arm the reading says nothing about leaves the whole choice
+     * unbounded, which is what an arm nothing is known of comes to.
+     *
+     * <p>Each arm is read against the domain this was handed, and the arms are read one after
+     * another out of the same memo. So a choice inside an arm is derived once however many arms
+     * stand over it, and the nesting costs what the recipes cost and not what a reading of every
+     * path through them would.
+     */
+    private static Bounds chosen(Derivation.Chosen chosen, NumericDomain<FactSubject> base,
+                                 Terms terms, Map<FactSubject, Bounds> done,
+                                 Set<FactSubject> deriving) {
+        Bounds out = null;
+        for (LinearForm<FactSubject> arm : chosen.arms()) {
+            Bounds here = boundsOf(arm, base, terms, done, deriving);
+            out = out == null ? here : Bounds.spanning(out, here);
+        }
+        // A choice with no arms answers nothing, and nothing derived is not an empty range: read as
+        // one it would go into the domain as a contradiction, and a contradictory domain proves
+        // every clause there is. The same reading `quotient` makes of a rule with nothing to fire on.
+        return out == null ? new Bounds(null, null) : out;
     }
 
     /**

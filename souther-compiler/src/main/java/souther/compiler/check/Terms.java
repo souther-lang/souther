@@ -133,6 +133,7 @@ final class Terms {
                     todo.addAll(q.numerator().coefs().keySet());
                     todo.addAll(q.divisor().coefs().keySet());
                 }
+                case Derivation.Chosen c -> c.arms().forEach(f -> todo.addAll(f.coefs().keySet()));
                 case null -> { }
             }
             InductiveBounds.Walk under = reductions.get(atom);
@@ -524,13 +525,15 @@ final class Terms {
             recordingWalk(atom, call, e, at);
             return;
         }
-        if (!(asOperator(e) instanceof Core.Binary b)) {
-            return;
-        }
-        Derivation made = switch (b.op()) {
-            case MUL -> product(b, at);
-            case DIV -> quotient(b, at);
-            default -> null;
+        Derivation made = switch (asOperator(e)) {
+            case Core.Binary b -> switch (b.op()) {
+                case MUL -> product(b, at);
+                case DIV -> quotient(b, at);
+                default -> null;
+            };
+            case Core.If iff -> chosen(List.of(iff.then(), iff.els()), at);
+            case Core.Match m -> chosen(m.cases().stream().map(Core.Case::body).toList(), at);
+            case null, default -> null;
         };
         if (made == null) {
             return;
@@ -557,9 +560,11 @@ final class Terms {
      * evaluation of the node it is written at would give one parameter two atoms where the step reads
      * it twice.
      *
-     * <p>A step this cannot read as arithmetic is recorded as nothing rather than as a walk with a
-     * part missing. That is the fragment this proves over, stated once: a step branching on its
-     * element is outside it, and so is a seed that is what some behavior answered.
+     * <p>A step this cannot read as a form is recorded as nothing rather than as a walk with a part
+     * missing. What it cannot read is narrower than the arithmetic: a step is one value, and a value
+     * this composes nothing out of is named all the same, so a step that branches is a form over the
+     * choice it is and is bounded by what its arms answer ({@link Derivation.Chosen}). What stays
+     * outside is a seed that is what some behavior answered.
      */
     private void recordingWalk(FactSubject atom, Core.PreservedCall call, Core e, Denotations at) {
         Reductions.Reducing walk = Reductions.reducing(call, at);
@@ -597,6 +602,29 @@ final class Terms {
             throw new OneTermTwoDerivations("atom `" + atom.rendered() + "` is the answer of two"
                     + " different walks");
         }
+    }
+
+    /**
+     * The choice {@code arms} make, or null where any arm is one this cannot read.
+     *
+     * <p>Every arm or none. What the value is, is one of these, so a recipe over a subset of them is
+     * a range the value can be outside of — and an arm whose body reads a binder only that arm
+     * introduces is such an arm, since nothing here has entered it.
+     *
+     * <p>Read where the choice stands, in the environment the choice stands in. An arm is not
+     * entered: what a {@code match} arm binds and what an {@code if}'s condition settles are facts
+     * about the arm and this records none of them ({@link Derivation.Chosen}).
+     */
+    private Derivation chosen(List<Core> arms, Denotations at) {
+        List<LinearForm<FactSubject>> forms = new ArrayList<>();
+        for (Core arm : arms) {
+            LinearForm<FactSubject> form = affineOf(arm, at);
+            if (form == null) {
+                return null;
+            }
+            forms.add(form);
+        }
+        return forms.isEmpty() ? null : new Derivation.Chosen(forms);
     }
 
     /** The product {@code b} is, or null where either factor is a value nothing can be said of. A
@@ -676,7 +704,25 @@ final class Terms {
                     && sameForm(one.numerator(), other.numerator())
                     && sameForm(one.divisor(), other.divisor())
                     && sameExtent(one.divisorExtent(), other.divisorExtent());
+            case Derivation.Chosen one -> b instanceof Derivation.Chosen other
+                    && sameArms(one.arms(), other.arms());
         };
+    }
+
+    /** Whether two readings found the same arms in the same order. An arm answers where the
+     * condition beside it does, so a choice reordered is a different recipe and not this one read
+     * twice. */
+    private static boolean sameArms(List<LinearForm<FactSubject>> a,
+                                    List<LinearForm<FactSubject>> b) {
+        if (a.size() != b.size()) {
+            return false;
+        }
+        for (int i = 0; i < a.size(); i++) {
+            if (!sameForm(a.get(i), b.get(i))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Whether two extents run between the same places. Asked on the order and not of the record's

@@ -3,6 +3,8 @@ package souther.compiler.check;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 
+import java.util.List;
+
 /**
  * How a value the affine fragment cannot carry was computed from values it can.
  *
@@ -21,6 +23,34 @@ import souther.compiler.numeric.NumericDomain.LinearForm;
 sealed interface Derivation {
 
     record Product(LinearForm<FactSubject> left, LinearForm<FactSubject> right) implements Derivation {}
+
+    /**
+     * A value that is one of several: an {@code if}, a {@code match}, and anything else that answers
+     * one of the values standing in it.
+     *
+     * <p>Not arithmetic, and here beside the arithmetic for the reason this interface gives: what is
+     * recorded is how a value was computed, and being one of several is a way of computing one. The
+     * affine walk already names such a node — a choice is one value, and a rule written about it is
+     * about the thing that stands there — and until this arm existed nothing was filed under that
+     * name, so the value came out with no range whatever its arms answered.
+     *
+     * <p>What is recorded is the arms and not what chose between them. The condition holds exactly
+     * where its arm is the answer, so reading it would sharpen this — {@code if a + x < 100 then
+     * a + x else 100} lies below a hundred only by its conditions — and it is a second reading of
+     * conditions beside {@link Predicates#assumeCond}, which is a thing to do once and not twice.
+     * Left out, the range is the arms together, which is sound and is narrower than what an author
+     * can write.
+     *
+     * @param arms what stands in each arm, as a form each. Every arm or none: an arm the walk could
+     *             not read leaves the choice with no recipe at all, since a range that left one of
+     *             them out would be a range the value can be outside of.
+     */
+    record Chosen(List<LinearForm<FactSubject>> arms) implements Derivation {
+
+        public Chosen {
+            arms = List.copyOf(arms);
+        }
+    }
 
     /**
      * A truncating divide.
