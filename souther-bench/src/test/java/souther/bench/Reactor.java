@@ -1,0 +1,72 @@
+package souther.bench;
+
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * What the reactor builds, asked once.
+ *
+ * <p>The checks in this module are about the repository rather than about one build, so each of
+ * them needs the same two answers: which modules there are, and where their classes ended up. Each
+ * had worked them out for itself, and four copies of "which modules there are" is four places for
+ * one of them to stop covering the module added next — which is the shape those checks exist to
+ * refuse.
+ *
+ * <p>The modules come from the root pom, which is what the reactor reads. Named in a list here
+ * instead, this would be a copy of the reactor rather than a reading of it.
+ *
+ * <p>A module with nothing built is a hole and not a pass. A check that walks fewer modules than it
+ * claims answers about the ones it read and says nothing about the rest, so this refuses rather
+ * than skipping — which is also what makes naming every module a dependency of this one the thing
+ * that keeps such a check honest under {@code -am}.
+ */
+final class Reactor {
+
+    private Reactor() {}
+
+    /** The modules the root pom names. */
+    static List<String> modules() {
+        String pom;
+        try {
+            pom = Files.readString(root().resolve("pom.xml"));
+        } catch (IOException unreadable) {
+            throw new UncheckedIOException(unreadable);
+        }
+        List<String> out = new ArrayList<>();
+        Matcher named = Pattern.compile("<module>([^<]+)</module>").matcher(pom);
+        while (named.find()) {
+            out.add(named.group(1));
+        }
+        assertTrue(out.size() > 1, () -> "the root pom names " + out);
+        return List.copyOf(out);
+    }
+
+    /** Every compiled class of every one of them. */
+    static List<Path> classes() throws IOException {
+        List<Path> found = new ArrayList<>();
+        for (String module : modules()) {
+            Path built = root().resolve(module).resolve("target/classes");
+            assertTrue(Files.isDirectory(built),
+                    module + " has no built classes: this check covers what has been built, so a"
+                            + " module that has not been is a hole rather than a pass");
+            try (Stream<Path> walk = Files.walk(built)) {
+                walk.filter(each -> each.toString().endsWith(".class")).forEach(found::add);
+            }
+        }
+        return found;
+    }
+
+    /** The repository, from the module this runs in. */
+    static Path root() {
+        return Path.of("").toAbsolutePath().getParent();
+    }
+}

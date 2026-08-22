@@ -3,23 +3,14 @@ package souther.bench;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.ClassModel;
-import java.lang.classfile.CodeModel;
-import java.lang.classfile.instruction.InvokeDynamicInstruction;
-import java.lang.classfile.instruction.InvokeInstruction;
-import java.lang.classfile.instruction.NewObjectInstruction;
-import java.lang.constant.DirectMethodHandleDesc;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -80,13 +71,10 @@ class OnlyARendererTakesAProofApartTest {
             REACH + "Reachability$Reachable",
             REACH + "Reachability$Unsettled");
 
-    /** One compiled call or construction, and the class whose code holds it. */
-    private record Use(String from, String owner, String member, boolean isStatic) {}
-
     @Test
     void onlyItsOwnWordsAskAPayloadWhatItSays() throws IOException {
         Map<String, List<String>> asked = new LinkedHashMap<>();
-        for (Use use : uses()) {
+        for (Compiled.Site use : uses()) {
             if (WRITES_THE_WORDS_OF.containsKey(use.owner()) && use.member().equals("said")) {
                 asked.computeIfAbsent(use.owner(), _ -> new ArrayList<>()).add(use.from());
             }
@@ -101,7 +89,7 @@ class OnlyARendererTakesAProofApartTest {
     @Test
     void andOnlyThoseWordsAreWritten() throws IOException {
         Map<String, List<String>> implementors = new LinkedHashMap<>();
-        for (Path each : classes()) {
+        for (Path each : Reactor.classes()) {
             ClassModel model = ClassFile.of().parse(Files.readAllBytes(each));
             for (var face : model.interfaces()) {
                 String name = face.asInternalName().replace('/', '.');
@@ -125,7 +113,7 @@ class OnlyARendererTakesAProofApartTest {
         List<String> outside = new ArrayList<>();
         boolean sawAFactory = false;
         boolean sawAConstructor = false;
-        for (Use use : uses()) {
+        for (Compiled.Site use : uses()) {
             // A factory is static; reading a component off an answer already in hand is not one,
             // and is what a policy consumer does when it passes a reason along.
             boolean isFactory = use.owner().startsWith(REACH) && use.isStatic();
@@ -152,100 +140,17 @@ class OnlyARendererTakesAProofApartTest {
     }
 
     /**
-     * What a method handle in a bootstrap argument comes to, said the way a call is.
+     * Every call and construction the built classes hold, the answers' own aside.
      *
-     * <p>A reference is the call it stands for and puts neither an invoke nor a new in the caller's
-     * code. Which kind of handle it is decides the two things these rules ask: static is a factory,
-     * a constructor handle makes the value, a virtual one on a payload asks it what it says.
+     * <p>Read by {@link Compiled}, which is where the vocabulary lives: making a value is a
+     * {@code new}, a constructor handle in a bootstrap argument, or nothing visible at the call
+     * site at all, and a check that knows about one of those has a way round it. This rule found
+     * that out first and the next one copied the module walk instead, so the reading is one place
+     * now and both ask it.
      */
-    private static Use referenced(String from, DirectMethodHandleDesc handle) {
-        String owner = handle.owner().descriptorString();
-        owner = owner.startsWith("L") && owner.endsWith(";")
-                ? owner.substring(1, owner.length() - 1).replace('/', '.') : owner;
-        return switch (handle.kind()) {
-            case STATIC, INTERFACE_STATIC -> new Use(from, owner, handle.methodName(), true);
-            case CONSTRUCTOR -> new Use(from, owner, "<init>", false);
-            default -> new Use(from, owner, handle.methodName(), false);
-        };
+    private static List<Compiled.Site> uses() throws IOException {
+        // What the answers do among themselves is their own business.
+        return Compiled.sites().stream().filter(use -> !use.from().startsWith(REACH)).toList();
     }
 
-    /** Every call and construction the built classes hold, the answers' own aside. */
-    private static List<Use> uses() throws IOException {
-        List<Use> found = new ArrayList<>();
-        for (Path each : classes()) {
-            ClassModel model = ClassFile.of().parse(Files.readAllBytes(each));
-            String from = model.thisClass().asInternalName().replace('/', '.');
-            if (from.startsWith(REACH)) {
-                continue;   // what the answers do among themselves is their own business
-            }
-            for (var method : model.methods()) {
-                CodeModel code = method.code().orElse(null);
-                if (code == null) {
-                    continue;
-                }
-                for (var element : code) {
-                    if (element instanceof InvokeInstruction call) {
-                        found.add(new Use(from, call.owner().asInternalName().replace('/', '.'),
-                                call.name().stringValue(),
-                                call.opcode() == java.lang.classfile.Opcode.INVOKESTATIC));
-                    } else if (element instanceof NewObjectInstruction made) {
-                        found.add(new Use(from,
-                                made.className().asInternalName().replace('/', '.'), "<init>",
-                                false));
-                    } else if (element instanceof InvokeDynamicInstruction lambda) {
-                        for (var argument : lambda.bootstrapArgs()) {
-                            if (argument instanceof DirectMethodHandleDesc handle) {
-                                found.add(referenced(from, handle));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        assertFalse(found.isEmpty(), "no compiled call was read at all");
-        return found;
-    }
-
-    /**
-     * Every module's compiled main classes.
-     *
-     * <p>A module with nothing built is a hole rather than a pass: this rule is about what the
-     * repository ships, and a module the walk could not read is one it says nothing about.
-     */
-    private static List<Path> classes() throws IOException {
-        List<Path> found = new ArrayList<>();
-        for (String module : modules()) {
-            Path root = repoRoot().resolve(module).resolve("target/classes");
-            assertTrue(Files.isDirectory(root),
-                    module + " has no built classes: this check covers what has been built, so a"
-                            + " module that has not been is a hole rather than a pass");
-            try (Stream<Path> walk = Files.walk(root)) {
-                walk.filter(each -> each.toString().endsWith(".class")).forEach(found::add);
-            }
-        }
-        return found;
-    }
-
-    /** The modules the reactor builds, read off the root pom so a module added later is covered by
-     *  being added rather than by being remembered here. */
-    private static List<String> modules() {
-        String pom;
-        try {
-            pom = Files.readString(repoRoot().resolve("pom.xml"));
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-        List<String> modules = new ArrayList<>();
-        Matcher m = Pattern.compile("<module>([^<]+)</module>").matcher(pom);
-        while (m.find()) {
-            modules.add(m.group(1));
-        }
-        assertFalse(modules.isEmpty(), "the reactor names no modules");
-        return modules;
-    }
-
-    /** The test runs in its own module directory, so the repository root is its parent. */
-    private static Path repoRoot() {
-        return Path.of("").toAbsolutePath().getParent();
-    }
 }
