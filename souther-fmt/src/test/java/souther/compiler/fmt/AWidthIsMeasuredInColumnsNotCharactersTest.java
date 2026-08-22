@@ -51,6 +51,33 @@ class AWidthIsMeasuredInColumnsNotCharactersTest {
     }
 
     /**
+     * And a third number, which is neither of the two. Past a table's column the line has reached
+     * further on the screen than the width has counted, because padding is not content the width has
+     * to make room for. What a group decision carries is the column the width read.
+     *
+     * <p>Held as a pair. The group after the padded stop is written at column 5 and measured from
+     * column 2, and a layout that kept the screen column here would have measured this group against
+     * a width three columns further along than the one it was decided by.
+     */
+    @Test
+    void a_group_is_measured_from_the_column_the_width_read_and_not_the_one_it_stands_at() {
+        Columns.Unit column = new Columns.Unit(new Columns.TableRef(),
+                Columns.Stop.THE_RESULT_OF_A_FAKE);
+        Doc wide = Doc.group(Doc.concat(Doc.text("xxxx"), Doc.columnStop(column), Doc.text("|"),
+                Doc.group(Doc.text("ab"))));
+        Doc narrow = Doc.group(Doc.concat(Doc.text("x"), Doc.columnStop(column), Doc.text("|"),
+                Doc.group(Doc.text("ab"))));
+        Layout laid = Doc.concat(wide,
+                Doc.hardline(Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN), narrow).layout(100);
+
+        assertEquals("xxxx|ab\nx   |ab", laid.text());
+        assertEquals(5, laid.text().indexOf("ab", 8) - laid.text().indexOf('\n') - 1,
+                "the second row's group stands at column 5 on the screen");
+        assertEquals(2, laid.decisions().get(3).startColumn(),
+                "and the width read column 2, which is where it stands with no padding counted");
+    }
+
+    /**
      * The other half of the contract. Everything a layout says about where something is in its text
      * — a break's offset, a break opportunity's — indexes the text it wrote, and the readers of a
      * layout cut and search that string with it. Moving those to columns alongside the width would

@@ -5,7 +5,6 @@ import souther.compiler.cst.SyntaxElement;
 import souther.compiler.cst.SyntaxKind;
 import souther.compiler.cst.SyntaxNode;
 import souther.compiler.cst.SyntaxToken;
-import souther.compiler.text.DisplayColumns;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -621,7 +620,20 @@ final class Witnesses {
 
     /**
      * What the column rule has against {@code source}: for each column of each table, the display
-     * column the canonical form writes the connector at, and the ones the source wrote it at.
+     * column the canonical form writes the connector at, and the ones the source's rows come to.
+     *
+     * <p>What a row comes to is where its connector stands with the padding the source wrote and
+     * everything before it on the line as the canonical form has it — not the column the connector
+     * physically occupies in the source. An absolute column is the sum of everything to its left:
+     * the indent, every separator, and every column before it on the line. Read that way, a table
+     * an author lined up correctly and indented one column too deep departs from this rule at every
+     * row, and repairing the indentation is what makes those departures go away — which is a rule
+     * reporting somebody else's difference as its own. {@link Witness.Indentation} met the same
+     * thing and answers with a step rather than with a column for the same reason.
+     *
+     * <p>So what is read from the source is the padding, which is this rule's own, and it is said
+     * as the column that padding comes to. Where the rest of the line is already canonical the two
+     * are the same number, which is every source that has nothing else wrong with it.
      *
      * <p>A row the canonical form writes down the page has no stop, so it is not asked about here.
      * Neither is a row the source broke: its connector opens a line there, and a column is not
@@ -657,8 +669,11 @@ final class Witnesses {
             if (!padsAfterTheSeparator(source, had.get(i), had.get(i + 1), stop.separator())) {
                 continue;   // the spacing rule is answering this run; asked again once it has
             }
+            // The run comes apart, so what is left of it after the separator is spaces and each of
+            // them is one column.
+            int padding = between.length() - stop.separator().length();
             hadAt.computeIfAbsent(stop.occurrence().unit(), _ -> new LinkedHashSet<>())
-                    .add(columnAt(source, had.get(i + 1).start()));
+                    .add(stop.occurrence().naturalColumn() + padding);
         }
         List<Witness> out = new ArrayList<>();
         hadAt.forEach((unit, columns) -> {
@@ -674,12 +689,6 @@ final class Witnesses {
             }
         });
         return out;
-    }
-
-    /** The display column {@code at} stands at in {@code text}. */
-    static int columnAt(String text, int at) {
-        int start = text.lastIndexOf('\n', at - 1) + 1;
-        return DisplayColumns.advance(text.substring(start, at), 0);
     }
 
     /**

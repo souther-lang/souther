@@ -100,10 +100,13 @@ sealed interface Witness {
      *
      * <p>Display columns, because what lines up is what a reader sees.
      *
-     * <p>This rule owns the whole run of spaces before the connector, so {@link BetweenTwoTokens}
-     * is not asked there. Both would be answering about the same characters, and what a reader
-     * wants to be told at a table is which column the row missed rather than that one space is
-     * eight.
+     * <p>What this rule owns at a stop is the padding, and {@link BetweenTwoTokens} owns the
+     * separator in front of it. So that one is not asked at a stop whose separator the source
+     * already writes, and it is the only one asked where the source wrote a tab there or no space
+     * at all — a run that does not come apart into a separator and padding holds nothing this rule
+     * could be the answer about. The two never answer about the same characters, which the
+     * composition of a repair refuses, and never both stay silent, which would leave a difference
+     * no rule accounts for.
      */
     record AtAColumn(Columns.Unit unit, int canonical, java.util.List<Integer> source)
             implements Witness {

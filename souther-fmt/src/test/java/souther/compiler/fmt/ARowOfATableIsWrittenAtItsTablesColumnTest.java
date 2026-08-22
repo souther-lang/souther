@@ -66,6 +66,39 @@ class ARowOfATableIsWrittenAtItsTablesColumnTest {
     private static final String NO_SEPARATOR =
             "examples for demo\n\nfake f\n    | (A)-> X\n";
 
+    /**
+     * A table whose rows are lined up with each other and whose whole block is written one column
+     * too deep. Nothing about the columns is wrong with it; one thing about its indentation is.
+     */
+    private static final String INDENTED_ONE_DEEPER = """
+            examples for demo
+
+            example f
+                 | "aaaa" : (A) -> X
+                 | "b"    : (B) -> Y
+            """;
+
+    /** The same, with one row missing the separator its first column stands after. The row's second
+     *  connector is then a column to the left of where the canonical form has it, and nothing about
+     *  the padding in front of it is what put it there. */
+    private static final String ONE_SEPARATOR_MISSING = """
+            examples for demo
+
+            example f
+                | "a": (A) -> X
+            """;
+
+    /** A table written in Japanese, where a name is twice the width its characters suggest. What
+     *  #938 was reported against. */
+    private static final String FULL_WIDTH = """
+            examples for demo
+
+            example 一杯目の価格を求める
+                | "通常時間・クーポンなし" : (通常時間, クーポンなし) -> 価格(490)
+                | "ハッピーアワー・クーポンなし" : (ハッピーアワー, クーポンなし) -> 価格(290)
+                | (通常時間, クーポンあり) -> 価格(100)
+            """;
+
     /** The canonical form of a source, with both texts' tokens read back. */
     private record Written(Formatter.CanonicalForm form, Witnesses.Pairing pairing) {
 
@@ -85,7 +118,7 @@ class ARowOfATableIsWrittenAtItsTablesColumnTest {
 
         /** The display column the connector of one stop was written at. */
         int columnOf(Witnesses.CanonicalStop stop) {
-            return Witnesses.columnAt(form.text(), code().get(stop.adjacency() + 1).start());
+            return columnAt(form.text(), code().get(stop.adjacency() + 1).start());
         }
 
         /** Where each column of each table was settled, in the order the tables are written. */
@@ -226,7 +259,7 @@ class ARowOfATableIsWrittenAtItsTablesColumnTest {
 
         int longest = 0;
         for (String line : written.form().text().split("\n", -1)) {
-            longest = Math.max(longest, Witnesses.columnAt(line + "\n", line.length()));
+            longest = Math.max(longest, columnAt(line + "\n", line.length()));
         }
         assertTrue(longest > 100, "the fixture writes a line over the width; it reaches " + longest);
         for (GroupDecision decision : written.form().layout().decisions()) {
@@ -350,15 +383,43 @@ class ARowOfATableIsWrittenAtItsTablesColumnTest {
      */
     @Test
     void aRowThatWroteNoSeparatorIsToldThatAndNotAboutItsColumn() {
-        Deviations.Report report = Deviations.of(NO_SEPARATOR);
-
-        Set<String> rules = new LinkedHashSet<>();
-        report.deviations().forEach(d -> rules.add(d.rule()));
-        assertEquals(Set.of("what goes between two tokens on a line"), rules);
-        assertTrue(report.whole(), "and repairing what the rules say writes the canonical form");
+        assertEquals(Set.of("what goes between two tokens on a line"), rulesAgainst(NO_SEPARATOR));
         assertEquals(List.of(), Witnesses.columns(NO_SEPARATOR,
                 Formatter.canonicalize(CstParser.parse(NO_SEPARATOR).root())),
                 "the column rule has nothing to say about this run");
+    }
+
+    /**
+     * A rule says what its own unit has against a source, and a column's unit is the padding it
+     * writes rather than the column its connector physically occupies.
+     *
+     * <p>An absolute column is the sum of everything to the left of it on the line: the indent,
+     * every separator, and every column already written. Read that way this rule reports whatever
+     * those rules got wrong as its own, and a reader repairing what it was told to repair finds the
+     * report was about something else.
+     *
+     * <p>Two sources say it. One is lined up correctly and indented a column too deep — nothing
+     * about its columns is wrong. The other has one separator missing before its first column, and
+     * what that moved is the connector after it. Each has exactly one thing wrong with it and is
+     * told exactly that.
+     */
+    @Test
+    void aColumnDoesNotReportWhatSomebodyElseMoved() {
+        assertEquals(Set.of("one level deeper is one indent further in"),
+                rulesAgainst(INDENTED_ONE_DEEPER),
+                "a table lined up correctly and indented one deeper");
+        assertEquals(Set.of("what goes between two tokens on a line"),
+                rulesAgainst(ONE_SEPARATOR_MISSING),
+                "a row that wrote no separator before its first column");
+    }
+
+    /** What the report names against a source, and that repairing it writes the canonical form. */
+    private static Set<String> rulesAgainst(String source) {
+        Deviations.Report report = Deviations.of(source);
+        assertTrue(report.whole(), "everything this source departs from was named");
+        Set<String> rules = new LinkedHashSet<>();
+        report.deviations().forEach(d -> rules.add(d.rule()));
+        return rules;
     }
 
     /** Every stop the rule lists is one some source in the repository writes. */
@@ -373,6 +434,12 @@ class ARowOfATableIsWrittenAtItsTablesColumnTest {
         assertEquals(Set.of(Columns.Stop.values()), reached);
     }
 
+    /** The display column {@code at} stands at in {@code text}. */
+    private static int columnAt(String text, int at) {
+        int start = text.lastIndexOf('\n', at - 1) + 1;
+        return souther.compiler.text.DisplayColumns.advance(text.substring(start, at), 0);
+    }
+
     /**
      * What these properties are held over: the fixtures above, the corpus the formatter's rules are
      * measured against — chosen to reach every kind of node the grammar has — and every {@code .sou}
@@ -385,7 +452,7 @@ class ARowOfATableIsWrittenAtItsTablesColumnTest {
     private static List<String> sources() {
         List<String> out = new ArrayList<>(
                 List.of(TWO_TABLES, A_TAB_REACHING_THE_COLUMN, A_TAB_AFTER_A_COLUMN,
-                        NO_SEPARATOR));
+                        NO_SEPARATOR, INDENTED_ONE_DEEPER, ONE_SEPARATOR_MISSING, FULL_WIDTH));
         out.addAll(WhatGoesBetweenTwoTokensOnALineTest.corpus());
         out.addAll(inTheRepository());
         return out;

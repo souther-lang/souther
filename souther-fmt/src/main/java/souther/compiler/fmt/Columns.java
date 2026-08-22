@@ -120,11 +120,4 @@ final class Columns {
         }
         return null;
     }
-
-    /** How many times the layout has to be laid out before every column has settled. Each stop is
-     *  settled by the pass after the one that settled the stop before it on its line, and one more
-     *  pass sees that nothing moved. */
-    static int passes() {
-        return Stop.values().length + 1;
-    }
 }

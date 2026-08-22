@@ -290,14 +290,15 @@ final class Repair {
      * The rows of one column, each carried out to it.
      *
      * <p>One edit per row and one decision behind them. What is written is the whole run before the
-     * connector, which is this rule's: the spacing rule is not asked at a stop, so nothing else
-     * answers about these characters.
+     * connector, which is this rule's wherever it is asked at all: a run that does not come apart
+     * into the separator and padding is the spacing rule's that round and is skipped here, so the
+     * two never write over each other.
      *
-     * <p>The number of spaces is worked out from where the row has got to in the text being
-     * repaired rather than from what the source had there, so a row whose own content is also being
-     * repaired does not have to be written in any order. Where the row has got further than the
-     * column, the run is the separator alone and the round after this one asks again — the width in
-     * front of the connector is another rule's and it has not been written yet.
+     * <p>What is written is what the canonical form writes there: the separator, and the spaces that
+     * carry this row from where the canonical form has it reaching to the column. Not spaces counted
+     * from where the source's own line has got to — that count is the indent and every separator
+     * before it as much as it is this rule's padding, so a row whose line is also being repaired
+     * elsewhere would be written to a column that the other repair then moves.
      */
     private static List<Edit> columns(Round round, Witness.AtAColumn witness) {
         String source = round.source();
@@ -322,9 +323,14 @@ final class Repair {
                                 + " written before a connector is counted in columns here, and a"
                                 + " tab is not one of them");
             }
-            int reached = Witnesses.columnAt(source, from);
-            int wide = Math.max(witness.canonical() - reached, separator.length());
-            out.add(new Edit(from, to, " ".repeat(wide)));
+            int padding = witness.canonical() - stop.occurrence().naturalColumn();
+            if (padding < 0) {
+                throw new IllegalStateException(
+                        "a row reaching column " + stop.occurrence().naturalColumn() + " is written"
+                                + " to column " + witness.canonical() + "; a column is the greatest"
+                                + " of what its rows reach and no row is written back from one");
+            }
+            out.add(new Edit(from, to, separator + " ".repeat(padding)));
         }
         return out;
     }

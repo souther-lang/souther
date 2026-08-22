@@ -18,6 +18,16 @@ sealed interface Doc {
 
     Doc NIL = new Nil();
 
+    /**
+     * How many times a document is laid out before every column has settled.
+     *
+     * <p>A stop is settled by the pass after the one that settled the stop before it on its line,
+     * and one more pass sees that nothing moved. So it is one more than the stops there are — read
+     * from {@link Columns.Stop} because that is where they are listed, and held here because how
+     * many times this lays a document out is this file's and not the rule's.
+     */
+    int PASSES = Columns.Stop.values().length + 1;
+
     /** Writes nothing, and the group holding it is never laid out flat. A comment cannot share the
      * line after it, so a construct holding one breaks even where its own content would have fitted
      * — and where the break itself is the enclosing construct's to write, as the brackets of a list
@@ -225,7 +235,7 @@ sealed interface Doc {
      *
      * <p>It settles because a column depends only on the columns before it on its line: the first
      * stop is settled by the first pass, the one after it by the second, and one more pass sees that
-     * nothing moved. {@link Columns#passes()} is that count and this refuses to run past it.
+     * nothing moved. {@link #PASSES} is that count and this refuses to run past it.
      *
      * <p>A document with no table is laid out once. The first pass writes no stop, so there is
      * nothing to settle and the layout it produced is the answer — which is what keeps this off the
@@ -239,9 +249,9 @@ sealed interface Doc {
             if (settled.equals(columns)) {
                 return laid;
             }
-            if (pass >= Columns.passes()) {
+            if (pass >= PASSES) {
                 throw new IllegalStateException(
-                        "the columns of a table did not settle in " + Columns.passes()
+                        "the columns of a table did not settle in " + PASSES
                                 + " layouts; a column reads the ones before it on its line and"
                                 + " nothing else, so this is a cycle that should not exist");
             }

@@ -332,6 +332,10 @@ column, and the two answers are columns:
 - the rows of a table of fakes write their -> at one column — a `fake` has the one column, since its
   rows have no description.
 
+The column a row is said to be at is where the padding it wrote carries it, with the rest of the
+line as the canonical form has it. So a table lined up correctly and indented one column too deep is
+told about its indentation and nothing else, rather than about every row.
+
 What separates one thing from another, and what ends:
 
 - a blank line stands where the author wrote one, and under a header — how many, as lines.
