@@ -24,6 +24,7 @@ public sealed interface GenerationReason {
      */
     record PositionWithheld(AxisId axis) implements GenerationReason {}
 
+
     /**
      * Rows exist that nothing read, so nothing was offered at all.
      *

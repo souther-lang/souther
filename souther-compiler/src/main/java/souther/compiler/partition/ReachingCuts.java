@@ -66,49 +66,6 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<ReachingCuts.Cut>> byC
     }
 
     /**
-     * Each comparison of {@code condition}, filed under what a row had already satisfied when it
-     * ran.
-     *
-     * <p><b>In the order a condition is evaluated in, which is what makes this per comparison and
-     * not per fork.</b> A condition stops as soon as it is settled: under {@code A && B} the second
-     * comparison runs only where the first held, and under {@code A || B} only where it did not. So
-     * what has been established by the time a comparison runs differs between the comparisons of one
-     * condition, and a reading that handed every comparison of a fork the same thing would be
-     * answering about the fork.
-     *
-     * <p>That is not a missing case, it is the case. Sequential guards and the same conditions run
-     * together with {@code &&} state the same model, and a coverage answer that differed between
-     * them would be a fact about how the author spelled the condition — the guard at the end of a
-     * chain would be searched for over everything its positions could ever hold, which is the
-     * defect this whole type exists to remove, arriving by way of a rewrite that changes nothing.
-     *
-     * <p>Descends through {@code &&} and {@code ||} and nothing else, which is what a condition is
-     * built out of. Anything else is where the arithmetic stops, and it contributes nothing rather
-     * than being guessed at.
-     */
-    static void collect(Condition condition, List<Cut> before, CoverageSites.Plan plan,
-                        Symbols symbols, Collected out) {
-        switch (condition) {
-            case Condition.Both both -> {
-                collect(both.left(), before, plan, symbols, out);
-                collect(both.right(), and(before, stating(both.left(), true, symbols)), plan,
-                        symbols, out);
-            }
-            case Condition.Either either -> {
-                collect(either.left(), before, plan, symbols, out);
-                collect(either.right(), and(before, stating(either.left(), false, symbols)), plan,
-                        symbols, out);
-            }
-            case Condition.Compares one ->
-                    plan.comparisonAt(one.at()).ifPresent(site -> out.reached(site, before));
-            case Condition.NotRead _ -> {
-                // Nothing runs here as far as this reading is concerned, so nothing is filed and
-                // nothing is established for whatever stands beside it.
-            }
-        }
-    }
-
-    /**
      * What {@code node} coming out {@code holding} says about this input, where anything can be
      * said.
      *

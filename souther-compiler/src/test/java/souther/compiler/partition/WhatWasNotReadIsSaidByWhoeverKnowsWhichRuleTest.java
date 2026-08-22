@@ -41,18 +41,24 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
             let f (n) = if Int.multiply(n, n) < 10 then Ok else No
             """;
 
-    /** A position whose values are held inside something the walk does not reach into. */
+    /**
+     * A position whose rules the reading never arrived at.
+     *
+     * <p>The clause states a relation of every element and is held as a quantifier over the clause
+     * it was written in; nothing places one at the position it is about. So there is a rule and no
+     * reader that reached it, which is what leaves a position with no rule to name.
+     */
     private static final String A_POSITION = """
             module m
 
             data Ok
             data Item = { charge: Int }
+            data Basket = List<Item>
+                invariant charged = List.all(i -> i.charge >= 1, value)
 
-            behavior f : (items: List<Item>) -> Ok
+            behavior f : (items: Basket) -> Ok
                 constructs Ok
-            let f (items) =
-                { guard List.length(List.filter((i) -> i.charge >= 21000, items)) < 1 else Ok
-                  Ok }
+            let f (items) = Ok
             """;
 
     /** A rule finding names the rule, and is told under the word for a rule. */
@@ -69,9 +75,9 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
     /**
      * And a position finding names no rule, because nothing observed one.
      *
-     * <p>The threshold is on an element of the list, and the elements cannot be reached
-     * reached. What stopped this is the reach and not any one clause, so what is said is the position
-     * and the limit — and the shape has nowhere to put a rule, which is what stops one being
+     * <p>The clause is stated of every element, and what holds it is the quantifier rather than
+     * the position — so what stopped this is the reading and not any one clause, and what is said
+     * is the position alone. The shape has nowhere to put a rule, which is what stops one being
      * invented.
      */
     @Test
@@ -80,7 +86,7 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
 
         assertTrue(said.stream().anyMatch(each ->
                         each instanceof PartitionEvidence.NotRead.APosition
-                                && each.reason() == UndividedPosition.Reason.UNSUPPORTED_TRAVERSAL),
+                                && each.reason() == UndividedPosition.Reason.RULES_NOT_READ_AT_ALL),
                 said::toString);
         assertFalse(said.stream().anyMatch(each -> each instanceof PartitionEvidence.NotRead.ARule),
                 said::toString);
@@ -98,7 +104,7 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
     void theTwoAreWrittenApart() {
         assertTrue(human(A_RULE).contains("not read: comparison@"), human(A_RULE));
         assertFalse(human(A_RULE).contains("not read: n "), human(A_RULE));
-        assertTrue(human(A_POSITION).contains("not read: items ("), human(A_POSITION));
+        assertTrue(human(A_POSITION).contains("not read: items[*].charge ("), human(A_POSITION));
     }
 
     private static List<Adequacy.Kind> kinds(String model) {

@@ -31,7 +31,7 @@ import java.util.function.Predicate;
  * same operation. What the operations do to the closure they are handed is not here but in
  * {@link Combinators}, which the totality check reads as well and neither of the two states.
  *
- * <p>A rule answers a call, not a position in one. Which argument it reads is written as {@link Reads}
+ * <p>A rule answers a call, not a position in one. Which argument it reads is written as {@link ArgumentRef}
  * and settled here, so no reader turns a number back into an argument and none has to ask whether the
  * number was one this call has. What makes that safe is the binding below: every row is held to the
  * declaration it was written for before any of them is read.
@@ -92,114 +92,144 @@ final class DischargeRules {
         SAME, AT_MOST
     }
 
-    /**
-     * Which argument a rule reads.
-     *
-     * <p>Either the position the declaration puts it at, or the part it plays in what the operation
-     * hands its closure — which {@link Combinators} already reads off the signature. A rule that names
-     * the part restates nothing and cannot come to disagree with the declaration; one that writes a
-     * position is a decision the signature does not settle, and is held to the declaration where the
-     * tables are bound.
-     *
-     * <p>Nothing outside this asks for the number. A reader is answered with the argument.
-     */
-    sealed interface Reads {
-
-        /** Which parameter of {@code operation} this names. */
-        int positionIn(ValueName operation);
-
-        /** The argument {@code call} passes there. */
-        default Core of(Core.PreservedCall call) {
-            return call.args().get(positionIn(call.operation()));
-        }
-
-        /** {@code call} with that argument replaced by {@code value}. */
-        default Core.PreservedCall replacedIn(Core.PreservedCall call, Core value) {
-            List<Core> args = new ArrayList<>(call.args());
-            args.set(positionIn(call.operation()), value);
-            return new Core.PreservedCall(call.operation(), args, call.type(), call.pos());
-        }
-
-        /** The argument at a written position. */
-        record At(int position) implements Reads {
-            @Override
-            public int positionIn(ValueName operation) {
-                return position;
-            }
-        }
-
-        /** The argument holding what the operation hands its closure. */
-        record TheContainer() implements Reads {
-            @Override
-            public int positionIn(ValueName operation) {
-                return handing(operation, "the container").containerArg();
-            }
-        }
-
-        /** The argument the operation applies to what a container holds. */
-        record TheClosure() implements Reads {
-            @Override
-            public int positionIn(ValueName operation) {
-                return handing(operation, "the closure").closureArg();
-            }
-        }
-
-        private static Combinators.Combinator handing(ValueName operation, String part) {
-            Combinators.Combinator handed = Combinators.of(operation);
-            if (handed == null) {
-                throw new IllegalStateException("a rule about " + operation + " names " + part
-                        + " of what it hands its closure, and its signature says it hands one nothing"
-                        + " a container holds");
-            }
-            return handed;
-        }
-    }
-
     /** The argument the signature already says the elements come from, where the operation takes a
      * closure at all — so a rule about such an operation writes no position of its own. */
-    private static final Reads CONTAINER = new Reads.TheContainer();
+    private static final ArgumentRef CONTAINER = new ArgumentRef.TheContainer();
 
     /** The closure itself, for a rule stated over what the closure answers. */
-    private static final Reads CLOSURE = new Reads.TheClosure();
+    private static final ArgumentRef CLOSURE = new ArgumentRef.TheClosure();
 
     /** The argument at {@code position}, for an operation whose signature does not say which one it
      * is: one that takes no closure, or one given two containers. */
-    private static Reads at(int position) {
-        return new Reads.At(position);
+    private static ArgumentRef at(int position) {
+        return new ArgumentRef.At(position);
     }
 
-    /** Which argument a container was built from, what the building keeps of its elements, and how
-     * many of them the result has. */
-    record Built(Reads from, Shape shape, Cardinality size) {}
+    /**
+     * Where a container's elements came from, and how many of them the result has.
+     *
+     * <p>The lineage is what is declared; {@link #shape} is read off it. The two are not the same
+     * statement and the shape is the coarser — {@code List.filterMap} and {@code Set.map} are one
+     * shape and two lineages — so declaring the shape and deriving the lineage would be deriving
+     * what was thrown away. Written this way round, a reader that wants where an element came from
+     * asks {@link ElementLineage} and a reader that wants whether a property survives asks here,
+     * and neither is recovering the other's answer.
+     */
+    record Built(List<ElementLineage.OutputLineage> outputs, Cardinality size) {
+
+        Built {
+            outputs = List.copyOf(outputs);
+            if (outputs.isEmpty()) {
+                throw new IllegalArgumentException("a construction answers somewhere");
+            }
+        }
+
+        /** The one place its elements stand, for a rule about an operation that answers one run of
+         *  them. */
+        Built(ElementLineage lineage, Cardinality size) {
+            this(List.of(new ElementLineage.OutputLineage(
+                    ElementLineage.ResultPath.elements(), lineage)), size);
+        }
+
+        /** Where its elements came from, where they all came from one place. */
+        ElementLineage lineage() {
+            if (outputs.size() != 1) {
+                throw new IllegalStateException(
+                        "a construction answering more than one run of elements was asked for one"
+                                + " lineage: " + outputs);
+            }
+            return outputs.get(0).origin();
+        }
+
+        /** Which argument it was built from, where one argument is what it was built from. */
+        ArgumentRef from() {
+            ElementLineage.Source source = lineage().source();
+            if (source == null) {
+                throw new IllegalStateException(
+                        "a construction whose elements come from more than one place was asked which"
+                                + " one: " + outputs);
+            }
+            return source.argument();
+        }
+
+        /**
+         * What the building keeps of the elements it was built from, in the words the discharge
+         * check is written in.
+         *
+         * <p>A projection and the one place it happens. What survives a construction is decided by
+         * whether the elements are the source's own and by whether there are as many of them, and
+         * both of those are stated above — so the four words are a reading of the pair rather than
+         * a fifth thing to keep in step with it.
+         */
+        Shape shape() {
+            boolean asMany = size == Cardinality.SAME;
+            return switch (lineage()) {
+                case ElementLineage.SameAs _ -> asMany ? Shape.PERMUTES : Shape.SUBSET;
+                case ElementLineage.ClosureResult _ -> asMany ? Shape.MAPS : Shape.COLLAPSES;
+                // What the closure answered holds it, so what was stated of the source says nothing
+                // of it, and there may be any number of them. No word of the four is about that,
+                // and the nearest is the one for elements nothing was kept of.
+                case ElementLineage.InsideClosureResult _ -> Shape.COLLAPSES;
+                case ElementLineage.OneOf _ -> throw new IllegalStateException(
+                        "a construction whose elements come from more than one place has no single"
+                                + " source for a shape to be about: " + outputs);
+            };
+        }
+    }
 
     /** The container {@code call} built its result from, and what the building kept of it. */
     record Source(Core container, Shape shape, Cardinality size) {}
 
     private static final Map<ValueName, Built> BUILT_FROM = Map.ofEntries(
-            Map.entry(op("List", "reverse"), new Built(at(0), Shape.PERMUTES, Cardinality.SAME)),
-            Map.entry(op("List", "sort"), new Built(at(0), Shape.PERMUTES, Cardinality.SAME)),
-            Map.entry(op("List", "sortBy"), new Built(CONTAINER, Shape.PERMUTES, Cardinality.SAME)),
-            Map.entry(op("List", "map"), new Built(CONTAINER, Shape.MAPS, Cardinality.SAME)),
-            Map.entry(op("List", "mapIndexed"), new Built(CONTAINER, Shape.MAPS, Cardinality.SAME)),
-            Map.entry(op("Map", "mapValues"), new Built(CONTAINER, Shape.MAPS, Cardinality.SAME)),
-            Map.entry(op("List", "filter"), new Built(CONTAINER, Shape.SUBSET, Cardinality.AT_MOST)),
-            Map.entry(op("List", "distinct"), new Built(at(0), Shape.SUBSET, Cardinality.AT_MOST)),
-            Map.entry(op("List", "take"), new Built(at(1), Shape.SUBSET, Cardinality.AT_MOST)),
-            Map.entry(op("List", "drop"), new Built(at(1), Shape.SUBSET, Cardinality.AT_MOST)),
-            Map.entry(op("Set", "filter"), new Built(CONTAINER, Shape.SUBSET, Cardinality.AT_MOST)),
+            Map.entry(op("List", "reverse"), new Built(new ElementLineage.SameAs(
+                    new ElementLineage.Source(at(0), 1)), Cardinality.SAME)),
+            Map.entry(op("List", "sort"), new Built(new ElementLineage.SameAs(
+                    new ElementLineage.Source(at(0), 1)), Cardinality.SAME)),
+            Map.entry(op("List", "sortBy"), new Built(new ElementLineage.SameAs(
+                    new ElementLineage.Source(CONTAINER, 1)), Cardinality.SAME)),
+            Map.entry(op("List", "map"), new Built(new ElementLineage.ClosureResult(
+                    new ElementLineage.Source(CONTAINER, 1)), Cardinality.SAME)),
+            Map.entry(op("List", "mapIndexed"), new Built(new ElementLineage.ClosureResult(
+                    new ElementLineage.Source(CONTAINER, 1)), Cardinality.SAME)),
+            Map.entry(op("Map", "mapValues"), new Built(new ElementLineage.ClosureResult(
+                    new ElementLineage.Source(CONTAINER, 1)), Cardinality.SAME)),
+            Map.entry(op("List", "filter"), new Built(new ElementLineage.SameAs(
+                    new ElementLineage.Source(CONTAINER, 1)), Cardinality.AT_MOST)),
+            Map.entry(op("List", "distinct"), new Built(new ElementLineage.SameAs(
+                    new ElementLineage.Source(at(0), 1)), Cardinality.AT_MOST)),
+            Map.entry(op("List", "take"), new Built(new ElementLineage.SameAs(
+                    new ElementLineage.Source(at(1), 1)), Cardinality.AT_MOST)),
+            Map.entry(op("List", "drop"), new Built(new ElementLineage.SameAs(
+                    new ElementLineage.Source(at(1), 1)), Cardinality.AT_MOST)),
+            Map.entry(op("Set", "filter"), new Built(new ElementLineage.SameAs(
+                    new ElementLineage.Source(CONTAINER, 1)), Cardinality.AT_MOST)),
             Map.entry(op("Map", "filterEntries"),
-                    new Built(CONTAINER, Shape.SUBSET, Cardinality.AT_MOST)),
-            Map.entry(op("List", "distinctBy"), new Built(CONTAINER, Shape.SUBSET, Cardinality.AT_MOST)),
-            Map.entry(op("Map", "remove"), new Built(at(1), Shape.SUBSET, Cardinality.AT_MOST)),
-            Map.entry(op("Set", "remove"), new Built(at(1), Shape.SUBSET, Cardinality.AT_MOST)),
-            Map.entry(op("Map", "intersection"), new Built(at(0), Shape.SUBSET, Cardinality.AT_MOST)),
-            Map.entry(op("Map", "difference"), new Built(at(0), Shape.SUBSET, Cardinality.AT_MOST)),
-            Map.entry(op("Set", "intersection"), new Built(at(0), Shape.SUBSET, Cardinality.AT_MOST)),
-            Map.entry(op("Set", "difference"), new Built(at(0), Shape.SUBSET, Cardinality.AT_MOST)),
-            Map.entry(op("Map", "updateIfPresent"), new Built(CONTAINER, Shape.MAPS, Cardinality.SAME)),
+                    new Built(new ElementLineage.SameAs(
+                            new ElementLineage.Source(CONTAINER, 1)), Cardinality.AT_MOST)),
+            Map.entry(op("List", "distinctBy"), new Built(new ElementLineage.SameAs(
+                    new ElementLineage.Source(CONTAINER, 1)), Cardinality.AT_MOST)),
+            Map.entry(op("Map", "remove"), new Built(new ElementLineage.SameAs(
+                    new ElementLineage.Source(at(1), 1)), Cardinality.AT_MOST)),
+            Map.entry(op("Set", "remove"), new Built(new ElementLineage.SameAs(
+                    new ElementLineage.Source(at(1), 1)), Cardinality.AT_MOST)),
+            Map.entry(op("Map", "intersection"), new Built(new ElementLineage.SameAs(
+                    new ElementLineage.Source(at(0), 1)), Cardinality.AT_MOST)),
+            Map.entry(op("Map", "difference"), new Built(new ElementLineage.SameAs(
+                    new ElementLineage.Source(at(0), 1)), Cardinality.AT_MOST)),
+            Map.entry(op("Set", "intersection"), new Built(new ElementLineage.SameAs(
+                    new ElementLineage.Source(at(0), 1)), Cardinality.AT_MOST)),
+            Map.entry(op("Set", "difference"), new Built(new ElementLineage.SameAs(
+                    new ElementLineage.Source(at(0), 1)), Cardinality.AT_MOST)),
+            Map.entry(op("Map", "updateIfPresent"), new Built(new ElementLineage.ClosureResult(
+                    new ElementLineage.Source(CONTAINER, 1)), Cardinality.SAME)),
+            // Inside what the closure answered, which is an optional here and a list in a
+            // `flatMap`. One lineage for the two, told apart by what the closure's own signature
+            // says it answers with.
             Map.entry(op("List", "filterMap"),
-                    new Built(CONTAINER, Shape.COLLAPSES, Cardinality.AT_MOST)),
-            Map.entry(op("Set", "map"), new Built(CONTAINER, Shape.COLLAPSES, Cardinality.AT_MOST)));
+                    new Built(new ElementLineage.InsideClosureResult(
+                            new ElementLineage.Source(CONTAINER, 1)), Cardinality.AT_MOST)),
+            Map.entry(op("Set", "map"), new Built(new ElementLineage.ClosureResult(
+                    new ElementLineage.Source(CONTAINER, 1)), Cardinality.AT_MOST)));
 
     /**
      * The containers a construction's result is never smaller than.
@@ -217,7 +247,7 @@ final class DischargeRules {
      * does, and stating it for that one alone would be a second rule for one operation. The bound is
      * what they share, and it is what a lower-bound invariant asks for.
      */
-    private static final Map<ValueName, List<Reads>> NO_SMALLER_THAN = Map.of(
+    private static final Map<ValueName, List<ArgumentRef>> NO_SMALLER_THAN = Map.of(
             op("List", "append"), List.of(at(0), at(1)),
             op("Set", "union"), List.of(at(0), at(1)),
             op("Map", "union"), List.of(at(0), at(1)),
@@ -255,7 +285,7 @@ final class DischargeRules {
     /** Where a predicate reads its container, and which shapes of construction carry it there.
      * {@code List.all} holds of any sublist of a list it holds of; {@code List.contains} does not, and
      * neither survives a mapping — what a mapped element is, the mapping alone does not say. */
-    record Carried(Reads container, Set<Shape> through) {}
+    record Carried(ArgumentRef container, Set<Shape> through) {}
 
     private static final Map<ValueName, Carried> CARRIED = Map.of(
             op("List", "all"), new Carried(CONTAINER, Set.of(Shape.PERMUTES, Shape.SUBSET)),
@@ -266,7 +296,7 @@ final class DischargeRules {
             op("Map", "containsKey"), new Carried(at(1), Set.of(Shape.PERMUTES)));
 
     /** Where a predicate reads its container at a call, and how far its statement travels. */
-    record Carrying(Core.PreservedCall stated, Reads at, Set<Shape> through) {
+    record Carrying(Core.PreservedCall stated, ArgumentRef at, Set<Shape> through) {
 
         Core container() {
             return at.of(stated);
@@ -285,11 +315,11 @@ final class DischargeRules {
     /** Where a predicate reads the projection it is stated over. A mapping keeps a projection when
      * the closure copies that field from the element unchanged, so the predicate holds of the mapped
      * list exactly when it holds of what was mapped, over the field it came from. */
-    private static final Map<ValueName, Reads> PROJECTION_OF =
+    private static final Map<ValueName, ArgumentRef> PROJECTION_OF =
             Map.of(op("List", "allDistinctBy"), CLOSURE);
 
     /** The projection a predicate at a call is stated over, as the block it answers with. */
-    record Projection(Core.PreservedCall stated, Reads at, Core.Block projection) {
+    record Projection(Core.PreservedCall stated, ArgumentRef at, Core.Block projection) {
 
         /** The call this was read for, stated over {@code value} instead. */
         Core.PreservedCall over(Core value) {
@@ -375,7 +405,7 @@ final class DischargeRules {
          * value the check has already read. Requiring the digits at the call would make a rule the
          * author cannot predict from what the value is, only from where it was written.
          */
-        record ConstantAboveZero(Reads argument) implements Provided {
+        record ConstantAboveZero(ArgumentRef argument) implements Provided {
             @Override
             public boolean holdsAt(Core.PreservedCall call,
                                    java.util.function.Function<Core, BigDecimal> folded) {
@@ -400,7 +430,7 @@ final class DischargeRules {
      * @param rel      how the result stands to it
      * @param provided what has to hold of the arguments for this to be the operation's answer
      */
-    record ResultBound(Reads against, BigDecimal offset, Rel rel, Provided provided) {}
+    record ResultBound(ArgumentRef against, BigDecimal offset, Rel rel, Provided provided) {}
 
     /** {@code result rel n}. */
     private static ResultBound resultIs(Rel rel, long n) {
@@ -413,7 +443,7 @@ final class DischargeRules {
     }
 
     /** {@code result rel argument + offset}. */
-    private static ResultBound resultIs(Rel rel, Reads argument, long offset, Provided provided) {
+    private static ResultBound resultIs(Rel rel, ArgumentRef argument, long offset, Provided provided) {
         return new ResultBound(argument, BigDecimal.valueOf(offset), rel, provided);
     }
 
@@ -487,9 +517,9 @@ final class DischargeRules {
      * @param amount  the argument saying by how much
      * @param per     how many of what the measure counts one of {@code amount} is
      */
-    record Shift(ValueName.Stdlib measure, Reads of, Reads amount, BigDecimal per) {}
+    record Shift(ValueName.Stdlib measure, ArgumentRef of, ArgumentRef amount, BigDecimal per) {}
 
-    private static Shift shifts(String module, String measure, Reads of, Reads amount, long per) {
+    private static Shift shifts(String module, String measure, ArgumentRef of, ArgumentRef amount, long per) {
         return new Shift(new ValueName.Stdlib(module, measure), of, amount,
                 BigDecimal.valueOf(per));
     }
@@ -520,17 +550,17 @@ final class DischargeRules {
     /** A relation between two arguments: {@code left rel right}. What a case of a piecewise
      * definition is reached under, written in the arguments the operation was given and in nothing
      * else. */
-    record ArgumentsStand(Reads left, Rel rel, Reads right) {}
+    record ArgumentsStand(ArgumentRef left, Rel rel, ArgumentRef right) {}
 
-    private static ArgumentsStand where(Reads left, Rel rel, Reads right) {
+    private static ArgumentsStand where(ArgumentRef left, Rel rel, ArgumentRef right) {
         return new ArgumentsStand(left, rel, right);
     }
 
     /** One case of an operation's definition: the argument it answers there, and what holds of the
      * arguments where it does. */
-    record Choice(Reads answers, List<ArgumentsStand> given) {}
+    record Choice(ArgumentRef answers, List<ArgumentsStand> given) {}
 
-    private static Choice answers(Reads argument, ArgumentsStand... given) {
+    private static Choice answers(ArgumentRef argument, ArgumentsStand... given) {
         return new Choice(argument, List.of(given));
     }
 
@@ -627,7 +657,7 @@ final class DischargeRules {
      * candidate would put every value-preserving conversion under a table about selection, and the
      * two stop being one question the moment the library gains a conversion that is not a widening.
      */
-    private static final Map<ValueName, Reads> ANSWERS_ITS_ARGUMENT =
+    private static final Map<ValueName, ArgumentRef> ANSWERS_ITS_ARGUMENT =
             Map.of(op("Decimal", "fromInt"), at(0));
 
     /**
@@ -909,7 +939,7 @@ final class DischargeRules {
         if (!(e instanceof Core.PreservedCall call)) {
             return null;
         }
-        Reads reads = Bound.FORMS.get(call.operation());
+        ArgumentRef reads = Bound.FORMS.get(call.operation());
         return reads == null ? null : reads.of(call);
     }
 
@@ -949,13 +979,13 @@ final class DischargeRules {
         private static final Map<ValueName, Carried> CARRIERS =
                 bind(CARRIED, Carried::container, CONTAINER, Question::holdsElements,
                         "the container a predicate reads");
-        private static final Map<ValueName, Reads> PROJECTIONS =
+        private static final Map<ValueName, ArgumentRef> PROJECTIONS =
                 bind(PROJECTION_OF, Function.identity(), CLOSURE, t -> t instanceof Type.FnOf,
                         "the projection a predicate is stated over");
-        private static final Map<ValueName, List<Reads>> LOWER_BOUNDS =
+        private static final Map<ValueName, List<ArgumentRef>> LOWER_BOUNDS =
                 bindEach(NO_SMALLER_THAN, CONTAINER, Question::holdsElements,
                         "a container the result is no smaller than");
-        private static final Map<ValueName, Reads> FORMS =
+        private static final Map<ValueName, ArgumentRef> FORMS =
                 bind(ANSWERS_ITS_ARGUMENT, Function.identity(), null, Question::isANumber,
                         "the argument whose number the result is");
         private static final Map<ValueName, List<ResultBound>> BOUNDS =
@@ -998,7 +1028,7 @@ final class DischargeRules {
      * each condition it is reached under. */
     private static Map<ValueName, Choices> bindChoices(Map<ValueName, Choices> rules) {
         rules.forEach((operation, choices) -> choices.cases().forEach(choice -> {
-            List<Reads> named = new ArrayList<>();
+            List<ArgumentRef> named = new ArrayList<>();
             named.add(choice.answers());
             choice.given().forEach(stands -> {
                 named.add(stands.left());
@@ -1015,7 +1045,7 @@ final class DischargeRules {
     private static Map<ValueName, List<ResultBound>> bindBounds(
             Map<ValueName, List<ResultBound>> rules) {
         rules.forEach((operation, bounds) -> bounds.forEach(bound -> {
-            List<Reads> named = new ArrayList<>();
+            List<ArgumentRef> named = new ArrayList<>();
             if (bound.against() != null) {
                 named.add(bound.against());
             }
@@ -1030,7 +1060,7 @@ final class DischargeRules {
 
     /** As {@link #bind}, for a rule that names more than one argument: each is held to the
      * declaration on its own, since each is a separate claim about a separate argument. */
-    static Map<ValueName, List<Reads>> bindEach(Map<ValueName, List<Reads>> rules, Reads derived,
+    static Map<ValueName, List<ArgumentRef>> bindEach(Map<ValueName, List<ArgumentRef>> rules, ArgumentRef derived,
                                                 Predicate<Type> required, String what) {
         rules.forEach((operation, reads) -> reads.forEach(one ->
                 bind(Map.of(operation, one), Function.identity(), derived, required, what)));
@@ -1041,11 +1071,11 @@ final class DischargeRules {
      * {@code rules}, once every row has been held to the operation it is about: the operation is one
      * the library declares, the argument it names is one that declaration has, and what stands there
      * is what the rule is about. A row naming a part of something the signature says the operation
-     * does not hand is caught by {@link Reads}; one that writes a position the signature already
+     * does not hand is caught by {@link ArgumentRef}; one that writes a position the signature already
      * answers is caught here, since two answers to one question are what come apart later.
      */
-    static <T> Map<ValueName, T> bind(Map<ValueName, T> rules, Function<T, Reads> reads,
-                                      Reads derived, Predicate<Type> required, String what) {
+    static <T> Map<ValueName, T> bind(Map<ValueName, T> rules, Function<T, ArgumentRef> reads,
+                                      ArgumentRef derived, Predicate<Type> required, String what) {
         rules.forEach((operation, rule) -> {
             // Every row here is about an operation the library declares, so the key says which
             // library and which operation rather than a spelling this would have to take apart.
@@ -1059,7 +1089,7 @@ final class DischargeRules {
                         + library.qualified() + ", which the library does not declare");
             }
             List<Type> params = entry.signature().params();
-            Reads at = reads.apply(rule);
+            ArgumentRef at = reads.apply(rule);
             int position = at.positionIn(operation);
             if (position < 0 || position >= params.size()) {
                 throw new IllegalStateException(library.qualified() + " takes " + params.size()
@@ -1070,7 +1100,7 @@ final class DischargeRules {
                 throw new IllegalStateException("argument " + (position + 1) + " of "
                         + library.qualified() + " is not " + what);
             }
-            if (at instanceof Reads.At && derived != null && Combinators.of(operation) != null
+            if (at instanceof ArgumentRef.At && derived != null && Combinators.of(operation) != null
                     && derived.positionIn(operation) == position) {
                 throw new IllegalStateException("the rule about " + what + " for "
                         + library.qualified()
@@ -1079,6 +1109,27 @@ final class DischargeRules {
             }
         });
         return rules;
+    }
+
+    /** What {@link ElementLineage#derivesItsElementsFrom} answers with, read off the table here. */
+    static ArgumentRef derivesItsElementsFrom(ValueName operation) {
+        Built built = Bound.BUILDINGS.get(operation);
+        if (built == null || built.outputs().size() != 1) {
+            return null;
+        }
+        ElementLineage lineage = built.lineage();
+        return (lineage instanceof ElementLineage.ClosureResult
+                || lineage instanceof ElementLineage.InsideClosureResult)
+                && lineage.source().elements() == 1 ? lineage.source().argument() : null;
+    }
+
+    /** What {@link ElementLineage#holdsTheElementsOf} answers with, read off the table here. */
+    static ArgumentRef holdsTheElementsOf(ValueName operation) {
+        Built built = Bound.BUILDINGS.get(operation);
+        return built != null && built.outputs().size() == 1
+                && built.lineage() instanceof ElementLineage.SameAs same
+                && same.source().elements() == 1
+                ? same.source().argument() : null;
     }
 
     /** The container {@code call} built its result from, or null where the check has no rule about
@@ -1105,12 +1156,12 @@ final class DischargeRules {
         if (!(e instanceof Core.PreservedCall call)) {
             return List.of();
         }
-        List<Reads> reads = Bound.LOWER_BOUNDS.get(call.operation());
+        List<ArgumentRef> reads = Bound.LOWER_BOUNDS.get(call.operation());
         if (reads == null) {
             return List.of();
         }
         List<Core> containers = new ArrayList<>(reads.size());
-        for (Reads one : reads) {
+        for (ArgumentRef one : reads) {
             containers.add(one.of(call));
         }
         return containers;
@@ -1126,7 +1177,7 @@ final class DischargeRules {
     /** The projection {@code call}'s predicate is stated over, or null where it is stated over the
      * element itself — or where what stands in that argument is not a block this can read. */
     static Projection projectionOf(Core.PreservedCall call, Denotations at) {
-        Reads reads = Bound.PROJECTIONS.get(call.operation());
+        ArgumentRef reads = Bound.PROJECTIONS.get(call.operation());
         if (reads == null) {
             return null;
         }

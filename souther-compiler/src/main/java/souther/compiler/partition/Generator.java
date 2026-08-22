@@ -68,11 +68,25 @@ public final class Generator {
 
     /** The behavior a row would be written for: what its inputs are called, what they are, and where
      * the model divides them. */
-    public record Subject(BehaviorInputs inputs, List<Axis> axes) {
+    public record Subject(BehaviorInputs inputs, List<Axis> axes, HeldCounts held) {
 
         public Subject {
             axes = List.copyOf(axes);
         }
+
+        /**
+         * What the reading of the input says about how many its containers hold.
+         *
+         * <p>Handed in rather than read here, and answered about the positions of the input alone.
+         * A coordinate of a {@link ConstructionPlan} is spelled the same way and is not one of
+         * these, and what a plan's node holds is read off that node's own type -- which is the
+         * separation {@code AConstructionPositionIsNotAnInputPositionTest} keeps.
+         */
+        public HeldCounts held() {
+            return held;
+        }
+
+
 
         /**
          * The same three facts a row is read by, which is the point of holding one value.
@@ -384,6 +398,13 @@ public final class Generator {
         List<GenerationReason> undecided = new ArrayList<>();
         List<Axis> axes = new ArrayList<>();
         for (Axis axis : ordered) {
+            // A position inside a collection the rules leave no room in. No value stands there in
+            // any row, so no class of it is a cell to fill — and left in, every combination of the
+            // row would be one no row can be written for, including the ones that name a position
+            // beside it and have nothing to do with this one.
+            if (holdsNothing(subject, axis)) {
+                continue;
+            }
             if (readEverywhere(axis, existing)) {
                 axes.add(axis);
             } else {
@@ -399,7 +420,7 @@ public final class Generator {
         Set<Pair> pairs = pairsOf(axes);
         Set<Pair> singles = singlesOf(axes);
         for (ObservedRow row : existing) {
-            cover(pairs, singles, axes, whereIn(row.at(), axes));
+            cover(pairs, singles, axes, row.at());
         }
 
         List<GeneratedRow> rows = new ArrayList<>();
@@ -658,7 +679,7 @@ public final class Generator {
     /** The type declared at a position this subject has no axis for, which is a bare parameter and
      *  nothing else: a field of one is reached through a type this cannot name here. */
     private static Type declaredAt(Subject subject, TermPath path) {
-        if (!path.fields().isEmpty()) {
+        if (!path.steps().isEmpty()) {
             return null;
         }
         int at = subject.parameters().indexOf(path.head());
@@ -739,30 +760,68 @@ public final class Generator {
     private static boolean readEverywhere(Axis axis, List<ObservedRow> existing) {
         for (ObservedRow row : existing) {
             Classification where = row.at().get(axis.id());
-            if (where != null && !(where instanceof Classification.Classified)) {
+            // Whether the reading stopped, and not whether it placed anything. A row whose list
+            // holds one value in a class and one nothing could read placed something and is short
+            // of the rest, so what it does not cover here is as unknown as if it had placed nothing.
+            if (where != null && where.stopped() != null) {
                 return false;
             }
         }
         return true;
     }
 
-    /** Which class each ordered axis fell in for one row, or -1 where the row did not say. */
+    /**
+     * Which one class each ordered axis fell in for one row, or -1 where the row named no single
+     * one — because it could not be read there, or because its values fell in more than one.
+     *
+     * <p>Where a row sits, which is what a cell to be filled beside it is worked out from. A row
+     * whose list holds elements either side of a line sits in no one cell at that position, and
+     * choosing one of them would place the next row against an element this picked.
+     */
     private static int[] whereIn(Map<AxisId, Classification> row, List<Axis> axes) {
+        List<int[]> reached = reachedIn(row, axes);
         int[] at = new int[axes.size()];
         for (int i = 0; i < axes.size(); i++) {
-            at[i] = -1;
-            if (row.get(axes.get(i).id()) instanceof Classification.Classified in) {
-                for (int c = 0; c < axes.get(i).classes().size(); c++) {
-                    if (axes.get(i).classes().get(c).id().equals(in.classId())) {
-                        at[i] = c;
-                        break;
-                    }
-                }
-            }
+            at[i] = reached.get(i).length == 1 ? reached.get(i)[0] : -1;
         }
         return at;
     }
 
+    /**
+     * Which classes each ordered axis fell in for one row, empty where the row did not say.
+     *
+     * <p>More than one where the position is inside a sequence: a row whose list holds elements
+     * either side of a line stands in both classes there, and picking one of them would report what
+     * the row covers off an element this chose.
+     */
+    private static List<int[]> reachedIn(Map<AxisId, Classification> row, List<Axis> axes) {
+        List<int[]> at = new ArrayList<>();
+        for (Axis axis : axes) {
+            List<Integer> here = new ArrayList<>();
+            if (row.get(axis.id()) instanceof Classification.Classified in) {
+                for (int c = 0; c < axis.classes().size(); c++) {
+                    if (in.classIds().contains(axis.classes().get(c).id())) {
+                        here.add(c);
+                    }
+                }
+            }
+            int[] found = new int[here.size()];
+            for (int k = 0; k < here.size(); k++) {
+                found[k] = here.get(k);
+            }
+            at.add(found);
+        }
+        return at;
+    }
+
+    /**
+     * The same, of a row this generation composed, which sits in one class per position.
+     *
+     * <p>One class apiece, so every pair of the positions it named is a pair one value of each made
+     * — there is no second value here for a pair to be assembled out of. That is what tells this
+     * apart from a row the author wrote, whose list can hold values in more than one class at once,
+     * and it is why the two are not one routine over a set of classes per position.
+     */
     private static void cover(Set<Pair> pairs, Set<Pair> singles, List<Axis> axes, int[] where) {
         for (int i = 0; i < axes.size(); i++) {
             if (where[i] < 0) {
@@ -775,6 +834,57 @@ public final class Generator {
                 }
             }
         }
+    }
+
+    /**
+     * What one row the author wrote covers.
+     *
+     * <p>A row reaching more than one class at a position covers each of them: read as one class it
+     * would cover the first and leave the rest owed, which is a row the author already wrote being
+     * asked for again. What it covers of a <em>pair</em> is the narrower question, and the answer is
+     * {@link Classification#pairsOf}'s — the same one the report is measured by. Taken here as every
+     * combination of the two positions' classes, a list holding one element under a line and another
+     * that is active was counted as a row for an element both over the line and active, which none
+     * of its elements is; and the search then offered nothing for a combination the report was still
+     * calling untried.
+     */
+    private static void cover(Set<Pair> pairs, Set<Pair> singles, List<Axis> axes,
+                              Map<AxisId, Classification> row) {
+        for (int i = 0; i < axes.size(); i++) {
+            Classification here = row.get(axes.get(i).id());
+            if (here == null) {
+                continue;
+            }
+            for (String id : here.classIds()) {
+                int one = classIn(axes.get(i), id);
+                if (one >= 0) {
+                    singles.remove(Pair.alone(i, one));
+                }
+            }
+            for (int j = i + 1; j < axes.size(); j++) {
+                Classification beside = row.get(axes.get(j).id());
+                if (beside == null) {
+                    continue;
+                }
+                for (Map.Entry<String, String> both : Classification.pairsOf(here, beside)) {
+                    int one = classIn(axes.get(i), both.getKey());
+                    int other = classIn(axes.get(j), both.getValue());
+                    if (one >= 0 && other >= 0) {
+                        pairs.remove(new Pair(i, one, j, other));
+                    }
+                }
+            }
+        }
+    }
+
+    /** Where {@code id} sits among {@code axis}'s classes, or -1 where it is none of them. */
+    private static int classIn(Axis axis, String id) {
+        for (int c = 0; c < axis.classes().size(); c++) {
+            if (axis.classes().get(c).id().equals(id)) {
+                return c;
+            }
+        }
+        return -1;
     }
 
     /**
@@ -1244,9 +1354,16 @@ public final class Generator {
         // may take, the search that chooses them one at a time, and the composing of what was chosen
         // all read this, so there is no second reading of the declarations for one of them to
         // disagree with.
-        ConstructionPlan plan = ConstructionPlan.of(subject.types().get(p),
-                TermPath.of(subject.parameters().get(p)), subject.symbols(), decided.keySet(),
-                recipes);
+        TermPath root = TermPath.of(subject.parameters().get(p));
+        // How many the rules say a list at a position holds at the fewest, read from the same
+        // reading of the parameter the values are chosen against. A list built around an element
+        // has to meet that too: a row holding an element in the class and breaking the rule about
+        // how many the list holds is not a row.
+        FieldDomains under = rulesOf(subject.types().get(p), subject.symbols(),
+                subject.inputs().policy(), under(root, settled));
+        ConstructionPlan plan = ConstructionPlan.of(subject.types().get(p), root, subject.symbols(),
+                decided.keySet(), recipes, (at, building) -> leastHeld(under, at, building,
+                        subject.symbols()));
         Choices choices = choicesOf(subject, p, plan, decided, settled);
         if (choices.missingAt() != null) {
             return new Outcome(null, UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
@@ -1281,6 +1398,47 @@ public final class Generator {
     }
 
     /**
+     * Whether {@code axis} stands inside a collection the rules leave no room in.
+     *
+     * <p>Asked of the collections the position is inside and not of the position itself: what a rule
+     * capping a collection at none says is that nothing stands at any position under it, whatever
+     * the values there could otherwise be. Asked of every one of them, because a position two
+     * sequences deep needs each of them to hold something — read off the outermost alone, a list of
+     * lists whose inner lists hold nothing was offered rows for what the inner lists hold.
+     */
+    private static boolean holdsNothing(Subject subject, Axis axis) {
+        for (TermPath inside : axis.path().sequencesContainingIt()) {
+            if (subject.held().most(inside) < 1) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * How many the rules say the list at {@code path} holds at the most, or every number where they
+     * say nothing about how many.
+     *
+     * <p>Beside the floor and asked separately, because a collection built around an element has to
+     * meet both: the floor says how many it needs beside the one being placed, and this says whether
+     * there is room for that one at all. Read only for the floor, a rule capping a collection at
+     * none was met with a collection of one and every combination of the row came back as one every
+     * value was refused at — over a position the rules leave no room in, and over the positions
+     * beside it that have nothing to do with it.
+     */
+    private static int mostHeld(FieldDomains rules, TermPath path, Type building, Symbols symbols) {
+        String field = fieldUnder(path);
+        return Partitions.mostHeld(building, symbols, field == null ? null : rules.heldAt(field));
+    }
+
+    /** How many the rules say the value built at {@code path} holds at the fewest, or zero where
+     *  they say nothing about how many. Read the same two ways as the cap beside it. */
+    private static int leastHeld(FieldDomains rules, TermPath path, Type building, Symbols symbols) {
+        String field = fieldUnder(path);
+        return Partitions.leastHeld(building, symbols, field == null ? null : rules.heldAt(field));
+    }
+
+    /**
      * Why a position of this parameter offered less than its rules allow, or null where none did.
      *
      * <p>Under the same settled positions the values were chosen against. A rule counting one field
@@ -1296,6 +1454,15 @@ public final class Generator {
         FieldDomains rules = rulesOf(declared, subject.symbols(), subject.inputs().policy(),
                 under(root, settled));
         UnresolvedCombination.Reason held = null;
+        // A collection asked to hold a value in a class, whose rules say it holds fewer than that.
+        // Nothing composes one: what the search would offer is a collection the rules refuse, and
+        // saying every candidate was refused sends an author looking for a value where the rule
+        // says there is no room for one.
+        for (ConstructionPlan.Held each : plan.held()) {
+            if (mostHeld(rules, each.at(), each.type(), subject.symbols()) < each.least()) {
+                return UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE;
+            }
+        }
         for (ConstructionPlan.Slot each : plan.slots()) {
             String field = fieldUnder(each.at());
             UnresolvedCombination.Reason here = Partitions.notBuilt(each.type(), subject.symbols(),
@@ -1394,7 +1561,7 @@ public final class Generator {
             if (!budget.spend()) {
                 return null;
             }
-            FixtureTemplate whole = compose(plan.root(), chosen, subject.symbols());
+            FixtureTemplate whole = compose(plan.root(), chosen, subject.symbols(), subject.inputs().policy());
             return whole != null && check.refuse(p, whole).isEmpty() ? whole : null;
         }
         ConstructionPlan.Slot position = positions.get(index);
@@ -1540,9 +1707,11 @@ public final class Generator {
     }
 
     /** What a position under a parameter is called where the parameter's own rules name it, or null
-     * where the position is the parameter itself. */
+     * where the position is the parameter itself and where no rule of the parameter can name it
+     * ({@link TermPath#fieldKey}). */
     private static String fieldUnder(TermPath path) {
-        return path.fields().isEmpty() ? null : String.join(".", path.fields());
+        String where = path.fieldKey();
+        return where == null || where.isEmpty() ? null : where;
     }
 
     /** The settled positions of one parameter, named the way the reading of that parameter names
@@ -1613,7 +1782,7 @@ public final class Generator {
             for (int i = 0; i < positions; i++) {
                 chosen.put(at.get(i), values.get(i).get(assignment[i]));
             }
-            FixtureTemplate built = compose(plan.root(), chosen, subject.symbols());
+            FixtureTemplate built = compose(plan.root(), chosen, subject.symbols(), subject.inputs().policy());
             if (built != null && check.refuse(p, built).isEmpty()) {
                 return new Outcome(built, null, null);
             }
@@ -1654,19 +1823,59 @@ public final class Generator {
      * Composed without that, the row carries a value of a type the parameter does not declare.
      */
     private static FixtureTemplate compose(ConstructionPlan.Node node,
-                                           Map<String, FixtureTemplate> chosen, Symbols symbols) {
+                                           Map<String, FixtureTemplate> chosen, Symbols symbols,
+                                           ReadingPolicy policy) {
         return switch (node) {
             case ConstructionPlan.Slot slot -> chosen.get(slot.at().toString());
-            case ConstructionPlan.Built built -> composed(built, chosen, symbols);
+            case ConstructionPlan.Built built -> composed(built, chosen, symbols, policy);
+            case ConstructionPlan.Held held -> held(held, chosen, symbols, policy);
         };
+    }
+
+    /**
+     * The list of one this plan builds around what stands at its element.
+     *
+     * <p>Under the names the position is written with, as a record is: a row at a
+     * {@code data Basket = List<Item>} carries {@code Basket([...])}, and a list composed without
+     * them is of a type the parameter does not declare.
+     */
+    private static FixtureTemplate held(ConstructionPlan.Held plan,
+                                        Map<String, FixtureTemplate> chosen, Symbols symbols,
+                                        ReadingPolicy policy) {
+        FixtureTemplate element = compose(plan.under(), chosen, symbols, policy);
+        if (element == null) {
+            return null;
+        }
+        // The one placed in the class, and enough beside it for the collection to be one the rules
+        // admit. What may stand beside it is the carrier's business — a list may hold the same
+        // value again and a set may not — so the collection is asked for whole rather than padded
+        // here.
+        if (!(souther.compiler.check.TypeView.of(plan.type(), symbols).shape()
+                instanceof souther.compiler.check.Shape.Sequence carrier)) {
+            return null;
+        }
+        FixtureTemplate collection =
+                Witnesses.holdingAlso(carrier, element, plan.least(), symbols, policy);
+        if (collection == null) {
+            return null;
+        }
+        List<TypeReachName.Written> worn = new ArrayList<>();
+        for (TypeOps.Layer layer : plan.worn()) {
+            if (!(symbols.scope().reach(layer.named()) instanceof TypeReachName.Written written)) {
+                return null;   // a name this module cannot write leaves no value to write
+            }
+            worn.add(written);
+        }
+        return RepresentativeSource.under(worn, collection);
     }
 
     /** One record of the plan, out of what the assignment put at the positions under it. */
     private static FixtureTemplate composed(ConstructionPlan.Built built,
-                                            Map<String, FixtureTemplate> chosen, Symbols symbols) {
+                                            Map<String, FixtureTemplate> chosen, Symbols symbols,
+                                            ReadingPolicy policy) {
         Map<String, FixtureTemplate> fields = new LinkedHashMap<>();
         for (Map.Entry<String, ConstructionPlan.Node> under : built.under().entrySet()) {
-            FixtureTemplate value = compose(under.getValue(), chosen, symbols);
+            FixtureTemplate value = compose(under.getValue(), chosen, symbols, policy);
             if (value == null) {
                 return null;
             }

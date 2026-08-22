@@ -40,16 +40,28 @@ import java.util.Map;
  *                   tree is what was handed over and a bug in the caller where it is not
  */
 public record InputReads(InputDomain read, Map<BindingId, String> roots,
-                         Map<BindingId, Core> bound, boolean callsStand) {
+                         Map<BindingId, Core> bound,
+                         souther.compiler.check.ElementBindings elements, boolean callsStand) {
 
     public InputReads {
         roots = Map.copyOf(roots);
         bound = Map.copyOf(bound);
     }
 
-    /** At the top of a body, where nothing has been bound yet. */
+    /** At the top of a body, where nothing has been bound yet and no element has been handed out. */
     public static InputReads of(InputDomain read) {
-        return new InputReads(read, read.parameterReads(), Map.of(), false);
+        return of(read, souther.compiler.check.ElementBindings.NONE);
+    }
+
+    /**
+     * The same, of a body whose operations handed their closures the contents of containers.
+     *
+     * <p>Read where those operations still stood and carried here, since the tree this walks has
+     * none of them left in it. A reading given nothing finds every name inside a closure naming no
+     * position, which is what it did before there was anything to give.
+     */
+    public static InputReads of(InputDomain read, souther.compiler.check.ElementBindings elements) {
+        return new InputReads(read, read.parameterReads(), Map.of(), elements, false);
     }
 
     /**
@@ -60,7 +72,8 @@ public record InputReads(InputDomain read, Map<BindingId, String> roots,
      * implements binds its parameters nowhere a body could, and its clauses still name them.
      */
     public static InputReads ofWhatIsDeclared(InputDomain read, Map<BindingId, String> roots) {
-        return new InputReads(read, roots, Map.of(), true);
+        return new InputReads(read, roots, Map.of(),
+                souther.compiler.check.ElementBindings.NONE, true);
     }
 
     /** The same, inside what {@code binder} binds. */
@@ -71,11 +84,23 @@ public record InputReads(InputDomain read, Map<BindingId, String> roots,
         Map<BindingId, Core> wider = new LinkedHashMap<>(bound);
         // The nearest binding wins, which is what being inside it means.
         wider.put(binder.binding(), value);
-        return new InputReads(read, roots, wider, callsStand);
+        return new InputReads(read, roots, wider, elements, callsStand);
     }
 
     /** The position {@code e} names here, or null where it names none. */
     public TermPath pathOf(Core e, Symbols symbols) {
-        return InputPath.of(e, roots, bound, symbols, callsStand);
+        return InputPath.of(e, roots, bound, elements, symbols, callsStand);
+    }
+
+    /** The position an element handed to {@code binding} stands at, or null where it stands at
+     *  none ({@link InputPath#elementAt}). */
+    public TermPath elementAt(BindingId binding, Symbols symbols) {
+        return InputPath.elementAt(binding, roots, bound, elements, symbols, callsStand);
+    }
+
+    /** The position {@code e}'s value came from, or null where it came from none. Not where it is:
+     *  a value made from a position is not that position ({@link InputPath#cameFrom}). */
+    public TermPath cameFrom(Core e, Symbols symbols) {
+        return InputPath.cameFrom(e, roots, bound, elements, symbols, callsStand);
     }
 }
