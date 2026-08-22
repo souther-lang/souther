@@ -47,13 +47,17 @@ public final class PartitionDerivation {
     public record NothingIsDivided(MeasureClosure.OfThePartition.Closed proven)
             implements NotApplicableReason {
 
+        /** The word, held where a reader with no instance can find it. A reason that costs a proof
+         *  to say cannot be an enum, and its word is still the schema's to be held against. */
+        public static final String WORD = "NOTHING_IS_DIVIDED";
+
         public NothingIsDivided {
             java.util.Objects.requireNonNull(proven, "an absence is what a closed reading came to");
         }
 
         @Override
         public String name() {
-            return "NOTHING_IS_DIVIDED";
+            return WORD;
         }
     }
 

@@ -124,7 +124,7 @@ class ABoundaryIsDrawnOnATermAndNotAPositionTest {
         assertTrue(ItemAssessment.Coverage.hit(onPointOf(byLabel, "Set.size(t.codes) = 1").coverage()),
                 "the row's set holds one code");
         assertEquals(ItemAssessment.Coverage.NoHit.class,
-                onPointOf(byLabel, "List.length(t.names) = 2").coverage().getClass(),
+                onPointOf(byLabel, "List.length(t.names) = 2").coverage().made().orElseThrow().getClass(),
                 "the row holds three names, and nothing was unreadable about it");
     }
 

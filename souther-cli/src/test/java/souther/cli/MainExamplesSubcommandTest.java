@@ -153,7 +153,7 @@ class MainExamplesSubcommandTest {
     void theJsonCarriesTheNumbersABuildReads() throws Exception {
         JsonNode root = JSON.readTree(run("--format", "json"));
 
-        assertEquals(4, root.get("schemaVersion").asInt());
+        assertEquals(5, root.get("schemaVersion").asInt());
         assertEquals("complete", root.get("status").asString());
         assertNotNull(root.get("compilerVersion"));
 

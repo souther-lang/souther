@@ -94,10 +94,10 @@ class AnArmDoesNotSayWhetherAComparisonRanTest {
     @Test
     void oneValueAndOneArmAreNotOneAnswer() {
         assertEquals(new ItemAssessment.Coverage.Hit(),
-coverageOf(linesFor("0", "100001", "Manual"), "gate/r.cost", "100001"),
+coverageOf(linesFor("0", "100001", "Manual"), "gate/r.cost", "100001").made().orElseThrow(),
                 "the comparison produced false, which is reaching it");
         assertEquals(new ItemAssessment.Coverage.NoHit(),
-coverageOf(linesFor("-1", "100001", "Manual"), "gate/r.cost", "100001"),
+coverageOf(linesFor("-1", "100001", "Manual"), "gate/r.cost", "100001").made().orElseThrow(),
                 "the comparison never ran, and the row lands in the same arm");
     }
 

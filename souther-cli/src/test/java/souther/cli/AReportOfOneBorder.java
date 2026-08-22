@@ -83,6 +83,19 @@ final class AReportOfOneBorder {
                 new NumericDomain.Bounds(Endpoint.inclusive(Count.of(100)), null));
     }
 
+    /** A point measured to the end, whichever way it came out. */
+    static Measurement<ItemAssessment.Coverage> settled(ItemAssessment.Coverage verdict) {
+        return new Measurement.Complete<>(verdict);
+    }
+
+    /** A point whose reading was not whole, so what it did not find is undecided rather than
+     *  absent. What weakened it is a row that never finished. */
+    static Measurement<ItemAssessment.Coverage> undecided() {
+        return new Measurement.Partial<>(new ItemAssessment.Coverage.NoHit(),
+                WeakeningSet.of(new Weakening.RowDidNotFinish(
+                        new souther.compiler.observe.RowIdentity.Unnamed(1))));
+    }
+
     /**
      * {@code border} assessed point by point, with {@code coverage} saying what each point came to.
      *
@@ -91,7 +104,8 @@ final class AReportOfOneBorder {
      * than the one handed in.
      */
     static BorderAssessment assessed(Border border,
-                                     Function<PointRole, ItemAssessment.Coverage> coverage) {
+                                     Function<PointRole, Measurement<ItemAssessment.Coverage>>
+                                             coverage) {
         EnumMap<PointRole, ItemAssessment> items = new EnumMap<>(PointRole.class);
         for (PointRole role : PointRole.values()) {
             if (border.demand(role) instanceof Demand.NotOwed not) {
@@ -99,7 +113,7 @@ final class AReportOfOneBorder {
                 continue;
             }
             items.put(role, new ItemAssessment.Owed(border.demand(role).criterion(),
-                    new Measurement.Complete<>(coverage.apply(role)),
+                    coverage.apply(role),
                     new ItemAssessment.Writability.WitnessedByRow(),
                     new ItemAssessment.Attempt.NotAttempted(
                             ItemAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE)));
@@ -108,8 +122,8 @@ final class AReportOfOneBorder {
     }
 
     /** A row is at every point the border owes. */
-    static ItemAssessment.Coverage hit(PointRole role) {
-        return new ItemAssessment.Coverage.Hit();
+    static Measurement<ItemAssessment.Coverage> hit(PointRole role) {
+        return settled(new ItemAssessment.Coverage.Hit());
     }
 
     /**

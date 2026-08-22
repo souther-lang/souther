@@ -42,10 +42,11 @@
       "items": {
         "enum": ["value_unreadable", "value_truncated", "row_undecided", "answerer_not_established",
                  "linkage_failed", "observation_absent", "instrumentation_absent",
-                 "outputCasesUnreadable", "inputCasesUnreadable", "rowDidNotFinish",
-                 "borderValueUnreadable", "ruleUnread", "positionNotRead", "questionUnanswered",
-                 "rulesNotReached", "axisOmitted", "pairSpaceTruncated", "proofContradicted",
-                 "armsUnsettled"]
+                 "probe_mapping_lost",
+                 "output_cases_unreadable", "input_cases_unreadable", "row_did_not_finish",
+                 "border_value_unreadable", "rule_unread", "position_not_read",
+                 "question_unanswered", "rules_not_reached", "axis_omitted",
+                 "pair_space_truncated", "proof_contradicted", "arms_unsettled"]
       }
     },
     "notReadReason": {

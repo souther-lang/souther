@@ -33,13 +33,16 @@ public final class BoundaryDerivation {
     public record NoRuleDrawsALine(MeasureClosure.OfTheBorder.Closed proven)
             implements NotApplicableReason {
 
+        /** The word, for the reason {@link PartitionDerivation.NothingIsDivided#WORD} gives. */
+        public static final String WORD = "NO_RULE_DRAWS_A_LINE";
+
         public NoRuleDrawsALine {
             java.util.Objects.requireNonNull(proven, "an absence is what a closed reading came to");
         }
 
         @Override
         public String name() {
-            return "NO_RULE_DRAWS_A_LINE";
+            return WORD;
         }
     }
 

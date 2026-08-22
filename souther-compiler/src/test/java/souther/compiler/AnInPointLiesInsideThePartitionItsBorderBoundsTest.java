@@ -273,6 +273,6 @@ borderNamed(all, "3 * n = 1").owedAt(PointRole.OUT).coverage().made().orElseThro
                     | (30) -> High { n = 30 }""", "20");
 
         assertEquals(ItemAssessment.Coverage.NoHit.class,
-                border.owedAt(PointRole.OUT).coverage().getClass());
+                border.owedAt(PointRole.OUT).coverage().made().orElseThrow().getClass());
     }
 }

@@ -463,11 +463,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         }
     }
 
-    /** One border point's own measurement. A point nobody is owed a row at was answered by the
-     *  model, so it counts as made rather than as one nobody got to. */
+    /** One border point's own measurement, asked of the point. Written out here as well, the answer
+     *  a point nobody is owed a row at gets would be this report deciding it. */
     private static Measurement<?> measurementOf(ItemAssessment item) {
-        return item instanceof ItemAssessment.Owed owed ? owed.coverage()
-                : new Measurement.Complete<>(new ItemAssessment.Coverage.NoHit());
+        return item.weakeningSource();
     }
 
     // --- rendering --------------------------------------------------------------------------------
@@ -1331,6 +1330,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return value.name().toLowerCase(java.util.Locale.ROOT);
     }
 
+    /** The same of a word held as a constant, which is what a reason that costs a proof to say has
+     *  instead of an enum name. */
+    public static String word(String constant) {
+        return constant.toLowerCase(java.util.Locale.ROOT);
+    }
+
     /** The same of a reason, which is not always an enum: one that costs a proof to say carries it,
      *  and a record is what holds a proof. The word is the reason's own either way. */
     public static String word(souther.compiler.observe.MeasureReason reason) {
@@ -2053,16 +2058,29 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         weakening(of, said.weakenedBy());
     }
 
-    /** What a measurement went without, where it went without anything. Written under one key at
-     *  every level that has one, so a consumer reads the same shape of a measure and of a module. */
+    /**
+     * What a measurement went without, where it went without anything.
+     *
+     * <p>Written under one key at every level that has one, so a consumer reads the same shape of a
+     * measure and of a module.
+     *
+     * <p><b>The kinds, once each.</b> Two rules this compiler could not read are two facts and one
+     * word, and the word is all this field carries — which rule, which position, which row is named
+     * where the document already names that thing. Written per fact the array would say
+     * {@code rule_unread} five times and leave a reader counting repetitions of a word that
+     * identifies nothing.
+     */
     private static void weakening(ObjectNode of, WeakeningSet weakenedBy) {
         if (weakenedBy.isEmpty()) {
             return;
         }
-        ArrayNode out = of.putArray("weakening");
+        Set<String> words = new LinkedHashSet<>();
         for (Weakening each : weakenedBy.causes()) {
-            out.add(wordFor(each));
+            words.add(each instanceof Weakening.ObservationIncomplete gap
+                    ? word(gap.cause().code()) : word(wordFor(each)));
         }
+        ArrayNode out = of.putArray("weakening");
+        words.forEach(out::add);
     }
 
     /**
@@ -2073,28 +2091,33 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * already names that thing — a rule, a position, a row — so this says which kind it is and does
      * not restate the subject.
      */
-    private static String wordFor(Weakening weakening) {
+    public static WeakeningWord wordFor(Weakening weakening) {
         return switch (weakening) {
-            case Weakening.ObservationIncomplete it -> word(it.cause().code());
-            case Weakening.OutputCasesUnreadable _ -> "outputCasesUnreadable";
-            case Weakening.InputCasesUnreadable _ -> "inputCasesUnreadable";
-            case Weakening.RowDidNotFinish _ -> "rowDidNotFinish";
-            case Weakening.BorderValueUnreadable _ -> "borderValueUnreadable";
+            // Its own vocabulary, which is the observation codes. Asking this to spell it a second
+            // way would be a second set of words for one fact.
+            case Weakening.ObservationIncomplete _ ->
+                    throw new IllegalArgumentException("an observation writes its own code");
+            case Weakening.OutputCasesUnreadable _ -> WeakeningWord.OUTPUT_CASES_UNREADABLE;
+            case Weakening.InputCasesUnreadable _ -> WeakeningWord.INPUT_CASES_UNREADABLE;
+            case Weakening.RowDidNotFinish _ -> WeakeningWord.ROW_DID_NOT_FINISH;
+            case Weakening.BorderValueUnreadable _ -> WeakeningWord.BORDER_VALUE_UNREADABLE;
             case Weakening.ModelReadingIncomplete it -> switch (it.cause()) {
-                case souther.compiler.partition.ClosureGap.RuleUnread _ -> "ruleUnread";
+                case souther.compiler.partition.ClosureGap.RuleUnread _ ->
+                        WeakeningWord.RULE_UNREAD;
                 case souther.compiler.partition.ClosureGap.PositionBlocked _,
                      souther.compiler.partition.ClosureGap.PositionNotReachedInto _ ->
-                        "positionNotRead";
+                        WeakeningWord.POSITION_NOT_READ;
                 case souther.compiler.partition.ClosureGap.QuestionUnanswered _,
                      souther.compiler.partition.ClosureGap.ComparisonUnanswered _ ->
-                        "questionUnanswered";
+                        WeakeningWord.QUESTION_UNANSWERED;
                 case souther.compiler.partition.ClosureGap.RulesNotReached _ ->
-                        "rulesNotReached";
-                case souther.compiler.partition.ClosureGap.AxisOmitted _ -> "axisOmitted";
+                        WeakeningWord.RULES_NOT_REACHED;
+                case souther.compiler.partition.ClosureGap.AxisOmitted _ ->
+                        WeakeningWord.AXIS_OMITTED;
             };
-            case Weakening.PairSpaceTruncated _ -> "pairSpaceTruncated";
-            case Weakening.ProofContradicted _ -> "proofContradicted";
-            case Weakening.ArmsUnsettled _ -> "armsUnsettled";
+            case Weakening.PairSpaceTruncated _ -> WeakeningWord.PAIR_SPACE_TRUNCATED;
+            case Weakening.ProofContradicted _ -> WeakeningWord.PROOF_CONTRADICTED;
+            case Weakening.ArmsUnsettled _ -> WeakeningWord.ARMS_UNSETTLED;
         };
     }
 

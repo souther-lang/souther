@@ -250,6 +250,14 @@ class EverySchemaWordIsAccountedForTest {
                     PartitionEvidence.PairSpace.NoRows.class),
             new Vocabulary("signature.reason", List.of("$defs", "signature", "properties", "reason"),
                     Adequacy.SignatureEvidence.NotASum.class, Adequacy.SignatureEvidence.NoRows.class),
+            // Two vocabularies under one key. An observation that went missing writes the code it
+            // already has, and everything else writes a word of its own — one field, because a
+            // consumer reading what weakened a measurement does not care which of the two a word
+            // came from.
+            new Vocabulary("weakening[]", List.of("$defs", "weakening", "items"),
+                    Set.of("probe_mapping_lost"),
+                    Incompleteness.Code.class,
+                    souther.compiler.report.WeakeningWord.class),
             new Vocabulary("incompleteness.scope",
                     List.of("$defs", "incompleteness", "properties", "scope"),
                     Incompleteness.Scope.class),
@@ -502,9 +510,19 @@ class EverySchemaWordIsAccountedForTest {
      * consumer reads is what the encoder produces, so that is the side a contract has to be held
      * against.
      */
+    @SuppressWarnings("unchecked")
     private static Set<String> wordsOf(Class<?> source) {
         Object[] constants = source.getEnumConstants();
         if (constants == null) {
+            // A reason that costs a proof to say cannot be an enum — the proof is its argument — so
+            // it holds its word in a constant a reader with no instance can find. Read here rather
+            // than written out here, so the schema is still held against what the writer spells.
+            try {
+                return Set.of(AdequacyReport.word(
+                        (String) source.getField("WORD").get(null)));
+            } catch (NoSuchFieldException | IllegalAccessException absent) {
+                // Said below, in the words the rule is written in.
+            }
             // The type stopped saying this when a field turned up whose words are a writer's and
             // not an enum's. Said here instead, because the alternative was a vocabulary with
             // neither an enum nor a written set failing as a null somewhere inside a stream.
