@@ -52,7 +52,7 @@ final class InductiveBounds {
      * that same domain.
      *
      * <p>Taken rather than done here, because which recipes an atom has is
-     * {@link DerivedBounds}' table and reading it a second way would be a second answer. What this
+     * {@link DerivedNumericFacts}' table and reading it a second way would be a second answer. What this
      * asks of it is the part that matters to a proof: the domain is the one the question is asked
      * in, so a product inside a step is read under the induction hypothesis and not under what was
      * known before it.
@@ -102,7 +102,7 @@ final class InductiveBounds {
      * <p>The domain the step is read against is forked from the one the caller was given and is
      * dropped here. Nothing derived under an assumed accumulator is true where the accumulator is
      * not assumed, so letting it back would be this deriving from its own answers — which is what
-     * {@link DerivedBounds} declines to be and for the same reason.
+     * {@link DerivedNumericFacts} declines to be and for the same reason.
      *
      * <p>The step is read in that forked domain and not before it. A step whose answer is arithmetic
      * the fragment cannot carry — {@code acc * x.value} — is one value the domain holds nothing

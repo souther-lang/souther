@@ -124,16 +124,11 @@ final class Terms {
             if (!out.add(atom)) {
                 continue;
             }
-            switch (derivations.get(atom)) {
-                case Derivation.Product p -> {
-                    todo.addAll(p.left().coefs().keySet());
-                    todo.addAll(p.right().coefs().keySet());
+            Derivation recipe = derivations.get(atom);
+            if (recipe != null) {
+                for (LinearForm<FactSubject> operand : recipe.operands()) {
+                    todo.addAll(operand.coefs().keySet());
                 }
-                case Derivation.Quotient q -> {
-                    todo.addAll(q.numerator().coefs().keySet());
-                    todo.addAll(q.divisor().coefs().keySet());
-                }
-                case null -> { }
             }
             InductiveBounds.Walk under = reductions.get(atom);
             if (under != null) {
@@ -622,10 +617,11 @@ final class Terms {
             case NumericMeaning.Operator(BinOp op, Core left, Core right) ->
                     op == BinOp.MUL ? product(left, right, at) : null;
             case NumericMeaning.TruncatingQuotient(Core dividend, Core divisor) ->
-                    quotient(dividend, divisor, at);
-            // A remainder and a quotient rounded to a scale are read and derived from by nothing
-            // yet: each is arithmetic this names and states no range of.
-            case NumericMeaning.TruncatingRemainder _, NumericMeaning.RoundedQuotient _ -> null;
+                    divided(dividend, divisor, at, Derivation.TruncatingQuotient::new);
+            case NumericMeaning.TruncatingRemainder(Core dividend, Core divisor) ->
+                    divided(dividend, divisor, at, Derivation.TruncatingRemainder::new);
+            // A quotient rounded to a scale is arithmetic this names and states no range of.
+            case NumericMeaning.RoundedQuotient _ -> null;
         };
     }
 
@@ -648,19 +644,26 @@ final class Terms {
      *
      * <p>The divisor is a form, as the factors of a product are. Whether the path holds it away from
      * zero, and whether it is the kind of value the operator's divisor could be at all, are asked
-     * where the recipe is read ({@link DerivedBounds}): the first because the answer is the path's
+     * where the recipe is read ({@link DerivedNumericFacts}): the first because the answer is the path's
      * and one expression is read under more than one, and the second because it is a question about
      * a range and no range is known here. Held as a written number, this had to refuse every divisor
      * with a coefficient in it, and a day count guarded above zero went unread.
      */
-    private Derivation quotient(Core over, Core by, Denotations at) {
+    private Derivation divided(Core over, Core by, Denotations at, Divided made) {
         LinearForm<FactSubject> numerator = affineOf(over, at);
         LinearForm<FactSubject> divisor = affineOf(by, at);
         NumericDomain.Bounds extent = extentOf(by.type());
         if (numerator == null || divisor == null || extent == null) {
             return null;
         }
-        return new Derivation.Quotient(numerator, divisor, extent);
+        return made.of(numerator, divisor, extent);
+    }
+
+    /** Which of the two answers of one division a recipe is about. Both are read off the same three
+     * parts, so what tells them apart is which recipe is made and nothing else. */
+    private interface Divided {
+        Derivation of(LinearForm<FactSubject> numerator, LinearForm<FactSubject> divisor,
+                      NumericDomain.Bounds divisorExtent);
     }
 
     /**
@@ -694,15 +697,18 @@ final class Terms {
      * is catching the check naming two values alike, and a difference in scale is not that.
      */
     private static boolean sameDerivation(Derivation a, Derivation b) {
-        return switch (a) {
-            case Derivation.Product one -> b instanceof Derivation.Product other
-                    && sameForm(one.left(), other.left())
-                    && sameForm(one.right(), other.right());
-            case Derivation.Quotient one -> b instanceof Derivation.Quotient other
-                    && sameForm(one.numerator(), other.numerator())
-                    && sameForm(one.divisor(), other.divisor())
-                    && sameExtent(one.divisorExtent(), other.divisorExtent());
-        };
+        if (a.getClass() != b.getClass() || a.operands().size() != b.operands().size()) {
+            return false;
+        }
+        for (int i = 0; i < a.operands().size(); i++) {
+            if (!sameForm(a.operands().get(i), b.operands().get(i))) {
+                return false;
+            }
+        }
+        if (a.divisorExtent() == null || b.divisorExtent() == null) {
+            return a.divisorExtent() == b.divisorExtent();
+        }
+        return sameExtent(a.divisorExtent(), b.divisorExtent());
     }
 
     /** Whether two extents run between the same places. Asked on the order and not of the record's

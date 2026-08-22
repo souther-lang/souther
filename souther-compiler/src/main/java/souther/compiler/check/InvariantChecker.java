@@ -1952,7 +1952,7 @@ public final class InvariantChecker {
             }
             asked.addAll(c.atomsItIsDecidedBy());
         }
-        return DerivedBounds.refine(out, terms, asked);
+        return DerivedNumericFacts.refine(out, terms, asked);
     }
 
     /**

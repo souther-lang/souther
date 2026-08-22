@@ -1,0 +1,119 @@
+package souther.compiler;
+
+import souther.compiler.diag.Diagnostic;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+/**
+ * A truncating divide says how what it answered stands to what it divided, and not only where its
+ * answer lies.
+ *
+ * <p>A quotient's own range comes off its dividend's and its divisor's, so ten times a quotient at
+ * or above nought is at or above nought — and what is <em>left</em> of the dividend was a value
+ * nothing put on either side of nought (#960). That is the value every step of a change-making loop
+ * is built on: the first denomination discharged and the second did not, because what the first left
+ * was unknown and so was the quotient taken of it.
+ *
+ * <p>{@code 0 <= a - b * (a / b) < b} is not unconditional. {@code /} truncates toward zero (spec
+ * §stdlib-int), so what is left takes the sign of the dividend — {@code -7 / 2} is {@code -3} and
+ * {@code -7 - 2 * -3} is {@code -1}. Which side the dividend is on is what the path establishes, and
+ * it is read where the clause is read, as a product's bound is.
+ */
+class AQuotientIsHeldAgainstWhatItDividedTest {
+
+    private static String model(String guard, String construction) {
+        return """
+                module demo
+
+                data 硬貨枚数 = Int
+                    invariant value >= 0
+
+                behavior 買う : (額: Int) -> 硬貨枚数
+                    constructs 硬貨枚数
+
+                let 買う (額) = {
+                    guard %s else 硬貨枚数(0)
+                    %s
+                }
+                """.formatted(guard, construction);
+    }
+
+    private static List<String> reported(String guard, String construction) {
+        return Compiler.compileWithWarnings(model(guard, construction)).warnings().stream()
+                .map(Diagnostic::code)
+                .distinct()
+                .toList();
+    }
+
+    /** The quotient's own range, which came off its operands before any of this. */
+    @Test
+    void theQuotientsOwnRangeIsStillRead() {
+        assertEquals(List.of(), reported("額 >= 0", "硬貨枚数(額 / 10)"));
+        assertEquals(List.of(), reported("額 >= 0", "硬貨枚数(額 / 10 * 10)"));
+    }
+
+    /** What the divide left, which is the quotient held against the very value it was taken of. */
+    @Test
+    void whatTheDivideLeftIsAtOrAboveNought() {
+        assertEquals(List.of(), reported("額 >= 0", "硬貨枚数(額 - 額 / 10 * 10)"));
+    }
+
+    /**
+     * The other half of the relation: what is left is below the divisor, which is what says the next
+     * denomination's quotient is bounded. Ninety-nine is what a hundred leaves at most, so nine is
+     * what ten of that answers at most — and a count of nine is a count of at least nought.
+     */
+    @Test
+    void whatTheDivideLeftIsBelowTheDivisor() {
+        assertEquals(List.of(), reported("額 >= 0", """
+                {
+                        let k0 = 額 / 100
+                        let r0 = 額 - k0 * 100
+                        let k1 = r0 / 10
+                        硬貨枚数(k0 + k1)
+                    }"""));
+    }
+
+    /** The same through the total surface, which is where an author writes it when the divisor is
+     * not a literal they can argue about. */
+    @Test
+    void theSameHoldsOfTheValueCaseOfADivide() {
+        assertEquals(List.of(), reported("額 >= 0", """
+                match Int.divide(額, 10) with
+                        | Int as k -> 硬貨枚数(額 - k * 10)
+                        | DivisionByZero -> 硬貨枚数(0)"""));
+    }
+
+    /** The remainder answered as its own value, which the library has an operation for. */
+    @Test
+    void aRemainderIsAtOrAboveNoughtAndBelowItsDivisor() {
+        assertEquals(List.of(), reported("額 >= 0", """
+                match Int.truncatingRemainder(額, 10) with
+                        | Int as r -> 硬貨枚数(9 - r)
+                        | DivisionByZero -> 硬貨枚数(0)"""));
+    }
+
+    /**
+     * The sign is the dividend's, so a dividend the guards leave on either side of nought leaves
+     * what the divide left there too.
+     *
+     * <p>The control the rest of them need: this is the very construction of
+     * {@link #whatTheDivideLeftIsAtOrAboveNought} under a guard that says nothing about which side
+     * the dividend is on, and it is reported.
+     */
+    @Test
+    void withTheDividendOnNeitherSideOfNoughtNothingFollows() {
+        assertEquals(List.of("E2011"), reported("額 <= 1000", "硬貨枚数(額 - 額 / 10 * 10)"));
+    }
+
+    /** And with the dividend at or below nought, what is left is at or below nought — which the
+     * construction owing {@code value >= 0} is refused by, not discharged. */
+    @Test
+    void aDividendAtOrBelowNoughtLeavesSomethingAtOrBelowIt() {
+        assertEquals(List.of(), reported("額 <= 0", "硬貨枚数(額 / 10 * 10 - 額)"));
+    }
+}

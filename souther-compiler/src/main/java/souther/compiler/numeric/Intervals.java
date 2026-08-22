@@ -92,7 +92,7 @@ public final class Intervals {
      * rules admit.
      *
      * @param divisor a range holding at least one value and none of them zero. Both are the caller's
-     *                to establish ({@code DerivedBounds}), and neither could be answered here as a
+     *                to establish ({@code DerivedNumericFacts}), and neither could be answered here as a
      *                range: a range with nothing in it is not a divisor whose sign and magnitude
      *                could be read, and what a range admitting zero leaves depends on how its values
      *                are spaced, which is not something a range says. Over the whole numbers a
