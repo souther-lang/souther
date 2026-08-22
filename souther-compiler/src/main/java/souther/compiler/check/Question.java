@@ -404,30 +404,40 @@ enum Question {
         }
     },
 
-    /** Which operator it is the function form of ({@link DischargeRules#operator}). Asked of an
-     * operation over two numbers answering a number of the same kind. */
-    OPERATOR("which operator it computes") {
+    /**
+     * What number it computes, and at which result it answers it
+     * ({@link DischargeRules#numericResult}). Asked of an operation whose first two arguments are
+     * numbers and which answers a number of that kind — as its result, or as one case of the union
+     * its result is.
+     *
+     * <p>The case is in range for the reason the result is. An operation answering {@code Int |
+     * DivisionByZero} computes exactly the arithmetic its {@code Int}-answering counterpart does,
+     * and the shape of the result says which inputs it declines rather than what it computes; asked
+     * only of a bare numeric result, every such operation fell out of range and the arithmetic it
+     * computes was readable through no surface (#959).
+     */
+    NUMERIC_RESULT("what number it computes, and where it answers it") {
         @Override
         boolean asksOf(Prelude.Signature signature) {
-            Type result = signature.result();
-            return (result == Type.Prim.INT || result == Type.Prim.DECIMAL)
-                    && signature.params().size() == 2
-                    && signature.params().stream().allMatch(result::equals);
+            Type number = numberAnsweredBy(signature.result());
+            return number != null && signature.params().size() >= 2
+                    && number.equals(signature.params().get(0))
+                    && number.equals(signature.params().get(1));
         }
 
         @Override
         boolean answeredFor(ValueName operation) {
-            return DischargeRules.operator(operation) != null;
+            return DischargeRules.numericResult(operation) != null;
         }
 
         @Override
         Set<ValueName> answeredOperations() {
-            return DischargeRules.operatorForms();
+            return DischargeRules.numericResultOperations();
         }
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return DischargeRules.NOT_AN_OPERATOR;
+            return DischargeRules.COMPUTES_NO_ARITHMETIC_OF_ITS_OWN;
         }
     };
 
@@ -501,6 +511,34 @@ enum Question {
      * as what puts an operation in range of one. */
     static boolean isANumber(Type t) {
         return t == Type.Prim.INT || t == Type.Prim.DECIMAL;
+    }
+
+    /**
+     * The number a result of {@code t} answers — {@code t} itself where it is one, and the number a
+     * union carries where exactly one of its cases is a number.
+     *
+     * <p>Exactly one, and not the first found. A union carrying two numbers would answer its number
+     * at two cases, and which of them a rule about the operation was written for is a question the
+     * table has no column for — so it is out of range, and stays out until something says which.
+     */
+    static Type numberAnsweredBy(Type t) {
+        if (isANumber(t)) {
+            return t;
+        }
+        if (!(t instanceof Type.Union union)) {
+            return null;
+        }
+        Type found = null;
+        for (souther.compiler.types.TypeSymbol member : union.members()) {
+            Type.Prim prim = member.primitiveKind();
+            if (prim != null && isANumber(prim)) {
+                if (found != null) {
+                    return null;
+                }
+                found = prim;
+            }
+        }
+        return found;
     }
 
     /** Whether {@code t} is something the check can name the size of — a container, or a string. */

@@ -55,8 +55,14 @@ record Denotations(Map<BindingId, Means> bound) {
      * @param location where it is, or null where it is not a place. What the seeding writes about
      *                 and what a clause may be read against
      * @param term what the term grammar names it by, or null where it names it by nothing
+     * @param numeric which arithmetic the value is, or null where it is not arithmetic this reads.
+     *                A fifth answer and not a reading of the fourth: what a name is called and what
+     *                was computed to make it are apart, and the arm of a {@code match} is where they
+     *                come apart furthest — it opens a number a library operation computed, and the
+     *                value it stands for is the union that operation answered
      */
-    record Means(Core value, FactSubject subject, Location location, Term term) {
+    record Means(Core value, FactSubject subject, Location location, Term term,
+                 NumericMeaning numeric) {
 
         Means {
             // Every binding this holds is one something is known about. A binding entered without a
@@ -89,6 +95,12 @@ record Denotations(Map<BindingId, Means> bound) {
     }
 
 
+    /** Which arithmetic {@code binding} is, or null where it is not arithmetic this reads. */
+    NumericMeaning numericOf(BindingId binding) {
+        Means given = bound.get(binding);
+        return given == null ? null : given.numeric();
+    }
+
     /** The value {@code binding} was given, or null where nothing recorded one. */
     Core valueOf(BindingId binding) {
         Means given = bound.get(binding);
@@ -105,7 +117,7 @@ record Denotations(Map<BindingId, Means> bound) {
      * binding is ({@link Terms#placeSubject}); an arm opening an optional hands what that optional
      * holds. */
     Denotations location(BindingId binding, FactSubject subject, Term term) {
-        return with(binding, new Means(null, subject, Location.of(binding), term));
+        return with(binding, new Means(null, subject, Location.of(binding), term, null));
     }
 
     /**
@@ -123,8 +135,9 @@ record Denotations(Map<BindingId, Means> bound) {
      * introduced a value of its own: the name was about the answer while standing for nothing, so a
      * {@code match} over what an outer arm bound could not find the call underneath it.
      */
-    Denotations opened(BindingId binding, Core value, FactSubject subject, Term term) {
-        return with(binding, new Means(value, subject, Location.of(binding), term));
+    Denotations opened(BindingId binding, Core value, FactSubject subject, Term term,
+                       NumericMeaning numeric) {
+        return with(binding, new Means(value, subject, Location.of(binding), term, numeric));
     }
 
     /** The same, for bindings that stand for themselves rather than for a value the walk reached —
@@ -138,9 +151,13 @@ record Denotations(Map<BindingId, Means> bound) {
         return out;
     }
 
+    /** {@code binding} entered as the name of {@code value}: what a {@code let} introduces. What
+     * the name means is what it was given, in every one of these answers — which arithmetic it is
+     * included, since a name given a quotient is that quotient and naming a value does not change
+     * what is known of it (spec §invariant-discharge-terms). */
     Denotations binding(BindingId binding, Core value, FactSubject subject, Location location,
-                        Term term) {
-        return with(binding, new Means(value, subject, location, term));
+                        Term term, NumericMeaning numeric) {
+        return with(binding, new Means(value, subject, location, term, numeric));
     }
 
     private Denotations with(BindingId binding, Means means) {

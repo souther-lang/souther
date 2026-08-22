@@ -93,6 +93,22 @@ final class Term {
         /** The empty optional, at the type of the position it fills. */
         NONE,
         /**
+         * The value one case of a union carries, over the value that union is.
+         *
+         * <p>For an operation answering its result as a case of a union rather than as a number:
+         * the call is one value and the number its success carries is another, and naming the two
+         * alike would file everything said about either under one key. {@link #HELD} is the same
+         * shape for the one case the language builds itself, and this is the general one — held
+         * apart because an optional's carrier is a case of a type this compiler declares and can
+         * cancel against the {@code Some} that built it, and a union's case is neither.
+         *
+         * <p>Not every case result takes this. Where the language has a second spelling for the same
+         * arithmetic, the value is named by that arithmetic — the {@code Int} of {@code Int.divide}
+         * is {@code a / b} and is one term with the written divide (spec
+         * §invariant-discharge-arithmetic).
+         */
+        OPENED,
+        /**
          * A value a walk hands its step, read where that walk is being proved about.
          *
          * <p>Named against the walk and by which parameter it arrives on, because that is what makes
@@ -229,6 +245,9 @@ final class Term {
             case HANDED -> sb.append("handed(").append(parts.get(0).rendered()).append(", ")
                     .append(of).append(')');
             case NONE -> sb.append("None:").append(of);
+            case OPENED -> sb.append("opened(").append(parts.get(0).rendered()).append(", ")
+                    .append(souther.compiler.types.Type.show((souther.compiler.types.Type) of))
+                    .append(')');
             case MATCHED -> joined(sb.append("match("), ", ").append(')');
             case ATTEMPTED -> joined(sb.append("attempt("), ", ").append(')');
         }
@@ -483,6 +502,12 @@ final class Term {
          * optional is not the absent value of another. */
         Term none(souther.compiler.types.Type type) {
             return of(Shape.NONE, type, List.of());
+        }
+
+        /** The value the case carrying {@code carries} opens out of {@code value}. Held at the type
+         * the case carries, since two cases of one union are two values. */
+        Term opened(Term value, souther.compiler.types.Type carries) {
+            return of(Shape.OPENED, carries, List.of(value));
         }
 
         /** A value opened: the scrutinee, and what each arm answers, under the cases that arm takes.

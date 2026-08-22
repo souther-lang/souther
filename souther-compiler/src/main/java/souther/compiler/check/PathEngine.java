@@ -235,14 +235,24 @@ final class PathEngine {
                 ? at.location(root.binding(), terms.placeSubject(root.binding()),
                         terms.placeTerm(root.binding()))
                 : at.opened(root.binding(), opens.value(), opens.subject(),
-                        terms.placeTerm(root.binding()));
+                        opens.term() != null ? opens.term() : terms.placeTerm(root.binding()),
+                        opens.numeric());
         return new Entered(seedAt(root, k, next, 0), next);
     }
 
-    /** What an arm's binding stands for: the value the walk reached where the two are one value, and
-     * the subject facts about it are filed under. Taken together because they are one answer about
-     * one binding, and handing them over apart is how one of them was left behind. */
-    private record Opens(Core value, FactSubject subject) {}
+    /**
+     * What an arm's binding stands for: the value the walk reached where the two are one value, the
+     * subject facts about it are filed under, what the term grammar names it by where the arithmetic
+     * it opened names it, and which arithmetic that is.
+     *
+     * <p>Taken together because they are one answer about one binding, and handing them over apart is
+     * how one of them was left behind. Four answers and not one: the value is where it came from,
+     * which is how a rule declared about an answer is found through however many names the answer
+     * went by, and the arithmetic is what was computed to make it. An arm opening the number a
+     * library operation answered as a case is where the two are furthest apart — the value it stands
+     * for is the union, and the number it is is a quotient of two operands the union does not carry.
+     */
+    private record Opens(Core value, FactSubject subject, Term term, NumericMeaning numeric) {}
 
     /**
      * What the arm's binding opens, or null where nothing here says.
@@ -260,10 +270,58 @@ final class PathEngine {
             return null;
         }
         return switch (arm.pattern().binding()) {
-            case Refinement.Direct ignored -> new Opens(scrutinee, of);
-            case Refinement.OptionPresent ignored -> new Opens(null, terms.heldBy(of));
+            case Refinement.Direct(Type carried) -> arithmetic(carried, scrutinee, at);
+            case Refinement.OptionPresent ignored -> new Opens(null, terms.heldBy(of), null, null);
             case Refinement.OptionAbsent ignored -> null;
         };
+    }
+
+    /**
+     * The arm's binding as the number a library operation computed, where the case it opened is
+     * where that operation answers one — and as the value the walk reached otherwise.
+     *
+     * <p>Which case was opened is decided here and the arithmetic is not. What an operation computes
+     * and where it answers it is one row of one table (spec §invariant-discharge-arithmetic), and
+     * this reads the row: a reader that recognised {@code divide} for itself would be a second place
+     * deciding which spellings are divisions, and the next operation answering a number as a case
+     * would be a third.
+     *
+     * <p>Read through the names the call was given, as everything else about a scrutinee is: {@code
+     * let q = Int.divide(a, b)} and a {@code match} written straight over the call are the same
+     * program, and a binding between the two is a name for the call rather than a step away from it.
+     */
+    private Opens arithmetic(Type carried, Core scrutinee, Denotations at) {
+        Core called = originating(scrutinee, at, new HashSet<>());
+        DischargeRules.NumericResult result = called == null ? null
+                : DischargeRules.numericResult(Terms.operationOf(called));
+        if (result == null || !(result.at() instanceof DischargeRules.Answered.InTheCaseCarrying(
+                Type answersIn)) || !answersIn.equals(carried)) {
+            return new Opens(scrutinee, terms.subjectOf(scrutinee, at), null, null);
+        }
+        NumericMeaning meaning = result.computes().of(Terms.argsOf(called));
+        FactSubject subject = terms.subjectOpenedAs(meaning, carried, called, at);
+        // A call the term grammar cannot name leaves the number it answers named by nothing this can
+        // relate to anything else, and a binding standing for the value it opened is what an arm has
+        // always given. Nothing is lost by declining here; what is lost by naming it anyway is the
+        // one thing an atom asserts, which is that two writings of it are one value.
+        return subject == null ? new Opens(scrutinee, terms.subjectOf(scrutinee, at), null, null)
+                : new Opens(scrutinee, subject,
+                        terms.termOpenedAs(meaning, carried, called, at), meaning);
+    }
+
+    /** The call {@code value} came from, through however many names it was given, or null where it
+     * came from something else. As {@link #originatingCall}, of a call in either representation:
+     * what an operation computes is a question about the operation, not about which tree is being
+     * read. */
+    private Core originating(Core value, Denotations at, Set<BindingId> seen) {
+        if (Terms.operationOf(value) != null) {
+            return value;
+        }
+        if (value instanceof Core.Read read && seen.add(read.binding())) {
+            Core given = at.valueOf(read.binding());
+            return given == null || given == value ? null : originating(given, at, seen);
+        }
+        return null;
     }
 
     // --- what a call's answer was declared to be ------------------------------------------------
