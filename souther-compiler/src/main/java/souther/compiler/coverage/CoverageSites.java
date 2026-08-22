@@ -80,6 +80,12 @@ public final class CoverageSites {
         // of anything else that spells one the same way answers first, and it answers with its own
         // rule.
         for (BindingOwner owner : within) {
+            // Both sides say which declaration by the name this module reaches it under, which is
+            // one name because both took it from one place: the reading walked the table of what
+            // this body can reach, and the expansion looked its callee up in that same table under
+            // the name the call resolved to. A second way of saying which declaration -- one side
+            // naming it, the other spelling it -- would agree until a declaration came to be reached
+            // under two names, and nothing would say which of them a copy was of.
             if (!by.declaration().equals(supplied.declarationOf(owner))) {
                 continue;
             }

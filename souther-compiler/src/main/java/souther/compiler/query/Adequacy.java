@@ -1104,25 +1104,30 @@ public final class Adequacy {
          * shape of a measure reporting a behavior complete over something nothing ran, and naming
          * them is what keeps that from being silent.
          *
-         * <p>Only where there is more than one occurrence to be told from another. What an
-         * unsettled rule leaves undecided is which occurrences are one obligation; an obligation
-         * with one occurrence has nothing to be told from, and whether a row reached its arms is
-         * read like any other. Which module wrote the fork does not come into it: a helper of this
-         * module's own deciding by a rule it was handed is the same shape as one the library wrote.
+         * <p>However many places it was counted at. What an unsettled rule leaves undecided is how
+         * many rules the obligation stands for, and one place can stand for several — a rule chosen
+         * while the behavior runs arrives at one call site. Which module wrote the fork does not
+         * come into it: a helper of this module's own deciding by a rule it was handed is the same
+         * shape as one the library wrote.
          */
         /**
-         * Whether {@code occurrences} were counted as one obligation without anything having
-         * established that they are one.
+         * Whether nothing established how many rules this obligation stands for.
+         *
+         * <p>Not how many places it was counted at. Which rule decides at a fork the caller decides
+         * is what says what one obligation is, and where nothing said, one place can be as many
+         * obligations as there are rules reaching it — a rule chosen while the behavior runs arrives
+         * at one call site, and the arms one of them takes say nothing about the arms another would.
+         * Asked as "were several places put together", a single place came back settled and its arms
+         * were judged as though one rule had been through them.
          *
          * <p>One question and one answer, asked by what says so and by what acts on it. Asked one
          * way where it is reported and another where a row is judged against it, a fork could be
          * left out of what the rows are owed and named nowhere — an arm nothing reaches, missing
          * from the findings, over a measurement still calling itself complete.
          */
-        private static boolean unsettledTogether(
-                souther.compiler.coverage.CoverageSites.Obligation key,
-                List<souther.compiler.coverage.CoverageSites.Site> occurrences) {
-            return occurrences.size() > 1 && !key.decided().isSettled();
+        private static boolean unsettledDecision(
+                souther.compiler.coverage.CoverageSites.Obligation key) {
+            return !key.decided().isSettled();
         }
 
         public List<souther.compiler.types.CoverageOrigin> countedTogether() {
@@ -1130,7 +1135,7 @@ public final class Adequacy {
             byObligation().forEach((key, occurrences) -> {
                 // Of the fork and not of its arms. Both arms of one fork are counted together or
                 // neither is, so saying it per arm says one thing twice.
-                if (unsettledTogether(key, occurrences)
+                if (unsettledDecision(key)
                         && !out.contains(key.origin())) {
                     out.add(key.origin());
                 }
@@ -1163,7 +1168,7 @@ public final class Adequacy {
                 // them may or may not be a row through this one. Asked the same way it is said —
                 // one occurrence is nothing to be told from another, and what its arms did is read
                 // like any other's.
-                if (unsettledTogether(each.getKey(), each.getValue())) {
+                if (unsettledDecision(each.getKey())) {
                     continue;
                 }
                 List<souther.compiler.coverage.CoverageSites.Site> occurrences = each.getValue();
