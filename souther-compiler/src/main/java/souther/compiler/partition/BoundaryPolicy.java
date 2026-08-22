@@ -4,11 +4,8 @@ import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputReads;
 
-import java.util.ArrayList;
-import java.util.List;
-
 /**
- * Which of a body's comparisons the rules of a model are read off, and why the rest are not.
+ * Whether the rules of a model are read off one comparison, and why not where they are not.
  *
  * <p><b>The rule, said in what a behavior does rather than in what a body looks like.</b> A
  * comparison is a boundary rule where its truth is on a live flow to what the behavior answers with,
@@ -32,14 +29,10 @@ import java.util.List;
  * divides — and while they were one walk, the decision was being made by whatever the numbering
  * happened to reach.
  *
- * <p><b>Total over the body's comparisons.</b> Every one of them is answered for, as a line or as
- * one of {@link NotABoundary}'s reasons, because a comparison left out of a set is one whose absence
- * every later reader has to explain for itself. A filter answers one question; this answers the one
- * the readers actually have, which is what to say about the comparison in front of them.
- *
- * <p>Asked of a comparison and answered for a whole body, which is the shape the question has. Asked
- * of a fork instead, the reader of lines had to find a fork before it could find a rule — so
- * widening what bears a line would have meant rewriting that reader rather than this.
+ * <p><b>A decision and not a walk.</b> Where a comparison is written and what is in force there is
+ * {@link ComparisonReadings}'s, asked once for the whole body; this is what that walk asks at each
+ * of them. Holding a walk of its own, this was one of two readings threading the same {@code let}
+ * rule through the same tree to answer different halves of one question.
  *
  * <p>What is not answered here is what reaching an arm of a fork proves about a comparison under it.
  * Under {@code A && (B || C)} the arms tell those three apart — the arm the whole condition holds on
@@ -66,15 +59,6 @@ final class BoundaryPolicy {
         /** The comparison this is about, whichever answer it got. */
         Core.Binary comparison();
 
-        /**
-         * Where the names in it point.
-         *
-         * <p>Here rather than only beside a line, because what a comparison says about a position is
-         * asked of the ones that bear none too: a rule this could not read is still a rule written
-         * at a position, and read against the wrong names it is written at none.
-         */
-        InputReads reads();
-
         /** A line is drawn on it, and read under {@code bearing}'s names. */
         record DrawsALine(Bearing bearing) implements Standing {
 
@@ -82,94 +66,40 @@ final class BoundaryPolicy {
             public Core.Binary comparison() {
                 return bearing.comparison();
             }
-
-            @Override
-            public InputReads reads() {
-                return bearing.reads();
-            }
         }
 
         /** No line is drawn on it, and this is which of the reasons it is. */
-        record DrawsNone(Core.Binary comparison, InputReads reads, NotABoundary why)
-                implements Standing {}
-    }
-
-    private final List<Standing> standing;
-
-    private BoundaryPolicy(List<Standing> standing) {
-        this.standing = List.copyOf(standing);
-    }
-
-    /** What this says about every comparison of the body, in the order the source wrote them. */
-    List<Standing> all() {
-        return standing;
-    }
-
-    /** The comparisons a line is drawn on, in the order the source wrote them. */
-    List<Bearing> drawn() {
-        return standing.stream()
-                .filter(Standing.DrawsALine.class::isInstance)
-                .map(each -> ((Standing.DrawsALine) each).bearing())
-                .toList();
-    }
-
-    /** What this policy says about each comparison of {@code body}. */
-    static BoundaryPolicy of(Core body, CoverageSites.Plan plan, InputReads reads) {
-        List<Standing> standing = new ArrayList<>();
-        gather(body, plan, reads, LiveFlow.of(body), true, standing);
-        return new BoundaryPolicy(standing);
+        record DrawsNone(Core.Binary comparison, NotABoundary why) implements Standing {}
     }
 
     /**
-     * @param live whether what is computed here is read on the way to what the behavior answers
-     *             with. Carried down rather than asked at each comparison, because everything inside
-     *             a value nothing reads is read by nothing either
-     */
-    private static void gather(Core e, CoverageSites.Plan plan, InputReads reads, LiveFlow flow,
-                               boolean live, List<Standing> standing) {
-        if (e instanceof Core.Binary comparison && plan.comparisons().at(comparison).isPresent()) {
-            standing.add(standingOf(comparison, plan, reads, live));
-        }
-        // Inside what a `let` binds, since that is where a name standing for an argument is read as
-        // the argument.
-        InputReads inside = e instanceof Core.LetIn let ? reads.and(let.binder(), let.value())
-                : reads;
-        if (e instanceof Core.LetIn let) {
-            // What a `let` computes is read on the way to the answer only where the name is read.
-            // Everywhere else a value stands in a body it is consumed by what it stands in — a
-            // condition decides a fork, an operand is combined, an argument is handed over, a field
-            // becomes part of a value, a tail is what the body answers with — so this is the one
-            // place a flow stops.
-            gather(let.value(), plan, reads, flow, live && flow.reads(let), standing);
-            gather(let.body(), plan, inside, flow, live, standing);
-            return;
-        }
-        Core.forEachChild(e, child -> gather(child, plan, inside, flow, live, standing));
-    }
-
-    /**
-     * What one comparison's standing is.
+     * What {@code comparison}'s standing is, where it stands.
      *
      * <p>The reason about the model is said first. A comparison the behavior's answer does not turn
      * on is not a boundary whichever way it could have been measured, and a reader told instead that
      * its outcome cannot be attributed to a row would go looking for a way to attribute it.
+     *
+     * @param live whether what is computed at this position is read on the way to what the behavior
+     *             answers with, which is {@link LiveFlow}'s answer carried down the walk
      */
-    private static Standing standingOf(Core.Binary comparison, CoverageSites.Plan plan,
-                                       InputReads reads, boolean live) {
+    static Standing standingOf(Core.Binary comparison, CoverageSites.Plan plan, InputReads reads,
+                               boolean live) {
         if (!live) {
-            return new Standing.DrawsNone(comparison, reads, NotABoundary.NOTHING_READS_IT);
+            return new Standing.DrawsNone(comparison, NotABoundary.NOTHING_READS_IT);
         }
         // Meeting a line takes getting the comparison to answer, and whether it answered is what a
         // site records — so a comparison with no site is one no row could ever be shown to have
         // reached, and a border on it would owe a row nothing can measure.
         if (plan.comparisonAt(comparison).isEmpty()) {
-            return new Standing.DrawsNone(comparison, reads, NotABoundary.NOTHING_RECORDS_IT);
+            return new Standing.DrawsNone(comparison, NotABoundary.NOTHING_RECORDS_IT);
         }
         // A recording holds that a place was passed and not how many times, so two outcomes of one
         // comparison in one run cannot be told from two rows' outcomes.
         if (plan.mayRepeat(comparison)) {
-            return new Standing.DrawsNone(comparison, reads, NotABoundary.REPEATED_IN_ONE_RUN);
+            return new Standing.DrawsNone(comparison, NotABoundary.REPEATED_IN_ONE_RUN);
         }
         return new Standing.DrawsALine(new Bearing(comparison, reads));
     }
+
+    private BoundaryPolicy() {}
 }

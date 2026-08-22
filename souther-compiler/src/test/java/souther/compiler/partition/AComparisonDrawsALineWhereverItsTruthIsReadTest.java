@@ -32,6 +32,7 @@ class AComparisonDrawsALineWhereverItsTruthIsReadTest {
             data Temp = Int
             data Cold
             data Hot
+            data Verdict = { cold: Bool }
 
             behavior underAFork : (temp: Temp) -> Cold | Hot
             let underAFork (temp) =
@@ -42,6 +43,19 @@ class AComparisonDrawsALineWhereverItsTruthIsReadTest {
                 let cold = temp.value < 240
                 if cold then Cold else Hot
             }
+
+            behavior answeredDirectly : (temp: Temp) -> Bool
+            let answeredDirectly (temp) = temp.value < 240
+
+            behavior namedThenAnswered : (temp: Temp) -> Bool
+            let namedThenAnswered (temp) = {
+                let cold = temp.value < 240
+                cold
+            }
+
+            behavior insideTheAnswersData : (temp: Temp) -> Verdict
+            let insideTheAnswersData (temp) =
+                Verdict { cold = temp.value < 240 }
 
             behavior namedAndNeverRead : (temp: Temp) -> Cold
             let namedAndNeverRead (temp) = {
@@ -77,15 +91,37 @@ class AComparisonDrawsALineWhereverItsTruthIsReadTest {
                 .toList();
     }
 
-    /** A body that names the truth before testing it divides what the fork spelling divides. */
+    /** The spellings that read the truth somewhere other than a fork's condition. */
+    private static final List<String> READ_ELSEWHERE = List.of(
+            "namedThenForked", "answeredDirectly", "namedThenAnswered", "insideTheAnswersData");
+
+    /**
+     * Every spelling that reads the truth divides what the fork spelling divides.
+     *
+     * <p>One rule and four uses of it: tested by a fork, given a name a line above the fork that
+     * tests it, answered with, and written into a field of the answer's data. Each was reported as a
+     * position the model draws no line through, which is not a quieter answer than the fork
+     * spelling's — it is the opposite one.
+     */
     @Test
-    void namingTheTruthBeforeTestingItDividesWhatTheForkSpellingDivides() {
+    void everySpellingThatReadsTheTruthDividesWhatTheForkSpellingDivides() {
         Map<String, PartitionEvidence> measured = measured();
         PartitionEvidence held = measured.get("underAFork");
-        PartitionEvidence named = measured.get("namedThenForked");
 
-        assertEquals(classesOf(held), classesOf(named));
-        assertEquals(linesOf(held), linesOf(named));
+        for (String behavior : READ_ELSEWHERE) {
+            assertEquals(classesOf(held), classesOf(measured.get(behavior)), behavior);
+            assertEquals(linesOf(held), linesOf(measured.get(behavior)), behavior);
+        }
+    }
+
+    /** And none of them is left among the positions no class came back for. */
+    @Test
+    void noSpellingThatReadsTheTruthNamesItsInputAsOneNothingDivides() {
+        Map<String, PartitionEvidence> measured = measured();
+        for (String behavior : READ_ELSEWHERE) {
+            assertEquals(List.of(), measured.get(behavior).notDerivable(), behavior);
+            assertEquals(List.of(), measured.get(behavior).notRead(), behavior);
+        }
     }
 
     /**

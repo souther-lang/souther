@@ -160,97 +160,18 @@ public final class GuardThresholds {
         // the names in force there. Which comparisons those are is
         // {@link BoundaryPolicy}'s answer: a reader that had to find a fork before it could
         // find a rule could not be handed a wider one without being rewritten.
-        BoundaryPolicy policy = BoundaryPolicy.of(body, plan, InputReads.of(inputs));
-        for (BoundaryPolicy.Bearing each : policy.drawn()) {
+        // One reading of the body, and everything below is that reading asked something. Where a
+        // comparison is written, what its names point at, what a row had satisfied to get there and
+        // whether a line is drawn on it are four questions about one position, and a walk apiece was
+        // a walk apiece to disagree about what a `let` does.
+        ComparisonReadings read = ComparisonReadings.of(body, plan, InputReads.of(inputs), symbols);
+        for (BoundaryPolicy.Bearing each : read.drawn()) {
             lineAt(behavior, each.comparison(), plan, each.reads(), symbols, quantities, found,
                     singled, between, accounting, made);
         }
-        // What a row had already satisfied when each comparison ran. Walks the body; does not
-        // decide which comparisons there are.
-        ReachingCuts.Collected cuts = new ReachingCuts.Collected();
-        reached(body, plan, InputReads.of(inputs), symbols, List.of(), cuts);
-        // And every comparison the model states something by that nothing turned into a line, read
-        // off the same answer the lines came off. Walked again from a fork, this reported a
-        // comparison written anywhere else as nothing at all — which is the one answer that says
-        // the model states nothing there.
-        noticed(behavior, policy, made, plan, symbols, unread);
-        return new Guards(found, unread, singled, between, accounting, cuts.made());
-    }
-
-    /**
-     * Every comparison a condition holds that nothing turned into a line.
-     *
-     * <p>Asked of the comparisons and not of the positions. One position carries more than one
-     * statement, and a line read at it says nothing about the rest: kept per position, a threshold
-     * on `x` swallowed the comparison beside it that nothing could read, which is "a result exists,
-     * so the reading is complete".
-     *
-     * <p>A wider set than the one that bears lines, and deliberately. What this establishes is that
-     * the model states something at a position — which is exactly what {@code not derivable} would
-     * otherwise deny — so a comparison written somewhere no line is drawn from is still a rule the
-     * author wrote and still worth saying went unread.
-     */
-    private static void reached(Core e, CoverageSites.Plan plan,
-                                InputReads reads, Symbols symbols, List<ReachingCuts.Cut> assumed,
-                                ReachingCuts.Collected cuts) {
-        // One reading of this condition, folded by both of the questions asked here. Read off the
-        // shape of the node in front of each of them, they each knew on their own which shapes are
-        // transparent and which combine, and a shape one learned to see through was one the other
-        // still could not.
-        Condition asked = e instanceof Core.If iff ? Condition.of(iff.cond(), reads) : null;
-        if (asked != null) {
-            // What a row had already satisfied when each of this condition's comparisons ran, filed
-            // where it was assumed. Asked of the condition rather than of the fork: a condition
-            // stops as soon as it is settled, so what stands when the second comparison runs is not
-            // what stood when the first did.
-            ReachingCuts.collect(asked, assumed, plan, symbols, cuts);
-        } else if (e instanceof Core.Binary comparison) {
-            // A comparison standing anywhere else runs under what the forks above it established and
-            // under nothing finer, since there is no condition round it to have stopped early. Filed
-            // rather than left out: a body that names a truth above the fork that tests it states
-            // the model the fork spelling states, and a region as wide as the declarations at one of
-            // them and narrowed at the other is the spelling deciding what a row is searched for.
-            // The condition's own reading has already been filed and stands.
-            plan.comparisonAt(comparison).ifPresent(site -> cuts.reached(site, assumed));
-        }
-        // A match case's body and an attempted construction's departure are expression slots, so the
-        // generic walk reaches them; only the arms themselves are not children, and this walk does not
-        // number arms.
-        InputReads inside = e instanceof Core.LetIn let ? reads.and(let.binder(), let.value())
-                : reads;
-        if (e instanceof Core.If iff) {
-            // The arms under what each of them proves of the condition, and the condition itself
-            // under what stood above the fork. A comparison inside a condition is not below the
-            // fork: it runs to decide it.
-            reached(iff.cond(), plan, inside, symbols, assumed, cuts);
-            reached(iff.then(), plan, inside, symbols,
-                    taking(asked, true, assumed, symbols), cuts);
-            reached(iff.els(), plan, inside, symbols,
-                    taking(asked, false, assumed, symbols), cuts);
-            return;
-        }
-        Core.forEachChild(e, child ->
-                reached(child, plan, inside, symbols, assumed, cuts));
-    }
-
-    /**
-     * What stands inside one arm of a fork: what stood above it, and what that arm proves of the
-     * condition.
-     *
-     * <p>Asked of {@link ReachingCuts#stating}, which is the same rule that says what reaching the
-     * right operand of a condition establishes. Both are "this subtree came out this way, so what
-     * follows", and written apart they would agree by having been derived alike — until one of them
-     * learned to read a shape of condition the other did not.
-     */
-    private static List<ReachingCuts.Cut> taking(Condition condition, boolean onThen,
-                                                 List<ReachingCuts.Cut> assumed, Symbols symbols) {
-        List<ReachingCuts.Cut> arm = ReachingCuts.stating(condition, onThen, symbols);
-        if (arm.isEmpty()) {
-            return assumed;
-        }
-        List<ReachingCuts.Cut> out = new ArrayList<>(assumed);
-        out.addAll(arm);
-        return List.copyOf(out);
+        // And every comparison the model states something by that nothing turned into a line.
+        noticed(behavior, read, made, plan, symbols, unread);
+        return new Guards(found, unread, singled, between, accounting, read.reaching(plan));
     }
 
     /**
@@ -275,14 +196,14 @@ public final class GuardThresholds {
      * nothing about the position, and naming it here would put a rule into the report that the model
      * does not state.
      */
-    private static void noticed(String behavior, BoundaryPolicy policy, List<Core> made,
+    private static void noticed(String behavior, ComparisonReadings read, List<Core> made,
                                 CoverageSites.Plan plan, Symbols symbols, List<UnreadRule> out) {
-        for (BoundaryPolicy.Standing standing : policy.all()) {
-            if (standing instanceof BoundaryPolicy.Standing.DrawsNone none
+        for (ComparisonReadings.Reading reading : read.all()) {
+            if (reading.standing() instanceof BoundaryPolicy.Standing.DrawsNone none
                     && none.why() == NotABoundary.NOTHING_READS_IT) {
                 continue;
             }
-            Core.Binary binary = standing.comparison();
+            Core.Binary binary = reading.comparison();
             // By the comparison it is, and not by what it was about: two comparisons at one position
             // are two statements, and this one having been read is no answer about the other.
             if (made.stream().anyMatch(each -> each == binary)) {
@@ -292,7 +213,7 @@ public final class GuardThresholds {
             if (entry == null || !writtenHere(entry)) {
                 continue;
             }
-            InputReads reads = standing.reads();
+            InputReads reads = reading.reads();
             List<TermPath> named = new ArrayList<>();
             mentioned(binary.left(), reads, symbols, named);
             mentioned(binary.right(), reads, symbols, named);

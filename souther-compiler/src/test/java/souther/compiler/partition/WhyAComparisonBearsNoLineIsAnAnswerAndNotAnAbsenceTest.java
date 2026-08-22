@@ -62,10 +62,13 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
         souther.compiler.inputs.InputDomain inputs = compilation.db()
                 .ask(new Adequacy.Inputs(module)).value().get("read");
 
+        souther.compiler.check.Symbols symbols =
+                souther.compiler.query.Scopes.derived(compilation.db(), module).value();
+
         Map<Integer, BoundaryPolicy.Standing> byLine = new LinkedHashMap<>();
-        for (BoundaryPolicy.Standing each
-                : BoundaryPolicy.of(body, plan, InputReads.of(inputs)).all()) {
-            byLine.put(each.comparison().pos().line(), each);
+        for (ComparisonReadings.Reading each
+                : ComparisonReadings.of(body, plan, InputReads.of(inputs), symbols).all()) {
+            byLine.put(each.comparison().pos().line(), each.standing());
         }
         return byLine;
     }
