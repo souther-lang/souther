@@ -78,7 +78,17 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
     private static Reduction.Tightened<String> reduce(List<AffineConstraint<String>> rules,
                                                       Box<String> from, Granularity spacing) {
         return assertInstanceOf(Reduction.Tightened.class,
-                AffineReduction.over(rules, from, atom -> spacing));
+                AffineReduction.over(reading(rules, from), atom -> spacing));
+    }
+
+    /**
+     * The rules read against {@code from}, which is what a round of the closure hands the reduction —
+     * or null where the differences alone already hold nothing, which is where a round is never
+     * reached.
+     */
+    private static FormReach<String> reading(List<AffineConstraint<String>> rules, Box<String> from) {
+        DifferenceBounds<String> differences = DifferenceBounds.over(rules);
+        return differences.holdsNothing() ? null : FormReach.over(rules, from, differences);
     }
 
     // --- the issue's example -----------------------------------------------------------------------
@@ -217,7 +227,7 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
         AffineConstraint<String> hole =
                 rule(weighing("a", 1), -3, Rel.NE, Granularity.DISCRETE);
         assertInstanceOf(Reduction.NothingIsLeft.class,
-                AffineReduction.over(List.of(hole), between("a", 3, 3),
+                AffineReduction.over(reading(List.of(hole), between("a", 3, 3)),
                         atom -> Granularity.DISCRETE));
     }
 
@@ -228,7 +238,7 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
         AffineConstraint<String> rule =
                 rule(weighing("a", 1, "b", 1), -5, Rel.LE, Granularity.DISCRETE);
         assertInstanceOf(Reduction.NothingIsLeft.class,
-                AffineReduction.over(List.of(rule), between("a", 10, 20, "b", 10, 20),
+                AffineReduction.over(reading(List.of(rule), between("a", 10, 20, "b", 10, 20)),
                         atom -> Granularity.DISCRETE));
     }
 
@@ -249,8 +259,13 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
             Box<String> from = between("a", LOW, HIGH, "b", LOW, HIGH, "c", LOW, HIGH);
             List<Map<String, Integer>> admitted = pointsSatisfying(written);
 
-            Reduction<String> found = AffineReduction.over(stated, from,
-                    atom -> Granularity.DISCRETE);
+            FormReach<String> reading = reading(stated, from);
+            if (reading == null) {
+                assertTrue(admitted.isEmpty(),
+                        () -> "the differences hold nothing, but " + written + " admits " + admitted);
+                continue;
+            }
+            Reduction<String> found = AffineReduction.over(reading, atom -> Granularity.DISCRETE);
             if (found instanceof Reduction.NothingIsLeft) {
                 assertTrue(admitted.isEmpty(),
                         () -> "said nothing is left, but " + written + " admits " + admitted);
@@ -293,10 +308,15 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
             List<AffineConstraint<String>> shuffled = new ArrayList<>(stated);
             Collections.shuffle(shuffled, dice);
 
+            FormReach<String> asRead = reading(stated, from);
+            FormReach<String> reread = reading(shuffled, from);
+            if (asRead == null || reread == null) {
+                continue;   // the differences hold nothing, which the closure answers before a round
+            }
             Reduction<String> asWritten =
-                    AffineReduction.over(stated, from, atom -> Granularity.DISCRETE);
+                    AffineReduction.over(asRead, atom -> Granularity.DISCRETE);
             Reduction<String> reordered =
-                    AffineReduction.over(shuffled, from, atom -> Granularity.DISCRETE);
+                    AffineReduction.over(reread, atom -> Granularity.DISCRETE);
             assertEquals(asWritten, reordered,
                     () -> "the reduction moved when the rules were reordered: " + stated);
         }
@@ -312,10 +332,15 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
             Box<String> narrow = between("a", LOW + 1, HIGH - 1, "b", LOW + 1, HIGH - 1,
                     "c", LOW + 1, HIGH - 1);
 
+            FormReach<String> readWide = reading(stated, wide);
+            FormReach<String> readNarrow = reading(stated, narrow);
+            if (readWide == null || readNarrow == null) {
+                continue;   // the differences hold nothing, which the closure answers before a round
+            }
             Reduction<String> overWide =
-                    AffineReduction.over(stated, wide, atom -> Granularity.DISCRETE);
+                    AffineReduction.over(readWide, atom -> Granularity.DISCRETE);
             Reduction<String> overNarrow =
-                    AffineReduction.over(stated, narrow, atom -> Granularity.DISCRETE);
+                    AffineReduction.over(readNarrow, atom -> Granularity.DISCRETE);
             if (!(overWide instanceof Reduction.Tightened<String> loose)) {
                 continue;   // the wider box was already empty, so there is nothing wider to be
             }

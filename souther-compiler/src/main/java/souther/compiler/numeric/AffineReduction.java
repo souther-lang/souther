@@ -42,10 +42,12 @@ import java.util.function.Function;
  * refuses values a model admits, and no measure downstream is in a position to notice — which is why
  * it is checked against enumerated points rather than argued for.
  *
- * <p>Nothing here reaches anything but the box it was handed. It cannot ask what has been derived
- * since, or what another rule found in the same round, so what it answers depends on the box and
- * the rule and nothing else — and putting the answers together afterwards is what keeps the order
- * the rules arrived in out of the result.
+ * <p>Nothing here reaches anything but the state it was handed, which is the one the round started
+ * in. It cannot ask what another rule found in the same round, so what it answers depends on that
+ * state and the rule and nothing else — and putting the answers together afterwards is what keeps
+ * the order the rules arrived in out of the result. What it may read of that state is both the ends
+ * and the relations, because the rest of a rule is a sum and the thing that bounds a sum is often
+ * not any one position's ends.
  */
 public final class AffineReduction {
 
@@ -77,16 +79,20 @@ public final class AffineReduction {
     }
 
     /**
-     * Every bound the rules put on a position given {@code from}, read once each against the same
-     * box.
+     * Every bound the rules put on a position given {@code reading}, read once each against the same
+     * state.
      *
-     * @param constraints the rules to read this way. Ones the difference bounds already hold in full
-     *                    can be passed and cost a little; ones of no shape at all are skipped
+     * @param reading     the rules to read this way, the ends the round started in, and the one
+     *                    reading of how far a form runs under them. Ends and relations both, because
+     *                    the rest of a rule is a sum and a sum is bounded by things no position's own
+     *                    ends carry. Rules the difference bounds already hold in full can be among
+     *                    them and cost a little; ones of no shape at all are skipped
      * @param spacing     how each position's values are spaced, for the reason
      *                    {@link AffineConstraint#of} wants it
      */
-    public static <A> Reduction<A> over(Iterable<AffineConstraint<A>> constraints, Box<A> from,
-                                        Function<A, Granularity> spacing) {
+    public static <A> Reduction<A> over(FormReach<A> reading, Function<A, Granularity> spacing) {
+        Box<A> from = reading.ends();
+        List<AffineConstraint<A>> constraints = reading.rules();
         Map<A, RationalCut> atLeast = new LinkedHashMap<>();
         Map<A, RationalCut> atMost = new LinkedHashMap<>();
         for (AffineConstraint<A> each : constraints) {
@@ -97,7 +103,7 @@ public final class AffineReduction {
             }
             for (AffineConstraint.HalfSpace<A> half : halves) {
                 for (A atom : half.form().coefs().keySet()) {
-                    if (!record(half, atom, from, spacing, atLeast, atMost)) {
+                    if (!record(half, atom, from, reading, each, spacing, atLeast, atMost)) {
                         return new Reduction.NothingIsLeft<>();
                     }
                 }
@@ -159,10 +165,11 @@ public final class AffineReduction {
      * @return false where the rule leaves that position no value at all
      */
     private static <A> boolean record(AffineConstraint.HalfSpace<A> half, A atom, Box<A> from,
+                                      FormReach<A> reading, AffineConstraint<A> itsOwnRule,
                                       Function<A, Granularity> spacing,
                                       Map<A, RationalCut> atLeast, Map<A, RationalCut> atMost) {
         Rational weight = half.form().coefs().get(atom);
-        Least rest = leastOfTheRest(half, atom, from);
+        Least rest = leastOfTheRest(half, atom, reading, itsOwnRule);
         if (rest == null) {
             return true;   // some other position runs the wrong way without end, so nothing follows
         }
@@ -201,8 +208,17 @@ public final class AffineReduction {
         }
     }
 
-    /** Whether the ends now known at {@code atom} — the ones it came in with and the ones just
-     *  found — still leave it something. */
+    /**
+     * Whether the ends now known at {@code atom} — the ones it came in with and the ones just found
+     * — still leave it something.
+     *
+     * <p>The one thing here that reads what this round has found rather than what it started with.
+     * It decides emptiness and nothing else: what is <em>derived</em> comes from the state the round
+     * began in, so no bound depends on which rule was read first, while whether the rules have
+     * emptied a position is noticed as soon as two ends cross rather than a round later. Worth
+     * knowing when reading the promise above as "every rule sees the same state" — every rule
+     * derives from the same state, which is not quite the same sentence.
+     */
     private static <A> boolean holdsAValue(A atom, Box<A> from, Map<A, RationalCut> atLeast,
                                            Map<A, RationalCut> atMost) {
         RationalCut low = RationalCut.tighterLower(from.leastOf(atom), atLeast.get(atom));
@@ -217,18 +233,24 @@ public final class AffineReduction {
     /**
      * The least the rest of the form can come to, and whether it can actually come to it.
      *
-     * <p>A position pulling the sum down contributes least at its own least, and one pulling it up
-     * contributes least at its greatest — so which end is read is the coefficient's sign and not the
-     * position's. Where the end that is wanted is missing, the rest can be made as small as you
-     * like and the rule bounds nothing.
+     * <p>Asked of {@link FormReach}, which is the one reading of how far a form runs. Summed from
+     * each position's own ends and no further, this could not use a relation: under
+     * {@code guard x >= y} the rest {@code x - y} has no end at either position, so a rule relating
+     * it to a third was left bounding nothing at all — while the goal side, asking the very same
+     * question of the very same state, read the relation and answered.
      *
-     * @return null where some position of the rest has no end in the direction that matters
+     * <p>The rule being reduced is left out of the reading. It cannot make this unsound and it was
+     * measured to change nothing, and what it would leave behind is a bound whose premise is the
+     * rule it is a bound on.
+     *
+     * @return null where nothing bounds the rest below, which is where the rest can be made as small
+     *         as you like and the rule bounds nothing
      */
-    private static <A> Least leastOfTheRest(AffineConstraint.HalfSpace<A> half, A atom, Box<A> from) {
+    private static <A> Least leastOfTheRest(AffineConstraint.HalfSpace<A> half, A atom,
+                                            FormReach<A> reading, AffineConstraint<A> itsOwnRule) {
         Map<A, Rational> rest = new LinkedHashMap<>(half.form().coefs());
         rest.remove(atom);
-        RationalCut least = Reach.of(rest, Rational.ZERO,
-                each -> Reach.between(from.leastOf(each), from.mostOf(each))).least();
+        RationalCut least = reading.ofTheRestOf(itsOwnRule, rest, Rational.ZERO).least();
         return least == null ? null : new Least(least.at(), least.inclusive());
     }
 
