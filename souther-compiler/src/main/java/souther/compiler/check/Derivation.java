@@ -92,4 +92,29 @@ sealed interface Derivation {
             return List.of(numerator, divisor);
         }
     }
+
+    /**
+     * A divide rounded to a scale the call states (spec §stdlib-decimal).
+     *
+     * <p>{@code scale} is the number of places, where the reading holds the argument as a number,
+     * and null where it does not. A number and not a form: nothing composes with it — it says which
+     * grid the answer lands on, and a grid is not a value the domain relates anything to — and where
+     * it is not a number there is no grid to state, which is a rule not applying rather than a rule
+     * over an unknown. A name given a constant is that constant, as everywhere else the check reads
+     * a value (spec §invariant-discharge-terms).
+     *
+     * <p>The mode is not here at all. Every mode the library has lands the answer on one of the two
+     * grid points the exact quotient lies between, so what a range can say is the same for all seven
+     * of them ({@link souther.compiler.numeric.Intervals#roundedQuotient}). Which one it is is part
+     * of which value this is — {@link NumericMeaning} keeps it — and not part of where it lies.
+     */
+    record RoundedQuotient(LinearForm<FactSubject> numerator, LinearForm<FactSubject> divisor,
+                           NumericDomain.Bounds divisorExtent, java.math.BigDecimal scale)
+            implements Derivation {
+
+        @Override
+        public List<LinearForm<FactSubject>> operands() {
+            return List.of(numerator, divisor);
+        }
+    }
 }

@@ -620,8 +620,8 @@ final class Terms {
                     divided(dividend, divisor, at, Derivation.TruncatingQuotient::new);
             case NumericMeaning.TruncatingRemainder(Core dividend, Core divisor) ->
                     divided(dividend, divisor, at, Derivation.TruncatingRemainder::new);
-            // A quotient rounded to a scale is arithmetic this names and states no range of.
-            case NumericMeaning.RoundedQuotient _ -> null;
+            case NumericMeaning.RoundedQuotient(Core dividend, Core divisor, Core scale, Core _) ->
+                    rounded(dividend, divisor, scale, at);
         };
     }
 
@@ -657,6 +657,21 @@ final class Terms {
             return null;
         }
         return made.of(numerator, divisor, extent);
+    }
+
+    /** The recipe a divide rounded to a scale is, or null where the fragment derives nothing in it.
+     * The scale is read as a number where the reading holds one, and the recipe stands without it —
+     * which side of nought such a quotient is on is the same at every scale. */
+    private Derivation rounded(Core over, Core by, Core places, Denotations at) {
+        LinearForm<FactSubject> numerator = affineOf(over, at);
+        LinearForm<FactSubject> divisor = affineOf(by, at);
+        NumericDomain.Bounds extent = extentOf(by.type());
+        if (numerator == null || divisor == null || extent == null) {
+            return null;
+        }
+        LinearForm<FactSubject> scale = affineOf(places, at);
+        return new Derivation.RoundedQuotient(numerator, divisor, extent,
+                scale != null && scale.coefs().isEmpty() ? scale.constant() : null);
     }
 
     /** Which of the two answers of one division a recipe is about. Both are read off the same three

@@ -222,6 +222,8 @@ final class DerivedNumericFacts {
                     quotient(atom, quotient, base, terms, done, deriving);
             case Derivation.TruncatingRemainder remainder ->
                     remainder(atom, remainder, base, terms, done, deriving);
+            case Derivation.RoundedQuotient rounded ->
+                    rounded(atom, rounded, base, terms, done, deriving);
         };
     }
 
@@ -344,6 +346,63 @@ final class DerivedNumericFacts {
                     left.plus(LinearForm.constant(magnitude)), Rel.GT));
         }
         return facts;
+    }
+
+    /**
+     * What a divide rounded to a scale answers, under what this reading holds of the two it was
+     * computed from.
+     *
+     * <p>The same two questions about the divisor as a truncating divide asks, and for the same
+     * reasons. What is said under them depends on whether the scale reads as a number.
+     *
+     * <p>With one, the answer lies between the two points of that scale's grid the exact quotient
+     * lies between, whichever way the call rounds ({@link Intervals#roundedQuotient}) — and the grid
+     * is the one the run time will use, which is why a scale no {@code int} holds is no scale here:
+     * what the backend divides at is that scale narrowed, so a proof over the number as written
+     * would be a proof about a different division.
+     *
+     * <p>With none, the side of nought is still the same. Rounding to a grid never crosses zero — a
+     * quotient at or above nought lands on a grid point at or above nought at every scale — so which
+     * side it is on follows from the operands and not from where the grid is. Read off the grid at
+     * scale nought, since which side that answer is on is the side every other scale answers too.
+     */
+    private static List<Fact> rounded(FactSubject atom, Derivation.RoundedQuotient rounded,
+                                      NumericDomain<FactSubject> base, Terms terms,
+                                      Map<FactSubject, List<Fact>> done, Set<FactSubject> deriving) {
+        Bounds divisor = divisorOf(rounded.divisor(), rounded.divisorExtent(), base, terms, done,
+                deriving);
+        if (divisor == null) {
+            return List.of();
+        }
+        Bounds numerator = boundsOf(rounded.numerator(), base, terms, done, deriving);
+        Integer places = placesOf(rounded.scale());
+        Bounds answered = Intervals.roundedQuotient(numerator, divisor,
+                places == null ? 0 : places);
+        if (places != null) {
+            return between(atom, answered);
+        }
+        List<Fact> facts = new ArrayList<>();
+        if (answered.liesWithin(AT_OR_ABOVE_NOUGHT)) {
+            facts.add(new Fact.Relating(LinearForm.atom(atom), Rel.GE));
+        }
+        if (answered.liesWithin(AT_OR_BELOW_NOUGHT)) {
+            facts.add(new Fact.Relating(LinearForm.atom(atom), Rel.LE));
+        }
+        return facts;
+    }
+
+    /** The scale as the run time takes it, or null where the reading has no number or the number is
+     * not one a scale can be — the backend narrows it to an {@code int}, so a place count outside
+     * that is a division at a scale no proof here was about. */
+    private static Integer placesOf(BigDecimal scale) {
+        if (scale == null) {
+            return null;
+        }
+        try {
+            return scale.intValueExact();
+        } catch (ArithmeticException _) {
+            return null;
+        }
     }
 
     /** The number {@code form} is, or null where it names one this reading does not hold as a
