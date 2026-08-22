@@ -65,7 +65,7 @@ class AGeneratedModelIsCompiledRatherThanMatchedTest {
                 .toList();
         List<Located> warnings = new ArrayList<>();
         Compilation compiled = Compiler.analyzedModules(texts, ModulePath.EMPTY, warnings,
-                Adequacy.Asked.reportOnly());
+                Adequacy.Asked.fullReport());
         AdequacyReport report = AdequacyReport.of(compiled);
 
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, report.adequacy(),

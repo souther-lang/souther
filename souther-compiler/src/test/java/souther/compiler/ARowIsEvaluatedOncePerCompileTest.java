@@ -90,14 +90,14 @@ class ARowIsEvaluatedOncePerCompileTest {
      */
     @Test
     void everyRowStillRunsOnceWhenTheArmsAreMeasured() {
-        assertEquals(2, rowsRunIn(Adequacy.Asked.reportOnly()));
+        assertEquals(2, rowsRunIn(Adequacy.Asked.fullReport()));
     }
 
     /** The measurement still gets what it asks for: a compile that measures reads the arms. */
     @Test
     void measuringStillReadsTheArmsTheRowsTook() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
 
         Adequacy.Of measured = compilation.adequacy("example.once");

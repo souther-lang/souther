@@ -53,7 +53,7 @@ class ARuleAboutAValueMadeFromAPositionIsNamedTest {
 
     private static PartitionEvidence measured() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         PartitionEvidence scored = compilation.db()
                 .ask(new Adequacy.Coverage(MODULE)).value().get("scored");
@@ -92,7 +92,7 @@ class ARuleAboutAValueMadeFromAPositionIsNamedTest {
     @Test
     void theReportSaysWhichOfTheTwoItIs() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String human = AdequacyReport.of(compilation).human(SourceNameResolver.identity());
 

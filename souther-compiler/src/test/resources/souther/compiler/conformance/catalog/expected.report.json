@@ -618,7 +618,7 @@
         "code" : "E1916"
       }, {
         "kind" : "domain_point_uncovered",
-        "disposition" : "reported",
+        "disposition" : "refused",
         "subject" : "出荷する/指示.重量 in 30001 < 指示.重量",
         "code" : "E1917"
       }, {

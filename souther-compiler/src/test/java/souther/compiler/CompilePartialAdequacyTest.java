@@ -140,12 +140,12 @@ class CompilePartialAdequacyTest {
     /** Measured, with {@code overrun} the work this model does not get back from — for a model
      *  written out here, which is its own key. */
     private static Compilation measured(String source, Deadline overrun) {
-        return measured("report:", source, overrun, Adequacy.Asked.reportOnly());
+        return measured("report:", source, overrun, Adequacy.Asked.fullReport());
     }
 
     /** The same, for a model shared between tests, which needs a key of its own. */
     private static Compilation measured(String key, String source, Deadline overrun) {
-        return measured("report:" + key, source, overrun, Adequacy.Asked.reportOnly());
+        return measured("report:" + key, source, overrun, Adequacy.Asked.fullReport());
     }
 
     /** The same, warned about at every level. */
@@ -401,7 +401,7 @@ class CompilePartialAdequacyTest {
         return COMPILED.computeIfAbsent("split", _ -> {
             Compilation compilation = Compilation.ofSources(SPLIT,
                     souther.compiler.meta.ModulePath.EMPTY);
-            compilation.measure(Adequacy.Asked.reportOnly());
+            compilation.measure(Adequacy.Asked.fullReport());
             compilation.answerEverything();
             return compilation;
         });
@@ -646,7 +646,7 @@ class CompilePartialAdequacyTest {
                     | "at the line" : (Draft { kind = Overseas, cost = Amount(100) }) -> Ok { n = 100 }
                     | "over it"     : (Draft { kind = Domestic, cost = Amount(500) }) -> Big { n = 0 }
                 """, DoesNotComeBack.overrunningOn(
-                        DoesNotComeBack.everythingAboutTheRowNamed("over it")), Adequacy.Asked.reportOnly())
+                        DoesNotComeBack.everythingAboutTheRowNamed("over it")), Adequacy.Asked.fullReport())
                 .db().ask(new Adequacy.Coverage("example.mix")).value().get("take");
 
         BorderAssessment.Point line = pointsAgainstTheLine(partition).stream()

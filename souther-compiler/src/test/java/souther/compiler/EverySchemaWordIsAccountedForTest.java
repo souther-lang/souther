@@ -453,7 +453,7 @@ class EverySchemaWordIsAccountedForTest {
                 example go
                     | "one" : (N(1)) -> Ok { n = 1 }
                 """, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.withDeadline(
                 DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("go")));
         compilation.answerEverything();

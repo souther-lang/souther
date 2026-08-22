@@ -59,7 +59,7 @@ class AGeneratedRowIsWrittenTheWayTheModuleReachesItTest {
     private static Compilation compiled(String source) {
         Compilation compilation =
                 Compilation.ofSources(List.of(LIB, source), ModulePath.EMPTY);
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return compilation;
     }

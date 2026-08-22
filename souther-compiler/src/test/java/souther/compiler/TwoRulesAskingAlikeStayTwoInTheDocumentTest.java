@@ -69,7 +69,7 @@ class TwoRulesAskingAlikeStayTwoInTheDocumentTest {
             """;
 
     private static JsonNode documentOf(Compilation compilation) {
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return JSON.readTree(AdequacyReport.of(compilation).json(SourceNameResolver.identity()));
     }

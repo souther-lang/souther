@@ -52,7 +52,7 @@ class OneDivisionReadsAlikeHoweverItIsWrittenTest {
                 """.formatted(type, type, type, guard,
                         type.equals("Decimal") ? "0.1m" : "1",
                         type.equals("Decimal") ? "0.1m" : "1"), "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();

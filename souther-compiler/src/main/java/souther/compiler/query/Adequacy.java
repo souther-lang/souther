@@ -165,16 +165,38 @@ public final class Adequacy {
             return new Asked(level, true, criterion);
         }
 
-        /** Measured for a report to read, and not said again. */
-        public static Asked reportOnly() {
+        /**
+         * Everything measured, for a report that is the whole of what a command answers with.
+         *
+         * <p>{@code souther examples} asks for this, and the criterion is part of what it asks for
+         * rather than one left at a build's default. That command chooses no measurement — its output
+         * is the report, so everything is measured — which leaves the bar as the only thing it could
+         * have chosen, and a report command choosing a bar is a build policy in a command that runs no
+         * build. So it is held to the whole of what the syllabus asks for, and {@code --strict}
+         * decides the exit status of that verdict without touching it.
+         *
+         * <p>Reading a build's default here is what let {@code souther examples --strict} exit 0 on a
+         * model {@code souther compile --adequacy reliable-domain --warnings error} refused, with the
+         * two points away from the line printed in the report that had just called it satisfied.
+         */
+        public static Asked fullReport() {
             return reportOnly(Level.ALL);
         }
 
-        /** As much as {@code level} measures, for a report to read. An editor asks for this: what it
+        /**
+         * As much as {@code level} measures, for a report to read. An editor asks for this: what it
          * draws beside a declaration is a report, and a warning saying the same thing again would be
-         * the same news twice on the same line. */
+         * the same news twice on the same line.
+         *
+         * <p>Held to the same bar as {@link #fullReport()}, and for the same reason: what a level
+         * says is how much was measured, and a caller reading a report picks no bar. What that
+         * decides for an editor is which gaps it offers to write a row for — the action that writes
+         * the rows a behavior does not cover reads the criterion, the lens beside the declaration
+         * reads the evidence and not the verdict — so a point away from a line is now offered there
+         * as it is on the command line.
+         */
         public static Asked reportOnly(Level level) {
-            return new Asked(level, false, Criterion.SIMPLIFIED_DOMAIN);
+            return new Asked(level, false, Criterion.RELIABLE_DOMAIN);
         }
 
         /** Whether a build that asked for this refuses over {@code kind}. */
@@ -1641,12 +1663,12 @@ public final class Adequacy {
          * There is nothing to match and nothing for the two readings to disagree about.
          */
         private static GenerationOutcome atEdge(Finding gap, BorderAssessment.Point point) {
-            if (!point.role().againstTheLine()) {
-                // A point away from the line is reported under no code and is not a gap. Reaching
-                // this is the disposition of a finding and the role disagreeing about one point.
-                throw new IllegalStateException("not a gap a build refuses: " + gap);
-            }
-            String subject = point.border().axis() + " = " + point.against();
+            // Of whichever of the border's four points the finding is about. Which of them a build
+            // refuses over is the criterion's answer and the loop above has already asked it; asking
+            // again here — and this used to answer that only the two against the line can be gaps —
+            // is a second criterion, and it said the impossible about the two a build held to
+            // reliable domain coverage refuses over.
+            String subject = point.said();
             if (!(point.item() instanceof ItemAssessment.Owed owed)) {
                 // A gap was found at a point nobody is owed a row at, which is the finding and
                 // the assessment disagreeing about the same border rather than a row that could

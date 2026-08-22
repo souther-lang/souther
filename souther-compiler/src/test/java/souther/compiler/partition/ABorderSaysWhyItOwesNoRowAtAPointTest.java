@@ -398,7 +398,7 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
     /** Every border of the one behavior {@code model} declares, by the line it is at. */
     private static Map<String, BorderAssessment> bordersOf(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, List<BorderAssessment>> boundaries =
                 compilation.db().ask(new Adequacy.Boundaries("example.owed")).value();
@@ -414,7 +414,7 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
 
     private static Compilation compiled(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return compilation;
     }

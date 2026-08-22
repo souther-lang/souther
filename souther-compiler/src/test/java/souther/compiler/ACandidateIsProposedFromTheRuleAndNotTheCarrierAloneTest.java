@@ -65,7 +65,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
      */
     private static Generator.GenerationResult generated(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                 .flatMap(List::stream).toList(), "the model under test compiles");

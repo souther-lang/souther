@@ -166,21 +166,107 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
      * <p>Held on a model whose only warnings are the adequacy ones, because {@code --warnings error}
      * refuses a build that warns at all. Where they disagree, one of them is reading the evidence a
      * second time.
+     *
+     * <p>Against the build held to the same bar. {@code souther examples} measures everything and is
+     * held to reliable domain coverage, so the compile this is put beside is the one that asks for
+     * that criterion; put beside {@code --adequacy all} the two answer to different bars, and
+     * agreeing would be the accident of a model with no point away from a line left uncovered.
      */
     @Test
     void strictAndAWarningsErrorBuildAgreeWhereNothingElseWarns() throws Exception {
-        for (String model : List.of(ONLY_WAITING, WAITING_AND_UNCOVERED, UNCOVERED_ONLY)) {
+        for (String model : List.of(ONLY_WAITING, WAITING_AND_UNCOVERED, UNCOVERED_ONLY,
+                ON_THE_LINE_ONLY)) {
             Path file = sourceOf(model);
             Path out = Files.createTempDirectory("souther-strict-out");
 
             Run examples = cli("examples", file.toString(), "--strict");
             Run compile = cli("compile", file.toString(), "-d", out.toString(),
-                    "--adequacy", "all", "--warnings", "error");
+                    "--adequacy", "reliable-domain", "--warnings", "error");
 
             assertEquals(examples.code() != 0, compile.code() != 0,
                     model + "\n--- examples ---\n" + examples.err()
                             + "\n--- compile ---\n" + compile.err());
         }
+    }
+
+    /**
+     * A model covered against the lines and at neither point away from them.
+     *
+     * <p>The two criteria differ here and nowhere else in this class, which is what makes the
+     * agreement above something rather than an accident: simplified domain coverage asks for the row
+     * on the line and the row one step over, and this has both.
+     */
+    private static final String ON_THE_LINE_ONLY = """
+            module example.limit
+
+            data Ok
+            data TooHigh
+
+            behavior grade : (score: Int) -> Ok | TooHigh
+
+            let grade (score) = {
+                guard score <= 100 else TooHigh
+                Ok
+            }
+
+            example grade
+                | "on the line" : (100) -> Ok
+                | "a step over" : (101) -> TooHigh
+            """;
+
+    /**
+     * The command that reports and the build that refuses say the same thing about one model.
+     *
+     * <p>What this was. {@code souther examples} was measuring every point of every border and
+     * being held to a build's default criterion, so it printed the two points away from the line and
+     * then called the model satisfied — while {@code souther compile --adequacy reliable-domain
+     * --warnings error} refused the same model over the same two points. A CI running both was told
+     * the model was covered and that the build was refused.
+     *
+     * <p>The build held to the other criterion is here too, and it succeeds. Without it this passes
+     * on a model where the two bars ask for the same thing, and every word about criteria in it would
+     * be describing something the test never exercises.
+     */
+    @Test
+    void strictRefusesThePointsAwayFromALineTheWayAReliableDomainBuildDoes() throws Exception {
+        Path file = sourceOf(ON_THE_LINE_ONLY);
+
+        Run examples = cli("examples", file.toString(), "--strict");
+        Run reliable = cli("compile", file.toString(),
+                "-d", Files.createTempDirectory("souther-reliable").toString(),
+                "--adequacy", "reliable-domain", "--warnings", "error");
+        Run simplified = cli("compile", file.toString(),
+                "-d", Files.createTempDirectory("souther-simplified").toString(),
+                "--adequacy", "all", "--warnings", "error");
+
+        assertEquals(1, examples.code(), examples.out() + examples.err());
+        assertTrue(examples.out().contains("adequacy: not satisfied"), examples.out());
+        assertTrue(examples.out().contains("! no row is at an IN point"), examples.out());
+        assertTrue(examples.out().contains("! no row is at an OUT point"), examples.out());
+        assertEquals(1, reliable.code(), reliable.out() + reliable.err());
+        assertTrue(reliable.err().contains("E1917"), reliable.err());
+        assertEquals(0, simplified.code(),
+                "the two criteria differ on this model: " + simplified.out() + simplified.err());
+    }
+
+    /**
+     * {@code --strict} decides an exit status and says nothing about the model.
+     *
+     * <p>What a reader is shown is one report, whether or not the run was asked to fail on it. A flag
+     * that moved the bar would answer one model two ways from one command, and a reader comparing a
+     * strict run's output against an earlier one would read the difference as the rows having
+     * changed.
+     */
+    @Test
+    void theReportIsWhatItIsWhetherOrNotTheRunWasAskedToBeStrict() throws Exception {
+        Path file = sourceOf(ON_THE_LINE_ONLY);
+
+        Run lenient = cli("examples", file.toString());
+        Run strict = cli("examples", file.toString(), "--strict");
+
+        assertEquals(lenient.out(), strict.out());
+        assertEquals(0, lenient.code(), lenient.err());
+        assertEquals(1, strict.code(), strict.err());
     }
 
     /**
@@ -359,10 +445,12 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
             behavior both = twice >-> thrice
 
             example twice
-                | "zero" : (Amount(0)) -> Doubled { of = Amount(0) }
+                | "zero"     : (Amount(0)) -> Doubled { of = Amount(0) }
+                | "positive" : (Amount(1)) -> Doubled { of = Amount(1) }
 
             example thrice
-                | "zero" : (Doubled { of = Amount(0) }) -> Tripled { of = Amount(0) }
+                | "zero"     : (Doubled { of = Amount(0) }) -> Tripled { of = Amount(0) }
+                | "positive" : (Doubled { of = Amount(1) }) -> Tripled { of = Amount(1) }
 
             example both
                 | "zero" : (Amount(0)) -> Tripled { of = Amount(0) }

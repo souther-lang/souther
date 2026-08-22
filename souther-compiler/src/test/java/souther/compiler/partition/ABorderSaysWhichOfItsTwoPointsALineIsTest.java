@@ -318,7 +318,7 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
     /** Each item of the model's borders as {@code point:relation against}, in document order. */
     private static List<String> pointsAsked(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         JsonNode root = JsonMapper.builder().build()
                 .readTree(AdequacyReport.of(compilation).json(SourceNameResolver.identity()));
@@ -331,7 +331,7 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
 
     private static String report(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
     }

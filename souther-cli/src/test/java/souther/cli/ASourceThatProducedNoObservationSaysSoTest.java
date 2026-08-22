@@ -97,7 +97,7 @@ class ASourceThatProducedNoObservationSaysSoTest {
     void theReasonIsNamedForTheObservationAndNotForTheRuntime() {
         Compilation compilation = Compilation.ofSources(List.of(MODULE, ATTACHED),
                 souther.compiler.meta.ModulePath.EMPTY);
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
 
         List<Incompleteness> gaps = AdequacyReport.of(compilation).modules().get(0).incompleteness();

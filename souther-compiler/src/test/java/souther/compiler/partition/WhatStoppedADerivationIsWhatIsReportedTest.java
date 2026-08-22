@@ -26,7 +26,7 @@ class WhatStoppedADerivationIsWhatIsReportedTest {
 
     private static PartitionEvidence measured(String model, String behavior) {
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, PartitionEvidence> coverage =
                 compilation.db().ask(new Adequacy.Coverage("demo")).value();

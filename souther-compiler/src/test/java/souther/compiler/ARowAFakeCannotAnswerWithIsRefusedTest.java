@@ -83,7 +83,7 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
 
     private static List<Diagnostic> diagnosticsOf(String source) {
         Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         List<Diagnostic> out = new ArrayList<>();
         compilation.diagnostics().forEach((id, found) -> out.addAll(Located.diagnosticsOf(found)));
@@ -98,7 +98,7 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
     /** The rows of a model that compiles as far as running them. */
     private static List<RowOutcome> rowsOf(String source) {
         Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         List<RowOutcome> rows = new ArrayList<>();
         for (String module : compilation.modules()) {

@@ -56,7 +56,7 @@ class APairIsOneElementInTwoClassesTest {
     private static Compilation compiled(String people) {
         Compilation compilation =
                 Compilation.ofSource(MODEL.replace("PEOPLE", people), "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return compilation;
     }

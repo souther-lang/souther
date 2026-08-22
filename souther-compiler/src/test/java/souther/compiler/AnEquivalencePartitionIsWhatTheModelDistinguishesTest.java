@@ -54,7 +54,7 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
                 example f
                 %s
                 """.formatted(type, guards, rows), "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
@@ -190,7 +190,7 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
                 example f
                     | "one" : (0.1m) -> No { why = 0 }
                 """, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String rows = souther.compiler.report.GeneratedRows.of(compilation, "example.between", "f",
                 true, souther.compiler.diag.SourceNameResolver.identity());
@@ -230,7 +230,7 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
                 example f
                     | "one" : (0.1m) -> No { why = 0 }
                 """, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String rows = souther.compiler.report.GeneratedRows.of(compilation, "example.narrow", "f",
                 true, souther.compiler.diag.SourceNameResolver.identity());
@@ -327,7 +327,7 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
                     example f
                         | "one" : (Narrow(0.1m)) -> No { why = 0 }
                     """.formatted(facing), "Main");
-            compilation.measure(Adequacy.Asked.reportOnly());
+            compilation.measure(Adequacy.Asked.fullReport());
             compilation.answerEverything();
             String rows = souther.compiler.report.GeneratedRows.of(compilation, "example.bounded",
                     "f", true, souther.compiler.diag.SourceNameResolver.identity());

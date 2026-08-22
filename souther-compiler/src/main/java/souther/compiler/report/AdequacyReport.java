@@ -1864,13 +1864,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             + " " + subjectOf(asked, sources::written, null);
             case About.ACaseNoRowAppliesItTo(var input, var missing) ->
                     missing.name() + " (in #" + (input.at() + 1) + ")";
-            // What the point asks of a row, which is what joins it to one of a border's `items`. A
-            // point on the line is written the way it always was; a point away from it carries the
-            // relation, because a value alone would name the border rather than the side of it a
-            // row is owed in.
-            case About.APointOfABorder(var point) -> point.role().againstTheLine()
-                    ? point.border().axis() + " = " + point.against()
-                    : point.border().axis() + " " + point.asked();
+            // What the point asks of a row, which is what joins it to one of a border's `items`.
+            // Asked of the point, which is where the two readers of that name meet.
+            case About.APointOfABorder(var point) -> point.said();
         };
     }
 

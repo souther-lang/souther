@@ -93,7 +93,7 @@ class AProductWiderThanItsRulesIsSaidInTheDocumentTest {
         // answers has to reach a document.
         Compilation compilation = Compilation.ofSource(source, "Main")
                 .withReadingPolicy(souther.compiler.query.ReadAs.MERGING_WHAT_A_CHOICE_LEAVES);
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return JSON.readTree(AdequacyReport.of(compilation).json(SourceNameResolver.identity()))
                 .get("modules").get(0).get("behaviors").get(0);
@@ -169,7 +169,7 @@ class AProductWiderThanItsRulesIsSaidInTheDocumentTest {
     @Test
     void andHeldApartTheSameModelSaysNoneOfIt() {
         Compilation compilation = Compilation.ofSource(WITNESS, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         JsonNode behavior = JSON.readTree(
                         AdequacyReport.of(compilation).json(SourceNameResolver.identity()))

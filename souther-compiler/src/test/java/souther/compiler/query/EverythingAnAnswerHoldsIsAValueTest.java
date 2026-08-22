@@ -98,7 +98,7 @@ class EverythingAnAnswerHoldsIsAValueTest {
     @Test
     void nothingUnderAnAnswerComparesByIdentity() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         // Asked as well as answered: the measures are what this model is for, and a key nothing
         // asked is a key whose answer `everyAnswer` has nothing to say about.
@@ -123,7 +123,7 @@ class EverythingAnAnswerHoldsIsAValueTest {
     @Test
     void andTheAnswersWithNothingToCompareAreAmongThem() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         compilation.db().ask(new Adequacy.Coverage(compilation.modules().get(0)));
 

@@ -566,7 +566,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aLineTheRecordPlacedIsSettledLikeOneOnANewtype() {
         Map<String, BorderAssessment> lines = new LinkedHashMap<>();
         Compilation compilation = Compilation.ofSource(UNMEETABLE, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         compilation.db().ask(new Adequacy.Coverage("unmeetable")).value()
                 .forEach((behavior, evidence) -> evidence.boundaries()
@@ -817,7 +817,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     /** Every line one module draws, by the behavior and label it is reported under. */
     private static Map<String, BorderAssessment> linesOf(String source, String module) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, BorderAssessment> lines = new LinkedHashMap<>();
         compilation.db().ask(new Adequacy.Coverage(module)).value()
@@ -828,7 +828,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
 
     private static String report(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
     }

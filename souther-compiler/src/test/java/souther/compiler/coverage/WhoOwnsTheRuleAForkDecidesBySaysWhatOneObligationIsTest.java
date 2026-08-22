@@ -32,7 +32,7 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
 
     private static Adequacy.BranchEvidence arms(String model, String behavior) {
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Adequacy.BranchEvidence said = compilation.db()
                 .ask(new Adequacy.BranchCoverage(MODULE)).value().get(behavior);
