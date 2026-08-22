@@ -126,19 +126,20 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
      * second reading of what a comparison says is a second thing to keep in step with how a border
      * is drawn, and the two disagreeing is a region that excludes the very level the border is at.
      *
-     * <p>And where it comes back with nothing, the reason is asked of {@link GuardThresholds#why},
-     * which is what this compiler already answers about a comparison it could not use. Read off
-     * where the reading returned nothing instead, the answer would be one word for a form outside
-     * the arithmetic, a carrier no line is drawn on and a comparison of two positions — three
-     * things that reading tells apart, and a reader would be sent after the wrong one.
+     * <p>And where it comes back with nothing, that is the whole of what is said. The reason the
+     * same comparison gets for drawing no line is {@link UnreadComparison}'s and answers another
+     * question: {@code 1 < 2} is a form nothing reads over there and constrains no position here,
+     * and a form this arithmetic cannot carry is a comparison between two positions over there
+     * while a relation between two positions is exactly what a cut carries here. What would tell
+     * this end's cases apart is {@link AffineReading} saying why it read nothing, which it does
+     * not.
      */
     private static OnTheWay of(Condition.Compares comparison, boolean holding, Symbols symbols) {
         Citation at = Citation.of(comparison.at().pos());
         AffineReading read = AffineReading.of(comparison.at(), comparison.reads(), symbols);
         Rel states = read == null ? null : relOf(read.claim());
         if (states == null) {
-            return new OnTheWay.Declined(at, new OnTheWay.Why.ARuleItCouldNotUse(
-                    GuardThresholds.why(comparison.at(), comparison.reads(), symbols)));
+            return new OnTheWay.Declined(at, new OnTheWay.Why.ComparisonNotRepresentedAsACut());
         }
         // The form with the threshold moved into it, since what a domain is told is `f rel 0`.
         LinearForm<NumericTerm> against =

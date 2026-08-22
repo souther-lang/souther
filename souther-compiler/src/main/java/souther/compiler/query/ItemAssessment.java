@@ -5,6 +5,8 @@ import souther.compiler.partition.Criterion;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.NotOwedReason;
 
+import java.util.List;
+
 /**
  * Everything known about one of the four coverage items of a border.
  *
@@ -137,14 +139,24 @@ public sealed interface ItemAssessment {
     sealed interface Attempt {
 
         /**
-         * A value at the point, built and accepted by the module's own decoders.
+         * What a search of the region came to, whichever way it came out.
          *
-         * @param region where it was looked for, and what the walk to the point took in and could
-         *               not. Carried by the two states a search ran in and by neither of the ones
-         *               it did not: a region nothing searched is not a fact about this run
+         * <p>The boundary is which side of the search an outcome is on, and it is a type because it
+         * was a sentence. A candidate is composed by walking the region, so everything found out
+         * afterwards — a row that was accepted, a row that was refused, decoders that could not be
+         * reached — is an outcome of a search that ran and carries what it ran over. What was
+         * written instead was a comment saying so, and the one outcome that arrived by a different
+         * route was filed as a search nobody made and dropped its region on the way.
          */
+        sealed interface Searched extends Attempt {
+
+            /** Where the row was looked for, and what the way to the point took in and could not. */
+            souther.compiler.partition.RegionForARow region();
+        }
+
+        /** A value at the point, built and accepted by the module's own decoders. */
         record Built(Generator.GeneratedRow row,
-                     souther.compiler.partition.RegionForARow region) implements Attempt {}
+                     souther.compiler.partition.RegionForARow region) implements Searched {}
 
         /**
          * The search ran and no row came of it.
@@ -155,12 +167,12 @@ public sealed interface ItemAssessment {
          * name that said "refused" would invite a reader to take the other two for a decision the
          * decoder made — which is the mistake this type exists to prevent, one size down.
          *
-         * @param region where the search ran, as {@link Built#region()} carries it. What a search
-         *               that settled nothing was looking over is the half of the answer that says
-         *               how much the other half is worth
+         * <p>What a search that settled nothing was looking over is the half of the answer that
+         * says how much the other half is worth, so it carries the region like every other outcome
+         * of a search.
          */
         record Unresolved(Generator.UnresolvedCombination why,
-                          souther.compiler.partition.RegionForARow region) implements Attempt {}
+                          souther.compiler.partition.RegionForARow region) implements Searched {}
 
         /** Nothing was tried, and why not. Separate from a refusal because they license different
          * sentences: one is a fact about values, the other is a fact about this run. */
@@ -172,11 +184,33 @@ public sealed interface ItemAssessment {
             /** The point was not measured against the rows, so no row here is owed to anybody yet. */
             NOT_MEASURED,
             /** The module's classes were not there to build against. */
-            NO_CLASSES,
-            /** The generated classes would not link, so the decoders could not be reached. What
-             * the JVM raised is a {@code LinkageError}, and which of its causes it was is not
-             * something this can tell. */
-            LINKAGE_FAILED
+            NO_CLASSES
+            // The decoders being out of reach was one of these and is not. It is found by running a
+            // candidate, and a candidate is something a search of the region already produced — so
+            // it is a search that came to nothing, which is `Unresolved`, and it says so in the
+            // generator's own words. Left here, it was the one search whose region went unrecorded.
+        }
+
+        /**
+         * What the search ran over that the way to the point does not account for.
+         *
+         * <p>Asked of the attempt because the attempt is what holds both halves: which conditions
+         * were left out of the region, and whether this outcome is one they bear on. Answered at a
+         * renderer instead, the two halves were a pair of conditions written into a sentence, and
+         * the only way to ask what they came to was to compile a model that produced the sentence.
+         *
+         * <p>Empty where nothing was left out, and empty where the outcome settles the point on its
+         * own: a walk of the whole of what the rules leave that reaches no value proves there is
+         * nothing to find whether or not the box it walked held rows that never arrive, since an
+         * empty box leaves what it contains empty too. Empty for a row that was built, which is a
+         * point answered rather than a search to account for, and for a search nobody made.
+         */
+        default List<souther.compiler.partition.OnTheWay.Declined> unaccountedFor() {
+            return switch (this) {
+                case Built _, NotAttempted _ -> List.of();
+                case Unresolved left -> left.why().reason().provesInfeasible()
+                        ? List.of() : left.region().declined();
+            };
         }
     }
 

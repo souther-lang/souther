@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.diag.Citation;
-import souther.compiler.inputs.BlockReason;
 
 /**
  * One condition on the way to a comparison, and what became of it.
@@ -37,44 +36,37 @@ public sealed interface OnTheWay {
     /**
      * What stopped a condition from becoming a cut.
      *
-     * <p>Three shapes, and only one of them has a rule to name. A condition this reading has no
-     * words for is not one thing an author wrote; an arm of a fork stating one of two things is
-     * about the arm and not about either operand; and a comparison read and not used is a rule,
-     * which is why that one carries the account of it rather than a word of its own.
+     * <p>Three shapes, and each says what this reading did rather than what the model says. A
+     * condition an author wrote plainly is here wherever the arithmetic has no way of carrying it,
+     * so nothing read off one of these says a row cannot be written, and a word going away is a
+     * capability gained rather than a model changed.
      *
-     * <p><b>The comparison's reason is the one this compiler already gives.</b>
-     * {@link souther.compiler.inputs.BlockReason.AboutARule} is what a reading of a rule it could
-     * not use comes to, and {@link UnreadComparison} is where a comparison is turned into one — the
-     * same answer the line beside this one is filed under. A word invented here would be a second
-     * classification of one question: it merged a form outside the arithmetic, a carrier no line is
-     * drawn on and a comparison relating two positions into one sentence, and called all three a
-     * limit of this compiler when the last is what the rule says.
+     * <p><b>Not the reason the same comparison gets for drawing no line.</b>
+     * {@link UnreadComparison} answers why a comparison did not become a boundary, which is a
+     * different question with different answers: {@code 1 < 2} comes back there as a form nothing
+     * reads, when what happened is that it constrains no position; and a comparison this
+     * arithmetic cannot carry comes back as one relating two positions, when a relation between two
+     * positions is exactly what a cut over a {@code LinearForm} does carry. Borrowed here, either
+     * would send an author after the wrong thing.
      *
-     * <p>Which of these leaves a region wider than the rows that arrive is not answered here and is
-     * not the same question as {@link souther.compiler.inputs.BlockReason.AboutARule#leavesShort},
-     * which is about a measure. A condition that did not narrow the region may still be implied by
-     * one that did.
+     * <p>So what is said about a comparison is what is known about it here, and no more. The finer
+     * answer belongs to whatever decided — {@link AffineReading}, which returns nothing and says
+     * nothing about why — and it is not invented at this end from the shape of what it was given.
      */
     sealed interface Why {
 
-        /** A condition of a shape this reading has no words for, so nothing was read of it. */
+        /** A condition that is neither a comparison nor a combination of them, so nothing was read
+         *  of it. */
         record NoWordsForTheShape() implements Why {}
 
         /**
-         * One comparison it read and could not use, in the words that already answer that.
+         * A comparison this reading did not turn into a cut.
          *
-         * @param why what {@link UnreadComparison} makes of it, which is what the same comparison
-         *            is filed under wherever else this compiler says it could not use one
+         * <p>One word, because one word is what this end knows. A comparison naming no position, a
+         * form outside the arithmetic and a subject with no spacing for its values arrive here as
+         * one absence, and {@link AffineReading} is where they would be told apart.
          */
-        record ARuleItCouldNotUse(BlockReason.AboutARule why) implements Why {
-
-            public ARuleItCouldNotUse {
-                if (why == null) {
-                    throw new IllegalArgumentException(
-                            "a rule this could not use is one a reader can be told about");
-                }
-            }
-        }
+        record ComparisonNotRepresentedAsACut() implements Why {}
 
         /**
          * What the condition coming out this way says is one of two things, and a region is what

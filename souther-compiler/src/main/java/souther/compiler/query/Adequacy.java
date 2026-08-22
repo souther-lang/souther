@@ -1680,9 +1680,11 @@ public final class Adequacy {
                         new GenerationOutcome.Generated(List.of(built.row()));
                 case ItemAssessment.Attempt.Unresolved why ->
                         new GenerationOutcome.CannotGenerate(why.why());
-                // Carried apart, because the assessment kept them apart. Classes that were not
-                // there and classes that would not link are two things this saw, and choosing
-                // one of them to print is this compiler deciding what it observed.
+                // Classes that were not there is a thing this saw, said in the words the
+                // generator says it in. Classes that would not link used to be beside it and is
+                // not: it is found by running a candidate the region search had already produced,
+                // so it arrives above as a search that came to nothing, in the same words this
+                // was rebuilding here.
                 //
                 // The other two reasons do not reach an unmet edge: a row is already at the
                 // value, or the line was never measured against the rows, and neither is a gap.
@@ -1693,9 +1695,6 @@ public final class Adequacy {
                             new Generator.UnresolvedCombination(List.of(subject),
                                     Generator.UnresolvedCombination.Reason
                                             .NOTHING_TO_BUILD_AGAINST));
-                    case LINKAGE_FAILED -> new GenerationOutcome.CannotGenerate(
-                            new Generator.UnresolvedCombination(List.of(subject),
-                                    Generator.UnresolvedCombination.Reason.LINKAGE_FAILED));
                     case A_ROW_IS_ALREADY_THERE, NOT_MEASURED ->
                             throw new IllegalStateException("the assessment at " + subject
                                     + " says " + absent.reason() + ", which is not a gap: "
@@ -1790,10 +1789,23 @@ public final class Adequacy {
                 }
                 switch (each.attempt()) {
                     case ItemAssessment.Attempt.Built built -> rows.add(built.row());
-                    case ItemAssessment.Attempt.Unresolved why -> unresolved.add(why.why());
-                    // Nothing was tried. One of the reasons is news — the decoders could not be
-                    // reached, so this block is short of rows it would otherwise have offered — and
-                    // two are boundaries nobody is owed a row at, where saying so would be noise.
+                    case ItemAssessment.Attempt.Unresolved why -> {
+                        unresolved.add(why.why());
+                        // And where the decoders were out of reach, the block is short of rows it
+                        // would otherwise have offered, which is a thing about this run rather than
+                        // about the point. Read off the reason because that is where the search
+                        // records it: a boundary search keeps no reasons list of its own, which is
+                        // what the pairs half above takes its copy of this from.
+                        if (why.why().reason()
+                                == Generator.UnresolvedCombination.Reason.LINKAGE_FAILED) {
+                            stopped.add(new souther.compiler.partition.GenerationReason
+                                    .LinkageFailed(behavior));
+                        }
+                    }
+                    // Nothing was tried. Two of the reasons are boundaries nobody is owed a row
+                    // at, where saying so would be noise; the news is the one above them, and the
+                    // decoders being out of reach is no longer here to be it — that is found by
+                    // running a candidate, which takes a search having already produced one.
                     //
                     // NO_CLASSES is here for completeness and does not arrive: the evaluation is
                     // asked only of a module that checked, so a module with no classes has no rows
@@ -1807,9 +1819,6 @@ public final class Adequacy {
                             case NO_CLASSES -> stopped.add(
                                     new souther.compiler.partition.GenerationReason
                                             .NothingToBuildAgainst(behavior));
-                            case LINKAGE_FAILED -> stopped.add(
-                                    new souther.compiler.partition.GenerationReason
-                                            .LinkageFailed(behavior));
                             case A_ROW_IS_ALREADY_THERE, NOT_MEASURED -> { }
                         }
                     }

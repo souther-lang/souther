@@ -1148,29 +1148,28 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // Every other word here is this compiler saying what it did not manage; one of them is the
         // model settling the point, and reading them under one opening sends an author looking for
         // a row nothing can write. Asked of the reason, which is where that decision is written.
-        boolean settled = left.why().reason().provesInfeasible();
-        String opening = settled ? " — " : " — nothing composed one: ";
+        String opening = left.why().reason().provesInfeasible()
+                ? " — " : " — nothing composed one: ";
         return opening + left.why().said().orElseGet(() -> whyUnresolved(left.why()))
-                + (settled ? "" : whatTheRegionLeftOut(left.region(), names, declaredIn));
+                + whatTheRegionLeftOut(left.unaccountedFor(), names, declaredIn);
     }
 
     /**
      * What the search ran over that the way to the border does not account for, where anything did.
      *
-     * <p>Said only where the search settled nothing. A walk of the whole of what the rules leave
-     * that reaches no value settles the point whether or not the box it walked held rows that never
-     * arrive — an empty box leaves what it contains empty too. Everywhere
-     * else the search came back without an answer, and which box it looked in is half of what that
-     * answer is worth.
+     * <p>Which conditions those are, and whether this outcome is one they bear on, is
+     * {@link ItemAssessment.Attempt#unaccountedFor()}'s — so what is left here is the wording. A
+     * report deciding it would be a second reader of the same two facts, and the only way to ask
+     * what it decided would be to compile a model that produces this sentence.
      *
      * <p>What is said is what is known: these conditions are not represented in the region. Not
      * that the region is wider than the rows that reach the line — a condition nothing could take
      * in may be implied by the ones that were, or may hold of every row — and a sentence claiming
      * the wider box would be this report deciding something it has not been shown.
      */
-    private static String whatTheRegionLeftOut(souther.compiler.partition.RegionForARow region,
-                                               SourceNameResolver names, SourceId declaredIn) {
-        List<souther.compiler.partition.OnTheWay.Declined> left = region.declined();
+    private static String whatTheRegionLeftOut(
+            List<souther.compiler.partition.OnTheWay.Declined> left,
+            SourceNameResolver names, SourceId declaredIn) {
         if (left.isEmpty()) {
             return "";
         }
@@ -1191,29 +1190,28 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * What stopped one condition on the way from narrowing the search, in the words a reader acts
      * on.
      *
-     * <p>One sentence per shape rather than one for all three, and the one that has a rule to name
-     * takes that rule's own words. What an author does about a condition this reading has no words
-     * for is not what they do about a comparison it read and could not use, and neither is what
-     * they do about an arm that states one of two things — a single "was not read" for all of them
-     * is the vocabulary being kept apart in the compiler and put back together on the way out.
+     * <p>One phrase per shape rather than one for all three. What an author does about a condition
+     * this reading has no words for is not what they do about a comparison it could not turn into a
+     * cut, and neither is what they do about an arm that states one of two things — a single "was
+     * not read" for all of them is the vocabulary being kept apart in the compiler and put back
+     * together on the way out.
      */
     private static String whyDeclined(souther.compiler.partition.OnTheWay.Why why) {
+        // Noun phrases, because what the line above them says is "not every condition ... is
+        // represented", and each of these names one of those conditions. Written as sentences, the
+        // place in brackets after them lands after a verb and reads as part of what is being said
+        // rather than as where to look.
         return switch (why) {
-            // What this reading takes apart is a comparison and the two ways of joining them, so
-            // what it stops at is a condition that is neither. Said as "written in a form this
-            // compiler does not read", it would be the sentence a comparison whose form was
-            // unreadable gets, and the two are lifted by different work — a reader for a shape, and
-            // arithmetic for a form.
             case souther.compiler.partition.OnTheWay.Why.NoWordsForTheShape _ ->
-                    "the condition is neither a comparison nor a combination of them";
-            // The rule's own reason, in the words this document already writes for one. A sentence
-            // of this line's own would be a second wording of one answer, and the two would part on
-            // the day either was made more precise.
-            case souther.compiler.partition.OnTheWay.Why.ARuleItCouldNotUse(var reason) ->
-                    "the comparison is "
-                            + whyUnread(souther.compiler.partition.ReportedReason.of(reason));
+                    "a condition that is neither a comparison nor a combination of them";
+            // Not the words a comparison gets for drawing no line: that answers why there is no
+            // boundary, and its answers are wrong about this — a comparison of two constants is a
+            // form nothing reads there, and a form this arithmetic cannot carry is a relation
+            // between positions there, which is something a cut carries perfectly well.
+            case souther.compiler.partition.OnTheWay.Why.ComparisonNotRepresentedAsACut _ ->
+                    "a comparison this reading could not turn into a cut";
             case souther.compiler.partition.OnTheWay.Why.OneOfTwoThings _ ->
-                    "the outcome of the condition states one of two things";
+                    "an outcome that states one of two things";
         };
     }
 

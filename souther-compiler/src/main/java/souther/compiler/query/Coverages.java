@@ -642,7 +642,7 @@ final class Coverages {
                 // offered for goes in beside it rather than being read back off it.
                 return switch (realizer.realize(quantity.standingAt(criterion), within.where())) {
                     case Realization.Found found -> whatCameOfIt(
-                            probe.attempt(label, quantity.carrier(), found.fixing()), within);
+                            probe.attempt(label, quantity.carrier(), found.fixing()), label, within);
                     // And the two ways of finding nothing are not one answer. A walk of the whole
                     // of what the rules leave that reaches no value settles the point; a search
                     // that stopped, or one that composed no candidate at all, settles nothing
@@ -927,13 +927,23 @@ final class Coverages {
      * and a run that composed a row and never saw it arrive is the answer that most needs it — the
      * candidate came out of this box, and a condition on the way that nothing represented in the
      * box is a thing an author would want to know at exactly that point.
+     *
+     * <p>Including where the decoders could not be reached. This is asked only of a placement the
+     * realizer found, so the region was walked and a candidate came out of it before anything was
+     * run — which makes it a search that came to nothing rather than a search nobody made, and it
+     * carries what it was looking over like the rest. Filed as one nobody made, it was the one
+     * outcome of a search that dropped its region, and the reader that wanted it back built the
+     * same value by hand a moment later.
      */
-    private static ItemAssessment.Attempt whatCameOfIt(
-            souther.compiler.partition.Generator.BoundaryAttempt made,
+    private static ItemAssessment.Attempt.Searched whatCameOfIt(
+            souther.compiler.partition.Generator.BoundaryAttempt made, String subject,
             souther.compiler.partition.RegionForARow within) {
         return switch (made) {
-            case null -> new ItemAssessment.Attempt.NotAttempted(
-                    ItemAssessment.Attempt.Reason.LINKAGE_FAILED);
+            case null -> new ItemAssessment.Attempt.Unresolved(
+                    new souther.compiler.partition.Generator.UnresolvedCombination(
+                            List.of(subject),
+                            souther.compiler.partition.Generator.UnresolvedCombination.Reason
+                                    .LINKAGE_FAILED), within);
             case souther.compiler.partition.Generator.BoundaryAttempt.Built built ->
                     new ItemAssessment.Attempt.Built(built.row(), within);
             case souther.compiler.partition.Generator.BoundaryAttempt.Unresolved left ->

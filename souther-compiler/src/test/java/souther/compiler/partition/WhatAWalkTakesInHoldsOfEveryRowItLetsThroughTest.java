@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
-import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.NumericDomain.LinearForm;
@@ -190,22 +189,22 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
     }
 
     /**
-     * A comparison this could not use carries the reason this compiler already gives for one.
+     * A comparison this reading could not turn into a cut says that, and says no more.
      *
-     * <p>The rule's own account and not a word made up here. Which reason a comparison comes back
-     * with is {@link souther.compiler.check.UnreadComparison}'s, and what it makes of each shape is
-     * held where that lives — a form outside the arithmetic, a carrier no line is drawn on and a
-     * comparison relating two positions are three answers there, and one word here would have been
-     * one answer for all three.
+     * <p>Not the answer the same comparison gets for drawing no line. That question is
+     * {@link souther.compiler.check.UnreadComparison}'s and its answers are about boundaries: a
+     * relation between two positions stops a line there and is carried here without trouble, and a
+     * comparison of two constants comes back there as a form nothing reads when what is true of it
+     * is that it constrains no position.
      */
     @Test
-    void aComparisonItCouldNotUseCarriesTheReasonThisCompilerGivesForOne() {
-        assertEquals(List.of(new OnTheWay.Why.ARuleItCouldNotUse(
-                new BlockReason.UnreadComparisonForm())), whys("product", true));
+    void aComparisonItCouldNotTurnIntoACutSaysThatAndNoMore() {
+        assertEquals(List.of(new OnTheWay.Why.ComparisonNotRepresentedAsACut()),
+                whys("product", true));
         // The affine operand is taken in beside it: a conjunction coming out true says both, and
         // one of them being unreadable is no reason to lose the other.
-        assertEquals(List.of(new OnTheWay.Why.ARuleItCouldNotUse(
-                new BlockReason.UnreadComparisonForm())), whys("withACall", true));
+        assertEquals(List.of(new OnTheWay.Why.ComparisonNotRepresentedAsACut()),
+                whys("withACall", true));
         assertEquals(1, stating("withACall", true).stream()
                 .filter(each -> each instanceof OnTheWay.TakenIn).count());
     }
