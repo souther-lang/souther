@@ -1158,8 +1158,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * What the search ran over that the way to the border does not account for, where anything did.
      *
      * <p>Said only where the search settled nothing. A walk of the whole of what the rules leave
-     * that reaches no value settles the point whether or not the box it walked was wider than the
-     * rows that arrive — a wider box that is empty leaves the narrower one empty too. Everywhere
+     * that reaches no value settles the point whether or not the box it walked held rows that never
+     * arrive — an empty box leaves what it contains empty too. Everywhere
      * else the search came back without an answer, and which box it looked in is half of what that
      * answer is worth.
      *
@@ -1179,8 +1179,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (int i = 0; i < left.size(); i++) {
             out.append(i == 0 ? "" : ", ")
                     .append(whyDeclined(left.get(i).why()))
-                    .append(" at ")
-                    .append(left.get(i).at().said(names, declaredIn));
+                    // The place last and in brackets, as every other line of this report writes
+                    // one. Written into the sentence, it lands after a verb and reads as part of
+                    // what the sentence says rather than as where to look.
+                    .append(" (").append(left.get(i).at().said(names, declaredIn)).append(")");
         }
         return out.toString();
     }
@@ -1189,18 +1191,28 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * What stopped one condition on the way from narrowing the search, in the words a reader acts
      * on.
      *
-     * <p>One sentence per case rather than one for all three. What an author does about a condition
-     * this reading has no words for is not what they do about one it read and could place no
-     * constraint from, and neither is what they do about an arm that states one of two things — and
-     * a single "was not read" for all of them is the vocabulary being kept apart in the compiler
-     * and put back together on the way out.
+     * <p>One sentence per shape rather than one for all three, and the one that has a rule to name
+     * takes that rule's own words. What an author does about a condition this reading has no words
+     * for is not what they do about a comparison it read and could not use, and neither is what
+     * they do about an arm that states one of two things — a single "was not read" for all of them
+     * is the vocabulary being kept apart in the compiler and put back together on the way out.
      */
     private static String whyDeclined(souther.compiler.partition.OnTheWay.Why why) {
         return switch (why) {
-            case CONDITION_NOT_READ -> "the condition was not read";
-            case NO_CONSTRAINT_REPRESENTED ->
-                    "the comparison places no constraint this could take in";
-            case NON_CONJUNCTIVE_OUTCOME ->
+            // What this reading takes apart is a comparison and the two ways of joining them, so
+            // what it stops at is a condition that is neither. Said as "written in a form this
+            // compiler does not read", it would be the sentence a comparison whose form was
+            // unreadable gets, and the two are lifted by different work — a reader for a shape, and
+            // arithmetic for a form.
+            case souther.compiler.partition.OnTheWay.Why.NoWordsForTheShape _ ->
+                    "the condition is neither a comparison nor a combination of them";
+            // The rule's own reason, in the words this document already writes for one. A sentence
+            // of this line's own would be a second wording of one answer, and the two would part on
+            // the day either was made more precise.
+            case souther.compiler.partition.OnTheWay.Why.ARuleItCouldNotUse(var reason) ->
+                    "the comparison is "
+                            + whyUnread(souther.compiler.partition.ReportedReason.of(reason));
+            case souther.compiler.partition.OnTheWay.Why.OneOfTwoThings _ ->
                     "the outcome of the condition states one of two things";
         };
     }

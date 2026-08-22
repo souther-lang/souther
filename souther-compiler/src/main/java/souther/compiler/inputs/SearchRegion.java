@@ -33,8 +33,10 @@ import java.util.Optional;
  * proves nothing. Neither survives a reading that narrowed on a condition it had not established.
  *
  * <p>Which also says what this is not: it is not the set of rows that reach the border. A condition
- * of a shape the arithmetic has no word for leaves this wider than that set, so a row found here is
- * a row to try and not a row shown to arrive — what shows that is running it.
+ * of a shape the arithmetic has no word for narrows nothing, so this may hold rows that never
+ * arrive and a row found here is a row to try and not a row shown to arrive — what shows that is
+ * running it. Only the inclusion is promised, never that it is strict: a condition nothing took in
+ * may be implied by the ones that were.
  */
 public interface SearchRegion {
 
@@ -48,7 +50,7 @@ public interface SearchRegion {
      * <p>Where the arithmetic has nothing to say about a condition — a form over a position whose
      * values it cannot count, a subject it has no spacing for — what comes back is this region
      * unchanged. Which is the direction that keeps the inclusions above: a condition nothing took in
-     * leaves the region wider than the rows that arrive, and a region narrowed on a condition
+     * leaves a region that still holds every row that arrives, and a region narrowed on a condition
      * nothing established would leave it narrower than they are.
      */
     SearchRegion assuming(NumericDomain.LinearForm<NumericTerm> form, NumericDomain.Rel rel);

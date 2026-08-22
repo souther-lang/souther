@@ -43,10 +43,12 @@ import java.util.Map;
  * region would come to exclude rows that reach the guard.
  *
  * <p>Nothing here says a row that satisfies all of this arrives. A condition of a shape the
- * arithmetic cannot read is on the list without narrowing anything, so what a region built from
- * this describes is wider than what arrives — which is what {@link SearchRegion} promises and what
- * a proof of unreachability rests on. Being on the list is what lets a report say so; it is not
- * what the region is built from.
+ * arithmetic cannot read is on the list without narrowing anything, so a region built from this
+ * holds every row that arrives and may hold rows that do not — which is what {@link SearchRegion}
+ * promises and what a proof of unreachability rests on. It is the inclusion and not a strict one:
+ * a condition nothing took in may be implied by the ones that were, or hold of every row. Being on
+ * the list is what lets a report say a condition is unaccounted for; it is not what the region is
+ * built from.
  */
 public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byComparison) {
 
@@ -104,15 +106,15 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
             case Condition.Both both -> holding
                     ? and(stating(both.left(), true, symbols), stating(both.right(), true, symbols))
                     : List.of(new OnTheWay.Declined(Citation.of(both.at().pos()),
-                            OnTheWay.Why.NON_CONJUNCTIVE_OUTCOME));
+                            new OnTheWay.Why.OneOfTwoThings()));
             case Condition.Either either -> holding
                     ? List.of(new OnTheWay.Declined(Citation.of(either.at().pos()),
-                            OnTheWay.Why.NON_CONJUNCTIVE_OUTCOME))
+                            new OnTheWay.Why.OneOfTwoThings()))
                     : and(stating(either.left(), false, symbols),
                             stating(either.right(), false, symbols));
             case Condition.Compares one -> List.of(of(one, holding, symbols));
-            case Condition.NotRead not -> List.of(new OnTheWay.Declined(Citation.of(not.at().pos()),
-                    OnTheWay.Why.CONDITION_NOT_READ));
+            case Condition.NotRead not -> List.of(new OnTheWay.Declined(
+                    Citation.of(not.at().pos()), new OnTheWay.Why.NoWordsForTheShape()));
         };
     }
 
@@ -124,17 +126,19 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
      * second reading of what a comparison says is a second thing to keep in step with how a border
      * is drawn, and the two disagreeing is a region that excludes the very level the border is at.
      *
-     * <p>One word for both ways the reading comes back empty. A comparison whose operands are
-     * outside the affine fragment and one whose operator places nothing leave the same thing
-     * missing here — a statement about a position — and what would lift either is the same piece of
-     * work.
+     * <p>And where it comes back with nothing, the reason is asked of {@link GuardThresholds#why},
+     * which is what this compiler already answers about a comparison it could not use. Read off
+     * where the reading returned nothing instead, the answer would be one word for a form outside
+     * the arithmetic, a carrier no line is drawn on and a comparison of two positions — three
+     * things that reading tells apart, and a reader would be sent after the wrong one.
      */
     private static OnTheWay of(Condition.Compares comparison, boolean holding, Symbols symbols) {
         Citation at = Citation.of(comparison.at().pos());
         AffineReading read = AffineReading.of(comparison.at(), comparison.reads(), symbols);
         Rel states = read == null ? null : relOf(read.claim());
         if (states == null) {
-            return new OnTheWay.Declined(at, OnTheWay.Why.NO_CONSTRAINT_REPRESENTED);
+            return new OnTheWay.Declined(at, new OnTheWay.Why.ARuleItCouldNotUse(
+                    GuardThresholds.why(comparison.at(), comparison.reads(), symbols)));
         }
         // The form with the threshold moved into it, since what a domain is told is `f rel 0`.
         LinearForm<NumericTerm> against =

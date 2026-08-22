@@ -110,9 +110,9 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
         Recording region = new Recording();
 
         RegionForARow narrowed = RegionForARow.narrowed(region, List.of(
-                new OnTheWay.Declined(somewhere(1), OnTheWay.Why.CONDITION_NOT_READ),
+                new OnTheWay.Declined(somewhere(1), new OnTheWay.Why.NoWordsForTheShape()),
                 new OnTheWay.TakenIn(somewhere(2), only),
-                new OnTheWay.Declined(somewhere(3), OnTheWay.Why.NON_CONJUNCTIVE_OUTCOME)));
+                new OnTheWay.Declined(somewhere(3), new OnTheWay.Why.OneOfTwoThings())));
 
         assertEquals(List.of(only), region.told, "a decline is a record and not a cut");
         assertEquals(2, narrowed.declined().size(), "and it is still on the account");

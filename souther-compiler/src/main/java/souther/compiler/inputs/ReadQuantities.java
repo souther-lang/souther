@@ -157,8 +157,8 @@ final class ReadQuantities implements Quantities {
      * <p>This value back where the arithmetic cannot take the assertion in — a form over a position
      * whose values it has no spacing for. Kept anyway, it would sit in the state as a rule about a
      * number nothing knows how to space, which {@link souther.compiler.numeric.NumericDomain#assume}
-     * refuses outright; declined here, the region stays wider than what reaches the border, which is
-     * the direction every reader of it depends on.
+     * refuses outright; declined here, the region still holds everything that reaches the border,
+     * which is the direction every reader of it depends on.
      */
     ReadQuantities assuming(NumericDomain.LinearForm<NumericTerm> form, NumericDomain.Rel rel) {
         if (form == null || form.coefs().isEmpty()) {

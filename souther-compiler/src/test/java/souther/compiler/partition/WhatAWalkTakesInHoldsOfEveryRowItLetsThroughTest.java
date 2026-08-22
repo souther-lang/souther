@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.NumericDomain.LinearForm;
@@ -182,25 +183,29 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
      */
     @Test
     void anArmThatStatesOneOfTwoThingsIsDeclinedWhole() {
-        assertEquals(List.of(OnTheWay.Why.NON_CONJUNCTIVE_OUTCOME), whys("both", false));
-        assertEquals(List.of(OnTheWay.Why.NON_CONJUNCTIVE_OUTCOME), whys("either", true));
+        assertEquals(List.of(new OnTheWay.Why.OneOfTwoThings()), whys("both", false));
+        assertEquals(List.of(new OnTheWay.Why.OneOfTwoThings()), whys("either", true));
         assertEquals(List.of(), whys("both", true), "and both operands are taken in the other way");
         assertEquals(List.of(), whys("either", false));
     }
 
     /**
-     * A comparison read as far as it goes that places no constraint is its own answer.
+     * A comparison this could not use carries the reason this compiler already gives for one.
      *
-     * <p>Apart from a condition of a shape nothing reads: what would lift this one is arithmetic
-     * this compiler does not have, and what would lift that one is a reader for a shape. An author
-     * told one word for both is told what neither of them says.
+     * <p>The rule's own account and not a word made up here. Which reason a comparison comes back
+     * with is {@link souther.compiler.check.UnreadComparison}'s, and what it makes of each shape is
+     * held where that lives — a form outside the arithmetic, a carrier no line is drawn on and a
+     * comparison relating two positions are three answers there, and one word here would have been
+     * one answer for all three.
      */
     @Test
-    void aComparisonThatConstrainsNothingIsSaidApartFromAShapeNothingReads() {
-        assertEquals(List.of(OnTheWay.Why.NO_CONSTRAINT_REPRESENTED), whys("product", true));
+    void aComparisonItCouldNotUseCarriesTheReasonThisCompilerGivesForOne() {
+        assertEquals(List.of(new OnTheWay.Why.ARuleItCouldNotUse(
+                new BlockReason.UnreadComparisonForm())), whys("product", true));
         // The affine operand is taken in beside it: a conjunction coming out true says both, and
         // one of them being unreadable is no reason to lose the other.
-        assertEquals(List.of(OnTheWay.Why.NO_CONSTRAINT_REPRESENTED), whys("withACall", true));
+        assertEquals(List.of(new OnTheWay.Why.ARuleItCouldNotUse(
+                new BlockReason.UnreadComparisonForm())), whys("withACall", true));
         assertEquals(1, stating("withACall", true).stream()
                 .filter(each -> each instanceof OnTheWay.TakenIn).count());
     }
