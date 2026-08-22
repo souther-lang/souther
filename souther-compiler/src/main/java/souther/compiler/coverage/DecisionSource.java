@@ -9,10 +9,12 @@ import java.util.Set;
  * one obligation is: a fork deciding for itself is one obligation however many bodies it is spliced
  * into, and a fork deciding by a rule the caller handed in is one per rule handed in.
  *
- * <p>Two answers and no third. A declaration either names a function parameter its fork applies or
- * it does not, and both are things this reading establishes. Whether an occurrence of a supplied
- * fork could be told which rule it was handed is the other half of the question and is answered
- * where the occurrence is ({@link DecidedBy}).
+ * <p>Two answers and no third. A declaration's fork either rests on one or more of the rules it was
+ * handed or it does not, and both are things this reading establishes. Rests on, and not applies: a
+ * fork can test what another helper answered out of a rule without applying the rule itself, and a
+ * reading that asked the narrower question called that fork the declaration's own. Whether an
+ * occurrence of a supplied fork could be told which rule it was handed is the other half of the
+ * question and is answered where the occurrence is ({@link DecidedBy}).
  */
 public sealed interface DecisionSource {
 

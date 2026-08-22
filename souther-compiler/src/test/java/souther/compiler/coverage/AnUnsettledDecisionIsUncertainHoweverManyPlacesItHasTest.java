@@ -39,9 +39,10 @@ class AnUnsettledDecisionIsUncertainHoweverManyPlacesItHasTest {
                 new CoverageSites.Obligation("b", FORK, index, decided));
     }
 
+    /** Two arms of one fork, neither of them reached. */
     private static Adequacy.BranchEvidence over(DecidedBy decided) {
         return new Adequacy.BranchEvidence(List.of(arm(0, decided), arm(1, decided)),
-                Set.of(0, 1), Set.of(),
+                Set.of(), Set.of(),
                 MeasurementStatus.COMPLETE, MeasurementStatus.COMPLETE, null);
     }
 
@@ -58,6 +59,13 @@ class AnUnsettledDecisionIsUncertainHoweverManyPlacesItHasTest {
         assertEquals(List.of(), over(DecidedBy.NOT_SAID).unreached().stream()
                         .map(each -> each.name().toString()).toList(),
                 "a row through one of them may or may not be a row through this obligation");
+    }
+
+    /** Which is only worth saying beside what a settled one comes to over the same arms. */
+    @Test
+    void whileASettledOnesArmsAreOwedARow() {
+        assertEquals(2, over(DecidedBy.THE_DECLARATION).unreached().size(),
+                "both arms of it, and no row goes through either");
     }
 
     /** A settled one is read like any other. */
