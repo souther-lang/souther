@@ -8,6 +8,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 
 import java.math.BigDecimal;
@@ -83,7 +84,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
 
     /** {@code e} as an affine form over the behavior's positions, or null where it is not one. */
     static LinearForm<NumericTerm> affine(Core e, InputReads reads, Symbols symbols) {
-        return AffineForms.of(e, reads, new AffineForms.Leaves<NumericTerm, InputReads>() {
+        return AffineForms.of(e, reads, new AffineForms.Reading<NumericTerm, InputReads>() {
 
             @Override
             public LinearForm<NumericTerm> leafOf(Core node, InputReads at) {
@@ -94,6 +95,26 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
             @Override
             public InputReads inside(Core.LetIn li, InputReads at) {
                 return at.and(li.binder(), li.value());
+            }
+
+            /**
+             * A name given arithmetic over positions, which is the arithmetic the rule cuts.
+             *
+             * <p>Only where the name is nothing of its own. A name that is a position is that
+             * position and the leaf answers with it; a name an operation handed an element on
+             * stands for one element of what the operation answered, and the expression behind it
+             * was written about every element rather than about the value at this read — put where
+             * the name stands, it would draw a line at a position whose values are not the ones the
+             * rule is about. Which of those a name is, is one answer from one place
+             * ({@link InputReads#meaningOf}), read here rather than worked out again.
+             */
+            @Override
+            public AffineForms.ReadThrough<InputReads> readThrough(Core.Read read, InputReads at) {
+                // The environment at the read. Bindings are added on the way down and each tells
+                // itself from every other, so a name this one holds is answered by the binding that
+                // made it whichever of the two environments is asked.
+                return at.meaningOf(read, symbols) instanceof ReadMeaning.Through through
+                        ? new AffineForms.ReadThrough<>(through.value(), at) : null;
             }
 
             @Override

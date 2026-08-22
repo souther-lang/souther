@@ -13,6 +13,7 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.UnreadRule;
 import souther.compiler.numeric.Count;
@@ -310,6 +311,27 @@ public final class GuardThresholds {
      */
     private static void mentioned(Core e, InputReads reads, Symbols symbols,
                                   List<TermPath> out) {
+        // A name is what the reading of the input says it is, and there are four answers rather
+        // than a position and nothing. A name given arithmetic over positions mentions those
+        // positions, and reading it as a node with no children left every rule written over such a
+        // name looking like a rule about nothing — which is the same answer a model with no rule
+        // there gives.
+        if (e instanceof Core.Read read) {
+            switch (reads.meaningOf(read, symbols)) {
+                case ReadMeaning.Position at -> {
+                    if (!out.contains(at.path())) {
+                        out.add(at.path());
+                    }
+                }
+                case ReadMeaning.Through through -> mentioned(through.value(), reads, symbols, out);
+                // An element an operation handed out that stands at no position, and a name this
+                // reading knows nothing about. Neither mentions a position, and they are told apart
+                // where the difference is read rather than here.
+                case ReadMeaning.Element _ -> { }
+                case ReadMeaning.Unknown _ -> { }
+            }
+            return;
+        }
         if (!(e instanceof Core.PreservedCall)) {
             TermPath here = reads.pathOf(e, symbols);
             if (here != null) {
