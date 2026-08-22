@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
@@ -45,7 +46,7 @@ class WhatANameIsAboutIsWhatItWasGivenIsAboutTest {
 
     @Test
     void aNameGivenAPlaceIsAboutThatPlace() {
-        BindingId x = binders.binder("x", POS).id();
+        BindingId x = CoreBinders.of(binders.binder("x", POS)).binding();
         Denotations outer = Denotations.none().location(x, engine.terms().placeSubject(x), engine.terms().placeTerm(x));
 
         heldOf(new Core.Read("x", x, Type.INT, POS), outer);
@@ -53,10 +54,10 @@ class WhatANameIsAboutIsWhatItWasGivenIsAboutTest {
 
     @Test
     void aNameGivenSomethingComputedIsAboutWhatComputesIt() {
-        BindingId x = binders.binder("x", POS).id();
+        BindingId x = CoreBinders.of(binders.binder("x", POS)).binding();
         Denotations outer = Denotations.none().location(x, engine.terms().placeSubject(x), engine.terms().placeTerm(x));
 
-        heldOf(new Core.Binary(Hir.BinOp.ADD, new Core.Read("x", x, Type.INT, POS),
+        heldOf(new Core.Binary(BinOp.ADD, new Core.Read("x", x, Type.INT, POS),
                 new Core.Int(1, Type.INT, POS), CoverageOrigin.unwritten(), Type.INT, POS), outer);
     }
 
@@ -75,27 +76,27 @@ class WhatANameIsAboutIsWhatItWasGivenIsAboutTest {
     @Test
     void twoNamesForOneAnswerAreAboutTheOneAnswer() {
         Core call = answer();
-        Hir.Binder first = binders.binder("a", POS);
-        Hir.Binder second = binders.binder("b", POS);
+        Core.Binder first = CoreBinders.of(binders.binder("a", POS));
+        Core.Binder second = CoreBinders.of(binders.binder("b", POS));
 
         Denotations at = engine.bindLet(letting(first, call), Known.top(), Denotations.none()).at();
-        at = engine.bindLet(letting(second, new Core.Read("a", first.id(), Type.INT, POS)),
+        at = engine.bindLet(letting(second, new Core.Read("a", first.binding(), Type.INT, POS)),
                 Known.top(), at).at();
 
-        assertNotNull(at.subject(first.id()));
-        assertEquals(at.subject(first.id()), at.subject(second.id()),
+        assertNotNull(at.subject(first.binding()));
+        assertEquals(at.subject(first.binding()), at.subject(second.binding()),
                 "a name for a name is a name for the value, and one value is one subject");
     }
 
     /** What {@code value} was recorded as being about is what reading the name it was given says it
      * is about. */
     private void heldOf(Core value, Denotations outer) {
-        Hir.Binder binder = binders.binder("y", POS);
+        Core.Binder binder = CoreBinders.of(binders.binder("y", POS));
         Denotations at = engine.bindLet(letting(binder, value), Known.top(), outer).at();
 
-        FactSubject recorded = at.subject(binder.id());
+        FactSubject recorded = at.subject(binder.binding());
         FactSubject read = engine.terms()
-                .subjectOf(new Core.Read("y", binder.id(), value.type(), POS), at);
+                .subjectOf(new Core.Read("y", binder.binding(), value.type(), POS), at);
 
         assertNotNull(recorded, "a name entered is a name something is known about");
         assertEquals(recorded, read,
@@ -104,8 +105,8 @@ class WhatANameIsAboutIsWhatItWasGivenIsAboutTest {
                 "and both are what the value it was given is about");
     }
 
-    private Core.LetIn letting(Hir.Binder binder, Core value) {
-        return new Core.LetIn(binder, value, new Core.Read(binder.name(), binder.id(), value.type(),
+    private Core.LetIn letting(Core.Binder binder, Core value) {
+        return new Core.LetIn(binder, value, new Core.Read(binder.name(), binder.binding(), value.type(),
                 POS), value.type(), POS);
     }
 

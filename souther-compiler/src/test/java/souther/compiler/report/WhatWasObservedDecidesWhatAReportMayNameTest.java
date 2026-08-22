@@ -67,7 +67,7 @@ class WhatWasObservedDecidesWhatAReportMayNameTest {
 
         assertEquals(1, behavior.get("branch").get("unreached").size(),
                 () -> "the settled fork's other arm: " + behavior.get("branch"));
-        assertEquals("partial", behavior.get("branch").get("status").asText(),
+        assertEquals("partial", behavior.get("branch").get("status").asString(),
                 "and the numbers still say they are not a whole measure");
     }
 

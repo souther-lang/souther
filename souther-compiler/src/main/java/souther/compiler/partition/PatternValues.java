@@ -134,6 +134,7 @@ final class PatternValues {
 
     /** The engine read more of the answer than it was given to read. */
     private static final class OutOfBudget extends RuntimeException {
+        private static final long serialVersionUID = 1L;
         OutOfBudget() {
             super(null, null, false, false);
         }
@@ -196,6 +197,7 @@ final class PatternValues {
     /** A construct this does not read. Thrown rather than returned so that a nested one stops the
      * whole walk: half of a pattern is not a value. */
     private static final class Unreadable extends RuntimeException {
+         private static final long serialVersionUID = 1L;
         Unreadable() {
             super(null, null, false, false);
         }

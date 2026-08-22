@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.ProjectionCertificate;
 
 import java.util.List;

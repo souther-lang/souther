@@ -13,7 +13,6 @@ import souther.compiler.query.ReadAs;
 import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 import souther.compiler.types.TypeKey;
-import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
 import java.util.LinkedHashSet;

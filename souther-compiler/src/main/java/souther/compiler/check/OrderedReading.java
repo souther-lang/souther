@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.Endpoint;
@@ -9,7 +10,6 @@ import souther.compiler.numeric.Place;
 import souther.compiler.types.Type;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -108,7 +108,7 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject
         // says.
         FactSubject position = positionIn(bin.left());
         Core bound = bin.right();
-        Hir.BinOp op = bin.op();
+        BinOp op = bin.op();
         if (position == null) {
             position = positionIn(bin.right());
             bound = bin.left();
@@ -122,8 +122,8 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject
         // Denied, a comparison is the one that leaves what it leaves out. `!(value /= x)` is an
         // equality and is read; `!(value == x)` is a disequality and is not, which is the same
         // answer the disequality gets when it is written directly.
-        Hir.BinOp said = positive ? op : denied(op);
-        if (said == Hir.BinOp.EQ) {
+        BinOp said = positive ? op : denied(op);
+        if (said == BinOp.EQ) {
             Place only = written == null ? null : carrier.literalOf(written);
             return only == null ? OrderedIntervals.top()
                     : leaves(position, carrier, new OrderedInterval(
@@ -158,14 +158,14 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject
     }
 
     /** The comparison that holds exactly where {@code op} does not. */
-    private static Hir.BinOp denied(Hir.BinOp op) {
+    private static BinOp denied(BinOp op) {
         return switch (op) {
-            case EQ -> Hir.BinOp.NE;
-            case NE -> Hir.BinOp.EQ;
-            case LT -> Hir.BinOp.GE;
-            case LE -> Hir.BinOp.GT;
-            case GT -> Hir.BinOp.LE;
-            case GE -> Hir.BinOp.LT;
+            case EQ -> BinOp.NE;
+            case NE -> BinOp.EQ;
+            case LT -> BinOp.GE;
+            case LE -> BinOp.GT;
+            case GT -> BinOp.LE;
+            case GE -> BinOp.LT;
             // Not a comparison. Denied or stated, it says nothing about where a position stops, and
             // answering it with itself lets the caller find that out the one way it does.
             default -> op;

@@ -3,8 +3,6 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeKey;
-import souther.compiler.types.TypeSymbols;
-import souther.compiler.types.TypeSymbol;
 
 import java.util.LinkedHashMap;
 import java.util.Map;

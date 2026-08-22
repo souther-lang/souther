@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Hir;
+import souther.compiler.types.BinOp;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
@@ -110,12 +110,12 @@ final class ComparisonReadings {
             // unsettled, so what it stands under is what that says. Asked of the operand and not of
             // any fork above it: there need not be one, and where there is, this is what the fork
             // would have been reading anyway.
-            case Core.Binary both when both.op() == Hir.BinOp.AND -> {
+            case Core.Binary both when both.op() == BinOp.AND -> {
                 walk(both.left(), plan, reads, symbols, flow, assumed, live, each, out);
                 walk(both.right(), plan, reads, symbols, flow,
                         taking(both.left(), true, reads, assumed, symbols), live, each, out);
             }
-            case Core.Binary either when either.op() == Hir.BinOp.OR -> {
+            case Core.Binary either when either.op() == BinOp.OR -> {
                 walk(either.left(), plan, reads, symbols, flow, assumed, live, each, out);
                 walk(either.right(), plan, reads, symbols, flow,
                         taking(either.left(), false, reads, assumed, symbols), live, each, out);
@@ -163,7 +163,7 @@ final class ComparisonReadings {
         // of those elements at a position the input walk names. A container the walk names nothing
         // at is one no row can be read at, so what repeats there is still a number of passes and not
         // a number of occurrences, and a line drawn on it would be owed by nothing.
-        for (Hir.Binder param : step.params()) {
+        for (Core.Binder param : step.params()) {
             if (param.binding() != null && reads.elementAt(param.binding(), symbols) != null) {
                 return true;
             }

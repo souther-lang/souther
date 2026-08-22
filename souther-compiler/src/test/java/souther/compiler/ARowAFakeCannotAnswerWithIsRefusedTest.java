@@ -78,7 +78,7 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
 
                 example place
                     | "what the table answers" : (Order { by = MemberId("m-1") })
-                        -> """ + expected + "\n";
+                        ->""" + expected + "\n";
     }
 
     private static List<Diagnostic> diagnosticsOf(String source) {

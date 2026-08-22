@@ -5,7 +5,6 @@ import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -144,20 +143,6 @@ public final class DeclaredBounds {
     }
 
     /**
-     * How many of whatever counts a value the rules on its type require it to hold, or 0 where they
-     * require none.
-     *
-     * <p>Which operation counts it is asked of {@link NumericMeasures}, the one list of them, so that
-     * a rule this reads and a rule a boundary is drawn on are read off the same call. Not asked of the
-     * decoder's constraints: Raoh has no entry for a set's size — a set crosses the boundary as a list
-     * and a size chained after the mapping that drops duplicates would count the wrong things — and
-     * that absence is a fact about the decoder rather than about what the rule says.
-     *
-     * <p>What is being counted follows from the type. A string's rule reaches this as readily as a
-     * list's, and comes back a floor on characters; a caller reading every floor above zero as a
-     * collection that cannot be empty would be answering a question this did not.
-     */
-    /**
      * The ends {@code placed} puts on one coordinate, or null where it puts none there.
      *
      * <p>The clauses of the value a position sits in, read as what they are: a clause naming one
@@ -206,6 +191,20 @@ public final class DeclaredBounds {
                 had.carrier() == null ? one.carrier() : had.carrier());
     }
 
+    /**
+     * How many of whatever counts a value the rules on its type require it to hold, or 0 where they
+     * require none.
+     *
+     * <p>Which operation counts it is asked of {@link NumericMeasures}, the one list of them, so that
+     * a rule this reads and a rule a boundary is drawn on are read off the same call. Not asked of the
+     * decoder's constraints: Raoh has no entry for a set's size — a set crosses the boundary as a list
+     * and a size chained after the mapping that drops duplicates would count the wrong things — and
+     * that absence is a fact about the decoder rather than about what the rule says.
+     *
+     * <p>What is being counted follows from the type. A string's rule reaches this as readily as a
+     * list's, and comes back a floor on characters; a caller reading every floor above zero as a
+     * collection that cannot be empty would be answering a question this did not.
+     */
     public static int leastCountOf(Type type, Symbols symbols) {
         ValueName.Stdlib counts = NumericMeasures.takenOf(type, symbols);
         if (counts == null) {

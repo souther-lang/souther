@@ -1,6 +1,5 @@
 package souther.compiler.query;
 
-import souther.compiler.diag.Primary;
 
 import souther.compiler.source.SourceId;
 

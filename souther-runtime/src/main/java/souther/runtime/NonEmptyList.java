@@ -23,6 +23,7 @@ public record NonEmptyList<T>(T head, List<T> tail) {
     }
 
     @SafeVarargs
+    @SuppressWarnings("varargs")   // `rest` is handed straight to `List.of`, which is varargs too
     public static <T> NonEmptyList<T> of(T head, T... rest) {
         return new NonEmptyList<>(head, List.of(rest));
     }

@@ -1,5 +1,6 @@
 package souther.compiler.core;
 
+import souther.compiler.check.CoreBinders;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
@@ -42,8 +43,8 @@ class EverySlotIsAChildTest {
 
     /** A binding this test writes. Nothing runs after a pass that writes into a resolved body to
      *  answer a binder it left, so one is minted with its binding rather than a spelling. */
-    private static Hir.Binder binder(String name) {
-        return BINDERS.binder(name, POS);
+    private static Core.Binder binder(String name) {
+        return CoreBinders.of(BINDERS.binder(name, POS));
     }
     private static final TypeSymbol PERSON = TypeSymbols.declared(new TypeKey("demo", "Person"));
 

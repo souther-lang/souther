@@ -17,7 +17,6 @@ import souther.compiler.check.ReqSig;
 import souther.compiler.check.Requirements;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.EnsuresEnforcement;
 import souther.compiler.codegen.Backend;
@@ -78,8 +77,8 @@ public final class Output {
                 Emissions emitted = Backend.generate(
                         shipped(in), in.scope(), in.typePackages(), in.sigs(), in.imported(),
                         in.injected(),
-                        in.callees(), in.requirements(), in.checked(), in.dischargeClauses(),
-                        in.checks(), in.standingCalls());
+                        in.callees(), in.requirements(), in.checked(), in.compositions(),
+                        in.dischargeClauses(), in.checks(), in.standingCalls());
                 stamp(db, emitted);
                 return Answer.of(Ordered.map(emitted.byBinaryName()));
             } catch (CompileException e) {
@@ -121,6 +120,7 @@ public final class Output {
                       Map<ValueName.Behavior, ReqSig> callees,
                       Map<String, List<BehaviorRequirement>> requirements,
                       Bodies.Elaborated checked,
+                      Map<ValueName.Behavior, souther.compiler.core.Composition> compositions,
                       Map<TypeSymbol, List<Hir.InvariantClause>> dischargeClauses,
                       Map<ValueName.Behavior, EnsuresEnforcement> checks,
                       Set<String> rowMethods,
@@ -128,6 +128,10 @@ public final class Output {
 
         static Inputs inputs(Db db, String name) {
             Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
+            // What each composed behavior routes, settled where the composition was checked. The
+            // emitter used to walk the declaration for it a second time.
+            Answer<Map<ValueName.Behavior, souther.compiler.core.Composition>> compositions =
+                    db.ask(new Compositions.Of(name));
             Answer<Lower.Lowered> lowering = db.ask(new Bodies.Lowering(name));
             Answer<Symbols> scope = Names.derivedSymbols(db, name);
             // The same answer the check read. The backend replays the composition walk and emits
@@ -154,7 +158,8 @@ public final class Output {
             // would agree only until one of them was edited.
             Answer<Map<String, souther.compiler.types.Type>> standing =
                     db.ask(new Bodies.RecursiveCallSigs(name, souther.compiler.check.InliningPolicy.FULL));
-            if (!checked.present() || !lowering.present() || !scope.present() || !imported.present()
+            if (!checked.present() || !compositions.present()
+                    || !lowering.present() || !scope.present() || !imported.present()
                     || !signatures.present() || !injected.present() || !callees.present()
                     || !prepared.present() || !requirements.present() || !dischargeClauses.present()
                     || !contracts.present() || !standing.present()) {
@@ -163,7 +168,8 @@ public final class Output {
             return new Inputs(lowering.value().lowered(), scope.value(),
                     prepared.value().importedFrom(), signatures.value(), imported.value(),
                     injected.value(),
-                    callees.value(), requirements.value(), checked.value(), dischargeClauses.value(),
+                    callees.value(), requirements.value(), checked.value(), compositions.value(),
+                    dischargeClauses.value(),
                     checksOf(lowering.value().lowered(), injected.value(), contracts.value()),
                     Set.copyOf(prepared.value().operandMethods().values()), standing.value());
         }
@@ -238,7 +244,6 @@ public final class Output {
                     written.slices(), sigs.value(), implementations);
         }
 
-        /** Maps each imported type name to its declaring module, for cross-package references. */
     }
 
     /**
@@ -388,8 +393,8 @@ public final class Output {
                 Emissions emitted = Backend.generate(
                         in.lowered(), in.scope(), in.typePackages(), in.sigs(), in.imported(),
                         in.injected(),
-                        in.callees(), in.requirements(), in.checked(), in.dischargeClauses(),
-                        in.checks(), in.standingCalls(), instrumentation);
+                        in.callees(), in.requirements(), in.checked(), in.compositions(),
+                        in.dischargeClauses(), in.checks(), in.standingCalls(), instrumentation);
                 Classes.stamp(db, name, emitted);
                 // The classes and what they implement, from the one emission that decided both.
                 return Answer.of(new EvaluationArtifact(Ordered.map(emitted.byBinaryName()),

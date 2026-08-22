@@ -226,7 +226,7 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
         assertEquals(OutcomeName.CASE, OutcomeName.of(CoverageConstruct.MATCH,
                 new SourceOutcome.Matched(List.of())));
         assertEquals(OutcomeName.COMPARISON, OutcomeName.of(CoverageConstruct.BINARY,
-                new SourceOutcome.Compared(souther.compiler.ast.Hir.BinOp.GE)));
+                new SourceOutcome.Compared(souther.compiler.types.BinOp.GE)));
     }
 
     /** A comprehension attempts no construction, and a {@code match} settles no condition. */
@@ -262,7 +262,7 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
         for (CoverageConstruct construct : CoverageConstruct.values()) {
             for (SourceOutcome outcome : List.of(held(), failed(), built(), refused(),
                     new SourceOutcome.Matched(List.of()),
-                    new SourceOutcome.Compared(souther.compiler.ast.Hir.BinOp.GE))) {
+                    new SourceOutcome.Compared(souther.compiler.types.BinOp.GE))) {
                 OutcomeName name;
                 try {
                     name = OutcomeName.of(construct, outcome);

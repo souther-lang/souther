@@ -29,13 +29,13 @@ final class Correspondence {
     private final Map<SyntaxNode, Span> spans = new IdentityHashMap<>();
     private final List<Place> made = new ArrayList<>();
 
-    /** Says what the source has at the file's own place. It is made before anything is written, so
-     *  it is the one place that is told rather than asked. */
     /** The file's place, which the construction declared. Asking for it does not make one. */
     Place file() {
         return file;
     }
 
+    /** Says what the source has at the file's own place. It is made before anything is written, so
+     *  it is the one place that is told rather than asked. */
     Place fileOf(SyntaxNode source) {
         made.add(file);
         wrote.put(file, List.of(new Written.Construct(source)));

@@ -6,7 +6,6 @@ import souther.compiler.check.Symbols;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.types.TypeSymbol;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;

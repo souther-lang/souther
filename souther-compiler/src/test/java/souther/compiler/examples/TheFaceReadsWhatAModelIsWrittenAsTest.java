@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.CompileException;
 import souther.compiler.meta.ModulePath;
-import souther.compiler.observe.Disposition;
 import souther.compiler.observe.RowIdentity;
 
 import org.junit.jupiter.api.io.TempDir;

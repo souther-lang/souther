@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
@@ -50,16 +51,16 @@ class FollowingWhatANameWasGivenCostsTheChainOnceTest {
     private static long followedOver(int links) {
         PathEngine engine = new PathEngine(Symbols.none(), Map.of(), Terms.Of.THE_DISCHARGE_TREE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Hir.Binders binders = new Hir.Binders(OWNER);
-        Hir.Binder first = binders.binder("x0", POS);
-        Denotations at = engine.enter(Terms.read(binders.binder("a", POS), Type.INT, POS),
+        Core.Binder first = CoreBinders.of(binders.binder("x0", POS));
+        Denotations at = engine.enter(Terms.read(CoreBinders.of(binders.binder("a", POS)), Type.INT, POS),
                 Known.top(), Denotations.none()).at();
-        Core arithmetic = new Core.Binary(Hir.BinOp.ADD,
+        Core arithmetic = new Core.Binary(BinOp.ADD,
                 new Core.Read("a", at.bound().keySet().iterator().next(), Type.INT, POS),
                 new Core.Int(1, Type.INT, POS), CoverageOrigin.unwritten(), Type.INT, POS);
         at = bound(engine, first, arithmetic, at);
-        Hir.Binder last = first;
+        Core.Binder last = first;
         for (int i = 1; i <= links; i++) {
-            Hir.Binder next = binders.binder("x" + i, POS);
+            Core.Binder next = CoreBinders.of(binders.binder("x" + i, POS));
             at = bound(engine, next, read(last), at);
             last = next;
         }
@@ -74,13 +75,13 @@ class FollowingWhatANameWasGivenCostsTheChainOnceTest {
         return counting[0];
     }
 
-    private static Denotations bound(PathEngine engine, Hir.Binder binder, Core value,
+    private static Denotations bound(PathEngine engine, Core.Binder binder, Core value,
                                      Denotations at) {
         return engine.bindLet(new Core.LetIn(binder, value, read(binder), Type.INT, POS),
                 Known.top(), at).at();
     }
 
-    private static Core read(Hir.Binder binder) {
-        return new Core.Read(binder.name(), binder.id(), Type.INT, POS);
+    private static Core read(Core.Binder binder) {
+        return new Core.Read(binder.name(), binder.binding(), Type.INT, POS);
     }
 }

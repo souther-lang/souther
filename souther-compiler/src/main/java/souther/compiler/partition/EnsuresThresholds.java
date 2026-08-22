@@ -1,9 +1,8 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Hir;
+import souther.compiler.types.BinOp;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.ComparisonClaim;
-import souther.compiler.check.Owed;
 import souther.compiler.check.Required;
 import souther.compiler.check.RuleAccounting;
 import souther.compiler.check.RuleRef;
@@ -90,18 +89,6 @@ public final class EnsuresThresholds {
         }
     }
 
-    /**
-     * The lines one behavior's clauses draw.
-     *
-     * <p>Read in the representation the declaration's own rules are held in, which keeps the
-     * operations the language defines the meaning of standing. That is what the rules were read into
-     * once ({@link StatedContract}); a second reading of them would be a second chance to disagree
-     * with what a caller is told it may assume.
-     *
-     * @param stated the behavior's rules, or null where it declares none or its declaration could
-     *               not be read. Both leave nothing to draw a line from, and which of them happened
-     *               is said where the declaration is held to its rules
-     */
 
     /**
      * The same, reading the input's rules here.
@@ -114,6 +101,18 @@ public final class EnsuresThresholds {
         return of(stated, inputs, inputs.quantities(symbols), symbols);
     }
 
+    /**
+     * The lines one behavior's clauses draw.
+     *
+     * <p>Read in the representation the declaration's own rules are held in, which keeps the
+     * operations the language defines the meaning of standing. That is what the rules were read into
+     * once ({@link StatedContract}); a second reading of them would be a second chance to disagree
+     * with what a caller is told it may assume.
+     *
+     * @param stated the behavior's rules, or null where it declares none or its declaration could
+     *               not be read. Both leave nothing to draw a line from, and which of them happened
+     *               is said where the declaration is held to its rules
+     */
     public static Clauses of(StatedContract stated, InputDomain inputs,
                              souther.compiler.inputs.Quantities quantities, Symbols symbols) {
         if (stated == null || stated.isEmpty()) {
@@ -154,7 +153,7 @@ public final class EnsuresThresholds {
      */
     private static void stated(Core e, StatedContract.StatedRule rule, String clause,
                                InputReads reads, Symbols symbols, souther.compiler.inputs.Quantities quantities, Drawn out) {
-        if (e instanceof Core.Binary both && both.op() == Hir.BinOp.AND) {
+        if (e instanceof Core.Binary both && both.op() == BinOp.AND) {
             stated(both.left(), rule, clause, reads, symbols, quantities, out);
             stated(both.right(), rule, clause, reads, symbols, quantities, out);
             return;
@@ -172,7 +171,7 @@ public final class EnsuresThresholds {
         // A disjunction was read, and what it states is not what either side of it states. Said as
         // nothing rather than as a rule this could not read: reporting it would send an author after
         // a limit of this compiler that is not there.
-        if (e instanceof Core.Binary or && or.op() == Hir.BinOp.OR) {
+        if (e instanceof Core.Binary or && or.op() == BinOp.OR) {
             return;
         }
         // Anything else is a form this walk does not read. Which positions it is about is still

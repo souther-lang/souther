@@ -2,7 +2,6 @@ package souther.compiler.query;
 
 import souther.compiler.source.SourceId;
 
-import souther.compiler.check.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
@@ -11,19 +10,14 @@ import souther.compiler.check.Denoting;
 import souther.compiler.check.DeclaredNames;
 import souther.compiler.check.ModuleUniverse;
 import souther.compiler.check.Scoping;
-import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Registry;
 import souther.compiler.check.Resolve;
-import souther.compiler.check.Suggest;
 import souther.compiler.check.SyntaxSymbols;
 import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeChecker;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.DataMessage;
-import souther.compiler.diag.msg.NameMessage;
-import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.ImportMessage;
 import souther.compiler.diag.Region;
@@ -34,12 +28,9 @@ import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
-import souther.compiler.types.TypeSymbols;
-import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -61,13 +52,6 @@ public final class Names {
 
     private Names() {}
 
-    /** Which stage of a module's resolved declarations a registry reads. The names a module declares
-     * are the same at every stage; what changes is what each declaration holds.
-     *
-     * <p>There is no entry here for the declarations as they were written. Those are a different
-     * representation rather than an earlier stage of this one, and {@link #writtenRegistry} is what
-     * answers with them — so a reader holding one of these cannot be handed a declaration nothing
-     * has resolved. */
     /**
      * A registry over this compilation, reading each module's declarations as resolution left them.
      *

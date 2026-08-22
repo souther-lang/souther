@@ -15,7 +15,6 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
-import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -511,7 +510,7 @@ public final class DataChecker {
         }
         List<CompileException> found = new ArrayList<>();
         for (UninhabitableTypes.UninhabitableGroup group : groups) {
-            Hir.Def at = (Hir.Def) symbols.declarations().declaration(group.reportedAt().key());
+            Hir.Def at = symbols.declarations().declaration(group.reportedAt().key());
             found.add(CompileException.of(told(Diagnostic.at(at.pos()), at.name(),
                     FieldDomains.THE_VALUE, group.why(),
                     lacks.get(group.reportedAt()) == 1).build()));

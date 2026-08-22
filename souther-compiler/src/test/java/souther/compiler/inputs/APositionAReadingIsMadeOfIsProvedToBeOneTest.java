@@ -1,6 +1,5 @@
 package souther.compiler.inputs;
 
-import souther.compiler.Compiler;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Resolve;
@@ -12,7 +11,6 @@ import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.types.TypeSymbol;
 
 import org.junit.jupiter.api.Test;
 

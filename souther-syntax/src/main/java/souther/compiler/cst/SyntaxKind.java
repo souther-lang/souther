@@ -270,10 +270,6 @@ public enum SyntaxKind {
         });
     }
 
-    /** A reader-facing name for an "expected X but found Y" message. A kind that spells itself is
-     * locale-neutral and shown as that spelling in backticks ({@code `:`}); a category (a name, a
-     * literal, end of input) is language-dependent and returned as a {@link Localizable}, localized
-     * when the message is rendered. */
 
     /**
      * Whether a token of this kind stands where a name stands.
@@ -288,6 +284,10 @@ public enum SyntaxKind {
         return this == IDENT || this == UNDERSCORE;
     }
 
+    /** A reader-facing name for an "expected X but found Y" message. A kind that spells itself is
+     * locale-neutral and shown as that spelling in backticks ({@code `:`}); a category (a name, a
+     * literal, end of input) is language-dependent and returned as a {@link Localizable}, localized
+     * when the message is rendered. */
     public Object display() {
         Optional<String> spelled = fixedSpelling();
         if (spelled.isPresent()) {

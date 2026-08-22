@@ -46,11 +46,19 @@ class TwoWritingsOfOneRuleAreOneConstraintTest {
         return out;
     }
 
+
+    /** The constraint {@code read} states, where it states one. Asked through the reading's own
+     *  type, so that what comes back is a constraint over the same positions the reading was of. */
+    private static AffineConstraint<String> stated(Read<String> read) {
+        assertInstanceOf(Read.Stated.class, read);
+        return ((Read.Stated<String>) read).constraint();
+    }
+
     private static AffineConstraint<String> whole(Map<String, Rational> coefs, long constant,
                                                   Rel rel) {
         Read<String> read = AffineConstraint.of(coefs, num(constant), rel,
                 atom -> Granularity.DISCRETE);
-        return assertInstanceOf(Read.Stated.class, read).constraint();
+        return stated(read);
     }
 
     private static Read<String> decimals(Map<String, Rational> coefs, Rational constant, Rel rel) {
@@ -181,9 +189,7 @@ class TwoWritingsOfOneRuleAreOneConstraintTest {
         assertEquals(decimals(weighing(A, 3), num(-1), Rel.LT),
                 decimals(weighing(A, 3), num(-1), Rel.LE),
                 "`3a <= 1` and `3a < 1` admit the same decimals");
-        AffineConstraint<String> read =
-                assertInstanceOf(Read.Stated.class, decimals(weighing(A, 3), num(-1), Rel.LE))
-                        .constraint();
+        AffineConstraint<String> read = stated(decimals(weighing(A, 3), num(-1), Rel.LE));
         assertEquals(new AffineConstraint.HalfSpace<>(
                         new CanonicalForm<>(Map.of(A, Rational.ONE)),
                         RationalCut.exclusive(ratio(1, 3))),

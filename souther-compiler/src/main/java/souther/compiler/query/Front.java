@@ -23,7 +23,6 @@ import souther.compiler.meta.ModuleReadback;
 import souther.compiler.meta.ReadableModule;
 import souther.compiler.meta.Readback;
 import souther.compiler.meta.ReadbackReasons;
-import souther.compiler.types.ValueName;
 
 import java.util.ArrayDeque;
 import java.util.Collections;
@@ -37,7 +36,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.SequencedSet;
 import java.util.Set;
-import java.util.function.Function;
 
 /**
  * Getting from text to a set of named modules: the inputs, the parse of each source, which module
@@ -599,14 +597,6 @@ public final class Front {
     }
 
     /**
-     * The type names a module exposes.
-     *
-     * <p>Its own question, not a read of the module. Everything that resolves a name against another
-     * module asks this, and a module changes far more often than its {@code exposing} line does —
-     * reading the whole module here would mean a new behavior in one module rebuilding every module
-     * that imports a type from it.
-     */
-    /**
      * The library names a module's imports let it write bare, keyed by the bare spelling.
      *
      * <p>Asked of every module this compilation has and not only of the ones a source declared. The
@@ -780,6 +770,14 @@ public final class Front {
         return path == null ? null : path.modules().get(name);
     }
 
+    /**
+     * The type names a module exposes.
+     *
+     * <p>Its own question, not a read of the module. Everything that resolves a name against another
+     * module asks this, and a module changes far more often than its {@code exposing} line does —
+     * reading the whole module here would mean a new behavior in one module rebuilding every module
+     * that imports a type from it.
+     */
     public record Exposes(String name) implements Key<Set<String>> {
         @Override
         public String module() {

@@ -6,8 +6,6 @@ import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.ast.Hir;
 import souther.compiler.examples.Answering;
-import souther.compiler.examples.Deadline;
-import souther.compiler.examples.EvaluationPolicy;
 import souther.compiler.examples.ExampleVerifier;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.check.Symbols;

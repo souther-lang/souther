@@ -1,6 +1,6 @@
 package souther.compiler.flow;
 
-import souther.compiler.ast.Hir;
+import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
 import souther.compiler.types.Type;
 
@@ -84,7 +84,7 @@ final class Witnessed {
      * written being the last one on the side the way needs, which is the only thing about a range of
      * every whole number that can close one.
      */
-    private static boolean against(Hir.BinOp op, long written, boolean want) {
+    private static boolean against(BinOp op, long written, boolean want) {
         return switch (op) {
             // Equal to it, and every other whole number is not.
             case EQ, NE -> true;
@@ -97,12 +97,12 @@ final class Witnessed {
     }
 
     /** The same comparison written the other way round, so the number is always on the right. */
-    private static Hir.BinOp mirrored(Hir.BinOp op) {
+    private static BinOp mirrored(BinOp op) {
         return switch (op) {
-            case LT -> Hir.BinOp.GT;
-            case LE -> Hir.BinOp.GE;
-            case GT -> Hir.BinOp.LT;
-            case GE -> Hir.BinOp.LE;
+            case LT -> BinOp.GT;
+            case LE -> BinOp.GE;
+            case GT -> BinOp.LT;
+            case GE -> BinOp.LE;
             default -> op;
         };
     }
@@ -155,7 +155,7 @@ final class Witnessed {
     }
 
     /** Whether the operator answers with which way two values came out against each other. */
-    private static boolean compares(Hir.BinOp op) {
+    private static boolean compares(BinOp op) {
         return switch (op) {
             case EQ, NE, LT, LE, GT, GE -> true;
             case AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;

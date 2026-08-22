@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.core.Composition;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
@@ -21,15 +22,14 @@ import java.util.Set;
  * Behavior signatures and pipeline composition: what each behavior takes and yields, and how
  * {@code >->} routes a stage's output cases into the next stage (spec §composition).
  *
- * <p>The routing walk here is the one the backend replays when it emits a pipeline, so
- * {@link #stageOut} and {@link #mainlineCases} are public: the two must agree on which cases a
- * stage consumes and which retire.
+ * <p>The routing walk here is the only one. A backend used to replay it as it emitted a pipeline,
+ * which made what a stage is offered a thing two places worked out; {@link #composition} answers it
+ * once and both the signature and the emitter read that.
  */
 public final class PipelineSigs {
 
     private PipelineSigs() {}
 
-    /** Builds the input/output signature of every behavior, checking pipeline composition. */
     /**
      * Builds the input/output signature of every behavior, checking pipeline composition. The
      * {@code imported} map seeds the resolvable behaviors with those imported from other modules
@@ -153,7 +153,7 @@ public final class PipelineSigs {
      * composition has no meaning to work out: the behavior it belongs to is abandoned, and the
      * definitions around it are checked as they would be without it.
      */
-    public static Sig stageSig(Hir.Var stage, Map<ValueName.Behavior, Sig> sigs, Symbols symbols,
+    private static Sig stageSig(Hir.Var stage, Map<ValueName.Behavior, Sig> sigs, Symbols symbols,
                                SourcePos pos) {
         ValueName.Behavior named = reaches(stage);
         if (named == null) {
@@ -168,12 +168,27 @@ public final class PipelineSigs {
         return s;
     }
 
-    private static Sig pipeSig(Hir.PipeBehavior pipe, Map<ValueName.Behavior, Sig> sigs,
-                               Symbols symbols,
-                               Map<ValueName.Behavior, List<Hir.Var>> pipeStages) {
+    /**
+     * The routing a composition performs, as the checker settles it.
+     *
+     * <p>The one walk. What a stage is offered and what runs on after it decides both what the
+     * composition answers — which is its signature — and what a backend emits, and those two were
+     * worked out separately: here, and again in the JVM emitter as it wrote the branches. The
+     * emitter's copy is gone; it reads this.
+     *
+     * <p>Asked of a declaration and the signatures around it, so it can be asked before the module
+     * has checked (a signature needs it) and after (a backend needs it), and answer the same.
+     */
+    public static Composition composition(Hir.PipeBehavior pipe, Map<ValueName.Behavior, Sig> sigs,
+                                          Symbols symbols,
+                                          Map<ValueName.Behavior, List<Hir.Var>> pipeStages) {
         // flatten nested pipeline stages so `>->` is associative (spec §type-routing)
         List<Hir.Var> stages = flattenStages(pipe.stages(), pipeStages, pipe.pos());
         Sig first = stageSig(stages.get(0), sigs, symbols, pipe.pos());
+        List<Composition.Stage> walked = new ArrayList<>();
+        // the first stage takes the composition's own arguments, so nothing is routed into it
+        walked.add(new Composition.Stage(reaches(stages.get(0)), first.outputType(),
+                new Composition.Routing.Always()));
         Type mainline = first.outputType();
         Set<TypeSymbol> retired = new LinkedHashSet<>();
         for (int i = 1; i < stages.size(); i++) {
@@ -187,9 +202,23 @@ public final class PipelineSigs {
                 throw CompileException.of(Diagnostic
                                 .at(pipe.pos()).say(new BehaviorMessage.AStageAfterTheFirstTakesOneInput(stages.get(i).name(), String.valueOf(g.ins().size()), pipe.name())).build());
             }
+            // A running value carrying cases is offered to this stage only where it is one the
+            // stage accepts (spec §type-routing). A running value with no cases to tell apart is
+            // offered whole: there is nothing to decide.
+            walked.add(new Composition.Stage(reaches(stages.get(i)), g.outputType(),
+                    TypeOps.isDataLike(mainline)
+                            ? new Composition.Routing.OnCases(mainlineCases(mainline, g, symbols))
+                            : new Composition.Routing.Always()));
             mainline = route(mainline, g, retired, symbols, pipe.pos());
         }
-        Type out = withRetired(mainline, retired);
+        return new Composition(walked, withRetired(mainline, retired));
+    }
+
+    private static Sig pipeSig(Hir.PipeBehavior pipe, Map<ValueName.Behavior, Sig> sigs,
+                               Symbols symbols,
+                               Map<ValueName.Behavior, List<Hir.Var>> pipeStages) {
+        Composition composed = composition(pipe, sigs, symbols, pipeStages);
+        Type out = composed.answers();
         // an optional declared output must match the inferred one exactly (spec
         // §declared-composition-output): neither a missing case (too narrow) nor an extra one (too wide) is
         // accepted.
@@ -205,7 +234,7 @@ public final class PipelineSigs {
             Set<TypeSymbol> declared = TypeOps.leafCases(declaredOut, symbols);
             if (!inferred.equals(declared)) {
                 throw CompileException.of(Diagnostic.at(pipe.pos())
-                                
+
                                 .hint(new DeclarationMessage.UpdateTheOutputOrHandleTheCase())
                                 .say(new DeclarationMessage.TheDeclaredOutputIsNotWhatThePipelineProduces(pipe.name(), caseList(declared), caseList(inferred))).build());
             }
@@ -214,6 +243,7 @@ public final class PipelineSigs {
         // that stage's own signature and is not asked again. What it answers is a type nobody wrote
         // — the last stage's answer, merged with the cases that left the main line — so that is
         // where the boundary is asked, once, about a composition.
+        Sig first = sigs.get(composed.stages().get(0).behavior());
         return new Sig(first.ins(),
                 SignatureBoundary.composedOutput(pipe.name(), pipe.pos(), out, symbols));
     }
@@ -241,7 +271,7 @@ public final class PipelineSigs {
     }
 
     /** The main-line leaf cases {@code g} accepts — the ones the backend routes into it (spec §type-routing). */
-    public static List<TypeSymbol> mainlineCases(Type mainline, Sig g, Symbols symbols) {
+    private static List<TypeSymbol> mainlineCases(Type mainline, Sig g, Symbols symbols) {
         List<TypeSymbol> accepted = new ArrayList<>();
         for (TypeSymbol caseName : TypeOps.leafCases(mainline, symbols)) {
             if (TypeOps.assignable(Type.ref(caseName), g.in(), symbols)) {
@@ -249,11 +279,6 @@ public final class PipelineSigs {
             }
         }
         return accepted;
-    }
-
-    /** The main line after {@code g} runs, for the backend's routing walk. */
-    public static Type stageOut(Type mainline, Sig g, Symbols symbols, SourcePos pos) {
-        return route(mainline, g, new LinkedHashSet<>(), symbols, pos);
     }
 
     /**

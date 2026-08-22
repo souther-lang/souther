@@ -1,9 +1,9 @@
 package souther.compiler.check;
 
+import souther.compiler.types.BinOp;
 import org.junit.jupiter.api.Test;
 import souther.compiler.types.CoverageOrigin;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
@@ -51,7 +51,7 @@ class ATermThatReadsAnotherHoldsItsNameAndNotItsShapeTest {
     private static List<Term> chain(Terms terms, int links) {
         List<Term> along = new java.util.ArrayList<>();
         Denotations at = Denotations.none();
-        Core value = new Core.Binary(Hir.BinOp.ADD, new Core.Int(1, Type.INT, NOWHERE),
+        Core value = new Core.Binary(BinOp.ADD, new Core.Int(1, Type.INT, NOWHERE),
                 new Core.Int(1, Type.INT, NOWHERE), CoverageOrigin.unwritten(), Type.INT, NOWHERE);
         Term term = terms.bodyKey(value, at);
         along.add(term);
@@ -59,7 +59,7 @@ class ATermThatReadsAnotherHoldsItsNameAndNotItsShapeTest {
             BindingId id = new BindingId(OWNER, i);
             at = at.binding(id, value, FactSubject.of(term), null, term);
             Core read = new Core.Read("v" + i, id, Type.INT, NOWHERE);
-            value = new Core.Binary(Hir.BinOp.ADD, read, read, CoverageOrigin.unwritten(),
+            value = new Core.Binary(BinOp.ADD, read, read, CoverageOrigin.unwritten(),
                     Type.INT, NOWHERE);
             term = terms.bodyKey(value, at);
             along.add(term);

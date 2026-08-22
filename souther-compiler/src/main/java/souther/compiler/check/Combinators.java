@@ -53,7 +53,7 @@ final class Combinators {
 
     /** What a call hands its closure: the argument that takes the function, the block that argument
      * is, the parameter the element arrives on, and the container it comes from. */
-    record Handed(Core closure, Core.Block step, Hir.Binder element, Core container) {}
+    record Handed(Core closure, Core.Block step, Core.Binder element, Core container) {}
 
     /** The same, off the tree an author wrote, where a closure is the block as written. */
     record Written(Hir.Block step, Hir.Binder element, Hir.Expr container) {}

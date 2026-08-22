@@ -41,6 +41,7 @@ class OneReasonPerKindPerPositionTest {
     }
 
     @SafeVarargs
+    @SuppressWarnings("varargs")   // `rows` is handed straight to `List.of`, which is varargs too
     private static List<Incompleteness> of(Map<AxisId, Classification>... rows) {
         return Coverages.whyUnclassified(List.of(rows), List.of(KIND, URGENT));
     }

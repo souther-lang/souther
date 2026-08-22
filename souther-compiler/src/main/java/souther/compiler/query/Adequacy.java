@@ -1,6 +1,5 @@
 package souther.compiler.query;
 
-import souther.compiler.check.ReadingPolicy;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.source.SourceId;
 
@@ -9,14 +8,12 @@ import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.msg.DeadBranchMessage;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.Citation;
-import souther.compiler.diag.SourcePos;
 import souther.compiler.examples.FixtureReader;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
-import souther.compiler.observe.Classification;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.InputCaseEvidence;
@@ -27,7 +24,6 @@ import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.PointRole;
-import souther.compiler.partition.AxisId;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.Generator;
@@ -214,7 +210,6 @@ public final class Adequacy {
                      Map<String, PartitionEvidence> partitions,
                      Map<String, BranchEvidence> branches) {}
 
-    /** Nothing proven and nothing disproved, for a module whose reachability could not be asked. */
     /** Nothing read, so nothing proven and nothing shown wrong. What a measure gets where the
      *  reading is not available, which leaves every arm owed whatever it was owed. */
     static final souther.compiler.check.PathReachability.Answers.AsRun NOTHING_PROVEN =
@@ -1126,24 +1121,6 @@ public final class Adequacy {
         }
 
         /**
-         * The forks whose arms are owed for a rule this could not work out.
-         *
-         * <p>What an arm of a fork the caller decides is owed for is one rule, and this is where the
-         * declaration says the caller decides and the occurrence could not say which rule arrived.
-         * What that leaves open is how many rules the arm stands for: copies of the fork put
-         * together, or one place several rules reach. Counted as one, which is the answer that risks
-         * the least — split, each would be owed a row establishing what the row beside it already
-         * does, and a specific piece of work that is already done is worse to be told than nothing.
-         *
-         * <p>So it is said instead. A count that quietly holds two rules where it says one is the
-         * shape of a measure reporting a behavior complete over something nothing ran, and naming
-         * them is what keeps that from being silent.
-         *
-         * <p>However many places it was counted at, which is why it is not named for that. Which
-         * module wrote the fork does not come into it either: a helper of this module's own deciding
-         * by a rule it was handed is the same shape as one the library wrote.
-         */
-        /**
          * Whether nothing established how many rules this obligation stands for.
          *
          * <p>Not how many places it was counted at. Which rule decides at a fork the caller decides
@@ -1318,8 +1295,6 @@ public final class Adequacy {
         }
     }
 
-    /** Every row this module's sources observed, grouped by the behavior it is about, run against the
-     * classes that record where they went. */
     /**
      * What a module's sources saw of one behavior: the rows, and what stopped them being seen.
      *
@@ -2658,13 +2633,6 @@ public final class Adequacy {
 
     }
 
-    /**
-     * What a behavior's rows establish about its signature.
-     *
-     * <p>Which set a row lands in is decided by how far it got, never by whether it passed. A row that
-     * disagreed still applied the behavior and still saw an answer, and a coverage measure that dropped
-     * it would report the case it produced as one nothing produces.
-     */
     /**
      * The cases an input position has to be covered at: what it divides into, read through the names
      * it writes its values under.

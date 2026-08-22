@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.numeric.Endpoint;
@@ -206,7 +207,7 @@ final class Terms {
         if (operation == null || args.size() != 2) {
             return e;
         }
-        Hir.BinOp op = DischargeRules.operator(operation);
+        BinOp op = DischargeRules.operator(operation);
         // Not a comparison any source wrote: a call read as the operator it stands for.
         return op == null ? e : new Core.Binary(op, args.get(0), args.get(1),
                 CoverageOrigin.unwritten(), e.type(), e.pos());
@@ -299,15 +300,15 @@ final class Terms {
         // Entering a binding a walk is already inside is not a second binding of it. A branch is
         // read from where its conditional stood, which is inside these, over a tree that still holds
         // them.
-        if (at.valueOf(li.binder().id()) == li.value()) {
+        if (at.valueOf(li.binder().binding()) == li.value()) {
             return at;
         }
         // What the name is about is what it was given is about. Where even the identity reading has
         // nothing to name — an expression answering nothing at all — the name is what there is, and
         // it is one value however many times it is read.
         FactSubject about = subjectOf(li.value(), at);
-        return at.binding(li.binder().id(), li.value(),
-                about != null ? about : placeSubject(li.binder().id()),
+        return at.binding(li.binder().binding(), li.value(),
+                about != null ? about : placeSubject(li.binder().binding()),
                 locationOf(li.value(), at), bodyKey(li.value(), at));
     }
 
@@ -572,12 +573,12 @@ final class Terms {
         // Named against the walk and not against the bindings the step was written with: the walk's
         // own atom normalises those bindings, so two readings of one walk are one atom and would
         // otherwise carry two accumulators under it (Term.Shape.HANDED).
-        List<Hir.Binder> params = walk.step().params();
+        List<Core.Binder> params = walk.step().params();
         FactSubject accumulator = null;
         Denotations inside = at;
         for (int i = 0; i < params.size(); i++) {
             FactSubject handed = FactSubject.of(interned.handed(atom.identity(), i));
-            inside = inside.location(params.get(i).id(), handed, handed.identity());
+            inside = inside.location(params.get(i).binding(), handed, handed.identity());
             if (params.get(i) == walk.accumulator()) {
                 accumulator = handed;
             }
@@ -709,6 +710,7 @@ final class Terms {
      * derived under that name is about neither of them.
      */
     static final class OneTermTwoDerivations extends TheCheckDisagreesWithItself {
+        private static final long serialVersionUID = 1L;
 
         OneTermTwoDerivations(String message) {
             super(message);
@@ -789,6 +791,7 @@ final class Terms {
      * left is the check handing one value two spacings.
      */
     static final class OneTermTwoKinds extends TheCheckDisagreesWithItself {
+         private static final long serialVersionUID = 1L;
 
         OneTermTwoKinds(String message) {
             super(message);
@@ -1050,21 +1053,6 @@ final class Terms {
     }
 
     /**
-     * What {@code raw} is called, or why it is called nothing.
-     *
-     * <p>Exhaustive over {@link Core} and carrying no default: a shape added to the language is a
-     * compile error here rather than a value the check silently has nothing to say about. Which is
-     * what the shapes below were — a call this reading kept standing fell through to nothing, so a
-     * construction over one was left to the run-time check while the same construction over the same
-     * helper expanded into the body was reported (#722).
-     *
-     * <p>A value is named by what computes it, where what computes it is a function of named parts.
-     * So the parts decide most of this, and what decides the rest is what is being called: a module's
-     * own helper is pure, the language's own operations are, and what an injected behavior answers is
-     * not. That a call is still standing here is not one of the questions — whether a helper was
-     * expanded into this body is a fact about the reading, not about the value it answers.
-     */
-    /**
      * What a walk over an expression does where the term grammar runs out.
      *
      * <p>Two readings, one walk. The symbolic domain wants to know whether it can read a value's
@@ -1096,6 +1084,21 @@ final class Terms {
                 ? new Naming.Named(interned.evaluated(evaluationIdOf(raw))) : absent;
     }
 
+    /**
+     * What {@code raw} is called, or why it is called nothing.
+     *
+     * <p>Exhaustive over {@link Core} and carrying no default: a shape added to the language is a
+     * compile error here rather than a value the check silently has nothing to say about. Which is
+     * what the shapes below were — a call this reading kept standing fell through to nothing, so a
+     * construction over one was left to the run-time check while the same construction over the same
+     * helper expanded into the body was reported (#722).
+     *
+     * <p>A value is named by what computes it, where what computes it is a function of named parts.
+     * So the parts decide most of this, and what decides the rest is what is being called: a module's
+     * own helper is pure, the language's own operations are, and what an injected behavior answers is
+     * not. That a call is still standing here is not one of the questions — whether a helper was
+     * expanded into this body is a fact about the reading, not about the value it answers.
+     */
     private Naming naming(Core raw, Denotations at, Map<BindingId, Term> bound, int depth,
                           Leaf leaf) {
         Core e = asOperator(raw);
@@ -1159,8 +1162,8 @@ final class Terms {
                 Map<BindingId, Term> outer = bound;
                 List<Naming> answers = new ArrayList<>();
                 for (Core.Case arm : m.cases()) {
-                    Map<BindingId, Term> inner = arm.binding() == null ? outer
-                            : binding(outer, List.of(arm.binding()), depth);
+                    Map<BindingId, Term> inner = arm.binder() == null ? outer
+                            : binding(outer, List.of(arm.binder()), depth);
                     answers.add(naming(arm.body(), at, inner, depth + 1, leaf));
                 }
                 Naming scrutinee = naming(m.scrutinee(), at, bound, depth, leaf);
@@ -1286,10 +1289,10 @@ final class Terms {
 
     /** {@code bound} with each of {@code binders} keyed by where it is bound rather than by which
      * binding it is, so two expressions that differ only in what they bound are one term. */
-    Map<BindingId, Term> binding(Map<BindingId, Term> bound, List<Hir.Binder> binders, int depth) {
+    Map<BindingId, Term> binding(Map<BindingId, Term> bound, List<Core.Binder> binders, int depth) {
         Map<BindingId, Term> inner = new HashMap<>(bound);
         for (int i = 0; i < binders.size(); i++) {
-            inner.put(binders.get(i).id(), interned.bound(depth, i));
+            inner.put(binders.get(i).binding(), interned.bound(depth, i));
         }
         return inner;
     }
@@ -1550,7 +1553,7 @@ final class Terms {
                     yield false;
                 }
                 Set<BindingId> inner = new HashSet<>(written);
-                inner.add(li.binder().id());
+                inner.add(li.binder().binding());
                 yield isWritten(li.body(), inner);
             }
             default -> false;
@@ -1694,8 +1697,8 @@ final class Terms {
 
 
     /** A read of {@code binder}, as the expression naming the value it holds. */
-    static Core.Read read(Hir.Binder binder, Type type, SourcePos pos) {
-        return new Core.Read(binder.name(), binder.id(), type, pos);
+    static Core.Read read(Core.Binder binder, Type type, SourcePos pos) {
+        return new Core.Read(binder.name(), binder.binding(), type, pos);
     }
 
     /** The block {@code e} is, following a name given one: a lambda handed to an operation the
@@ -1777,8 +1780,8 @@ final class Terms {
     }
 
 
-    static boolean isArith(Hir.BinOp op) {
-        return op == Hir.BinOp.ADD || op == Hir.BinOp.SUB || op == Hir.BinOp.MUL || op == Hir.BinOp.DIV;
+    static boolean isArith(BinOp op) {
+        return op == BinOp.ADD || op == BinOp.SUB || op == BinOp.MUL || op == BinOp.DIV;
     }
     /** How a preserved call's operation is reached: it is the library's, named under the alias the
      * library publishes it under. */

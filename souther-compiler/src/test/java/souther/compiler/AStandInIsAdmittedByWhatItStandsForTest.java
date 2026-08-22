@@ -1,6 +1,5 @@
 package souther.compiler;
 
-import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.msg.Message;
 import souther.compiler.diag.CompileException;

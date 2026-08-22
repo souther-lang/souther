@@ -730,16 +730,6 @@ public final class SpecChecker {
     }
 
     /**
-     * Every stage after the first takes exactly one input (spec §sequential-composition): {@code >->} hands a single
-     * value along.
-     *
-     * <p>The first stage is not restricted — it consumes the pipeline's own arguments, and the
-     * pipeline simply takes what it takes. The spec DSL relies on this
-     * (`behavior 却下して差し戻す = 却下する >-> 差し戻す`, where `却下する` reads
-     * `事前承認待ち AND 却下者ID`); requiring the whole chain to be single-input would reject the
-     * very line 14.1 cites.
-     */
-    /**
      * Nothing built here may hold a behavior Souther is to implement and nobody has (spec
      * §unwritten-behavior).
      *
@@ -799,6 +789,16 @@ public final class SpecChecker {
         }
     }
 
+    /**
+     * Every stage after the first takes exactly one input (spec §sequential-composition): {@code >->} hands a single
+     * value along.
+     *
+     * <p>The first stage is not restricted — it consumes the pipeline's own arguments, and the
+     * pipeline simply takes what it takes. The spec DSL relies on this
+     * (`behavior 却下して差し戻す = 却下する >-> 差し戻す`, where `却下する` reads
+     * `事前承認待ち AND 却下者ID`); requiring the whole chain to be single-input would reject the
+     * very line 14.1 cites.
+     */
     static void checkStagesAreSingleInput(Hir.Module module) {
         Map<ValueName.Behavior, Integer> arity = new HashMap<>();
         for (Hir.BehaviorDef b : module.behaviors()) {

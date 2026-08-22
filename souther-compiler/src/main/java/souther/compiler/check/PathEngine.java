@@ -3,7 +3,6 @@ package souther.compiler.check;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorContract.Guard;
 import souther.compiler.core.Core;
-import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.Refinement;
@@ -205,7 +204,7 @@ final class PathEngine {
      * the one that forgot fell over on every ordinary unit case.
      */
     Entered enteringArm(Core.Case arm, Core scrutinee, Known k, Denotations at) {
-        Entered in = arm.binding() == null || arm.bindType() == null
+        Entered in = arm.binder() == null || arm.bindType() == null
                 ? new Entered(k, at)
                 : opening(arm, scrutinee, k, at);
         return assuming(answeredBy(scrutinee, in.at()), answered(arm, scrutinee),
@@ -230,7 +229,7 @@ final class PathEngine {
      * the two agreed only for as long as nothing could tell them apart (#824).
      */
     private Entered opening(Core.Case arm, Core scrutinee, Known k, Denotations at) {
-        Core.Read root = Terms.read(arm.binding(), arm.bindType(), arm.pos());
+        Core.Read root = Terms.read(arm.binder(), arm.bindType(), arm.pos());
         Opens opens = opens(arm, scrutinee, at);
         Denotations next = opens == null
                 ? at.location(root.binding(), terms.placeSubject(root.binding()),
@@ -331,8 +330,8 @@ final class PathEngine {
     /** What the arm holds of the answer: what it binds where it binds one, and the answer itself
      * where it does not — an arm may state a relation about a case that carries nothing. */
     private static Core answered(Core.Case arm, Core scrutinee) {
-        return arm.binding() == null || arm.bindType() == null ? scrutinee
-                : Terms.read(arm.binding(), arm.bindType(), arm.pos());
+        return arm.binder() == null || arm.bindType() == null ? scrutinee
+                : Terms.read(arm.binder(), arm.bindType(), arm.pos());
     }
 
     /**

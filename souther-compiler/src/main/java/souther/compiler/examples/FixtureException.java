@@ -7,6 +7,7 @@ package souther.compiler.examples;
  * the row states nothing until its fixtures are built.
  */
 final class FixtureException extends RuntimeException {
+    private static final long serialVersionUID = 1L;
     FixtureException(String message) {
         super(message);
     }

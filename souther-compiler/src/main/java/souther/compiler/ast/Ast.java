@@ -3,17 +3,13 @@ package souther.compiler.ast;
 import souther.compiler.diag.Region;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.CoverageOrigin;
-import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
-import souther.compiler.types.TypeSymbol;
-import souther.compiler.types.TypeReachName;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -396,16 +392,6 @@ public interface Ast {
         }
     }
 
-    /**
-     * {@code fn name (a1, ...) = body} — a behavior's implementation (spec §fn-declaration). If a same-named
-     * {@link SpecBehavior} exists, the parameter types come from it and the author writes none
-     * ({@link FnParam#type()} is null, or read off a pattern; {@link FnParam#typeFromPattern()});
-     * otherwise it is a helper {@code fn} that writes its own parameter types.
-     *
-     * <p>{@code body} is a single expression. The surface forms {@code let} and {@code guard} are
-     * desugared by the parser into {@link LetIn} and {@link If} (spec §guard), so every later stage
-     * sees one expression tree and has exactly one place where a value can be constructed.
-     */
     /**
      * What stands to the right of a definition's {@code =}: the expression the author wrote, or —
      * in the reserved {@code souther} namespace only (spec §primitives) — the name of a shipped
@@ -898,7 +884,6 @@ public interface Ast {
      * also the classification the checker already made, carried here rather than worked out again. */
     record MapDecRef(DecRef value, MapKeyRepresentation key, SourcePos pos) implements DecRef.Bare {}
 
-    /** A primitive field decoder kind. */
     /** A statement in a single-value decoder body. */
     sealed interface DecStmt extends Ast permits Let {}
 
@@ -917,8 +902,7 @@ public interface Ast {
      */
     record Construct(Name typeName, List<FieldInit> inits, SourcePos pos) implements Ast {}
 
-    /** One {@code field: expr} (or shorthand {@code field}) inside a record literal. */
-    /** {@code field: value} in a construction. */
+    /** {@code field: expr}, or the shorthand {@code field}, in a construction. */
     record FieldInit(WrittenName written, Expr value) implements Ast {
 
         /** An initialiser a pass wrote — a derived encoder's, a newtype's implicit {@code value}. */
@@ -1058,9 +1042,6 @@ public interface Ast {
      * <p>Second-class: it may only be an argument, never a value that is returned, stored in a
      * field, or bound by {@code let}. The parser only accepts one in an argument position, and
      * because it cannot escape, the backend inlines it rather than building a closure.
-     */
-    /**
-     * {@code x -> expr} — a block.
      *
      * <p>{@code rule} is which block of the source this is, minted where the syntax is read and
      * carried by every copy. A block handed to a function parameter is the rule the fork that
@@ -1284,8 +1265,6 @@ public interface Ast {
             this(construct, binder, then, List.of(ElseArm.any(els)), origin, pos, region);
         }
 
-        /** The same, as the parser read it. */
-
         /** How the binding was written. */
         public String binderName() {
             return binder.name();
@@ -1329,9 +1308,8 @@ public interface Ast {
      * holds one case name, or several joined by {@code |} (an or-pattern, spec §match). With one case,
      * {@code x} binds that case's type; with several, it binds the scrutinee's sum type, since no
      * single case type fits all alternatives.
-     */
-    /**
-     * {@code unwrapAsserts} are the inner newtype names written in a constructor-destructuring
+     *
+     * <p>{@code unwrapAsserts} are the inner newtype names written in a constructor-destructuring
      * pattern {@code X(Y(s))} — {@code [Y]} here (the case {@code X} is in {@code caseTypes}, the
      * bound variable {@code s} is dropped). {@code null} when the pattern is not a constructor
      * destructure; an empty list is the single-layer form {@code X(v)}. The {@code TypeChecker}
@@ -1355,9 +1333,8 @@ public interface Ast {
      * <p>A spread names a value like any other position, so it carries what that name resolves to: a
      * binding in force wins over a declaration here as everywhere else, and a reader downstream must
      * not go back to matching the spelling against the module's own definitions.
-     */
-    /**
-     * A construction. {@code origin} says where it came from: written here, or carried in by a
+     *
+     * <p>{@code origin} says where the construction came from: written here, or carried in by a
      * published body or by a value this body named.
      *
      * <p>Expansion makes the two look alike: a construction spliced in from another body is the same
@@ -1602,22 +1579,6 @@ public interface Ast {
     enum BinOp { EQ, NE, LT, LE, GT, GE, AND, OR, ADD, SUB, MUL, DIV, CONCAT }
 
     /**
-     * {@code e} with each of its slots replaced by what the operator for that slot answers, its own
-     * kind and position kept — or {@code e} itself where every slot answered what it was given, so a
-     * walk that only reads allocates nothing.
-     *
-     * <p>The children of an expression occupy two kinds of slot, and they differ in what may stand
-     * there. An expression slot takes any expression — an argument, a field's value, the thing an
-     * {@code if} tests. A name slot takes only a name: a construction's spread {@code T { ..base }}
-     * copies the fields of what the name stands for, so there is nothing there to evaluate and
-     * nothing else that could be written.
-     *
-     * <p>This is the one place that says which slots a node has. Both {@link #mapChildren} and
-     * {@link #forEachChild} are derived from it, so a slot a node gains later is written once and
-     * neither walk can be left behind. Being exhaustive over {@code Expr}, a node kind added later
-     * stops the build here, which is the one place it has to be accounted for.
-     */
-    /**
      * {@code e} written over {@code region} instead of whatever it says now — for the one caller
      * that knows a wider stretch of source than the node it is holding.
      *
@@ -1661,6 +1622,22 @@ public interface Ast {
         };
     }
 
+    /**
+     * {@code e} with each of its slots replaced by what the operator for that slot answers, its own
+     * kind and position kept — or {@code e} itself where every slot answered what it was given, so a
+     * walk that only reads allocates nothing.
+     *
+     * <p>The children of an expression occupy two kinds of slot, and they differ in what may stand
+     * there. An expression slot takes any expression — an argument, a field's value, the thing an
+     * {@code if} tests. A name slot takes only a name: a construction's spread {@code T { ..base }}
+     * copies the fields of what the name stands for, so there is nothing there to evaluate and
+     * nothing else that could be written.
+     *
+     * <p>This is the one place that says which slots a node has. Both {@link #mapChildren} and
+     * {@link #forEachChild} are derived from it, so a slot a node gains later is written once and
+     * neither walk can be left behind. Being exhaustive over {@code Expr}, a node kind added later
+     * stops the build here, which is the one place it has to be accounted for.
+     */
     private static Expr atSlots(Expr e, UnaryOperator<Expr> atExpr, UnaryOperator<Var> atName) {
         return switch (e) {
             case IntLit x -> x;

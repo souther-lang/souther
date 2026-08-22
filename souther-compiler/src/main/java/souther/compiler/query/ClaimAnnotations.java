@@ -122,11 +122,10 @@ public record ClaimAnnotations(List<Said> all) {
         return new Said(had.at(), had.classId(), reasons, had.why());
     }
 
-    /** What a reader is told about a claim nothing settled. One projection, so that a distinction
-     *  this compiler learns to make later is a word the report chooses to add rather than one it
-     *  gains by accident. */
     /**
-     * The one place a reason is turned into a word.
+     * The one place a reason is turned into a word: what a reader is told about a claim nothing
+     * settled. One projection, so that a distinction this compiler learns to make later is a word
+     * the report chooses to add rather than one it gains by accident.
      *
      * <p>Named rather than written where it is used, so that what may ask a reason what it says is
      * one class and can be held to being one: the check that fixes this reads the compiled calls,

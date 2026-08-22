@@ -7,7 +7,6 @@ import tools.jackson.databind.json.JsonMapper;
 
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.Carrier;
-import souther.compiler.inputs.BoundaryDomain;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
@@ -324,8 +323,8 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
                 .readTree(AdequacyReport.of(compilation).json(SourceNameResolver.identity()));
         List<String> out = new ArrayList<>();
         root.findValues("boundaries").forEach(each -> each.forEach(
-                b -> b.get("items").forEach(i -> out.add(i.get("point").asText() + ":"
-                        + i.get("relation").asText() + " " + i.get("against").asText()))));
+                b -> b.get("items").forEach(i -> out.add(i.get("point").asString() + ":"
+                        + i.get("relation").asString() + " " + i.get("against").asString()))));
         return out;
     }
 

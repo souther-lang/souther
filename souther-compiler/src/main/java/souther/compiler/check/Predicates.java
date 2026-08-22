@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Hir;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.check.Combinators.Handed;
 import souther.compiler.check.DischargeRules.Cardinality;
@@ -84,7 +84,7 @@ final class Predicates {
      * innermost element. */
     Known instantiate(Quantified q, Core element, Known k, Denotations at) {
         Core stated = Clauses.substituted(q.predicate().body(),
-                Map.of(q.predicate().params().get(0).id(), element));
+                Map.of(q.predicate().params().get(0).binding(), element));
         List<Quantified> nested = new ArrayList<>();
         quantifiedBy(stated, at, true, nested);
         // A quantifier is recorded by a guard and by a type's invariant alike, and carries no record
@@ -100,7 +100,7 @@ final class Predicates {
      * predicate, and which one is not something this check can name. */
     void quantifiedBy(Core raw, Denotations at, boolean positive, List<Quantified> out) {
         Core e = asSizeComparison(raw);
-        if (e instanceof Core.Binary b && b.op() == Hir.BinOp.AND && positive) {
+        if (e instanceof Core.Binary b && b.op() == BinOp.AND && positive) {
             quantifiedBy(b.left(), at, true, out);
             quantifiedBy(b.right(), at, true, out);
             return;
@@ -559,7 +559,7 @@ final class Predicates {
      * which is where each of them is taken as the comparison it states. */
     private Owed read(Core inv, Known k, Denotations at, Set<Core> unnamed,
                       boolean positive, boolean decidesFalse, Read way, PerPart per) {
-        if (inv instanceof Core.Binary b && b.op() == Hir.BinOp.AND && positive) {
+        if (inv instanceof Core.Binary b && b.op() == BinOp.AND && positive) {
             // Each conjunct on its own: an invariant is a set of things that hold, and one the check
             // cannot read leaves its own run-time check standing without costing the others theirs.
             // That it stands is carried rather than dropped — the other conjunct being discharged is
@@ -659,9 +659,6 @@ final class Predicates {
         return keys.isEmpty() ? keys : List.of(keys.get(0));
     }
 
-    /** Refines {@code k} by asserting {@code cond} (or its negation): a comparison tightens the
-     * numeric domain, a stdlib predicate settles a fact. A condition of neither shape, and an operand
-     * outside the affine fragment, leave {@code k} unchanged (sound). */
     /**
      * What taking a condition as holding came to.
      *
@@ -681,6 +678,9 @@ final class Predicates {
         }
     }
 
+    /** Refines {@code k} by asserting {@code cond} (or its negation): a comparison tightens the
+     * numeric domain, a stdlib predicate settles a fact. A condition of neither shape, and an operand
+     * outside the affine fragment, leave {@code k} unchanged (sound). */
     Assumed assumeCond(Core rawCond, Known k, Denotations at, boolean positive) {
         Core cond = asSizeComparison(rawCond);
         // Two answers, and they were one until a condition could name something without this having
@@ -702,7 +702,7 @@ final class Predicates {
         }
         // `&&` asserted true gives both sides; `||` asserted false gives both sides negated.
         if (cond instanceof Core.Binary b
-                && (b.op() == Hir.BinOp.AND && positive || b.op() == Hir.BinOp.OR && !positive)) {
+                && (b.op() == BinOp.AND && positive || b.op() == BinOp.OR && !positive)) {
             Assumed left = assumeCond(b.left(), k, at, positive);
             // Either side taken in is the condition taken in. A conjunction one half of which reads
             // is not one nothing was read of, and calling it that would name this compiler's limit
@@ -743,7 +743,7 @@ final class Predicates {
             LinearForm<FactSubject> la = eff == null ? null : terms.affineOf(b.left(), at);
             LinearForm<FactSubject> ra = eff == null ? null : terms.affineOf(b.right(), at);
             if (la != null && ra != null) {
-                LinearForm compared = la.minus(ra);
+                LinearForm<FactSubject> compared = la.minus(ra);
                 out = out.taking(compared, eff, Known.Held.ON_THE_PATH, terms.kindsOf(compared));
                 taken = true;
                 shapeRead |= readsItsShape(b.left(), at) && readsItsShape(b.right(), at);
@@ -818,15 +818,15 @@ final class Predicates {
             return new Polar(e, positive);
         }
         return switch (b.op()) {
-            case NE -> new Polar(comparison(Hir.BinOp.EQ, b.left(), b.right(), b), !positive);
-            case GE -> new Polar(comparison(Hir.BinOp.LT, b.left(), b.right(), b), !positive);
-            case GT -> new Polar(comparison(Hir.BinOp.LT, b.right(), b.left(), b), positive);
-            case LE -> new Polar(comparison(Hir.BinOp.LT, b.right(), b.left(), b), !positive);
+            case NE -> new Polar(comparison(BinOp.EQ, b.left(), b.right(), b), !positive);
+            case GE -> new Polar(comparison(BinOp.LT, b.left(), b.right(), b), !positive);
+            case GT -> new Polar(comparison(BinOp.LT, b.right(), b.left(), b), positive);
+            case LE -> new Polar(comparison(BinOp.LT, b.right(), b.left(), b), !positive);
             default -> new Polar(e, positive);
         };
     }
 
-    static Core.Binary comparison(Hir.BinOp op, Core left, Core right, Core.Binary of) {
+    static Core.Binary comparison(BinOp op, Core left, Core right, Core.Binary of) {
         return new Core.Binary(op, left, right, of.origin(), of.type(), of.pos());
     }
 
@@ -841,7 +841,7 @@ final class Predicates {
         }
         if (e instanceof Core.LetIn li) {
             Core inner = negated(li.body());
-            return inner instanceof Core.Read r && r.binding().equals(li.binder().id())
+            return inner instanceof Core.Read r && r.binding().equals(li.binder().binding())
                     ? li.value() : null;
         }
         return e instanceof Core.If iff
@@ -851,7 +851,6 @@ final class Predicates {
     }
 
 
-    /** Every subject the clauses in {@code owed} say something about. */
     /**
      * The positions this reading took {@code owed}'s clause in about.
      *
@@ -1279,12 +1278,12 @@ final class Predicates {
         if (proj.params().size() != 1 || step.params().size() != 1) {
             return null;
         }
-        Hir.Binder element = step.params().get(0);
-        List<String> read = new Reads(proj.params().get(0).id()).chain(proj.body());
+        Core.Binder element = step.params().get(0);
+        List<String> read = new Reads(proj.params().get(0).binding()).chain(proj.body());
         if (read == null) {
             return null;
         }
-        Reads reads = new Reads(element.id());
+        Reads reads = new Reads(element.binding());
         Core made = reads.produced(step.body());
         List<String> traced;
         if (read.isEmpty()) {
@@ -1334,7 +1333,7 @@ final class Predicates {
         Core produced(Core body) {
             Core cur = body;
             while (cur instanceof Core.LetIn li) {
-                chains.put(li.binder().id(), chain(li.value()));
+                chains.put(li.binder().binding(), chain(li.value()));
                 cur = li.body();
             }
             return cur;
@@ -1346,7 +1345,7 @@ final class Predicates {
                 case Core.LetIn li -> {
                     Reads inner = new Reads(element);
                     inner.chains.putAll(chains);
-                    inner.chains.put(li.binder().id(), chain(li.value()));
+                    inner.chains.put(li.binder().binding(), chain(li.value()));
                     yield inner.chain(li.body());
                 }
                 case Core.FieldAccess fa -> {
@@ -1404,7 +1403,7 @@ final class Predicates {
         }
         // The relation the source wrote, read from the sign's side of the zero, and between the
         // arguments in the order this operation counts them.
-        Hir.BinOp written = callFirst ? b.op() : mirrored(b.op());
+        BinOp written = callFirst ? b.op() : mirrored(b.op());
         return comparison(written, positive.greaterOf(call), positive.lesserOf(call), b);
     }
 
@@ -1416,12 +1415,12 @@ final class Predicates {
 
     /** {@code op} with its two sides exchanged: what the same fact is called when it is written the
      * other way round. */
-    static Hir.BinOp mirrored(Hir.BinOp op) {
+    static BinOp mirrored(BinOp op) {
         return switch (op) {
-            case LT -> Hir.BinOp.GT;
-            case GT -> Hir.BinOp.LT;
-            case LE -> Hir.BinOp.GE;
-            case GE -> Hir.BinOp.LE;
+            case LT -> BinOp.GT;
+            case GT -> BinOp.LT;
+            case LE -> BinOp.GE;
+            case GE -> BinOp.LE;
             default -> op;
         };
     }
@@ -1432,7 +1431,7 @@ final class Predicates {
                 && DischargeRules.sizeMeantBy(call.operation()) != null) {
             Core size = new Core.PreservedCall(DischargeRules.sizeMeantBy(call.operation()), call.args(),
                     Type.INT, call.pos());
-            return new Core.Binary(Hir.BinOp.EQ, size, new Core.Int(0, Type.INT, call.pos()),
+            return new Core.Binary(BinOp.EQ, size, new Core.Int(0, Type.INT, call.pos()),
                     CoverageOrigin.unwritten(),
                     Type.BOOL, call.pos());
         }
@@ -1440,7 +1439,7 @@ final class Predicates {
     }
 
 
-    static Rel relOf(Hir.BinOp op) {
+    static Rel relOf(BinOp op) {
         return switch (op) {
             case GE -> Rel.GE;
             case GT -> Rel.GT;

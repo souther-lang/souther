@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Hir;
+import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
 
 /**
@@ -77,11 +77,11 @@ interface ClauseReading<S> {
             // Stated, a conjunction gives both sides; denied, it gives the choice between their
             // denials. And the same the other way round, which is the whole of what a denial does
             // to a connective.
-            if (bin.op() == Hir.BinOp.AND) {
+            if (bin.op() == BinOp.AND) {
                 return positive ? both(read(bin.left(), true, per), read(bin.right(), true, per))
                         : either(read(bin.left(), false, per), read(bin.right(), false, per));
             }
-            if (bin.op() == Hir.BinOp.OR) {
+            if (bin.op() == BinOp.OR) {
                 return positive ? either(read(bin.left(), true, per), read(bin.right(), true, per))
                         : both(read(bin.left(), false, per), read(bin.right(), false, per));
             }

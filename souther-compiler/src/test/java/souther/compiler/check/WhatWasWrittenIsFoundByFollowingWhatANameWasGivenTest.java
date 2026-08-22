@@ -50,7 +50,7 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
     @Test
     void aNameGivenTextIsThatText() {
         Core three = new Core.Int(3, Type.INT, POS);
-        Hir.Binder a = binders.binder("a", POS);
+        Core.Binder a = CoreBinders.of(binders.binder("a", POS));
         Denotations at = given(a, three, Denotations.none());
 
         assertSame(three, engine.terms().writtenValue(read(a), at));
@@ -61,9 +61,9 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
     @Test
     void aNameGivenANameGivenTextIsThatTextToo() {
         Core three = new Core.Int(3, Type.INT, POS);
-        Hir.Binder a = binders.binder("a", POS);
-        Hir.Binder b = binders.binder("b", POS);
-        Hir.Binder c = binders.binder("c", POS);
+        Core.Binder a = CoreBinders.of(binders.binder("a", POS));
+        Core.Binder b = CoreBinders.of(binders.binder("b", POS));
+        Core.Binder c = CoreBinders.of(binders.binder("c", POS));
         Denotations at = given(a, three, Denotations.none());
         at = given(b, read(a), at);
         at = given(c, read(b), at);
@@ -74,7 +74,7 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
     /** A place stands for no value the walk reached, so there is no text behind it. */
     @Test
     void aPlaceWasGivenNothingSoItWasWrittenAsNothing() {
-        Hir.Binder x = binders.binder("x", POS);
+        Core.Binder x = CoreBinders.of(binders.binder("x", POS));
         Denotations at = engine.enter(Terms.read(x, Type.INT, POS), Known.top(),
                 Denotations.none()).at();
 
@@ -86,7 +86,7 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
     @Test
     void anArmOpeningWrittenTextOpensThatText() {
         Core written = new Core.Construct(FOUND, List.of(), Type.ref(FOUND), POS);
-        Hir.Binder x = binders.binder("x", POS);
+        Core.Binder x = CoreBinders.of(binders.binder("x", POS));
 
         Denotations at = engine.enteringArm(
                 arm(new Core.ResolvedPattern.Single(CaseSelector.direct(FOUND)), x),
@@ -100,7 +100,7 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
     void anArmOpeningAnAnswerOpensNoText() {
         Core answer = new Core.Call(ReachName.of(FIND, "findIt", "demo"), FIND, List.of(),
                 Type.ref(FOUND), POS);
-        Hir.Binder x = binders.binder("x", POS);
+        Core.Binder x = CoreBinders.of(binders.binder("x", POS));
 
         Denotations at = engine.enteringArm(
                 arm(new Core.ResolvedPattern.Single(CaseSelector.direct(FOUND)), x),
@@ -114,11 +114,11 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
     @Test
     @Timeout(5)
     void aNameGivenItselfIsFollowedToNothing() {
-        Hir.Binder a = binders.binder("a", POS);
-        Hir.Binder b = binders.binder("b", POS);
+        Core.Binder a = CoreBinders.of(binders.binder("a", POS));
+        Core.Binder b = CoreBinders.of(binders.binder("b", POS));
         Denotations at = Denotations.none()
-                .binding(a.id(), read(b), engine.terms().placeSubject(a.id()), null, null)
-                .binding(b.id(), read(a), engine.terms().placeSubject(b.id()), null, null);
+                .binding(a.binding(), read(b), engine.terms().placeSubject(a.binding()), null, null)
+                .binding(b.binding(), read(a), engine.terms().placeSubject(b.binding()), null, null);
 
         assertNull(engine.terms().writtenValue(read(a), at));
     }
@@ -129,7 +129,7 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
     @Test
     void aNameGivenTextIsWrittenWhereverItIsRead() {
         Core three = new Core.Int(3, Type.INT, POS);
-        Hir.Binder a = binders.binder("a", POS);
+        Core.Binder a = CoreBinders.of(binders.binder("a", POS));
         Denotations at = given(a, three, Denotations.none());
 
         assertEquals(engine.terms().bodyKey(three, Denotations.none()),
@@ -140,22 +140,22 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
         assertNull(engine.terms().reportableSite(three, Denotations.none(), Known.top()));
     }
 
-    private Denotations given(Hir.Binder binder, Core value, Denotations at) {
+    private Denotations given(Core.Binder binder, Core value, Denotations at) {
         return engine.bindLet(new Core.LetIn(binder, value,
-                new Core.Read(binder.name(), binder.id(), value.type(), POS), value.type(), POS),
+                new Core.Read(binder.name(), binder.binding(), value.type(), POS), value.type(), POS),
                 Known.top(), at).at();
     }
 
-    private Core.Case arm(Core.ResolvedPattern pattern, Hir.Binder binder) {
-        return new Core.Case(pattern, binder, new Core.Read(binder.name(), binder.id(),
+    private Core.Case arm(Core.ResolvedPattern pattern, Core.Binder binder) {
+        return new Core.Case(pattern, binder, new Core.Read(binder.name(), binder.binding(),
                 pattern.bindType(), POS), POS);
     }
 
-    private static Core read(Hir.Binder binder) {
+    private static Core read(Core.Binder binder) {
         return read(binder, Type.INT);
     }
 
-    private static Core read(Hir.Binder binder, Type type) {
-        return new Core.Read(binder.name(), binder.id(), type, POS);
+    private static Core read(Core.Binder binder, Type type) {
+        return new Core.Read(binder.name(), binder.binding(), type, POS);
     }
 }

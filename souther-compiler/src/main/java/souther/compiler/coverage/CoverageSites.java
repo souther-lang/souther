@@ -3,7 +3,6 @@ package souther.compiler.coverage;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.CoverageConstruct;
 import souther.compiler.types.CoverageOrigin;
@@ -194,8 +193,7 @@ public final class CoverageSites {
      * still evaluated to reach the arm beside it. An {@code if} whose arms both answer nothing has no
      * {@code GuardRef} at all — there is nothing left for a row to reach, and a reference with two
      * absent sides would report the line as never met however the model is exercised.
-     */
-    /**
+     *
      * @param at the fork's own place. A coordinate and not a reference over one: a reference
      *           carries a source beside the one the coordinate has, and a walk over one module
      *           pairs its own with a position from a helper another module wrote. Nothing reads

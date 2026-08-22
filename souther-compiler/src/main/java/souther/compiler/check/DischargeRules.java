@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Hir;
+import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.Rel;
@@ -691,13 +691,13 @@ final class DischargeRules {
      * which is what {@code +} emits — so the two spellings compute one value and are read as one term.
      * {@code divide} is absent: it answers a union rather than a number.
      */
-    private static final Map<ValueName, Hir.BinOp> OPERATOR_CALLS = Map.of(
-            op("Int", "add"), Hir.BinOp.ADD,
-            op("Int", "subtract"), Hir.BinOp.SUB,
-            op("Int", "multiply"), Hir.BinOp.MUL,
-            op("Decimal", "add"), Hir.BinOp.ADD,
-            op("Decimal", "subtract"), Hir.BinOp.SUB,
-            op("Decimal", "multiply"), Hir.BinOp.MUL);
+    private static final Map<ValueName, BinOp> OPERATOR_CALLS = Map.of(
+            op("Int", "add"), BinOp.ADD,
+            op("Int", "subtract"), BinOp.SUB,
+            op("Int", "multiply"), BinOp.MUL,
+            op("Decimal", "add"), BinOp.ADD,
+            op("Decimal", "subtract"), BinOp.SUB,
+            op("Decimal", "multiply"), BinOp.MUL);
 
     /** The operations over two numbers that are the function form of no operator: the language
      * writes no {@code min}, {@code max}, {@code floorMod} or {@code compare}, so there is no second
@@ -1150,7 +1150,7 @@ final class DischargeRules {
      * both being written as an operator and not as a call.
      */
     static List<Core> noSmallerThan(Core e) {
-        if (e instanceof Core.Binary b && b.op() == Hir.BinOp.CONCAT) {
+        if (e instanceof Core.Binary b && b.op() == BinOp.CONCAT) {
             return List.of(b.left(), b.right());
         }
         if (!(e instanceof Core.PreservedCall call)) {
@@ -1199,7 +1199,7 @@ final class DischargeRules {
     }
 
     /** The operator {@code operation} is, where it is one written as a function, else null. */
-    static Hir.BinOp operator(ValueName operation) {
+    static BinOp operator(ValueName operation) {
         return OPERATOR_CALLS.get(operation);
     }
 

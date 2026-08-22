@@ -126,7 +126,6 @@ class AConstructionMeansWhatItsFormMeansTest {
         return assertInstanceOf(ExampleMessage.TheExpectedValueCouldNotBeBuilt.class, d.said()).why();
     }
 
-    /** The row built a value, and it is not the one that came out. */
     /**
      * The construction is refused where a body's is: a row's operand is compiled as this module's
      * code, so a field of another type, a missing field, a temporal where another temporal stands

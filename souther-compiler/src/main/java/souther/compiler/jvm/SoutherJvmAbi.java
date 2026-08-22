@@ -2,7 +2,6 @@ package souther.compiler.jvm;
 
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeKey;
-import souther.compiler.types.TypeSymbols;
 
 /**
  * How a {@link GeneratedClass} is spelled on the JVM. The one place that maps a Souther identity to a

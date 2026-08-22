@@ -248,7 +248,6 @@ public enum DiagnosticCode {
         return ruleAnchor;
     }
 
-    /** The catalog key of the header category this code is shown under. Shared across codes. */
     /**
      * Whether this rule is reported as an error or a warning.
      *
@@ -266,6 +265,7 @@ public enum DiagnosticCode {
             java.util.EnumSet.of(E1327, E1913, E1915, E1916, E1917, E1918, E1919, E1920, E1921,
                     E1922, E2011);
 
+    /** The catalog key of the header category this code is shown under. Shared across codes. */
     public String titleKey() {
         return titleKey;
     }

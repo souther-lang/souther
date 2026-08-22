@@ -1,21 +1,14 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Hir;
-import souther.compiler.check.BehaviorContract.Clause;
 import souther.compiler.check.BehaviorContract.ContractParam;
 import souther.compiler.check.BehaviorContract.Guard;
-import souther.compiler.check.BehaviorContract.Rule;
-import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.BindingOwner;
 import souther.compiler.types.CaseSelector;
-import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**

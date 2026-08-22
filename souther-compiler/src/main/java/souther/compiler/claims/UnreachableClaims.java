@@ -6,7 +6,6 @@ import souther.compiler.coverage.NormalReturn;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.List;

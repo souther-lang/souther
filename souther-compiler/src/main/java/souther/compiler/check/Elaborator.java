@@ -183,7 +183,7 @@ public final class Elaborator {
                 // the binding is visible only inside the body, so a sibling branch cannot see it
                 Scope inner = env.with(li.binder(), bindType);
                 Core body = elaborate(li.body(), inner, ctx, expected);
-                yield new Core.LetIn(li.binder(), value, body, body.type(), li.pos());
+                yield new Core.LetIn(CoreBinders.of(li.binder()), value, body, body.type(), li.pos());
             }
             case Hir.Expansion ex -> expansion(ex, env, ctx, expected);
             // reached only where a block escapes: it may be passed as an argument, or bound to a
@@ -339,7 +339,7 @@ public final class Elaborator {
                     }
                     joined = next;
                 }
-                yield new Core.IfConstructed(construct, ic.binder(), then, arms, ic.origin(),
+                yield new Core.IfConstructed(construct, CoreBinders.of(ic.binder()), then, arms, ic.origin(),
                         joined, ic.pos(), ctx.within());
             }
             case Hir.ListLit lit -> {
@@ -511,13 +511,6 @@ public final class Elaborator {
     }
 
     /**
-     * Types a block argument, binding its parameters to {@code paramTypes} (spec §blocks).
-     *
-     * <p>The parameters are visible only inside the block's body, and its requirement set is
-     * whatever it calls — which flows outward into the enclosing behavior's, so nothing about
-     * requirements has to be written down (spec §requirement-propagation).
-     */
-    /**
      * Resolves the accumulator type for one function argument (a fold's step) of a helper call,
      * updating {@code bind}. The step is first typed at the accumulator the value arguments fixed —
      * the seed's type, which may be a narrow case. That type stands when the step is a fixpoint there
@@ -572,8 +565,15 @@ public final class Elaborator {
                 .build());
     }
 
-    /** Elaborates a block argument at {@code paramTypes}; the node it returns carries the
-     * {@link Type.FnOf} of the block — the parameter types the call fixed, and the body's result. */
+    /**
+     * Types a block argument, binding its parameters to {@code paramTypes} (spec §blocks). The node
+     * it answers with carries the {@link Type.FnOf} of the block — the parameter types the call
+     * fixed, and the body's result.
+     *
+     * <p>The parameters are visible only inside the block's body, and its requirement set is
+     * whatever it calls — which flows outward into the enclosing behavior's, so nothing about
+     * requirements has to be written down (spec §requirement-propagation).
+     */
     static Core elaborateBlockArg(String fnName, Hir.Expr arg, List<Type> paramTypes,
                                   Scope env, CheckContext ctx) {
         if (!(arg instanceof Hir.Block block)) {
@@ -613,7 +613,8 @@ public final class Elaborator {
             inner = inner.with(block.params().get(i), paramTypes.get(i));
         }
         Core body = elaborate(block.body(), inner, ctx);
-        return new Core.Block(block.params(), body, Type.fn(paramTypes, body.type()), block.pos());
+        return new Core.Block(CoreBinders.all(block.params()), body, Type.fn(paramTypes, body.type()),
+                block.pos());
     }
 
     /** Whether an expression bound to a {@code let} is a function value: a lambda, or an {@code if}
@@ -631,9 +632,6 @@ public final class Elaborator {
         };
     }
 
-    /** The type a source annotation declares on a binding ({@code let x: T = e}), or null when the
-     * binding carries none. Read wherever a binding's type is needed, so the annotation and the
-     * inference, the checker and the backend cannot drift apart. */
     /**
      * A constructor pattern outside a {@code match} — {@code let Tags(xs) = t}, a parameter written
      * as {@code (Tags(xs))}. Two things have to hold, and neither has anything standing behind it
@@ -669,6 +667,9 @@ public final class Elaborator {
         }
     }
 
+    /** The type a source annotation declares on a binding ({@code let x: T = e}), or null when the
+     * binding carries none. Read wherever a binding's type is needed, so the annotation and the
+     * inference, the checker and the backend cannot drift apart. */
     static Type annotatedType(Hir.LetIn li, Symbols symbols) {
         return li.annotation() == null ? null : TypeOps.successType(li.annotation());
     }
@@ -776,7 +777,8 @@ public final class Elaborator {
         // wrapped innermost-first, so the value parameters bind in declared order
         Core out = body;
         for (int i = ex.bound().size() - 1; i >= 0; i--) {
-            out = new Core.LetIn(ex.bound().get(i).binder(), values.get(i), out, type, ex.pos());
+            out = new Core.LetIn(CoreBinders.of(ex.bound().get(i).binder()), values.get(i), out, type,
+                    ex.pos());
         }
         return out;
     }
@@ -1285,7 +1287,7 @@ public final class Elaborator {
                     inner = inner.with(b.params().get(i), paramTypes.get(i));
                 }
                 Core body = elaborate(b.body(), inner, ctx);
-                yield new Core.Block(b.params(), body, Type.fn(paramTypes, body.type()), b.pos());
+                yield new Core.Block(CoreBinders.all(b.params()), body, Type.fn(paramTypes, body.type()), b.pos());
             }
             case Hir.If iff -> {
                 Core cond = requireTyped(iff.cond(), Type.BOOL, env, ctx, "if condition");
@@ -1307,7 +1309,7 @@ public final class Elaborator {
                 Applied applied = arguments(ex, env, ctx);
                 Core out = elaborateFunctionValue(ex.body(), paramTypes, applied.inner(), ctx);
                 for (int i = ex.bound().size() - 1; i >= 0; i--) {
-                    out = new Core.LetIn(ex.bound().get(i).binder(), applied.values().get(i), out,
+                    out = new Core.LetIn(CoreBinders.of(ex.bound().get(i).binder()), applied.values().get(i), out,
                             out.type(), ex.pos());
                 }
                 yield out;
@@ -1317,7 +1319,7 @@ public final class Elaborator {
                 Core bound = elaborate(li.value(), env, ctx);
                 Scope inner = env.with(li.binder(), bound.type());
                 Core body = elaborateFunctionValue(li.body(), paramTypes, inner, ctx);
-                yield new Core.LetIn(li.binder(), bound, body, body.type(), li.pos());
+                yield new Core.LetIn(CoreBinders.of(li.binder()), bound, body, body.type(), li.pos());
             }
             default -> elaborate(value, env, ctx);
         };

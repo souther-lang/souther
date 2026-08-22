@@ -3,6 +3,7 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
@@ -65,7 +66,7 @@ class WhatTheLanguageDeclaresIsNotWhatTheCompilationDeclaresTest {
         assertFalse(declarations().declaredByCompilation(nothing.key()));
     }
 
-    private static Declarations declarations() {
+    private static Declarations<Hir.Def> declarations() {
         Ast.Module parsed = CstFrontend.parse(APP);
         return Symbols.of(Resolve.module(parsed, SyntaxSymbols.of(parsed))).declarations();
     }

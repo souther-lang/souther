@@ -1,9 +1,7 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.Location;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Carrier;
-import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Owed;
 import souther.compiler.check.Required;
 import souther.compiler.check.RuleAccounting;
@@ -16,16 +14,13 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.UnreadRule;
-import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ComparisonCatalog;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.Citation;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
@@ -103,9 +98,8 @@ public final class GuardThresholds {
          * equality says nothing about ranges: what it distinguishes is the value from every other
          * value, and reading it as a place to cut would put a distinction between the two sides into
          * a partition the model never drew.
-         */
-        /**
-         * A value a rule names, and the position it names it at.
+         *
+         * <p>A value a rule names, and the position it names it at.
          *
          * <p>A value and never an absence. What such a rule does is put one value in a class of its
          * own, so a rule that names none of the position's values singles nothing out and is not one
@@ -130,9 +124,6 @@ public final class GuardThresholds {
         }
     }
 
-    /** The thresholds one behavior's body compares its parameters against. {@code plan} supplies
-     * the site each comparison's own value is recorded at, so a boundary can later ask whether the
-     * comparison ran — which is not something the arms of anything standing round it record. */
 
     /**
      * The same, reading the input's rules here.
@@ -147,6 +138,9 @@ public final class GuardThresholds {
                 souther.compiler.check.ElementBindings.NONE);
     }
 
+    /** The thresholds one behavior's body compares its parameters against. {@code plan} supplies
+     * the site each comparison's own value is recorded at, so a boundary can later ask whether the
+     * comparison ran — which is not something the arms of anything standing round it record. */
     public static Guards of(String behavior, Core body, CoverageSites.Plan plan,
                             InputDomain inputs, souther.compiler.inputs.Quantities quantities,
                             Symbols symbols,

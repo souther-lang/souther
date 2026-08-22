@@ -412,14 +412,6 @@ public final class CallElaborator {
                 + " and reached call elaboration unexpanded, at " + call.pos());
     }
 
-    /**
-     * The type of a call, by what the name it applies denotes.
-     *
-     * <p>Which of these a name is was answered when the module's names were resolved, so the order
-     * the cases are written in here decides nothing. Before that this was a sequence of attempts —
-     * the library, then a function-typed binding, then an injected behavior — and a name that could
-     * be read two ways was whichever came first.
-     */
     /** What one application of a declared signature settled: the declared result with the
      *  signature's variables substituted, and that substitution itself — for the checks a kernel
      *  runs on the outcome. Settled at construction: the map is copied, not shared with the
@@ -512,6 +504,14 @@ public final class CallElaborator {
         }
     }
 
+    /**
+     * The type of a call, by what the name it applies denotes.
+     *
+     * <p>Which of these a name is was answered when the module's names were resolved, so the order
+     * the cases are written in here decides nothing. Before that this was a sequence of attempts —
+     * the library, then a function-typed binding, then an injected behavior — and a name that could
+     * be read two ways was whichever came first.
+     */
     static Type typeOfCall(CallArgs ca, Hir.Apply call, Scope env, CheckContext ctx, Type expected) {
         List<Hir.Expr> args = call.args();
         if (call.function() instanceof Hir.Var.Unanswered) {

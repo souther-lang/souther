@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Hir;
+import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.types.BindingId;
@@ -163,16 +163,16 @@ public final class AffineForms {
             case Core.Int i -> LinearForm.constant(BigDecimal.valueOf(i.value()));
             case Core.Decimal d -> LinearForm.constant(d.value());
             case Core.Neg n -> Terms.negate(of(n.operand(), at, reading, following));
-            case Core.Binary b when b.op() == Hir.BinOp.ADD ->
+            case Core.Binary b when b.op() == BinOp.ADD ->
                     Terms.add(of(b.left(), at, reading, following),
                             of(b.right(), at, reading, following), false);
-            case Core.Binary b when b.op() == Hir.BinOp.SUB ->
+            case Core.Binary b when b.op() == BinOp.SUB ->
                     Terms.add(of(b.left(), at, reading, following),
                             of(b.right(), at, reading, following), true);
             // A scalar multiply by a constant (`Amount * 2`) is linear; `/` and a variable product
             // are not — a divide truncates for `Int`, and a variable factor is non-linear — so those
             // come back here as one value rather than as arithmetic over two.
-            case Core.Binary b when b.op() == Hir.BinOp.MUL ->
+            case Core.Binary b when b.op() == BinOp.MUL ->
                     Terms.scale(of(b.left(), at, reading, following),
                             of(b.right(), at, reading, following));
             case Core.FieldAccess fa when reading.readsThrough(fa, at) ->

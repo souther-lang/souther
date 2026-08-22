@@ -43,7 +43,6 @@ import souther.compiler.meta.Readback;
 import souther.compiler.meta.ReadbackReasons;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -596,9 +595,8 @@ public final class ExampleVerifier {
      * <p>By behavior as well as by classes, because that is what was asked. One jar answers several
      * behaviors, and what each of them reaches is its own — so a memo kept by the classes alone
      * would answer for the second behavior with what was worked out about the first.
-     */
-    /**
-     * What holding an answer's declarations against this module said, per answer and behavior.
+     *
+     * <p>What holding an answer's declarations against this module said, per answer and behavior.
      *
      * <p>Concurrent because a caller owns the loop over the rows and may run them alongside each
      * other — this face says parallelism is theirs, and a cache that came apart while two of them
@@ -1951,6 +1949,7 @@ public final class ExampleVerifier {
 
     /** A fake table had no output for an input the behavior asked for (and no {@code _} default). */
     private static final class FakeMissException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
         FakeMissException(String message) {
             super(message);
         }

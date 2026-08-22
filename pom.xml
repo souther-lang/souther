@@ -38,6 +38,7 @@
         <module>souther-lsp</module>
         <module>souther-cli</module>
         <module>souther-bench</module>
+        <module>souther-program-api-test</module>
     </modules>
 
     <scm>
@@ -73,6 +74,11 @@
              two. Emptying this leaves the profile's the only one, and NullAway is in both spellings,
              so the gate does not lift when the profile takes over. -->
         <errorprone.gate>-Xplugin:ErrorProne -XepDisableAllChecks ${nullaway.args}</errorprone.gate>
+        <!-- Every warning javac gives is an error. It is a property because the `lint` profile
+             empties it: under that profile Error Prone's findings arrive as javac warnings too, and
+             there are 889 of them — a backlog of its own, which this is not the thing to turn into
+             a build failure. What this holds is javac's own warnings. -->
+        <javac.werror>-Werror</javac.werror>
         <!-- The build protocol souther-build-driver implements. Not this project's version and not
              tracked to it: it moves when the interface between a build plugin and a driver moves,
              which is why it is released from souther-lang/souther-build-api and named here like any
@@ -213,6 +219,15 @@
                 <version>3.15.0</version>
                 <configuration>
                     <compilerArgs>
+                        <!-- Every warning javac can give, and none of them is a thing to walk past.
+                             A warning nobody has to act on is read by nobody, and 152 of them had
+                             collected before anyone counted: 87 documentation comments attached to
+                             nothing, 20 serializable classes with no serialized form written down,
+                             13 calls to a deprecated method, 10 casts to what the value already
+                             was. Each was a fact about the code that javac already knew and the
+                             build was throwing away. -->
+                        <arg>-Xlint:all</arg>
+                        <arg>${javac.werror}</arg>
                         <!-- javac prints a hundred warnings per compilation and stops counting, and
                              a hundred errors likewise. A report that stops at a round number reads
                              as the whole of what was found — a change that breaks two hundred call
@@ -286,6 +301,9 @@
                 <!-- The gate a module carries, emptied: this profile's plugin argument below is the
                      only one javac may be given. -->
                 <errorprone.gate/>
+                <!-- Emptied for the reason above: Error Prone's own findings would stop this
+                     build for something javac never said. -->
+                <javac.werror/>
             </properties>
             <build>
                 <plugins>
@@ -300,7 +318,17 @@
                                      as a thing that confuses a reader, and this compiler's tests
                                      call methods the language named in Japanese: the check would be
                                      asking the tests to stop covering what Souther supports. -->
-                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF ${nullaway.args}</arg>
+                                <!-- RemoveUnusedImports ships as a suggestion, and a suggestion is
+                                     a thing a build prints and nobody reads: 173 of them had
+                                     collected across 114 files before anyone counted. An import
+                                     that names what its file never uses tells a reader the file
+                                     depends on something it does not, and the reader who most
+                                     needs that to be true is the one deciding whether a package
+                                     may be split or whether a boundary is being crossed. Raised
+                                     to an error so that the next one stops the build it arrived
+                                     in. The check reads documentation too, so an import only a
+                                     {@link} mentions is not one of these. -->
+                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:RemoveUnusedImports:ERROR ${nullaway.args}</arg>
                             </compilerArgs>
                             <annotationProcessorPaths>
                                 <path>

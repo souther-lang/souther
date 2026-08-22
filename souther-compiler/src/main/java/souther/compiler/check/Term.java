@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Hir;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
@@ -177,13 +177,6 @@ final class Term {
     }
 
     /**
-     * How this reads where a person is shown one — a report, a log, this compiler's own tests.
-     *
-     * <p>What it renders as says nothing about what it is. Two terms rendering alike are not thereby
-     * one term, and nothing here reads a rendering back: that is what the string form of this was,
-     * and it is why an escaping bug in it could make one value out of two.
-     */
-    /**
      * Whether this stands on one evaluation and nothing else this check can read — the atom itself,
      * or a field read off one.
      *
@@ -257,6 +250,13 @@ final class Term {
         return sb.toString();
     }
 
+    /**
+     * How this reads where a person is shown one — a report, a log, this compiler's own tests.
+     *
+     * <p>What it renders as says nothing about what it is. Two terms rendering alike are not thereby
+     * one term, and nothing here reads a rendering back: that is what the string form of this was,
+     * and it is why an escaping bug in it could make one value out of two.
+     */
     @Override
     public String toString() {
         return rendered();
@@ -387,14 +387,14 @@ final class Term {
          * comparison is not the whole condition — only there can the denial not be carried by the
          * polarity instead.
          */
-        Term operator(Hir.BinOp op, Term left, Term right) {
+        Term operator(BinOp op, Term left, Term right) {
             return switch (op) {
                 case EQ -> of(Shape.EQ, null, List.of(left, right));
                 case NE -> not(of(Shape.EQ, null, List.of(left, right)));
-                case LT -> of(Shape.OP, Hir.BinOp.LT, List.of(left, right));
-                case GT -> of(Shape.OP, Hir.BinOp.LT, List.of(right, left));
-                case GE -> not(of(Shape.OP, Hir.BinOp.LT, List.of(left, right)));
-                case LE -> not(of(Shape.OP, Hir.BinOp.LT, List.of(right, left)));
+                case LT -> of(Shape.OP, BinOp.LT, List.of(left, right));
+                case GT -> of(Shape.OP, BinOp.LT, List.of(right, left));
+                case GE -> not(of(Shape.OP, BinOp.LT, List.of(left, right)));
+                case LE -> not(of(Shape.OP, BinOp.LT, List.of(right, left)));
                 default -> of(Shape.OP, op, List.of(left, right));
             };
         }

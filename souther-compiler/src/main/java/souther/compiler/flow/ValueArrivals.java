@@ -1,6 +1,6 @@
 package souther.compiler.flow;
 
-import souther.compiler.ast.Hir;
+import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 
@@ -185,7 +185,7 @@ public final class ValueArrivals<P> {
             }
             case Core.Block block -> {
                 Map<BindingId, Bound<P>> inner = bound;
-                for (Hir.Binder param : block.params()) {
+                for (Core.Binder param : block.params()) {
                     inner = with(inner, param, oneWay(), null);
                 }
                 fill(block.body(), naming, inner);
@@ -193,7 +193,7 @@ public final class ValueArrivals<P> {
             case Core.Match match -> {
                 fill(match.scrutinee(), naming, bound);
                 for (Core.Case arm : match.cases()) {
-                    fill(arm.body(), naming, with(bound, arm.binding(), oneWay(), null));
+                    fill(arm.body(), naming, with(bound, arm.binder(), oneWay(), null));
                 }
             }
             case Core.IfConstructed constructed -> {
@@ -217,7 +217,7 @@ public final class ValueArrivals<P> {
      * name bound to nothing this can read — a parameter, an arm's binding — is a position in its own
      * right rather than a name with no answer.
      */
-    private Map<BindingId, Bound<P>> with(Map<BindingId, Bound<P>> bound, Hir.Binder binder,
+    private Map<BindingId, Bound<P>> with(Map<BindingId, Bound<P>> bound, Core.Binder binder,
                                           Paths<P> ways, Core settledBy) {
         if (binder == null) {
             return bound;
@@ -387,7 +387,7 @@ public final class ValueArrivals<P> {
      */
     private Paths<P> through(Core.Binary binary, Naming<P> naming,
                              Map<BindingId, Bound<P>> bound) {
-        Truth goesOn = binary.op() == Hir.BinOp.AND ? Truth.TRUE : Truth.FALSE;
+        Truth goesOn = binary.op() == BinOp.AND ? Truth.TRUE : Truth.FALSE;
         Paths<P> left = settle(binary.left(), naming, bound);
         Paths<P> right = settle(binary.right(), naming, bound);
         if (left instanceof Paths.Beyond) {
@@ -476,7 +476,7 @@ public final class ValueArrivals<P> {
         for (int part = 0; part < match.cases().size(); part++) {
             Core.Case arm = match.cases().get(part);
             Paths<P> body =
-                    settle(arm.body(), naming, with(bound, arm.binding(), oneWay(), null));
+                    settle(arm.body(), naming, with(bound, arm.binder(), oneWay(), null));
             if (!arrivesAt(arm.body())) {
                 continue;
             }
@@ -635,8 +635,8 @@ public final class ValueArrivals<P> {
     // ------------------------------------------------------------------- the tree
 
     /** Whether the operator settles its answer without evaluating both sides. */
-    public static boolean shortCircuits(Hir.BinOp op) {
-        return op == Hir.BinOp.AND || op == Hir.BinOp.OR;
+    public static boolean shortCircuits(BinOp op) {
+        return op == BinOp.AND || op == BinOp.OR;
     }
 
     /**

@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.types.CoverageOrigin;
 
 import souther.compiler.coverage.CoverageSites;
-import souther.compiler.numeric.Count;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.check.PathReachability;
 import souther.compiler.query.Adequacy;
@@ -18,7 +17,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Hir;
+import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.numeric.NumericDomain;
@@ -75,7 +75,7 @@ class WhatTheCheckWillNotGiveUpOnIsAskedByItsKindTest {
         Core.Read left = new Core.Read("a", a, Type.INT, POS);
         Core.Read right = new Core.Read("b", b, Type.INT, POS);
         NumericDomain.LinearForm<FactSubject> product = terms.affineOf(
-                new Core.Binary(Hir.BinOp.MUL, left, right, CoverageOrigin.unwritten(), Type.INT,
+                new Core.Binary(BinOp.MUL, left, right, CoverageOrigin.unwritten(), Type.INT,
                         POS), at);
         FactSubject atom = product.coefs().keySet().iterator().next();
 

@@ -7,7 +7,6 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.Ordering;
 import souther.compiler.check.TypeOps;
-import souther.compiler.check.MatchElaborator;
 
 import souther.compiler.jvm.DecoderKind;
 import souther.compiler.jvm.GeneratedClass;

@@ -6,7 +6,6 @@ import souther.compiler.source.SourceId;
 import souther.compiler.text.DisplayColumns;
 
 import java.util.Locale;
-import java.util.Objects;
 
 /**
  * Renders a diagnostic Elm-style: a title bar with the error name and location, the offending source

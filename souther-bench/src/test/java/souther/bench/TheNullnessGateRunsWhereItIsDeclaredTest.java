@@ -20,8 +20,6 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.List;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -99,6 +97,9 @@ class TheNullnessGateRunsWhereItIsDeclaredTest {
 
     /** Whether any class the module built carries the annotation. */
     private static boolean declaresNullMarked(String module) {
+        if (!Reactor.hasMainSources(module)) {
+            return false;   // nothing of its own to annotate
+        }
         Path classes = repoRoot().resolve(module).resolve("target/classes");
         assertTrue(Files.isDirectory(classes),
                 module + " has no built classes: this reads what has been built, so a module that has"

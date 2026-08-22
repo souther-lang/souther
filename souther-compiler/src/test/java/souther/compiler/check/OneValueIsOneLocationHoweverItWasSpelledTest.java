@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.core.Core;
@@ -56,7 +57,7 @@ class OneValueIsOneLocationHoweverItWasSpelledTest {
     @Test
     void whatIsComputedIsNowhereAFactCanBeAbout() {
         assertNull(of(new Core.Int(1, Type.INT, POS)));
-        assertNull(of(new Core.Binary(Hir.BinOp.ADD,
+        assertNull(of(new Core.Binary(BinOp.ADD,
                 new Core.Int(1, Type.INT, POS), new Core.Int(2, Type.INT, POS),
                 CoverageOrigin.unwritten(), Type.INT, POS)));
     }

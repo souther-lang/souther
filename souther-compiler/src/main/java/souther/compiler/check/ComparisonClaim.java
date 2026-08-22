@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Hir;
+import souther.compiler.types.BinOp;
 
 /**
  * What a comparison places on a position's values, read off the comparison and nothing else.
@@ -61,13 +61,13 @@ public sealed interface ComparisonClaim {
     /**
      * What {@code op} places, which is nothing where it is not a comparison.
      *
-     * <p>Which operators compare is {@link Hir.BinOp#compares}'s answer and this asks it rather
+     * <p>Which operators compare is {@link BinOp#compares}'s answer and this asks it rather
      * than listing them again. Two lists can be given different answers about one operator added
      * later, and they fail in opposite directions: the numbering would leave it out of the
      * comparisons of a body while this said what it cuts, so a line would be drawn on a comparison
      * no run records and no row could ever meet it.
      */
-    static ComparisonClaim of(Hir.BinOp op) {
+    static ComparisonClaim of(BinOp op) {
         if (!op.compares()) {
             return new Nothing();
         }
@@ -85,7 +85,7 @@ public sealed interface ComparisonClaim {
     }
 
     /** Whether {@code op} orders the values either side of what it names. */
-    static boolean orders(Hir.BinOp op) {
+    static boolean orders(BinOp op) {
         return of(op) instanceof Cut;
     }
 

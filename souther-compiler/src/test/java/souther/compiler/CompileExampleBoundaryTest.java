@@ -6,7 +6,6 @@ import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BorderAssessment;
-import souther.compiler.query.ItemAssessment;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.query.PartitionEvidence;
 

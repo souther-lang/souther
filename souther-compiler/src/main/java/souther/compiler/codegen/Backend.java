@@ -11,7 +11,6 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.BehaviorRequirement;
-import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.ReqSig;
 import souther.compiler.check.Requirements;
 import souther.compiler.check.BehaviorContract;
@@ -19,8 +18,8 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.EnsuresEnforcement;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
-import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
+import souther.compiler.core.Composition;
 import souther.compiler.core.Core;
 
 import souther.compiler.jvm.GeneratedClass;
@@ -143,11 +142,12 @@ public final class Backend {
                                                Map<ValueName.Behavior, ReqSig> calleeSigs,
                                                Map<String, List<BehaviorRequirement>> requirements,
                                                Bodies.Elaborated checked,
+                                               Map<ValueName.Behavior, Composition> compositions,
                                                Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                Map<String, Type> standingCalls) {
         return generate(module, symbols, typePackage, sigs, importedSigs, importedInjected, calleeSigs,
-                requirements, checked, dischargeInvariants, checks, standingCalls,
+                requirements, checked, compositions, dischargeInvariants, checks, standingCalls,
                 Instrumentation.NONE);
     }
 
@@ -172,14 +172,15 @@ public final class Backend {
                                                Map<ValueName.Behavior, ReqSig> calleeSigs,
                                                Map<String, List<BehaviorRequirement>> requirements,
                                                Bodies.Elaborated checked,
+                                               Map<ValueName.Behavior, Composition> compositions,
                                                Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                Map<String, Type> standingCalls,
                                                Instrumentation instrumentation) {
         try {
             return generating(module, symbols, typePackage, sigs, importedSigs, importedInjected,
-                    calleeSigs, requirements, checked, dischargeInvariants, checks, standingCalls,
-                    instrumentation);
+                    calleeSigs, requirements, checked, compositions, dischargeInvariants, checks,
+                    standingCalls, instrumentation);
         } catch (IllegalArgumentException e) {
             // Something the writer would not hold, from a member no definition here claimed — a
             // synthesised class, a shared one. It belongs to the module, which is as near as anything
@@ -196,6 +197,7 @@ public final class Backend {
                                                   Map<ValueName.Behavior, ReqSig> calleeSigs,
                                                   Map<String, List<BehaviorRequirement>> requirements,
                                                   Bodies.Elaborated checked,
+                                                  Map<ValueName.Behavior, Composition> compositions,
                                                   Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
                                                   Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                   Map<String, Type> standingCalls,
@@ -429,7 +431,6 @@ public final class Backend {
             behaviorDeps.put(new ValueName.Behavior(module.name(), e.getKey()),
                     Requirements.names(e.getValue()));
         }
-        Map<ValueName.Behavior, List<Hir.Var>> pipeStages = PipelineSigs.pipelineStages(module);
         for (Hir.BehaviorDef bd : module.behaviors()) {
             emitting(bd.written(), () -> {
                 // The class a declared relation is checked by, emitted by the module that declares
@@ -475,7 +476,8 @@ public final class Backend {
                     }
                     case Hir.PipeBehavior pipe -> {
                         out.put(new GeneratedClass.BehaviorImpl(module.name(), pipe.name()),
-                                b.generatePipe(pipe, requiredNames, sigs, behaviorDeps, pipeStages));
+                                b.generatePipe(pipe, composedOf(compositions, named), requiredNames,
+                                        sigs, behaviorDeps));
                         Sig sig = declaredSig(module.name(), pipe, sigs);
                         out.put(new GeneratedClass.BehaviorInterface(module.name(), pipe.name()),
                                 b.generateBehaviorInterface(pipe.name(), sig.inputTypes(), sig.outputType(),
@@ -604,7 +606,8 @@ public final class Backend {
                         code.aload(i);
                         int slot = gen.slot(pt);
                         unbox(code, pt, slot);
-                        gen.bind(h.params().get(i).binder(), slot, pt);
+                        gen.bind(h.params().get(i).binder().binding(), h.params().get(i).binder().name(),
+                                slot, pt);
                     }
                     // A tail-position call to this same helper loops back here instead of recursing,
                     // so a self-tail-recursive helper runs in constant stack.
@@ -945,13 +948,6 @@ public final class Backend {
     }
 
     /**
-     * Behavior-result interfaces to generate (spec §jvm-anonymous-union): for each behavior whose output is an
-     * anonymous union, maps {@code <behavior名>Result} to its leaf cases — the {@code permits} list and
-     * the set of case classes that {@code implements} it. A named-sum output is already a sealed
-     * interface (§jvm-sum) and a single-case output uses that case's own type, so neither gets one. Case
-     * order is sorted for deterministic bytecode.
-     */
-    /**
      * A bridge case takes a class name in this module (spec §jvm-anonymous-union), so it is subject to the same rule
      * as every other name this module emits: no two of them may be one class. {@code YenCase} is a
      * name a model may well have declared, and {@code IntCase} / {@code DateCase} the same, so this
@@ -1238,7 +1234,6 @@ public final class Backend {
 
     // --- sum data (sealed interface) ---
 
-    /** Emits a {@code static} factory that returns a fresh instance of {@code impl}. */
     // --- behaviors ---
 
     /**
@@ -1289,7 +1284,8 @@ public final class Backend {
                     code.aload(i + 1);
                     int slot = gen.slot(pt);
                     unbox(code, pt, slot);
-                    gen.bind(fn.params().get(i).binder(), slot, pt);
+                    gen.bind(fn.params().get(i).binder().binding(), fn.params().get(i).binder().name(),
+                            slot, pt);
                 }
                 // thread the behavior's declared output so a tail-position fold over an empty seed
                 // materialises its step at the output type, not a bottom (issue #70)
@@ -1379,6 +1375,23 @@ public final class Backend {
         return sig;
     }
 
+    /**
+     * The routing settled for {@code named}.
+     *
+     * <p>A composition that reached codegen was checked, and a checked composition has one. Missing
+     * means the two sets have come apart — a behavior emitted as a composition that the checker
+     * never walked — which is not something to carry on past.
+     */
+    private static Composition composedOf(Map<ValueName.Behavior, Composition> compositions,
+                                          ValueName.Behavior named) {
+        Composition composed = compositions.get(named);
+        if (composed == null) {
+            throw new IllegalStateException("`" + named.name() + "` reached codegen as a"
+                    + " composition with no routing settled for it");
+        }
+        return composed;
+    }
+
     /** The behaviors a spec declares it depends on, by the name each is reached by. */
     private static List<ValueName.Behavior> requiredBy(Hir.SpecBehavior spec) {
         List<ValueName.Behavior> names = new ArrayList<>();
@@ -1391,15 +1404,6 @@ public final class Backend {
         return names;
     }
 
-    /**
-     * The name a dependency or a pipeline stage is reached by.
-     *
-     * <p>Every name in a module reaching the backend was answered. {@code Bodies.Checked} hands over
-     * an elaboration only where {@code Names.Sound} holds of the module, and that is false as soon
-     * as resolution reports a name denoting nothing; {@code Output.Classes} builds what it generates
-     * from that answer and from nothing else. So one arriving here is not a mistake in the source —
-     * it is this module being emitted with a hole in it, which is the thing that gate is for.
-     */
     /**
      * The declaration a type name written in a module being generated names.
      *
@@ -1415,6 +1419,15 @@ public final class Backend {
         };
     }
 
+    /**
+     * The name a dependency or a pipeline stage is reached by.
+     *
+     * <p>Every name in a module reaching the backend was answered. {@code Bodies.Checked} hands over
+     * an elaboration only where {@code Names.Sound} holds of the module, and that is false as soon
+     * as resolution reports a name denoting nothing; {@code Output.Classes} builds what it generates
+     * from that answer and from nothing else. So one arriving here is not a mistake in the source —
+     * it is this module being emitted with a hole in it, which is the thing that gate is for.
+     */
     private static ValueName.Behavior reachedBy(Hir.Var named) {
         return switch (named) {
             case Hir.Var.Denoting d -> d.denotes() instanceof ValueName.Behavior behavior
@@ -1423,21 +1436,29 @@ public final class Backend {
         };
     }
 
-    private byte[] generatePipe(Hir.PipeBehavior pipe, Set<ValueName.Behavior> requiredNames,
+    /**
+     * The class behind a composed behavior: what {@code composed} says the composition does, in
+     * bytecode.
+     *
+     * <p>Nothing here decides what a stage is offered. Which cases reach a stage, and what runs on
+     * after it, is a fact about the Souther program and was settled where the composition was
+     * checked; this walks the answer. A second walk of the declaration lived here, and what it
+     * derived had to agree with what the composition's own signature was built from — two
+     * derivations of one rule, one of them in a backend.
+     */
+    private byte[] generatePipe(Hir.PipeBehavior pipe, Composition composed,
+                                Set<ValueName.Behavior> requiredNames,
                                 Map<ValueName.Behavior, Sig> sigs,
-                                Map<ValueName.Behavior, List<ValueName.Behavior>> behaviorDeps,
-                                Map<ValueName.Behavior, List<Hir.Var>> pipeStages) {
+                                Map<ValueName.Behavior, List<ValueName.Behavior>> behaviorDeps) {
         ClassDesc cdP = cdBehaviorImpl(pipe.name());   // the $Impl behind the public interface
-        // Flatten nested pipeline stages so the routing is over leaf behaviors (spec §type-routing): a named
-        // intermediate `half = split >-> work` inlines to `split, work`, which keeps a retired case
-        // retired across the composition, making `>->` associative.
-        List<Hir.Var> flat = PipelineSigs.flattenStages(pipe.stages(), pipeStages, pipe.pos());
         // the pipeline's injected fields are the union of its stages' requirements (spec
         // §composition-with-requirements)
         InjectionSlots reqStages =
                 InjectionSlots.of(behaviorDeps.getOrDefault(own(pipe.name()), List.of()), ctx);
-        // the pipeline takes whatever its first stage takes (spec §sequential-composition)
-        int arity = PipelineSigs.stageSig(flat.get(0), sigs, symbols, pipe.pos()).inputTypes().size();
+        // the pipeline takes whatever its first stage takes (spec §sequential-composition), which is
+        // what its own signature was built with
+        Sig declared = declaredSig(ctx.pkg, pipe, sigs);
+        int arity = declared.inputTypes().size();
         ClassDesc[] applyParams = new ClassDesc[arity];
         java.util.Arrays.fill(applyParams, CD_Object);
         MethodTypeDesc mtdApply = MethodTypeDesc.of(CD_Object, applyParams);
@@ -1450,48 +1471,44 @@ public final class Backend {
 
             cb.withMethodBody("apply", mtdApply, ClassFile.ACC_PUBLIC, code -> {
                 // slot 1 always holds the running value (an output case, as an Object).
-                List<Hir.Var> stages = flat;
+                List<Composition.Stage> stages = composed.stages();
                 // stage 0 consumes the pipeline's arguments unconditionally
-                Type mainline = PipelineSigs.stageSig(stages.get(0), sigs, symbols, pipe.pos()).outputType();
-                applyFirstStage(code, cdP, reachedBy(stages.get(0)), arity, requiredNames,
-                        reqStages, behaviorDeps, mainline, arity + 1);
+                applyFirstStage(code, cdP, stages.get(0).behavior(), arity, requiredNames,
+                        reqStages, behaviorDeps, stages.get(0).answers(), arity + 1);
                 Label end = code.newLabel();
                 for (int i = 1; i < stages.size(); i++) {
-                    ValueName.Behavior stage = reachedBy(stages.get(i));
-                    Sig g = PipelineSigs.stageSig(stages.get(i), sigs, symbols, pipe.pos());
-                    if (TypeOps.isDataLike(mainline)) {
-                        // Apply g only when the running value is one of the main-line cases it
-                        // accepts. Anything else has left the main line: jump to the end rather
-                        // than offering it to the stages after this one (spec §type-routing). Branching to
-                        // the end is what makes a retired case unreachable without tagging it — the
-                        // same case type may legitimately reappear on the main line downstream.
-                        List<TypeSymbol> accepted = PipelineSigs.mainlineCases(mainline, g, symbols);
-                        Label doApply = code.newLabel();
-                        for (TypeSymbol caseName : accepted) {
-                            code.aload(1);
-                            code.instanceOf(caseClass(caseName));
-                            code.ifne(doApply);
+                    Composition.Stage stage = stages.get(i);
+                    switch (stage.routing()) {
+                        // Anything the stage was not offered has left the main line: jump to the
+                        // end rather than offering it to the stages after this one (spec
+                        // §type-routing). Branching to the end is what makes a retired case
+                        // unreachable without tagging it — the same case type may legitimately
+                        // reappear on the main line downstream.
+                        case Composition.Routing.OnCases on -> {
+                            Label doApply = code.newLabel();
+                            for (TypeSymbol caseName : on.accepted()) {
+                                code.aload(1);
+                                code.instanceOf(caseClass(caseName));
+                                code.ifne(doApply);
+                            }
+                            code.goto_(end);
+                            code.labelBinding(doApply);
                         }
-                        code.goto_(end);
-                        code.labelBinding(doApply);
-                        applyStage(code, cdP, stage, requiredNames, reqStages, behaviorDeps,
-                                g.outputType(), arity + 1);
-                    } else {
-                        applyStage(code, cdP, stage, requiredNames, reqStages, behaviorDeps,
-                                g.outputType(), arity + 1);
+                        case Composition.Routing.Always ignored -> { }
                     }
-                    mainline = PipelineSigs.stageOut(mainline, g, symbols, pipe.pos());
+                    applyStage(code, cdP, stage.behavior(), requiredNames, reqStages, behaviorDeps,
+                            stage.answers(), arity + 1);
                 }
                 code.labelBinding(end);
                 code.aload(1);
                 // The composition's own return: the running value is a Souther value, and this is
                 // where it becomes a member of the union this composition answers with.
-                ResultBoundary.inject(code, ctx, ctx.bridgedMembers(declaredSig(ctx.pkg, pipe, sigs).outputType()),
+                ResultBoundary.inject(code, ctx, ctx.bridgedMembers(declared.outputType()),
                         arity + 1);
             });
             if (arity != 1) {
-                Sig sig = declaredSig(ctx.pkg, pipe, sigs);
-                emitTypedApplyBridge(cb, cdP, typedApplyDesc(pipe.name(), sig.inputTypes(), sig.outputType()));
+                emitTypedApplyBridge(cb, cdP,
+                        typedApplyDesc(pipe.name(), declared.inputTypes(), declared.outputType()));
             }
         });
     }

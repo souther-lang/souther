@@ -133,15 +133,6 @@ public final class ClosedState<A> {
     }
 
     /**
-     * A state with a box no difference can still narrow, which is what every reading of a range
-     * rests on.
-     *
-     * <p>Asserted at the one place a state with a box is made. The rounds carry the box along the
-     * differences at the end of each of them, so this holds however the loop left — and a reader
-     * taking a range as the whole of what the rules leave a position is depending on it whether or
-     * not the rounds settled.
-     */
-    /**
      * The box carried along the differences, over the positions it has bounds for.
      *
      * <p>One expression rather than two. The check that a box about to be handed back is a fixed
@@ -153,6 +144,15 @@ public final class ClosedState<A> {
         return throughDifferences(box, differences, box.positions());
     }
 
+    /**
+     * A state with a box no difference can still narrow, which is what every reading of a range
+     * rests on.
+     *
+     * <p>Asserted at the one place a state with a box is made. The rounds carry the box along the
+     * differences at the end of each of them, so this holds however the loop left — and a reader
+     * taking a range as the whole of what the rules leave a position is depending on it whether or
+     * not the rounds settled.
+     */
     private static <A> ClosedState<A> settled(Box<A> box, DifferenceBounds<A> differences,
                                               Status status) {
         assert box.equals(carriedAlong(box, differences))

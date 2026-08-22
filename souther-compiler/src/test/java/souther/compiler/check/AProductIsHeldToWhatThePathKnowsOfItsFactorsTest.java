@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Hir;
+import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.numeric.Count;
@@ -51,7 +51,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         return new Core.Read(name, binding, Type.INT, POS);
     }
 
-    private static Core.Binary arithmetic(Hir.BinOp op, Core left, Core right) {
+    private static Core.Binary arithmetic(BinOp op, Core left, Core right) {
         return new Core.Binary(op, left, right, CoverageOrigin.unwritten(), Type.INT, POS);
     }
 
@@ -81,7 +81,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         Denotations at = Denotations.none().location(a, AsPlaces.of(a), AsPlaces.term(a)).location(b, AsPlaces.of(b), AsPlaces.term(b));
 
         LinearForm<FactSubject> product = terms.affineOf(
-                arithmetic(Hir.BinOp.MUL, read("a", a), read("b", b)), at);
+                arithmetic(BinOp.MUL, read("a", a), read("b", b)), at);
 
         assertNotNull(product, "a product is one value, whatever is known of it");
         FactSubject atom = product.coefs().keySet().iterator().next();
@@ -113,7 +113,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         Denotations at = Denotations.none().location(a, AsPlaces.of(a), AsPlaces.term(a)).location(b, AsPlaces.of(b), AsPlaces.term(b));
 
         LinearForm<FactSubject> product = terms.affineOf(
-                arithmetic(Hir.BinOp.MUL, read("a", a), read("b", b)), at);
+                arithmetic(BinOp.MUL, read("a", a), read("b", b)), at);
         FactSubject atom = product.coefs().keySet().iterator().next();
 
         NumericDomain<FactSubject> derived = DerivedBounds.refine(NumericDomain.top(), terms, Set.of(atom));
@@ -134,8 +134,8 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         Terms terms = new Terms(Symbols.none(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         BindingId x = binding(0);
         Denotations at = Denotations.none().location(x, AsPlaces.of(x), AsPlaces.term(x));
-        Core scaled = arithmetic(Hir.BinOp.MUL, read("x", x), new Core.Int(30, Type.INT, POS));
-        Core quotient = arithmetic(Hir.BinOp.DIV, scaled, new Core.Int(100, Type.INT, POS));
+        Core scaled = arithmetic(BinOp.MUL, read("x", x), new Core.Int(30, Type.INT, POS));
+        Core quotient = arithmetic(BinOp.DIV, scaled, new Core.Int(100, Type.INT, POS));
 
         LinearForm<FactSubject> form = terms.affineOf(quotient, at);
 
@@ -158,8 +158,8 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         BindingId a = binding(0);
         BindingId b = binding(1);
         Denotations at = Denotations.none().location(a, AsPlaces.of(a), AsPlaces.term(a)).location(b, AsPlaces.of(b), AsPlaces.term(b));
-        Core product = arithmetic(Hir.BinOp.MUL, read("a", a), read("b", b));
-        Core quotient = arithmetic(Hir.BinOp.DIV, product, new Core.Int(100, Type.INT, POS));
+        Core product = arithmetic(BinOp.MUL, read("a", a), read("b", b));
+        Core quotient = arithmetic(BinOp.DIV, product, new Core.Int(100, Type.INT, POS));
 
         LinearForm<FactSubject> form = terms.affineOf(quotient, at);
         FactSubject atom = form.coefs().keySet().iterator().next();
@@ -191,8 +191,8 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         BindingId b = binding(1);
         Denotations at = Denotations.none().location(a, AsPlaces.of(a), AsPlaces.term(a)).location(b, AsPlaces.of(b), AsPlaces.term(b));
 
-        FactSubject first = terms.affineOf(arithmetic(Hir.BinOp.MUL, read("a", a), read("b", b)), at).coefs().keySet().iterator().next();
-        FactSubject second = terms.affineOf(arithmetic(Hir.BinOp.MUL, read("a", a), read("b", b)), at).coefs().keySet().iterator().next();
+        FactSubject first = terms.affineOf(arithmetic(BinOp.MUL, read("a", a), read("b", b)), at).coefs().keySet().iterator().next();
+        FactSubject second = terms.affineOf(arithmetic(BinOp.MUL, read("a", a), read("b", b)), at).coefs().keySet().iterator().next();
 
         assertEquals(first, second);
         assertEquals(1, terms.derivations().size());
@@ -207,7 +207,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         Denotations at = Denotations.none().location(a, AsPlaces.of(a), AsPlaces.term(a)).location(b, AsPlaces.of(b), AsPlaces.term(b));
 
         LinearForm<FactSubject> product = terms.affineOf(
-                arithmetic(Hir.BinOp.MUL, read("a", a), read("b", b)), at);
+                arithmetic(BinOp.MUL, read("a", a), read("b", b)), at);
         FactSubject atom = product.coefs().keySet().iterator().next();
 
         assertEquals(Map.of(atom, Granularity.DISCRETE), terms.kindsOf(product));

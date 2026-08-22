@@ -50,10 +50,25 @@ final class Reactor {
         return List.copyOf(out);
     }
 
+    /**
+     * Whether {@code module} has main sources at all.
+     *
+     * <p>Told apart from a module that has them and was not built, which is the hole below. A
+     * module holding only tests — one that exists to compile against what another artifact
+     * publishes, and stand where that artifact's consumer stands — has nothing here to walk, and
+     * finding nothing is the whole answer rather than a gap in one.
+     */
+    static boolean hasMainSources(String module) {
+        return Files.isDirectory(root().resolve(module).resolve("src/main/java"));
+    }
+
     /** Every compiled class of every one of them. */
     static List<Path> classes() throws IOException {
         List<Path> found = new ArrayList<>();
         for (String module : modules()) {
+            if (!hasMainSources(module)) {
+                continue;
+            }
             Path built = root().resolve(module).resolve("target/classes");
             assertTrue(Files.isDirectory(built),
                     module + " has no built classes: this check covers what has been built, so a"

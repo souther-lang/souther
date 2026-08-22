@@ -1,5 +1,6 @@
 package souther.compiler.codegen;
 
+import souther.compiler.types.BinOp;
 import souther.compiler.check.Scope;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
@@ -17,13 +18,11 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.Ordering;
-import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 import souther.compiler.core.GrowingFold;
 
 import souther.compiler.check.EnsuresEnforcement;
 import souther.compiler.jvm.GeneratedClass;
-import souther.compiler.types.CaseSelector;
 import souther.compiler.types.Refinement;
 import souther.compiler.types.ValueName;
 import java.lang.classfile.ClassFile;
@@ -200,8 +199,8 @@ final class BodyGen {
             return sigs;
         }
 
-        void bind(Hir.Binder binder, int slot, Type type) {
-            bind(binder.id(), binder.name(), slot, type);
+        void bind(Core.Binder binder, int slot, Type type) {
+            bind(binder.binding(), binder.name(), slot, type);
         }
 
         void bind(BindingId binding, String name, int slot, Type type) {
@@ -283,7 +282,7 @@ final class BodyGen {
         /** Generates a synthetic {@code Fn} class for an escaping lambda: captured free variables become
          * {@code final} fields set by the constructor, and the body compiles into {@code apply}, which
          * unboxes its arguments from the {@code Object[]} and boxes its result (spec §blocks). */
-        private byte[] generateLambdaClass(ClassDesc cd, List<Hir.Binder> params, Core body,
+        private byte[] generateLambdaClass(ClassDesc cd, List<Core.Binder> params, Core body,
                                            List<Type> paramTypes,
                                            Type resultType, List<Core.Read> captures,
                                            List<ValueName.Behavior> injectedNames,
@@ -594,18 +593,6 @@ final class BodyGen {
             castFromObject(code, tg.type());
         }
 
-        /** Binds the bytecode that follows to {@code e}'s source line, for the {@code LineNumberTable}
-         * (spec §target-jdk). Every {@code Core} node keeps its {@code SourcePos}, so a runtime stack trace
-         * — an invariant abort above all — points back to the {@code .sou} line. Consecutive nodes on
-         * the same line (a subexpression tree, or a tail node re-lined by {@code genExpr}) collapse to
-         * one entry. */
-        /**
-         * Records that this arm ran, where this generation is one that measures.
-         *
-         * <p>Nothing before it on the stack and nothing after: an {@code int} constant in, nothing out.
-         * So it can go at the head of any arm without the arm's own emission having to know it is
-         * there, and a measuring build and a shipping build differ by these calls and by nothing else.
-         */
         /**
          * Records that this comparison produced a value and which value it was, where it is one a
          * guard's condition is made of.
@@ -637,6 +624,13 @@ final class BodyGen {
             });
         }
 
+        /**
+         * Records that this arm ran, where this generation is one that measures.
+         *
+         * <p>Nothing before it on the stack and nothing after: an {@code int} constant in, nothing out.
+         * So it can go at the head of any arm without the arm's own emission having to know it is
+         * there, and a measuring build and a shipping build differ by these calls and by nothing else.
+         */
         private void probe(Core node, int arm) {
             if (!armsAreCounted || !ctx.measuring()) {
                 return;
@@ -650,6 +644,11 @@ final class BodyGen {
             code.invokestatic(CD_Probe, "hit", MTD_Probe_hit);
         }
 
+        /** Binds the bytecode that follows to {@code e}'s source line, for the {@code LineNumberTable}
+         * (spec §target-jdk). Every {@code Core} node keeps its {@code SourcePos}, so a runtime stack trace
+         * — an invariant abort above all — points back to the {@code .sou} line. Consecutive nodes on
+         * the same line (a subexpression tree, or a tail node re-lined by {@code genExpr}) collapse to
+         * one entry. */
         private void emitLine(Core e) {
             int line = e.pos() != null ? e.pos().line() : 0;
             if (line > 0 && line != lastEmittedLine) {
@@ -856,7 +855,7 @@ final class BodyGen {
                 emitCaseGuard(c, sSlot, st, nextCase);
                 probe(m, i);
                 genExpr(c.body(), want);
-                if (c.binding() != null) {
+                if (c.binder() != null) {
                 }
                 code.goto_(end);
                 code.labelBinding(nextCase);
@@ -884,7 +883,7 @@ final class BodyGen {
                 emitCaseGuard(c, sSlot, st, nextCase);
                 probe(m, i);
                 emitTail(c.body(), cdB, requiredNames, requiredSuccess, expected);
-                if (c.binding() != null) {
+                if (c.binder() != null) {
                 }
                 code.labelBinding(nextCase);
             }
@@ -917,25 +916,25 @@ final class BodyGen {
                     CaseGen.pushBound(code, wrapped, sSlot);
                     int bslot = slot(element);
                     unbox(code, element, bslot);
-                    if (c.binding() != null) {
-                        bind(c.binding(), bslot, element);
+                    if (c.binder() != null) {
+                        bind(c.binder(), bslot, element);
                     }
                 }
                 case Refinement.Direct itself -> {
                     Type bound = itself.bound();
-                    if (c.binding() == null || bound == null) {
+                    if (c.binder() == null || bound == null) {
                         return;
                     }
                     if (bound.equals(st)) {
                         // nothing narrowed it: the value is the subject, where it already is
-                        bind(c.binding(), sSlot, st);
+                        bind(c.binder(), sSlot, st);
                         return;
                     }
                     // a data case binds the instance; a primitive case (e.g. Int) unboxes the value
                     CaseGen.pushBound(code, itself, sSlot);
                     int bslot = slot(bound);
                     unbox(code, bound, bslot);
-                    bind(c.binding(), bslot, bound);
+                    bind(c.binder(), bslot, bound);
                 }
                 case Refinement.OptionAbsent ignored -> { }
             }
@@ -1529,8 +1528,6 @@ final class BodyGen {
             code.labelBinding(end);
         }
 
-        /** Emits an inline call to an injected required behavior, leaving its success value on
-         * the stack cast to the success type (spec §unmarked-output, §fn). */
         /**
          * Calls a behavior that depends on nothing (spec {@code [#calling-a-behavior]}). It is built
          * here rather than read out of a field: with an empty requirement set there is nothing to
@@ -1567,6 +1564,8 @@ final class BodyGen {
             stackCast(sig.success());
         }
 
+        /** Emits an inline call to an injected required behavior, leaving its success value on
+         * the stack cast to the success type (spec §unmarked-output, §fn). */
         private void requiredCall(Core.Call call) {
             ValueName.Behavior callee = behaviorOf(call);
             Type success = reqSuccess.get(callee);
@@ -1806,7 +1805,7 @@ final class BodyGen {
                     if (lt == Type.STRING) {
                         code.invokevirtual(CD_String, "equals",
                                 MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
-                        if (bin.op() == Hir.BinOp.NE) {
+                        if (bin.op() == BinOp.NE) {
                             code.iconst_1();
                             code.ixor();
                         }
@@ -1817,7 +1816,7 @@ final class BodyGen {
                         // an amount ignores its scale, a collection asks that of what it holds
                         // (spec §equality). A pair of Decimals takes the overload for them.
                         emitValueEquals(code, lt == Type.DECIMAL);
-                        if (bin.op() == Hir.BinOp.NE) {
+                        if (bin.op() == BinOp.NE) {
                             code.iconst_1();
                             code.ixor();
                         }
@@ -1877,7 +1876,7 @@ final class BodyGen {
             };
         }
 
-        private void comparisonMaterialize(Hir.BinOp op, boolean isLong) {
+        private void comparisonMaterialize(BinOp op, boolean isLong) {
             Label t = code.newLabel();
             Label end = code.newLabel();
             if (isLong) {
@@ -1975,7 +1974,7 @@ final class BodyGen {
                     ((Type.FnOf) block.type()).result(), freeVars(block));
         }
 
-        private void emitLambda(List<Hir.Binder> params, Core body, List<Type> paramTypes,
+        private void emitLambda(List<Core.Binder> params, Core body, List<Type> paramTypes,
                                 Type resultType, Reaches free) {
             List<Core.Read> captures = free.bindings();
             List<ValueName.Behavior> injectedNames = free.injected();
@@ -2058,7 +2057,7 @@ final class BodyGen {
         private Reaches freeVars(Core.Block block) {
             Reaches free = new Reaches();
             Set<BindingId> bound = new HashSet<>();
-            block.params().forEach(p -> bound.add(p.id()));
+            block.params().forEach(p -> bound.add(p.binding()));
             collectFree(block.body(), bound, free);
             return free;
         }
@@ -2095,23 +2094,23 @@ final class BodyGen {
                 }
                 case Core.IfConstructed ic -> {
                     collectFree(ic.construct(), bound, free);
-                    collectFree(ic.then(), with(bound, ic.binder().id()), free);
+                    collectFree(ic.then(), with(bound, ic.binder().binding()), free);
                     ic.els().forEach(arm -> collectFree(arm.body(), bound, free));
                 }
                 case Core.LetIn li -> {
                     collectFree(li.value(), bound, free);
-                    collectFree(li.body(), with(bound, li.binder().id()), free);
+                    collectFree(li.body(), with(bound, li.binder().binding()), free);
                 }
                 case Core.Match m -> {
                     collectFree(m.scrutinee(), bound, free);
                     for (Core.Case c : m.cases()) {
-                        collectFree(c.body(), c.binding() == null
-                                ? bound : with(bound, c.binding().id()), free);
+                        collectFree(c.body(), c.binder() == null
+                                ? bound : with(bound, c.binder().binding()), free);
                     }
                 }
                 case Core.Block b -> {
                     Set<BindingId> inner = new HashSet<>(bound);
-                    b.params().forEach(p -> inner.add(p.id()));
+                    b.params().forEach(p -> inner.add(p.binding()));
                     collectFree(b.body(), inner, free);
                 }
                 case Core.ListLit lit -> lit.elements().forEach(x -> collectFree(x, bound, free));

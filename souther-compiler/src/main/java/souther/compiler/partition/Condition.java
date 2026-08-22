@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Hir;
+import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReads;
 
@@ -104,7 +104,7 @@ sealed interface Condition {
         if (e instanceof Core.Binary binary && combines(binary.op())) {
             Condition left = of(binary.left(), reads);
             Condition right = of(binary.right(), reads);
-            return binary.op() == Hir.BinOp.AND
+            return binary.op() == BinOp.AND
                     ? new Both(binary, left, right) : new Either(binary, left, right);
         }
         if (e instanceof Core.Binary comparison && comparison.op().compares()) {
@@ -114,11 +114,11 @@ sealed interface Condition {
     }
 
     /** Whether an operator joins two conditions rather than comparing two values. */
-    static boolean combines(Hir.BinOp op) {
-        return op == Hir.BinOp.AND || op == Hir.BinOp.OR;
+    static boolean combines(BinOp op) {
+        return op == BinOp.AND || op == BinOp.OR;
     }
 
-    // Which operators compare is `Hir.BinOp#compares` and is asked rather than spelled out again.
+    // Which operators compare is `BinOp#compares` and is asked rather than spelled out again.
     // Written here as "a binary that is not `&&` or `||`", this said arithmetic was a comparison —
     // which nothing in a condition is, so it was a spelling that happened to be right.
 }

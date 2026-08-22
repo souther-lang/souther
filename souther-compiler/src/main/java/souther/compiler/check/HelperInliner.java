@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.StructuralCost;
 import souther.compiler.ast.WrittenName;
@@ -19,8 +18,6 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.DeclaringCode;
 import souther.compiler.diag.QuotedFrom;
 
-import java.util.ArrayDeque;
-import java.util.Deque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -823,15 +820,6 @@ public final class HelperInliner {
     }
 
     /**
-     * The body {@code named} stands for here, or null where no body stands behind it.
-     *
-     * <p>The one place that answers it, so a name applied and a name handed over get the same answer.
-     * The two halves of the answer arrive together, as one name: how it is written here — bare for a
-     * definition of this module, qualified for the library and for what another module publishes —
-     * is the namespace the table is keyed by, and which namespace to look in is decided by what it
-     * denotes, never by the text. A name that names nothing has neither, so it is not asked at all.
-     */
-    /**
      * What a rule handed to the function parameter {@code parameter} is expanded under.
      *
      * <p>Written here and read by whoever asks which rule a call site supplied, so the name and the
@@ -893,6 +881,15 @@ public final class HelperInliner {
                 : null;
     }
 
+    /**
+     * The body {@code named} stands for here, or null where no body stands behind it.
+     *
+     * <p>The one place that answers it, so a name applied and a name handed over get the same answer.
+     * The two halves of the answer arrive together, as one name: how it is written here — bare for a
+     * definition of this module, qualified for the library and for what another module publishes —
+     * is the namespace the table is keyed by, and which namespace to look in is decided by what it
+     * denotes, never by the text. A name that names nothing has neither, so it is not asked at all.
+     */
     private Hir.FnDef expands(Hir.Var.Denoting named) {
         String reachedBy = named.reaches();
         return switch (named.denotes()) {
@@ -2057,13 +2054,6 @@ public final class HelperInliner {
                 call.end().standingInFor(declaring));
     }
 
-    /**
-     * One name renamed — what {@link #rename} does wherever a name stands, whether that is an
-     * expression of its own or the name a spread holds.
-     *
-     * <p>A substituted name keeps what the argument resolved to, so a named function handed to a
-     * combinator stays the helper it is rather than becoming a binding of that spelling.
-     */
     /**
      * A name in the copy, reading whatever it reads here.
      *
