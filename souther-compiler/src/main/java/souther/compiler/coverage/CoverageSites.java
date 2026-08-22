@@ -4,6 +4,7 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.BindingOwner;
 import souther.compiler.types.CoverageConstruct;
 import souther.compiler.types.CoverageOrigin;
 
@@ -46,84 +47,49 @@ import java.util.Map;
 public final class CoverageSites {
 
     /**
-     * What a fork decides, as far as this can describe it.
+     * Which rule one occurrence of a fork decides by.
      *
      * <p>Beside the fork's own construct in what an arm is counted under. A non-recursive helper is
      * spliced into each body that calls it, and the copies are one arm the author wrote — which
-     * holds while what they decide is the same. A fork whose condition the call site had a hand in
-     * decides something else at each call, and those are different things to cover: a row through
-     * one of them establishes nothing about the next.
+     * holds while the helper decides for itself. Where the caller hands the rule in, each call
+     * decides by a different rule, and those are different things to cover: a row through one of
+     * them establishes nothing about the next.
      *
-     * <p>A description and not a name. What was written is a name — and a name is the wrong thing
-     * here, because it is the same at every copy by design: a construct keeps its identity through
-     * being spliced, which is what lets the copies of a helper's arm be one obligation, and is
-     * exactly what cannot tell one specialisation of a rule from another. Two calls of
-     * {@code oldEnough(18, ·)} and {@code oldEnough(65, ·)} write one comparison and decide two
-     * things.
-     *
-     * <p>So what is described is the rule after the call site has had its say: what is compared,
-     * against what, in whatever the author wrote it out of. What is left out is which position the
-     * comparison is about — {@code grown(a.age)} and {@code grown(b.age)} are one rule at two
-     * subjects, and covering it once is covering it, which is the answer this had before and keeps.
-     *
-     * <p>Empty where the condition is made of nothing an author wrote here — a predicate handed in
-     * from outside the body and applied, say. Copies that describe alike are counted as one, and
-     * where the description is empty they describe alike without this having compared anything:
-     * {@link Decides#tellsThemApart} is what says which of the two it was.
+     * <p>Which of the two a fork is, is {@link DecisionSources}'s answer, read off the declaration
+     * that wrote the fork. Not read off the condition standing here: after expansion the argument
+     * the call site supplied is standing where the parameter was, whether it was the rule or what
+     * the rule reads, and no description of what is left can tell those apart. Two descriptions
+     * that came out alike were counted as one obligation, and a rule nothing exercised was reported
+     * as covered.
      */
-    private static Decides decidedBy(Core cond, Map<BindingId, Core> held) {
-        List<String> said = new ArrayList<>();
-        describe(cond, held, said, 0);
-        return new Decides(said, true);
-    }
-
-    /** What every binding in {@code e} holds. */
-    private static void bindings(Core e, Map<BindingId, Core> out) {
-        if (e instanceof Core.LetIn let && let.binder() != null && let.binder().binding() != null) {
-            out.putIfAbsent(let.binder().binding(), let.value());
+    private static DecidedBy decidedAt(Core.If fork, DecisionSources decisions) {
+        if (!(decisions.at(fork.origin()) instanceof DecisionSource.Supplied)) {
+            return DecidedBy.THE_DECLARATION;
         }
-        Core.forEachChild(e, child -> bindings(child, out));
+        // The rules this occurrence was handed, taken from the bindings its condition stands under.
+        // A rule written at a call site is expanded under a name of its own, and the expansion is
+        // made once per supply — so two calls handing in two rules leave two here, and a rule handed
+        // on through a helper keeps the expansion it was written into.
+        List<BindingOwner> supplied = new ArrayList<>();
+        suppliedIn(fork.cond(), supplied);
+        return supplied.isEmpty() ? DecidedBy.NOT_SAID : new DecidedBy.BySupplied(supplied);
     }
 
-    /** How far a description follows what a binding holds. A binding holds one value, so following
-     *  cannot come back to itself; the bound says so to a reader rather than a claim in a comment. */
-    private static final int FOLLOWED = 32;
-
-    private static void describe(Core e, Map<BindingId, Core> held, List<String> said, int through) {
-        switch (e) {
-            // What the author wrote, in the words they wrote it in. A comparison is which comparison
-            // and which construct wrote it; a value written out is that value; a field is its name.
-            // Together these are what one rule says, and two rules that say the same thing are one
-            // thing to cover however many places they were spliced into.
-            case Core.Binary b -> said.add("cmp " + b.op()
-                    + (b.origin().isWritten() ? " @" + b.origin().ordinal() : ""));
-            case Core.Int i -> said.add("int " + i.value());
-            case Core.Decimal d -> said.add("dec " + d.value());
-            case Core.Str t -> said.add("str " + t.value());
-            case Core.Bool t -> said.add("bool " + t.value());
-            case Core.Temporal t -> said.add("time " + t.text());
-            case Core.FieldAccess fa -> said.add("field " + fa.field());
-            case Core.UnitValue u -> said.add("case " + u.data());
-            case Core.Construct nd -> said.add("built " + nd.typeName());
-            case Core.Call c -> said.add("call " + c.fn().rendered());
-            // What a name stands for, and not the name. A call site writes its value into the
-            // binding the expansion made for it, so two copies of one comparison say what each was
-            // given rather than that both were given something.
-            case Core.Read r -> {
-                Core value = through >= FOLLOWED ? null : held.get(r.binding());
-                if (value != null) {
-                    describe(value, held, said, through + 1);
+    private static void suppliedIn(Core e, List<BindingOwner> out) {
+        if (e instanceof Core.Read r && r.binding() != null) {
+            for (BindingOwner owner = r.binding().owner(); owner != null;
+                    owner = owner instanceof BindingOwner.Expansion in ? in.within()
+                            : owner instanceof BindingOwner.Synthesized made ? made.within() : null) {
+                if (owner instanceof BindingOwner.Expansion in
+                        && souther.compiler.check.HelperInliner.isSuppliedRule(
+                                in.expanded().name())
+                        && !out.contains(owner)) {
+                    out.add(owner);
                 }
-                // Or nothing, where it stands for a value from outside this body. Which position a
-                // rule is about is not part of what it says, so a subject leaves no mark and two
-                // calls of one helper describe alike.
-                return;
             }
-            default -> { }
         }
-        Core.forEachChild(e, child -> describe(child, held, said, through));
+        Core.forEachChild(e, child -> suppliedIn(child, out));
     }
-
 
     /**
      * What stands in an arm's place where the arm answers nothing.
@@ -152,44 +118,8 @@ public final class CoverageSites {
      *             comparison, whose origin is its own rather than the fork's: a comparison is one
      *             construct, and what a fork holds several of is arms
      */
-    public record Obligation(String behavior, CoverageOrigin origin, int part, Decides decides) {}
-
-    /**
-     * What a fork decides, described far enough to tell one specialisation of a rule from another.
-     *
-     * <p>Compared and never read for what it says. Two forks deciding alike are one thing to cover;
-     * two deciding differently are two. What it is made of is only ever as much as it took to say
-     * that, so a reader taking it for the rule itself would be taking it further than it goes.
-     */
-    public record Decides(List<String> said, boolean overACondition) {
-
-        /**
-         * What a construct that does not fork over a condition comes to.
-         *
-         * <p>A {@code match} tells its arms apart by the case each is, and an attempted
-         * construction by which way out it is; both are what {@link Obligation#part} already holds.
-         * There is no condition to describe, which is not the same as a condition described as
-         * nothing — folded together, the arms of every table a body calls twice would be arms
-         * nothing could tell apart.
-         */
-        public static final Decides NOTHING = new Decides(List.of(), false);
-
-        public Decides {
-            said = List.copyOf(said);
-        }
-
-        /**
-         * Whether this describes anything at all.
-         *
-         * <p>False only where a condition was read and nothing in it was the author's to describe.
-         * Two forks whose descriptions are both empty are counted as one without anything having
-         * been compared, and that is the one collapse this cannot stand behind.
-         */
-        public boolean tellsThemApart() {
-            return !overACondition || !said.isEmpty();
-        }
-    }
-
+    public record Obligation(String behavior, CoverageOrigin origin, int part,
+                             DecidedBy decided) {}
 
     /**
      * One outcome of one construct, as it stands in the tree that runs.
@@ -260,13 +190,13 @@ public final class CoverageSites {
      *           the pair, and a value that can hold two answers about one place is one a reader
      *           can pick the wrong half of.
      */
-    public record GuardRef(String behavior, CoverageOrigin origin, Decides decides,
+    public record GuardRef(String behavior, CoverageOrigin origin, DecidedBy decided,
                            int siteIndexThen, int siteIndexElse, SourcePos at) {
 
         /** The fork this is one occurrence of. Two calls of one helper give two of these, and a line
          * drawn on the condition is one line however many of them there are. */
         public Obligation fork() {
-            return new Obligation(behavior, origin, 0, decides);
+            return new Obligation(behavior, origin, 0, decided);
         }
     }
 
@@ -459,12 +389,12 @@ public final class CoverageSites {
 
     /** The sites of every behavior body in one module, numbered in the order the bodies are declared
      * and, within one, in the order the arms are written. */
-    public static Plan of(Map<String, Core> behaviorBodies) {
+    public static Plan of(Map<String, Core> behaviorBodies, DecisionSources decisions) {
         // Which comparisons there are is not this walk's to decide. Asked here and answered once,
         // so that what gets a number and what a line is drawn on are the same collection read twice
         // rather than two descents that happen to agree.
         ComparisonCatalog comparisons = ComparisonCatalog.of(behaviorBodies);
-        Walk walk = new Walk(comparisons);
+        Walk walk = new Walk(comparisons, decisions);
         for (Map.Entry<String, Core> body : behaviorBodies.entrySet()) {
             walk.behavior(body.getKey(), body.getValue());
         }
@@ -510,27 +440,16 @@ public final class CoverageSites {
          *  whichever behavior it is in — the same rule the probe numbers are under. */
         private int controls;
 
-        /**
-         * What every binding of the body being walked holds, over the whole of it.
-         *
-         * <p>Over the body and not down the path to a fork. A call site writes its value into the
-         * binding the expansion made for it, and that binding is written where the expansion put it
-         * rather than above the fork that reads it — so a description that only knew what was in
-         * scope where the fork stands would find the name and not the value. A binding tells itself
-         * from every other, so there is no shadowing for a lookup by one to get wrong.
-         */
-        private Map<BindingId, Core> held = Map.of();
+        private final DecisionSources decisions;
 
-        Walk(ComparisonCatalog comparisons) {
+        Walk(ComparisonCatalog comparisons, DecisionSources decisions) {
             this.comparisons = comparisons;
+            this.decisions = decisions;
         }
 
         void behavior(String name, Core body) {
             this.behavior = name;
             this.ordinal = 0;
-            Map<BindingId, Core> bound = new java.util.LinkedHashMap<>();
-            bindings(body, bound);
-            this.held = bound;
             this.answering = NormalReturn.ofBody(body);
             walk(body, true);
         }
@@ -549,12 +468,12 @@ public final class CoverageSites {
         private ControlPointId.ArmOccurrence armOf(SourceOutcome outcome, Core owner,
                                                    CoverageOrigin origin, int part, Core arm,
                                                    boolean reachable,
-                                                   Decides decides) {
+                                                   DecidedBy decided) {
             // The arm is made either way. Whether a run through it can be recorded is the second
             // question and only the probe turns on it — an arm nothing could record is still an arm,
             // and the readings that judge one need to be able to name it.
             int probe = reachable && answers(arm) && answering.mayEnter(owner, part)
-                    ? site(outcome, owner, origin, part, decides) : NO_SITE;
+                    ? site(outcome, owner, origin, part, decided) : NO_SITE;
             return new ControlPointId.ArmOccurrence(controls++,
                     probe == NO_SITE ? OptionalInt.empty() : OptionalInt.of(probe),
                     // The fork's own coordinate, as a site takes it: an arm's body is what lowering
@@ -611,7 +530,7 @@ public final class CoverageSites {
          * @param arm   the arm's body, which says what the arm is made of and not where it is
          */
         private int site(SourceOutcome outcome, Core owner, CoverageOrigin origin, int part,
-                         Decides decides) {
+                         DecidedBy decided) {
             // Said here because this is where anything is numbered, and the rule is about numbering
             // rather than about comparisons: an arm of a fork nothing wrote is as much a row nobody
             // can be owed as a comparison of one. Stated for the comparisons alone, it left the arms
@@ -628,7 +547,7 @@ public final class CoverageSites {
             // source carried here beside the position would be the wrong half of two
             // answers about one place. The walk holds none for that reason.
             sites.add(new Site(behavior, outcome, Citation.of(owner.pos()),
-                    index, ordinal++, new Obligation(behavior, origin, part, decides)));
+                    index, ordinal++, new Obligation(behavior, origin, part, decided)));
             return index;
         }
 
@@ -698,20 +617,20 @@ public final class CoverageSites {
                 case Core.Construct nd -> nd.values().forEach(given -> walk(given.value(), inside));
                 case Core.If iff -> {
                     walk(iff.cond(), inside);
-                    // What this fork decides about, taken before its arms are numbered: two calls
-                    // of one library combinator are one fork inlined twice and are not one thing to
-                    // cover, and what tells them apart is which closure each was handed.
-                    Decides decides = decidedBy(iff.cond(), held);
+                    // Which rule this fork decides by, taken before its arms are numbered: two
+                    // calls of one library combinator are one fork inlined twice and are not one
+                    // thing to cover, and what tells them apart is the rule each was handed.
+                    DecidedBy decided = decidedAt(iff, decisions);
                     ControlPointId.ArmOccurrence then =
-                            armOf(HELD, iff, iff.origin(), 0, iff.then(), inside, decides);
+                            armOf(HELD, iff, iff.origin(), 0, iff.then(), inside, decided);
                     walk(iff.then(), inside);
                     ControlPointId.ArmOccurrence els =
-                            armOf(FAILED, iff, iff.origin(), 1, iff.els(), inside, decides);
+                            armOf(FAILED, iff, iff.origin(), 1, iff.els(), inside, decided);
                     walk(iff.els(), inside);
                     byNode.put(iff, probesOf(then, els));
                     arms(iff, new ControlPointId.ArmOccurrence[] {then, els});
                     if (then.isMeasured() || els.isMeasured()) {
-                        guards.add(new GuardRef(behavior, iff.origin(), decides,
+                        guards.add(new GuardRef(behavior, iff.origin(), decided,
                                 then.probe().orElse(NO_SITE), els.probe().orElse(NO_SITE),
                                 iff.pos()));
                     }
@@ -723,7 +642,7 @@ public final class CoverageSites {
                     for (int i = 0; i < m.cases().size(); i++) {
                         Core.Case arm = m.cases().get(i);
                         arms[i] = armOf(matched(arm), m, m.origin(), i, arm.body(), inside,
-                                Decides.NOTHING);
+                                DecidedBy.THE_DECLARATION);
                         walk(arm.body(), inside);
                     }
                     byNode.put(m, probesOf(arms));
@@ -734,12 +653,12 @@ public final class CoverageSites {
                     ControlPointId.ArmOccurrence[] arms =
                             new ControlPointId.ArmOccurrence[1 + ic.els().size()];
                     arms[0] = armOf(BUILT, ic, ic.origin(), 0,
-                            ic.then(), inside, Decides.NOTHING);
+                            ic.then(), inside, DecidedBy.THE_DECLARATION);
                     walk(ic.then(), inside);
                     for (int i = 0; i < ic.els().size(); i++) {
                         Core.ElseArm arm = ic.els().get(i);
                         arms[i + 1] = armOf(refused(arm), ic, ic.origin(), i + 1,
-                                arm.body(), inside, Decides.NOTHING);
+                                arm.body(), inside, DecidedBy.THE_DECLARATION);
                         walk(arm.body(), inside);
                     }
                     byNode.put(ic, probesOf(arms));
@@ -782,7 +701,7 @@ public final class CoverageSites {
             // one, neither of which a fork can say.
             byComparison.put(comparison,
                     site(new SourceOutcome.Compared(comparison.op()), comparison,
-                            comparison.origin(), 0, Decides.NOTHING));
+                            comparison.origin(), 0, DecidedBy.THE_DECLARATION));
             controlByComparison.put(comparison, controls++);
         }
 

@@ -1823,7 +1823,13 @@ public final class Bodies {
                 // renames no binding, so what is read now is as true of what it answers with.
                 return Answer.of(new CheckedBody(GrowingFold.rewrite(core),
                         souther.compiler.check.ElementBindings.of(core,
-                                body.value().provenance())), reports);
+                                body.value().provenance()),
+                        // Who owns the rule each fork decides by, read off the declarations that
+                        // wrote them. Read here because here is where the declarations are: after
+                        // expansion a fork carries the argument the call site put in and says
+                        // nothing about whether that argument was the rule or what the rule reads.
+                        souther.compiler.coverage.DecisionSources.of(
+                                inliner.value().reachable().values())), reports);
             } catch (Unanswerable _) {
                 // The name it rested on was reported where it was written. This body has no meaning
                 // to emit, which the absence says, and nothing further to add.
@@ -1847,7 +1853,8 @@ public final class Bodies {
      * out has been reported on for that.
      */
     private static Map<String, souther.compiler.claims.Claims> judged(
-            Db db, String module, Hir.Module settled, Map<String, Core> bodies) {
+            Db db, String module, Hir.Module settled, Map<String, Core> bodies,
+            souther.compiler.coverage.DecisionSources decisions) {
         ReadingPolicy policy = db.ask(new Front.Reading()).value();
         Answer<Symbols> scope = Names.derivedSymbols(db, module);
         Answer<Map<String, souther.compiler.inputs.InputDomain>> inputs =
@@ -1862,7 +1869,7 @@ public final class Bodies {
         // query that answers it for a report depends on this one and cannot be asked from inside
         // it. Both routes call one function over one input; what is not shared is the memo.
         souther.compiler.coverage.CoverageSites.Plan plan =
-                souther.compiler.coverage.CoverageSites.of(bodies);
+                souther.compiler.coverage.CoverageSites.of(bodies, decisions);
         Map<String, souther.compiler.claims.Claims> out = new LinkedHashMap<>();
         for (Hir.BehaviorDef behavior : settled.behaviors()) {
             souther.compiler.inputs.InputDomain read = inputs.value().get(behavior.name());
@@ -2001,7 +2008,8 @@ public final class Bodies {
      * is gone from the tree the rewrite answers with, so a caller given only the body would have to
      * recognise the shapes that rewrite produces — which is what carrying the pair avoids.
      */
-    public record CheckedBody(Core body, souther.compiler.check.ElementBindings elements) {}
+    public record CheckedBody(Core body, souther.compiler.check.ElementBindings elements,
+                             souther.compiler.coverage.DecisionSources decisions) {}
 
     /**
      * What a successful check produced for the backend (issue #81): the Core of every body it typed,
@@ -2027,14 +2035,22 @@ public final class Bodies {
         private final Map<String, Core> emittedHelpers;
         private final Map<String, souther.compiler.claims.Claims> claims;
         private final Map<String, souther.compiler.check.ElementBindings> elements;
+        private final souther.compiler.coverage.DecisionSources decisions;
 
         private Elaborated(Map<String, Core> behaviorBodies, Map<String, Core> emittedHelpers,
                            Map<String, souther.compiler.claims.Claims> claims,
-                           Map<String, souther.compiler.check.ElementBindings> elements) {
+                           Map<String, souther.compiler.check.ElementBindings> elements,
+                           souther.compiler.coverage.DecisionSources decisions) {
             this.behaviorBodies = behaviorBodies;
             this.emittedHelpers = emittedHelpers;
             this.claims = claims;
             this.elements = elements;
+            this.decisions = decisions;
+        }
+
+        /** Who owns the rule each fork of this module's bodies decides by. */
+        public souther.compiler.coverage.DecisionSources decisions() {
+            return decisions;
         }
 
         /** Which of each body's bindings hold an element of a container, by the behavior's name. */
@@ -2119,6 +2135,11 @@ public final class Bodies {
             }
             Map<String, Core> bodies = new LinkedHashMap<>();
             Map<String, souther.compiler.check.ElementBindings> elements = new LinkedHashMap<>();
+            // One reading for the module. Every behavior's check walks the same declarations, so the
+            // entries agree wherever two of them wrote one fork; kept as one map so a reader asking
+            // about a fork does not have to know which behavior's check happened to reach it.
+            Map<souther.compiler.types.CoverageOrigin,
+                    souther.compiler.coverage.DecisionSource> decisions = new LinkedHashMap<>();
             boolean bodiesCheck = true;
             // A module whose own check stopped built nothing for a body to be checked against, so
             // asking would report not being able to see what has already been reported missing.
@@ -2135,6 +2156,7 @@ public final class Bodies {
                     if (core.present()) {
                         bodies.put(spec.name(), core.value().body());
                         elements.put(spec.name(), core.value().elements());
+                        decisions.putAll(core.value().decisions().byFork());
                     } else {
                         bodiesCheck = false;
                     }
@@ -2162,10 +2184,12 @@ public final class Bodies {
             // where the hole is, and what a case can arrive at cannot be read through one — asked
             // anyway, the reading meets a shape no position can have and says so about this
             // compiler, which is true and is not what the author of a mistyped model needs.
+            souther.compiler.coverage.DecisionSources read =
+                    new souther.compiler.coverage.DecisionSources(decisions);
             Map<String, souther.compiler.claims.Claims> claims =
-                    judged(db, name, settled.value(), bodies);
+                    judged(db, name, settled.value(), bodies, read);
             return Answer.of(
-                    new Elaborated(bodies, module.value().emittedHelpers(), claims, elements),
+                    new Elaborated(bodies, module.value().emittedHelpers(), claims, elements, read),
                     contradicted(db, name, claims));
         }
     }

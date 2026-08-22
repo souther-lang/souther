@@ -464,6 +464,12 @@ public final class HelperInliner {
         return table.held();
     }
 
+    /** Every declaration this body can reach, this module's own and the library's. What a reader
+     *  asking about a fork wants: the fork may have been written in either. */
+    public Map<String, Hir.FnDef> reachable() {
+        return table.reachable();
+    }
+
     /**
      * A definition {@code module} publishes, closed so that it means in a reader what it means here.
      *
@@ -806,6 +812,33 @@ public final class HelperInliner {
      * is the namespace the table is keyed by, and which namespace to look in is decided by what it
      * denotes, never by the text. A name that names nothing has neither, so it is not asked at all.
      */
+    /**
+     * What a rule handed to the function parameter {@code parameter} is expanded under.
+     *
+     * <p>Written here and read by whoever asks which rule a call site supplied, so the name and the
+     * question about it are one thing. Two spellings of it would agree until the day one of them
+     * changed, and what would go wrong then is that copies of a fork deciding by two different
+     * rules would quietly be counted as one.
+     */
+    public static String suppliedAs(String parameter) {
+        return SUPPLIED + parameter;
+    }
+
+    /**
+     * Whether {@code expanded} is a rule a call site supplied, rather than a declaration it named.
+     *
+     * <p>Asked rather than the parameter's name matched, because a rule is forwarded: a helper
+     * taking one and handing it to another puts it under the second's parameter, and a reader
+     * looking for the name the innermost fork's declaration uses would find nothing there and call
+     * the two call sites alike.
+     */
+    public static boolean isSuppliedRule(String expanded) {
+        return expanded.startsWith(SUPPLIED);
+    }
+
+    /** The one spelling for a rule written at a call site. */
+    private static final String SUPPLIED = "$";
+
     private Hir.FnDef expands(Hir.Var.Denoting named) {
         String reachedBy = named.reaches();
         return switch (named.denotes()) {
@@ -1265,7 +1298,7 @@ public final class HelperInliner {
                     // so the two are read against each other without either being re-typed.
                     subst.put(p.binder().id(), new Substituted(fnName.name(), fnName.denotes()));
                 } else if (arg instanceof Hir.Block lambda) {
-                    Hir.Binder f = ours.binder("$" + p.name(), lambda.pos());
+                    Hir.Binder f = ours.binder(suppliedAs(p.name()), lambda.pos());
                     subst.put(p.binder().id(), Substituted.of(f));
                     // The lambda is registered under what the callee declared of the
                     // parameter it was given to, this application's variables written in. So

@@ -185,7 +185,7 @@ class ARowNothingRanFillsNoCombinationTest {
                     souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
             Core body = checked.behaviorBodies().get(behavior);
             assertNotNull(body, "the behavior under test has a body");
-            CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
+            CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions());
             return new Model(new Generator.Subject(
                     new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
                             sig.inputTypes(), symbols,

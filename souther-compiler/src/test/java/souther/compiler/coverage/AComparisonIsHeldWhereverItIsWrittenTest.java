@@ -199,7 +199,7 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
 
                 let positives (xs) = List.filter(x -> x > 0, xs)
                 """);
-        CoverageSites.Plan plan = CoverageSites.of(bodies);
+        CoverageSites.Plan plan = CoverageSites.of(bodies, souther.compiler.coverage.DecisionSources.NONE);
         Core.Binary comparison = comparisonsIn(bodies).get(0);
 
         assertTrue(plan.comparisonAt(comparison).isPresent(), "it is numbered");
@@ -209,7 +209,7 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
     /** What the catalog holds is what the plan numbers, wherever the comparison stands. */
     @Test
     void aComparisonGivenANameBeforeTheForkIsNumbered() {
-        CoverageSites.Plan plan = CoverageSites.of(bodiesOf(NAMED_BEFORE_THE_FORK));
+        CoverageSites.Plan plan = CoverageSites.of(bodiesOf(NAMED_BEFORE_THE_FORK), souther.compiler.coverage.DecisionSources.NONE);
 
         assertEquals(1, plan.sites().stream()
                         .filter(site -> site.outcome() instanceof SourceOutcome.Compared)

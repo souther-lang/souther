@@ -45,7 +45,7 @@ class AComparisonIsAccountedForWhereverItIsWrittenTest {
         assertNotNull(checked, () -> "the model under test compiles: " + body);
         Core core = checked.behaviorBodies().get("pick");
         assertNotNull(core);
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
+        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions());
         return GuardThresholds.of("pick", core, plan,
                 compilation.db().ask(new Adequacy.Inputs(module)).value().get("pick"), symbols);
     }
