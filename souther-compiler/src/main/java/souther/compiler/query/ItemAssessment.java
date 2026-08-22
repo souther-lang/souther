@@ -136,8 +136,15 @@ public sealed interface ItemAssessment {
      */
     sealed interface Attempt {
 
-        /** A value at the point, built and accepted by the module's own decoders. */
-        record Built(Generator.GeneratedRow row) implements Attempt {}
+        /**
+         * A value at the point, built and accepted by the module's own decoders.
+         *
+         * @param region where it was looked for, and what the walk to the point took in and could
+         *               not. Carried by the two states a search ran in and by neither of the ones
+         *               it did not: a region nothing searched is not a fact about this run
+         */
+        record Built(Generator.GeneratedRow row,
+                     souther.compiler.partition.RegionForARow region) implements Attempt {}
 
         /**
          * The search ran and no row came of it.
@@ -147,8 +154,13 @@ public sealed interface ItemAssessment {
          * before it got here, are the others, and only the first is the decoder saying anything. A
          * name that said "refused" would invite a reader to take the other two for a decision the
          * decoder made — which is the mistake this type exists to prevent, one size down.
+         *
+         * @param region where the search ran, as {@link Built#region()} carries it. What a search
+         *               that settled nothing was looking over is the half of the answer that says
+         *               how much the other half is worth
          */
-        record Unresolved(Generator.UnresolvedCombination why) implements Attempt {}
+        record Unresolved(Generator.UnresolvedCombination why,
+                          souther.compiler.partition.RegionForARow region) implements Attempt {}
 
         /** Nothing was tried, and why not. Separate from a refusal because they license different
          * sentences: one is a fact about values, the other is a fact about this run. */

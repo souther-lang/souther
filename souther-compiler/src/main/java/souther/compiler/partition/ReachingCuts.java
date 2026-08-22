@@ -4,6 +4,7 @@ import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Symbols;
 import souther.compiler.coverage.ComparisonOccurrence;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.diag.Citation;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.NumericDomain;
@@ -26,8 +27,14 @@ import java.util.Map;
  * comparison sits.</b> A reading that walked back up the tree would be a second account of what was
  * assumed, free to name a condition nothing here could take in — and a region narrowed on a
  * condition nothing established is narrower than the rows that arrive, which is the one direction
- * that takes a coverage item away. So what is here is what the walk itself put in, and a condition
- * the arithmetic has no word for leaves nothing behind.
+ * that takes a coverage item away. So what is here is what the walk itself put in.
+ *
+ * <p><b>Including what it could not put in.</b> A condition the arithmetic has no word for narrows
+ * nothing, and it is written down all the same: what a region is is one question and how it came to
+ * be that region is another, and only the second can tell a search that ran over what the
+ * declarations leave because nothing stood in the way from one that ran over the same box because a
+ * guard above could not be read. Held as {@link OnTheWay}, so the two are one sequence in the order
+ * the walk met them rather than a list and a silence.
  *
  * <p><b>Its own value and not its arm.</b> Under {@code A && B} the {@code then} arm is reached with
  * both holding, and the {@code else} arm with neither settled — a row can be in it for failing
@@ -36,10 +43,12 @@ import java.util.Map;
  * region would come to exclude rows that reach the guard.
  *
  * <p>Nothing here says a row that satisfies all of this arrives. A condition of a shape the
- * arithmetic cannot read is not on the list, so what this describes is wider than what arrives —
- * which is what {@link SearchRegion} promises and what a proof of unreachability rests on.
+ * arithmetic cannot read is on the list without narrowing anything, so what a region built from
+ * this describes is wider than what arrives — which is what {@link SearchRegion} promises and what
+ * a proof of unreachability rests on. Being on the list is what lets a report say so; it is not
+ * what the region is built from.
  */
-public record ReachingCuts(Map<ComparisonOccurrence, List<ReachingCuts.Cut>> byComparison) {
+public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byComparison) {
 
     public static final ReachingCuts NONE = new ReachingCuts(Map.of());
 
@@ -51,23 +60,26 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<ReachingCuts.Cut>> byC
     public record Cut(LinearForm<NumericTerm> form, Rel rel) {}
 
     /**
-     * {@code region}, narrowed to what reaches {@code site}.
+     * Where a row for a border at {@code site} is looked for: {@code region} narrowed by what the
+     * walk to it took in, beside the whole account of that walk.
      *
-     * <p>{@code region} itself where nothing was collected there, which is a comparison at the top
-     * of a body as much as it is one this could read nothing on the way to. The two are not told
-     * apart because nothing downstream acts on the difference: both leave a region as wide as the
-     * declarations, and both are sound.
+     * <p>{@code region} itself where nothing was collected there — and the answer says so, rather
+     * than leaving a reader to tell a comparison at the top of a body from one this could read
+     * nothing on the way to. Both leave a region as wide as the declarations and both are sound;
+     * only one of them is a limit of this compiler, and an author who is told nothing has no way to
+     * find out which they are looking at.
      */
-    public SearchRegion narrowing(SearchRegion region, ComparisonOccurrence site) {
-        for (Cut each : byComparison.getOrDefault(site, List.of())) {
-            region = region.assuming(each.form(), each.rel());
-        }
-        return region;
+    public RegionForARow narrowing(SearchRegion region, ComparisonOccurrence site) {
+        return RegionForARow.narrowed(region, byComparison.getOrDefault(site, List.of()));
     }
 
     /**
-     * What {@code node} coming out {@code holding} says about this input, where anything can be
-     * said.
+     * What {@code node} coming out {@code holding} says about this input, and where it says
+     * nothing, that.
+     *
+     * <p>Never empty. Every shape has an answer — a cut where one could be made and a decline
+     * where none could — because an empty answer is what made a comparison reached under nothing
+     * and one reached past something unreadable into the same reading.
      *
      * <p>One rule for two questions, because they are one question. What reaching the right operand
      * of a condition establishes and what reaching an arm of the fork establishes are both "this
@@ -78,48 +90,56 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<ReachingCuts.Cut>> byC
      * <p>A conjunction coming out true is both its operands true, and a disjunction coming out false
      * is both false. The other two ways round say a disjunction of things, which is not a list of
      * cuts and is not approximated into one: {@code A && B} being false says one of them failed and
-     * names neither, and narrowing on either would exclude rows that arrive.
+     * names neither, and narrowing on either would exclude rows that arrive. So those two are
+     * declined whole, at the condition rather than at an operand — neither operand is what could
+     * not be carried.
      */
-    static List<Cut> stating(Condition node, boolean holding, Symbols symbols) {
+    static List<OnTheWay> stating(Condition node, boolean holding, Symbols symbols) {
         return switch (node) {
             // A conjunction coming out true is both its operands true, and a disjunction coming out
             // false is both false. The other two ways round say a disjunction of things, which is
             // not a list of cuts and is not approximated into one: `A && B` being false says one of
             // them failed and names neither, and narrowing on either would exclude rows that arrive.
-            case Condition.Both both when holding ->
-                    and(stating(both.left(), true, symbols), stating(both.right(), true, symbols));
-            case Condition.Either either when !holding ->
-                    and(stating(either.left(), false, symbols),
+            // So the whole node is declined, at the whole node's place.
+            case Condition.Both both -> holding
+                    ? and(stating(both.left(), true, symbols), stating(both.right(), true, symbols))
+                    : List.of(new OnTheWay.Declined(Citation.of(both.at().pos()),
+                            OnTheWay.Why.NON_CONJUNCTIVE_OUTCOME));
+            case Condition.Either either -> holding
+                    ? List.of(new OnTheWay.Declined(Citation.of(either.at().pos()),
+                            OnTheWay.Why.NON_CONJUNCTIVE_OUTCOME))
+                    : and(stating(either.left(), false, symbols),
                             stating(either.right(), false, symbols));
-            case Condition.Compares one -> {
-                Cut cut = of(one, holding, symbols);
-                yield cut == null ? List.of() : List.of(cut);
-            }
-            default -> List.of();
+            case Condition.Compares one -> List.of(of(one, holding, symbols));
+            case Condition.NotRead not -> List.of(new OnTheWay.Declined(Citation.of(not.at().pos()),
+                    OnTheWay.Why.CONDITION_NOT_READ));
         };
     }
 
     /**
-     * What {@code comparison} states about this input, coming out {@code holding} — or null where
-     * the arithmetic reads nothing here.
+     * What {@code comparison} states about this input, coming out {@code holding} — or a decline
+     * where the arithmetic reads nothing here.
      *
      * <p>Read once, off the same {@link AffineReading} every other reader of a comparison uses. A
      * second reading of what a comparison says is a second thing to keep in step with how a border
      * is drawn, and the two disagreeing is a region that excludes the very level the border is at.
+     *
+     * <p>One word for both ways the reading comes back empty. A comparison whose operands are
+     * outside the affine fragment and one whose operator places nothing leave the same thing
+     * missing here — a statement about a position — and what would lift either is the same piece of
+     * work.
      */
-    private static Cut of(Condition.Compares comparison, boolean holding, Symbols symbols) {
+    private static OnTheWay of(Condition.Compares comparison, boolean holding, Symbols symbols) {
+        Citation at = Citation.of(comparison.at().pos());
         AffineReading read = AffineReading.of(comparison.at(), comparison.reads(), symbols);
-        if (read == null) {
-            return null;
-        }
-        Rel states = relOf(read.claim());
+        Rel states = read == null ? null : relOf(read.claim());
         if (states == null) {
-            return null;
+            return new OnTheWay.Declined(at, OnTheWay.Why.NO_CONSTRAINT_REPRESENTED);
         }
         // The form with the threshold moved into it, since what a domain is told is `f rel 0`.
         LinearForm<NumericTerm> against =
                 read.form().minus(LinearForm.constant(read.cut()));
-        return new Cut(against, holding ? states : negated(states));
+        return new OnTheWay.TakenIn(at, new Cut(against, holding ? states : negated(states)));
     }
 
     /**
@@ -154,12 +174,12 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<ReachingCuts.Cut>> byC
         };
     }
 
-    /** These cuts, with {@code site} reached under {@code assumed}. */
+    /** These conditions, with {@code site} reached under {@code assumed}. */
     static final class Collected {
 
-        private final Map<ComparisonOccurrence, List<Cut>> byComparison = new LinkedHashMap<>();
+        private final Map<ComparisonOccurrence, List<OnTheWay>> byComparison = new LinkedHashMap<>();
 
-        void reached(ComparisonOccurrence site, List<Cut> assumed) {
+        void reached(ComparisonOccurrence site, List<OnTheWay> assumed) {
             // The first reading of a site stands. One comparison is read once per call of the helper
             // it is written in, and each of those is a site of its own — two readings arriving under
             // one site would be this walk and the plan disagreeing about what a site is.
@@ -172,11 +192,8 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<ReachingCuts.Cut>> byC
     }
 
     /** What a caller is carrying, with more added, keeping what was already there. */
-    private static List<Cut> and(List<Cut> assumed, List<Cut> more) {
-        if (more.isEmpty()) {
-            return assumed;
-        }
-        List<Cut> out = new java.util.ArrayList<>(assumed);
+    private static List<OnTheWay> and(List<OnTheWay> assumed, List<OnTheWay> more) {
+        List<OnTheWay> out = new java.util.ArrayList<>(assumed);
         out.addAll(more);
         return List.copyOf(out);
     }

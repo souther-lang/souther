@@ -44,11 +44,12 @@ final class ComparisonReadings {
      * comparison inside an expanded helper is about the argument the call handed it, and read
      * against the names outside the binding it is about nothing at all.
      *
-     * @param assumed what a row had already satisfied by the time it got here. Empty is an ordinary
-     *                answer — a comparison at the top of a body has satisfied nothing yet, and so
-     *                has one reached past a condition this reading has no arithmetic for
+     * @param assumed every condition on the way here, each with what became of it. Empty says
+     *                nothing stood on the way, which a comparison at the top of a body is; one this
+     *                reading has no arithmetic for is on the list as a decline, so the two are not
+     *                one answer
      */
-    record Reading(Core.Binary comparison, InputReads reads, List<ReachingCuts.Cut> assumed,
+    record Reading(Core.Binary comparison, InputReads reads, List<OnTheWay> assumed,
                    BoundaryPolicy.Standing standing) {}
 
     private final List<Reading> readings;
@@ -98,7 +99,7 @@ final class ComparisonReadings {
      *                nothing says the applications of settles it for everything under it
      */
     private static void walk(Core e, CoverageSites.Plan plan, InputReads reads, Symbols symbols,
-                             LiveFlow flow, List<ReachingCuts.Cut> assumed, boolean live,
+                             LiveFlow flow, List<OnTheWay> assumed, boolean live,
                              boolean each, List<Reading> out) {
         if (e instanceof Core.Binary comparison && plan.comparisons().at(comparison).isPresent()) {
             out.add(new Reading(comparison, reads, assumed,
@@ -179,15 +180,10 @@ final class ComparisonReadings {
      * written apart they would agree by having been derived alike — until one of them learned to
      * read a shape of condition the other did not.
      */
-    private static List<ReachingCuts.Cut> taking(Core node, boolean holding, InputReads reads,
-                                                 List<ReachingCuts.Cut> assumed, Symbols symbols) {
-        List<ReachingCuts.Cut> more =
-                ReachingCuts.stating(Condition.of(node, reads), holding, symbols);
-        if (more.isEmpty()) {
-            return assumed;
-        }
-        List<ReachingCuts.Cut> out = new ArrayList<>(assumed);
-        out.addAll(more);
+    private static List<OnTheWay> taking(Core node, boolean holding, InputReads reads,
+                                         List<OnTheWay> assumed, Symbols symbols) {
+        List<OnTheWay> out = new ArrayList<>(assumed);
+        out.addAll(ReachingCuts.stating(Condition.of(node, reads), holding, symbols));
         return List.copyOf(out);
     }
 }
