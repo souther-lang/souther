@@ -225,7 +225,30 @@ public final class Generator {
              * seemed likely when the branch was added, and a reason read off an empty result outlives
              * whatever made it plausible.
              */
-            NO_REASON_RECORDED
+            NO_REASON_RECORDED;
+
+            /**
+             * Whether this reason proves there is nothing to find, which one of them does.
+             *
+             * <p>Asked rather than matched on. Every reader of one of these has the same question —
+             * may I say the model settles this, or am I saying what this compiler did not manage —
+             * and each that answered it by naming the one word carried a copy of the decision
+             * ADR-0091 took. A reason added is then a case here rather than a word that quietly
+             * joins whichever side a reader's condition happened to leave it on.
+             *
+             * <p>Named as {@link souther.compiler.query.PartitionEvidence.PairSpace#provenInfeasible}
+             * names it, since it is the same question about the same thing.
+             */
+            public boolean provesInfeasible() {
+                return switch (this) {
+                    case THE_RULES_LEAVE_NOTHING_THERE -> true;
+                    // Every one of these is this compiler falling short, and none of them is the
+                    // model saying anything: another value of the same classes may well build.
+                    case NOTHING_COMPOSES_ONE, ALL_CANDIDATES_REJECTED, SEARCH_LIMIT,
+                         NOTHING_TO_BUILD_AGAINST, LINKAGE_FAILED, NO_CERTIFIED_WITNESS,
+                         NO_REASON_RECORDED -> false;
+                };
+            }
         }
 
         public UnresolvedCombination {

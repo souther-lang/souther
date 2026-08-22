@@ -826,7 +826,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // without this line the difference reads as the tool being arbitrary.
             out.append(String.format("      · not known to be writable: the %s point %s %s (%s)%s%n",
                     p.role(), p.border().axis(), p.asked(),
-                    p.border().origin(names, declaredIn), whatWasTried(owed(p).attempt())));
+                    p.border().origin(names, declaredIn),
+                    whatWasTried(owed(p).attempt(), names, declaredIn)));
         }
         // And what the model itself answered, which is not a row anybody is behind on. Named by the
         // reason rather than left blank: a point the rules refuse and a point this language cannot
@@ -1138,19 +1139,70 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /** What the search for a value at an edge came to, where it ran and found none. */
-    private static String whatWasTried(ItemAssessment.Attempt attempt) {
+    private static String whatWasTried(ItemAssessment.Attempt attempt, SourceNameResolver names,
+                                       SourceId declaredIn) {
         if (!(attempt instanceof ItemAssessment.Attempt.Unresolved left)) {
             return "";   // nothing ran, and what a run would have said is not this line's to guess
         }
         // A proof is not a failure, and the sentence in front of the reason may not say it is.
         // Every other word here is this compiler saying what it did not manage; one of them is the
         // model settling the point, and reading them under one opening sends an author looking for
-        // a row nothing can write.
-        String opening = left.why().reason()
-                == souther.compiler.partition.Generator.UnresolvedCombination.Reason
-                        .THE_RULES_LEAVE_NOTHING_THERE
-                ? " — " : " — nothing composed one: ";
-        return opening + left.why().said().orElseGet(() -> whyUnresolved(left.why()));
+        // a row nothing can write. Asked of the reason, which is where that decision is written.
+        boolean settled = left.why().reason().provesInfeasible();
+        String opening = settled ? " — " : " — nothing composed one: ";
+        return opening + left.why().said().orElseGet(() -> whyUnresolved(left.why()))
+                + (settled ? "" : whatTheRegionLeftOut(left.region(), names, declaredIn));
+    }
+
+    /**
+     * What the search ran over that the way to the border does not account for, where anything did.
+     *
+     * <p>Said only where the search settled nothing. A walk of the whole of what the rules leave
+     * that reaches no value settles the point whether or not the box it walked was wider than the
+     * rows that arrive — a wider box that is empty leaves the narrower one empty too. Everywhere
+     * else the search came back without an answer, and which box it looked in is half of what that
+     * answer is worth.
+     *
+     * <p>What is said is what is known: these conditions are not represented in the region. Not
+     * that the region is wider than the rows that reach the line — a condition nothing could take
+     * in may be implied by the ones that were, or may hold of every row — and a sentence claiming
+     * the wider box would be this report deciding something it has not been shown.
+     */
+    private static String whatTheRegionLeftOut(souther.compiler.partition.RegionForARow region,
+                                               SourceNameResolver names, SourceId declaredIn) {
+        List<souther.compiler.partition.OnTheWay.Declined> left = region.declined();
+        if (left.isEmpty()) {
+            return "";
+        }
+        StringBuilder out = new StringBuilder("; not every condition on the way to the line is"
+                + " represented in the region searched: ");
+        for (int i = 0; i < left.size(); i++) {
+            out.append(i == 0 ? "" : ", ")
+                    .append(whyDeclined(left.get(i).why()))
+                    .append(" at ")
+                    .append(left.get(i).at().said(names, declaredIn));
+        }
+        return out.toString();
+    }
+
+    /**
+     * What stopped one condition on the way from narrowing the search, in the words a reader acts
+     * on.
+     *
+     * <p>One sentence per case rather than one for all three. What an author does about a condition
+     * this reading has no words for is not what they do about one it read and could place no
+     * constraint from, and neither is what they do about an arm that states one of two things — and
+     * a single "was not read" for all of them is the vocabulary being kept apart in the compiler
+     * and put back together on the way out.
+     */
+    private static String whyDeclined(souther.compiler.partition.OnTheWay.Why why) {
+        return switch (why) {
+            case CONDITION_NOT_READ -> "the condition was not read";
+            case NO_CONSTRAINT_REPRESENTED ->
+                    "the comparison places no constraint this could take in";
+            case NON_CONJUNCTIVE_OUTCOME ->
+                    "the outcome of the condition states one of two things";
+        };
     }
 
     /** The category a search came back with, where the class it was about said nothing itself. */
