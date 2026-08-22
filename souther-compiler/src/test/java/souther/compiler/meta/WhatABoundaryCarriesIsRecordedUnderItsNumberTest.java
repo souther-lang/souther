@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -39,15 +40,25 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  */
 class WhatABoundaryCarriesIsRecordedUnderItsNumberTest {
 
-    /** Enough of a module to write all three of the annotations this compiler puts on a class. */
+    /**
+     * Enough of a module to write all three of the annotations this compiler puts on a class, and to
+     * put something in every member of each.
+     *
+     * <p>Every array member holds at least one element on purpose. An empty array says its own name
+     * and nothing about what it holds, so a member left empty here would be one whose element type
+     * could change without the record moving. What keeps that from going unnoticed is
+     * {@link #everyMemberOfTheRecordWasMeasured}, which refuses a record that could not read one.
+     */
     private static final String MODULE = """
             module shared.money exposing ( Amount, Receipt, charge, quote )
             import String ( length )
 
             data Amount = Int
-                invariant value >= 0
+                invariant value >= 0 && withinCap(value)
 
             data Receipt = { paid: Amount }
+
+            let withinCap (n: Int) = n <= 1000
 
             behavior charge : (a: Amount) -> Receipt
                 constructs Receipt
@@ -100,6 +111,9 @@ class WhatABoundaryCarriesIsRecordedUnderItsNumberTest {
         return String.join("\n", written) + "\n";
     }
 
+    /** An array the fixture left empty, which says its own name and nothing about what it holds. */
+    private static final String UNREAD = "nothing";
+
     /** What a member holds, as coarsely as the wire distinguishes it: a value of another kind is a
      *  member a reader of this number cannot take. */
     private static String kindOf(AnnotationValue value) {
@@ -107,8 +121,11 @@ class WhatABoundaryCarriesIsRecordedUnderItsNumberTest {
             case AnnotationValue.OfString _ -> "string";
             case AnnotationValue.OfInt _ -> "int";
             case AnnotationValue.OfBoolean _ -> "boolean";
+            // Said as what it is rather than guessed at. An empty array read as an array of strings
+            // records a shape nothing measured, and the member's element type could then move
+            // without this moving with it.
             case AnnotationValue.OfArray array -> "array of "
-                    + (array.values().isEmpty() ? "string" : kindOf(array.values().get(0)));
+                    + (array.values().isEmpty() ? UNREAD : kindOf(array.values().getFirst()));
             default -> value.getClass().getSimpleName();
         };
     }
@@ -118,6 +135,24 @@ class WhatABoundaryCarriesIsRecordedUnderItsNumberTest {
                 .findAttribute(Attributes.runtimeInvisibleAnnotations())
                 .map(a -> List.copyOf(a.annotations()))
                 .orElse(List.of());
+    }
+
+    /**
+     * The record says what every member holds, or the fixture is not wide enough to be a record.
+     *
+     * <p>Beside the comparison rather than folded into it. A member the fixture leaves empty
+     * compares equal to itself forever, so the boundary would be recorded with a hole in it and the
+     * record would go on passing — which is the shape of the defect this whole test is about, one
+     * member in.
+     */
+    @Test
+    void everyMemberOfTheRecordWasMeasured() {
+        String carried = carried(Compiler.compile(MODULE));
+
+        assertFalse(carried.contains(UNREAD),
+                () -> "a member of the boundary is written by a fixture that leaves it empty, so"
+                        + " what it holds is not recorded and could move without this noticing."
+                        + " Give it a value in MODULE:\n\n" + carried);
     }
 
     private static String resource(int version) {

@@ -73,12 +73,18 @@ public final class Adequacy {
     }
 
     /**
-     * What a build is held to.
+     * What a build is held to among the measures it asked for.
      *
      * <p>Beside {@link Level} and not a rung of it. A level says how much work to do — what separates
      * {@code WITNESS} from {@code ALL} is a second set of classes and a second run of every row — and
      * this says which of what was measured a build refuses over. The two are different questions, and
      * a fourth level would have been the first one that answered this one instead (issue #937).
+     *
+     * <p>Among what was measured, and that is the whole of it. A measure the build did not ask for is
+     * outside the question rather than one that failed, so pairing this with a level that measures
+     * less is not a contradiction: it asks what the criterion makes of the evidence there is. What a
+     * criterion cannot do is name evidence a verdict then ignores — {@link #requires} and
+     * {@link #refuses} answer for the same criterion, within whatever the level measured.
      *
      * <p>The two the syllabus defines. Simplified domain coverage asks for a row on each line a rule
      * draws and a row one step over it; reliable domain coverage adds a row well inside and a row
