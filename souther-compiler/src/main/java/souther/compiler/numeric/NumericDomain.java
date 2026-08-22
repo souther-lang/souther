@@ -597,115 +597,39 @@ public final class NumericDomain<A> {
         return sign < 0 || (sign == 0 && (!strict || !highest.inclusive()));
     }
 
-    /** {@code goal - (premise.form - premise.bound)}, which is what is left to prove once the
-     *  premise has been used. */
-    private Goal<A> subtracting(Goal<A> goal, AffineConstraint.HalfSpace<A> premise) {
-        Map<A, Rational> coefs = new LinkedHashMap<>(goal.coefs());
-        premise.form().coefs().forEach((atom, coef) ->
-                coefs.merge(atom, coef.negated(), Rational::plus));
-        coefs.values().removeIf(Rational::isZero);
-        return new Goal<>(coefs, goal.constant().plus(premise.bound().at()));
-    }
-
     /**
      * The highest the goal comes to, or null where nothing bounds it above.
      *
-     * <p><b>The one place a bound on a form is derived.</b> {@link #boundsOf(LinearForm)},
-     * {@link #entails} and {@link #refutes} all read this, so what a form is said to run up to and
+     * <p><b>Read in one place and derived in another.</b> {@link #boundsOf(LinearForm)},
+     * {@link #entails} and {@link #refutes} all come here, so what a form is said to run up to and
      * what is said to follow from it are one statement. They had not been: the ranges said
      * {@code x + y} ran to ten while the proof beside them showed {@code x + y <= 5} — both sound,
      * and not the same abstract state, which is the shape all of this exists to remove.
      *
-     * <p>Three routes, met. What the box leaves the goal's own positions; the relation on a
-     * difference of two of them, where the goal has that shape; and a rule taken off the goal,
-     * leaving a residual the box bounds — {@code f <= u} with {@code g - f <= r} gives
-     * {@code g <= r + u}, which is what relates a guard over a computed value to what the type of
-     * the value it was compared against guarantees.
+     * <p>What the derivation is belongs to {@link FormReach}, and it is not this class's because it
+     * is not only this class's question: a rule being reduced asks it of the rest of its own form,
+     * and the two readings had come apart in exactly the way the ranges and the proof once had
+     *. So the routes, and the rule that a reading composes at most one other rule, are said
+     * there and read from here.
      *
-     * <p>One rule, once. The residual is bounded by the box alone, so two rules are never added
-     * together through this. What the box already holds of them is not this step: the rules that
-     * narrow it have each been read into it on their own.
-     *
-     * <p>A goal naming one position does not come here at all: the box is this step at one position
-     * already, so {@link #boundsOf(Object)} and this are the same answer by construction rather than
-     * by both happening to converge. They did not, where the rounds ran out — see below.
-     *
-     * @param withRules false to ask what the box and the closed relations between its positions say,
-     *                  leaving the rules beside them out. A different question from what the rules
-     *                  say, and the one an account of what was derived wants — and not the product
-     *                  of the ranges either, which holds less than this does
+     * @param withRules false to ask what the ends and the closed relations between them say, leaving
+     *                  the rules beside them out. A different question from what the rules say, and
+     *                  the one an account of what was derived wants — and not the product of the
+     *                  ranges either, which holds less than this does
      */
     private RationalCut highestProven(Goal<A> goal, boolean withRules) {
-        RationalCut best = fromTheBox(goal);
-        if (!withRules || goal.coefs().size() <= 1) {
-            // A goal naming one position is answered by the box and by nothing else, because the box
-            // *is* this step at one position, run until it stops moving or until the rounds run out.
-            // Taking one more here would be one round past whatever the closure was allowed, and
-            // where the rounds do run out that showed: a chain longer than the budget left
-            // `boundsOf(x)` with no bound while `boundsOf` of the same position as a form, and
-            // `entails`, went one link further and found one. Two answers about one position, and
-            // the budget bounding neither.
-            return best;
-        }
-        for (AffineConstraint<A> rule : rules) {
-            for (AffineConstraint.HalfSpace<A> premise : rule.halfSpaces()) {
-                RationalCut residual = fromTheBox(subtracting(goal, premise));
-                if (residual != null) {
-                    // The goal reaches the sum only where the residual reaches its own end and the
-                    // premise reaches its bound.
-                    best = RationalCut.tighterUpper(best, new RationalCut(residual.at(),
-                            residual.inclusive() && premise.bound().inclusive()));
-                }
-            }
-        }
-        return best;
+        FormReach<A> reading = reading();
+        return withRules
+                ? reading.most(goal.coefs(), goal.constant())
+                : reading.mostFromTheEndsAndTheDifferences(goal.coefs(), goal.constant());
     }
 
-    /** What the box and the closed differences leave the goal, which is where every route starts. */
-    private RationalCut fromTheBox(Goal<A> goal) {
-        if (goal.coefs().isEmpty()) {
-            return RationalCut.inclusive(goal.constant());
-        }
+    /** The one reading of what the rules leave a form, over the state they have been worked out to. */
+    private FormReach<A> reading() {
         ClosedState<A> state = closed();
-        Box<A> box = state.box();
-        RationalCut best = Reach.of(goal.coefs(), goal.constant(),
-                atom -> Reach.between(box.leastOf(atom), box.mostOf(atom))).most();
-        Apart<A> apart = difference(goal.coefs());
-        if (apart != null) {
-            RationalCut held = state.differences().differenceBound(apart.above(), apart.below());
-            if (held != null) {
-                best = RationalCut.tighterUpper(best, new RationalCut(
-                        held.at().times(apart.by()).plus(goal.constant()), held.inclusive()));
-            }
-        }
-        return best;
+        return FormReach.over(rules, state.box(), state.differences());
     }
 
-    /**
-     * The two positions of {@code k·(a - b)} and the {@code k}, or null where the goal is not that.
-     *
-     * <p>Any {@code k} and not only one. A goal asked as {@code 2a - 2b} is the difference
-     * {@code a - b} twice over, and the closed differences bound it at twice what they bound that —
-     * so recognising the shape only when it is spelled with ones is the same trap this removed from
-     * the rules, one level down in the reading.
-     */
-    private static <A> Apart<A> difference(Map<A, Rational> coefs) {
-        if (coefs.size() != 2) {
-            return null;
-        }
-        java.util.Iterator<Map.Entry<A, Rational>> both = coefs.entrySet().iterator();
-        Map.Entry<A, Rational> one = both.next();
-        Map.Entry<A, Rational> other = both.next();
-        if (!one.getValue().equals(other.getValue().negated())) {
-            return null;
-        }
-        return one.getValue().signum() > 0
-                ? new Apart<>(one.getKey(), other.getKey(), one.getValue())
-                : new Apart<>(other.getKey(), one.getKey(), other.getValue());
-    }
-
-    /** {@code by · (above - below)}, with {@code by} positive. */
-    private record Apart<A>(A above, A below, Rational by) {}
 
     // --- reading the domain back --------------------------------------------------------------------
 
