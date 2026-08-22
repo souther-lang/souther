@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.report.AdequacyReport;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.MeasurementStatus;
@@ -70,11 +71,11 @@ class CompileExampleWitnessTest {
                 """).get("lookup");
 
         assertEquals(List.of("Found", "Missing"), names(lookup.output().declared()));
-        assertEquals(List.of("Found"), names(lookup.output().specified()),
+        assertEquals(List.of("Found"), names(lookup.output().seen().specified()),
                 "both rows expect Found");
-        assertEquals(List.of("Found", "Missing"), names(lookup.output().observed()),
+        assertEquals(List.of("Found", "Missing"), names(lookup.output().seen().observed()),
                 "the second row saw Missing even though it wanted Found");
-        assertEquals(List.of("Found"), names(lookup.output().verified()),
+        assertEquals(List.of("Found"), names(lookup.output().seen().verified()),
                 "only the row that held confirms anything");
         assertEquals(List.of("Missing"), lookup.output().unspecified().stream()
                 .map(TypeSymbol::name).toList());
@@ -99,10 +100,10 @@ class CompileExampleWitnessTest {
                     | (MemberId("m-9")) -> Missing { reason = "none" }
                 """).get("findMember");
 
-        assertEquals(List.of("Found", "Missing"), names(findMember.output().specified()));
-        assertEquals(List.of(), names(findMember.output().observed()),
+        assertEquals(List.of("Found", "Missing"), names(findMember.output().seen().specified()));
+        assertEquals(List.of(), names(findMember.output().seen().observed()),
                 "nothing ran, so nothing was seen");
-        assertEquals(List.of(), names(findMember.output().verified()));
+        assertEquals(List.of(), names(findMember.output().seen().verified()));
     }
 
     @Test
@@ -117,7 +118,7 @@ class CompileExampleWitnessTest {
         assertEquals(List.of(), names(lookup.inputs().get(0).declared()),
                 "a parameter that is not a sum has nothing to cover");
         assertEquals(List.of("Active", "Suspended"), names(lookup.inputs().get(1).declared()));
-        assertEquals(List.of("Active"), names(lookup.inputs().get(1).specified()));
+        assertEquals(List.of("Active"), names(lookup.inputs().get(1).seen().specified()));
         assertEquals(List.of("Suspended"), lookup.inputs().get(1).unspecified().stream()
                 .map(TypeSymbol::name).toList());
     }
@@ -126,7 +127,7 @@ class CompileExampleWitnessTest {
     void aBehaviorWithNoRowsIsNotMeasured() {
         Adequacy.SignatureEvidence lookup = evidence(BASE).get("lookup");
 
-        assertEquals(MeasurementStatus.NOT_MEASURED, lookup.status(),
+        assertEquals(MeasurementStatus.NOT_MEASURED, AdequacyReport.statusOf(lookup.counted()),
                 "no rows is an absence of evidence, not a set of gaps");
     }
 
@@ -144,11 +145,11 @@ class CompileExampleWitnessTest {
                     | (MemberId("m-1"), Active) -> asFound(MemberId("m-1"))
                 """).get("lookup");
 
-        assertEquals(1, lookup.output().unclassifiedRows());
-        assertEquals(MeasurementStatus.PARTIAL, lookup.output().status());
-        assertEquals(MeasurementStatus.PARTIAL, lookup.status());
-        assertTrue(lookup.output().verified().isEmpty()
-                        || names(lookup.output().verified()).equals(List.of("Found")),
+        assertEquals(1, lookup.output().seen().unclassifiedRows());
+        assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(lookup.output().cases()));
+        assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(lookup.counted()));
+        assertTrue(lookup.output().seen().verified().isEmpty()
+                        || names(lookup.output().seen().verified()).equals(List.of("Found")),
                 "whatever the row confirmed, it did not confirm a case the text names");
     }
 }

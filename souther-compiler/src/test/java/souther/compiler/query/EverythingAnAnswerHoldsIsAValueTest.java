@@ -1,5 +1,8 @@
 package souther.compiler.query;
 
+import souther.compiler.query.Measurement;
+import souther.compiler.query.PartitionDerivation;
+import souther.compiler.query.BoundaryDerivation;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Array;
@@ -129,9 +132,9 @@ class EverythingAnAnswerHoldsIsAValueTest {
 
         Set<String> reached = walkOf(compilation.db()).classes();
 
-        assertTrue(reached.contains(PartitionDerivation.Absent.class.getName()),
+        assertTrue(reached.contains(Measurement.NotApplicable.class.getName()),
                 () -> "no partition measure came to an absence: " + reached.size() + " classes");
-        assertTrue(reached.contains(BoundaryDerivation.Absent.class.getName()),
+        assertTrue(reached.contains(Measurement.NotApplicable.class.getName()),
                 "no border measure came to an absence");
     }
 

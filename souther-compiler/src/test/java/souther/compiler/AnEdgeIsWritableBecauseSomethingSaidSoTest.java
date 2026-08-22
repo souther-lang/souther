@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.query.Measurement;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
@@ -118,7 +119,8 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
         ItemAssessment.Owed at =
                 assessmentAt(PROVEN_BUT_UNREACHED, "example.proven", "place", "0");
 
-        assertInstanceOf(ItemAssessment.Coverage.Missed.class, at.coverage());
+        assertInstanceOf(ItemAssessment.Coverage.NoHit.class,
+at.coverage().made().orElseThrow());
         assertInstanceOf(ItemAssessment.Writability.ProvenByProjection.class, at.writability(),
                 "every rule of `Amount` was read, so 0 is a value it holds");
         assertInstanceOf(ItemAssessment.Attempt.Unresolved.class, at.attempt(),
@@ -200,7 +202,8 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
                     | "bottom" : (N(0)) -> Ok
                 """;
         ItemAssessment.Owed at = assessmentAt(model, "example.at", "f", "0");
-        assertInstanceOf(ItemAssessment.Coverage.Hit.class, at.coverage());
+        assertInstanceOf(ItemAssessment.Coverage.Hit.class,
+at.coverage().made().orElseThrow());
         assertInstanceOf(ItemAssessment.Writability.WitnessedByRow.class, at.writability(),
                 "the row is the witness");
         assertEquals(ItemAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE,
@@ -240,9 +243,8 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
                     | "some" : (N(4)) -> Other
                 """;
         ItemAssessment.Owed at = assessmentAt(model, "example.unnamed", "f", "0");
-        ItemAssessment.Coverage.NotMeasured absent = assertInstanceOf(
-                ItemAssessment.Coverage.NotMeasured.class, at.coverage());
-        assertEquals(ItemAssessment.Coverage.Reason.NO_ROWS, absent.reason());
+        assertEquals(ItemAssessment.Coverage.NotAsked.NO_ROWS,
+                assertInstanceOf(Measurement.NotMeasured.class, at.coverage()).why());
         assertTrue(at.writability().known(),
                 "nobody wrote a row, which says nothing about whether one could be written");
         assertInstanceOf(ItemAssessment.Attempt.Built.class, at.attempt(),
@@ -287,9 +289,9 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
                         .filter(p -> p.owed() != null).toList();
         assertFalse(guards.isEmpty(), "the comparison draws lines: " + boundaries.get("f"));
         for (BorderAssessment.Point at : guards) {
-            assertEquals(ItemAssessment.Coverage.Reason.ARMS_NOT_ASKED,
-                    assertInstanceOf(ItemAssessment.Coverage.NotMeasured.class,
-                            at.owed().coverage()).reason(), at.label());
+            assertEquals(ItemAssessment.Coverage.NotAsked.ARMS_NOT_ASKED,
+                    assertInstanceOf(Measurement.NotMeasured.class,
+                            at.owed().coverage()).why(), at.label());
             assertEquals(ItemAssessment.Attempt.Reason.NOT_MEASURED,
                     assertInstanceOf(ItemAssessment.Attempt.NotAttempted.class,
                             at.owed().attempt()).reason(), at.label());

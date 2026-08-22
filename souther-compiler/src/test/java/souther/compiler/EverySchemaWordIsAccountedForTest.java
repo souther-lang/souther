@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Every word the shipped schema allows is one somebody accounted for.
  *
- * <p>Every enumerated field of {@code adequacy-schema-4.json} is a second spelling of a Java enum.
+ * <p>Every enumerated field of {@code adequacy-schema-5.json} is a second spelling of a Java enum.
  * The two are edited in different files by different hands, and until this test nothing noticed when
  * one moved: `ROW_TIMED_OUT` became `ROW_UNDECIDED` when a row stopped being held to a clock, the
  * rename was right, and the schema went on promising a word that had not been emitted since.
@@ -57,7 +57,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class EverySchemaWordIsAccountedForTest {
 
-    private static final String SCHEMA = "/souther/adequacy-schema-4.json";
+    private static final String SCHEMA = "/souther/adequacy-schema-5.json";
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     /**
@@ -65,27 +65,38 @@ class EverySchemaWordIsAccountedForTest {
      *
      * @param at the field, as the keys leading to it from the root of the schema
      */
-    private record Vocabulary(String label, List<String> at, Class<?> source,
+    private record Vocabulary(String label, List<String> at, List<Class<?>> source,
                               Set<String> written, Set<String> retired) {
 
-        Vocabulary(String label, List<String> at, Class<?> source) {
-            this(label, at, source, null, Set.of());
+        /**
+         * One field's words, from the reasons that spell them.
+         *
+         * <p>More than one class per field since #953. Which kind of no-number a reason is, is its
+         * type, so one measure's reasons live in two or three enums — and a field carries the words
+         * of all of them, because a document does not say which Java type a word came from.
+         */
+        Vocabulary(String label, List<String> at, Class<?>... source) {
+            this(label, at, List.of(source), null, Set.of());
         }
 
-        Vocabulary(String label, List<String> at, Class<?> source,
-                   Set<String> retired) {
-            this(label, at, source, null, retired);
+        Vocabulary(String label, List<String> at, Set<String> retired, Class<?>... source) {
+            this(label, at, List.of(source), null, retired);
         }
 
         /** A field whose words are not an enum's own names. {@link #source} is what they are
          * projected from, named so a reader knows where to look, and not what they are spelled by. */
         Vocabulary(String label, List<String> at, Set<String> written) {
-            this(label, at, MeasurementStatus.class, written, Set.of());
+            this(label, at, List.of(MeasurementStatus.class), written, Set.of());
         }
 
         /** Every word a document of this version may carry: what is written now, and what was. */
         Set<String> allowed() {
-            Set<String> out = new LinkedHashSet<>(written == null ? wordsOf(source) : written);
+            Set<String> out = new LinkedHashSet<>();
+            if (written == null) {
+                source.forEach(each -> out.addAll(wordsOf(each)));
+            } else {
+                out.addAll(written);
+            }
             out.addAll(retired);
             return out;
         }
@@ -148,7 +159,8 @@ class EverySchemaWordIsAccountedForTest {
             // the constants.
             new Vocabulary("status", List.of("$defs", "status"), STATUS_WORDS),
             new Vocabulary("branch.reason", List.of("$defs", "branch", "properties", "reason"),
-                    Adequacy.BranchEvidence.Reason.class),
+                    Adequacy.BranchEvidence.NoBody.class, Adequacy.BranchEvidence.NotAsked.class,
+                    Adequacy.BranchEvidence.Unreadable.class),
             new Vocabulary("findings[].kind",
                     List.of("$defs", "findings", "items", "properties", "kind"),
                     Adequacy.Kind.class),
@@ -162,14 +174,14 @@ class EverySchemaWordIsAccountedForTest {
             new Vocabulary("branch.unreached[].kind",
                     List.of("$defs", "branch", "properties", "unreached", "items", "properties",
                             "kind"),
-                    souther.compiler.coverage.OutcomeName.class, armWords(), Set.of()),
+                    List.of(souther.compiler.coverage.OutcomeName.class), armWords(), Set.of()),
             // The other half of what an arm is. Held apart from the outcome because they vary on
             // their own: an `else` is written under an `if` and under a `guard`, and a construct
             // added to the language does not add an outcome.
             new Vocabulary("branch.unreached[].construct",
                     List.of("$defs", "branch", "properties", "unreached", "items", "properties",
                             "construct"),
-                    souther.compiler.types.CoverageConstruct.class, constructWords(), Set.of()),
+                    List.of(souther.compiler.types.CoverageConstruct.class), constructWords(), Set.of()),
             // What a rule of the model raises. Only the questions this compiler issues today: a
             // word arrives here in the same change that starts raising it, so the enum and the
             // schema move together or the compile stops.
@@ -181,8 +193,10 @@ class EverySchemaWordIsAccountedForTest {
             new Vocabulary("partition.axesMeasure.reason",
                     List.of("$defs", "partition", "properties", "axesMeasure", "properties",
                             "reason"),
-                    souther.compiler.query.PartitionDerivation.Reason.class,
-                    Set.of("no_axis_derived")),
+                    Set.of("no_axis_derived"),
+                    souther.compiler.query.PartitionDerivation.NoSubject.class,
+                    souther.compiler.query.PartitionDerivation.TheReadingDidNotRunOut.class,
+                    souther.compiler.query.PartitionDerivation.NothingIsDivided.class),
             // Written once and referred to twice: a position's reading and a rule left unread are
             // the same question asked of two things, and two copies of the words would be two
             // places for one of them to gain a word the other does not have.
@@ -193,12 +207,14 @@ class EverySchemaWordIsAccountedForTest {
             new Vocabulary("partition.boundariesMeasure.reason",
                     List.of("$defs", "partition", "properties", "boundariesMeasure", "properties",
                             "reason"),
-                    souther.compiler.query.BoundaryDerivation.Reason.class,
-                    Set.of("no_lines_derived")),
+                    Set.of("no_lines_derived"),
+                    souther.compiler.query.BoundaryDerivation.NoSubject.class,
+                    souther.compiler.query.BoundaryDerivation.TheReadingDidNotRunOut.class,
+                    souther.compiler.query.BoundaryDerivation.NoRuleDrawsALine.class),
             new Vocabulary("partition.axes[].reason",
                     List.of("$defs", "partition", "properties", "axes", "items", "properties",
                             "reason"),
-                    PartitionEvidence.AxisCoverage.Reason.class),
+                    PartitionEvidence.AxisCoverage.NoRows.class),
             new Vocabulary("partition.axes[].unprovenClaims[].why",
                     List.of("$defs", "partition", "properties", "axes", "items", "properties",
                             "unprovenClaims", "items", "properties", "why"),
@@ -226,12 +242,14 @@ class EverySchemaWordIsAccountedForTest {
             new Vocabulary("partition.boundaries[].items[].reason",
                     List.of("$defs", "partition", "properties", "boundaries", "items", "properties",
                             "items", "items", "properties", "reason"),
-                    ItemAssessment.Coverage.Reason.class, Set.of("no_arm_witnesses_it")),
+                    Set.of("no_arm_witnesses_it"),
+                    ItemAssessment.Coverage.NotAsked.class,
+                    ItemAssessment.Coverage.CouldNotAsk.class),
             new Vocabulary("partition.pairs.reason",
                     List.of("$defs", "partition", "properties", "pairs", "properties", "reason"),
-                    PartitionEvidence.PairSpace.Reason.class),
+                    PartitionEvidence.PairSpace.NoRows.class),
             new Vocabulary("signature.reason", List.of("$defs", "signature", "properties", "reason"),
-                    Adequacy.SignatureEvidence.Reason.class),
+                    Adequacy.SignatureEvidence.NotASum.class, Adequacy.SignatureEvidence.NoRows.class),
             new Vocabulary("incompleteness.scope",
                     List.of("$defs", "incompleteness", "properties", "scope"),
                     Incompleteness.Scope.class),
@@ -241,12 +259,12 @@ class EverySchemaWordIsAccountedForTest {
             // the contract — a word that stops being emitted and is not written down still fails.
             new Vocabulary("incompleteness.code",
                     List.of("$defs", "incompleteness", "properties", "code"),
-                    Incompleteness.Code.class, Set.of("probe_mapping_lost")),
+                    Set.of("probe_mapping_lost"), Incompleteness.Code.class),
             // Whether a place is where the code it names is written. Not an enum: the two words
             // are the citation's own, and are read off it rather than listed here.
             new Vocabulary("at.writtenAt.kind",
                     List.of("$defs", "writtenAt", "properties", "kind"),
-                    Citation.class, writtenAtWords(), Set.of()));
+                    List.of(Citation.class), writtenAtWords(), Set.of()));
 
     /**
      * The status words the schema allows are the ones the writer can write.
@@ -270,7 +288,8 @@ class EverySchemaWordIsAccountedForTest {
         JsonNode schema = schema();
         for (Vocabulary each : VOCABULARIES) {
             assertEquals(each.allowed(), allowedAt(schema, each.at()),
-                    each.label() + ": the schema and " + each.source().getSimpleName()
+                    each.label() + ": the schema and " + each.source().stream()
+                            .map(Class::getSimpleName).toList()
                             + " name different words");
         }
     }
@@ -533,7 +552,7 @@ class EverySchemaWordIsAccountedForTest {
 
     private static JsonNode schema() {
         try (InputStream in = AdequacyReport.class.getResourceAsStream(SCHEMA)) {
-            assertNotNull(in, "adequacy-schema-4.json ships beside the compiler");
+            assertNotNull(in, "adequacy-schema-5.json ships beside the compiler");
             return JSON.readTree(new String(in.readAllBytes(), StandardCharsets.UTF_8));
         } catch (java.io.IOException e) {
             throw new AssertionError(e);

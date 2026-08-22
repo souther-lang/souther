@@ -106,7 +106,8 @@ class AThresholdOnAnElementIsMetByARowTest {
                 .filter(point -> "21000".equals(point.against())).toList();
 
         assertEquals(1, at.size(), () -> "one point at the threshold: " + owedFor(">="));
-        assertEquals(new ItemAssessment.Coverage.Missed(), at.get(0).owed().coverage(),
+        assertEquals(new ItemAssessment.Coverage.NoHit(),
+at.get(0).owed().coverage().made().orElseThrow(),
                 "every row was read here, and none writes an item charged exactly 21000");
     }
 
@@ -128,7 +129,8 @@ class AThresholdOnAnElementIsMetByARowTest {
                 .filter(point -> point.role().againstTheLine()).filter(point -> point.owed() != null)
                 .filter(point -> "21000".equals(point.against())).findFirst().orElseThrow();
 
-        assertEquals(new ItemAssessment.Coverage.Hit(), at.owed().coverage(),
+        assertEquals(new ItemAssessment.Coverage.Hit(),
+at.owed().coverage().made().orElseThrow(),
                 "the row holds an item at the threshold, among others");
     }
 }

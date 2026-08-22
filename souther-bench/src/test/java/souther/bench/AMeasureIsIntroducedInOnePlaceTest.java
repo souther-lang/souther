@@ -1,5 +1,7 @@
 package souther.bench;
 
+import souther.compiler.query.PartitionDerivation;
+import souther.compiler.query.BoundaryDerivation;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;

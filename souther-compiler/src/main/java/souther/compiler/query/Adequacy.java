@@ -16,9 +16,6 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.Incompleteness;
-import souther.compiler.observe.InputCaseEvidence;
-import souther.compiler.observe.MeasurementStatus;
-import souther.compiler.observe.OutputCaseEvidence;
 import souther.compiler.observe.Counting;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
@@ -212,7 +209,7 @@ public final class Adequacy {
 
     /** Nothing read, so nothing proven and nothing shown wrong. What a measure gets where the
      *  reading is not available, which leaves every arm owed whatever it was owed. */
-    static final souther.compiler.check.PathReachability.Answers.AsRun NOTHING_PROVEN =
+    public static final souther.compiler.check.PathReachability.Answers.AsRun NOTHING_PROVEN =
             new souther.compiler.check.PathReachability.Answers.AsRun(souther.compiler.check.PathReachability.Answers.NONE, Set.of());
 
     static Asked askedOf(Db db) {
@@ -235,41 +232,58 @@ public final class Adequacy {
         return levelOf(db).measuresArms() ? Output.CoverageMode.ARMS : Output.CoverageMode.NONE;
     }
 
-    /** What the rows say about one behavior's signature. */
+    /**
+     * What the rows say about one behavior's signature.
+     *
+     * <p>An aggregate and not a number of its own: the numbers are the output's and the inputs'.
+     * What its own measurement carries is that there was something to count and it was counted, and
+     * what it went without is the union of what its parts went without and what the signature
+     * measure itself could not see.
+     */
     public record SignatureEvidence(OutputCaseEvidence output, List<InputCaseEvidence> inputs,
-                                    MeasurementStatus status, Reason reason) {
+                                    Measurement<Counted> counted) {
+
+        /** That the signature's cases were counted. */
+        public record Counted() {}
 
         /** Why the signature has no numbers. */
-        public enum Reason implements souther.compiler.observe.MeasureReason {
-            /** No row names this behavior, so nothing was established about it either way. */
-            NO_ROWS(MeasurementStatus.NOT_MEASURED),
+        public enum NotASum implements souther.compiler.observe.NotApplicableReason {
             /** Neither the output nor any input is a sum, so there is no case anywhere for a row to
-             *  cover and no row could make one. Held here rather than read back from the two empty
-             *  case sets below it: a reader that counted them would be answering a different
-             *  question — how many cases there are — and getting this one right by coincidence. */
-            NOT_A_SUM(MeasurementStatus.NOT_APPLICABLE);
-
-            private final MeasurementStatus status;
-
-            Reason(MeasurementStatus status) {
-                this.status = status;
-            }
-
-            @Override
-            public MeasurementStatus status() {
-                return status;
-            }
-
-            /** Neither of these is a reading that stopped: one is a shape of the model and one is a row nobody wrote. */
-            @Override
-            public boolean somethingWasUnreadable() {
-                return false;
-            }
+             *  cover and no row could make one. Held rather than read back from the two empty case
+             *  sets below it: a reader that counted them would be answering a different question —
+             *  how many cases there are — and getting this one right by coincidence. */
+            NOT_A_SUM
         }
 
-        public static SignatureEvidence unavailable(OutputCaseEvidence output,
-                                                    List<InputCaseEvidence> inputs, Reason reason) {
-            return new SignatureEvidence(output, inputs, reason.status(), reason);
+        /** The same, for a measurement nobody asked for. */
+        public enum NoRows implements souther.compiler.observe.NotMeasuredReason {
+            /** No row names this behavior, so nothing was established about it either way. */
+            NO_ROWS
+        }
+
+        public static SignatureEvidence notASum(OutputCaseEvidence output,
+                                                List<InputCaseEvidence> inputs) {
+            return new SignatureEvidence(output, inputs,
+                    new Measurement.NotApplicable<>(NotASum.NOT_A_SUM));
+        }
+
+        public static SignatureEvidence noRows(OutputCaseEvidence output,
+                                               List<InputCaseEvidence> inputs) {
+            return new SignatureEvidence(output, inputs,
+                    new Measurement.NotMeasured<>(NoRows.NO_ROWS));
+        }
+
+        /** What the rows came to, with what the parts went without folded in. The one place the
+         *  states are chosen between. */
+        public static SignatureEvidence of(OutputCaseEvidence output,
+                                           List<InputCaseEvidence> inputs, WeakeningSet own) {
+            WeakeningSet by = own.union(output.cases().weakening());
+            for (InputCaseEvidence each : inputs) {
+                by = by.union(each.cases().weakening());
+            }
+            return new SignatureEvidence(output, inputs, by.isEmpty()
+                    ? new Measurement.Complete<>(new Counted())
+                    : new Measurement.Partial<>(new Counted(), by));
         }
 
         public SignatureEvidence {
@@ -280,17 +294,12 @@ public final class Adequacy {
             // names a position by. They are read by different surfaces, so a list assembled out of
             // step would publish an array whose first entry called itself the second, and each
             // surface would go on being right about the one it reads.
-            //
-            // Held here because here is where both exist. The evidence carries the position so that
-            // one of them means something away from this list, and the price of that is that the
-            // two can be said to differ; this is where they are said to agree.
             for (int i = 0; i < inputs.size(); i++) {
                 if (inputs.get(i).at() != i) {
                     throw new IllegalArgumentException("the evidence at input " + i
                             + " says it is input " + inputs.get(i).at());
                 }
             }
-            Unavailable.check(status, reason);
         }
     }
 
@@ -692,7 +701,7 @@ public final class Adequacy {
                 if (sig == null) {
                     continue;   // a behavior whose signature did not work out has nothing to measure
                 }
-                out.put(behavior.name(), evidenceOf(sig, scope.value(),
+                out.put(behavior.name(), evidenceOf(behavior.name(), sig, scope.value(),
                         byTarget.getOrDefault(behavior.name(), Observed.NONE),
                         behavior instanceof Hir.SpecBehavior spec ? spec.params().stream()
                                 .map(Hir.Param::name).toList() : List.of(),
@@ -962,118 +971,138 @@ public final class Adequacy {
      *                {@link #all} beside it, because a measure that quietly counted such an arm as
      *                covered would report a full denominator and hide the one fact worth acting on.
      */
-    public record BranchEvidence(List<souther.compiler.coverage.CoverageSites.Site> all,
-                                 Set<Integer> covered, Set<Integer> contradicted,
-                                 MeasurementStatus observation, MeasurementStatus status,
-                                 Reason reason) {
+    public record BranchEvidence(Measurement<Arms> measured) {
 
         /**
-         * Whether every row that bears on these arms could be read, and whether this analysis
-         * stands.
+         * The arms of one behavior and what the rows went through.
          *
-         * <p>Beside {@link #status} and not the same question. Two things leave a measurement short
-         * of complete and only one of them is about the rows: a row nothing could read leaves every
-         * arm undecided, while an obligation nothing can tell from its neighbour leaves that one
-         * obligation undecided and says nothing about the rest. Folded into one number, the second
-         * took the first's meaning -- an arm no row goes through, and nothing uncertain about it,
-         * stopped being reported because a helper elsewhere in the body could not be told apart.
+         * @param all     the arms this behavior is owed a row for, with the ones nothing reaches
+         *                taken out
+         * @param covered the ones a row went through
          */
-        public MeasurementStatus observation() {
-            return observation;
+        public record Arms(List<souther.compiler.coverage.CoverageSites.Site> all,
+                           Set<Integer> covered) {
+
+            public Arms {
+                all = List.copyOf(all);
+                covered = Set.copyOf(covered);
+            }
         }
 
         /**
-         * Why a behavior's arms have no number, in the order the measurement asks.
+         * Why a behavior's arms have no number, where nobody asked for one.
          *
-         * <p>The first gate that did not open is the answer. They are asked in that order because that
-         * is the order the work happens in: a body has to exist before anything can be asked about it,
-         * the build has to ask before the classes are generated, the classes have to survive before a
-         * row can carry what it went through, and a row has to name the behavior before any of it is
-         * about this one.
+         * <p>The first gate that did not open is the answer. They are asked in that order because
+         * that is the order the work happens in: a body has to exist before anything can be asked
+         * about it, the build has to ask before the classes are generated, and a row has to name the
+         * behavior before any of it is about this one.
          */
-        public enum Reason implements souther.compiler.observe.MeasureReason {
-            /** A {@code >->} composition or a behavior with no {@code let}. It has no arms of its own,
-             *  so the measure does not apply rather than failing. */
-            NO_BODY(MeasurementStatus.NOT_APPLICABLE),
+        public enum NotAsked implements souther.compiler.observe.NotMeasuredReason {
             /** The build did not ask for the arms, which cost a second run of every row. */
-            NOT_ASKED(MeasurementStatus.NOT_MEASURED),
-            /** The rows ran without instrumentation, so what they went through went with it. */
-            UNREADABLE(MeasurementStatus.NOT_MEASURED),
-            /** No row names this behavior. The measurement is opted into by writing one, and reaching
-             *  the behavior through somebody else's row is not opting in. */
-            NO_ROWS(MeasurementStatus.NOT_MEASURED);
-
-            private final MeasurementStatus status;
-
-            Reason(MeasurementStatus status) {
-                this.status = status;
-            }
-
-            @Override
-            public MeasurementStatus status() {
-                return status;
-            }
-
-            /** The rows ran without instrumentation, so what they went through went with it. The other three are a measurement nobody asked for, or arms this behavior does not have. */
-            @Override
-            public boolean somethingWasUnreadable() {
-                return this == UNREADABLE;
-            }
+            NOT_ASKED,
+            /** No row names this behavior. The measurement is opted into by writing one, and
+             *  reaching the behavior through somebody else's row is not opting in. */
+            NO_ROWS
         }
 
-        public static BranchEvidence unavailable(Reason reason) {
-            return new BranchEvidence(List.of(), Set.of(), Set.of(), reason.status(),
-                    reason.status(), reason);
+        /** A {@code >->} composition or a behavior with no {@code let}. It has no arms of its own,
+         *  so the measure does not apply rather than failing. */
+        public enum NoBody implements souther.compiler.observe.NotApplicableReason {
+            NO_BODY
+        }
+
+        /** The rows ran without instrumentation, so what they went through went with it. The one
+         *  reason here that is a measurement started and not finished. */
+        public enum Unreadable implements souther.compiler.observe.FailureReason {
+            UNREADABLE
+        }
+
+        public static BranchEvidence noBody() {
+            return new BranchEvidence(new Measurement.NotApplicable<>(NoBody.NO_BODY));
+        }
+
+        public static BranchEvidence notAsked(NotAsked reason) {
+            return new BranchEvidence(new Measurement.NotMeasured<>(reason));
+        }
+
+        public static BranchEvidence unreadable(WeakeningSet by) {
+            return new BranchEvidence(
+                    new Measurement.FailedToMeasure<>(Unreadable.UNREADABLE, by));
         }
 
         /**
          * The arms of one behavior, with the ones nothing reaches taken out of what it is owed.
          *
-         * <p>Taken out here and not where the probes are numbered. The plan says where instrumentation
-         * is; this says which of it is owed a row, and the two are different questions — a site with no
-         * probe could never disprove the reachability it was excluded by.
+         * <p>Taken out here and not where the probes are numbered. The plan says where
+         * instrumentation is; this says which of it is owed a row, and the two are different
+         * questions — a site with no probe could never disprove the reachability it was excluded by.
+         *
+         * <p>Three things can leave this weaker than complete and all three arrive as what they are.
+         * A row nothing could read leaves every arm undecided. A proof a row has already disproved
+         * is not something to report a complete measurement over: what is wrong is this analysis,
+         * not the model's rows. And arms counted as one that nothing tells apart are more than one,
+         * so what the numbers hold is more than they say. Folded into one word, the second took the
+         * first's meaning — an arm no row goes through, and nothing uncertain about it, stopped
+         * being reported because a helper elsewhere in the body could not be told apart — which is
+         * why this measure grew a second status field beside the first (issue #953).
          */
-        public static BranchEvidence measured(List<souther.compiler.coverage.CoverageSites.Site> all,
-                                              Set<Integer> covered, souther.compiler.check.PathReachability.Answers.AsRun reachable,
-                                              MeasurementStatus status) {
+        public static BranchEvidence measured(String behavior,
+                                              List<souther.compiler.coverage.CoverageSites.Site> all,
+                                              Set<Integer> covered,
+                                              souther.compiler.check.PathReachability.Answers.AsRun reachable,
+                                              WeakeningSet rows) {
             List<souther.compiler.coverage.CoverageSites.Site> owed = all.stream()
                     .filter(site -> !reachable.answers().nothingArrivesAt(site.index())).toList();
             Set<Integer> counted = new LinkedHashSet<>(covered);
             counted.retainAll(owed.stream()
                     .map(souther.compiler.coverage.CoverageSites.Site::index).toList());
-            // A proof a row has already disproved is not something to report a complete measurement
-            // over. What is wrong is this analysis, not the model's rows, and a number given as though
-            // nothing had happened is the one thing that must not come out of it.
-            MeasurementStatus observation =
-                    reachable.provedWrong().isEmpty() ? status : MeasurementStatus.PARTIAL;
-            BranchEvidence measured = new BranchEvidence(owed, counted,
-                    reachable.provedWrong(), observation, observation, null);
-            // Arms counted as one that nothing shows are one. What the numbers then hold is more
-            // than they say, so they are not a complete measurement of what they name — a count
-            // that says every arm is covered while holding two predicates under one of them is the
-            // sentence this is against, and a status of complete beside it is that sentence in the
-            // one field a build reads.
-            return measured.unsettledDecisions().isEmpty() ? measured
-                    : new BranchEvidence(owed, counted, reachable.provedWrong(),
-                            observation, MeasurementStatus.PARTIAL, null);
+            Arms arms = new Arms(owed, counted);
+            WeakeningSet by = rows;
+            for (int probe : reachable.provedWrong()) {
+                by = by.union(WeakeningSet.of(new Weakening.ProofContradicted(behavior, probe)));
+            }
+            for (souther.compiler.types.CoverageOrigin fork : unsettled(arms)) {
+                by = by.union(WeakeningSet.of(new Weakening.ArmsUnsettled(fork)));
+            }
+            return new BranchEvidence(by.isEmpty()
+                    ? new Measurement.Complete<>(arms) : new Measurement.Partial<>(arms, by));
         }
 
-        public BranchEvidence {
-            all = List.copyOf(all);
-            covered = Set.copyOf(covered);
-            contradicted = Set.copyOf(contradicted);
-            Unavailable.check(status, reason);
+        /** Whether this behavior has arms for the measure to be about. */
+        public boolean applicable() {
+            return !(measured instanceof Measurement.NotApplicable<Arms>);
         }
 
         /**
-         * Whether this behavior has arms for the measure to be about.
+         * Whether what the rows went through was read in full and this analysis was not shown wrong.
          *
-         * <p>Read off the status, which now has a word for it. This used to ask after
-         * {@link Reason#NO_BODY} because {@code MeasurementStatus} had none, and every caller that
-         * needed the distinction had to know this measure's reasons to get it.
+         * <p>Asked of the weakening rather than kept beside the measurement as a second status. Two
+         * things leave this measure short of complete and only one of them is about the rows: a row
+         * nothing could read leaves every arm undecided, while an obligation nothing can tell from
+         * its neighbour leaves that one obligation undecided and says nothing about the rest.
          */
-        public boolean applicable() {
-            return status != MeasurementStatus.NOT_APPLICABLE;
+        public boolean armsWereReadInFull() {
+            return measured.made().isPresent() && measured.weakening().causes().stream()
+                    .allMatch(Weakening.ArmsUnsettled.class::isInstance);
+        }
+
+        /** The arms this behavior is owed a row for, empty where nothing was measured. */
+        public List<souther.compiler.coverage.CoverageSites.Site> all() {
+            return measured.made().map(Arms::all).orElseGet(List::of);
+        }
+
+        /** The ones a row went through, likewise. */
+        public Set<Integer> covered() {
+            return measured.made().map(Arms::covered).orElseGet(Set::of);
+        }
+
+        /** The arms a row went through that this compiler had proven nothing arrives at. Read off
+         *  what weakened the measurement, which is where that fact is now kept. */
+        public Set<Integer> contradicted() {
+            return measured.weakening().causes().stream()
+                    .filter(Weakening.ProofContradicted.class::isInstance)
+                    .map(each -> ((Weakening.ProofContradicted) each).probe())
+                    .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
         }
 
         /**
@@ -1090,7 +1119,7 @@ public final class Adequacy {
                 List<souther.compiler.coverage.CoverageSites.Site>> byObligation() {
             java.util.SequencedMap<souther.compiler.coverage.CoverageSites.Obligation,
                     List<souther.compiler.coverage.CoverageSites.Site>> out = new LinkedHashMap<>();
-            for (souther.compiler.coverage.CoverageSites.Site site : all) {
+            for (souther.compiler.coverage.CoverageSites.Site site : all()) {
                 out.computeIfAbsent(site.obligation(), _ -> new ArrayList<>()).add(site);
             }
             return out;
@@ -1113,7 +1142,7 @@ public final class Adequacy {
             int hit = 0;
             for (List<souther.compiler.coverage.CoverageSites.Site> occurrences
                     : byObligation().values()) {
-                if (occurrences.stream().anyMatch(site -> covered.contains(site.index()))) {
+                if (occurrences.stream().anyMatch(site -> covered().contains(site.index()))) {
                     hit++;
                 }
             }
@@ -1140,13 +1169,28 @@ public final class Adequacy {
             return !key.decided().isSettled();
         }
 
+        /** The forks whose occurrences nothing tells apart. Read off what weakened the
+         *  measurement, which is where the fact is kept once. */
         public List<souther.compiler.types.CoverageOrigin> unsettledDecisions() {
+            return measured.weakening().causes().stream()
+                    .filter(Weakening.ArmsUnsettled.class::isInstance)
+                    .map(each -> ((Weakening.ArmsUnsettled) each).fork()).toList();
+        }
+
+        /** The same, of arms nothing has yet made a measurement of. The one place the fact is
+         *  found; everything else asks the measurement. */
+        private static List<souther.compiler.types.CoverageOrigin> unsettled(Arms arms) {
             List<souther.compiler.types.CoverageOrigin> out = new ArrayList<>();
-            byObligation().forEach((key, occurrences) -> {
+            java.util.SequencedMap<souther.compiler.coverage.CoverageSites.Obligation,
+                    List<souther.compiler.coverage.CoverageSites.Site>> byObligation =
+                    new LinkedHashMap<>();
+            for (souther.compiler.coverage.CoverageSites.Site site : arms.all()) {
+                byObligation.computeIfAbsent(site.obligation(), _ -> new ArrayList<>()).add(site);
+            }
+            byObligation.forEach((key, occurrences) -> {
                 // Of the fork and not of its arms. Both arms of one fork are counted together or
                 // neither is, so saying it per arm says one thing twice.
-                if (unsettledDecision(key)
-                        && !out.contains(key.origin())) {
+                if (unsettledDecision(key) && !out.contains(key.origin())) {
                     out.add(key.origin());
                 }
             });
@@ -1182,7 +1226,7 @@ public final class Adequacy {
                     continue;
                 }
                 List<souther.compiler.coverage.CoverageSites.Site> occurrences = each.getValue();
-                if (occurrences.stream().noneMatch(site -> covered.contains(site.index()))) {
+                if (occurrences.stream().noneMatch(site -> covered().contains(site.index()))) {
                     out.add(occurrences.get(0));
                 }
             }
@@ -1242,24 +1286,19 @@ public final class Adequacy {
                 List<souther.compiler.coverage.CoverageSites.Site> arms =
                         plan.arms(behavior.name());
                 Observed observed = byTarget.getOrDefault(behavior.name(), Observed.NONE);
-                BranchEvidence.Reason absent =
+                BranchEvidence absent =
                         whyNoArms(behavior.name(), withBodies, measured, observed);
                 if (absent != null) {
-                    out.put(behavior.name(), BranchEvidence.unavailable(absent));
+                    out.put(behavior.name(), absent);
                     continue;
                 }
                 Set<Integer> covered = new LinkedHashSet<>(lit);
                 covered.retainAll(arms.stream()
                         .map(souther.compiler.coverage.CoverageSites.Site::index).toList());
-                // A row that did not finish went somewhere before it stopped, and what it went through
-                // was dropped with it. So the arms it did not light are undecided rather than
-                // unreached, and the whole measure says so — the arms that were lit are still lit.
-                boolean partial = !observed.complete() || observed.rows().stream()
-                        .anyMatch(row -> row.disposition() == Disposition.INCOMPLETE);
-                out.put(behavior.name(), BranchEvidence.measured(arms, covered,
+                out.put(behavior.name(), BranchEvidence.measured(behavior.name(), arms, covered,
                         reachable == null ? NOTHING_PROVEN
                                 : reachable.getOrDefault(behavior.name(), NOTHING_PROVEN),
-                        partial ? MeasurementStatus.PARTIAL : MeasurementStatus.COMPLETE));
+                        rowsBehind(observed)));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -1273,25 +1312,50 @@ public final class Adequacy {
          * first. The bodies say which behaviors have arms; the arm count cannot, since a body with no
          * fork in it also has none.
          */
-        private static BranchEvidence.Reason whyNoArms(String behavior, Set<String> withBodies,
-                                                       boolean measured, Observed observed) {
+        private static BranchEvidence whyNoArms(String behavior, Set<String> withBodies,
+                                                boolean measured, Observed observed) {
             if (!withBodies.contains(behavior)) {
-                return BranchEvidence.Reason.NO_BODY;
+                return BranchEvidence.noBody();
             }
             if (!measured) {
-                return BranchEvidence.Reason.NOT_ASKED;
+                return BranchEvidence.notAsked(BranchEvidence.NotAsked.NOT_ASKED);
             }
             if (observed.armsUnseen()) {
-                return BranchEvidence.Reason.UNREADABLE;
+                // Started and not finished, so it says what it went without. The entries that say
+                // the instrumentation was not there are exactly what a reader needs to know why
+                // there is no number, and they used to be somewhere else on the page.
+                return BranchEvidence.unreadable(rowsBehind(observed));
             }
             // Nothing read is not the same as nothing written. Where a source could not be evaluated
             // at all, the rows this behavior is waiting on may be sitting in it, and answering
             // `NO_ROWS` would tell an author to write what is already there. The measure goes ahead
             // on what was seen and comes back undecided, which is what it is.
             if (observed.rows().isEmpty() && !observed.someRowsUnseen()) {
-                return BranchEvidence.Reason.NO_ROWS;
+                return BranchEvidence.notAsked(BranchEvidence.NotAsked.NO_ROWS);
             }
             return null;
+        }
+
+        /**
+         * What the rows behind an arm measurement leave it weaker by.
+         *
+         * <p>A row that did not finish went somewhere before it stopped, and what it went through
+         * was dropped with it — so the arms it did not light are undecided rather than unreached,
+         * and the arms that were lit are still lit. A source nothing evaluated leaves no row to
+         * find at all. Both arrive here as the fact they are rather than as a word for how far the
+         * measurement got.
+         */
+        private static WeakeningSet rowsBehind(Observed observed) {
+            Set<Weakening> out = new LinkedHashSet<>();
+            for (Incompleteness gap : observed.incompleteness()) {
+                out.add(new Weakening.ObservationIncomplete(gap));
+            }
+            for (RowOutcome row : observed.rows()) {
+                if (row.disposition() == Disposition.INCOMPLETE) {
+                    out.add(new Weakening.RowDidNotFinish(row.identity()));
+                }
+            }
+            return WeakeningSet.ofAll(out);
         }
     }
 
@@ -1348,11 +1412,6 @@ public final class Adequacy {
          */
         public boolean someRowsUnseen() {
             return incompleteness.stream().anyMatch(gap -> gap.code().leftNoRowRead());
-        }
-
-        /** The status a measure over these rows takes before its own reading is considered. */
-        public MeasurementStatus status() {
-            return complete() ? MeasurementStatus.COMPLETE : MeasurementStatus.PARTIAL;
         }
     }
 
@@ -2059,7 +2118,7 @@ public final class Adequacy {
      * one of a body that may have been spliced in from a file nobody holds. A report reading a
      * coordinate cannot tell the two apart, and printed the second as though it were the first.
      */
-    public record Finding(String behavior, MeasurementStatus status, Citation at, About about) {
+    public record Finding(String behavior, WeakeningSet weakenedBy, Citation at, About about) {
 
         /**
          * What a build does about a finding, which is what neither surface used to say.
@@ -2134,8 +2193,10 @@ public final class Adequacy {
             if (!criterion.refuses(kind())) {
                 return Disposition.REPORTED;
             }
-            return status == MeasurementStatus.COMPLETE
-                    ? Disposition.REFUSED : Disposition.UNDECIDED;
+            // What the measurement that found this went without, and not a word for how far it
+            // got. A build refuses over a gap a measure established; where something the measure
+            // reads could not be read, what it did not find is undecided rather than absent.
+            return weakenedBy.isEmpty() ? Disposition.REFUSED : Disposition.UNDECIDED;
         }
 
         /** Whether a build held to {@code criterion} is entitled to refuse over this. */
@@ -2200,10 +2261,10 @@ public final class Adequacy {
          *  row could be read. Which of them are said at all is each measure's own question below. */
         private static void signatureFindings(Hir.BehaviorDef behavior, SignatureEvidence signature,
                                               List<Finding> out) {
-            if (signature == null || !signature.status().counted()) {
+            if (signature == null || signature.counted().made().isEmpty()) {
                 return;
             }
-            MeasurementStatus status = signature.status();
+            WeakeningSet status = signature.counted().weakening();
             OutputCaseEvidence output = signature.output();
             for (TypeSymbol missing : output.unspecified()) {
                 out.add(new Finding(behavior.name(), status, Citation.of(behavior.pos()),
@@ -2221,7 +2282,7 @@ public final class Adequacy {
             //
             // Left out here rather than at the printing, so that what a report shows and what a build
             // is told come from one list.
-            if (output.answeredRows() > 0) {
+            if (output.cases().made().map(OutputCaseEvidence.Cases::answeredRows).orElse(0) > 0) {
                 for (TypeSymbol missing : output.unverified()) {
                     if (!output.unspecified().contains(missing)) {
                         out.add(new Finding(behavior.name(), status, Citation.of(behavior.pos()),
@@ -2251,11 +2312,11 @@ public final class Adequacy {
                 // A class nothing sits in, where nothing was measured, is not a class no row is in.
                 // Stopped here rather than where the line is printed: a finding is something a measure
                 // established, and one from a measure that was never made is not established at all.
-                if (!axis.status().counted()) {
+                if (axis.reached().made().isEmpty()) {
                     continue;
                 }
                 for (PartitionEvidence.AxisClass missing : axis.uncovered()) {
-                    out.add(new Finding(behavior.name(), axis.status(),
+                    out.add(new Finding(behavior.name(), axis.reached().weakening(),
                             Citation.of(behavior.pos()), new About.AClassNoRowIsIn(missing)));
                 }
             }
@@ -2277,14 +2338,14 @@ public final class Adequacy {
                 // for; the axis, the value, the rule and the role used to be copied out here, and
                 // a reader then matched the copy back against the assessments to find the one it
                 // came from.
-                out.add(new Finding(behavior.name(), MeasurementStatus.COMPLETE,
+                out.add(new Finding(behavior.name(), WeakeningSet.none(),
                         Citation.of(behavior.pos()), new About.APointOfABorder(point)));
             }
             // What the model divides this position no way at all, which is the classes question and
             // is answered only for a position that has none.
             for (souther.compiler.partition.UndividedPosition position : partition.notDerivable()) {
                 if (position.isAbsent()) {
-                    out.add(new Finding(behavior.name(), MeasurementStatus.COMPLETE,
+                    out.add(new Finding(behavior.name(), WeakeningSet.none(),
                             Citation.of(behavior.pos()),
                             new About.APositionNoLineDivides(position)));
                 }
@@ -2294,7 +2355,7 @@ public final class Adequacy {
             // list above.
             for (PartitionEvidence.NotRead each : partition.notRead()) {
                 // Not measured, because nothing here established anything either way about it.
-                out.add(new Finding(behavior.name(), MeasurementStatus.NOT_MEASURED,
+                out.add(new Finding(behavior.name(), WeakeningSet.none(),
                         Citation.of(behavior.pos()),
                         switch (each) {
                             case PartitionEvidence.NotRead.ARule rule ->
@@ -2307,7 +2368,7 @@ public final class Adequacy {
             // rule is answerable for it and nothing went unreached. Said whatever the axes made of
             // the position, since what it qualifies is the classes and not their absence.
             for (souther.compiler.inputs.PositionValuesNotSeparated each : partition.notSeparated()) {
-                out.add(new Finding(behavior.name(), MeasurementStatus.NOT_MEASURED,
+                out.add(new Finding(behavior.name(), WeakeningSet.none(),
                         Citation.of(behavior.pos()),
                         new About.APositionReadWiderThanItsRules(each)));
             }
@@ -2322,7 +2383,7 @@ public final class Adequacy {
                 // nothing was seen rather than because everything was accounted for.
                 if (axis.read().reach()
                         == PartitionEvidence.AxisCoverage.Reach.SOME_OUT_OF_SIGHT) {
-                    out.add(new Finding(behavior.name(), MeasurementStatus.NOT_MEASURED,
+                    out.add(new Finding(behavior.name(), WeakeningSet.none(),
                             Citation.of(behavior.pos()),
                             new About.APositionWhoseRulesWereNotReached(axis)));
                 }
@@ -2336,12 +2397,12 @@ public final class Adequacy {
                 // on whole. Which of the names it carries a reader is shown, and what words the
                 // question is put in, are the reader's — and both used to be settled here, one of
                 // them only to be overruled by every surface that printed it.
-                out.add(new Finding(behavior.name(), MeasurementStatus.NOT_MEASURED,
+                out.add(new Finding(behavior.name(), WeakeningSet.none(),
                         Citation.of(behavior.pos()),
                         new About.AQuestionNothingAnswered(each)));
             }
             for (souther.compiler.partition.Partitions.OmittedAxis dropped : partition.omitted()) {
-                out.add(new Finding(behavior.name(), MeasurementStatus.COMPLETE,
+                out.add(new Finding(behavior.name(), WeakeningSet.none(),
                         Citation.of(behavior.pos()),
                         new About.APositionPastTheAxisLimit(dropped)));
             }
@@ -2357,7 +2418,7 @@ public final class Adequacy {
             // nothing can tell from its neighbour is undecidable on its own and is left out of
             // BranchEvidence#unreached already; gating on the number that falls for it as well threw
             // away every arm the rows certainly do not reach.
-            if (branch == null || branch.observation() != MeasurementStatus.COMPLETE) {
+            if (branch == null || !branch.armsWereReadInFull()) {
                 return;
             }
             for (souther.compiler.coverage.CoverageSites.Site arm : branch.unreached()) {
@@ -2365,7 +2426,7 @@ public final class Adequacy {
                 // which is written in one language, and a diagnostic, which is written in the
                 // reader's — and the two readings ask the same arm rather than one of them being
                 // handed the other's answer.
-                out.add(new Finding(behavior.name(), branch.status(), arm.at(),
+                out.add(new Finding(behavior.name(), branch.measured().weakening(), arm.at(),
                         new About.AnArmNoRowGoesThrough(arm)));
             }
         }
@@ -2711,7 +2772,7 @@ public final class Adequacy {
      *                   denominator here. Not the type's cases alone: a case the rules refuse is one
      *                   no row can be built at, and counting it holds the model short for ever
      */
-    static SignatureEvidence evidenceOf(Sig sig, Symbols symbols, Observed seen,
+    static SignatureEvidence evidenceOf(String name, Sig sig, Symbols symbols, Observed seen,
                                         List<String> parameters, InputDomain read,
                                         souther.compiler.core.Core body,
                                         souther.compiler.coverage.CoverageSites.Plan plan,
@@ -2781,39 +2842,39 @@ public final class Adequacy {
             }
         }
 
-        OutputCaseEvidence output = declaredOut.isEmpty() ? OutputCaseEvidence.none()
-                : new OutputCaseEvidence(declaredOut, specified, observed, verified, unreadableOut,
-                        answered);
+        OutputCaseEvidence output = OutputCaseEvidence.of(name, declaredOut,
+                new OutputCaseEvidence.Cases(specified, observed, verified, unreadableOut,
+                        answered));
         List<InputCaseEvidence> inputs = new ArrayList<>(ins.size());
-        boolean partial = output.status() == MeasurementStatus.PARTIAL;
         for (int i = 0; i < ins.size(); i++) {
-            InputCaseEvidence evidence = declaredIn.get(i).isEmpty() ? InputCaseEvidence.none(i)
-                    : new InputCaseEvidence(i, declaredIn.get(i), inSpecified.get(i),
-                            inExecuted.get(i), inVerified.get(i), inExcluded.get(i),
-                            unreadableIn[i]);
-            inputs.add(evidence);
-            partial |= evidence.status() == MeasurementStatus.PARTIAL;
+            inputs.add(InputCaseEvidence.of(name, i, declaredIn.get(i), inExcluded.get(i),
+                    new InputCaseEvidence.Cases(inSpecified.get(i), inExecuted.get(i),
+                            inVerified.get(i), unreadableIn[i])));
         }
-        // Nothing was measured where nothing was written: a behavior with no rows has no gaps to
-        // report, only an absence of evidence, and saying so is not the same as saying it is covered.
-        // A source that could not be evaluated is a set of rows nothing has seen, and a case they may
-        // have covered reads exactly like a case nothing covers. A row that did not finish is already
-        // counted, above: its state is dropped rather than read, so it has no arm and no input case
-        // and shows up as one nothing could classify.
-        partial |= seen.someRowsUnseen();
         // Asked before the rows are, because it is not about them. A signature with no sum anywhere
         // in it has nothing for this measure to be about, and writing every row anybody could write
         // would not give it one — so it is inapplicable rather than unmeasured, and a build is not
         // told to go and do something about it.
         if (output.declared().isEmpty()
                 && inputs.stream().allMatch(in -> in.declared().isEmpty())) {
-            return SignatureEvidence.unavailable(output, inputs, SignatureEvidence.Reason.NOT_A_SUM);
+            return SignatureEvidence.notASum(output, inputs);
         }
         if (rows.isEmpty() && seen.complete()) {
-            return SignatureEvidence.unavailable(output, inputs, SignatureEvidence.Reason.NO_ROWS);
+            return SignatureEvidence.noRows(output, inputs);
         }
-        return new SignatureEvidence(output, inputs,
-                partial ? MeasurementStatus.PARTIAL : MeasurementStatus.COMPLETE, null);
+        // Nothing was measured where nothing was written: a behavior with no rows has no gaps to
+        // report, only an absence of evidence, and saying so is not the same as saying it is
+        // covered. A source that could not be evaluated is a set of rows nothing has seen, and a
+        // case they may have covered reads exactly like a case nothing covers. A row that did not
+        // finish is already counted by its case being unreadable: its state is dropped rather than
+        // read, so it has no arm and no input case.
+        Set<Weakening> unseen = new LinkedHashSet<>();
+        for (Incompleteness gap : seen.incompleteness()) {
+            if (gap.code().leftNoRowRead()) {
+                unseen.add(new Weakening.ObservationIncomplete(gap));
+            }
+        }
+        return SignatureEvidence.of(output, inputs, WeakeningSet.ofAll(unseen));
     }
 
     private Adequacy() {}

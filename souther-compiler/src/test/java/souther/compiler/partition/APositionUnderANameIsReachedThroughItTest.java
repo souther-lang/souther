@@ -101,9 +101,9 @@ class APositionUnderANameIsReachedThroughItTest {
     void aRowWrittenUnderTheNameIsReadBackThroughIt() {
         Compilation compilation = measured(FLAGS);
 
-        assertEquals(Set.of("true"), evidence(compilation, "wrapped").axes().get(0).covered());
-        assertEquals(evidence(compilation, "bare").axes().get(0).covered(),
-                evidence(compilation, "wrapped").axes().get(0).covered(),
+        assertEquals(Set.of("true"), evidence(compilation, "wrapped").axes().get(0).rows().covered());
+        assertEquals(evidence(compilation, "bare").axes().get(0).rows().covered(),
+                evidence(compilation, "wrapped").axes().get(0).rows().covered(),
                 "a name is how a value is written, not what it is");
     }
 

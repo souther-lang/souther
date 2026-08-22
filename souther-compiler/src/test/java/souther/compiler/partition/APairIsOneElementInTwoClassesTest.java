@@ -76,7 +76,7 @@ class APairIsOneElementInTwoClassesTest {
                   Person { age = 20, status = Inactive } ]""");
 
         assertEquals(4, select.pairs().total(), "two classes at each of two positions");
-        assertEquals(2, select.pairs().covered(),
+        assertEquals(2, select.pairs().counts().covered(),
                 () -> "the two its elements are in, and not the two neither is: "
                         + select.pairs());
     }
@@ -90,7 +90,7 @@ class APairIsOneElementInTwoClassesTest {
 
         assertEquals(List.of(Set.of("people[*].age/x < 18", "people[*].age/18 <= x"),
                         Set.of("Active", "Inactive")),
-                select.axes().stream().map(PartitionEvidence.AxisCoverage::covered).toList());
+                select.axes().stream().map(a -> a.rows().covered()).toList());
     }
 
     /**
@@ -122,7 +122,7 @@ class APairIsOneElementInTwoClassesTest {
         PartitionEvidence select =
                 measured("[ Person { age = 20, status = Active } ]");
 
-        assertEquals(1, select.pairs().covered(),
+        assertEquals(1, select.pairs().counts().covered(),
                 () -> "the one its element is in: " + select.pairs());
     }
 }

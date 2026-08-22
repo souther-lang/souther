@@ -75,10 +75,10 @@ class WitnessAcrossSourcesTest {
         assertNotNull(witnesses);
         Adequacy.SignatureEvidence submit = witnesses.get("submit");
 
-        assertEquals(List.of("Rejected", "Submitted"), names(submit.output().specified()),
+        assertEquals(List.of("Rejected", "Submitted"), names(submit.output().seen().specified()),
                 "both files' rows are the module's rows");
         assertEquals(List.of(), submit.output().unspecified(),
                 "nothing is missing once the two sources are read together");
-        assertEquals(List.of("Rejected", "Submitted"), names(submit.output().verified()));
+        assertEquals(List.of("Rejected", "Submitted"), names(submit.output().seen().verified()));
     }
 }

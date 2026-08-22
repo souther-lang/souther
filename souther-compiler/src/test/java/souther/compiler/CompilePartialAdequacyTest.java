@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.query.ItemAssessment;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.examples.Deadline;
@@ -197,7 +198,7 @@ class CompilePartialAdequacyTest {
                 .ask(new Adequacy.BranchCoverage(compilation.modules().get(0))).value().get("go");
 
         assertEquals(2, branch.all().size(), "the arms are there");
-        assertEquals(MeasurementStatus.PARTIAL, branch.status());
+        assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(branch.measured()));
         assertEquals(List.of(), branch.covered().stream().sorted().toList());
     }
 
@@ -223,8 +224,8 @@ class CompilePartialAdequacyTest {
         List<BorderAssessment.Point> at = pointsAgainstTheLine(partition).stream()
                 .filter(p -> "0".equals(p.against())).toList();
         assertEquals(1, at.size());
-        assertEquals(MeasurementStatus.PARTIAL, at.get(0).item().status());
-        assertFalse(at.get(0).owed().coverage().hit(),
+        assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(at.get(0).item().weakeningSource()));
+        assertFalse(ItemAssessment.Coverage.hit(at.get(0).owed().coverage()),
                 "nothing was read, so nothing was met either");
     }
 
@@ -272,7 +273,7 @@ class CompilePartialAdequacyTest {
         Adequacy.SignatureEvidence signature = compilation.db()
                 .ask(new Adequacy.Witnesses(compilation.modules().get(0))).value().get("go");
 
-        assertEquals(MeasurementStatus.PARTIAL, signature.status());
+        assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(signature.counted()));
         assertFalse(warningCodes(warned("loop", TIMES_OUT, DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("go")))).contains("E1913"),
                 "a case the unfinished row might have produced is not a case nothing claims");
     }
@@ -300,7 +301,7 @@ class CompilePartialAdequacyTest {
 
         assertFalse(undecided.isEmpty(), () -> "the model has a kind a build gates on: " + findings);
         for (Adequacy.Finding f : undecided) {
-            assertEquals(MeasurementStatus.PARTIAL, f.status(), f::toString);
+            assertFalse(f.weakenedBy().isEmpty(), f::toString);
             assertEquals(Adequacy.Finding.Disposition.UNDECIDED,
                     f.disposition(Adequacy.Criterion.SIMPLIFIED_DOMAIN), f::toString);
             assertFalse(f.isAdequacyGap(Adequacy.Criterion.SIMPLIFIED_DOMAIN), f::toString);
@@ -420,8 +421,8 @@ class CompilePartialAdequacyTest {
 
         assertEquals(2, pointsAgainstTheLine(partition).size());
         for (BorderAssessment.Point boundary : pointsAgainstTheLine(partition)) {
-            assertEquals(MeasurementStatus.PARTIAL, boundary.item().status(), boundary.against());
-            assertFalse(boundary.owed().coverage().hit());
+            assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(boundary.item().weakeningSource()), boundary.against());
+            assertFalse(ItemAssessment.Coverage.hit(boundary.owed().coverage()));
         }
     }
 
@@ -564,7 +565,7 @@ class CompilePartialAdequacyTest {
                 .ask(new Adequacy.Coverage("example.pair")).value().get("pick");
 
         assertEquals(4, partition.pairs().total());
-        assertEquals(MeasurementStatus.PARTIAL, partition.pairs().status(),
+        assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(partition.pairs().counted()),
                 "the one row could not be placed at either position");
         assertFalse(AdequacyReport.of(compilation).human(SourceNameResolver.identity()).contains("untried"),
                 AdequacyReport.of(compilation).human(SourceNameResolver.identity()));
@@ -603,9 +604,9 @@ class CompilePartialAdequacyTest {
                 .ask(new Adequacy.Coverage("example.agree")).value().get("pick");
 
         for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
-            assertEquals(MeasurementStatus.PARTIAL, axis.status(), axis.path());
+            assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(axis.reached()), axis.path());
         }
-        assertEquals(MeasurementStatus.PARTIAL, partition.pairs().status());
+        assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(partition.pairs().counted()));
     }
 
     /**
@@ -650,13 +651,13 @@ class CompilePartialAdequacyTest {
 
         BorderAssessment.Point line = pointsAgainstTheLine(partition).stream()
                 .filter(p -> "100".equals(p.against())).findFirst().orElseThrow();
-        assertTrue(line.owed().coverage().hit(),
+        assertTrue(ItemAssessment.Coverage.hit(line.owed().coverage()),
                 "a row wrote 100 and went through the comparison");
-        assertEquals(MeasurementStatus.COMPLETE, line.item().status());
+        assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(line.item().weakeningSource()));
 
         BorderAssessment.Point beyond = pointsAgainstTheLine(partition).stream()
                 .filter(p -> "101".equals(p.against())).findFirst().orElseThrow();
-        assertEquals(MeasurementStatus.PARTIAL, beyond.item().status(),
+        assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(beyond.item().weakeningSource()),
                 "and the one nothing was found at is undecided, not missed");
     }
 

@@ -4,7 +4,10 @@ import souther.compiler.check.CoverageObligation;
 import souther.compiler.check.RuleAccounting;
 import souther.compiler.inputs.StructuralInspection;
 
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Whether the reading one measure of coverage depends on came to an end.
@@ -81,8 +84,19 @@ public final class MeasureClosure {
             }
         }
 
-        /** It did not, so what this measure did not find is not known not to be there. */
-        record Open() implements OfThePartition {}
+        /**
+         * It did not, and this is what was still open when it stopped.
+         *
+         * <p>Never empty. Something has to have been found for the reading not to have run out, so
+         * an open closure carrying nothing is a measure that would come back weaker than complete
+         * with no account of why — which is the whole of issue #953.
+         */
+        record Open(Set<ClosureGap> by) implements OfThePartition {
+
+            public Open {
+                by = gaps(by);
+            }
+        }
     }
 
     /** Whether the border measure's reading ran out. The same question of the other measure, and a
@@ -110,8 +124,14 @@ public final class MeasureClosure {
             }
         }
 
-        /** It did not. */
-        record Open() implements OfTheBorder {}
+        /** It did not, and this is what was still open. Never empty, for the reason
+         *  {@link OfThePartition.Open} gives. */
+        record Open(Set<ClosureGap> by) implements OfTheBorder {
+
+            public Open {
+                by = gaps(by);
+            }
+        }
     }
 
     /** What the two closures come to, together, so that neither is built from half a reading. */
@@ -139,43 +159,76 @@ public final class MeasureClosure {
     static Both of(List<Axis> axes, List<GuardThresholds.Guards.AtAPosition> compared,
                    List<Partitions.OmittedAxis> omitted,
                    List<souther.compiler.inputs.UnreadRule> refused) {
-        boolean refusedThePartition = refused.stream()
-                .anyMatch(each -> each.why().leavesShort(CoverageObligation.Measure.PARTITION));
-        boolean refusedTheBorder = refused.stream()
-                .anyMatch(each -> each.why().leavesShort(CoverageObligation.Measure.BOUNDARY));
+        Set<ClosureGap> partition = new LinkedHashSet<>();
+        Set<ClosureGap> border = new LinkedHashSet<>();
+        for (souther.compiler.inputs.UnreadRule rule : refused) {
+            if (rule.why().leavesShort(CoverageObligation.Measure.PARTITION)) {
+                partition.add(new ClosureGap.RuleUnread(rule));
+            }
+            if (rule.why().leavesShort(CoverageObligation.Measure.BOUNDARY)) {
+                border.add(new ClosureGap.RuleUnread(rule));
+            }
+        }
         // A dropped axis, asked which measure lost by it. What it was carrying is recorded where it
         // was dropped, because it cannot be read back afterwards: one that was carrying a line took
         // the border's evidence with it, and one that was only classifying took the partition's.
         // Counted as one fact, a model dropping an axis that divides nothing anybody bounds was
         // held open over a measure it never had.
-        boolean partition = !refusedThePartition && omitted.isEmpty();
-        boolean border = !refusedTheBorder
-                && omitted.stream().noneMatch(Partitions.OmittedAxis::carriedAnObligation);
+        for (Partitions.OmittedAxis each : omitted) {
+            partition.add(new ClosureGap.AxisOmitted(each));
+            if (each.carriedAnObligation()) {
+                border.add(new ClosureGap.AxisOmitted(each));
+            }
+        }
         for (Axis axis : axes) {
             // A position whose rules nothing enumerated, and one the walk could not reach into.
             // Neither raises a question, so neither can be short of one — which is why they are
             // asked here and not among the questions.
-            if (axis.rulesNotReached() || axis.pending() instanceof StructuralInspection.Blocked) {
-                partition = false;
-                border = false;
+            boolean unreached = false;
+            if (axis.rulesNotReached()) {
+                ClosureGap gap = new ClosureGap.RulesNotReached(axis.id());
+                partition.add(gap);
+                border.add(gap);
+                unreached = true;
+            }
+            if (axis.pending() instanceof StructuralInspection.Blocked blocked) {
+                ClosureGap gap = new ClosureGap.PositionNotReachedInto(axis.id(), blocked.why());
+                partition.add(gap);
+                border.add(gap);
+                unreached = true;
+            }
+            if (unreached) {
                 continue;
             }
             for (RuleAccounting.Unanswered each : axis.unanswered()) {
+                ClosureGap gap = new ClosureGap.QuestionUnanswered(axis.id(), each);
                 switch (each.owed().obligation().answeredBy()) {
-                    case PARTITION -> partition = false;
-                    case BOUNDARY -> border = false;
+                    case PARTITION -> partition.add(gap);
+                    case BOUNDARY -> border.add(gap);
                 }
             }
         }
         for (GuardThresholds.Guards.AtAPosition each : compared) {
             for (RuleAccounting.Unanswered open : each.accounting().unansweredQuestions()) {
+                ClosureGap gap = new ClosureGap.ComparisonUnanswered(each.at(), open);
                 switch (open.owed().obligation().answeredBy()) {
-                    case PARTITION -> partition = false;
-                    case BOUNDARY -> border = false;
+                    case PARTITION -> partition.add(gap);
+                    case BOUNDARY -> border.add(gap);
                 }
             }
         }
-        return new Both(partition ? new OfThePartition.Closed() : new OfThePartition.Open(),
-                border ? new OfTheBorder.Closed() : new OfTheBorder.Open());
+        return new Both(
+                partition.isEmpty() ? new OfThePartition.Closed() : new OfThePartition.Open(partition),
+                border.isEmpty() ? new OfTheBorder.Closed() : new OfTheBorder.Open(border));
+    }
+
+    /** An open closure's own account of itself: never empty, and in the order the readers found it,
+     *  so that two runs over one model produce the same value. */
+    private static Set<ClosureGap> gaps(Set<ClosureGap> by) {
+        if (by == null || by.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "a reading that did not run out has something it did not get to");
+        }
+        return Collections.unmodifiableSet(new LinkedHashSet<>(by));
     }
 }

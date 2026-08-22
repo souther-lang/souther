@@ -130,9 +130,9 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
                     | "under" : (0.30m) -> Yes { v = 1 }
                     | "over" : (0.34m) -> No { why = 0 }""");
 
-        assertEquals(2, measured.axes().get(0).covered().size(),
+        assertEquals(2, measured.axes().get(0).rows().covered().size(),
                 "three tenths is under a third and thirty-four hundredths is over it: "
-                        + measured.axes().get(0).covered());
+                        + measured.axes().get(0).rows().covered());
     }
 
     /**
@@ -152,7 +152,7 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
                     | "low" : (0.1m) -> No { why = 0 }
                     | "mid" : (0.3m) -> No { why = 1 }
                     | "high" : (0.5m) -> Yes { v = 1 }""")
-                .axes().get(0).covered().stream().sorted().toList();
+                .axes().get(0).rows().covered().stream().sorted().toList();
 
         assertEquals(3, covered.size(), "one row in each of the three classes: " + covered);
         assertEquals(List.of("n/0.2 < x and 3 * x <= 1", "n/1 < 3 * x", "n/x <= 0.2"), covered,

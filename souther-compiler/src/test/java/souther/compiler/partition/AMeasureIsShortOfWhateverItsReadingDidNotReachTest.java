@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.query.Measurement;
+import souther.compiler.report.AdequacyReport;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.MeasurementStatus;
@@ -150,8 +152,8 @@ class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
     void anAxisDroppedPastTheLimitLeavesBothMeasuresShort() {
         PartitionEvidence wide = evidenceFor(PAST_THE_LIMIT, "wide");
 
-        assertInstanceOf(BoundaryDerivation.Partial.class, wide.bounded());
-        assertInstanceOf(PartitionDerivation.Partial.class, wide.partitioned());
+        assertInstanceOf(Measurement.Partial.class, wide.bounded());
+        assertInstanceOf(Measurement.Partial.class, wide.partitioned());
     }
 
     /** And within the limit both are made in full, which is what says the answers above are the
@@ -160,8 +162,8 @@ class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
     void andWithinTheLimitBothAreMadeInFull() {
         PartitionEvidence narrow = evidenceFor(WITHIN_THE_LIMIT, "narrow");
 
-        assertInstanceOf(BoundaryDerivation.Complete.class, narrow.bounded());
-        assertInstanceOf(PartitionDerivation.Complete.class, narrow.partitioned());
+        assertInstanceOf(Measurement.Complete.class, narrow.bounded());
+        assertInstanceOf(Measurement.Complete.class, narrow.partitioned());
     }
 
 
@@ -176,9 +178,9 @@ class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
     void aPositionTheWalkDidNotReachIntoLeavesBothMeasuresShort() {
         PartitionEvidence evidence = evidenceFor(RULES_NOT_REACHED, "f");
 
-        assertEquals(MeasurementStatus.PARTIAL, evidence.partitioned().status(),
+        assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(evidence.partitioned()),
                 () -> "partition: " + evidence.partitioned());
-        assertEquals(MeasurementStatus.NOT_MEASURED, evidence.bounded().status(),
+        assertEquals(MeasurementStatus.NOT_MEASURED, AdequacyReport.statusOf(evidence.bounded()),
                 () -> "border: " + evidence.bounded());
     }
 
@@ -194,8 +196,8 @@ class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
     void andARuleSetAsideForWhatItSaysLeavesNeither() {
         PartitionEvidence evidence = evidenceFor(SET_ASIDE_COSTING_NEITHER, "f");
 
-        assertInstanceOf(PartitionDerivation.Absent.class, evidence.partitioned());
-        assertInstanceOf(BoundaryDerivation.Absent.class, evidence.bounded());
+        assertInstanceOf(Measurement.NotApplicable.class, evidence.partitioned());
+        assertInstanceOf(Measurement.NotApplicable.class, evidence.bounded());
         // And the rule is named beside them, so the two answers are about a model with a rule in it
         // and not about one with none.
         assertEquals(2, evidence.unread().size(), () -> "unread: " + evidence.unread());

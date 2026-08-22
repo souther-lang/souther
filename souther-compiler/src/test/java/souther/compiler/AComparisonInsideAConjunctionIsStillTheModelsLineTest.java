@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.query.Measurement;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
@@ -103,12 +104,12 @@ class AComparisonInsideAConjunctionIsStillTheModelsLineTest {
      */
     @Test
     void theEdgeOnTheOtherSideIsOwedTheSame() {
-        assertEquals(new ItemAssessment.Coverage.Missed(),
-                coverageAt("inAConjunction", "inAConjunction/r.cost", "100001"));
+        assertEquals(new ItemAssessment.Coverage.NoHit(),
+coverageAt("inAConjunction", "inAConjunction/r.cost", "100001").made().orElseThrow());
     }
 
     /** What the rows established about one line of one behavior. */
-    private static ItemAssessment.Coverage coverageAt(String behavior, String axis,
+    private static Measurement<ItemAssessment.Coverage> coverageAt(String behavior, String axis,
                                                           String value) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());

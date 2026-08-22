@@ -101,7 +101,7 @@ class ABuildCanBeHeldToReliableDomainCoverageTest {
                         AReportOfOneBorder.assessed(AReportOfOneBorder.aBoundedBorder(),
                                 role -> role.againstTheLine()
                                         ? new ItemAssessment.Coverage.Hit()
-                                        : new ItemAssessment.Coverage.Undecided())));
+                                        : new ItemAssessment.Coverage.NoHit())));
 
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
                 AReportOfOneBorder.verdictOf(measured, Adequacy.Criterion.SIMPLIFIED_DOMAIN),

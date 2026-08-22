@@ -186,7 +186,7 @@ class ANameGoesBackOnTheWayItCameOffTest {
         PartitionEvidence evidence = compilation.db()
                 .ask(new Adequacy.Coverage("demo")).value().get("run");
 
-        assertEquals(java.util.Set.of("Approved"), evidence.axes().get(0).covered());
+        assertEquals(java.util.Set.of("Approved"), evidence.axes().get(0).rows().covered());
     }
 
     /** The observation of {@code value} written under {@code names}, outermost first. */

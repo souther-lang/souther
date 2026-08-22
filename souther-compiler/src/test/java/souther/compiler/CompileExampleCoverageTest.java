@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.report.AdequacyReport;
 import souther.compiler.source.SourceId;
 
 import org.junit.jupiter.api.Test;
@@ -69,7 +70,7 @@ class CompileExampleCoverageTest {
                     | (Draft { cost = Amount(50) }) -> Submitted { cost = Amount(50) }
                 """, "submit");
 
-        assertEquals(MeasurementStatus.COMPLETE, branch.status());
+        assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(branch.measured()));
         assertEquals(2, branch.all().size(), "a guard is two arms");
         assertEquals(List.of("else"), unreached(branch));
     }
@@ -220,7 +221,7 @@ class CompileExampleCoverageTest {
 
         assertEquals(1, branch.all().size(), "one arm a row can be in, not three");
         assertEquals(List.of(), unreached(branch));
-        assertEquals(MeasurementStatus.COMPLETE, branch.status());
+        assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(branch.measured()));
     }
 
     /**
@@ -314,9 +315,9 @@ class CompileExampleCoverageTest {
                     | (Draft { cost = Amount(50) }) -> Submitted { cost = Amount(50) }
                 """;
 
-        assertEquals(MeasurementStatus.NOT_MEASURED, branch(indirect, "classify").status(),
+        assertEquals(MeasurementStatus.NOT_MEASURED, AdequacyReport.statusOf(branch(indirect, "classify").measured()),
                 "nobody wrote a row about `classify`");
-        assertEquals(MeasurementStatus.COMPLETE, branch(indirect, "submit").status());
+        assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(branch(indirect, "submit").measured()));
     }
 
     /** A behavior with no `let` has no arms to go through, which is not the same as arms nothing
@@ -336,7 +337,7 @@ class CompileExampleCoverageTest {
                     | (MemberId("m-1")) -> Found { id = MemberId("m-1") }
                 """, "findMember");
 
-        assertEquals(MeasurementStatus.NOT_APPLICABLE, branch.status());
+        assertEquals(MeasurementStatus.NOT_APPLICABLE, AdequacyReport.statusOf(branch.measured()));
         assertEquals(List.of(), branch.all());
     }
 
@@ -345,7 +346,7 @@ class CompileExampleCoverageTest {
     void aModelWithNoRowsIsSilent() {
         Adequacy.BranchEvidence branch = branch(MODEL, "submit");
 
-        assertEquals(MeasurementStatus.NOT_MEASURED, branch.status());
+        assertEquals(MeasurementStatus.NOT_MEASURED, AdequacyReport.statusOf(branch.measured()));
         assertTrue(unreached(branch).isEmpty());
     }
 
@@ -380,9 +381,9 @@ class CompileExampleCoverageTest {
         // The `guard` passes into the rest of the block, and the author wrote no `then` for it
         // to be called after.
         assertEquals(List.of("continued"), unreached(branch));
-        assertEquals(1, signature.output().verified().size());
-        assertFalse(signature.output().verified().isEmpty(),
+        assertEquals(1, signature.output().seen().verified().size());
+        assertFalse(signature.output().seen().verified().isEmpty(),
                 "the arm that ran is the case that was verified");
-        assertEquals("Waiting", signature.output().verified().iterator().next().name());
+        assertEquals("Waiting", signature.output().seen().verified().iterator().next().name());
     }
 }

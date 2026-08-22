@@ -1,5 +1,7 @@
 package souther.compiler.report;
 
+import souther.compiler.query.WeakeningSet;
+import souther.compiler.report.AdequacyReport;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
 
@@ -49,13 +51,12 @@ class WhatWasObservedDecidesWhatAReportMayNameTest {
 
     /** Every row read, and one fork whose rule could not be worked out. */
     private static Adequacy.BranchEvidence read() {
-        return new Adequacy.BranchEvidence(
+        return Adequacy.BranchEvidence.measured("b",
                 List.of(arm(SETTLED, 0, DecidedBy.THE_DECLARATION),
                         arm(SETTLED, 1, DecidedBy.THE_DECLARATION),
                         arm(UNSETTLED, 2, DecidedBy.NOT_SAID),
                         arm(UNSETTLED, 3, DecidedBy.NOT_SAID)),
-                Set.of(0), Set.of(),
-                MeasurementStatus.COMPLETE, MeasurementStatus.PARTIAL, null);
+                Set.of(0), souther.compiler.query.Adequacy.NOTHING_PROVEN, WeakeningSet.none());
     }
 
     /** The arm no row goes through is named, though the numbers are not a whole measure. */
@@ -76,10 +77,10 @@ class WhatWasObservedDecidesWhatAReportMayNameTest {
     void andNothingSaysARowWasNotRead() {
         StringBuilder out = new StringBuilder();
         new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "x",
-                souther.compiler.query.Adequacy.Asked.fullReport(), MeasurementStatus.PARTIAL,
+                souther.compiler.query.Adequacy.Asked.fullReport(), WeakeningSet.none(),
                 List.of()).branch(out,
                 new AdequacyReport.BehaviorReport("b", BehaviorImplementation.IMPLEMENTED, 1, 0,
-                        MeasurementStatus.PARTIAL, null, null, null, read(), List.of()),
+                        WeakeningSet.none(), null, null, null, read(), List.of()),
                 null, SourceNameResolver.identity());
 
         assertTrue(out.toString().contains("branch      1/4"),

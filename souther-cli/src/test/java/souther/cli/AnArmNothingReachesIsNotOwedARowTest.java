@@ -1,5 +1,7 @@
 package souther.cli;
 
+import souther.compiler.report.AdequacyReport;
+import souther.compiler.query.WeakeningSet;
 import souther.cli.Main;
 import org.junit.jupiter.api.Test;
 import souther.compiler.types.CoverageOrigin;
@@ -357,9 +359,9 @@ class AnArmNothingReachesIsNotOwedARowTest {
 
     @Test
     void aProvenArmLeavesTheDenominator() {
-        Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured(
+        Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
                 List.of(arm(UNREACHED), arm(TAKEN)), Set.of(TAKEN),
-                proving().asRunWith(Set.of(TAKEN)), MeasurementStatus.COMPLETE);
+                proving().asRunWith(Set.of(TAKEN)), WeakeningSet.none());
 
         assertEquals(List.of(TAKEN),
                 measured.all().stream().map(CoverageSites.Site::index).toList());
@@ -380,9 +382,9 @@ class AnArmNothingReachesIsNotOwedARowTest {
         // The rows lit both arms, one of which nothing was supposed to reach. Handed to the same
         // fold the measures read, so what a run does to a proof is decided in one place.
         PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(UNREACHED, TAKEN));
-        Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured(
+        Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
                 List.of(arm(UNREACHED), arm(TAKEN)), Set.of(UNREACHED, TAKEN), asRun,
-                MeasurementStatus.COMPLETE);
+                WeakeningSet.none());
 
         assertEquals(Set.of(UNREACHED), measured.contradicted(),
                 "the arm nothing reaches was proven unreachable and a row went through it");
@@ -390,8 +392,13 @@ class AnArmNothingReachesIsNotOwedARowTest {
                 measured.all().stream().map(CoverageSites.Site::index).toList(),
                 "so it is still an arm this behavior has");
         assertEquals(Set.of(UNREACHED, TAKEN), measured.covered());
-        assertEquals(MeasurementStatus.PARTIAL, measured.status(),
+        assertEquals(MeasurementStatus.PARTIAL,
+                AdequacyReport.statusOf(measured.measured()),
                 "and no number here is given as though nothing had happened");
+        assertEquals(WeakeningSet.of(new souther.compiler.query.Weakening.ProofContradicted(
+                        "b", UNREACHED)),
+                measured.measured().weakening(),
+                "and the measurement says which proof a row went against");
     }
 
     /** The same fact both measures read. Taking the arm back for one of them and not the other is how

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.query.ItemAssessment;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Citation;

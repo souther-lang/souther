@@ -1,6 +1,5 @@
 package souther.compiler.query;
 
-import souther.compiler.observe.InputCaseEvidence;
 import souther.compiler.types.TypeSymbol;
 
 /**

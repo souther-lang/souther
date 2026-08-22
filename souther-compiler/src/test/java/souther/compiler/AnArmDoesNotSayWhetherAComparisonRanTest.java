@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.query.Measurement;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
@@ -65,7 +66,7 @@ class AnArmDoesNotSayWhetherAComparisonRanTest {
     }
 
     /** What the rows established about one line, named the way a report names it. */
-    private static ItemAssessment.Coverage coverageOf(List<BorderAssessment> lines,
+    private static Measurement<ItemAssessment.Coverage> coverageOf(List<BorderAssessment> lines,
                                                           String axis, String value) {
         return BorderAssessment.pointsOf(lines).stream()
                 .filter(p -> p.role().againstTheLine()).filter(p -> p.owed() != null)
@@ -93,10 +94,10 @@ class AnArmDoesNotSayWhetherAComparisonRanTest {
     @Test
     void oneValueAndOneArmAreNotOneAnswer() {
         assertEquals(new ItemAssessment.Coverage.Hit(),
-                coverageOf(linesFor("0", "100001", "Manual"), "gate/r.cost", "100001"),
+coverageOf(linesFor("0", "100001", "Manual"), "gate/r.cost", "100001"),
                 "the comparison produced false, which is reaching it");
-        assertEquals(new ItemAssessment.Coverage.Missed(),
-                coverageOf(linesFor("-1", "100001", "Manual"), "gate/r.cost", "100001"),
+        assertEquals(new ItemAssessment.Coverage.NoHit(),
+coverageOf(linesFor("-1", "100001", "Manual"), "gate/r.cost", "100001"),
                 "the comparison never ran, and the row lands in the same arm");
     }
 
@@ -104,7 +105,7 @@ class AnArmDoesNotSayWhetherAComparisonRanTest {
     @Test
     void aRowThatMadeTheComparisonTrueMeetsTheValue() {
         assertEquals(new ItemAssessment.Coverage.Hit(),
-                coverageOf(linesFor("0", "100000", "Auto"), "gate/r.cost", "100000"));
+coverageOf(linesFor("0", "100000", "Auto"), "gate/r.cost", "100000").made().orElseThrow());
     }
 
     /**
@@ -116,8 +117,8 @@ class AnArmDoesNotSayWhetherAComparisonRanTest {
      */
     @Test
     void aRowThatSkippedTheComparisonDoesNotMeetTheValue() {
-        assertEquals(new ItemAssessment.Coverage.Missed(),
-                coverageOf(linesFor("-1", "100000", "Manual"), "gate/r.cost", "100000"));
+        assertEquals(new ItemAssessment.Coverage.NoHit(),
+coverageOf(linesFor("-1", "100000", "Manual"), "gate/r.cost", "100000").made().orElseThrow());
     }
 
     /**
@@ -135,7 +136,7 @@ class AnArmDoesNotSayWhetherAComparisonRanTest {
                         "gate/r.cost = 100000", "gate/r.cost = 100001"),
                 labels(lines));
         for (BorderAssessment.Point line : pointsFor("0", "100001", "Manual")) {
-            assertNull(line.item().whyNotMeasured(), line.label() + " was measured");
+            assertNull(line.item().weakeningSource().why(), line.label() + " was measured");
         }
     }
 

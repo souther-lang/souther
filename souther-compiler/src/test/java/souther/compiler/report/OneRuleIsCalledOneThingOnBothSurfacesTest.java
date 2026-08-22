@@ -1,5 +1,6 @@
 package souther.compiler.report;
 
+import souther.compiler.report.AdequacyReport;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.RuleCitation;

@@ -10,7 +10,6 @@ import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
-import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.observe.Counting;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.partition.Axis;
@@ -139,7 +138,8 @@ final class Coverages {
         List<Axis> divided = new ArrayList<>();
         List<PartitionEvidence.Unanswered> standing = new ArrayList<>();
         Readings readings = Readings.of(rows, where, partitioning.axes(),
-                observed.someRowsUnseen());
+                observed.incompleteness().stream()
+                        .filter(gap -> gap.code().leftNoRowRead()).toList());
         for (Axis axis : partitioning.axes()) {
             // What the model asked about this position and nothing answered, said before anything
             // here decides whether the position could be measured. The questions are the model's;
@@ -186,7 +186,7 @@ final class Coverages {
         return new PartitionEvidence(
                 PartitionDerivation.of(axes, partitioning.partitionClosure()),
                 BoundaryDerivation.of(boundaries, partitioning.borderClosure()),
-                pairsOf(divided, readings),
+                pairsOf(behavior.name(), divided, readings),
                 partitioning.undivided(), partitioning.unread(), partitioning.blocked(),
                 partitioning.notSeparated(), List.copyOf(standing),
                 partitioning.omitted(),
@@ -232,17 +232,22 @@ final class Coverages {
      * reported what remained as untried. One reading, so that a row nothing could place is the same
      * fact wherever it is read.
      *
-     * @param someRowsUnseen rows that were never observed at all, which no reading can show
+     * @param unseen rows that were never observed at all, which no reading can show — each as the
+     *               reason it was not observed, so that a measure weakened by one of them says which
      */
-    private record Readings(List<Map<AxisId, Classification>> byRow, boolean someRowsUnseen) {
+    private record Readings(List<Map<AxisId, Classification>> byRow, List<Incompleteness> unseen) {
 
         static Readings of(List<RowOutcome> rows, BehaviorInputs where, List<Axis> axes,
-                           boolean someRowsUnseen) {
+                           List<Incompleteness> unseen) {
             List<Map<AxisId, Classification>> read = new ArrayList<>();
             for (RowOutcome row : rows) {
                 read.add(RowClasses.of(row, where, axes));
             }
-            return new Readings(List.copyOf(read), someRowsUnseen);
+            return new Readings(List.copyOf(read), List.copyOf(unseen));
+        }
+
+        boolean someRowsUnseen() {
+            return !unseen.isEmpty();
         }
 
         boolean noRows() {
@@ -281,16 +286,25 @@ final class Coverages {
          * that could not be placed at one of the positions leaves every class of that position, and
          * every combination it takes part in, undecided rather than untried.
          */
-        MeasurementStatus status(List<Axis> axes) {
-            if (someRowsUnseen) {
-                return MeasurementStatus.PARTIAL;
+        WeakeningSet weakening(List<Axis> axes) {
+            Set<Weakening> out = new LinkedHashSet<>();
+            for (Incompleteness gap : unseen) {
+                out.add(new Weakening.ObservationIncomplete(gap));
             }
-            for (Axis axis : axes) {
-                if (couldNotSay(axis) > 0) {
-                    return MeasurementStatus.PARTIAL;
+            // One reason per kind per position, which is what a hundred rows too large at one
+            // position are: how many there were is the count beside this, and carrying the number
+            // here as well would be the same fact under two names.
+            Map<Object, Incompleteness> byKind = new LinkedHashMap<>();
+            for (Map<AxisId, Classification> where : byRow) {
+                for (Axis axis : axes) {
+                    Classification said = where.get(axis.id());
+                    if (said != null && said.stopped() != null) {
+                        byKind.putIfAbsent(said.stopped().identity(), said.stopped());
+                    }
                 }
             }
-            return MeasurementStatus.COMPLETE;
+            byKind.values().forEach(gap -> out.add(new Weakening.ObservationIncomplete(gap)));
+            return WeakeningSet.ofAll(out);
         }
     }
 
@@ -310,7 +324,8 @@ final class Coverages {
      * than anyone writes. A behavior with one divided position has no pairs at all, which is why the
      * single-position coverage is measured on its own and not derived from this.
      */
-    private static PartitionEvidence.PairSpace pairsOf(List<Axis> axes, Readings readings) {
+    private static PartitionEvidence.PairSpace pairsOf(String behavior, List<Axis> axes,
+                                                      Readings readings) {
         // The product of what a row can be written at, not of what the types declare. A case the
         // rules refuse is not a class of its position at all, so the slice of the product it would
         // have taken part in is not here to be counted — which is a different thing from a pair
@@ -328,12 +343,10 @@ final class Coverages {
         // not a combination left untried by anybody, and how many of them there are says nothing
         // about a behavior no row names.
         if (readings.noRows() && !readings.someRowsUnseen()) {
-            return PartitionEvidence.PairSpace.unavailable((int) Math.min(total, Integer.MAX_VALUE),
-                    PartitionEvidence.PairSpace.Reason.NO_ROWS);
+            return PartitionEvidence.PairSpace.noRows((int) Math.min(total, Integer.MAX_VALUE));
         }
         if (total > PAIR_LIMIT) {
-            return new PartitionEvidence.PairSpace((int) Math.min(total, Integer.MAX_VALUE), 0, 0, 0,
-                    (int) Math.min(total, Integer.MAX_VALUE), true, MeasurementStatus.PARTIAL, null);
+            return PartitionEvidence.PairSpace.truncated(behavior, total, PAIR_LIMIT);
         }
         Set<String> covered = new LinkedHashSet<>();
         for (Map<AxisId, Classification> where : readings.byRow()) {
@@ -356,8 +369,11 @@ final class Coverages {
             }
         }
         int reached = covered.size();
-        return new PartitionEvidence.PairSpace((int) total, reached, reached, 0,
-                (int) total - reached, false, readings.status(axes), null);
+        PartitionEvidence.PairSpace.PairCounts counts = new PartitionEvidence.PairSpace.PairCounts(
+                reached, reached, 0, (int) total - reached);
+        WeakeningSet by = readings.weakening(axes);
+        return new PartitionEvidence.PairSpace((int) total, by.isEmpty()
+                ? new Measurement.Complete<>(counts) : new Measurement.Partial<>(counts, by));
     }
 
     /**
@@ -417,9 +433,8 @@ final class Coverages {
         // ({@link ClaimReport}) — which is what keeps a claim from narrowing a denominator by being
         // in reach of the code that counts one.
         if (readings.noRows() && !readings.someRowsUnseen()) {
-            return PartitionEvidence.AxisCoverage.unavailable(axis.id().toString(),
-                    axis.term().toString(), classes,
-                    PartitionEvidence.AxisCoverage.Reason.NO_ROWS, read);
+            return PartitionEvidence.AxisCoverage.noRows(axis.id().toString(),
+                    axis.term().toString(), classes, read);
         }
         Set<String> covered = new LinkedHashSet<>();
         for (Map<AxisId, Classification> where : readings.byRow()) {
@@ -428,9 +443,13 @@ final class Coverages {
                 covered.addAll(in);
             }
         }
+        PartitionEvidence.AxisCoverage.Reached reached =
+                new PartitionEvidence.AxisCoverage.Reached(covered, readings.couldNotSay(axis));
+        WeakeningSet by = readings.weakening(List.of(axis));
         return new PartitionEvidence.AxisCoverage(axis.id().toString(), axis.term().toString(),
-                classes, covered, readings.couldNotSay(axis), readings.status(List.of(axis)), null,
-                read);
+                classes, read, by.isEmpty()
+                        ? new Measurement.Complete<>(reached)
+                        : new Measurement.Partial<>(reached, by));
     }
 
     /**
@@ -580,9 +599,8 @@ final class Coverages {
         // clause's are about the values — one refuses everything outside its bound, the other states
         // a relation — so for both of those writing the value is the whole of what there is to reach.
         boolean guard = border.origin().comparisonAt().isPresent();
-        ItemAssessment.Coverage.Reason absent = guard
-                ? whyNoGuardLine(observed.rows(), armsAsked, observed.armsUnseen(),
-                        observed.someRowsUnseen())
+        Measurement<ItemAssessment.Coverage> absent = guard
+                ? whyNoGuardLine(observed, armsAsked)
                 : whyNoInvariantLine(observed.rows(), observed.someRowsUnseen());
 
         java.util.EnumMap<PointRole, ItemAssessment> items = new java.util.EnumMap<>(PointRole.class);
@@ -590,10 +608,9 @@ final class Coverages {
             items.put(role, switch (border.demand(role)) {
                 case Demand.NotOwed not -> new ItemAssessment.NotOwed(not.reason());
                 case Demand.Owed owed -> {
-                    ItemAssessment.Coverage coverage = absent != null
-                            ? new ItemAssessment.Coverage.NotMeasured(absent)
+                    Measurement<ItemAssessment.Coverage> coverage = absent != null ? absent
                             : verdictOf(shape.met(owed.criterion(), observed.rows()), guard,
-                                    observed);
+                                    border, observed);
                     ItemAssessment.Attempt attempt = whereOneIsWorthBuilding(coverage,
                             () -> shape.search(owed.criterion(), border.label(role)));
                     yield new ItemAssessment.Owed(owed.criterion(), coverage,
@@ -878,10 +895,15 @@ final class Coverages {
             return 0;
         }
         return switch (owed.coverage()) {
-            case ItemAssessment.Coverage.Hit _ -> 3;
-            case ItemAssessment.Coverage.Undecided _ -> 2;
-            case ItemAssessment.Coverage.Missed _ -> 1;
-            case ItemAssessment.Coverage.NotMeasured _ -> 0;
+            case Measurement.Complete<ItemAssessment.Coverage> whole ->
+                    whole.value() instanceof ItemAssessment.Coverage.Hit ? 3 : 1;
+            // A reading made in part saw less than a settled one and more than none: found is
+            // found either way, and what it did not find is undecided rather than absent.
+            case Measurement.Partial<ItemAssessment.Coverage> part ->
+                    part.value() instanceof ItemAssessment.Coverage.Hit ? 3 : 2;
+            case Measurement.NotApplicable<ItemAssessment.Coverage> _,
+                 Measurement.NotMeasured<ItemAssessment.Coverage> _,
+                 Measurement.FailedToMeasure<ItemAssessment.Coverage> _ -> 0;
         };
     }
 
@@ -895,9 +917,9 @@ final class Coverages {
      * them and said a search had run and failed at points nothing had looked at.
      */
     private static ItemAssessment.Attempt whereOneIsWorthBuilding(
-            ItemAssessment.Coverage coverage,
+            Measurement<ItemAssessment.Coverage> coverage,
             java.util.function.Supplier<ItemAssessment.Attempt> search) {
-        if (coverage instanceof ItemAssessment.Coverage.Hit) {
+        if (ItemAssessment.Coverage.hit(coverage)) {
             return new ItemAssessment.Attempt.NotAttempted(
                     ItemAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE);
         }
@@ -982,27 +1004,37 @@ final class Coverages {
     }
 
     /** What a reading of the rows comes to, once what could not be read is accounted for. */
-    private static ItemAssessment.Coverage verdictOf(
-            Met met, boolean guard, souther.compiler.query.Adequacy.Observed observed) {
+    private static Measurement<ItemAssessment.Coverage> verdictOf(
+            Met met, boolean guard, souther.compiler.partition.Border border,
+            souther.compiler.query.Adequacy.Observed observed) {
         List<RowOutcome> rows = observed.rows();
         if (met == Met.YES) {
-            return new ItemAssessment.Coverage.Hit();
+            // Found is found: a row settles this whatever else went unread, so nothing weakens it.
+            return new Measurement.Complete<>(new ItemAssessment.Coverage.Hit());
         }
+        // What is not found is undecided rather than absent, wherever the reading behind it was not
+        // whole — and now says which reading it was. A row whose value here could not be read; a row
+        // nothing read at all, which may be the row that is at this value; and, for a line a fork
+        // drew, a row that never finished and so never reached the comparison.
+        Set<Weakening> by = new LinkedHashSet<>();
         if (met == Met.UNREADABLE) {
-            return new ItemAssessment.Coverage.Undecided();
+            by.add(new Weakening.BorderValueUnreadable(border));
         }
-        // A row nothing read may be the row that is at this value. Found is still found — one row at
-        // the boundary settles it whatever else went unread — but not-found is not settled.
-        if (observed.someRowsUnseen()) {
-            return new ItemAssessment.Coverage.Undecided();
+        for (Incompleteness gap : observed.incompleteness()) {
+            if (gap.code().leftNoRowRead()) {
+                by.add(new Weakening.ObservationIncomplete(gap));
+            }
         }
-        // Nor is a hit that could not be looked for: a row that never finished left no hits, and a
-        // guard's line is met by going through the comparison.
-        if (guard && rows.stream().anyMatch(
-                row -> row.disposition() == souther.compiler.observe.Disposition.INCOMPLETE)) {
-            return new ItemAssessment.Coverage.Undecided();
+        if (guard) {
+            for (RowOutcome row : rows) {
+                if (row.disposition() == souther.compiler.observe.Disposition.INCOMPLETE) {
+                    by.add(new Weakening.RowDidNotFinish(row.identity()));
+                }
+            }
         }
-        return new ItemAssessment.Coverage.Missed();
+        ItemAssessment.Coverage seen = new ItemAssessment.Coverage.NoHit();
+        return by.isEmpty() ? new Measurement.Complete<>(seen)
+                : new Measurement.Partial<>(seen, WeakeningSet.ofAll(by));
     }
 
     /**
@@ -1019,9 +1051,9 @@ final class Coverages {
      * a search can still fail to reach, and a reader that had only this could not tell that it had.
      */
     private static ItemAssessment.Writability writabilityOf(
-            ItemAssessment.Coverage coverage, boolean knownWritable,
+            Measurement<ItemAssessment.Coverage> coverage, boolean knownWritable,
             ItemAssessment.Attempt attempt) {
-        if (coverage instanceof ItemAssessment.Coverage.Hit) {
+        if (ItemAssessment.Coverage.hit(coverage)) {
             return new ItemAssessment.Writability.WitnessedByRow();
         }
         if (attempt instanceof ItemAssessment.Attempt.Built) {
@@ -1042,10 +1074,11 @@ final class Coverages {
      * value may be one of the rows nothing saw — building a candidate for either hands somebody a
      * specific piece of work that may already be done.
      */
-    private static boolean worthBuilding(ItemAssessment.Coverage coverage) {
-        return coverage instanceof ItemAssessment.Coverage.Missed
-                || (coverage instanceof ItemAssessment.Coverage.NotMeasured absent
-                        && absent.reason() == ItemAssessment.Coverage.Reason.NO_ROWS);
+    private static boolean worthBuilding(Measurement<ItemAssessment.Coverage> coverage) {
+        return coverage instanceof Measurement.Complete<ItemAssessment.Coverage> whole
+                        && whole.value() instanceof ItemAssessment.Coverage.NoHit
+                || coverage instanceof Measurement.NotMeasured<ItemAssessment.Coverage> none
+                        && none.why() == ItemAssessment.Coverage.NotAsked.NO_ROWS;
     }
 
     /**
@@ -1056,32 +1089,38 @@ final class Coverages {
      * run, which puts the arms in front of the rows: nothing a row carries decides it until the
      * classes that record where the row went exist and survived.
      */
-    private static ItemAssessment.Coverage.Reason whyNoGuardLine(
-            List<RowOutcome> rows, boolean armsAsked, boolean armsUnseen, boolean someRowsUnseen) {
+    private static Measurement<ItemAssessment.Coverage> whyNoGuardLine(
+            souther.compiler.query.Adequacy.Observed observed, boolean armsAsked) {
         if (!armsAsked) {
-            return ItemAssessment.Coverage.Reason.ARMS_NOT_ASKED;
+            return new Measurement.NotMeasured<>(ItemAssessment.Coverage.NotAsked.ARMS_NOT_ASKED);
         }
-        if (armsUnseen) {
-            return ItemAssessment.Coverage.Reason.ARMS_UNREADABLE;
+        if (observed.armsUnseen()) {
+            // Started and not finished, so it says what it went without.
+            Set<Weakening> by = new LinkedHashSet<>();
+            for (Incompleteness gap : observed.incompleteness()) {
+                by.add(new Weakening.ObservationIncomplete(gap));
+            }
+            return new Measurement.FailedToMeasure<>(
+                    ItemAssessment.Coverage.CouldNotAsk.ARMS_UNREADABLE, WeakeningSet.ofAll(by));
         }
-        return whyNoInvariantLine(rows, someRowsUnseen);
+        return whyNoInvariantLine(observed.rows(), observed.someRowsUnseen());
     }
 
     /**
      * The first gate an invariant's line did not get through.
      *
-     * <p>Only the one: nothing outside the bound can be constructed, so writing the value is the whole
-     * of what there is to reach and no instrumentation is owed. This is why the two origins are asked
-     * separately — an invariant's line can never be waiting on the arms, and a measure that could say
-     * so would be able to say something that is not true of it.
+     * <p>Only the one: nothing outside the bound can be constructed, so writing the value is the
+     * whole of what there is to reach and no instrumentation is owed. This is why the two origins
+     * are asked separately — an invariant's line can never be waiting on the arms, and a measure
+     * that could say so would be able to say something that is not true of it.
      */
-    private static ItemAssessment.Coverage.Reason whyNoInvariantLine(
+    private static Measurement<ItemAssessment.Coverage> whyNoInvariantLine(
             List<RowOutcome> rows, boolean someRowsUnseen) {
         // Nothing read is not the same as nothing written. A source that could not be evaluated may
         // hold the row that is at this line, so the question is undecided rather than unasked, and
         // the reading below settles it that way.
         return rows.isEmpty() && !someRowsUnseen
-                ? ItemAssessment.Coverage.Reason.NO_ROWS : null;
+                ? new Measurement.NotMeasured<>(ItemAssessment.Coverage.NotAsked.NO_ROWS) : null;
     }
 
     /**

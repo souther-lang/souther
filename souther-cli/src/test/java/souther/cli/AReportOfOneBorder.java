@@ -1,5 +1,8 @@
 package souther.cli;
 
+import souther.compiler.query.WeakeningSet;
+import souther.compiler.query.Weakening;
+import souther.compiler.query.Measurement;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
@@ -96,7 +99,7 @@ final class AReportOfOneBorder {
                 continue;
             }
             items.put(role, new ItemAssessment.Owed(border.demand(role).criterion(),
-                    coverage.apply(role),
+                    new Measurement.Complete<>(coverage.apply(role)),
                     new ItemAssessment.Writability.WitnessedByRow(),
                     new ItemAssessment.Attempt.NotAttempted(
                             ItemAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE)));
@@ -118,23 +121,33 @@ final class AReportOfOneBorder {
      * step that decides that answer is tested where it happens
      * (souther-compiler, {@code AMeasureIsShortOfWhateverItsReadingDidNotReachTest}).
      */
-    static PartitionEvidence partition(BoundaryDerivation border,
+    static PartitionEvidence partition(Measurement<List<BorderAssessment>> border,
                                        Partitions.OmittedAxis... omitted) {
-        return new PartitionEvidence(new PartitionDerivation.Unresolved(), border,
+        return new PartitionEvidence(
+                new Measurement.FailedToMeasure<>(
+                        PartitionDerivation.TheReadingDidNotRunOut.THE_READING_DID_NOT_RUN_OUT,
+                        WeakeningSet.of(new Weakening.ModelReadingIncomplete(
+                                new souther.compiler.partition.ClosureGap.RulesNotReached(
+                                        new souther.compiler.partition.AxisId("b", "t"))))),
+                border,
                 PartitionEvidence.PairSpace.NONE,
                 List.of(), List.of(), List.of(), List.of(), List.of(), List.of(omitted),
                 List.of());
     }
 
     /** The border measure made in full, over the one border. */
-    static BoundaryDerivation measured(BorderAssessment boundary) {
-        return new BoundaryDerivation.Complete(List.of(boundary));
+    static Measurement<List<BorderAssessment>> measured(BorderAssessment boundary) {
+        return new Measurement.Complete<>(List.of(boundary));
     }
 
     /** And the same border, from a reading that was short of something — which is what a dropped
      *  axis carrying a line leaves behind. */
-    static BoundaryDerivation shortOfSomething(BorderAssessment boundary) {
-        return new BoundaryDerivation.Partial(List.of(boundary));
+    static Measurement<List<BorderAssessment>> shortOfSomething(BorderAssessment boundary) {
+        return new Measurement.Partial<>(List.of(boundary),
+                WeakeningSet.of(new Weakening.ModelReadingIncomplete(
+                        new souther.compiler.partition.ClosureGap.AxisOmitted(
+                                new Partitions.OmittedAxis(
+                                        new souther.compiler.partition.AxisId("b", "t"), true)))));
     }
 
     /** What one behavior's partition makes of the whole report, held to {@code criterion}. */
@@ -142,13 +155,13 @@ final class AReportOfOneBorder {
                                                    Adequacy.Criterion criterion) {
         AdequacyReport.BehaviorReport behavior = new AdequacyReport.BehaviorReport(
                 "weigh", souther.compiler.check.BehaviorImplementation.IMPLEMENTED,
-                1, 0, MeasurementStatus.COMPLETE, null, partition,
+                1, 0, WeakeningSet.none(), null, partition,
                 souther.compiler.query.ClaimAnnotations.NONE, null, List.of());
         return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test",
                 Adequacy.Asked.warningsAt(Adequacy.Level.ALL, criterion),
-                MeasurementStatus.COMPLETE,
+                WeakeningSet.none(),
                 List.of(new AdequacyReport.ModuleReport("example.wide",
-                        new SourceId("wide.sou"), MeasurementStatus.COMPLETE,
+                        new SourceId("wide.sou"), WeakeningSet.none(),
                         List.of(), List.of(behavior))))
                 .adequacy();
     }

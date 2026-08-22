@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.query.ItemAssessment;
+import souther.compiler.report.AdequacyReport;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.MeasurementStatus;
@@ -80,7 +82,7 @@ class CompileExampleBoundaryTest {
                 """);
 
         assertEquals(List.of("request.cost/100 < x"), names(cost(one).uncovered()));
-        assertEquals(MeasurementStatus.COMPLETE, cost(one).status());
+        assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(cost(one).reached()));
 
         PartitionEvidence both = evidence(MODEL + """
 
@@ -101,8 +103,8 @@ class CompileExampleBoundaryTest {
                     | (Draft { cost = Amount(50) }) -> Submitted
                 """);
         BorderAssessment.Point zero = at(away, "0").get(0);
-        assertFalse(zero.owed().coverage().hit());
-        assertEquals(MeasurementStatus.COMPLETE, zero.item().status());
+        assertFalse(ItemAssessment.Coverage.hit(zero.owed().coverage()));
+        assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(zero.item().weakeningSource()));
         assertTrue(zero.border().rule().named().startsWith("invariant"),
                 zero.border().rule().named());
 
@@ -111,7 +113,7 @@ class CompileExampleBoundaryTest {
                 example submit
                     | (Draft { cost = Amount(0) }) -> Submitted
                 """);
-        assertTrue(at(edge, "0").get(0).owed().coverage().hit(),
+        assertTrue(ItemAssessment.Coverage.hit(at(edge, "0").get(0).owed().coverage()),
                 "a row is written at the edge");
     }
 
@@ -125,8 +127,8 @@ class CompileExampleBoundaryTest {
                 """);
 
         BorderAssessment.Point hundred = at(evidence, "100").get(0);
-        assertEquals(MeasurementStatus.COMPLETE, hundred.item().status());
-        assertTrue(hundred.owed().coverage().hit(),
+        assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(hundred.item().weakeningSource()));
+        assertTrue(ItemAssessment.Coverage.hit(hundred.owed().coverage()),
                 "the row wrote 100 and the guard compared it");
         assertTrue(hundred.border().rule().isWrittenRatherThanNamed(),
                 hundred.border().rule().named());
@@ -169,10 +171,10 @@ class CompileExampleBoundaryTest {
                 .filter(p -> p.border().rule().isWrittenRatherThanNamed()).findFirst().orElseThrow();
         BorderAssessment.Point second = at(evidence, "100").get(0);
 
-        assertEquals(MeasurementStatus.COMPLETE, second.item().status(),
+        assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(second.item().weakeningSource()),
                 "the arms were measured");
-        assertFalse(second.owed().coverage().hit(), "no row was ever compared against 100");
-        assertFalse(first.owed().coverage().hit(), "and the row wrote -1, not 0");
+        assertFalse(ItemAssessment.Coverage.hit(second.owed().coverage()), "no row was ever compared against 100");
+        assertFalse(ItemAssessment.Coverage.hit(first.owed().coverage()), "and the row wrote -1, not 0");
     }
 
     @Test
