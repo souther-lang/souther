@@ -83,7 +83,9 @@ public final class Partitions {
                                List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                List<Border> between,
                                List<GuardThresholds.Guards.AtAPosition> compared,
-                               ReachingCuts reaching) {
+                               ReachingCuts reaching,
+                               MeasureClosure.OfThePartition partitionClosure,
+                               MeasureClosure.OfTheBorder borderClosure) {
         public Partitioning {
             compared = List.copyOf(compared);
             axes = List.copyOf(axes);
@@ -94,6 +96,13 @@ public final class Partitions {
             blocked = List.copyOf(blocked);
             notSeparated = List.copyOf(notSeparated);
             between = List.copyOf(between);
+            // Made where the reading is, never here. A closure this constructor could compute would
+            // be one a caller assembling a `Partitioning` by hand could also have written, and
+            // `Closed` is a conclusion about a reading rather than a shape of the lists beside it.
+            if (partitionClosure == null || borderClosure == null) {
+                throw new IllegalArgumentException(
+                        "a partitioning with no account of what each measure's reading came to");
+            }
         }
 
         /** Whether an edge of this term is a value some row could carry.
@@ -197,11 +206,12 @@ public final class Partitions {
         // of them was left unread — settled beside each axis, as it is once a body has spoken.
         List<Measured> measured = new ArrayList<>();
         for (Axis axis : kept) {
-            keep(new ArrayList<>(), measured, axis, null, unread);
+            keep(new ArrayList<>(), measured, axis, unread);
         }
+        MeasureClosure.Both closed = MeasureClosure.of(kept, List.of(), omitted, unread);
         return new Partitioning(kept, omitted, quantities, uncertain, undividedIn(measured),
                 List.copyOf(unread), blockedIn(measured), List.copyOf(notSeparated),
-                List.of(), List.of(), ReachingCuts.NONE);
+                List.of(), List.of(), ReachingCuts.NONE, closed.partition(), closed.border());
     }
 
     /**
@@ -226,10 +236,13 @@ public final class Partitions {
      *  went unread. Kept beside the axis rather than looked up afterwards by how its path is
      *  spelled. */
     private static void keep(List<Axis> out, List<Measured> measured, Axis axis,
-                             BodyCutInspection drew, List<UnreadRule> rules) {
+                             List<UnreadRule> rules) {
         out.add(axis);
-        if (drew != null) {
-            measured.add(new Measured(axis, drew));
+        // Asked of the axis rather than taken from the caller. What the body drew and what the
+        // position is left with are the same fact read twice, and a caller passing the first was
+        // the second's only account of itself.
+        if (axis.measurable()) {
+            measured.add(new Measured(axis, new BodyCutInspection.Evidence()));
             return;
         }
         // Whether this phase left anything at the position unread, and not which limit it was.
@@ -419,7 +432,7 @@ public final class Partitions {
                         () -> singledClasses(points, at, here2.type(), only, symbols),
                         mergedPoints(axis.cuts(), points, at.carrierAt(axis.type(), symbols)),
                         axis.parted()),
-                        new BodyCutInspection.Evidence(), rules);
+                        rules);
                 continue;
             }
             if (here.isEmpty()) {
@@ -429,7 +442,7 @@ public final class Partitions {
                 // for it to be about, and dropping the threshold would lose a line the body draws.
                 NumericTerm drawn = axis.measurable() ? null : soleTermAt(thresholds, axis.path());
                 if (drawn == null) {
-                    keep(out, measured, axis, null, rules);
+                    keep(out, measured, axis, rules);
                     continue;
                 }
                 term = drawn;
@@ -484,8 +497,9 @@ public final class Partitions {
                             within == null ? null : within.max()),
                     merged(axis.cuts(), reachable, carrier),
                     reachable.stream().map(Threshold::parts).toList()),
-                    reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), rules);
+                    rules);
         }
+        MeasureClosure.Both closed = MeasureClosure.of(out, compared, base.omitted(), rules);
         return new Partitioning(out, base.omitted(), base.quantities(), base.uncertain(),
                 undividedIn(measured), List.copyOf(rules), blockedIn(measured),
                 // Carried across: what a reading could not hold together is a fact about the
@@ -499,7 +513,7 @@ public final class Partitions {
                 // where the position has no value beside it, its border over here — and the two
                 // sides of that border are runs of what all of them leave.
                 base.notSeparated(), Border.allOf(between, partedByQuantity(out)), compared,
-                reaching);
+                reaching, closed.partition(), closed.border());
     }
 
     /**
