@@ -73,17 +73,24 @@ with an `.examples.sou` covering it and a Java test that reaches the generated t
 
 ```
 souther compile <file.sou>... -d|--dir <outdir> [-cp|--class-path <path>]
-                              [--adequacy off|witness|all] [--warnings report|error]
+                              [--adequacy off|witness|all|reliable-domain]
+                              [--warnings report|error]
 ```
 
 Type-checks the given files together, resolving imports across them, and writes `.class` files
 under `-d`. `-cp` (`--class-path`) points at modules another project compiled. `--adequacy`
 additionally warns about what the `example` rows do not cover; it defaults to `off`, and `souther
-examples` asks the same question as a report.
+examples` asks the same question as a report. Its words name two things at once: how much to measure
+and what the build is held to. `witness` reads what the rows already ran; `all` adds what the arms
+and the borders take a second run to find out and holds the build to simplified domain coverage;
+`reliable-domain` measures what `all` does and holds it to reliable domain coverage, which asks for a
+row well inside each line and one well outside it as well as the two against it.
 
 `--warnings error` refuses the build that warned: nothing is written and the exit code is non-zero.
 It gates every warning and not only the adequacy ones, so a build that wants to fail on coverage
-alone wants `souther examples --strict`, which refuses the same coverage findings and nothing else.
+alone wants `souther examples --strict`, which refuses coverage findings and nothing else. That
+command is held to reliable domain coverage, so the build it answers alike is `compile --adequacy
+reliable-domain --warnings error`.
 The default is `report`, which prints them and writes the classes.
 
 <!-- souther-section: run -->
@@ -381,8 +388,9 @@ found a gap; `not satisfied` (`not_satisfied` in the JSON) where one found a gap
 where nothing that could find a gap was asked about, or one of those measures could not be made. A
 measure that does not apply — the arms of a `>->` composition, which has none of its own — is neither
 asked nor missing, and does not hold the answer open. `--strict`
-refuses `not_satisfied` and nothing else, which is the same set of findings `compile --adequacy all
---warnings error` refuses.
+refuses `not_satisfied` and nothing else, which is the same set of findings `compile --adequacy
+reliable-domain --warnings error` refuses. It decides the exit status and no more: the report is the
+same whether or not it was written.
 
 The report prints more findings than a build refuses over, and says which is which. A line under `!`
 is one of them; a line under `·` is something measured and named and not gated on — a class no row is
