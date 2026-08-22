@@ -1,31 +1,14 @@
 package souther.cli;
 
-import souther.compiler.check.RuleRef;
-import souther.compiler.source.SourceId;
 
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
-import souther.compiler.observe.MeasurementStatus;
-import souther.compiler.partition.Border;
-import souther.compiler.partition.Cut;
-import souther.compiler.partition.Demand;
-import souther.compiler.partition.PointRole;
-import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.partition.Partitions;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.check.Carrier;
-import souther.compiler.numeric.Count;
 import souther.compiler.partition.AxisId;
-import souther.compiler.check.Clause;
-import souther.compiler.check.ClauseName;
-import souther.compiler.partition.OriginRef;
 import souther.compiler.query.BorderAssessment;
-import souther.compiler.query.ItemAssessment;
-import souther.compiler.types.TypeKey;
-import souther.compiler.types.TypeSymbols;
-import souther.compiler.types.TypeSymbol;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 
@@ -219,6 +202,30 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
     }
 
     /**
+     * And it is told as a warning, which is the other half of being able to refuse over it.
+     *
+     * <p>Whether a code is reported as an error or a warning is a set written by hand a package
+     * away, and nothing tied it to this. A gap a build refuses over that is not among them is raised
+     * as an error out of the measure that found it, which is not a compile error and is not the
+     * warning `--warnings` decides about — the state E1917 was in until it was noticed by running
+     * the command.
+     */
+    @Test
+    void everyKindACriterionRefusesOverIsToldAsAWarning() {
+        for (Adequacy.Criterion criterion : Adequacy.Criterion.values()) {
+            for (Adequacy.Kind kind : Adequacy.Kind.values()) {
+                if (!criterion.refuses(kind)) {
+                    continue;
+                }
+                assertEquals(souther.compiler.diag.Severity.WARNING,
+                        kind.code().orElseThrow().severity(),
+                        criterion + " refuses over " + kind + ", so its code is one a build is"
+                                + " warned about rather than one a compile fails on");
+            }
+        }
+    }
+
+    /**
      * The two criteria differ over the points away from a line and over nothing else.
      *
      * <p>Read off the criteria rather than listed, so a kind added and given to one of them and not
@@ -289,35 +296,8 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
      */
     @Test
     void anAxisDroppedPastTheLimitHoldsTheVerdictOpenOnlyWhereItCarriedAnObligation() {
-        OriginRef origin = new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
-                new Clause.Id(TypeSymbols.declared(new TypeKey("example.rate", "Amount")), 0),
-                java.util.Optional.of(new ClauseName("cap")))), true);
-        // A bound at 100 over a position the rules leave at 100 and up: the ON point is the whole of
-        // what it owes, and a row is at it.
-        Border border = Border.at(
-                souther.compiler.partition.BoundaryTarget.at(
-                        new souther.compiler.partition.BorderQuantity.OfACoordinate(
-                                new AxisId("weigh", "w.a"),
-                                new souther.compiler.inputs.NumericTerm.ValueOf(
-                                        souther.compiler.inputs.TermPath.of("w").then("a")),
-                                Carrier.WHOLE),
-                        new souther.compiler.partition.Level.OnACarrier(
-                                Carrier.WHOLE, Count.of(100))),
-                origin,
-                new souther.compiler.numeric.NumericDomain.Bounds(
-                        souther.compiler.numeric.Endpoint.inclusive(Count.of(100)), null));
-        java.util.EnumMap<PointRole, ItemAssessment> items =
-                new java.util.EnumMap<>(PointRole.class);
-        for (PointRole role : PointRole.values()) {
-            items.put(role, border.demand(role) instanceof Demand.NotOwed not
-                    ? new ItemAssessment.NotOwed(not.reason())
-                    : new ItemAssessment.Owed(border.demand(role).criterion(),
-                            new ItemAssessment.Coverage.Hit(),
-                            new ItemAssessment.Writability.WitnessedByRow(),
-                            new ItemAssessment.Attempt.NotAttempted(
-                                    ItemAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE)));
-        }
-        BorderAssessment met = new BorderAssessment(border, items);
+        BorderAssessment met = AReportOfOneBorder.assessed(
+                AReportOfOneBorder.aBorderAtTheEdgeOfItsDomain(), AReportOfOneBorder::hit);
 
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, verdictOf(partition(met)),
                 "nothing dropped");
@@ -334,26 +314,15 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
         return new Partitions.OmittedAxis(new AxisId(behavior, path), carriedAnObligation);
     }
 
+    /** This one asks nothing about the criterion, so it is held to the one a build asks for by
+     *  default; {@link AReportOfOneBorder} is where the report itself is built. */
     private static PartitionEvidence partition(BorderAssessment boundary,
                                                Partitions.OmittedAxis... omitted) {
-        return new PartitionEvidence(PartitionEvidence.Partitioned.of(List.of()),
-                PartitionEvidence.Bounded.of(List.of(boundary)), PartitionEvidence.PairSpace.NONE,
-                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(omitted),
-                List.of());
+        return AReportOfOneBorder.partition(boundary, omitted);
     }
 
-    /** What one behavior's partition makes of the whole report, with nothing else asked about. */
     private static AdequacyReport.AdequacyStatus verdictOf(PartitionEvidence partition) {
-        AdequacyReport.BehaviorReport behavior = new AdequacyReport.BehaviorReport(
-                "weigh", souther.compiler.check.BehaviorImplementation.IMPLEMENTED,
-                1, 0, MeasurementStatus.COMPLETE, null, partition,
-                souther.compiler.query.ClaimAnnotations.NONE, null, List.of());
-        return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test",
-                Adequacy.Asked.warningsAt(Adequacy.Level.ALL),
-                MeasurementStatus.COMPLETE,
-                List.of(new AdequacyReport.ModuleReport("example.wide", new SourceId("wide.sou"), MeasurementStatus.COMPLETE,
-                        List.of(), List.of(behavior))))
-                .adequacy();
+        return AReportOfOneBorder.verdictOf(partition, Adequacy.Criterion.SIMPLIFIED_DOMAIN);
     }
 
     /** Two covered stages and the composition of them, which carries rows of its own. */

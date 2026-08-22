@@ -135,8 +135,11 @@ public final class Bodies {
                                              java.util.function.Predicate<BehaviorImplementation> is) {
         Answer<Map<String, BehaviorImplementation>> states =
                 db.ask(new Implementation(module));
+        // Absent rather than empty. A module whose classification could not be asked has not been
+        // shown to have no unwritten behaviors, and a caller told there are none rests on it: the
+        // rule that nothing built here may hold one would then pass for want of an answer.
         if (!states.present() || states.value() == null) {
-            return Answer.of(Set.of());
+            return Answer.absent();
         }
         Set<String> named = new LinkedHashSet<>();
         states.value().forEach((name, state) -> {

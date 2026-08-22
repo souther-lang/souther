@@ -2,34 +2,11 @@ package souther.cli;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.Clause;
-import souther.compiler.check.ClauseName;
-import souther.compiler.check.RuleRef;
-import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.TermPath;
-import souther.compiler.check.Carrier;
-import souther.compiler.numeric.Count;
-import souther.compiler.numeric.Endpoint;
-import souther.compiler.numeric.NumericDomain;
-import souther.compiler.observe.MeasurementStatus;
-import souther.compiler.partition.AxisId;
-import souther.compiler.partition.Border;
-import souther.compiler.partition.BorderQuantity;
-import souther.compiler.partition.BoundaryTarget;
-import souther.compiler.partition.Demand;
-import souther.compiler.partition.OriginRef;
-import souther.compiler.partition.PointRole;
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
-import souther.compiler.source.SourceId;
-import souther.compiler.types.TypeKey;
-import souther.compiler.types.TypeSymbols;
 
-import java.util.EnumMap;
-import java.util.List;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
@@ -119,67 +96,18 @@ class ABuildCanBeHeldToReliableDomainCoverageTest {
      */
     @Test
     void aVerdictRestsOnTheEvidenceItsCriterionAsksFor() {
-        PartitionEvidence measured = partition(aBorderWhoseInnerPointsWereNotDecided());
+        PartitionEvidence measured = AReportOfOneBorder.partition(
+                AReportOfOneBorder.assessed(AReportOfOneBorder.aBoundedBorder(),
+                        role -> role.againstTheLine()
+                                ? new ItemAssessment.Coverage.Hit()
+                                : new ItemAssessment.Coverage.Undecided()));
 
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
-                verdictOf(measured, Adequacy.Criterion.SIMPLIFIED_DOMAIN),
+                AReportOfOneBorder.verdictOf(measured, Adequacy.Criterion.SIMPLIFIED_DOMAIN),
                 "the points it asks for came to an answer");
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED,
-                verdictOf(measured, Adequacy.Criterion.RELIABLE_DOMAIN),
+                AReportOfOneBorder.verdictOf(measured, Adequacy.Criterion.RELIABLE_DOMAIN),
                 "two of the points it asks for did not");
-    }
-
-    /** A border whose ON and OFF points a row is at, and whose IN and OUT points were not decided. */
-    private static BorderAssessment aBorderWhoseInnerPointsWereNotDecided() {
-        OriginRef origin = new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
-                new Clause.Id(TypeSymbols.declared(new TypeKey("example.rate", "Amount")), 0),
-                java.util.Optional.of(new ClauseName("cap")))), true);
-        Border border = Border.at(
-                BoundaryTarget.at(
-                        new BorderQuantity.OfACoordinate(new AxisId("weigh", "w.a"),
-                                new NumericTerm.ValueOf(TermPath.of("w").then("a")), Carrier.WHOLE),
-                        new souther.compiler.partition.Level.OnACarrier(Carrier.WHOLE,
-                                Count.of(100))),
-                origin,
-                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(1)),
-                        Endpoint.inclusive(Count.of(1000))));
-        EnumMap<PointRole, ItemAssessment> items = new EnumMap<>(PointRole.class);
-        for (PointRole role : PointRole.values()) {
-            if (border.demand(role) instanceof Demand.NotOwed not) {
-                items.put(role, new ItemAssessment.NotOwed(not.reason()));
-                continue;
-            }
-            items.put(role, new ItemAssessment.Owed(border.demand(role).criterion(),
-                    role.againstTheLine()
-                            ? new ItemAssessment.Coverage.Hit()
-                            : new ItemAssessment.Coverage.Undecided(),
-                    new ItemAssessment.Writability.WitnessedByRow(),
-                    new ItemAssessment.Attempt.NotAttempted(
-                            ItemAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE)));
-        }
-        return new BorderAssessment(border, items);
-    }
-
-    private static PartitionEvidence partition(BorderAssessment boundary) {
-        return new PartitionEvidence(PartitionEvidence.Partitioned.of(List.of()),
-                PartitionEvidence.Bounded.of(List.of(boundary)), PartitionEvidence.PairSpace.NONE,
-                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
-    }
-
-    /** What one behavior's partition makes of the whole report, held to {@code criterion}. */
-    private static AdequacyReport.AdequacyStatus verdictOf(PartitionEvidence partition,
-                                                           Adequacy.Criterion criterion) {
-        AdequacyReport.BehaviorReport behavior = new AdequacyReport.BehaviorReport(
-                "weigh", souther.compiler.check.BehaviorImplementation.IMPLEMENTED,
-                1, 0, MeasurementStatus.COMPLETE, null, partition,
-                souther.compiler.query.ClaimAnnotations.NONE, null, List.of());
-        return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test",
-                Adequacy.Asked.warningsAt(Adequacy.Level.ALL, criterion),
-                MeasurementStatus.COMPLETE,
-                List.of(new AdequacyReport.ModuleReport("example.wide",
-                        new SourceId("wide.sou"), MeasurementStatus.COMPLETE,
-                        List.of(), List.of(behavior))))
-                .adequacy();
     }
 
     private record Run(int code, String out, String err) {}

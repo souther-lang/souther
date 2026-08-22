@@ -2261,8 +2261,8 @@ public final class Adequacy {
          *
          * <p>The message keys are written out per kind rather than derived from the code's name, so
          * that a scan for the keys this names finds them — a key built by concatenation is one nothing
-         * can see is used. Which findings get here is {@link Finding#isAdequacyGap()}'s answer and not
-         * this method's.
+         * can see is used. Which findings get here is
+         * {@link Finding#isAdequacyGap(Criterion)}'s answer and not this method's.
          */
         private static Report warning(Finding finding) {
             About said = finding.about();
@@ -2292,7 +2292,7 @@ public final class Adequacy {
                         // different criteria and are told under different codes.
                         case About.APointOfABorder(var point) ->
                                 point.role().againstTheLine()
-                                        ? againstTheLine(point).rule().isWrittenRatherThanNamed()
+                                        ? point.border().rule().isWrittenRatherThanNamed()
                                                 ? new ExampleMessage
                                                         .NoRowIsAtThePointOfTheBorderAConstructDrew(
                                                         point.role().name(), point.border().axis(),
@@ -2419,22 +2419,6 @@ public final class Adequacy {
                 case Citation.OutOfSight out ->
                         souther.compiler.diag.Diagnostic.atCodeWrittenOutOfSight(out.provenance());
             };
-        }
-
-        /**
-         * The border a build is warned about, which is the one a row is owed against the line.
-         *
-         * <p>A build is told about a point away from the line under no code at all, so one reaching
-         * a warning is {@link Finding#isAdequacyGap()} and the role disagreeing about the same
-         * point. Asked rather than assumed, since what decides it lives on the role and this is the
-         * one place that would go on printing a boundary sentence about the other two points.
-         */
-        private static BorderAssessment againstTheLine(BorderAssessment.Point point) {
-            if (!point.role().againstTheLine()) {
-                throw new IllegalArgumentException(
-                        "no build is warned about the " + point.role() + " point: " + point);
-            }
-            return point.border();
         }
 
         /** What a sentence calls a rule that has no name, as a phrase the reader's language
