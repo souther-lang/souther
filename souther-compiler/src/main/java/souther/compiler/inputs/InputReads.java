@@ -9,7 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Which of a tree's names stand for a position of a behavior's input, where the reader has got to.
+ * What a tree's names stand for, in terms of a behavior's input, where the reader has got to.
  *
  * <p>A reader meets a position under whatever name is in scope there, and the name is not the
  * position. Three things make that so, and one value carries them.
@@ -29,8 +29,13 @@ import java.util.Map;
  * so the roots belong to the reading rather than to the input, and a reading given the other one's
  * finds every comparison about nothing.
  *
+ * <p>And a name stands for more than a position or nothing. It is a position, or the expression it
+ * was given, or an element an operation handed out, or something this knows nothing about
+ * ({@link ReadMeaning}). Answered as a position and nothing, the last three were one answer, and a
+ * rule written over a name given arithmetic over positions was read as no rule at all.
+ *
  * <p>Nothing here decides what a position holds; that is the reading of the declarations
- * ({@link InputDomain}), and this only says which position a name is pointing at.
+ * ({@link InputDomain}), and this only says what a name is pointing at.
  *
  * @param roots      which bindings name which parameter, in the tree being walked
  * @param callsStand whether an operation the language defines the meaning of is left standing in
@@ -90,6 +95,41 @@ public record InputReads(InputDomain read, Map<BindingId, String> roots,
     /** The position {@code e} names here, or null where it names none. */
     public TermPath pathOf(Core e, Symbols symbols) {
         return InputPath.of(e, roots, bound, elements, symbols, callsStand);
+    }
+
+    /**
+     * What {@code read}'s name stands for here ({@link ReadMeaning}).
+     *
+     * <p>The one place a name is given a meaning for this side, and the whole of what this reading
+     * knows about one. Every reader that meets a name asks here — the arithmetic that finds the line
+     * a rule draws, and the walk that says which positions a rule mentions — so the two agree about
+     * what a name is rather than each working out what a missing position meant.
+     *
+     * <p>A position first, wherever there is one. A name an operation handed an element on is a
+     * position where the container is at one, and only where it is not does what the binding holds
+     * matter — which is the order the position walk already reads them in, said here so a caller
+     * does not have to know it.
+     *
+     * <p>What it holds is answered last and only as the expression. Whether that expression may
+     * stand where the name does is the caller's question, asked of the fact rather than of a
+     * permission recorded here: an arithmetic reader substitutes it, and a reader collecting
+     * positions walks into it, and neither is the other's rule.
+     */
+    public ReadMeaning meaningOf(Core.Read read, Symbols symbols) {
+        TermPath path = pathOf(read, symbols);
+        if (path != null) {
+            return new ReadMeaning.Position(path);
+        }
+        if (elements.containerOf(read.binding()) != null) {
+            return new ReadMeaning.Element();
+        }
+        Core held = bound.get(read.binding());
+        // Read in this environment. Bindings are added on the way down and each tells itself from
+        // every other, so what was bound after this name does not answer for what it holds — which
+        // is why the environment at the binder and the one at the read cannot be told apart yet.
+        // Said once here rather than by each reader, so the day they can be, one place changes.
+        return held == null || held == read ? new ReadMeaning.Unknown()
+                : new ReadMeaning.Through(held, this);
     }
 
     /** The position an element handed to {@code binding} stands at, or null where it stands at
