@@ -296,6 +296,32 @@ public sealed interface ExampleMessage extends Message {
                                                      souther.compiler.diag.Localizable construct)
             implements ExampleMessage, Reported {}
 
+    /**
+     * The same, for one of the two points away from the line.
+     *
+     * <p>Its own rule and its own code, because which criterion a build is held to decides whether it
+     * is said at all: a row on the line and a row one step over are what simplified domain coverage
+     * asks for, and a row well inside and a row well outside are the two items reliable domain
+     * coverage adds. One sentence for both would be one code covering two rules, and a build asking
+     * to be held to the first would be refused over the second's.
+     */
+    @Code(DiagnosticCode.E1917)
+    record NoRowIsAtThePointAwayFromTheBorderARuleDrew(String point, String at, String value,
+                                                       String rule)
+            implements ExampleMessage, Reported {}
+
+    /** The same again, where a fork of a body drew the line and there is no name to put in the slot. */
+    @Code(DiagnosticCode.E1917)
+    record NoRowIsAtThePointAwayFromTheBorderAConstructDrew(String point, String at, String value,
+                                                            souther.compiler.diag.Localizable construct)
+            implements ExampleMessage, Reported {}
+
+    /** What a row well inside shows: the border is the only thing keeping the values apart there. */
+    record ARowWellInsideShowsTheBorderIsWhatDivides() implements ExampleMessage, Supporting {}
+
+    /** The same, from the other side. */
+    record ARowWellOutsideShowsTheBorderIsWhatDivides() implements ExampleMessage, Supporting {}
+
     /** Said beside the construct a line was drawn in, the sentence naming the rule without a place —
      *  a fork has no name, and where it is written is a place a renderer resolves a file for. */
     record TheConstructThatDrawsTheLine(souther.compiler.diag.Localizable construct)

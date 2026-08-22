@@ -58,8 +58,13 @@ import java.util.Set;
  * answers differently for each. It is an input carried through rather than a value derived from the
  * modules, so filtering the report leaves it alone.
  */
-public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy.Level askedLevel,
+public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy.Asked asked,
                              MeasurementStatus status, List<ModuleReport> modules) {
+
+    /** How much was measured, which decides which measures have a number to show. */
+    public Adequacy.Level askedLevel() {
+        return asked.level();
+    }
 
     public static final int SCHEMA_VERSION = 3;
 
@@ -132,7 +137,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         }
         Adequacy.Asked asked = compilation.db().ask(new Adequacy.Requested()).value();
         return new AdequacyReport(SCHEMA_VERSION, ModuleMetadata.compilerVersion(),
-                asked == null ? Adequacy.Level.OFF : asked.level(), overall, List.copyOf(modules));
+                asked == null ? Adequacy.Asked.NOTHING : asked, overall, List.copyOf(modules));
     }
 
     /**
@@ -285,7 +290,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             kept.add(new ModuleReport(m.module(), m.declaredIn(), status, gaps, behaviors));
             overall = overall.and(status);
         }
-        return new AdequacyReport(schemaVersion, compilerVersion, askedLevel, overall,
+        return new AdequacyReport(schemaVersion, compilerVersion, asked, overall,
                 List.copyOf(kept));
     }
 
@@ -307,7 +312,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     /** The findings a build is entitled to refuse: an asked measure came to an answer and the answer
      *  was that something the rows are asked for is not there. */
     public List<Adequacy.Finding> adequacyGaps() {
-        return findings().stream().filter(Adequacy.Finding::isAdequacyGap).toList();
+        return findings().stream().filter(f -> f.isAdequacyGap(asked.criterion())).toList();
     }
 
     /**
@@ -350,10 +355,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         List<MeasurementStatus> measures = new ArrayList<>();
         for (ModuleReport module : modules) {
             for (BehaviorReport behavior : module.behaviors()) {
-                if (askedLevel.reports() && behavior.signature() != null) {
+                if (askedLevel().reports() && behavior.signature() != null) {
                     add(measures, behavior.signature().status());
                 }
-                if (!askedLevel.measuresArms()) {
+                if (!askedLevel().measuresArms()) {
                     continue;
                 }
                 add(measures, behavior.branch() == null ? null : behavior.branch().status());
@@ -403,7 +408,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * counted and is exactly what stops a verdict of satisfied: it is the case where a gap could have
      * been found and nobody looked.
      */
-    private static void add(List<MeasurementStatus> measures, MeasurementStatus status) {
+    private void add(List<MeasurementStatus> measures, MeasurementStatus status) {
         if (status != null && status != MeasurementStatus.NOT_APPLICABLE) {
             measures.add(status);
         }
@@ -422,8 +427,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     public String human(SourceNameResolver names) {
         StringBuilder out = new StringBuilder();
-        Map<BehaviorImplementation, Integer> counted =
-                new java.util.EnumMap<>(BehaviorImplementation.class);
+        Map<BehaviorImplementation, Integer> counted = new java.util.EnumMap<>(BehaviorImplementation.class);
         for (BehaviorImplementation each : BehaviorImplementation.values()) {
             counted.put(each, 0);
         }
@@ -479,7 +483,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /** The reasons, in the one shape a reason is printed in wherever it sits. */
-    private static void said(StringBuilder out, List<Incompleteness> gaps,
+    private void said(StringBuilder out, List<Incompleteness> gaps,
                              SourceNameResolver names) {
         for (Incompleteness gap : gaps) {
             out.append(String.format("    · %s%n", Reasons.said(gap, names)));
@@ -494,7 +498,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * second says somebody has, and nothing has confirmed the model gives it. For a behavior with no
      * body only the first can be answered at all, so the second is not printed against one.
      */
-    private static void signature(StringBuilder out, BehaviorReport behavior) {
+    private void signature(StringBuilder out, BehaviorReport behavior) {
         Adequacy.SignatureEvidence signature = behavior.signature();
         if (signature == null) {
             return;
@@ -571,8 +575,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * classification to keep in step with the one a build refuses on, and the two would agree until
      * a kind changed sides.
      */
-    private static String mark(Adequacy.Finding finding) {
-        return finding.isAdequacyGap() ? "!" : "·";
+    private String mark(Adequacy.Finding finding) {
+        return finding.isAdequacyGap(asked.criterion()) ? "!" : "·";
     }
 
     /**
@@ -582,25 +586,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * claims. The summary already says partial; each line has to say it too, or the lines read as the
      * finding and the word in the margin as a footnote.
      */
-    private static String noRow(Adequacy.Finding finding) {
+    private String noRow(Adequacy.Finding finding) {
         return finding.status() == MeasurementStatus.COMPLETE
                 ? "no row " : "undecided whether a row ";
     }
 
     /** The positions this report has an axis for, which is what tells a claim it can print beside
      *  one from a claim it has to name a position for. */
-    private static List<String> measuredPaths(PartitionEvidence partition) {
+    private List<String> measuredPaths(PartitionEvidence partition) {
         return partition.axes().stream().map(PartitionEvidence.AxisCoverage::path).toList();
     }
 
     /** The model's own words for a claim, where there is one to print. */
-    private static String because(List<String> reasons) {
+    private String because(List<String> reasons) {
         return reasons.size() == 1 ? ": " + reasons.get(0)
                 : reasons.isEmpty() ? "" : " on every path";
     }
 
     /** What a reader is told about a claim nothing settled, in this report's own words. */
-    private static String unproven(ClaimAnnotations.Why why) {
+    private String unproven(ClaimAnnotations.Why why) {
         return switch (why) {
             case A_RULE_WENT_UNREAD -> "a rule about this position went unread";
             case THE_RULES_LEAVE_THE_POSITION_NOTHING ->
@@ -620,7 +624,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * <p>A boundary a guard drew is printed as not measured rather than as missed. Meeting it takes
      * more than writing the value — the comparison has to have run — and nothing counts that yet.
      */
-    private static void partition(StringBuilder out, BehaviorReport behavior,
+    private void partition(StringBuilder out, BehaviorReport behavior,
                                   SourceId declaredIn, SourceNameResolver names) {
         PartitionEvidence partition = behavior.partition();
         if (partition == null || (partition.axes().isEmpty() && partition.boundaries().isEmpty()
@@ -810,12 +814,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /** The owed half of a point this report has already filtered to the owed ones. */
-    private static ItemAssessment.Owed owed(BorderAssessment.Point point) {
+    private ItemAssessment.Owed owed(BorderAssessment.Point point) {
         return (ItemAssessment.Owed) point.item();
     }
 
     /** What settled a point nobody is owed a row at, in the words the report promises its reader. */
-    private static String whyNotOwed(souther.compiler.partition.NotOwedReason reason) {
+    private String whyNotOwed(souther.compiler.partition.NotOwedReason reason) {
         return switch (reason) {
             case THE_RULES_REFUSE_IT -> "excluded — the rules leave no value there";
             case THE_CARRIER_NAMES_NO_NEIGHBOUR ->
@@ -833,7 +837,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * the position went undivided sat two rows under a boundary count that was counting the line that
      * very comparison drew — one measure's silence printed as though it were the other's.
      */
-    private static void undivided(StringBuilder out, BehaviorReport behavior,
+    private void undivided(StringBuilder out, BehaviorReport behavior,
                                   SourceNameResolver names, SourceId declaredIn) {
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.APositionNoLineDivides(var position)) {
@@ -949,7 +953,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * arms and says nothing about their combinations, and a report that said "paths covered" would
      * invite an author to stop looking exactly where there is more to find.
      */
-    private static void branch(StringBuilder out, BehaviorReport behavior,
+    private void branch(StringBuilder out, BehaviorReport behavior,
                                SourceId declaredIn, SourceNameResolver names) {
         Adequacy.BranchEvidence branch = behavior.branch();
         if (branch == null) {
@@ -1147,7 +1151,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * the question is raised; a report chooses where to print it, and nothing here decides what the
      * model asked.
      */
-    private static void unaccounted(StringBuilder out, BehaviorReport behavior,
+    private void unaccounted(StringBuilder out, BehaviorReport behavior,
                                     SourceNameResolver names,
                                     souther.compiler.source.SourceId declaredIn,
                                     java.util.function.Predicate<
@@ -1418,7 +1422,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         }
     }
 
-    private static void partition(ObjectNode behavior, PartitionEvidence partition,
+    private void partition(ObjectNode behavior, PartitionEvidence partition,
                                   ClaimAnnotations claimed, DocumentSources sources) {
         if (partition == null) {
             return;
@@ -1661,12 +1665,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * under every finding of a behavior the entry already names — and where the finding is about a
      * line or a class, that coordinate is not where the reader would go.
      */
-    private static void findings(ObjectNode behavior, BehaviorReport of, DocumentSources sources) {
+    private void findings(ObjectNode behavior, BehaviorReport of, DocumentSources sources) {
         ArrayNode out = behavior.putArray("findings");
         for (Adequacy.Finding finding : of.findings()) {
             ObjectNode f = out.addObject();
             f.put("kind", word(finding.kind()));
-            f.put("disposition", word(finding.disposition()));
+            f.put("disposition", word(finding.disposition(asked.criterion())));
             f.put("subject", subject(finding, sources));
             // Which rule this is about, where the finding is about one. The words in `subject` are
             // how a reader finds it, and two rules an author named alike have the same words — so a

@@ -33,8 +33,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * either wrote rows for everything printed — more than the build asks, on a measure the language
  * deliberately chose not to gate — or wrote one and ran again to find out.
  *
- * <p>Both surfaces read {@link Adequacy.Finding#disposition()}, so what is marked here and what the
- * document says are the same answer rather than two readings of the finding kinds.
+ * <p>Both surfaces read {@link Adequacy.Finding#disposition(Adequacy.Criterion)}, so what is marked
+ * here and what the document says are the same answer rather than two readings of the finding
+ * kinds.
  */
 class WhichFindingsABuildRefusesOverIsWrittenDownTest {
 
@@ -258,9 +259,11 @@ class WhichFindingsABuildRefusesOverIsWrittenDownTest {
         List<Adequacy.Finding> findings = report().findings();
 
         assertEquals(Adequacy.Finding.Disposition.REFUSED,
-                of(findings, Adequacy.Kind.INPUT_CASE_UNSPECIFIED).disposition());
+                of(findings, Adequacy.Kind.INPUT_CASE_UNSPECIFIED)
+                        .disposition(Adequacy.Criterion.SIMPLIFIED_DOMAIN));
         assertEquals(Adequacy.Finding.Disposition.REPORTED,
-                of(findings, Adequacy.Kind.AXIS_CLASS_UNCOVERED).disposition());
+                of(findings, Adequacy.Kind.AXIS_CLASS_UNCOVERED)
+                        .disposition(Adequacy.Criterion.SIMPLIFIED_DOMAIN));
         // The middle answer needs a measure that came to none, which this model does not have. It
         // is held where the unfinished rows are, beside the warning that is not printed for it
         // (`CompilePartialAdequacyTest#aGapFromAMeasureThatCameToNoAnswerIsUndecided`).
@@ -276,9 +279,11 @@ class WhichFindingsABuildRefusesOverIsWrittenDownTest {
      */
     @Test
     void theGapAnswerIsTheDispositionAndNotASecondReading() {
-        for (Adequacy.Finding f : report().findings()) {
-            assertEquals(f.disposition() == Adequacy.Finding.Disposition.REFUSED,
-                    f.isAdequacyGap(), f.kind() + " at " + f.status());
+        for (Adequacy.Criterion criterion : Adequacy.Criterion.values()) {
+            for (Adequacy.Finding f : report().findings()) {
+                assertEquals(f.disposition(criterion) == Adequacy.Finding.Disposition.REFUSED,
+                        f.isAdequacyGap(criterion), f.kind() + " at " + f.status());
+            }
         }
     }
 

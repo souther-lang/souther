@@ -297,13 +297,14 @@ class CompilePartialAdequacyTest {
                 .findings();
 
         List<Adequacy.Finding> undecided = findings.stream()
-                .filter(f -> f.kind().isAdequacyGap()).toList();
+                .filter(f -> Adequacy.Criterion.SIMPLIFIED_DOMAIN.refuses(f.kind())).toList();
 
         assertFalse(undecided.isEmpty(), () -> "the model has a kind a build gates on: " + findings);
         for (Adequacy.Finding f : undecided) {
             assertEquals(MeasurementStatus.PARTIAL, f.status(), f::toString);
-            assertEquals(Adequacy.Finding.Disposition.UNDECIDED, f.disposition(), f::toString);
-            assertFalse(f.isAdequacyGap(), f::toString);
+            assertEquals(Adequacy.Finding.Disposition.UNDECIDED,
+                    f.disposition(Adequacy.Criterion.SIMPLIFIED_DOMAIN), f::toString);
+            assertFalse(f.isAdequacyGap(Adequacy.Criterion.SIMPLIFIED_DOMAIN), f::toString);
         }
     }
 

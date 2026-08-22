@@ -3275,7 +3275,9 @@ An input position carries the same three, with *executed* in place of *observed*
 
 Which measures could have found a gap is what was asked for and what the model has, and not what the evidence looks like. A behavior whose arms were never asked about, one that has no arms to reach — a `+>->+` composition, whose stages have them and which has none of its own — and one whose arms could not be measured are all three without arm evidence, and only the last of them leaves the answer undetermined. The same holds of a position dropped for being past the axis limit: dropping one a rule had drawn a line on loses boundaries nothing can ask about now, and dropping one that was only classifying loses a measure no build refuses over.
 
-*What refuses a build.* A gap a measure came to an answer about, whichever of the two ways a build asks: `+souther compile --adequacy all --warnings error+` and `+souther examples --strict+` refuse the same findings. How many rows are waiting for a `+let+` refuses nothing. A build that failed on one would fail on the record of what an injected behavior owes, which is what <<example-pending>> says a model being migrated onto is made of.
+*What refuses a build.* A gap a measure came to an answer about and the criterion the build asked for asks for. Both ways of asking read the same answer: `+souther compile --adequacy all --warnings error+` and `+souther examples --strict+` refuse the same findings, both being held to simplified domain coverage. `+souther examples+` names no criterion of its own, so a build wanting the other one asks `+souther compile --adequacy reliable-domain --warnings error+`. How many rows are waiting for a `+let+` refuses nothing. A build that failed on one would fail on the record of what an injected behavior owes, which is what <<example-pending>> says a model being migrated onto is made of.
+
+*What is measured and what a build is held to are two things it asks for.* `+--adequacy+` names both at once, and the words are presets rather than a single ladder. `+off+` measures nothing. `+witness+` reads what the rows already established. `+all+` adds what the arms and the boundaries take a second run to find out, and holds the build to simplified domain coverage. `+reliable-domain+` measures the same as `+all+` and holds the build to reliable domain coverage, which adds the two points away from each line (<<a-border-owes-four-points>>, <<e1917>>). The last two differ in the bar and not in the work: the points away from a line come off the same assessment as the points against it, so a fourth level would have said nothing about how much to measure.
 
 *A selector names a subject or the command is refused.* `+souther examples --module+` and `+--behavior+` narrow what is reported, and a name that resolves to no subject is a usage error rather than a report of nothing. A report of nothing says the measurement was made and found no gap, which is what a build reading it is entitled to accept. The two names are resolved together, so names that each resolve and hold nothing between them select nothing; and they are resolved against what the sources declare rather than against what reached the report, so a subject that resolves and then cannot be measured is reported as `+partial+` and is not a selector that named nothing.
 
@@ -6055,11 +6057,25 @@ Hint: A row at the nearest value the border keeps in is what shows the border do
 
 A warning, and one that needs the arms measured where the line was drawn by a fork of the body (<<example-branch-coverage>>): meeting such a line takes reaching the comparison, not writing the value. A line an invariant drew is decided without that. The rule that drew it is named, because the same value can be a border of several and reaching it through one leaves the others unmet.
 
-Said of the two points against the line and of neither of the two away from it (<<a-border-owes-four-points>>). Those two are what simplified domain coverage asks for and what a row on the line shows that no other row does; the points inside and outside are reported and warned about by nothing, which is the same decision made per measure everywhere else (<<example-adequacy>>) and not a claim that one criterion is the bar.
+Said of the two points against the line and of neither of the two away from it (<<a-border-owes-four-points>>). Those two are what simplified domain coverage asks for and what a row on the line shows that no other row does; the points inside and outside are the two items reliable domain coverage adds, and a build held to that criterion is told about them under <<e1917>>. Which of the two criteria a build is held to is what it asked for (<<example-adequacy>>), and the report still names neither as satisfied.
 
 Which of the two it is, in the word the report gives it (<<a-border-says-which-point-it-owes>>). One finding is told on two surfaces, and a reader handed this vocabulary by the report was working it out again here. `+ON+` and `+OFF+` are the technique's terms rather than English words for it, so they are the same in every catalog and what a catalog holds is the sentence around them. The rule is named as the one that drew the border and not as one drawing its line here: only one of the two points carries the value the rule was written with, so the other would be told the line is where it is not. The hint follows the point and is said in the same words — what a row at the nearest value the border keeps in shows, and what one at the nearest value it keeps out shows. Not which side of the line the value falls on: which of the two points carries the line's own value turns on the border being closed or open (<<a-border-owes-four-points>>), so a hint keyed on that would be a second reading of one finding under a sentence that has just named the role. What tells `+<=+` from `+<+` is the border being closed or open, which the report says of the border.
 
 The fork is named by the construct it was written as — an `+if+`, a `+guard+`, or a guard comprehension (<<stdlib-list>>) — and where it is written is pointed at rather than said, a place being something only a reader's own files give a name to. All three lower to one form before anything runs, so the word comes from where the source was read and not from the shape it was lowered to.
+
+[#e1917]
+=== No row is at a point away from a boundary
+
+[,text]
+----
+No row is at an IN point of submit/cost, 50, away from the border the `guard` draws.
+Hint: A row well inside is what shows the border, and not something else about the value, is
+what divides the two.
+----
+
+[[every-border-has-a-row-away-from-its-line]]A warning, and only to a build held to reliable domain coverage. The same assessment of the same border answers this and <<e1916>>; what differs is which of the four points a build is asked for (<<a-border-owes-four-points>>). A build that asked for simplified domain coverage is not told this, and the points are still reported.
+
+Told apart from <<e1916>> by a code of its own rather than by the role in the sentence. One code covering both would be a build asking to be held to the first criterion and refused over the second's items.
 
 [#e1918]
 === No row goes through an arm

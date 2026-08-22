@@ -168,6 +168,7 @@ public enum DiagnosticCode {
     E1913("every-output-case-is-expected-by-a-row", "check.example.title"),
     E1915("every-input-case-is-used-by-a-row", "check.example.title"),
     E1916("every-border-has-a-row-against-its-line", "check.example.title"),
+    E1917("every-border-has-a-row-away-from-its-line", "check.example.title"),
     E1918("every-arm-has-a-row", "check.example.title"),
     E1919("stand-in-and-recorded-row-agree", "check.example.title"),
     E1920("stand-in-comparison-completes", "check.example.title"),
@@ -262,7 +263,7 @@ public enum DiagnosticCode {
 
     /** The rules that are reported without failing the build. */
     private static final java.util.Set<DiagnosticCode> WARNINGS =
-            java.util.EnumSet.of(E1327, E1913, E1915, E1916, E1918, E1919, E1920, E1921,
+            java.util.EnumSet.of(E1327, E1913, E1915, E1916, E1917, E1918, E1919, E1920, E1921,
                     E1922, E2011);
 
     public String titleKey() {

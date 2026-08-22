@@ -72,20 +72,72 @@ public final class Adequacy {
     }
 
     /**
-     * What a build asked for: how much to measure, and whether to be told it as warnings.
+     * What a build is held to.
      *
-     * <p>Two things rather than one, because a caller can want the measurement without the warnings.
-     * {@code souther examples} is that caller — its whole output is the report, which says everything
-     * these warnings would say and says it in one place, so printing both would be the same news
-     * twice.
+     * <p>Beside {@link Level} and not a rung of it. A level says how much work to do — what separates
+     * {@code WITNESS} from {@code ALL} is a second set of classes and a second run of every row — and
+     * this says which of what was measured a build refuses over. The two are different questions, and
+     * a fourth level would have been the first one that answered this one instead (issue #937).
+     *
+     * <p>The two the syllabus defines. Simplified domain coverage asks for a row on each line a rule
+     * draws and a row one step over it; reliable domain coverage adds a row well inside and a row
+     * well outside. Both come off one assessment of one border, so what a build is held to is a
+     * reading of one measurement and never a second one made to other rules.
      */
-    public record Asked(Level level, boolean warn) {
+    public enum Criterion {
 
-        public static final Asked NOTHING = new Asked(Level.OFF, false);
+        /** A row against each line, and every other gap a measure can find. */
+        SIMPLIFIED_DOMAIN,
 
-        /** Measured and said. */
+        /** Those, and the points away from the line. */
+        RELIABLE_DOMAIN;
+
+        /**
+         * Whether a build held to this refuses over {@code kind}.
+         *
+         * <p>The whole table, written here rather than as a flag on each kind: what a kind is stays a
+         * fact about what a measure found, and which of them a build refuses over is this one's. An
+         * exhaustive switch, so a kind added later does not compile until somebody has said which
+         * side of every criterion it falls on.
+         */
+        public boolean refuses(Kind kind) {
+            return switch (kind) {
+                case OUTPUT_CASE_UNSPECIFIED, INPUT_CASE_UNSPECIFIED, BOUNDARY_UNMET, ARM_UNREACHED
+                        -> true;
+                case DOMAIN_POINT_UNCOVERED -> this == RELIABLE_DOMAIN;
+                // What a measure could not establish, and what it established about the model rather
+                // than about the rows. Neither is a row somebody owes, so no criterion asks for it.
+                case OUTPUT_CASE_UNVERIFIED, AXIS_CLASS_UNCOVERED, PARTITION_NOT_DERIVABLE,
+                     PARTITION_NOT_READ, RULE_UNACCOUNTED, PARTITION_RULES_NOT_REACHED,
+                     PARTITION_VALUES_NOT_SEPARATED, PARTITION_OMITTED -> false;
+            };
+        }
+    }
+
+    /**
+     * What a build asked for: how much to measure, whether to be told it as warnings, and what it is
+     * held to.
+     *
+     * <p>Three things rather than one, because a caller can want any of them without the others.
+     * {@code souther examples} wants the measurement without the warnings — its whole output is the
+     * report, which says everything these warnings would say and says it in one place, so printing
+     * both would be the same news twice. And what a build refuses over is not how much it measured:
+     * the points away from a line are measured whenever the ones against it are, and whether they
+     * are owed is the criterion's answer (issue #937).
+     */
+    public record Asked(Level level, boolean warn, Criterion criterion) {
+
+        public static final Asked NOTHING =
+                new Asked(Level.OFF, false, Criterion.SIMPLIFIED_DOMAIN);
+
+        /** Measured and said, held to the criterion a build asks for by default. */
         public static Asked warningsAt(Level level) {
-            return new Asked(level, true);
+            return warningsAt(level, Criterion.SIMPLIFIED_DOMAIN);
+        }
+
+        /** Measured and said, held to {@code criterion}. */
+        public static Asked warningsAt(Level level, Criterion criterion) {
+            return new Asked(level, true, criterion);
         }
 
         /** Measured for a report to read, and not said again. */
@@ -97,7 +149,12 @@ public final class Adequacy {
          * draws beside a declaration is a report, and a warning saying the same thing again would be
          * the same news twice on the same line. */
         public static Asked reportOnly(Level level) {
-            return new Asked(level, false);
+            return new Asked(level, false, Criterion.SIMPLIFIED_DOMAIN);
+        }
+
+        /** Whether a build that asked for this refuses over {@code kind}. */
+        public boolean refuses(Kind kind) {
+            return criterion.refuses(kind);
         }
     }
 
@@ -1342,7 +1399,7 @@ public final class Adequacy {
                                     .LinkageFailed(spec.name())));
                 }
                 out.put(spec.name(), new Filling(pairs, offered(spec.name(), edges),
-                        dispositions(findings == null ? List.of()
+                        dispositions(askedOf(db).criterion(), findings == null ? List.of()
                                         : findings.getOrDefault(spec.name(), List.of()),
                                 edges, partitions == null ? null : partitions.get(spec.name()),
                                 pairs, spec)));
@@ -1364,14 +1421,14 @@ public final class Adequacy {
          * never by what a search came back with. The kinds are listed one at a time so that a kind
          * added later does not compile until somebody has said which of the three it is.
          */
-        private static List<GapDisposition> dispositions(List<Finding> findings,
+        private static List<GapDisposition> dispositions(Criterion criterion, List<Finding> findings,
                                                       List<BorderAssessment> edges,
                                                       PartitionEvidence partition,
                                                       Generator.GenerationResult pairs,
                                                       Hir.SpecBehavior spec) {
             List<GapDisposition> out = new ArrayList<>();
             for (Finding gap : findings) {
-                if (!gap.isAdequacyGap()) {
+                if (!gap.isAdequacyGap(criterion)) {
                     continue;
                 }
                 out.add(new GapDisposition(gap, switch (gap.about()) {
@@ -1700,41 +1757,42 @@ public final class Adequacy {
     /**
      * What one measure found and nothing filled.
      *
-     * <p>Which of these fails a build is a property of the kind and not of whether it happens to carry
-     * a diagnostic code. The two line up today, and a required finding that nobody gave a code to
-     * would be a build that passes on a gap it printed, so the agreement is held by a test rather than
-     * by reading one off the other.
+     * <p>What a kind is, is what a measure found, and nothing here says whether a build fails over it:
+     * that is {@link Criterion}'s, because the answer differs between the two criteria a build can be
+     * held to. A gap some criterion refuses over has to carry a diagnostic code, or a build would
+     * fail over something it never printed; the agreement is held by a test rather than by reading
+     * one off the other.
      */
     public enum Kind {
         /** A case of the output no row expects. */
-        OUTPUT_CASE_UNSPECIFIED(DiagnosticCode.E1913, true),
+        OUTPUT_CASE_UNSPECIFIED(DiagnosticCode.E1913),
         /** A case of an input no row applies the behavior to. */
-        INPUT_CASE_UNSPECIFIED(DiagnosticCode.E1915, true),
+        INPUT_CASE_UNSPECIFIED(DiagnosticCode.E1915),
         /** A line some rule draws that no row sits on. */
-        BOUNDARY_UNMET(DiagnosticCode.E1916, true),
+        BOUNDARY_UNMET(DiagnosticCode.E1916),
         /** An arm of the body no row goes through. */
-        ARM_UNREACHED(DiagnosticCode.E1918, true),
+        ARM_UNREACHED(DiagnosticCode.E1918),
         /** A case some row expects and nothing was seen to produce. Said only of a behavior some row
          *  saw answer with a case: where nothing was observed at all, this is true of every case and
          *  is what the rows say of themselves. */
-        OUTPUT_CASE_UNVERIFIED(null, false),
+        OUTPUT_CASE_UNVERIFIED(null),
         /** A class of an axis no row is in. */
-        AXIS_CLASS_UNCOVERED(null, false),
+        AXIS_CLASS_UNCOVERED(null),
         /**
          * A point away from a border that no row is at — the {@code IN} or the {@code OUT} point.
          *
          * <p>Beside {@link #BOUNDARY_UNMET} rather than among its findings, and the difference is
          * which criterion a build is held to. A row on the line and a row one step over are what
-         * simplified domain coverage asks for, and a build can be told to refuse over them. A row
-         * well inside and a row well outside are the two further items reliable domain coverage adds,
-         * and this reports them without naming either criterion as the bar — which is what a report
-         * that claims no coverage criterion has to do.
+         * simplified domain coverage asks for; a row well inside and a row well outside are the two
+         * further items reliable domain coverage adds. A build held to the second refuses over this
+         * one and a build held to the first does not, which is {@link Criterion}'s to say — the
+         * report still names neither criterion as satisfied.
          *
          * <p>Not a measure of its own. It comes off the same assessment of the same border as the
          * points against the line, so what a build refuses over is a reading of one measurement and
          * never a second one made to different rules.
          */
-        DOMAIN_POINT_UNCOVERED(null, false),
+        DOMAIN_POINT_UNCOVERED(DiagnosticCode.E1917),
         /**
          * A position the model draws no line through.
          *
@@ -1743,9 +1801,9 @@ public final class Adequacy {
          * finding, and the sentence this one prints was told to authors whose own body compared the
          * position two lines above.
          */
-        PARTITION_NOT_DERIVABLE(null, false),
+        PARTITION_NOT_DERIVABLE(null),
         /** A position something is written about that this did not read, with what stopped it. */
-        PARTITION_NOT_READ(null, false),
+        PARTITION_NOT_READ(null),
         /**
          * A rule written about a position that nothing took in, and which of its questions stands.
          *
@@ -1768,7 +1826,7 @@ public final class Adequacy {
          * reading's account of itself, so it was said of models every rule of which had been read
          * (issue #842).
          */
-        RULE_UNACCOUNTED(null, false),
+        RULE_UNACCOUNTED(null),
         /**
          * A position the axes measure whose rules the walk never reached.
          *
@@ -1776,7 +1834,7 @@ public final class Adequacy {
          * and a reader told that every rule was accounted for is told the opposite of the one thing
          * worth knowing about the position.
          */
-        PARTITION_RULES_NOT_REACHED(null, false),
+        PARTITION_RULES_NOT_REACHED(null),
         /**
          * A position whose values are read from a product this reading cannot show the rules admit.
          *
@@ -1785,26 +1843,19 @@ public final class Adequacy {
          * What it qualifies is the classes rather than their absence, so it is said at positions the
          * axes measured as readily as at positions they did not.
          */
-        PARTITION_VALUES_NOT_SEPARATED(null, false),
+        PARTITION_VALUES_NOT_SEPARATED(null),
         /** A position left out because the axis limit was reached. */
-        PARTITION_OMITTED(null, false);
+        PARTITION_OMITTED(null);
 
         private final DiagnosticCode code;
-        private final boolean adequacyGap;
 
-        Kind(DiagnosticCode code, boolean adequacyGap) {
+        Kind(DiagnosticCode code) {
             this.code = code;
-            this.adequacyGap = adequacyGap;
         }
 
         /** The code a build is told this under, where it is told at all. */
         public Optional<DiagnosticCode> code() {
             return Optional.ofNullable(code);
-        }
-
-        /** Whether a model carrying this one has not met what the rows are asked for. */
-        public boolean isAdequacyGap() {
-            return adequacyGap;
         }
     }
 
@@ -1901,17 +1952,17 @@ public final class Adequacy {
          * the kinds a second time, so what a report marks and what a build refuses over cannot come
          * apart.
          */
-        public Disposition disposition() {
-            if (!kind().isAdequacyGap()) {
+        public Disposition disposition(Criterion criterion) {
+            if (!criterion.refuses(kind())) {
                 return Disposition.REPORTED;
             }
             return status == MeasurementStatus.COMPLETE
                     ? Disposition.REFUSED : Disposition.UNDECIDED;
         }
 
-        /** Whether this is a gap a build is entitled to refuse. */
-        public boolean isAdequacyGap() {
-            return disposition() == Disposition.REFUSED;
+        /** Whether a build held to {@code criterion} is entitled to refuse over this. */
+        public boolean isAdequacyGap(Criterion criterion) {
+            return disposition(criterion) == Disposition.REFUSED;
         }
 
         public Optional<DiagnosticCode> code() {
@@ -2172,7 +2223,7 @@ public final class Adequacy {
             List<Report> reports = new ArrayList<>();
             for (List<Finding> ofBehavior : found.value().values()) {
                 for (Finding finding : ofBehavior) {
-                    if (finding.isAdequacyGap()) {
+                    if (finding.isAdequacyGap(asked.criterion())) {
                         reports.add(warning(finding));
                     }
                 }
@@ -2211,14 +2262,31 @@ public final class Adequacy {
                         // border's points went unmet is the measurement's own answer, and a
                         // sentence deciding one of them from the other would be reading a rule off
                         // a role.
-                        case About.APointOfABorder(var point) -> againstTheLine(point).rule()
-                                .wasDrawnInABodyFork()
-                                ? new ExampleMessage.NoRowIsAtThePointOfTheBorderAConstructDrew(
-                                        point.role().name(), point.border().axis(),
-                                        point.against(), constructOf(point))
-                                : new ExampleMessage.NoRowIsAtThePointOfTheBorderARuleDrew(
-                                        point.role().name(), point.border().axis(),
-                                        point.against(), point.border().rule().named());
+                        // Which of the two rules this is, is the role's answer, exactly as the kind
+                        // is: a point against the line and a point away from it are owed by
+                        // different criteria and are told under different codes.
+                        case About.APointOfABorder(var point) ->
+                                point.role().againstTheLine()
+                                        ? againstTheLine(point).rule().wasDrawnInABodyFork()
+                                                ? new ExampleMessage
+                                                        .NoRowIsAtThePointOfTheBorderAConstructDrew(
+                                                        point.role().name(), point.border().axis(),
+                                                        point.against(), constructOf(point))
+                                                : new ExampleMessage
+                                                        .NoRowIsAtThePointOfTheBorderARuleDrew(
+                                                        point.role().name(), point.border().axis(),
+                                                        point.against(),
+                                                        point.border().rule().named())
+                                        : point.border().rule().wasDrawnInABodyFork()
+                                                ? new ExampleMessage
+                                                        .NoRowIsAtThePointAwayFromTheBorderAConstructDrew(
+                                                        point.role().name(), point.border().axis(),
+                                                        point.against(), constructOf(point))
+                                                : new ExampleMessage
+                                                        .NoRowIsAtThePointAwayFromTheBorderARuleDrew(
+                                                        point.role().name(), point.border().axis(),
+                                                        point.against(),
+                                                        point.border().rule().named());
                         case About.AnArmNoRowGoesThrough(var arm) ->
                                 new ExampleMessage.NoRowGoesThroughThatArm(
                                         phraseFor(arm), arm.behavior());
@@ -2248,11 +2316,14 @@ public final class Adequacy {
                                 new ExampleMessage.ARowJustInsideShowsTheBorderIsNotFurtherIn());
                         case OFF -> built.hint(
                                 new ExampleMessage.ARowJustOutsideShowsTheBorderIsNotFurtherOut());
-                        // Reported and warned about by nothing, which is where the two kinds part.
-                        // Reaching this is a finding built for a point no diagnostic is written
-                        // for, and answering it with a neighbour's hint is what that would cost.
-                        case IN, OUT -> throw new IllegalStateException(
-                                "only a point against the line is warned about: " + point.role());
+                        // Said only to a build held to reliable domain coverage, which is where
+                        // the two kinds part. In its own words: what a row well inside shows is not
+                        // what a row a step over shows, and the neighbour's hint would send an
+                        // author to the wrong value.
+                        case IN -> built.hint(
+                                new ExampleMessage.ARowWellInsideShowsTheBorderIsWhatDivides());
+                        case OUT -> built.hint(
+                                new ExampleMessage.ARowWellOutsideShowsTheBorderIsWhatDivides());
                     }
                     // Where the rule has a place rather than a name, the place is a second region
                     // and not words in the sentence: a renderer resolves what to call its file,

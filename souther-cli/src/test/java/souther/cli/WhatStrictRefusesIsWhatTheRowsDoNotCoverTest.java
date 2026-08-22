@@ -201,19 +201,39 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
     }
 
     /**
-     * Every kind a build may refuse has something to refuse it under.
+     * Every kind some criterion refuses over has something to refuse it under.
      *
-     * <p>Whether a finding fails a build is a property of the kind and not of whether it carries a
-     * code, and the two are written out separately so that neither is read off the other. A required
-     * kind nobody gave a code to would be a gap a report prints and a build is never told about.
+     * <p>What a criterion asks for and what a kind carries are written out separately so that neither
+     * is read off the other. A kind some build can be held to and nobody gave a code to would be a
+     * gap a report prints and a build is never told about.
      */
     @Test
-    void everyKindABuildMayRefuseHasADiagnosticCode() {
-        for (Adequacy.Kind kind : Adequacy.Kind.values()) {
-            if (kind.isAdequacyGap()) {
-                assertTrue(kind.code().isPresent(), kind.name());
+    void everyKindACriterionRefusesOverHasADiagnosticCode() {
+        for (Adequacy.Criterion criterion : Adequacy.Criterion.values()) {
+            for (Adequacy.Kind kind : Adequacy.Kind.values()) {
+                if (criterion.refuses(kind)) {
+                    assertTrue(kind.code().isPresent(), criterion + " refuses over " + kind);
+                }
             }
         }
+    }
+
+    /**
+     * The two criteria differ over the points away from a line and over nothing else.
+     *
+     * <p>Read off the criteria rather than listed, so a kind added and given to one of them and not
+     * the other is this failing rather than a silent second difference between the bars.
+     */
+    @Test
+    void theTwoCriteriaDifferOverThePointsAwayFromALine() {
+        List<Adequacy.Kind> differing = new java.util.ArrayList<>();
+        for (Adequacy.Kind kind : Adequacy.Kind.values()) {
+            if (Adequacy.Criterion.SIMPLIFIED_DOMAIN.refuses(kind)
+                    != Adequacy.Criterion.RELIABLE_DOMAIN.refuses(kind)) {
+                differing.add(kind);
+            }
+        }
+        assertEquals(List.of(Adequacy.Kind.DOMAIN_POINT_UNCOVERED), differing);
     }
 
     /**
@@ -328,7 +348,8 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
                 "weigh", souther.compiler.check.BehaviorImplementation.IMPLEMENTED,
                 1, 0, MeasurementStatus.COMPLETE, null, partition,
                 souther.compiler.query.ClaimAnnotations.NONE, null, List.of());
-        return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test", Adequacy.Level.ALL,
+        return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test",
+                Adequacy.Asked.warningsAt(Adequacy.Level.ALL),
                 MeasurementStatus.COMPLETE,
                 List.of(new AdequacyReport.ModuleReport("example.wide", new SourceId("wide.sou"), MeasurementStatus.COMPLETE,
                         List.of(), List.of(behavior))))
