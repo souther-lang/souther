@@ -48,11 +48,22 @@ import souther.compiler.inputs.InputReads;
  */
 sealed interface Condition {
 
+    /**
+     * The node this is a reading of.
+     *
+     * <p>Kept by every shape, because a reader that could not take one in owes the place it is
+     * written. Recovered afterwards from what is under a node, the place would be a child's — a
+     * conjunction nothing could turn into a region would be reported at whichever operand happened
+     * to be first, which is a second account of where a condition stands and is the kind of thing
+     * this vocabulary exists to have one of.
+     */
+    Core at();
+
     /** Both, and the right one runs only where the left held. */
-    record Both(Condition left, Condition right) implements Condition {}
+    record Both(Core.Binary at, Condition left, Condition right) implements Condition {}
 
     /** Either, and the right one runs only where the left did not hold. */
-    record Either(Condition left, Condition right) implements Condition {}
+    record Either(Core.Binary at, Condition left, Condition right) implements Condition {}
 
     /**
      * One comparison, and where the names in it point.
@@ -93,7 +104,8 @@ sealed interface Condition {
         if (e instanceof Core.Binary binary && combines(binary.op())) {
             Condition left = of(binary.left(), reads);
             Condition right = of(binary.right(), reads);
-            return binary.op() == Hir.BinOp.AND ? new Both(left, right) : new Either(left, right);
+            return binary.op() == Hir.BinOp.AND
+                    ? new Both(binary, left, right) : new Either(binary, left, right);
         }
         if (e instanceof Core.Binary comparison && comparison.op().compares()) {
             return new Compares(comparison, reads);

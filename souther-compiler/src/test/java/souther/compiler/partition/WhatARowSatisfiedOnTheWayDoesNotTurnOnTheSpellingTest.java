@@ -79,12 +79,28 @@ class WhatARowSatisfiedOnTheWayDoesNotTurnOnTheSpellingTest {
                 compilation.db().ask(new Adequacy.Inputs(module)).value();
         GuardThresholds.Guards guards =
                 GuardThresholds.of(behavior, body, plan, inputs.get(behavior), symbols);
-        // By what the cuts say and not by which site they are filed under. Two spellings number
-        // their comparisons differently and state the same thing.
+        // By what the walk came to and not by which site it is filed under, nor by where the
+        // conditions are written. Two spellings number their comparisons differently and write
+        // them in different places, and what they state is the same.
         return guards.reaching().byComparison().values().stream()
-                .map(Object::toString)
+                .map(WhatARowSatisfiedOnTheWayDoesNotTurnOnTheSpellingTest::said)
                 .sorted()
                 .toList();
+    }
+
+    /**
+     * What one comparison stands under, with the places left out.
+     *
+     * <p>The cuts and the reasons nothing could be cut from, which is the whole of what two
+     * spellings of one model have to agree about. A place is not: the same condition written two
+     * ways is at two positions, and holding this against the position would be holding it against
+     * the spelling.
+     */
+    private static String said(List<OnTheWay> assumed) {
+        return assumed.stream().map(each -> switch (each) {
+            case OnTheWay.TakenIn taken -> taken.cut().toString();
+            case OnTheWay.Declined left -> left.why().toString();
+        }).toList().toString();
     }
 
     /** The second comparison of a conjunction runs under the first, however the two are joined. */

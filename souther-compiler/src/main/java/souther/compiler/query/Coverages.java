@@ -527,13 +527,14 @@ final class Coverages {
      * values and holds wherever one stands, so there is nothing on the way to it; a guard is at a
      * place in a body, and a row that never arrives there is no row at its line whatever it holds.
      * Read off which kind of rule it is rather than off whether anything was collected: a guard
-     * nothing narrows and a clause are then the same region for the same stated reason.
+     * nothing narrows and a clause are then the same region for the same stated reason, and each
+     * says so in its own account rather than by coming back with nothing.
      */
-    private static souther.compiler.inputs.SearchRegion regionFor(
+    private static souther.compiler.partition.RegionForARow regionFor(
             Border border, souther.compiler.inputs.Quantities rules, ReachingCuts reaching) {
         return border.origin().comparisonAt()
                 .map(site -> reaching.narrowing(rules.region(), site))
-                .orElseGet(rules::region);
+                .orElseGet(() -> souther.compiler.partition.RegionForARow.untouched(rules.region()));
     }
 
     /**
@@ -618,7 +619,7 @@ final class Coverages {
     private static OneShapeOfBorder shapeOf(Border border, BehaviorInputs where,
                                             boolean knownWritable, Probe probe,
                                             LevelRealizer realizer,
-                                            souther.compiler.inputs.SearchRegion within) {
+                                            souther.compiler.partition.RegionForARow within) {
         BorderQuantity quantity = border.cut().of();
         java.util.Optional<souther.compiler.coverage.ComparisonOccurrence> site =
                 border.origin().comparisonAt();
@@ -639,9 +640,9 @@ final class Coverages {
                 // the realizer. What it composes is a candidate and no part of the item: another row
                 // in the same side is at the point as much as this one would be, so what the row is
                 // offered for goes in beside it rather than being read back off it.
-                return switch (realizer.realize(quantity.standingAt(criterion), within)) {
-                    case Realization.Found found ->
-                            whatCameOfIt(probe.attempt(label, quantity.carrier(), found.fixing()));
+                return switch (realizer.realize(quantity.standingAt(criterion), within.where())) {
+                    case Realization.Found found -> whatCameOfIt(
+                            probe.attempt(label, quantity.carrier(), found.fixing()), label, within);
                     // And the two ways of finding nothing are not one answer. A walk of the whole
                     // of what the rules leave that reaches no value settles the point; a search
                     // that stopped, or one that composed no candidate at all, settles nothing
@@ -650,14 +651,14 @@ final class Coverages {
                             new souther.compiler.partition.Generator.UnresolvedCombination(
                                     java.util.List.of(label),
                                     souther.compiler.partition.Generator.UnresolvedCombination
-                                            .Reason.THE_RULES_LEAVE_NOTHING_THERE));
+                                            .Reason.THE_RULES_LEAVE_NOTHING_THERE), within);
                     case Realization.Unknown unknown -> switch (unknown.why()) {
-                        case NOTHING_COMPOSED_ONE -> nothingComposedOne(label);
+                        case NOTHING_COMPOSED_ONE -> nothingComposedOne(label, within);
                         case THE_SEARCH_RAN_OUT -> new ItemAssessment.Attempt.Unresolved(
                                 new souther.compiler.partition.Generator.UnresolvedCombination(
                                         java.util.List.of(label),
                                         souther.compiler.partition.Generator.UnresolvedCombination
-                                                .Reason.SEARCH_LIMIT));
+                                                .Reason.SEARCH_LIMIT), within);
                     };
                 };
             }
@@ -911,23 +912,42 @@ final class Coverages {
     }
 
     /** A search that came to nothing at {@code subject}, which is what a point is written as. */
-    private static ItemAssessment.Attempt nothingComposedOne(String subject) {
+    private static ItemAssessment.Attempt nothingComposedOne(
+            String subject, souther.compiler.partition.RegionForARow within) {
         return new ItemAssessment.Attempt.Unresolved(
                 new souther.compiler.partition.Generator.UnresolvedCombination(List.of(subject),
                         souther.compiler.partition.Generator.UnresolvedCombination.Reason
-                                .NOTHING_COMPOSES_ONE));
+                                .NOTHING_COMPOSES_ONE), within);
     }
 
-    /** What a search of the module's own decoders came to, in this measure's words. */
-    private static ItemAssessment.Attempt whatCameOfIt(
-            souther.compiler.partition.Generator.BoundaryAttempt made) {
+    /**
+     * What a search of the module's own decoders came to, in this measure's words.
+     *
+     * <p>{@code within} travels as far as the answer does. The region is what the search ran in,
+     * and a run that composed a row and never saw it arrive is the answer that most needs it — the
+     * candidate came out of this box, and a condition on the way that nothing represented in the
+     * box is a thing an author would want to know at exactly that point.
+     *
+     * <p>Including where the decoders could not be reached. This is asked only of a placement the
+     * realizer found, so the region was walked and a candidate came out of it before anything was
+     * run — which makes it a search that came to nothing rather than a search nobody made, and it
+     * carries what it was looking over like the rest. Filed as one nobody made, it was the one
+     * outcome of a search that dropped its region, and the reader that wanted it back built the
+     * same value by hand a moment later.
+     */
+    private static ItemAssessment.Attempt.Searched whatCameOfIt(
+            souther.compiler.partition.Generator.BoundaryAttempt made, String subject,
+            souther.compiler.partition.RegionForARow within) {
         return switch (made) {
-            case null -> new ItemAssessment.Attempt.NotAttempted(
-                    ItemAssessment.Attempt.Reason.LINKAGE_FAILED);
+            case null -> new ItemAssessment.Attempt.Unresolved(
+                    new souther.compiler.partition.Generator.UnresolvedCombination(
+                            List.of(subject),
+                            souther.compiler.partition.Generator.UnresolvedCombination.Reason
+                                    .LINKAGE_FAILED), within);
             case souther.compiler.partition.Generator.BoundaryAttempt.Built built ->
-                    new ItemAssessment.Attempt.Built(built.row());
+                    new ItemAssessment.Attempt.Built(built.row(), within);
             case souther.compiler.partition.Generator.BoundaryAttempt.Unresolved left ->
-                    new ItemAssessment.Attempt.Unresolved(left.why());
+                    new ItemAssessment.Attempt.Unresolved(left.why(), within);
         };
     }
 

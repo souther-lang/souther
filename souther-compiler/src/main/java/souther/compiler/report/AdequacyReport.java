@@ -826,7 +826,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // without this line the difference reads as the tool being arbitrary.
             out.append(String.format("      · not known to be writable: the %s point %s %s (%s)%s%n",
                     p.role(), p.border().axis(), p.asked(),
-                    p.border().origin(names, declaredIn), whatWasTried(owed(p).attempt())));
+                    p.border().origin(names, declaredIn),
+                    whatWasTried(owed(p).attempt(), names, declaredIn)));
         }
         // And what the model itself answered, which is not a row anybody is behind on. Named by the
         // reason rather than left blank: a point the rules refuse and a point this language cannot
@@ -1138,19 +1139,80 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /** What the search for a value at an edge came to, where it ran and found none. */
-    private static String whatWasTried(ItemAssessment.Attempt attempt) {
+    private static String whatWasTried(ItemAssessment.Attempt attempt, SourceNameResolver names,
+                                       SourceId declaredIn) {
         if (!(attempt instanceof ItemAssessment.Attempt.Unresolved left)) {
             return "";   // nothing ran, and what a run would have said is not this line's to guess
         }
         // A proof is not a failure, and the sentence in front of the reason may not say it is.
         // Every other word here is this compiler saying what it did not manage; one of them is the
         // model settling the point, and reading them under one opening sends an author looking for
-        // a row nothing can write.
-        String opening = left.why().reason()
-                == souther.compiler.partition.Generator.UnresolvedCombination.Reason
-                        .THE_RULES_LEAVE_NOTHING_THERE
+        // a row nothing can write. Asked of the reason, which is where that decision is written.
+        String opening = left.why().reason().provesInfeasible()
                 ? " — " : " — nothing composed one: ";
-        return opening + left.why().said().orElseGet(() -> whyUnresolved(left.why()));
+        return opening + left.why().said().orElseGet(() -> whyUnresolved(left.why()))
+                + whatTheRegionLeftOut(left.unaccountedFor(), names, declaredIn);
+    }
+
+    /**
+     * What the search ran over that the way to the border does not account for, where anything did.
+     *
+     * <p>Which conditions those are, and whether this outcome is one they bear on, is
+     * {@link ItemAssessment.Attempt#unaccountedFor()}'s — so what is left here is the wording. A
+     * report deciding it would be a second reader of the same two facts, and the only way to ask
+     * what it decided would be to compile a model that produces this sentence.
+     *
+     * <p>What is said is what is known: these conditions are not represented in the region. Not
+     * that the region is wider than the rows that reach the line — a condition nothing could take
+     * in may be implied by the ones that were, or may hold of every row — and a sentence claiming
+     * the wider box would be this report deciding something it has not been shown.
+     */
+    private static String whatTheRegionLeftOut(
+            List<souther.compiler.partition.OnTheWay.Declined> left,
+            SourceNameResolver names, SourceId declaredIn) {
+        if (left.isEmpty()) {
+            return "";
+        }
+        StringBuilder out = new StringBuilder("; not every condition on the way to the line is"
+                + " represented in the region searched: ");
+        for (int i = 0; i < left.size(); i++) {
+            out.append(i == 0 ? "" : ", ")
+                    .append(whyDeclined(left.get(i).why()))
+                    // The place last and in brackets, as every other line of this report writes
+                    // one. Written into the sentence, it lands after a verb and reads as part of
+                    // what the sentence says rather than as where to look.
+                    .append(" (").append(left.get(i).at().said(names, declaredIn)).append(")");
+        }
+        return out.toString();
+    }
+
+    /**
+     * What stopped one condition on the way from narrowing the search, in the words a reader acts
+     * on.
+     *
+     * <p>One phrase per shape rather than one for all three. What an author does about a condition
+     * this reading has no words for is not what they do about a comparison it could not turn into a
+     * cut, and neither is what they do about an arm that states one of two things — a single "was
+     * not read" for all of them is the vocabulary being kept apart in the compiler and put back
+     * together on the way out.
+     */
+    private static String whyDeclined(souther.compiler.partition.OnTheWay.Why why) {
+        // Noun phrases, because what the line above them says is "not every condition ... is
+        // represented", and each of these names one of those conditions. Written as sentences, the
+        // place in brackets after them lands after a verb and reads as part of what is being said
+        // rather than as where to look.
+        return switch (why) {
+            case souther.compiler.partition.OnTheWay.Why.NoWordsForTheShape _ ->
+                    "a condition that is neither a comparison nor a combination of them";
+            // Not the words a comparison gets for drawing no line: that answers why there is no
+            // boundary, and its answers are wrong about this — a comparison of two constants is a
+            // form nothing reads there, and a form this arithmetic cannot carry is a relation
+            // between positions there, which is something a cut carries perfectly well.
+            case souther.compiler.partition.OnTheWay.Why.ComparisonNotRepresentedAsACut _ ->
+                    "a comparison this reading could not turn into a cut";
+            case souther.compiler.partition.OnTheWay.Why.OneOfTwoThings _ ->
+                    "an outcome that states one of two things";
+        };
     }
 
     /** The category a search came back with, where the class it was about said nothing itself. */
