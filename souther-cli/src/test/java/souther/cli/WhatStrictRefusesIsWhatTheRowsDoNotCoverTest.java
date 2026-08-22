@@ -291,22 +291,33 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
      * measure no build refuses over, and holding the verdict open for it would report a doubt nobody
      * can act on.
      *
-     * <p>Written from the evidence rather than from a source: reaching the limit takes thirteen axes
-     * on one behavior, and a fixture that size says less than this does about which of the two it is.
+     * <p>What a verdict does with the answer, and not what a dropped axis does to the answer. The
+     * second is settled where the reading is and reaches a verdict only as the measure's own status
+     * — so this hands the verdict each status in turn, and that a dropped axis carrying a line
+     * produces the second of them is held against a source in souther-compiler
+     * ({@code AMeasureIsShortOfWhateverItsReadingDidNotReachTest}). Written the other way round,
+     * this fixture would name a status of its own choosing and call the naming a test.
      */
     @Test
     void anAxisDroppedPastTheLimitHoldsTheVerdictOpenOnlyWhereItCarriedAnObligation() {
         BorderAssessment met = AReportOfOneBorder.assessed(
                 AReportOfOneBorder.aBorderAtTheEdgeOfItsDomain(), AReportOfOneBorder::hit);
 
-        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, verdictOf(partition(met)),
-                "nothing dropped");
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
-                verdictOf(partition(met, dropped("weigh", "w.flag", false))),
-                "a dropped axis that was only classifying");
+                verdictOf(partition(AReportOfOneBorder.measured(met))),
+                "a border measure made in full");
+        // The same border, from a reading that was short of something. Which is what a dropped axis
+        // carrying a line leaves the measure with, and the verdict reads the measure's answer and
+        // never the list of what was dropped: a report working out for itself what an omission cost
+        // is a second reading of a question the measure has already answered.
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED,
-                verdictOf(partition(met, dropped("weigh", "w.m", true))),
-                "a dropped axis that was carrying a boundary");
+                verdictOf(partition(AReportOfOneBorder.shortOfSomething(met),
+                        dropped("weigh", "w.m", true))),
+                "a border measure that was not made in full");
+        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
+                verdictOf(partition(AReportOfOneBorder.measured(met),
+                        dropped("weigh", "w.flag", false))),
+                "a dropped axis the border measure was not measuring");
     }
 
     private static Partitions.OmittedAxis dropped(String behavior, String path,
@@ -316,9 +327,9 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
 
     /** This one asks nothing about the criterion, so it is held to the one a build asks for by
      *  default; {@link AReportOfOneBorder} is where the report itself is built. */
-    private static PartitionEvidence partition(BorderAssessment boundary,
+    private static PartitionEvidence partition(souther.compiler.query.BoundaryDerivation border,
                                                Partitions.OmittedAxis... omitted) {
-        return AReportOfOneBorder.partition(boundary, omitted);
+        return AReportOfOneBorder.partition(border, omitted);
     }
 
     private static AdequacyReport.AdequacyStatus verdictOf(PartitionEvidence partition) {

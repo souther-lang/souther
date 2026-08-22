@@ -21,6 +21,8 @@ import souther.compiler.partition.PointRole;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.ItemAssessment;
+import souther.compiler.query.BoundaryDerivation;
+import souther.compiler.query.PartitionDerivation;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.source.SourceId;
@@ -107,12 +109,32 @@ final class AReportOfOneBorder {
         return new ItemAssessment.Coverage.Hit();
     }
 
-    static PartitionEvidence partition(BorderAssessment boundary,
+    /**
+     * One behavior's measures, as a verdict reads them.
+     *
+     * <p>The measures' own answers and not the entries beside them. What a dropped axis costs is
+     * settled where the reading is, and reaches a verdict as the measure saying it was not made in
+     * full — so a fixture here says which answer it is putting in front of the verdict, and the
+     * step that decides that answer is tested where it happens
+     * (souther-compiler, {@code AMeasureIsShortOfWhateverItsReadingDidNotReachTest}).
+     */
+    static PartitionEvidence partition(BoundaryDerivation border,
                                        Partitions.OmittedAxis... omitted) {
-        return new PartitionEvidence(PartitionEvidence.Partitioned.of(List.of()),
-                PartitionEvidence.Bounded.of(List.of(boundary)), PartitionEvidence.PairSpace.NONE,
+        return new PartitionEvidence(new PartitionDerivation.Unresolved(), border,
+                PartitionEvidence.PairSpace.NONE,
                 List.of(), List.of(), List.of(), List.of(), List.of(), List.of(omitted),
                 List.of());
+    }
+
+    /** The border measure made in full, over the one border. */
+    static BoundaryDerivation measured(BorderAssessment boundary) {
+        return new BoundaryDerivation.Complete(List.of(boundary));
+    }
+
+    /** And the same border, from a reading that was short of something — which is what a dropped
+     *  axis carrying a line leaves behind. */
+    static BoundaryDerivation shortOfSomething(BorderAssessment boundary) {
+        return new BoundaryDerivation.Partial(List.of(boundary));
     }
 
     /** What one behavior's partition makes of the whole report, held to {@code criterion}. */

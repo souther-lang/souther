@@ -97,10 +97,11 @@ class ABuildCanBeHeldToReliableDomainCoverageTest {
     @Test
     void aVerdictRestsOnTheEvidenceItsCriterionAsksFor() {
         PartitionEvidence measured = AReportOfOneBorder.partition(
-                AReportOfOneBorder.assessed(AReportOfOneBorder.aBoundedBorder(),
-                        role -> role.againstTheLine()
-                                ? new ItemAssessment.Coverage.Hit()
-                                : new ItemAssessment.Coverage.Undecided()));
+                AReportOfOneBorder.measured(
+                        AReportOfOneBorder.assessed(AReportOfOneBorder.aBoundedBorder(),
+                                role -> role.againstTheLine()
+                                        ? new ItemAssessment.Coverage.Hit()
+                                        : new ItemAssessment.Coverage.Undecided())));
 
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
                 AReportOfOneBorder.verdictOf(measured, Adequacy.Criterion.SIMPLIFIED_DOMAIN),

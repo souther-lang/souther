@@ -217,8 +217,8 @@
           "properties": {
             "status": { "$ref": "#/$defs/status" },
             "reason": {
-              "description": "Why there is no measure, present exactly where `status` is `unavailable`. `no_axis_derived` is a reading that produced no position — which is not itself evidence that the model divides none; `no_subject` is a behavior with no positions of its own, a `>->` composition, which is measured at its stages.",
-              "enum": ["no_axis_derived", "no_subject"]
+              "description": "Why there is no measure, present exactly where `status` is `unavailable`. `the_reading_did_not_run_out` is a reading that produced no position and was short of something it answers for, so the model is not thereby known to divide none; `nothing_is_divided` is a reading that answered everything it answers for and found no position the model divides, which no row would change; `no_subject` is a behavior with no positions of its own, a `>->` composition, which is measured at its stages. `no_axis_derived` is what the first was called while it also stood for the second, and is retired rather than gone.",
+              "enum": ["the_reading_did_not_run_out", "nothing_is_divided", "no_subject", "no_axis_derived"]
             }
           }
         },
@@ -230,8 +230,8 @@
           "properties": {
             "status": { "$ref": "#/$defs/status" },
             "reason": {
-              "description": "Why there is no measure, present exactly where `status` is `unavailable`. `no_lines_derived` is a reading that produced no obligation — which is not itself evidence that the model draws no line; `no_subject` is a behavior with no positions of its own.",
-              "enum": ["no_lines_derived", "no_subject"]
+              "description": "Why there is no measure, present exactly where `status` is `unavailable`. `the_reading_did_not_run_out` is a reading that produced no line and was short of something it answers for, so the model is not thereby known to draw none; `no_rule_draws_a_line` is a reading that answered everything it answers for and found no rule drawing a line, which no row would change since a row cannot make a line; `no_subject` is a behavior with no positions of its own. `no_lines_derived` is what the first was called while it also stood for the second, and is retired rather than gone.",
+              "enum": ["the_reading_did_not_run_out", "no_rule_draws_a_line", "no_subject", "no_lines_derived"]
             }
           }
         },

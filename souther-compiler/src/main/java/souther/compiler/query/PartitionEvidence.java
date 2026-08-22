@@ -30,7 +30,7 @@ import java.util.Set;
  *                     reasons: these are what classification observed, and joining them to
  *                     everything else a module could not read happens where that list is built
  */
-public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
+public record PartitionEvidence(PartitionDerivation partitioned, BoundaryDerivation bounded,
                                 PairSpace pairs,
                                 List<souther.compiler.partition.UndividedPosition> notDerivable,
                                 List<souther.compiler.inputs.UnreadRule> unread,
@@ -49,8 +49,9 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
      * answer inapplicable, and a verdict that counted them would hold every model with a composition
      * in it open for a measurement that was never anybody's to make.
      */
-    public static final PartitionEvidence NONE = new PartitionEvidence(Partitioned.absent(),
-            Bounded.absent(), PairSpace.NONE, List.of(), List.of(), List.of(), List.of(),
+    public static final PartitionEvidence NONE = new PartitionEvidence(
+            new PartitionDerivation.NoSubject(), new BoundaryDerivation.NoSubject(),
+            PairSpace.NONE, List.of(), List.of(), List.of(), List.of(),
             List.of(), List.of(), List.of());
 
     public PartitionEvidence {
@@ -217,100 +218,6 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
     /** The lines, likewise. */
     public List<BorderAssessment> boundaries() {
         return bounded.at();
-    }
-
-    /**
-     * The positions this behavior is measured at, and — where there are none — why not.
-     *
-     * <p>The list alone cannot say. An empty one is what a behavior whose model divides nothing has
-     * and what a behavior whose positions could not be read has, and a reader counting entries calls
-     * both of them measured and finds no gaps. So the measure answers for itself, and the entries are
-     * what it answered with.
-     */
-    public record Partitioned(List<AxisCoverage> at, MeasurementStatus status, Reason reason) {
-
-        /** Why no position was measured. */
-        public enum Reason implements souther.compiler.observe.MeasureReason {
-            /** Nothing came back divided. Whether the model draws no line anywhere or the reading
-             *  stopped short of one is not something this can tell, and only a proof excludes: the
-             *  positions it could not derive are named beside it and may be carrying rules. */
-            NO_AXIS_DERIVED(MeasurementStatus.NOT_MEASURED),
-            /** This behavior has no positions for the measure to be about — a {@code >->}
-             *  composition, which is measured at its stages. */
-            NO_SUBJECT(MeasurementStatus.NOT_APPLICABLE);
-
-            private final MeasurementStatus status;
-
-            Reason(MeasurementStatus status) {
-                this.status = status;
-            }
-
-            @Override
-            public MeasurementStatus status() {
-                return status;
-            }
-        }
-
-        public static Partitioned of(List<AxisCoverage> at) {
-            return at.isEmpty()
-                    ? new Partitioned(List.of(), Reason.NO_AXIS_DERIVED.status(),
-                            Reason.NO_AXIS_DERIVED)
-                    : new Partitioned(at, MeasurementStatus.COMPLETE, null);
-        }
-
-        static Partitioned absent() {
-            return new Partitioned(List.of(), Reason.NO_SUBJECT.status(), Reason.NO_SUBJECT);
-        }
-
-        public Partitioned {
-            at = List.copyOf(at);
-            Unavailable.check(status, reason);
-        }
-    }
-
-    /** The lines some rule drew that this behavior is measured at, and — where there are none — why
-     * not. The same argument as {@link Partitioned}: an empty list of obligations reads exactly like
-     * a measure that was made and found everything met. */
-    public record Bounded(List<BorderAssessment> at, MeasurementStatus status, Reason reason) {
-
-        /** Why no line was measured. */
-        public enum Reason implements souther.compiler.observe.MeasureReason {
-            /** No obligation was derived. A model whose bounds sit one type away from the position
-             *  the behavior takes has this, and so has one with no bound anywhere; nothing here can
-             *  tell them apart, and calling it measured said the rows carrying a model's whole risk
-             *  had earned nothing. */
-            NO_LINES_DERIVED(MeasurementStatus.NOT_MEASURED),
-            /** This behavior has no positions for a line to be drawn on — a {@code >->} composition,
-             *  which is measured at its stages. */
-            NO_SUBJECT(MeasurementStatus.NOT_APPLICABLE);
-
-            private final MeasurementStatus status;
-
-            Reason(MeasurementStatus status) {
-                this.status = status;
-            }
-
-            @Override
-            public MeasurementStatus status() {
-                return status;
-            }
-        }
-
-        public static Bounded of(List<BorderAssessment> at) {
-            return at.isEmpty()
-                    ? new Bounded(List.of(), Reason.NO_LINES_DERIVED.status(),
-                            Reason.NO_LINES_DERIVED)
-                    : new Bounded(at, MeasurementStatus.COMPLETE, null);
-        }
-
-        static Bounded absent() {
-            return new Bounded(List.of(), Reason.NO_SUBJECT.status(), Reason.NO_SUBJECT);
-        }
-
-        public Bounded {
-            at = List.copyOf(at);
-            Unavailable.check(status, reason);
-        }
     }
 
     /**

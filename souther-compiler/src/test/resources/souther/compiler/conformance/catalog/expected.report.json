@@ -40,10 +40,10 @@
       },
       "partition" : {
         "axesMeasure" : {
-          "status" : "complete"
+          "status" : "partial"
         },
         "boundariesMeasure" : {
-          "status" : "complete"
+          "status" : "partial"
         },
         "axes" : [ {
           "axis" : "discount/item.note",
@@ -236,10 +236,10 @@
       },
       "partition" : {
         "axesMeasure" : {
-          "status" : "complete"
+          "status" : "partial"
         },
         "boundariesMeasure" : {
-          "status" : "complete"
+          "status" : "partial"
         },
         "axes" : [ {
           "axis" : "台帳へ書く/指示.区分",
@@ -411,10 +411,10 @@
       },
       "partition" : {
         "axesMeasure" : {
-          "status" : "complete"
+          "status" : "partial"
         },
         "boundariesMeasure" : {
-          "status" : "complete"
+          "status" : "partial"
         },
         "axes" : [ {
           "axis" : "出荷する/指示.重量",
