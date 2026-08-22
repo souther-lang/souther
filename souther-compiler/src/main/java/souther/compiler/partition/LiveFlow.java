@@ -48,7 +48,6 @@ final class LiveFlow {
 
     /** Whether anything reads the name {@code let} binds. */
     boolean reads(Core.LetIn let) {
-        return let.binder() == null || let.binder().binding() == null
-                || read.contains(let.binder().binding());
+        return read.contains(let.binder().binding());
     }
 }

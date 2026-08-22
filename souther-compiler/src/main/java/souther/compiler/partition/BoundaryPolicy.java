@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
-import souther.compiler.inputs.InputReads;
 
 /**
  * Whether the rules of a model are read off one comparison, and why not where they are not.
@@ -44,29 +43,14 @@ import souther.compiler.inputs.InputReads;
  */
 final class BoundaryPolicy {
 
-    /**
-     * One comparison a line is drawn on, and where the names in it point.
-     *
-     * <p>The reading travels with the comparison because it is not the same at every one of them: a
-     * comparison inside an expanded helper is about the argument the call handed it, and read
-     * against the names outside the binding it is about nothing at all.
-     */
-    record Bearing(Core.Binary comparison, InputReads reads) {}
-
     /** What this policy says about one comparison of the body. */
     sealed interface Standing {
 
         /** The comparison this is about, whichever answer it got. */
         Core.Binary comparison();
 
-        /** A line is drawn on it, and read under {@code bearing}'s names. */
-        record DrawsALine(Bearing bearing) implements Standing {
-
-            @Override
-            public Core.Binary comparison() {
-                return bearing.comparison();
-            }
-        }
+        /** A line is drawn on it. */
+        record DrawsALine(Core.Binary comparison) implements Standing {}
 
         /** No line is drawn on it, and this is which of the reasons it is. */
         record DrawsNone(Core.Binary comparison, NotABoundary why) implements Standing {}
@@ -79,11 +63,14 @@ final class BoundaryPolicy {
      * on is not a boundary whichever way it could have been measured, and a reader told instead that
      * its outcome cannot be attributed to a row would go looking for a way to attribute it.
      *
+     * <p>Where the comparison stands and what its names point at are not arguments to this. A
+     * decision that took the reading only to hand it back was a second place holding it, and the
+     * walk that has it is {@link ComparisonReadings}.
+     *
      * @param live whether what is computed at this position is read on the way to what the behavior
      *             answers with, which is {@link LiveFlow}'s answer carried down the walk
      */
-    static Standing standingOf(Core.Binary comparison, CoverageSites.Plan plan, InputReads reads,
-                               boolean live) {
+    static Standing standingOf(Core.Binary comparison, CoverageSites.Plan plan, boolean live) {
         if (!live) {
             return new Standing.DrawsNone(comparison, NotABoundary.NOTHING_READS_IT);
         }
@@ -98,7 +85,7 @@ final class BoundaryPolicy {
         if (plan.mayRepeat(comparison)) {
             return new Standing.DrawsNone(comparison, NotABoundary.REPEATED_IN_ONE_RUN);
         }
-        return new Standing.DrawsALine(new Bearing(comparison, reads));
+        return new Standing.DrawsALine(comparison);
     }
 
     private BoundaryPolicy() {}

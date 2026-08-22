@@ -49,6 +49,13 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
             }
             """;
 
+    /** What this policy says about the comparison written on {@code line}. */
+    private static BoundaryPolicy.Standing standingAt(int line) {
+        BoundaryPolicy.Standing said = classified().get(line);
+        assertNotNull(said, () -> "the model under test writes a comparison on line " + line);
+        return said;
+    }
+
     /** Every comparison of the body, by the line of the source it is written on. */
     private static Map<Integer, BoundaryPolicy.Standing> classified() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
@@ -77,19 +84,19 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
     @Test
     void aTruthSomethingReadsBearsALine() {
         assertEquals(BoundaryPolicy.Standing.DrawsALine.class,
-                classified().get(8).getClass());
+                standingAt(8).getClass());
     }
 
     /** A truth nothing reads is not a boundary of the behavior at all. */
     @Test
     void aTruthNothingReadsIsNotABoundaryOfTheBehavior() {
-        assertEquals(NotABoundary.NOTHING_READS_IT, whyOf(classified().get(9)));
+        assertEquals(NotABoundary.NOTHING_READS_IT, whyOf(standingAt(9)));
     }
 
     /** A truth one run reaches once per element is a boundary nothing can measure a row against. */
     @Test
     void aTruthOneRunReachesMoreThanOnceIsOneNothingCanMeasure() {
-        assertEquals(NotABoundary.REPEATED_IN_ONE_RUN, whyOf(classified().get(10)));
+        assertEquals(NotABoundary.REPEATED_IN_ONE_RUN, whyOf(standingAt(10)));
     }
 
     private static NotABoundary whyOf(BoundaryPolicy.Standing standing) {

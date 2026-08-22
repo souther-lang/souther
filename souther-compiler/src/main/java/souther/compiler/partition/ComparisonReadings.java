@@ -40,6 +40,10 @@ final class ComparisonReadings {
     /**
      * One comparison of the body, read where it is written.
      *
+     * <p>The reading travels with the comparison because it is not the same at every one of them: a
+     * comparison inside an expanded helper is about the argument the call handed it, and read
+     * against the names outside the binding it is about nothing at all.
+     *
      * @param assumed what a row had already satisfied by the time it got here. Empty is an ordinary
      *                answer — a comparison at the top of a body has satisfied nothing yet, and so
      *                has one reached past a condition this reading has no arithmetic for
@@ -59,10 +63,9 @@ final class ComparisonReadings {
     }
 
     /** The comparisons a line is drawn on, in the order the source wrote them. */
-    List<BoundaryPolicy.Bearing> drawn() {
+    List<Reading> drawn() {
         return readings.stream()
                 .filter(each -> each.standing() instanceof BoundaryPolicy.Standing.DrawsALine)
-                .map(each -> new BoundaryPolicy.Bearing(each.comparison(), each.reads()))
                 .toList();
     }
 
@@ -80,8 +83,7 @@ final class ComparisonReadings {
     static ComparisonReadings of(Core body, CoverageSites.Plan plan, InputReads reads,
                                  Symbols symbols) {
         List<Reading> readings = new ArrayList<>();
-        new ComparisonReadings(List.of())
-                .walk(body, plan, reads, symbols, LiveFlow.of(body), List.of(), true, readings);
+        walk(body, plan, reads, symbols, LiveFlow.of(body), List.of(), true, readings);
         return new ComparisonReadings(readings);
     }
 
@@ -91,12 +93,12 @@ final class ComparisonReadings {
      *                with. Carried down because everything inside a value nothing reads is read by
      *                nothing either
      */
-    private void walk(Core e, CoverageSites.Plan plan, InputReads reads, Symbols symbols,
-                      LiveFlow flow, List<ReachingCuts.Cut> assumed, boolean live,
-                      List<Reading> out) {
+    private static void walk(Core e, CoverageSites.Plan plan, InputReads reads, Symbols symbols,
+                             LiveFlow flow, List<ReachingCuts.Cut> assumed, boolean live,
+                             List<Reading> out) {
         if (e instanceof Core.Binary comparison && plan.comparisons().at(comparison).isPresent()) {
             out.add(new Reading(comparison, reads, assumed,
-                    BoundaryPolicy.standingOf(comparison, plan, reads, live)));
+                    BoundaryPolicy.standingOf(comparison, plan, live)));
         }
         switch (e) {
             // The right operand runs only where the left came out the way that leaves the answer

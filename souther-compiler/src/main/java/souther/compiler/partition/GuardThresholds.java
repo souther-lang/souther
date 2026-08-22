@@ -165,7 +165,7 @@ public final class GuardThresholds {
         // whether a line is drawn on it are four questions about one position, and a walk apiece was
         // a walk apiece to disagree about what a `let` does.
         ComparisonReadings read = ComparisonReadings.of(body, plan, InputReads.of(inputs), symbols);
-        for (BoundaryPolicy.Bearing each : read.drawn()) {
+        for (ComparisonReadings.Reading each : read.drawn()) {
             lineAt(behavior, each.comparison(), plan, each.reads(), symbols, quantities, found,
                     singled, between, accounting, made);
         }
@@ -191,10 +191,14 @@ public final class GuardThresholds {
      * <p>A wider set than the one that bears lines, and deliberately. What this establishes is that
      * the model states something at a position — which is exactly what {@code not derivable} would
      * otherwise deny — so a comparison a line could never be drawn from is still a rule the author
-     * wrote and still worth saying went unread. The one standing left out is
-     * {@link NotABoundary#NOTHING_READS_IT}: a truth the behavior's answer does not turn on states
-     * nothing about the position, and naming it here would put a rule into the report that the model
-     * does not state.
+     * wrote and still worth saying went unread.
+     *
+     * <p>Which is why a comparison nothing can measure is in and one nothing reads is out, and the
+     * split is the same one {@link NotABoundary} is made of. {@link NotABoundary#NOTHING_RECORDS_IT}
+     * and {@link NotABoundary#REPEATED_IN_ONE_RUN} are the author's rules, written at a position,
+     * that this could not draw a line from — the sentence {@code not read} is there to say.
+     * {@link NotABoundary#NOTHING_READS_IT} is not a rule of the model at all, and saying it went
+     * unread would put a statement into the report that the behavior does not make.
      */
     private static void noticed(String behavior, ComparisonReadings read, List<Core> made,
                                 CoverageSites.Plan plan, Symbols symbols, List<UnreadRule> out) {
