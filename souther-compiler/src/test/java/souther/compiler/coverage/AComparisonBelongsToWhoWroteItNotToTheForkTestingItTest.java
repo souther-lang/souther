@@ -105,7 +105,7 @@ class AComparisonBelongsToWhoWroteItNotToTheForkTestingItTest {
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
         assertNotNull(checked, "the model under test compiles");
         Map<String, Core> bodies = checked.behaviorBodies();
-        CoverageSites.Plan plan = CoverageSites.of(bodies, souther.compiler.coverage.DecisionSources.NONE);
+        CoverageSites.Plan plan = CoverageSites.of(bodies, souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE);
         return plan.sites().stream()
                 .filter(site -> site.outcome() instanceof SourceOutcome.Compared)
                 .map(CoverageSites.Site::obligation)

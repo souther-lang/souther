@@ -203,4 +203,165 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                 "two rules written at two call sites, whatever they were handed through");
         assertEquals(2, sift.covered().size(), "and the one row reaches one arm of each");
     }
+
+    /**
+     * A fork resting on a supplied rule through another helper is still the caller's to decide.
+     *
+     * <p>The condition applies {@code ask} and not {@code p}, so a reading asking whether a
+     * function parameter is applied here comes back with the declaration deciding for itself — and
+     * the two rules the call sites wrote are counted as one. That is a rule nothing exercised
+     * reported as covered, and it is what asking about the whole condition rather than about one
+     * application answers.
+     */
+    @Test
+    void aForkRestingOnASuppliedRuleThroughAHelperIsTheCallersToDecide() {
+        Adequacy.BranchEvidence twice = arms("""
+                module example.rules
+
+                data Yes
+                data No
+                data Verdict = Yes | No
+                data Count = Int
+
+                let ask (p: (Int) -> Bool, x: Int): Bool = p(x)
+
+                let decide (p: (Int) -> Bool, x: Int): Verdict =
+                    if ask(p, x) then Yes else No
+
+                behavior twice : (a: Int, b: Int) -> Count
+                    constructs Count
+                let twice (a, b) =
+                    Count((if decide(n -> n < 18, a) == Yes then 1 else 0)
+                        + (if decide(m -> 18 < m, b) == Yes then 1 else 0))
+
+                example twice
+                    | "under the first line and under the second" : (1, 1) -> Count(1)
+                """, "twice");
+
+        assertEquals(8, twice.obligations(),
+                "the helper's fork is one obligation per rule handed to it, beside the two here");
+        assertEquals(4, twice.covered().size(), "and the one row reaches half of them");
+    }
+
+    /** And so is one resting on it through a name the body bound it to. */
+    @Test
+    void andThroughANameTheBodyBoundItTo() {
+        Adequacy.BranchEvidence pick = arms("""
+                module example.rules
+
+                data Yes
+                data No
+                data Verdict = Yes | No
+                data Count = Int
+
+                let decide (p: (Int) -> Bool, x: Int): Verdict = {
+                    let q = p
+                    if q(x) then Yes else No
+                }
+
+                behavior pick : (a: Int) -> Count
+                    constructs Count
+                let pick (a) =
+                    Count(if decide(n -> n < 18, a) == Yes then 1 else 0)
+
+                example pick
+                    | "under the line" : (1) -> Count(1)
+                """, "pick");
+
+        assertEquals(4, pick.obligations(),
+                "the name stands for the rule, so the fork is the caller's to decide");
+    }
+
+    /**
+     * One declaration named at two call sites is one rule.
+     *
+     * <p>The author wrote one rule and handed it over twice; a row through the arms of one call is
+     * a row through that rule. Told apart by where each hand-over happened, the second call site is
+     * owed a row establishing what the first already does — and a name reaching a function parameter
+     * is wrapped in a lambda written at the call site before the expansion sees it, so what arrives
+     * there says two where the source says one.
+     */
+    @Test
+    void oneDeclarationNamedAtTwoCallSitesIsOneRule() {
+        Adequacy.BranchEvidence twice = arms("""
+                module example.rules
+
+                data Count = Int
+
+                let adult (x: Int): Bool = x >= 18
+
+                behavior twice : (a: List<Int>, b: List<Int>) -> Count
+                    constructs Count
+                let twice (a, b) =
+                    Count(List.length(List.filter(adult, a))
+                        + List.length(List.filter(adult, b)))
+
+                example twice
+                    | "one over and one under" : ([ 20 ], [ 1 ]) -> Count(1)
+                """, "twice");
+
+        assertEquals(2, twice.obligations(), "one rule, handed over twice");
+        assertEquals(2, twice.covered().size(), "and both its arms are reached");
+    }
+
+    /** Two declarations named at two call sites are two. */
+    @Test
+    void andTwoDeclarationsNamedAtTwoCallSitesAreTwo() {
+        Adequacy.BranchEvidence twice = arms("""
+                module example.rules
+
+                data Count = Int
+
+                let adult (x: Int): Bool = x >= 18
+                let senior (x: Int): Bool = x >= 65
+
+                behavior twice : (a: List<Int>, b: List<Int>) -> Count
+                    constructs Count
+                let twice (a, b) =
+                    Count(List.length(List.filter(adult, a))
+                        + List.length(List.filter(senior, b)))
+
+                example twice
+                    | "one over the first and under the second" : ([ 20 ], [ 20 ]) -> Count(1)
+                """, "twice");
+
+        assertEquals(4, twice.obligations(), "two rules, one apiece");
+    }
+
+    /**
+     * And a rule handed to a helper whose answer does not rest on it decides nothing.
+     *
+     * <p>The other half of following a call. Asked as "is a rule mentioned anywhere in this
+     * condition", a rule handed to a helper that never reads it makes every copy of the fork its
+     * own obligation, and each call site is owed a row for a rule that decides nothing there. What
+     * the helper answers with is what settles it.
+     */
+    @Test
+    void aRuleAHelpersAnswerDoesNotRestOnDecidesNothing() {
+        Adequacy.BranchEvidence twice = arms("""
+                module example.rules
+
+                data Yes
+                data No
+                data Verdict = Yes | No
+                data Count = Int
+
+                let ignore (p: (Int) -> Bool, x: Int): Bool = x > 0
+
+                let decide (p: (Int) -> Bool, x: Int): Verdict =
+                    if ignore(p, x) then Yes else No
+
+                behavior twice : (a: Int, b: Int) -> Count
+                    constructs Count
+                let twice (a, b) =
+                    Count((if decide(n -> n < 18, a) == Yes then 1 else 0)
+                        + (if decide(m -> 18 < m, b) == Yes then 1 else 0))
+
+                example twice
+                    | "both over" : (1, 1) -> Count(2)
+                """, "twice");
+
+        assertEquals(6, twice.obligations(),
+                "the helper's fork is one obligation, beside the two written here");
+    }
 }

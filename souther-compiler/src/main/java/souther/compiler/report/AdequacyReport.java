@@ -999,9 +999,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // behavior complete over something nothing ran.
         for (souther.compiler.types.CoverageOrigin together : branch.countedTogether()) {
             out.append(String.format(
-                    "      · arms of a fork `%s` wrote are counted as one: what tells two of them"
-                            + " apart is the predicate each was handed, and this one compares"
-                            + " nothing written here%n",
+                    "      · arms of a fork `%s` wrote are counted as one: it decides by a rule"
+                            + " its caller supplies, and which rule these were handed could not be"
+                            + " read%n",
                     together.module()));
         }
         if (!decided) {

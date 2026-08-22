@@ -382,7 +382,7 @@ public final class Output {
             if (coverage == CoverageMode.ARMS) {
                 instrumentation = instrumentation.measuring(
                         CoverageSites.of(in.checked().behaviorBodies(),
-                                in.checked().decisions()));
+                                in.checked().decisions(), in.checked().supplied()));
             }
             try {
                 Emissions emitted = Backend.generate(
@@ -406,7 +406,8 @@ public final class Output {
         public static CoverageSites.Plan planOf(Db db, String module) {
             Bodies.Elaborated checked = db.ask(new Bodies.Checked(module)).value();
             return checked == null ? CoverageSites.Plan.NONE
-                    : CoverageSites.of(checked.behaviorBodies(), checked.decisions());
+                    : CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
+                            checked.supplied());
         }
     }
 

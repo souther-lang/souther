@@ -1,6 +1,6 @@
 package souther.compiler.coverage;
 
-import java.util.LinkedHashSet;
+import java.util.Set;
 
 /**
  * Who owns the rule a fork decides by.
@@ -26,16 +26,14 @@ public sealed interface DecisionSource {
      * is a fork neither predicate settles on its own, and a reader taking the first of them would
      * call two call sites alike that agree about {@code p} and differ about {@code q}.
      *
-     * <p>Named rather than numbered because the name is what the rule handed in is expanded under
-     * ({@code HelperInliner.suppliedAs}), and that is how an occurrence says which rule it was
-     * handed. A slot would have to be turned into the name to ask, which is the same lookup with a
-     * step in front of it that can be got wrong.
+     * <p>Named rather than numbered because the name is what an occurrence's record of the rules it
+     * was handed is keyed by ({@link SuppliedRules}). A place would have to be turned into the name
+     * to ask, which is the same lookup with a step in front of it that can be got wrong.
      */
-    record Supplied(java.util.SequencedSet<String> parameters) implements DecisionSource {
+    record Supplied(Set<String> parameters) implements DecisionSource {
 
         public Supplied {
-            parameters = java.util.Collections.unmodifiableSequencedSet(
-                    new LinkedHashSet<>(parameters));
+            parameters = Set.copyOf(parameters);
             if (parameters.isEmpty()) {
                 throw new IllegalArgumentException(
                         "a supplied decision is supplied through something");

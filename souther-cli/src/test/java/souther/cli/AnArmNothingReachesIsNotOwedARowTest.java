@@ -315,7 +315,8 @@ class AnArmNothingReachesIsNotOwedARowTest {
         compilation.answerEverything();
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
-        return CoverageSites.of(checked.behaviorBodies(), checked.decisions()).arms("classify").stream()
+        return CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
+                checked.supplied()).arms("classify").stream()
                 .map(CoverageSites.Site::index).toList();
     }
 

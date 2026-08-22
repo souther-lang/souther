@@ -27,13 +27,21 @@ import java.util.SequencedSet;
  *
  * @param value what the expansion produced
  * @param standing every recursive helper it left a call to, in the order they were met
+ * @param supplied which rule each expansion was handed, by the parameter it was handed to. Read
+ *                 where the call site still stands, for the same reason the element provenance is
  */
 public record Expansion<T>(T value, SequencedSet<String> standing,
-                          ElementProvenance provenance) {
+                          ElementProvenance provenance,
+                          souther.compiler.coverage.SuppliedRules supplied) {
 
-    /** The same, of an expansion nothing needs the element provenance of. */
+    /** The same, of an expansion nothing needs what the calls inside it were handed. */
     public Expansion(T value, SequencedSet<String> standing) {
-        this(value, standing, ElementProvenance.NONE);
+        this(value, standing, ElementProvenance.NONE, souther.compiler.coverage.SuppliedRules.NONE);
+    }
+
+    /** The same, of one nothing needs the rules of. */
+    public Expansion(T value, SequencedSet<String> standing, ElementProvenance provenance) {
+        this(value, standing, provenance, souther.compiler.coverage.SuppliedRules.NONE);
     }
 
     public Expansion {

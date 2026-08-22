@@ -177,7 +177,7 @@
         "covered": { "type": "integer", "minimum": 0 },
         "countedTogether": {
           "type": "array",
-          "description": "The modules that wrote a fork whose copies are counted as one arm without this being able to show they are one. A library operation applying a closure the call site supplied is one fork inlined many times, and what tells its copies apart is the predicate each was handed — a closure comparing nothing the author wrote leaves nothing to tell them by. Present and empty where every arm is counted on its own. What it qualifies is `arms` and `covered`: those hold more than one predicate wherever this is not empty, so a reader taking the pair as complete over each of them would be taking it further than it goes.",
+          "description": "The modules that wrote a fork whose copies are counted as one arm without this being able to show they are one. A fork deciding by a rule its caller supplies is one fork inlined many times, and what tells its copies apart is which rule each was handed; these are the ones that could not be read. Present and empty where every arm is counted on its own. What it qualifies is `arms` and `covered`: those hold more than one rule wherever this is not empty, so a reader taking the pair as complete over each of them would be taking it further than it goes.",
           "items": { "type": "string" }
         },
         "unreached": {

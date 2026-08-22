@@ -66,7 +66,8 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get("read");
         assertNotNull(body);
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions());
+        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
+                checked.supplied());
         souther.compiler.inputs.InputDomain inputs = compilation.db()
                 .ask(new Adequacy.Inputs(module)).value().get("read");
 

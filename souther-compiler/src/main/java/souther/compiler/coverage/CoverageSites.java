@@ -62,33 +62,49 @@ public final class CoverageSites {
      * that came out alike were counted as one obligation, and a rule nothing exercised was reported
      * as covered.
      */
-    private static DecidedBy decidedAt(Core.If fork, DecisionSources decisions) {
-        if (!(decisions.at(fork.origin()) instanceof DecisionSource.Supplied)) {
+    private static DecidedBy decidedAt(Core.If fork, DecisionSources decisions,
+                                       SuppliedRules supplied) {
+        if (!(decisions.at(fork.origin()) instanceof DecisionSource.Supplied by)) {
             return DecidedBy.THE_DECLARATION;
         }
-        // The rules this occurrence was handed, taken from the bindings its condition stands under.
-        // A rule written at a call site is expanded under a name of its own, and the expansion is
-        // made once per supply — so two calls handing in two rules leave two here, and a rule handed
-        // on through a helper keeps the expansion it was written into.
-        List<BindingOwner> supplied = new ArrayList<>();
-        suppliedIn(fork.cond(), supplied);
-        return supplied.isEmpty() ? DecidedBy.NOT_SAID : new DecidedBy.BySupplied(supplied);
+        // The expansion this copy of the fork belongs to, which is the one that was handed rules at
+        // the parameters the declaration named. Asked of those parameters and not of whatever
+        // supplied-looking thing stands in the condition: a fork resting on one of them can hold a
+        // combinator of its own inside it, and the rule that one was handed decides nothing here.
+        for (BindingOwner owner : within(fork)) {
+            List<SuppliedRules.RuleIdentity> rules = new ArrayList<>();
+            for (String parameter : by.parameters()) {
+                SuppliedRules.RuleIdentity rule = supplied.at(owner, parameter);
+                if (rule != null) {
+                    rules.add(rule);
+                }
+            }
+            if (rules.size() == by.parameters().size()) {
+                return new DecidedBy.BySupplied(rules);
+            }
+        }
+        return DecidedBy.NOT_SAID;
     }
 
-    private static void suppliedIn(Core e, List<BindingOwner> out) {
+    /** The expansions this fork's condition stands inside, innermost first. */
+    private static List<BindingOwner> within(Core.If fork) {
+        List<BindingOwner> out = new ArrayList<>();
+        owners(fork.cond(), out);
+        return out;
+    }
+
+    private static void owners(Core e, List<BindingOwner> out) {
         if (e instanceof Core.Read r && r.binding() != null) {
             for (BindingOwner owner = r.binding().owner(); owner != null;
                     owner = owner instanceof BindingOwner.Expansion in ? in.within()
-                            : owner instanceof BindingOwner.Synthesized made ? made.within() : null) {
-                if (owner instanceof BindingOwner.Expansion in
-                        && souther.compiler.check.HelperInliner.isSuppliedRule(
-                                in.expanded().name())
-                        && !out.contains(owner)) {
+                            : owner instanceof BindingOwner.Synthesized made ? made.within()
+                            : null) {
+                if (!out.contains(owner)) {
                     out.add(owner);
                 }
             }
         }
-        Core.forEachChild(e, child -> suppliedIn(child, out));
+        Core.forEachChild(e, child -> owners(child, out));
     }
 
     /**
@@ -389,12 +405,13 @@ public final class CoverageSites {
 
     /** The sites of every behavior body in one module, numbered in the order the bodies are declared
      * and, within one, in the order the arms are written. */
-    public static Plan of(Map<String, Core> behaviorBodies, DecisionSources decisions) {
+    public static Plan of(Map<String, Core> behaviorBodies, DecisionSources decisions,
+                          SuppliedRules supplied) {
         // Which comparisons there are is not this walk's to decide. Asked here and answered once,
         // so that what gets a number and what a line is drawn on are the same collection read twice
         // rather than two descents that happen to agree.
         ComparisonCatalog comparisons = ComparisonCatalog.of(behaviorBodies);
-        Walk walk = new Walk(comparisons, decisions);
+        Walk walk = new Walk(comparisons, decisions, supplied);
         for (Map.Entry<String, Core> body : behaviorBodies.entrySet()) {
             walk.behavior(body.getKey(), body.getValue());
         }
@@ -441,10 +458,12 @@ public final class CoverageSites {
         private int controls;
 
         private final DecisionSources decisions;
+        private final SuppliedRules supplied;
 
-        Walk(ComparisonCatalog comparisons, DecisionSources decisions) {
+        Walk(ComparisonCatalog comparisons, DecisionSources decisions, SuppliedRules supplied) {
             this.comparisons = comparisons;
             this.decisions = decisions;
+            this.supplied = supplied;
         }
 
         void behavior(String name, Core body) {
@@ -620,7 +639,7 @@ public final class CoverageSites {
                     // Which rule this fork decides by, taken before its arms are numbered: two
                     // calls of one library combinator are one fork inlined twice and are not one
                     // thing to cover, and what tells them apart is the rule each was handed.
-                    DecidedBy decided = decidedAt(iff, decisions);
+                    DecidedBy decided = decidedAt(iff, decisions, supplied);
                     ControlPointId.ArmOccurrence then =
                             armOf(HELD, iff, iff.origin(), 0, iff.then(), inside, decided);
                     walk(iff.then(), inside);

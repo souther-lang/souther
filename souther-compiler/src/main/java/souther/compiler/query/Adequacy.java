@@ -399,7 +399,8 @@ public final class Adequacy {
                     souther.compiler.coverage.CoverageSites.of(bodies,
                             checked == null
                                     ? souther.compiler.coverage.DecisionSources.NONE
-                                    : checked.decisions());
+                                    : checked.decisions(),
+                            checked == null ? souther.compiler.coverage.SuppliedRules.NONE : checked.supplied());
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             Map<String, souther.compiler.check.PathReachability.Answers> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
@@ -659,7 +660,8 @@ public final class Adequacy {
                     souther.compiler.coverage.CoverageSites.of(producing,
                             checkedBodies == null
                                     ? souther.compiler.coverage.DecisionSources.NONE
-                                    : checkedBodies.decisions());
+                                    : checkedBodies.decisions(),
+                            checkedBodies == null ? souther.compiler.coverage.SuppliedRules.NONE : checkedBodies.supplied());
             Map<String, souther.compiler.check.PathReachability.Answers.AsRun> reachableArms = db.ask(new Arrived(name)).value();
             Map<String, SignatureEvidence> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
@@ -715,7 +717,8 @@ public final class Adequacy {
                     souther.compiler.coverage.CoverageSites.of(bodies,
                             checked == null
                                     ? souther.compiler.coverage.DecisionSources.NONE
-                                    : checked.decisions());
+                                    : checked.decisions(),
+                            checked == null ? souther.compiler.coverage.SuppliedRules.NONE : checked.supplied());
             Map<String, Observed> byTarget = rowsOf(db, name);
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What the guards above each place leave, asked once for the module and read by
@@ -798,7 +801,8 @@ public final class Adequacy {
                     souther.compiler.coverage.CoverageSites.of(bodies,
                             checked == null
                                     ? souther.compiler.coverage.DecisionSources.NONE
-                                    : checked.decisions());
+                                    : checked.decisions(),
+                            checked == null ? souther.compiler.coverage.SuppliedRules.NONE : checked.supplied());
             Map<String, Observed> byTarget = rowsOf(db, name);
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What the guards above each place leave, asked once for the module and read by
@@ -1090,12 +1094,11 @@ public final class Adequacy {
         /**
          * The arms this counts as one that it cannot show are one.
          *
-         * <p>What tells two copies of a fork apart is the predicate each was handed, and a fork
-         * whose condition compares nothing an author wrote hands this nothing to tell them by — a
-         * {@code filter} over a {@code Bool} field is one. Such occurrences are counted together,
-         * which is the answer that risks the least: split, each would be owed a row establishing
-         * what the row beside it already does, and a specific piece of work that is already done is
-         * worse to be told than nothing.
+         * <p>What tells two copies of a fork apart is which rule each was handed, and this is
+         * where the declaration says the caller decides and the occurrence could not say which rule
+         * arrived. Such occurrences are counted together, which is the answer that risks the least:
+         * split, each would be owed a row establishing what the row beside it already does, and a
+         * specific piece of work that is already done is worse to be told than nothing.
          *
          * <p>So it is said instead. A count that quietly holds two predicates where it says one is
          * the shape of a measure reporting a behavior complete over something nothing ran, and
@@ -1474,7 +1477,8 @@ public final class Adequacy {
                     souther.compiler.coverage.CoverageSites.of(bodies,
                             checked == null
                                     ? souther.compiler.coverage.DecisionSources.NONE
-                                    : checked.decisions());
+                                    : checked.decisions(),
+                            checked == null ? souther.compiler.coverage.SuppliedRules.NONE : checked.supplied());
             Map<String, Observed> byTarget = rowsOf(db, name);
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What the guards above each place leave, asked once for the module and read by

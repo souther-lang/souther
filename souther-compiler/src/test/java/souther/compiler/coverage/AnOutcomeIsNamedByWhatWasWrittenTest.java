@@ -293,7 +293,7 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
                 CoverageOrigin.unwritten(), souther.compiler.types.Type.INT, at);
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> CoverageSites.of(Map.of("b", fork), souther.compiler.coverage.DecisionSources.NONE));
+                () -> CoverageSites.of(Map.of("b", fork), souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE));
 
         assertTrue(refused.getMessage().contains("no source wrote it"),
                 () -> "the walk says what is wrong with the tree: " + refused.getMessage());
@@ -368,6 +368,6 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
     }
 
     private static CoverageSites.Plan planOf(String source) {
-        return CoverageSites.of(bodiesOf(source), souther.compiler.coverage.DecisionSources.NONE);
+        return CoverageSites.of(bodiesOf(source), souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE);
     }
 }

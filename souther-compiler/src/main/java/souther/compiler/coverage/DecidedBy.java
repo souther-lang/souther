@@ -1,7 +1,5 @@
 package souther.compiler.coverage;
 
-import souther.compiler.types.BindingOwner;
-
 import java.util.List;
 
 /**
@@ -38,14 +36,13 @@ public sealed interface DecidedBy {
     /**
      * The caller decides, with the rules it wrote expanded here.
      *
-     * <p>The expansions and not a description of what they hold. An expansion is made once per rule
-     * supplied at a call site, so two calls handing in two rules have two of them and a rule handed
-     * on through a helper keeps the one it was written as. What this cannot yet tell apart is one
-     * rule named at two call sites: each supply is its own expansion, so the two are counted as two
-     * obligations — which asks for a row that establishes nothing rather than passing over one that
-     * does.
+     * <p>What was written and not where it was handed over. Two call sites naming one declaration
+     * hand in one rule and are one obligation; two writing the same expression are two, because the
+     * author wrote two and nothing here says they agree. In the order the declaration names the
+     * parameters, so a fork resting on two of them is told from one resting on the same two the
+     * other way round.
      */
-    record BySupplied(List<BindingOwner> rules) implements DecidedBy {
+    record BySupplied(List<SuppliedRules.RuleIdentity> rules) implements DecidedBy {
 
         public BySupplied {
             rules = List.copyOf(rules);

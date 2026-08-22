@@ -169,7 +169,8 @@ class WhatARuleOnAStringIsMeasuredAtTest {
         assertNotNull(checked, "the model under test compiles: " + guard);
 
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().get(0);
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions());
+        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
+                checked.supplied());
         Core body = checked.behaviorBodies().get("f");
         GuardThresholds.Guards guards = GuardThresholds.of("f", body, plan,
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("f"), symbols);
