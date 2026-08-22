@@ -5,6 +5,7 @@ import souther.compiler.core.Core;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.Rel;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
@@ -1251,7 +1252,7 @@ final class DischargeRules {
                     }
                 }
                 case Answered.InTheCaseCarrying(Type carried) -> {
-                    if (!(signature.result() instanceof Type.Union)) {
+                    if (!(signature.result() instanceof Type.Union(Set<TypeSymbol> members))) {
                         throw new IllegalStateException(operation + " answers "
                                 + Type.show(signature.result())
                                 + ", which has no case for the number it computes to arrive in");
@@ -1264,6 +1265,18 @@ final class DischargeRules {
                         throw new IllegalStateException(operation + " answers its number as one case"
                                 + " of a union, so when it answers none is what the other cases are"
                                 + " for and is not written down");
+                    }
+                    // The condition names no case, so it says what every case that is not the
+                    // number's says — which is one statement only where there is one such case. A
+                    // union that gained a third would have an arm establishing a condition it was
+                    // not taken under, which is a wrong fact rather than a missing one, and nothing
+                    // downstream could tell: an arm is read the same way whichever case it names.
+                    // Where a second failure is wanted, the condition is what has to name its case.
+                    if (members.size() != 2) {
+                        throw new IllegalStateException(operation + " answers "
+                                + members.size() + " cases, and when it answers no number is"
+                                + " written as one condition — which says what one other case"
+                                + " means and cannot say what several do");
                     }
                 }
             }

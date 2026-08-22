@@ -142,9 +142,35 @@ class AQuotientIsHeldAgainstWhatItDividedTest {
                         | DivisionByZero -> 硬貨枚数(額)"""));
     }
 
-    /** The control beside it: the same construction on the arm that does not say so. */
+    /**
+     * And taking the value arm establishes the denial, which is one statement's other reading and
+     * not a second rule.
+     */
     @Test
-    void theValueArmSaysNothingAboutWhereTheDivisorIs() {
+    void theValueArmEstablishesThatTheDivisorWasNot() {
+        String model = """
+                module demo
+
+                data NonZero = Int
+                    invariant notZero = value /= 0
+
+                data Nothing
+
+                behavior 割る : (d: Int) -> NonZero | Nothing
+                    constructs NonZero
+                let 割る (d) =
+                    match Int.divide(100, d) with
+                        | Int as k -> NonZero(d)
+                        | DivisionByZero -> Nothing
+                """;
+        assertEquals(List.of(), Compiler.compileWithWarnings(model).warnings().stream()
+                .map(Diagnostic::code).distinct().toList());
+    }
+
+    /** The control beside both: the value arm says the divisor is not zero and says nothing about
+     * which side of nought it is on. */
+    @Test
+    void theValueArmOnlyEstablishesThatTheDivisorIsNotZero() {
         assertEquals(List.of("E2011"), reported("額 <= 100", """
                 match Int.divide(100, 額) with
                         | Int as k -> 硬貨枚数(額)

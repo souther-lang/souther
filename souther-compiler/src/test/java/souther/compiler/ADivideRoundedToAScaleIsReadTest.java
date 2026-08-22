@@ -126,6 +126,45 @@ class ADivideRoundedToAScaleIsReadTest {
     }
 
     /**
+     * A scale no {@code int} holds is no scale here, and the range is not stated.
+     *
+     * <p>The backend narrows the scale to a Java {@code int} before it divides (#976), so a place
+     * count outside that is a division at a scale nothing proved here was about — a proof over the
+     * number as written would be a proof about a different division. The same model at two places
+     * discharges, which is what says this is the scale being refused and not the shape of the
+     * behavior.
+     */
+    @Test
+    void aScaleTheRunTimeCannotDivideAtIsNoScale() {
+        assertEquals(List.of("E2011"), atScale("4294967298"));
+        assertEquals(List.of(), atScale("2"));
+    }
+
+    /** The model of {@link #aScaleAGuardSettlesIsAScale}, with the scale written at the call. */
+    private static List<String> atScale(String places) {
+        return Compiler.compileWithWarnings("""
+                module demo
+
+                data Rate = Decimal
+                    invariant inRange = value >= 0m && value <= 100m
+
+                data Bad
+
+                behavior share : (x: Decimal, y: Decimal) -> Rate | Bad
+                    constructs Rate
+                let share (x, y) = {
+                    guard x >= 0m else Bad
+                    guard x <= 10m else Bad
+                    guard y >= 1m else Bad
+                    match Decimal.divide(x, y, %s, HALF_UP) with
+                        | Decimal as q -> Rate(q)
+                        | DivisionByZero -> unreachable "y >= 1"
+                }
+                """.formatted(places)).warnings().stream()
+                .map(Diagnostic::code).distinct().toList();
+    }
+
+    /**
      * The control. Nothing puts the divisor on a side of nought — the guard bounds {@code y} and
      * the divide is by one less — so this rule has no divisor to fire on and the construction is
      * owed its clause.

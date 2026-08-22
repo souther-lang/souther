@@ -529,11 +529,18 @@ final class Terms {
      * expression knows — which is why the walk that reads the operands is not handed one.
      */
     private void recording(FactSubject atom, Core e, Denotations at) {
-        if (asOperator(e) instanceof Core.PreservedCall call) {
-            recordingWalk(atom, call, e, at);
+        // What was computed first, and the representation only where nothing was. Asked the other
+        // way round, a value the table states arithmetic for reached the walk reader because the
+        // reading had kept its call standing — so which of the two answered turned on how the tree
+        // was written, which is what a meaning read once exists to stop deciding.
+        NumericMeaning meaning = numericMeaningOf(e, at);
+        if (meaning == null) {
+            if (asOperator(e) instanceof Core.PreservedCall call) {
+                recordingWalk(atom, call, e, at);
+            }
             return;
         }
-        Derivation made = recipeFor(numericMeaningOf(e, at), at);
+        Derivation made = recipeFor(meaning, at);
         if (made == null) {
             return;
         }
@@ -954,12 +961,27 @@ final class Terms {
         DischargeRules.NumericResult result =
                 DischargeRules.numericResult(operationOf(e));
         if (result != null && result.at() instanceof DischargeRules.Answered.Directly) {
-            return theOneOf(result.computes().of(argsOf(e)), e.type());
+            return computedBy(result, argsOf(e), e.type());
         }
         if (e instanceof Core.Binary b && isArith(b.op())) {
             return theOneOf(new NumericMeaning.Operator(b.op(), b.left(), b.right()), b.type());
         }
         return null;
+    }
+
+    /**
+     * The number {@code result} says a call handing over {@code args} computes, where it answers it
+     * as a value of {@code answered}.
+     *
+     * <p>The one place a row is turned into a meaning. Which arithmetic a row states does not depend
+     * on where the operation answers it — a row is a pair of those two answers and every pair of
+     * them is writable — so a reader that made the meaning itself would be a reader that had to be
+     * told about the next pair. Both the call read where it stands and the arm that opens a case
+     * come through here, which is what keeps one value from being two meanings depending on which
+     * of the two reached it.
+     */
+    NumericMeaning computedBy(DischargeRules.NumericResult result, List<Core> args, Type answered) {
+        return theOneOf(result.computes().of(args), answered);
     }
 
     /** {@code meaning}, as the arithmetic it is where the language writes that arithmetic two ways.
@@ -980,10 +1002,12 @@ final class Terms {
      * <p>Named by the arithmetic where the language writes that arithmetic another way, and by the
      * case otherwise. A truncating quotient is the first: {@code a / b} is a spelling of the very
      * value the {@code Int} case of {@code Int.divide(a, b)} carries, so the two are one term and a
-     * guard about either is about both — which is the whole of what naming a value says. A remainder
-     * and a quotient rounded to a scale are the second: no operator writes them, so what they are is
-     * the value that case opens out of that call, and naming them by the call itself would file the
-     * union and the number it carries under one key.
+     * guard about either is about both — which is the whole of what naming a value says. An
+     * operation whose value case carries what an operator computes is the same, whichever operator
+     * it is: where the operation answers a sum as one case of a union, that case carries the very
+     * value {@code a + b} is. A remainder and a quotient rounded to a scale are the other: no
+     * operator writes them, so what they are is the value that case opens out of that call, and
+     * naming them by the call itself would file the union and the number it carries under one key.
      */
     FactSubject subjectOpenedAs(NumericMeaning meaning, Type carried, Core scrutinee,
                                 Denotations at) {
@@ -996,16 +1020,20 @@ final class Terms {
         return openedKey(meaning, carried, scrutinee, at, Leaf.SYMBOLIC);
     }
 
+    /** The arithmetic written as an operator, as a term. */
+    private Term written(BinOp op, Core left, Core right, Denotations at, Leaf leaf) {
+        Term over = termKey(left, at, Map.of(), 0, leaf);
+        Term by = termKey(right, at, Map.of(), 0, leaf);
+        return over == null || by == null ? null : interned.operator(op, over, by);
+    }
+
     private Term openedKey(NumericMeaning meaning, Type carried, Core scrutinee, Denotations at,
                            Leaf leaf) {
         return switch (meaning) {
-            case NumericMeaning.TruncatingQuotient(Core dividend, Core divisor) -> {
-                Term over = termKey(dividend, at, Map.of(), 0, leaf);
-                Term by = termKey(divisor, at, Map.of(), 0, leaf);
-                yield over == null || by == null ? null : interned.operator(BinOp.DIV, over, by);
-            }
-            // An operator answers its number where it stands, so nothing opens one out of a case.
-            case NumericMeaning.Operator _ -> null;
+            case NumericMeaning.TruncatingQuotient(Core dividend, Core divisor) ->
+                    written(BinOp.DIV, dividend, divisor, at, leaf);
+            case NumericMeaning.Operator(BinOp op, Core left, Core right) ->
+                    written(op, left, right, at, leaf);
             case NumericMeaning.TruncatingRemainder _, NumericMeaning.RoundedQuotient _ -> {
                 Term of = termKey(scrutinee, at, Map.of(), 0, leaf);
                 yield of == null ? null : interned.opened(of, carried);

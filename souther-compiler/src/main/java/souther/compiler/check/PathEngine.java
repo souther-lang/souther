@@ -360,7 +360,7 @@ final class PathEngine {
                 Type answersIn)) || !answersIn.equals(carried)) {
             return new Opens(scrutinee, terms.subjectOf(scrutinee, at), null, null);
         }
-        NumericMeaning meaning = result.computes().of(Terms.argsOf(called));
+        NumericMeaning meaning = terms.computedBy(result, Terms.argsOf(called), carried);
         FactSubject subject = terms.subjectOpenedAs(meaning, carried, called, at);
         // A call the term grammar cannot name leaves the number it answers named by nothing this can
         // relate to anything else, and a binding standing for the value it opened is what an arm has
