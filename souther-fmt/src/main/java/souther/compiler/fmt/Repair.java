@@ -5,6 +5,7 @@ import souther.compiler.cst.SyntaxToken;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -55,11 +56,30 @@ final class Repair {
      */
     record Round(String source, Formatter.CanonicalForm canonical, Witnesses.Pairing pairing,
             Map<Doc.GroupRef, List<Opportunity>> settling,
-            Map<Doc.NestRef, List<Witnesses.CanonicalLine>> under) {
+            Map<Doc.NestRef, List<Witnesses.CanonicalLine>> under,
+            Map<Columns.Unit, List<Witnesses.CanonicalStop>> atAColumn) {
 
         Round(String source, Formatter.CanonicalForm canonical, Witnesses.Pairing pairing) {
             this(source, canonical, pairing, settling(canonical.layout()),
-                    under(Witnesses.lines(source, canonical, pairing)));
+                    under(Witnesses.lines(source, canonical, pairing)),
+                    atAColumn(canonical, pairing));
+        }
+
+        /**
+         * The canonical form's stops, gathered under the column each is written to.
+         *
+         * <p>The third of these, and the same reason as the other two: what a column's repair is
+         * about is the rows written to that column, and asked per witness it would read the whole
+         * file once for each column the file has.
+         */
+        private static Map<Columns.Unit, List<Witnesses.CanonicalStop>> atAColumn(
+                Formatter.CanonicalForm canonical, Witnesses.Pairing pairing) {
+            Map<Columns.Unit, List<Witnesses.CanonicalStop>> out = new LinkedHashMap<>();
+            for (Witnesses.CanonicalStop stop
+                    : Witnesses.stops(canonical, pairing.writesCode())) {
+                out.computeIfAbsent(stop.occurrence().unit(), _ -> new ArrayList<>()).add(stop);
+            }
+            return out;
         }
 
         /**
@@ -262,7 +282,50 @@ final class Repair {
                     t.unit().at() - t.source().length(), t.unit().at(), t.canonical()));
             case Witness.CommentAbove a -> List.of(under(source, a));
             case Witness.CommentCarrier c -> moved(source, canonical, pairing, c);
+            case Witness.AtAColumn c -> columns(round, c);
         };
+    }
+
+    /**
+     * The rows of one column, each carried out to it.
+     *
+     * <p>One edit per row and one decision behind them. What is written is the whole run before the
+     * connector, which is this rule's: the spacing rule is not asked at a stop, so nothing else
+     * answers about these characters.
+     *
+     * <p>The number of spaces is worked out from where the row has got to in the text being
+     * repaired rather than from what the source had there, so a row whose own content is also being
+     * repaired does not have to be written in any order. Where the row has got further than the
+     * column, the run is the separator alone and the round after this one asks again — the width in
+     * front of the connector is another rule's and it has not been written yet.
+     */
+    private static List<Edit> columns(Round round, Witness.AtAColumn witness) {
+        String source = round.source();
+        String text = round.canonical().layout().text();
+        List<SyntaxToken> had = round.pairing().hadCode();
+        List<SyntaxToken> writes = round.pairing().writesCode();
+        List<Edit> out = new ArrayList<>();
+        for (Witnesses.CanonicalStop stop
+                : round.atAColumn().getOrDefault(witness.unit(), List.of())) {
+            int i = stop.adjacency();
+            int from = had.get(i).end();
+            int to = had.get(i + 1).start();
+            String between = source.substring(from, to);
+            if (between.indexOf('\n') >= 0 || between.contains("//")) {
+                continue;   // the source broke the row, or wrote a comment there
+            }
+            String separator = text.substring(writes.get(i).end(), stop.occurrence().at());
+            if (separator.chars().anyMatch(c -> c != ' ')) {
+                throw new IllegalStateException(
+                        "a column stop whose separator is not spaces ([" + separator + "]); what is"
+                                + " written before a connector is counted in columns here, and a"
+                                + " tab is not one of them");
+            }
+            int reached = Witnesses.columnAt(source, from);
+            int wide = Math.max(witness.canonical() - reached, separator.length());
+            out.add(new Edit(from, to, " ".repeat(wide)));
+        }
+        return out;
     }
 
     /**

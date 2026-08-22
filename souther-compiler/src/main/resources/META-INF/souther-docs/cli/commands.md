@@ -244,6 +244,22 @@ departure to break off: the `else` ends the guard's own line and the clauses go 
         | unique -> DuplicateProduct
 ```
 
+An `example` and a `fake` are decision tables, and their rows are read against each other: which
+input differs between two rows is what writing them one under the other is for. So the connectors of
+a table's rows are written at one column — the `:` and the `->` of an `example`, the `->` of a
+`fake` — with the shorter rows padded out to the widest. Adding a row rewrites the table where the
+new one is the widest, which is the diff a table asks for. Whatever the author lined up by hand is
+derived again like everything else, and a row too long for one line is written down the page and
+takes no part in the columns. The padding is measured in columns on the screen, so a table whose
+descriptions are Japanese lines up on a screen rather than on a character count.
+
+```
+example priceOfTheFirstGlass
+    | "off peak, no coupon" : (OffPeak, NoCoupon)     -> Price(490)
+    | "happy hour"          : (HappyHour, NoCoupon)   -> Price(290)
+    | "with a coupon"       : (OffPeak, WithCoupon)   -> Price(100)
+```
+
 A comment keeps what it was written about. On the line of the code it follows it stays there; on a
 line of its own it goes above what follows it, unless a blank line separates it from that and none
 separates it from the code above, in which case it stays under that code. A comment with nothing
@@ -301,6 +317,15 @@ How far in a line begins. The two answers are columns:
 - one level deeper is one indent further in — a step, and not a column the rule never states.
 - a line the file holds begins at column zero — the outermost level, which has no level outside it
   to be measured from.
+
+Where a table's rows line up. An `example` and a `fake` write the connectors of every row at one
+column, and the two answers are columns:
+
+- the rows of a table of examples write their : at one column — the description was padded out to
+  the widest one in the table, or was not.
+- the rows of a table of examples write their -> at one column — the same, for the input.
+- the rows of a table of fakes write their -> at one column — a `fake` has the one column, since its
+  rows have no description.
 
 What separates one thing from another, and what ends:
 

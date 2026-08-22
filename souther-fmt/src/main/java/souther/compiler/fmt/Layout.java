@@ -17,19 +17,22 @@ import java.util.List;
  */
 record Layout(String text, List<GroupDecision> decisions,
         java.util.Map<Place, Extent> extents, List<Newline> breaks,
-        List<Opportunity> opportunities) {
+        List<Opportunity> opportunities, List<ColumnDecision> columns,
+        List<ColumnOccurrence> stops) {
 
     Layout {
         decisions = List.copyOf(decisions);
         extents = java.util.Map.copyOf(extents);
         breaks = List.copyOf(breaks);
         opportunities = List.copyOf(opportunities);
+        columns = List.copyOf(columns);
+        stops = List.copyOf(stops);
     }
 
     /** This layout with one more place located. */
     Layout and(Place place, Extent extent) {
         java.util.Map<Place, Extent> out = new java.util.LinkedHashMap<>(extents);
         out.put(place, extent);
-        return new Layout(text, decisions, out, breaks, opportunities);
+        return new Layout(text, decisions, out, breaks, opportunities, columns, stops);
     }
 }

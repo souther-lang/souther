@@ -3143,7 +3143,7 @@ A *function dependency* — one whose result varies with its input — is given 
 ----
 fake findManager
     | (EmployeeId("e-1")) -> EmployeeId("boss-1")
-    | _ -> EmployeeId("unknown")
+    | _                   -> EmployeeId("unknown")
 ----
 
 Each dependency of the target must have a fake — a `+with+` on the row or a `+fake+` table — or it is a compile error (<<e1908>>). A fake, like an example, is written inline or in an attached `+examples for+` file, and is local to its module. `+fake+` is a contextual keyword.
@@ -3197,7 +3197,7 @@ behavior findMember : (id: MemberId) -> Found | Missing
 
 example findMember
     | "a member that is registered" : (MemberId("m-1")) -> Found { id = MemberId("m-1") }
-    | "a member that is not" : (MemberId("m-9")) -> Missing { reason = "no such member" }
+    | "a member that is not"        : (MemberId("m-9")) -> Missing { reason = "no such member" }
 ----
 
 How many rows are waiting is what `+souther examples+` reports; it is not a compile warning, because waiting is the normal state of a model being written and a warning on every one of them says nothing.

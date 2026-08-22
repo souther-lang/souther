@@ -76,8 +76,8 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
                 //
                 // example findTodo
                 //     | "id=0 <= x <= 0" : (TodoId(0)) -> <?>
-                //     | "id=0 < x" : (TodoId(1)) -> <?>
-                //     | (TodoId(2)) -> <?>
+                //     | "id=0 < x"       : (TodoId(1)) -> <?>
+                //     | (TodoId(2))                    -> <?>
                 //
                 // example echo
                 //     | (TodoId(0)) -> <?>

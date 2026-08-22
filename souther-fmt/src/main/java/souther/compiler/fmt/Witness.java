@@ -90,6 +90,30 @@ sealed interface Witness {
     record BetweenTwoTokens(Boundary unit, String canonical, String source) implements Witness {}
 
     /**
+     * The column rule at one column of one table: which display column the canonical form writes
+     * the rows' connector at, and which ones the source wrote it at.
+     *
+     * <p>The unit is {@link Columns.Unit}, the column itself, and not a row. The rule is evaluated
+     * once for the whole column — the widest row is what it reads — and a table whose five rows are
+     * all at different columns has departed from one decision five times, not from five decisions.
+     * The same shape as {@link Indentation}, and for the same reason.
+     *
+     * <p>Display columns, because what lines up is what a reader sees.
+     *
+     * <p>This rule owns the whole run of spaces before the connector, so {@link BetweenTwoTokens}
+     * is not asked there. Both would be answering about the same characters, and what a reader
+     * wants to be told at a table is which column the row missed rather than that one space is
+     * eight.
+     */
+    record AtAColumn(Columns.Unit unit, int canonical, java.util.List<Integer> source)
+            implements Witness {
+
+        public AtAColumn {
+            source = java.util.List.copyOf(source);
+        }
+    }
+
+    /**
      * The separation rule's unit: two top-level items, one written after the other.
      *
      * <p>A pair, because what the rule says is what stands between them. A blank line is two breaks
