@@ -182,8 +182,12 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      * read alone can still put two subjects under one name, and only something that sees the whole
      * vocabulary can refuse that.
      *
-     * <p>Pass one renaming to every state that will be met. What may not collide is every subject of
-     * the conjunction, not of each reading in turn.
+     * <p>What may not collide is every subject of the conjunction and not of each reading in turn.
+     * Where the names a caller gives do not themselves say which reading a subject came from, pass
+     * one renaming to every state that will be met, and it holds that for all of them. Where they
+     * do — a name carrying which of several values it is a position of — the readings are kept apart
+     * by the shape of the names, and a renaming of its own for each is enough. Whichever it is, it
+     * is the caller's to say, and to say where the names are made rather than here.
      */
     public <B> ConstraintState<B> renamed(InjectiveRenaming<A, B> naming) {
         // The fold in `over` cannot fire: `naming` refuses a second subject at a name some other
@@ -224,7 +228,7 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
         // twice would keep the second reading and drop the first without a word, which is the one
         // way this can be got wrong now that it cannot combine two of them. An assertion because a
         // throw would be caught by the fail-open around the reading and leave it silently dropped.
-        assert values.readingsTaken() == 0
+        assert !values.hasReadings()
                 : "the values of a state are read once, and these were read over " + values;
         // The reading met with what nothing read leaves, and then held as a conjunction of one.
         // Met and not assigned, which is not the same answer, and the difference is a reading of one

@@ -147,6 +147,29 @@ class ReadingsConjoinedAreNotMultipliedTest {
     }
 
     /**
+     * Whether a reading was taken is not how many factors there are.
+     *
+     * <p>Two readings that name the same position are one factor, since the exact conjunction of
+     * those is their product — so counting the factors counts the vocabularies the readings fell
+     * into and not the readings. What a caller taking a reading in once needs to know is whether one
+     * was taken, and normalising never leaves nothing where a reading went in, so that question is
+     * the same of both.
+     */
+    @Test
+    void whetherAReadingWasTakenIsNotHowManyFactorsThereAre() {
+        ConjoinedAdmissibleValues<String> nothing = ConjoinedAdmissibleValues.top();
+        assertFalse(nothing.hasReadings());
+
+        ConjoinedAdmissibleValues<String> overOneVocabulary =
+                ConjoinedAdmissibleValues.of(AdmissibleValues.at("x", just("A")))
+                        .meet(ConjoinedAdmissibleValues.of(AdmissibleValues.at("x", just("B"))));
+
+        assertEquals(1, overOneVocabulary.factors().size(),
+                "two readings of one position are one factor");
+        assertTrue(overOneVocabulary.hasReadings(), "and two readings were taken all the same");
+    }
+
+    /**
      * A tripwire, and not the proof above it.
      *
      * <p>{@link AdmissibleValues#subjects} is what says which positions a reading is about, and

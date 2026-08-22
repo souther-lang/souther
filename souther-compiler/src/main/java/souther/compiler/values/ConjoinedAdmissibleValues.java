@@ -105,15 +105,23 @@ public final class ConjoinedAdmissibleValues<A> {
     }
 
     /**
-     * How many readings have been taken into this.
+     * Whether any reading has been taken into this.
      *
-     * <p>A count of readings and not of anything they say. What it is for is a caller that takes a
-     * reading in once and has to be able to say so — {@link
+     * <p>For a caller that takes a reading in once and has to be able to say so — {@link
      * souther.compiler.check.ConstraintState#takingValuesRead} is written against nothing having
      * been taken in yet, and a second reading arriving there would replace the first without a word.
+     *
+     * <p><b>Whether and not how many.</b> How many factors are here is how many vocabularies the
+     * readings fell into, which is not how many readings there were: two readings that name the
+     * same position are one factor, since the exact conjunction of those is their product. A count
+     * of factors offered as a count of readings would be a count of the representation — which is
+     * why {@link #factors} is not something a caller may have either.
+     *
+     * <p>Whether, on the other hand, is the same question of both. Normalising never leaves nothing
+     * where a reading went in, so a conjunction has a factor exactly when a reading was taken.
      */
-    public int readingsTaken() {
-        return factors.size();
+    public boolean hasReadings() {
+        return !factors.isEmpty();
     }
 
     /**
