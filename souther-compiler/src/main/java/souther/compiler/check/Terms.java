@@ -108,13 +108,22 @@ final class Terms {
     }
 
     /**
-     * Every atom {@code form} reaches: the ones it names, and the ones the arithmetic those stand
-     * for names, however deep.
+     * Every atom {@code form} reaches: the ones it names, and the ones a recipe filed against those
+     * is read from, however deep.
      *
      * <p>Naming one is not the same as being about one. {@code acc * x.value} is a product the
      * fragment cannot carry, so the form is a single atom and the two it was computed from are under
      * the recipe filed against that atom — and a reader that took the form's own atoms for what the
      * expression is about would miss both of them. Answered here because both tables are here.
+     *
+     * <p>What is followed is what the recipe is <em>read from</em> and not what it is arithmetic
+     * over. The two are the same for a product, whose operands are its arithmetic, and they come
+     * apart the moment a recipe holds something that decides which of its parts answers rather than
+     * being one of them — a choice's arms are read from today, and what chose between them would be
+     * too. So a form standing anywhere in a recipe is one this walks, and that is held to the
+     * recipes themselves ({@code WhatARecipeIsReadFromIsWhatAReadingReachesTest}) rather than
+     * described here, since a reader that missed one would leave the places under it unbounded and
+     * nothing else would say so ({@link StepInputFacts}).
      */
     Set<FactSubject> reached(LinearForm<FactSubject> form) {
         Set<FactSubject> out = new java.util.LinkedHashSet<>();
