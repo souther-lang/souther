@@ -503,10 +503,10 @@ class AMeasureWithNoNumberSaysWhyTest {
                 PartitionEvidence.Bounded.Reason.NO_LINES_DERIVED));
         assertThrows(IllegalArgumentException.class, () -> new Adequacy.BranchEvidence(
                 List.of(), java.util.Set.of(), java.util.Set.of(),
-                MeasurementStatus.NOT_MEASURED, null, "m"));
+                MeasurementStatus.NOT_MEASURED, null));
         assertThrows(IllegalArgumentException.class, () -> new Adequacy.BranchEvidence(
                 List.of(), java.util.Set.of(), java.util.Set.of(),
-                MeasurementStatus.COMPLETE, Adequacy.BranchEvidence.Reason.NO_BODY, "m"));
+                MeasurementStatus.COMPLETE, Adequacy.BranchEvidence.Reason.NO_BODY));
         assertThrows(IllegalArgumentException.class, () -> new PartitionEvidence.AxisCoverage(
                 "a", "a", List.of(), java.util.Set.of(), 0, MeasurementStatus.NOT_MEASURED, null,
                 PartitionEvidence.AxisCoverage.ANSWERED));
@@ -529,7 +529,7 @@ class AMeasureWithNoNumberSaysWhyTest {
                 PartitionEvidence.Partitioned.Reason.NO_SUBJECT));
         assertThrows(IllegalArgumentException.class, () -> new Adequacy.BranchEvidence(
                 List.of(), java.util.Set.of(), java.util.Set.of(),
-                MeasurementStatus.NOT_MEASURED, Adequacy.BranchEvidence.Reason.NO_BODY, "m"));
+                MeasurementStatus.NOT_MEASURED, Adequacy.BranchEvidence.Reason.NO_BODY));
     }
 
     private static String behaviorBlock(String human, String behavior) {

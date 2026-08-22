@@ -1,6 +1,5 @@
 package souther.compiler.coverage;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
@@ -46,64 +45,6 @@ import java.util.Map;
 public final class CoverageSites {
 
     /**
-     * The comparisons a condition is made of, in the order it holds them.
-     *
-     * <p>One rule, because two readers want it and a line one of them draws is measured against a
-     * number the other handed out: what is numbered and what a fork is counted as deciding are the
-     * same set or the two disagree about what a condition is.
-     *
-     * <p>Through the connectives, and through what a binding holds — the second because that is
-     * where a condition handed in from outside arrives. A closure given to a library combinator is
-     * inlined as a {@code let} binding the element with the author's comparison under it, so a walk
-     * that went no further than the connectives found none of them.
-     */
-    public static List<Core.Binary> comparisonsOf(Core condition) {
-        List<Core.Binary> out = new ArrayList<>();
-        gather(condition, out);
-        return List.copyOf(out);
-    }
-
-    private static void gather(Core condition, List<Core.Binary> out) {
-        if (condition instanceof Core.Binary binary
-                && (binary.op() == Hir.BinOp.AND || binary.op() == Hir.BinOp.OR)) {
-            gather(binary.left(), out);
-            gather(binary.right(), out);
-            return;
-        }
-        if (condition instanceof Core.LetIn let) {
-            gather(let.body(), out);
-            return;
-        }
-        if (condition instanceof Core.Binary comparison) {
-            out.add(comparison);
-        }
-    }
-
-    /**
-     * What the fork whose condition is {@code cond} decides about, as far as this can say: the
-     * constructs an author wrote that the condition compares.
-     *
-     * <p>Beside the fork's own construct in what an arm is counted under. A non-recursive helper is
-     * spliced into each body that calls it, and the copies are one arm the author wrote — which
-     * holds while the condition is the helper's own. A library combinator's fork applies a closure
-     * the call site supplied, so its copies test different predicates and are different things to
-     * cover: a row through one of them establishes nothing about the next.
-     *
-     * <p>Empty where the condition compares nothing an author wrote — a bare {@code Bool} field
-     * handed to a {@code filter}, say. Such copies are still counted as one, which is the answer
-     * this had for all of them before.
-     */
-    private static List<CoverageOrigin> decidedBy(Core cond) {
-        List<CoverageOrigin> out = new ArrayList<>();
-        for (Core.Binary comparison : comparisonsOf(cond)) {
-            if (comparison.origin().isWritten() && !out.contains(comparison.origin())) {
-                out.add(comparison.origin());
-            }
-        }
-        return List.copyOf(out);
-    }
-
-    /**
      * What stands in an arm's place where the arm answers nothing.
      *
      * <p>The arms of a node are handed to the emitter as an array it indexes by the arm's position, so
@@ -130,13 +71,7 @@ public final class CoverageSites {
      *             comparison, whose origin is its own rather than the fork's: a comparison is one
      *             construct, and what a fork holds several of is arms
      */
-    public record Obligation(String behavior, CoverageOrigin origin, int part,
-                            List<CoverageOrigin> decides) {
-
-        public Obligation {
-            decides = List.copyOf(decides);
-        }
-    }
+    public record Obligation(String behavior, CoverageOrigin origin, int part) {}
 
 
     /**
@@ -208,17 +143,13 @@ public final class CoverageSites {
      *           the pair, and a value that can hold two answers about one place is one a reader
      *           can pick the wrong half of.
      */
-    public record GuardRef(String behavior, CoverageOrigin origin, List<CoverageOrigin> decides,
-                           int siteIndexThen, int siteIndexElse, SourcePos at) {
-
-        public GuardRef {
-            decides = List.copyOf(decides);
-        }
+    public record GuardRef(String behavior, CoverageOrigin origin, int siteIndexThen,
+                           int siteIndexElse, SourcePos at) {
 
         /** The fork this is one occurrence of. Two calls of one helper give two of these, and a line
          * drawn on the condition is one line however many of them there are. */
         public Obligation fork() {
-            return new Obligation(behavior, origin, 0, decides);
+            return new Obligation(behavior, origin, 0);
         }
     }
 
@@ -486,13 +417,12 @@ public final class CoverageSites {
          */
         private ControlPointId.ArmOccurrence armOf(SourceOutcome outcome, Core owner,
                                                    CoverageOrigin origin, int part, Core arm,
-                                                   boolean reachable,
-                                                   List<CoverageOrigin> decides) {
+                                                   boolean reachable) {
             // The arm is made either way. Whether a run through it can be recorded is the second
             // question and only the probe turns on it — an arm nothing could record is still an arm,
             // and the readings that judge one need to be able to name it.
             int probe = reachable && answers(arm) && answering.mayEnter(owner, part)
-                    ? site(outcome, owner, origin, part, decides) : NO_SITE;
+                    ? site(outcome, owner, origin, part) : NO_SITE;
             return new ControlPointId.ArmOccurrence(controls++,
                     probe == NO_SITE ? OptionalInt.empty() : OptionalInt.of(probe),
                     // The fork's own coordinate, as a site takes it: an arm's body is what lowering
@@ -548,8 +478,7 @@ public final class CoverageSites {
          * @param owner the {@code if}, {@code match} or attempted construction the arm is one of
          * @param arm   the arm's body, which says what the arm is made of and not where it is
          */
-        private int site(SourceOutcome outcome, Core owner, CoverageOrigin origin, int part,
-                         List<CoverageOrigin> decides) {
+        private int site(SourceOutcome outcome, Core owner, CoverageOrigin origin, int part) {
             // Said here because this is where anything is numbered, and the rule is about numbering
             // rather than about comparisons: an arm of a fork nothing wrote is as much a row nobody
             // can be owed as a comparison of one. Stated for the comparisons alone, it left the arms
@@ -566,7 +495,7 @@ public final class CoverageSites {
             // source carried here beside the position would be the wrong half of two
             // answers about one place. The walk holds none for that reason.
             sites.add(new Site(behavior, outcome, Citation.of(owner.pos()),
-                    index, ordinal++, new Obligation(behavior, origin, part, decides)));
+                    index, ordinal++, new Obligation(behavior, origin, part)));
             return index;
         }
 
@@ -636,20 +565,16 @@ public final class CoverageSites {
                 case Core.Construct nd -> nd.values().forEach(given -> walk(given.value(), inside));
                 case Core.If iff -> {
                     walk(iff.cond(), inside);
-                    // What this fork decides about, taken before its arms are numbered: two calls
-                    // of one library combinator are one fork inlined twice and are not one thing to
-                    // cover, and what tells them apart is which closure each was handed.
-                    List<CoverageOrigin> decides = decidedBy(iff.cond());
                     ControlPointId.ArmOccurrence then =
-                            armOf(HELD, iff, iff.origin(), 0, iff.then(), inside, decides);
+                            armOf(HELD, iff, iff.origin(), 0, iff.then(), inside);
                     walk(iff.then(), inside);
                     ControlPointId.ArmOccurrence els =
-                            armOf(FAILED, iff, iff.origin(), 1, iff.els(), inside, decides);
+                            armOf(FAILED, iff, iff.origin(), 1, iff.els(), inside);
                     walk(iff.els(), inside);
                     byNode.put(iff, probesOf(then, els));
                     arms(iff, new ControlPointId.ArmOccurrence[] {then, els});
                     if (then.isMeasured() || els.isMeasured()) {
-                        guards.add(new GuardRef(behavior, iff.origin(), decides,
+                        guards.add(new GuardRef(behavior, iff.origin(),
                                 then.probe().orElse(NO_SITE), els.probe().orElse(NO_SITE),
                                 iff.pos()));
                     }
@@ -660,8 +585,7 @@ public final class CoverageSites {
                             new ControlPointId.ArmOccurrence[m.cases().size()];
                     for (int i = 0; i < m.cases().size(); i++) {
                         Core.Case arm = m.cases().get(i);
-                        arms[i] = armOf(matched(arm), m, m.origin(), i, arm.body(), inside,
-                                List.of());
+                        arms[i] = armOf(matched(arm), m, m.origin(), i, arm.body(), inside);
                         walk(arm.body(), inside);
                     }
                     byNode.put(m, probesOf(arms));
@@ -672,12 +596,12 @@ public final class CoverageSites {
                     ControlPointId.ArmOccurrence[] arms =
                             new ControlPointId.ArmOccurrence[1 + ic.els().size()];
                     arms[0] = armOf(BUILT, ic, ic.origin(), 0,
-                            ic.then(), inside, List.of());
+                            ic.then(), inside);
                     walk(ic.then(), inside);
                     for (int i = 0; i < ic.els().size(); i++) {
                         Core.ElseArm arm = ic.els().get(i);
                         arms[i + 1] = armOf(refused(arm), ic, ic.origin(), i + 1,
-                                arm.body(), inside, List.of());
+                                arm.body(), inside);
                         walk(arm.body(), inside);
                     }
                     byNode.put(ic, probesOf(arms));
@@ -720,7 +644,7 @@ public final class CoverageSites {
             // one, neither of which a fork can say.
             byComparison.put(comparison,
                     site(new SourceOutcome.Compared(comparison.op()), comparison,
-                            comparison.origin(), 0, List.of()));
+                            comparison.origin(), 0));
             controlByComparison.put(comparison, controls++);
         }
 

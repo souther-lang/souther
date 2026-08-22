@@ -982,17 +982,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // named with it. Named only where every row was read: an arm a row that never finished might
         // have gone through is undecided, and calling it unreached sends the author after a row that
         // exists.
-        // Arms this counts as one that it cannot show are one. Said before the arms nothing
-        // reaches, since it qualifies the number above rather than adding to what is missing from
-        // it: a count holding two predicates where it says one is what would otherwise report a
-        // behavior complete over something nothing ran.
-        for (souther.compiler.types.CoverageOrigin together : branch.countedTogether()) {
-            out.append(String.format(
-                    "      · arms of a fork `%s` wrote are counted as one: what tells two of them"
-                            + " apart is the predicate each was handed, and this one compares"
-                            + " nothing written here%n",
-                    together.module()));
-        }
         if (!decided) {
             return;
         }
