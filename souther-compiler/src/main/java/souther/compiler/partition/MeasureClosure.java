@@ -16,11 +16,11 @@ import java.util.List;
  * measure on the strength of what stopped the other one — and the day a third measure arrives it
  * inherits whatever the two of them happened to share.
  *
- * <p><b>Closed is a conclusion, and only this package draws it.</b> Each {@code Closed} has a
- * package-private constructor and is reached through {@link #of}, which is handed the whole of what
- * a behavior's reading came to. Outside this package there is no way to make one, so a caller
- * holding one is holding the proof that the reading ran out — the arrangement
- * {@link UndividedPosition.Why.Absent} is under, at the measure rather than at a position.
+ * <p><b>Closed is a conclusion, and only this class draws it.</b> Each {@code Closed} has a private
+ * constructor and is reached through {@link #of}, which is handed the whole of what a behavior's
+ * reading came to. Nowhere else is there a way to make one, so a caller holding one is holding the
+ * proof that the reading ran out — the arrangement {@link UndividedPosition.Why.Absent} is under, at
+ * the measure rather than at a position.
  *
  * <p><b>The questions first.</b> What a measure is mostly short of is a question the model raised
  * that nothing answered, filed under the measure that answers it
@@ -126,8 +126,10 @@ public final class MeasureClosure {
      *
      * @param axes    every position the reading kept, measured or not
      * @param compared what the body's comparisons raised and what answered each
-     * @param omitted positions dropped past the axis limit, which leave both measures short: what
-     *                they were carrying went with them and no question stands for it
+     * @param omitted positions dropped past the axis limit. Each leaves the partition measure short
+     *                always and the border measure short only where it was carrying a line: what a
+     *                dropped axis was carrying is recorded where it was dropped, since neither kind
+     *                leaves anything behind to read it off afterwards
      * @param refused the rules of the model this reading set aside, each from the reader that did.
      *                Asked which measures it leaves short rather than counted: a comparison relating
      *                two positions is set aside by what it says and not by anything missing here,

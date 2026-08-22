@@ -151,8 +151,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * <p><b>Asked of every measure and of nothing else.</b> Each of them answers whether it was made
      * in full, and each carries a reason where it has no number that says which kind of no-number it
      * is. So this is a fold and not a list of things to remember — a position dropped past the axis
-     * limit reaches it through the measure that lost by it, and reading the dropped ones here as
-     * well was that fact arriving twice, once in a measure's answer and once behind its back.
+     * limit reaches it through the measure that lost by it, and a space too many to walk through the
+     * status of the combinations, and reading either of those here as well was one fact arriving
+     * twice: once in a measure's answer and once behind its back.
      *
      * <p>A measure nobody asked for is not a degradation, and neither is one a behavior has nothing
      * to answer. Which of those a no-number is, is the reason's own answer
@@ -174,10 +175,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     .anyMatch(a -> fellShort(a.status(), a.reason()));
             partial |= BorderAssessment.pointsOf(partition.boundaries()).stream()
                     .anyMatch(p -> fellShort(p.item().status(), p.item().whyNotMeasured()));
+            // The combinations, whose status already carries the one fact this used to read
+            // separately: a space too many to walk is measured in part, and saying so twice left
+            // the flag and the status free to disagree.
             partial |= fellShort(partition.pairs().status(), partition.pairs().reason());
-            // The one fact no status carries: the combinations were too many to walk, so the
-            // numbers beside them describe part of the space.
-            partial |= partition.pairs().truncated();
         }
         return partial ? MeasurementStatus.PARTIAL : MeasurementStatus.COMPLETE;
     }

@@ -274,6 +274,15 @@ public record PartitionEvidence(PartitionDerivation partitioned, BoundaryDerivat
 
         public PairSpace {
             Unavailable.check(status, reason);
+            // A space too large to walk is a measure whose numbers describe part of it, which is
+            // what `PARTIAL` says and is not a second thing to say beside it. Left representable,
+            // the two could disagree — and a reader that then trusted neither read the flag and
+            // decided the status again, which is how a measure comes to have two authorities.
+            if (truncated && status != MeasurementStatus.PARTIAL) {
+                throw new IllegalArgumentException(
+                        "a space this could not walk to the end of is measured in part, not "
+                                + status);
+            }
         }
 
         /** Whether a single ratio would say anything. With unknowns in the denominator it would not. */

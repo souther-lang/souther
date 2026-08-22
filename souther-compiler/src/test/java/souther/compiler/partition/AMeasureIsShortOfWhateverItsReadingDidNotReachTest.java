@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BoundaryDerivation;
 import souther.compiler.query.Compilation;
@@ -10,6 +11,7 @@ import souther.compiler.query.PartitionEvidence;
 
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
@@ -88,6 +90,54 @@ class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
                                     f9 = A, f10 = A, f11 = A, cost = 1 }) -> Res { n = 1 }
             """;
 
+
+    /**
+     * A position the walk could not reach into, which is a fact no question carries.
+     *
+     * <p>Nothing was read there and so nothing was found wanting: an {@code Option} holds its value
+     * inside something this does not enter, and a rule about what is inside raises no question this
+     * could be short of. Both measures are short of it, because what is not known about the
+     * position is not known for either.
+     */
+    private static final String RULES_NOT_REACHED = """
+            module example.notreached
+
+            data Amount = Int
+                invariant value >= 0 && value <= 100
+            data Req = { cost: Amount? }
+            data Res = { n: Int }
+
+            behavior f : (r: Req) -> Res
+                constructs Res
+            let f (r) = Res { n = 0 }
+
+            example f
+                | "one" : (Req { cost = 1 }) -> Res { n = 0 }
+            """;
+
+    /**
+     * A rule this reading set aside that leaves neither measure short.
+     *
+     * <p>An order across a pair of positions divides neither of them, and the line it draws where
+     * the two hold one count is not one an invariant places. So both measures answered everything
+     * they answer for and found nothing — which is a fact about the model and not about this
+     * compiler, and no row would change it.
+     */
+    private static final String SET_ASIDE_COSTING_NEITHER = """
+            module example.relation
+
+            data Span = { startsAt: Int, endsAt: Int }
+                invariant startsAt <= endsAt
+            data Res = { n: Int }
+
+            behavior f : (v: Span) -> Res
+                constructs Res
+            let f (v) = Res { n = v.startsAt }
+
+            example f
+                | "one" : (Span { startsAt = 1, endsAt = 2 }) -> Res { n = 1 }
+            """;
+
     /**
      * An axis dropped past the limit leaves both measures short of what it was carrying.
      *
@@ -112,6 +162,43 @@ class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
 
         assertInstanceOf(BoundaryDerivation.Complete.class, narrow.bounded());
         assertInstanceOf(PartitionDerivation.Complete.class, narrow.partitioned());
+    }
+
+
+    /**
+     * A position whose rules the walk never reached leaves both measures short.
+     *
+     * <p>The second of the three facts no question carries. It is not a rule read and found
+     * wanting, so nothing about it stands among the questions — and a closure counted over the
+     * questions alone would call this behavior read to the end.
+     */
+    @Test
+    void aPositionTheWalkDidNotReachIntoLeavesBothMeasuresShort() {
+        PartitionEvidence evidence = evidenceFor(RULES_NOT_REACHED, "f");
+
+        assertEquals(MeasurementStatus.PARTIAL, evidence.partitioned().status(),
+                () -> "partition: " + evidence.partitioned());
+        assertEquals(MeasurementStatus.NOT_MEASURED, evidence.bounded().status(),
+                () -> "border: " + evidence.bounded());
+    }
+
+    /**
+     * And a rule set aside for what it says leaves neither.
+     *
+     * <p>The third, and the one the other two would be read as if a refusal were counted rather
+     * than asked. Both measures answer inapplicable: there is nothing here for either to be about,
+     * and holding a verdict open for it would be this compiler reporting a model whose every rule
+     * it understood.
+     */
+    @Test
+    void andARuleSetAsideForWhatItSaysLeavesNeither() {
+        PartitionEvidence evidence = evidenceFor(SET_ASIDE_COSTING_NEITHER, "f");
+
+        assertInstanceOf(PartitionDerivation.Absent.class, evidence.partitioned());
+        assertInstanceOf(BoundaryDerivation.Absent.class, evidence.bounded());
+        // And the rule is named beside them, so the two answers are about a model with a rule in it
+        // and not about one with none.
+        assertEquals(2, evidence.unread().size(), () -> "unread: " + evidence.unread());
     }
 
     private static PartitionEvidence evidenceFor(String source, String behavior) {
