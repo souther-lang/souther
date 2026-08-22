@@ -1,6 +1,5 @@
 package souther.compiler.coverage;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
@@ -46,40 +45,6 @@ import java.util.Map;
 public final class CoverageSites {
 
     /**
-     * The comparisons a condition is made of, in the order it holds them.
-     *
-     * <p>One rule, because two readers want it and a line one of them draws is measured against a
-     * number the other handed out: what is numbered and what a fork is counted as deciding are the
-     * same set or the two disagree about what a condition is.
-     *
-     * <p>Through the connectives, and through what a binding holds — the second because that is
-     * where a condition handed in from outside arrives. A closure given to a library combinator is
-     * inlined as a {@code let} binding the element with the author's comparison under it, so a walk
-     * that went no further than the connectives found none of them.
-     */
-    public static List<Core.Binary> comparisonsOf(Core condition) {
-        List<Core.Binary> out = new ArrayList<>();
-        gather(condition, out);
-        return List.copyOf(out);
-    }
-
-    private static void gather(Core condition, List<Core.Binary> out) {
-        if (condition instanceof Core.Binary binary
-                && (binary.op() == Hir.BinOp.AND || binary.op() == Hir.BinOp.OR)) {
-            gather(binary.left(), out);
-            gather(binary.right(), out);
-            return;
-        }
-        if (condition instanceof Core.LetIn let) {
-            gather(let.body(), out);
-            return;
-        }
-        if (condition instanceof Core.Binary comparison) {
-            out.add(comparison);
-        }
-    }
-
-    /**
      * What the fork whose condition is {@code cond} decides about, as far as this can say: the
      * constructs an author wrote that the condition compares.
      *
@@ -92,15 +57,26 @@ public final class CoverageSites {
      * <p>Empty where the condition compares nothing an author wrote — a bare {@code Bool} field
      * handed to a {@code filter}, say. Such copies are still counted as one, which is the answer
      * this had for all of them before.
+     *
+     * <p>Every comparison the condition holds, wherever in it. Not the ones a line may be drawn on,
+     * which is a narrower question with a reader of its own ({@link ComparisonCatalog}): what is
+     * wanted here is something the two copies differ by, and a comparison no line is drawn on tells
+     * them apart as well as one that is. Read through that reader instead, two closures would come
+     * out the same wherever neither of them compares anything it admits — which is a wider silence
+     * than the one this leaves.
      */
     private static List<CoverageOrigin> decidedBy(Core cond) {
         List<CoverageOrigin> out = new ArrayList<>();
-        for (Core.Binary comparison : comparisonsOf(cond)) {
-            if (comparison.origin().isWritten() && !out.contains(comparison.origin())) {
-                out.add(comparison.origin());
-            }
-        }
+        compared(cond, out);
         return List.copyOf(out);
+    }
+
+    private static void compared(Core e, List<CoverageOrigin> out) {
+        if (e instanceof Core.Binary comparison && comparison.origin().isWritten()
+                && !out.contains(comparison.origin())) {
+            out.add(comparison.origin());
+        }
+        Core.forEachChild(e, child -> compared(child, out));
     }
 
     /**
