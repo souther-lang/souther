@@ -2,10 +2,18 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ast.Hir;
+import souther.compiler.check.Prepared;
+import souther.compiler.check.Symbols;
+import souther.compiler.core.Core;
+import souther.compiler.coverage.CoverageSites;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.query.Scopes;
+import souther.compiler.query.Shapes;
 
 import java.util.List;
 import java.util.Map;
@@ -175,9 +183,57 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
         Map<String, PartitionEvidence> measured = measured(MODEL, "example.named");
         PartitionEvidence written = measured.get(PAIRS.get(named));
         PartitionEvidence bound = measured.get(named);
+        assertEquals(cutsOf(PAIRS.get(named)), cutsOf(named), named);
         assertEquals(axesOf(written), axesOf(bound), named);
         assertEquals(linesOf(written), linesOf(bound), named);
         assertEquals(reasonsOf(written), reasonsOf(bound), named);
+    }
+
+    /**
+     * What each of a behavior's comparisons cuts, which is the affine reading itself.
+     *
+     * <p>Asked here as well as through the report because everything else is downstream of it. Two
+     * readings that came out as different quantities can be projected onto one line — a coefficient
+     * dropped and the threshold moved to match reads as the same line at the same value — and the
+     * statement this is about is that the two spellings are read as one quantity, not that what
+     * survives the projection matches.
+     *
+     * <p>Read off the reading rather than built here. What a comparison is read in is the walk's
+     * environment, and a test that assembled one would be a second walk with its own account of what
+     * the names on the way meant, which is the defect this is about one layer up.
+     */
+    private static List<String> cutsOf(String behavior) {
+        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        compilation.answerEverything();
+        String module = compilation.modules().get(0);
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
+                .filter(each -> each.name().equals(behavior)).findFirst().orElseThrow();
+        Core body = checked.behaviorBodies().get(spec.name());
+        GuardThresholds.Guards guards = GuardThresholds.of(behavior, body,
+                CoverageSites.of(checked.behaviorBodies()),
+                compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior), symbols);
+        List<String> out = new java.util.ArrayList<>();
+        // The quantity a line is on and where it cuts it, with what names the behavior left out:
+        // an axis and an origin carry the behavior's own name, which is the one thing two spellings
+        // of one rule cannot agree on.
+        guards.thresholds().forEach(each ->
+                out.add(each.term() + " " + each.parts().below() + "|" + each.parts().above()
+                        + " below=" + each.valueBelongsBelow()));
+        guards.between().forEach(each -> out.add(quantityOf(each.cuts().of())
+                + " at " + each.cuts().at() + " " + each.cuts().claim()));
+        return out.stream().sorted().toList();
+    }
+
+    private static String quantityOf(BorderQuantity quantity) {
+        return switch (quantity) {
+            case BorderQuantity.OfACoordinate one -> one.term() + " on " + one.of();
+            case BorderQuantity.OverAForm form -> form.form() + " on " + form.of();
+            case BorderQuantity.Apart apart ->
+                    apart.on() + " vs " + apart.against() + " on " + apart.of();
+        };
     }
 
     private static final String DERIVED = """

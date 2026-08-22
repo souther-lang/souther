@@ -21,14 +21,22 @@ public sealed interface ReadMeaning {
     record Position(TermPath path) implements ReadMeaning {}
 
     /**
-     * The name and {@code value} are one value, which is what the name was given.
+     * The name and {@code value} are one value, which is what the name was given, and {@code at} is
+     * what that value is read in.
      *
      * <p>What is held is the expression rather than anything read off it. Which of the readings of a
      * value this expression carries — an affine form, the positions it mentions — is each reader's
      * own question, and answering one of them here would be this reading keeping an account of a
      * name that only one reader could use.
+     *
+     * <p>The environment comes with it because it is part of the answer. A value stands for the name
+     * in the environment the binding was made in, which is not always the one the name was read in;
+     * left out, each reader supplies one, and two readers that supply different ones are two
+     * accounts of what the name means — which is the shape this whole reading exists to remove.
+     * Today they cannot be told apart, and what makes that one fact rather than two is that it is
+     * settled here.
      */
-    record Through(Core value) implements ReadMeaning {}
+    record Through(Core value, InputReads at) implements ReadMeaning {}
 
     /**
      * An operation of the language handed the name an element of a container, and no position of the

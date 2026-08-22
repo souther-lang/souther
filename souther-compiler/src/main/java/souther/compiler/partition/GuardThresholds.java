@@ -323,7 +323,11 @@ public final class GuardThresholds {
                         out.add(at.path());
                     }
                 }
-                case ReadMeaning.Through through -> mentioned(through.value(), reads, symbols, out);
+                // In the environment the answer came with, which is the one the arithmetic reads
+                // it in too. Taking the one this walk happens to hold would be this reader deciding
+                // for itself where a name's value is read, beside a reader that was told.
+                case ReadMeaning.Through through ->
+                        mentioned(through.value(), through.at(), symbols, out);
                 // An element an operation handed out that stands at no position, and a name this
                 // reading knows nothing about. Neither mentions a position, and they are told apart
                 // where the difference is read rather than here.

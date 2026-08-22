@@ -110,11 +110,8 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
              */
             @Override
             public AffineForms.ReadThrough<InputReads> readThrough(Core.Read read, InputReads at) {
-                // The environment at the read. Bindings are added on the way down and each tells
-                // itself from every other, so a name this one holds is answered by the binding that
-                // made it whichever of the two environments is asked.
                 return at.meaningOf(read, symbols) instanceof ReadMeaning.Through through
-                        ? new AffineForms.ReadThrough<>(through.value(), at) : null;
+                        ? new AffineForms.ReadThrough<>(through.value(), through.at()) : null;
             }
 
             @Override

@@ -124,8 +124,12 @@ public record InputReads(InputDomain read, Map<BindingId, String> roots,
             return new ReadMeaning.Element();
         }
         Core held = bound.get(read.binding());
+        // Read in this environment. Bindings are added on the way down and each tells itself from
+        // every other, so what was bound after this name does not answer for what it holds — which
+        // is why the environment at the binder and the one at the read cannot be told apart yet.
+        // Said once here rather than by each reader, so the day they can be, one place changes.
         return held == null || held == read ? new ReadMeaning.Unknown()
-                : new ReadMeaning.Through(held);
+                : new ReadMeaning.Through(held, this);
     }
 
     /** The position an element handed to {@code binding} stands at, or null where it stands at
