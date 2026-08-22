@@ -512,6 +512,12 @@ class AMeasureWithNoNumberSaysWhyTest {
                 () -> new souther.compiler.query.BoundaryDerivation.Complete(List.of()));
         assertThrows(IllegalStateException.class,
                 () -> new souther.compiler.query.BoundaryDerivation.Partial(List.of()));
+        // And a space this could not walk to the end of, called measured in full. The flag and
+        // the status are one answer, and while the two could disagree a reader that noticed
+        // stopped trusting the status and decided it again — which is a second authority over one
+        // measure.
+        assertThrows(IllegalArgumentException.class, () -> new PartitionEvidence.PairSpace(
+                9, 0, 0, 0, 9, true, MeasurementStatus.COMPLETE, null));
         // And an absence that nothing proved. The proof is the argument, so this is the whole of
         // what "the model divides nothing anywhere" costs to say.
         assertThrows(NullPointerException.class,

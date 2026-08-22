@@ -34,33 +34,41 @@ public sealed interface BlockReason {
     sealed interface AboutARule extends BlockReason {
 
         /**
-         * Which measures of coverage are thereby short of something.
+         * Whether {@code measure} is thereby short of something.
          *
          * <p>Not every rule a reading set aside was one it fell short of, and the ones that were
          * are not all short of the same measure. A comparison in a form no reader takes apart may
-         * have divided the position or bounded it, and nothing knows which — so both. A comparison
-         * relating two positions divides neither of them however well it is read, and the line it
-         * draws where they hold one count is drawn: neither.
+         * have divided the position or bounded it, and nothing knows which — so both.
          *
-         * <p>Per measure and not one answer for all of them, which is the fold this whole
-         * arrangement exists to undo. Every reason here happens to answer alike for the two today,
-         * and a single boolean would say that they must — so the arm added next would be filed
-         * under whichever measure its author had in mind, and read as an answer about the other.
+         * <p>Relating two positions leaves neither, and not because a line is always drawn from
+         * such a rule: an invariant clause that relates two positions raises no question either
+         * measure answers, and a body's comparison that places a relational border has that border
+         * accounted for by the reading that placed it. Either way nothing is missing here, which is
+         * what this answers.
          *
-         * <p>A switch and no {@code default}, so a reason added answers this on the day it is added
-         * rather than falling into whichever arm stands nearest.
+         * <p><b>Two switches and no {@code default} on either.</b> Asked per measure rather than
+         * answered with a set of them: a set is open at the measure end, so a third measure would
+         * be one every reason had silently answered "not short of" — which is the shape this whole
+         * arrangement is against, a new measure inheriting what two others happened to share. This
+         * way a reason added fails the inner switch and a measure added fails the outer, and
+         * whichever axis grows has to be answered for.
          */
-        default java.util.Set<CoverageObligation.Measure> leavesShort() {
-            return switch (this) {
-                case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                     UnreadValueRule _, CompetingCoordinates _ ->
-                        java.util.Set.of(CoverageObligation.Measure.PARTITION,
-                                CoverageObligation.Measure.BOUNDARY);
-                // Neither. The rule is read and settled beside the partition rather than in it, and
-                // the border it places where two moving terms hold one count is drawn from the same
-                // rule — a measure counting either short would hold a verdict open over a model
-                // whose rule this compiler understood and measured.
-                case ComparisonBetweenPositions _ -> java.util.Set.of();
+        default boolean leavesShort(CoverageObligation.Measure measure) {
+            return switch (measure) {
+                case PARTITION -> switch (this) {
+                    case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
+                         UnreadValueRule _, CompetingCoordinates _ -> true;
+                    // The rule was read and it divides neither position, which is what it says and
+                    // not something missing here.
+                    case ComparisonBetweenPositions _ -> false;
+                };
+                case BOUNDARY -> switch (this) {
+                    case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
+                         UnreadValueRule _, CompetingCoordinates _ -> true;
+                    // Whatever line such a rule places is placed by the reading that reaches it, and
+                    // where none is placed none was owed.
+                    case ComparisonBetweenPositions _ -> false;
+                };
             };
         }
     }

@@ -139,16 +139,17 @@ public final class MeasureClosure {
     static Both of(List<Axis> axes, List<GuardThresholds.Guards.AtAPosition> compared,
                    List<Partitions.OmittedAxis> omitted,
                    List<souther.compiler.inputs.UnreadRule> refused) {
-        java.util.Set<CoverageObligation.Measure> short_ = new java.util.LinkedHashSet<>();
-        refused.forEach(each -> short_.addAll(each.why().leavesShort()));
+        boolean refusedThePartition = refused.stream()
+                .anyMatch(each -> each.why().leavesShort(CoverageObligation.Measure.PARTITION));
+        boolean refusedTheBorder = refused.stream()
+                .anyMatch(each -> each.why().leavesShort(CoverageObligation.Measure.BOUNDARY));
         // A dropped axis, asked which measure lost by it. What it was carrying is recorded where it
         // was dropped, because it cannot be read back afterwards: one that was carrying a line took
         // the border's evidence with it, and one that was only classifying took the partition's.
         // Counted as one fact, a model dropping an axis that divides nothing anybody bounds was
         // held open over a measure it never had.
-        boolean partition = !short_.contains(CoverageObligation.Measure.PARTITION)
-                && omitted.isEmpty();
-        boolean border = !short_.contains(CoverageObligation.Measure.BOUNDARY)
+        boolean partition = !refusedThePartition && omitted.isEmpty();
+        boolean border = !refusedTheBorder
                 && omitted.stream().noneMatch(Partitions.OmittedAxis::carriedAnObligation);
         for (Axis axis : axes) {
             // A position whose rules nothing enumerated, and one the walk could not reach into.
