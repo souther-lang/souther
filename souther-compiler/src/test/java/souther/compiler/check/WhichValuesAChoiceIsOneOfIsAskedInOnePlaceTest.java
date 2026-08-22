@@ -66,35 +66,38 @@ class WhichValuesAChoiceIsOneOfIsAskedInOnePlaceTest {
 
         Set<String> unclassified = new LinkedHashSet<>(arms);
         unclassified.removeAll(ANSWER_ONE_OF_SEVERAL);
-        unclassified.removeAll(ANSWERS_ONE_VALUE);
+        unclassified.removeAll(NOT_A_CHOICE_BY_ITS_SHAPE);
         assertEquals(Set.of(), unclassified,
-                "Core has an arm nobody has said answers one of several or answers one value."
+                "Core has an arm nobody has classified."
                         + " Decide which: a choice goes in ANSWER_ONE_OF_SEVERAL and into Choice.of,"
-                        + " and anything else goes in ANSWERS_ONE_VALUE. Defaulting it silently is"
-                        + " how an attempted construction went unread");
+                        + " and anything else goes in NOT_A_CHOICE_BY_ITS_SHAPE. Defaulting it"
+                        + " silently is how an attempted construction went unread");
     }
 
-    /** And a node that answers one value is not a choice, so a reader asks rather than knowing which
-     * nodes to ask about. */
+    /** And a reader asks rather than knowing which nodes to ask about. */
     @Test
     void nothingIsNoChoice() {
         assertNull(Choice.of(null), "nothing is not a value that is one of several");
     }
 
     /**
-     * The arms of {@code Core} that answer one value. Written out beside the choices so that the two
-     * together are every arm there is, which is what makes the check above a tripwire rather than a
-     * list of what someone happened to think of.
+     * The arms of {@code Core} that are not a choice by their shape. Written out beside the choices
+     * so that the two together are every arm there is, which is what makes the check above a
+     * tripwire rather than a list of what someone happened to think of.
      *
-     * <p>{@code PreservedCall} is here as a node and not as every call. What a call answers is one
+     * <p>Named for what it is and not for what its members answer, which is not one thing.
+     * {@code Unreachable} answers no value at all and {@code Block} answers none of its own — being
+     * a closure, read where it is applied — and neither is answering one of several.
+     *
+     * <p>{@code PreservedCall} is here as a shape and not as every call. What a call answers is one
      * value unless the operation is defined in cases — {@code Int.min} answers one of the two it was
      * given — and which operations those are is a table rather than a shape
      * ({@code DischargeRules.CHOOSES}). So a call is not a choice by being a call, and the day that
-     * table is read here it is {@link Choice} that grows a case rather than this list (#974).
-     *
-     * <p>{@code Unreachable} answers no value at all, which is not answering one of several.
+     * table is read the case goes into {@link Choice} while this row stays where it is (#974). A
+     * classification by shape is what this list can hold; which values a particular call answers one
+     * of is {@link Choice}'s, as it is for every other node here.
      */
-    private static final Set<String> ANSWERS_ONE_VALUE = Set.of(
+    private static final Set<String> NOT_A_CHOICE_BY_ITS_SHAPE = Set.of(
             "Int", "Decimal", "Str", "Bool", "Temporal", "Read", "UnitValue", "Neg", "FieldAccess",
             "Binary", "Call", "PreservedCall", "Apply", "LetIn", "Block", "ListLit", "OptionSome",
             "OptionNone", "Tuple", "TupleGet", "Construct", "Unreachable");

@@ -2417,30 +2417,55 @@ public final class InvariantChecker {
     /**
      * What {@code split} asks and what its arms are.
      *
-     * <p>An {@code if} has two arms decided by its condition; a {@code match} has one per case,
-     * decided by which case the scrutinee is — and an arm is entered <em>with</em> that scrutinee,
-     * which is what says the value the arm binds is the one already there ({@link
-     * PathEngine#enteringArm}) rather than a value of its own.
+     * <p>Which values it answers one of, and what it asks to decide between them, are
+     * {@link Choice}'s — this adds only what choosing each arm settles, which is the part needing an
+     * environment. Read off the choice rather than off the node a second time: a reader taking the
+     * arms out of the tree itself is a second answer to a question that has an owner, which is what
+     * put an attempted construction outside every reading of it.
      *
      * <p>What a split asks is read where it stands, and read whatever it is: a construction written
      * in a condition or in a scrutinee is a construction like any other.
      */
     private Split splitOf(Core split) {
-        return switch (split) {
-            case Core.If iff -> new Split(iff.cond(), List.of(
-                    new Arm(iff.then(), (within, there) -> new Entered(
-                            predicates.assumeCond(iff.cond(), within, there, true).known(), there)),
-                    new Arm(iff.els(), (within, there) -> new Entered(
-                            predicates.assumeCond(iff.cond(), within, there, false).known(), there))));
-            case Core.Match m -> new Split(m.scrutinee(), m.cases().stream()
-                    .map(arm -> new Arm(arm.body(),
-                            (within, there) -> engine.enteringArm(arm, m.scrutinee(), within, there)))
-                    .toList());
-            default -> throw new IllegalStateException(
-                    "a site was opened at " + split.getClass().getSimpleName()
-                            + ", which is not a case split — {@link #isASplit} and this answer for the"
-                            + " same forms and one of them was given a form the other has not");
+        Choice choice = Choice.of(split);
+        if (choice == null) {
+            throw new IllegalStateException("a site was opened at "
+                    + split.getClass().getSimpleName() + ", which answers one value —"
+                    + " isASplit and Choice.of were given a form one of them has not");
+        }
+        return new Split(choice.asked(), choice.arms().stream()
+                .map(arm -> new Arm(arm.answers(), choosing(arm.decidedBy())))
+                .toList());
+    }
+
+    /**
+     * What choosing the arm {@code decides} chose settles, as somewhere to enter.
+     *
+     * <p>The one reader here that has to grow when a kind of choice does, and the reason
+     * {@link Choice.Decides} is a sum: a kind added without an arm here does not compile. Answering
+     * by {@link Choice.Kind} instead let a kind be declared a split and reach no reader that opens
+     * one — a decision recorded and then not carried out, which is a tripwire that reads as holding.
+     *
+     * <p>An attempt is not entered here. It is a choice this walk does not open as a split
+     * ({@link #isASplit}) — it binds what it built, and the walk reads it where it stands with that
+     * binding entered — so reaching this with one is the two disagreeing rather than a case to
+     * handle.
+     */
+    private Choosing choosing(Choice.Decides decides) {
+        return switch (decides) {
+            case Choice.Decides.ACondition c -> (within, there) -> new Entered(
+                    predicates.assumeCond(c.cond(), within, there, c.holding()).known(), there);
+            case Choice.Decides.ACase c -> (within, there) ->
+                    engine.enteringArm(c.arm(), c.scrutinee(), within, there);
+            case Choice.Decides.ItWasBuilt b -> throw notOpened(b.attempt());
+            case Choice.Decides.ItDeparted d -> throw notOpened(d.attempt());
         };
+    }
+
+    private static IllegalStateException notOpened(Core.IfConstructed attempt) {
+        return new IllegalStateException("an attempted construction at " + attempt.pos()
+                + " was opened as a case split, which this walk does not do — it is read where it"
+                + " stands with what it built bound");
     }
 
     /**
@@ -2455,7 +2480,12 @@ public final class InvariantChecker {
      * the value is bounded by its arms instead ({@link Derivation.Chosen}).
      *
      * <p>Written as a switch over {@link Choice.Kind} with no default, so a kind of choice added
-     * later is one this stops at until someone says which of the two it is.
+     * later is one this stops at until someone says which of the two it is. That is not by itself
+     * enough and was once all there was: a kind can be answered {@code true} here and still reach no
+     * reader that opens one. What carries the decision out is that this is the one gate — {@link
+     * #splitIn} finds a site by asking it, and {@link #splitOf} reads the arms off the same
+     * {@link Choice} — and that {@link #choosing} switches over {@link Choice.Decides}, which is
+     * sealed, so a kind declared a split with nothing to enter it by does not compile.
      */
     private static boolean isASplit(Core e) {
         Choice choice = Choice.of(e);
@@ -2534,9 +2564,6 @@ public final class InvariantChecker {
      * it took. Those bindings are what the split is read in the scope of; a binding is not in
      * scope for the value it is itself given, so a split found there is inside nothing. */
     private static SplitSite splitIn(Core e) {
-        if (e instanceof Core.If iff) {
-            return SplitSite.at(iff);
-        }
         if (e instanceof Core.Block) {
             return null;   // read where the closure is applied
         }
@@ -2555,7 +2582,9 @@ public final class InvariantChecker {
             // its arms, and its arms are read as arms rather than searched for a split to lift out
             // of one — which is what leaves an arm's binding standing for the value it opened.
             SplitSite asked = splitIn(m.scrutinee());
-            return asked != null ? asked : SplitSite.at(m);
+            if (asked != null) {
+                return asked;
+            }
         }
         if (e instanceof Core.IfConstructed ic) {
             SplitSite tried = splitIn(ic.construct());
@@ -2575,6 +2604,13 @@ public final class InvariantChecker {
                 }
             }
             return null;
+        }
+        // Asked after the descents above and not instead of them: where a split stands inside what
+        // this node computes on the way to its own value, that one is the one to open. Which nodes
+        // reach here at all is the one question about it ({@link #isASplit}), so a kind of choice is
+        // opened by this walk or is not, and never by one reader and not another.
+        if (isASplit(e)) {
+            return SplitSite.at(e);
         }
         SplitSite[] found = {null};
         Core.forEachChild(e, child -> {
