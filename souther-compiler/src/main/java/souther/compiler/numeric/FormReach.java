@@ -71,6 +71,45 @@ final class FormReach<A> {
         return new FormReach<>(rules, ends, differences);
     }
 
+    /** The ends this was handed, for a reader that needs them as well and must not derive a second
+     *  set of its own. */
+    Box<A> ends() {
+        return ends;
+    }
+
+    /** The rules this reads. Handed back so that a reader reducing them reduces the very rules this
+     *  answers from: two lists would be two chances for the set being narrowed and the set being
+     *  read to come apart. */
+    List<AffineConstraint<A>> rules() {
+        return rules;
+    }
+
+    /** What {@code Σ coefs·position + constant} runs between. */
+    Reach of(Map<A, Rational> coefs, Rational constant) {
+        return between(coefs, constant, null);
+    }
+
+    /**
+     * The same for the rest of {@code asking}'s own form, read while {@code asking} is being reduced
+     * — with {@code asking} itself left out of the rules.
+     *
+     * <p>Not a soundness measure. Every route here derives a consequence of the rules, and a
+     * consequence is a sound premise however it was reached, so a rule bounding the rest of itself
+     * cannot make what comes back admit less than the rules do. It is left out because it was
+     * measured to buy nothing, and a derivation that buys nothing and raises the question of whether
+     * a conclusion propped up its own premise is better not written.
+     *
+     * <p>What is left out is the rule, and not what the closure made of it. A rule of difference
+     * shape has been read into the closed differences before this is asked anything, and those are
+     * the state rather than any one rule's — so such a rule reaches its own rest by that route
+     * whatever is done here, as it did before this existed. Excluding it there would mean closing
+     * the differences afresh for every rule, which is a cost for a distinction nothing has asked
+     * for.
+     */
+    Reach ofTheRestOf(AffineConstraint<A> asking, Map<A, Rational> coefs, Rational constant) {
+        return between(coefs, constant, asking);
+    }
+
     /**
      * What the ends and the closed differences leave the form, with the rules beside them left out.
      *
@@ -83,10 +122,28 @@ final class FormReach<A> {
 
     /** The highest the form is proven to come to, or null where nothing bounds it above. */
     RationalCut most(Map<A, Rational> coefs, Rational constant) {
-        return highest(coefs, constant);
+        return highest(coefs, constant, null);
     }
 
-    private RationalCut highest(Map<A, Rational> coefs, Rational constant) {
+    private Reach between(Map<A, Rational> coefs, Rational constant, AffineConstraint<A> without) {
+        RationalCut most = highest(coefs, constant, without);
+        // The least a form comes to is the highest its negation comes to, on the other side of
+        // nought. Asked that way rather than derived a second time, so the two ends are one reading
+        // and cannot come apart.
+        RationalCut flipped = highest(negated(coefs), constant.negated(), without);
+        RationalCut least = flipped == null ? null
+                : new RationalCut(flipped.at().negated(), flipped.inclusive());
+        return new Reach(least, most);
+    }
+
+    private static <A> Map<A, Rational> negated(Map<A, Rational> coefs) {
+        Map<A, Rational> out = new LinkedHashMap<>();
+        coefs.forEach((position, weight) -> out.put(position, weight.negated()));
+        return out;
+    }
+
+    private RationalCut highest(Map<A, Rational> coefs, Rational constant,
+                                AffineConstraint<A> without) {
         RationalCut best = fromTheEnds(coefs, constant);
         if (coefs.size() <= 1) {
             // A form naming one position is answered by the ends and by nothing else, because the
@@ -99,6 +156,9 @@ final class FormReach<A> {
             return best;
         }
         for (AffineConstraint<A> rule : rules) {
+            if (rule.equals(without)) {
+                continue;
+            }
             for (AffineConstraint.HalfSpace<A> premise : rule.halfSpaces()) {
                 RationalCut residual = fromTheEnds(withoutThe(premise, coefs),
                         constant.plus(premise.bound().at()));

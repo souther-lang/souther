@@ -26,6 +26,10 @@ import java.util.function.Function;
  * finds goes back through the differences, and round again. A round reads only what the round before
  * it produced, so no rule's answer depends on which rule ran first.
  *
+ * <p>What "against what the closure leaves" means is {@link FormReach}: the ends, the relations
+ * between them, and one other rule. So a chain of rules composes here, through the ends a round
+ * hands the next one, and not inside any one reading.
+ *
  * <p><b>The rounds are not run to a fixed point, and do not claim to be.</b> Narrowing over a general
  * sum need not settle in finitely many rounds: two rules each halving the other's bound descend
  * forever without arriving. So the rounds are bounded, and where the bound is reached the state says
@@ -104,8 +108,12 @@ public final class ClosedState<A> {
             return empty(differences);
         }
         for (int round = 0; round < ROUNDS; round++) {
-            AffineReduction.Reduction<A> found =
-                    AffineReduction.over(constraints, box, spacing);
+            // The reading is made afresh from the box this round starts in, and every rule is read
+            // against that one. A reading that carried the box along as the rules narrowed it would
+            // answer a rule differently depending on which rules had been read before it, which is
+            // the order deciding the result — the thing the rounds exist to be rid of.
+            AffineReduction.Reduction<A> found = AffineReduction.over(
+                    FormReach.over(constraints, box, differences), spacing);
             if (found instanceof AffineReduction.Reduction.NothingIsLeft) {
                 return empty(differences);
             }
