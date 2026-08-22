@@ -142,12 +142,14 @@ public final class GuardThresholds {
      */
     public static Guards of(String behavior, Core body, CoverageSites.Plan plan,
                             InputDomain inputs, Symbols symbols) {
-        return of(behavior, body, plan, inputs, inputs.quantities(symbols), symbols);
+        return of(behavior, body, plan, inputs, inputs.quantities(symbols), symbols,
+                souther.compiler.check.ElementBindings.NONE);
     }
 
     public static Guards of(String behavior, Core body, CoverageSites.Plan plan,
                             InputDomain inputs, souther.compiler.inputs.Quantities quantities,
-                            Symbols symbols) {
+                            Symbols symbols,
+                            souther.compiler.check.ElementBindings elements) {
         List<Threshold> found = new ArrayList<>();
         List<UnreadRule> unread = new ArrayList<>();
         List<Guards.AtAPosition> accounting = new ArrayList<>();
@@ -164,7 +166,7 @@ public final class GuardThresholds {
         // comparison is written, what its names point at, what a row had satisfied to get there and
         // whether a line is drawn on it are four questions about one position, and a walk apiece was
         // a walk apiece to disagree about what a `let` does.
-        ComparisonReadings read = ComparisonReadings.of(body, plan, InputReads.of(inputs), symbols);
+        ComparisonReadings read = ComparisonReadings.of(body, plan, InputReads.of(inputs, elements), symbols);
         for (ComparisonReadings.Reading each : read.drawn()) {
             lineAt(behavior, each.comparison(), plan, each.reads(), symbols, quantities, found,
                     singled, between, accounting, made);
@@ -228,6 +230,14 @@ public final class GuardThresholds {
             // record nothing is numbered nowhere, and a model states its rules regardless.
             RuleRef.Comparison rule = new RuleRef.Comparison(behavior, binary.origin());
             souther.compiler.check.RuleCitation cited = citationOf(binary, plan.comparisons());
+            // A comparison naming no position of the input, whose terms came from one. An operation
+            // made the value it compares out of what stands there, so the rule is about that
+            // position's values and this cannot say what it says about them — which is not the same
+            // as a body that wrote no rule, and used to read as one.
+            if (named.isEmpty()) {
+                cameFrom(binary, reads, symbols, named);
+                why = new BlockReason.RuleAboutADerivedValue();
+            }
             for (TermPath each : named) {
                 // One per position the comparison names, and told from its neighbours by the rule as
                 // well as the place. Kept by position alone, the second comparison of one condition
@@ -237,6 +247,23 @@ public final class GuardThresholds {
                 if (out.stream().noneMatch(had -> had.sameAs(said))) {
                     out.add(said);
                 }
+            }
+        }
+    }
+
+    /**
+     * The positions the values a comparison is over came from, for a comparison that names none.
+     *
+     * <p>Beside {@link #mentioned} and asking the other question. That one says which positions the
+     * terms <em>are</em>; this says where they came from, which is only ever asked once the first
+     * has come back with nothing.
+     */
+    private static void cameFrom(Core.Binary comparison, InputReads reads, Symbols symbols,
+                                 List<TermPath> out) {
+        for (Core side : List.of(comparison.left(), comparison.right())) {
+            TermPath at = reads.cameFrom(side, symbols);
+            if (at != null && !out.contains(at)) {
+                out.add(at);
             }
         }
     }

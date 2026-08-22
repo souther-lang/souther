@@ -84,6 +84,21 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
         return filled.rows().get(0).inputs().get(0).text();
     }
 
+    /**
+     * The rows the generator writes, where the collection's elements divide and each class is owed
+     * one.
+     *
+     * <p>Several rather than one, and that is the point. What a collection holds is a position, so a
+     * carrier that divides divides it — and a row is owed for each class of it, each a collection
+     * holding an element there.
+     */
+    private static List<String> generatedRows(String source) {
+        Generator.GenerationResult filled = generated(source);
+        assertEquals(List.of(), filled.unresolved(),
+                "the combination is one a value exists for, so nothing is left unresolved");
+        return filled.rows().stream().map(row -> row.inputs().get(0).text()).toList();
+    }
+
     // --- a collection the rules say is not empty ---------------------------------------------------
 
     @Test
@@ -172,12 +187,18 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
      */
     @Test
     void aSetOfACarrierWithTwoValuesIsBuiltFromBoth() {
-        String row = generatedRow(model("""
+        List<String> rows = generatedRows(model("""
                 data Flags = Set<Bool>
                     invariant both = Set.size(value) >= 2
                 """, "flags: Flags", "flags = Flags([true, false])"));
 
-        assertEquals("T { kind = Overseas, flags = Flags([true, false]) }", row);
+        // One per class of what the set holds, each a set of two with that value in it. Both hold
+        // the same two values, a `Bool` having no others and the rule asking for two — so the
+        // second is a row the first already covers, which is a row offered twice and not a row
+        // offered for nothing.
+        assertEquals(List.of("T { kind = Overseas, flags = Flags([true, false]) }",
+                        "T { kind = Overseas, flags = Flags([false, true]) }"),
+                rows);
     }
 
     /**
@@ -189,7 +210,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
      */
     @Test
     void aSetOfASumIsBuiltFromItsCases() {
-        String row = generatedRow(model("""
+        List<String> rows = generatedRows(model("""
                 data Red
                 data Green
                 data Blue
@@ -199,7 +220,11 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
                     invariant enough = Set.size(value) >= 2
                 """, "palette: Palette", "palette = Palette([Red, Blue])"));
 
-        assertEquals("T { kind = Overseas, palette = Palette([Red, Green]) }", row);
+        assertEquals(List.of("Palette([Red, Green])", "Palette([Green, Red])",
+                        "Palette([Green, Red])", "Palette([Blue, Red])"),
+                rows.stream().map(each -> each.replaceAll(".*palette = ", "").replace(" }", ""))
+                        .toList(),
+                "one per case of what the set holds, each a set of two holding it");
     }
 
     // --- a string the rules give a length ----------------------------------------------------------

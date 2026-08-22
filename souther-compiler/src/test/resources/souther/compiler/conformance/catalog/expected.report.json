@@ -2,7 +2,7 @@
   "schemaVersion" : 4,
   "compilerVersion" : "<version>",
   "status" : "complete",
-  "adequacy" : "satisfied",
+  "adequacy" : "not_satisfied",
   "modules" : [ {
     "module" : "conformance.catalog",
     "status" : "complete",
@@ -235,6 +235,32 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
+          "axis" : "台帳へ書く/String.length(指示.品目[*])",
+          "origin" : "invariant Sku #1",
+          "kind" : "at_value",
+          "value" : "1",
+          "items" : [ {
+            "point" : "on",
+            "relation" : "=",
+            "against" : "1",
+            "hit" : false,
+            "knownWritable" : true,
+            "status" : "complete"
+          }, {
+            "point" : "off",
+            "notOwed" : "the_rules_refuse_it"
+          }, {
+            "point" : "in",
+            "relation" : "in",
+            "against" : "1 < String.length(指示.品目[*])",
+            "hit" : true,
+            "knownWritable" : true,
+            "status" : "complete"
+          }, {
+            "point" : "out",
+            "notOwed" : "the_rules_refuse_it"
+          } ]
+        }, {
           "axis" : "台帳へ書く/指示.重量",
           "origin" : "invariant Weight #1",
           "kind" : "at_value",
@@ -273,7 +299,7 @@
         "notDerivable" : [ "指示.受付日", "指示.締切", "指示.集荷時刻", "指示.記録時刻" ],
         "notRead" : [ {
           "position" : "指示.品目",
-          "reason" : "unsupported_traversal"
+          "reason" : "rules_not_read_at_all"
         } ],
         "omitted" : [ ]
       },
@@ -285,6 +311,11 @@
         "unreached" : [ ]
       },
       "findings" : [ {
+        "kind" : "boundary_unmet",
+        "disposition" : "refused",
+        "subject" : "台帳へ書く/String.length(指示.品目[*]) = 1",
+        "code" : "E1916"
+      }, {
         "kind" : "partition_not_derivable",
         "disposition" : "reported",
         "subject" : "指示.受付日"
@@ -304,7 +335,7 @@
         "kind" : "partition_not_read",
         "disposition" : "reported",
         "subject" : "指示.品目",
-        "reason" : "unsupported_traversal"
+        "reason" : "rules_not_read_at_all"
       } ]
     }, {
       "name" : "出荷する",
@@ -382,6 +413,32 @@
             "point" : "in",
             "relation" : "in",
             "against" : "1 < String.length(指示.番号)",
+            "hit" : true,
+            "knownWritable" : true,
+            "status" : "complete"
+          }, {
+            "point" : "out",
+            "notOwed" : "the_rules_refuse_it"
+          } ]
+        }, {
+          "axis" : "出荷する/String.length(指示.品目[*])",
+          "origin" : "invariant Sku #1",
+          "kind" : "at_value",
+          "value" : "1",
+          "items" : [ {
+            "point" : "on",
+            "relation" : "=",
+            "against" : "1",
+            "hit" : false,
+            "knownWritable" : true,
+            "status" : "complete"
+          }, {
+            "point" : "off",
+            "notOwed" : "the_rules_refuse_it"
+          }, {
+            "point" : "in",
+            "relation" : "in",
+            "against" : "1 < String.length(指示.品目[*])",
             "hit" : true,
             "knownWritable" : true,
             "status" : "complete"
@@ -495,7 +552,7 @@
           }
         }, {
           "position" : "指示.品目",
-          "reason" : "unsupported_traversal"
+          "reason" : "rules_not_read_at_all"
         } ],
         "omitted" : [ ]
       },
@@ -506,6 +563,11 @@
         "unreached" : [ ]
       },
       "findings" : [ {
+        "kind" : "boundary_unmet",
+        "disposition" : "refused",
+        "subject" : "出荷する/String.length(指示.品目[*]) = 1",
+        "code" : "E1916"
+      }, {
         "kind" : "domain_point_uncovered",
         "disposition" : "reported",
         "subject" : "出荷する/指示.重量 in 30001 < 指示.重量",
@@ -554,7 +616,7 @@
         "kind" : "partition_not_read",
         "disposition" : "reported",
         "subject" : "指示.品目",
-        "reason" : "unsupported_traversal"
+        "reason" : "rules_not_read_at_all"
       } ]
     } ]
   } ],

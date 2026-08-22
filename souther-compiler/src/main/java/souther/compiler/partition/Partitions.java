@@ -1029,6 +1029,12 @@ public final class Partitions {
         return DeclaredBounds.leastCountOf(type, symbols, held);
     }
 
+    /** How many the rules on a value of {@code type} allow it to hold, where the record the position
+     *  sits in has a rule about it too: {@link DeclaredBounds#mostCountOf}. */
+    static int mostHeld(Type type, Symbols symbols, FieldDomains.Held held) {
+        return DeclaredBounds.mostCountOf(type, symbols, held);
+    }
+
     /**
      * Why a position offered less than its rules allow, or null where it offered everything.
      *

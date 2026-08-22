@@ -3,7 +3,6 @@ package souther.compiler.check;
 import souther.compiler.check.DischargeRules.Built;
 import souther.compiler.check.DischargeRules.Cardinality;
 import souther.compiler.check.DischargeRules.Carried;
-import souther.compiler.check.DischargeRules.Reads;
 import souther.compiler.check.DischargeRules.Shape;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -36,24 +35,25 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
         return new ValueName.Stdlib(qualified.substring(0, dot), qualified.substring(dot + 1));
     }
 
-    private static void bindCarried(String operation, Reads container) {
+    private static void bindCarried(String operation, ArgumentRef container) {
         DischargeRules.bind(
                 Map.of(op(operation), new Carried(container, Set.of(Shape.PERMUTES))),
-                Carried::container, new Reads.TheContainer(), Question::holdsElements,
+                Carried::container, new ArgumentRef.TheContainer(), Question::holdsElements,
                 "the container a predicate reads");
     }
 
-    private static void bindBuilt(String operation, Reads from) {
+    private static void bindBuilt(String operation, ArgumentRef from) {
         DischargeRules.bind(
-                Map.of(op(operation), new Built(from, Shape.SUBSET, Cardinality.AT_MOST)),
-                Built::from, new Reads.TheContainer(), Question::holdsElements,
+                Map.of(op(operation), new Built(new ElementLineage.SameAs(
+                        new ElementLineage.Source(from, 1)), Cardinality.AT_MOST)),
+                Built::from, new ArgumentRef.TheContainer(), Question::holdsElements,
                 "the container something is built from");
     }
 
     @Test
     void anArgumentTheDeclarationDoesNotHave() {
         IllegalStateException e = assertThrows(IllegalStateException.class,
-                () -> bindCarried("String.contains", new Reads.At(7)));
+                () -> bindCarried("String.contains", new ArgumentRef.At(7)));
         assertTrue(e.getMessage().contains("String.contains takes 2 argument(s)"), e.getMessage());
     }
 
@@ -62,7 +62,7 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
         // `String.contains(needle, haystack)` reads a string, and a shape says what became of a
         // container's elements — of a string this names only its length.
         IllegalStateException e = assertThrows(IllegalStateException.class,
-                () -> bindCarried("String.contains", new Reads.At(1)));
+                () -> bindCarried("String.contains", new ArgumentRef.At(1)));
         assertTrue(e.getMessage().contains("is not the container a predicate reads"), e.getMessage());
     }
 
@@ -70,14 +70,14 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
     void aPartOfSomethingTheSignatureSaysItDoesNotHand() {
         // `List.contains(value, xs)` applies no closure, so there is no container it hands one.
         IllegalStateException e = assertThrows(IllegalStateException.class,
-                () -> bindCarried("List.contains", new Reads.TheContainer()));
+                () -> bindCarried("List.contains", new ArgumentRef.TheContainer()));
         assertTrue(e.getMessage().contains("hands one nothing a container holds"), e.getMessage());
     }
 
     @Test
     void anOperationTheLibraryDoesNotDeclare() {
         IllegalStateException e = assertThrows(IllegalStateException.class,
-                () -> bindCarried("List.containsTwice", new Reads.At(1)));
+                () -> bindCarried("List.containsTwice", new ArgumentRef.At(1)));
         assertTrue(e.getMessage().contains("which the library does not declare"), e.getMessage());
     }
 
@@ -89,7 +89,7 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
     @Test
     void aPositionTheSignatureAlreadyAnswers() {
         IllegalStateException e = assertThrows(IllegalStateException.class,
-                () -> bindBuilt("List.filter", new Reads.At(1)));
+                () -> bindBuilt("List.filter", new ArgumentRef.At(1)));
         assertTrue(e.getMessage().contains("writes the argument its signature already answers"),
                 e.getMessage());
     }
@@ -108,8 +108,8 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
     @Test
     void aRuleThatAgreesWithTheDeclaration() {
         assertDoesNotThrow(() -> DischargeRules.bind(
-                Map.of(op("List.reverse"), new Reads.At(0)),
-                Function.identity(), new Reads.TheContainer(),
+                Map.of(op("List.reverse"), new ArgumentRef.At(0)),
+                Function.identity(), new ArgumentRef.TheContainer(),
                 (Type t) -> Question.holdsElements(t), "the container something is built from"));
     }
 }

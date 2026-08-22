@@ -295,6 +295,32 @@ final class Witnesses {
     }
 
     /**
+     * A collection of {@code carrier} holding {@code chosen} and counting at least {@code least}, or
+     * null where none was built.
+     *
+     * <p>For a row being built around one element. What the rest are is not what was asked for, and
+     * what they may be is: a list may hold the same value again and a set may not, and a caller
+     * padding one by hand would have to know which — the thing this reader is for.
+     */
+    static FixtureTemplate holdingAlso(souther.compiler.check.Shape.Sequence carrier,
+                                       FixtureTemplate chosen, int least,
+                                       Symbols symbols, ReadingPolicy policy) {
+        int want = Math.max(1, least);
+        if (carrier.kind() == souther.compiler.check.Shape.Sequence.Kind.LIST) {
+            List<FixtureTemplate> elements = new ArrayList<>();
+            while (elements.size() < want) {
+                elements.add(chosen);
+            }
+            return FixtureTemplate.collection(elements);
+        }
+        List<FixtureTemplate> elements =
+                distinctFrom(chosen, carrier.element(), want, policy, symbols, Set.of());
+        // Fewer than asked for is a type with too few values, which is a set the rules want and
+        // nothing can build — said as nothing built rather than as a set of the wrong size.
+        return elements.size() < want ? null : FixtureTemplate.collection(elements);
+    }
+
+    /**
      * {@code seed} and up to {@code least} values in all, no two of them equal.
      *
      * <p>Fewer than asked where the type runs out, which is not the same as failing: a set of three

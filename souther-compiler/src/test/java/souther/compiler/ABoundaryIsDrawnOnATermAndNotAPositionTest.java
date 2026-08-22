@@ -142,11 +142,23 @@ class ABoundaryIsDrawnOnATermAndNotAPositionTest {
         return byLabel.get(label).owedAt(souther.compiler.partition.PointRole.ON);
     }
 
-    /** The report stops saying the model draws no line through a position its own type bounds. */
+    /**
+     * The report stops saying the model draws no line through a position its own type bounds.
+     *
+     * <p>Of the positions this is about, which are the ones a clause bounds. What the collections
+     * hold is a position too and no clause of this model says anything about it, so the model
+     * really does divide those no way — that sentence is the true one there, and it is what the
+     * lines below are held to being.
+     */
     @Test
     void noneOfThemIsReportedAsAPositionNothingDivides() {
         String human = AdequacyReport.of(compiled(MODEL)).human(SourceNameResolver.identity());
-        assertFalse(human.contains("not derivable"), human);
+        List<String> said = human.lines().map(String::strip)
+                .filter(line -> line.startsWith("· not derivable:")).toList();
+
+        assertEquals(List.of(), said.stream()
+                        .filter(line -> !line.contains("[*]")).toList(),
+                () -> "every position a clause bounds is one the report says is divided: " + human);
     }
 
     private static final String GUARDED = """

@@ -15,6 +15,8 @@ import souther.compiler.types.TypeSymbol;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -102,20 +104,28 @@ class ALeafIsNotAnAbsenceTest {
     // --- and what stops the derivation -------------------------------------------------------------
 
     /**
-     * Issue #626, as this protocol states it: the shape is understood and the reaching is not made.
+     * A sequence holds a position, and is one.
      *
-     * <p>A fallback and not a verdict. The same position takes a line from
-     * {@code guard List.length(items) < 3}, and where one is drawn this reason is never reported —
-     * what a block refuses is a rule about what is inside standing in for reaching inside.
+     * <p>Neither of the two answers the other shapes get. A record is given up in favour of its
+     * fields, because it states nothing of its own; a sequence carries a length that
+     * {@code guard List.length(items) < 3} draws a line on, so it stays a position to be answered
+     * for and what it holds is read beside it.
      */
     @Test
-    void aSequenceIsBlockedOnReachingItsElements() {
-        assertEquals(new StructuralInspection.Blocked(new BlockReason.UnsupportedTraversal(
-                        BlockReason.Traversal.SEQUENCE_ELEMENT)),
-                under(Type.list(named("Slot"))));
-        assertEquals(new StructuralInspection.Blocked(new BlockReason.UnsupportedTraversal(
-                        BlockReason.Traversal.SEQUENCE_ELEMENT)),
-                under(Type.set(named("Slot"))));
+    void aSequenceHoldsAPositionAndIsStillOne() {
+        for (Type carrier : List.of(Type.list(named("Slot")), Type.set(named("Slot")))) {
+            assertEquals(new StructuralInspection.Inside(named("Slot")), under(carrier));
+            assertInstanceOf(StructuralInspection.Pending.class, under(carrier),
+                    () -> "and is still to be answered for: " + carrier);
+        }
+    }
+
+    /** And the walk stopping is the walk's own answer, said as the depth it is. */
+    @Test
+    void aSequenceTheWalkMayNotEnterIsStoppedByTheDepthAndNotByItsShape() {
+        StructuralInspection stopped = StructuralInspection.of(
+                ReadablePosition.of(Type.list(named("Slot")), symbols).shape(), false);
+        assertEquals(new StructuralInspection.Blocked(new BlockReason.DepthLimit()), stopped);
     }
 
     /** Each of the three is its own reaching, so implementing one does not read as all three. */

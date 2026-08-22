@@ -46,7 +46,7 @@ public sealed interface StructuralInspection {
      * condition anybody could get the wrong way round — and getting it wrong the quiet way turns a
      * position nothing has read into one nothing divides.
      */
-    sealed interface Pending extends StructuralInspection permits Leaf, Blocked {}
+    sealed interface Pending extends StructuralInspection permits Leaf, Blocked, Inside {}
 
     /**
      * The position is not made of positions.
@@ -57,6 +57,26 @@ public sealed interface StructuralInspection {
      * removes.
      */
     record Leaf() implements Pending {}
+
+    /**
+     * The position holds values of {@code element}, each of which is read the same way, at the one
+     * position they share.
+     *
+     * <p><b>Pending, unlike {@link Children}.</b> A position made of fields is given up in favour of
+     * them, because a record states nothing of its own and carries no end. A sequence is not that: a
+     * {@code guard List.length(items) < 3} draws a line on the list itself, and the elements are read
+     * beside it rather than instead of it. So this is a position still to be answered for, and the
+     * walk goes on down as well — the two are not alternatives, which is the case the other two arms
+     * had no room for.
+     *
+     * <p>One position for however many the list holds, and the coordinate says no more than that
+     * ({@link TermPath.Step.Element}). What is written about the elements is written once, so what is
+     * read of them is read once; how many of them a row has to put in a class is settled where the
+     * class is and not here.
+     *
+     * @param element what the sequence holds, as the signature wrote it
+     */
+    record Inside(Type element) implements Pending {}
 
     /**
      * The position is made of these, each of which is read the same way — in the order the
@@ -115,11 +135,14 @@ public sealed interface StructuralInspection {
             case Shape.Product product -> deeper
                     ? new Children(StructuralDescent.of(product))
                     : new Blocked(new BlockReason.DepthLimit());
-            // Holds its values inside something. Which reaching is missing is kept apart, because
-            // what would lift each is different work.
-            case Shape.Sequence _ ->
-                    new Blocked(new BlockReason.UnsupportedTraversal(
-                            BlockReason.Traversal.SEQUENCE_ELEMENT));
+            // What a sequence holds is one position, reached whether or not this reading stops
+            // here — and the sequence goes on standing either way, since its own length is a number
+            // rules are written about.
+            case Shape.Sequence sequence -> deeper
+                    ? new Inside(sequence.element())
+                    : new Blocked(new BlockReason.DepthLimit());
+            // Still held inside something nothing here reaches into. Which reaching is missing is
+            // kept apart, because what would lift each is different work.
             case Shape.Optional _ ->
                     new Blocked(new BlockReason.UnsupportedTraversal(
                             BlockReason.Traversal.OPTIONAL_VALUE));

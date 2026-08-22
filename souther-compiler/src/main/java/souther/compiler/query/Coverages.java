@@ -59,7 +59,9 @@ final class Coverages {
      */
     static Partitions.Partitioning partitioningOf(Hir.SpecBehavior behavior, InputDomain inputs,
                                                   Sig sig, Symbols symbols, ReadingPolicy policy,
-                                                  Core body, CoverageSites.Plan plan,
+                                                  Core body,
+                                                  souther.compiler.check.ElementBindings elements,
+                                                  CoverageSites.Plan plan,
                                                   PathReachability.Answers arrives,
                                                   souther.compiler.check.StatedContract stated) {
         List<String> parameters = behavior.params().stream().map(Hir.Param::name).toList();
@@ -80,7 +82,7 @@ final class Coverages {
                 EnsuresThresholds.of(stated, inputs, quantities, symbols);
         GuardThresholds.Guards guards = body == null ? GuardThresholds.Guards.NONE
                 : GuardThresholds.of(behavior.name(), body, plan, inputs, quantities,
-                        symbols);
+                        symbols, elements);
         // Both producers of one kind of line, put together before the position is divided. Two
         // rules at one value are one cut and stay separate obligations, which is what the merge
         // below does — applied one producer at a time, a clause and a guard naming one number would
@@ -120,6 +122,7 @@ final class Coverages {
      */
     static PartitionEvidence of(Hir.SpecBehavior behavior, InputDomain inputs, Sig sig,
                                 Symbols symbols, ReadingPolicy policy, Core body,
+                                souther.compiler.check.ElementBindings elements,
                                 CoverageSites.Plan plan, souther.compiler.query.Adequacy.Observed observed,
                                 List<BorderAssessment> boundaries,
                                 PathReachability.Answers arrives,
@@ -131,7 +134,8 @@ final class Coverages {
         // alone reaches nothing where the derivation reaches a field.
         BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols, policy);
         Partitions.Partitioning partitioning =
-                partitioningOf(behavior, inputs, sig, symbols, policy, body, plan, arrives, stated);
+                partitioningOf(behavior, inputs, sig, symbols, policy, body, elements, plan,
+                        arrives, stated);
 
         List<PartitionEvidence.AxisCoverage> axes = new ArrayList<>();
 
@@ -203,8 +207,13 @@ final class Coverages {
         Map<Object, Incompleteness> byKind = new LinkedHashMap<>();
         for (Map<AxisId, Classification> where : byRow) {
             for (AxisId axis : order) {
-                if (where.get(axis) instanceof Classification.Unclassified could) {
-                    byKind.putIfAbsent(could.reason().identity(), could.reason());
+                // Asked of every reading and not of the ones that placed nothing. A row that put
+                // one value in a class and could not read the value beside it is counted among the
+                // rows that could not say, so the reason it could not say is owed here too — left
+                // to the arm, the count went up and the report said nothing about why.
+                Classification said = where.get(axis);
+                if (said != null && said.stopped() != null) {
+                    byKind.putIfAbsent(said.stopped().identity(), said.stopped());
                 }
             }
         }
@@ -237,14 +246,29 @@ final class Coverages {
             return byRow.isEmpty();
         }
 
-        /** Which class a row fell in at one position, or null where it did not say. */
-        static String classIn(Map<AxisId, Classification> where, Axis axis) {
-            return where.get(axis.id()) instanceof Classification.Classified in ? in.classId() : null;
+        /**
+         * Which classes a row fell in at one position, or nothing where it did not say.
+         *
+         * <p>More than one where the position is inside a sequence and the row's elements did not
+         * fall together. Nothing where the row could not be read there, which is a different answer
+         * from a row whose list held no element — that one is read and falls in no class.
+         */
+        static List<String> classesIn(Map<AxisId, Classification> where, Axis axis) {
+            return where.get(axis.id()) instanceof Classification.Classified in ? in.classIds()
+                    : null;
+        }
+
+        /** Whether the row could not read some value at {@code axis}, whatever else it placed. */
+        static boolean stoppedAt(Map<AxisId, Classification> where, Axis axis) {
+            Classification said = where.get(axis.id());
+            return said != null && said.stopped() != null;
         }
 
         /** How many rows could not say where they were at this position. */
         int couldNotSay(Axis axis) {
-            return (int) byRow.stream().filter(where -> classIn(where, axis) == null).count();
+            // A row that could not read a value here, whatever else it placed. One that read every
+            // value and put none in a class is not one of these: it was read, and says so.
+            return (int) byRow.stream().filter(where -> stoppedAt(where, axis)).count();
         }
 
         /**
@@ -312,13 +336,18 @@ final class Coverages {
         for (Map<AxisId, Classification> where : readings.byRow()) {
             for (int i = 0; i < axes.size(); i++) {
                 for (int j = i + 1; j < axes.size(); j++) {
-                    String left = Readings.classIn(where, axes.get(i));
-                    String right = Readings.classIn(where, axes.get(j));
-                    if (left != null && right != null) {
+                    // Every pairing the row reaches, and only those. A row whose list holds
+                    // elements either side of a line stands in both classes there, and which of
+                    // them went with what the position beside it holds is settled by which element
+                    // each came from — taken as every combination, a row is evidence for a pair
+                    // none of its elements is in.
+                    for (Map.Entry<String, String> pair : Classification.pairsOf(
+                            where.get(axes.get(i).id()), where.get(axes.get(j).id()))) {
                         // Which positions, and not only which classes. A class id is unique within
-                        // its axis and not across axes — three `Flag` inputs all have a `Yes` — so a
-                        // key of two class names alone collapses every pair one row covers into one.
-                        covered.add(i + "/" + left + " " + j + "/" + right);
+                        // its axis and not across axes — three `Flag` inputs all have a `Yes` — so
+                        // a key of two class names alone collapses every pair one row covers into
+                        // one.
+                        covered.add(i + "/" + pair.getKey() + " " + j + "/" + pair.getValue());
                     }
                 }
             }
@@ -391,9 +420,9 @@ final class Coverages {
         }
         Set<String> covered = new LinkedHashSet<>();
         for (Map<AxisId, Classification> where : readings.byRow()) {
-            String in = Readings.classIn(where, axis);
+            List<String> in = Readings.classesIn(where, axis);
             if (in != null) {
-                covered.add(in);
+                covered.addAll(in);
             }
         }
         return new PartitionEvidence.AxisCoverage(axis.id().toString(), axis.term().toString(),
@@ -635,6 +664,141 @@ final class Coverages {
     }
 
     /**
+     * One row's values under one reading of it: an element chosen at each step inside a sequence
+     * the line's positions take.
+     *
+     * <p>A row standing at a point is one of its readings standing there, and a reading has to be
+     * one: two positions under one person are that person's two values, and offering the first
+     * person's age beside the second person's status would have a row stand at a point neither
+     * element is at. So an element is chosen per step and every position takes the one chosen for
+     * the steps it shares — the same rule a pair of classes is read by, since it is the same
+     * question.
+     *
+     * <p>Which readings there are is not known before the quantity has asked, since which positions
+     * a line is over is its to say. So the choices are collected as it asks and the reading is run
+     * again under each, until one stands or they are used up.
+     */
+    private static final class OneReadingOfARow implements BorderQuantity.Observation {
+
+        private final BehaviorInputs where;
+        private final RowOutcome row;
+        /** The element chosen at each step, for this reading. */
+        private final Map<souther.compiler.inputs.TermPath, Integer> chosen;
+        /** How many elements each step was found to have, over every reading so far. */
+        private final Map<souther.compiler.inputs.TermPath, Integer> held;
+        private boolean wroteNothing;
+        private boolean unreadable;
+
+        OneReadingOfARow(BehaviorInputs where, RowOutcome row,
+                         Map<souther.compiler.inputs.TermPath, Integer> chosen,
+                         Map<souther.compiler.inputs.TermPath, Integer> held) {
+            this.where = where;
+            this.row = row;
+            this.chosen = chosen;
+            this.held = held;
+        }
+
+        @Override
+        public souther.compiler.observe.ObservedValue at(souther.compiler.inputs.TermPath path) {
+            List<BehaviorInputs.Occurrence> values = where.occurrencesAt(row, path);
+            if (values == null) {
+                unreadable = true;
+                return null;   // the walk and the type disagree, which is the quantity's to report
+            }
+            if (values.isEmpty()) {
+                // The row wrote no element here, so nothing of it stands anywhere on this line.
+                // That is a row that was read and does not reach the point, and reporting it as a
+                // value nothing could read leaves the point undecided over a row that plainly
+                // settles it.
+                wroteNothing = true;
+                return null;
+            }
+            for (BehaviorInputs.Occurrence each : values) {
+                each.at().forEach((step, ordinal) ->
+                        held.merge(step, ordinal + 1, Math::max));
+            }
+            for (BehaviorInputs.Occurrence each : values) {
+                if (agrees(each)) {
+                    return each.value();
+                }
+            }
+            // No value here under this reading. Not a stop: the reading names an element this
+            // position does not have, and another reading is where its values are.
+            return null;
+        }
+
+        /** Whether {@code each} was reached through the elements this reading chose. */
+        private boolean agrees(BehaviorInputs.Occurrence each) {
+            for (Map.Entry<souther.compiler.inputs.TermPath, Integer> step : each.at().entrySet()) {
+                Integer picked = chosen.get(step.getKey());
+                if (picked != null && !picked.equals(step.getValue())) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /** Whether the row wrote nothing at some position this line is over. */
+        boolean wroteNothing() {
+            return wroteNothing;
+        }
+
+        /** Whether some position this line is over could not be read at all. */
+        boolean unreadable() {
+            return unreadable;
+        }
+    }
+
+    /**
+     * The readings of one row a point is tried against.
+     *
+     * <p>The first is run before the rest are known: which steps the line's positions take is the
+     * quantity's to say as it reads them, so it says so by being asked once. Every choice those
+     * steps allow follows it.
+     */
+    private static List<OneReadingOfARow> readings(BehaviorInputs where, RowOutcome row,
+                                                   BorderQuantity quantity, Criterion criterion,
+                                                   OneReadingOfARow first,
+                                                   Map<souther.compiler.inputs.TermPath,
+                                                           Integer> held) {
+        quantity.standsAt(criterion, first);
+        List<OneReadingOfARow> out = new ArrayList<>();
+        for (Map<souther.compiler.inputs.TermPath, Integer> choice : readingsOver(held)) {
+            out.add(new OneReadingOfARow(where, row, choice, held));
+        }
+        return out;
+    }
+
+    /**
+     * Every reading of a row over the steps {@code held} says its positions take.
+     *
+     * <p>One choice per step, in every combination — which is a product and not a zip, because two
+     * steps a row's positions do not take together are two independent choices. Bounded, since a
+     * row holding several long lists has more readings than a measure is worth.
+     */
+    private static List<Map<souther.compiler.inputs.TermPath, Integer>> readingsOver(
+            Map<souther.compiler.inputs.TermPath, Integer> held) {
+        List<Map<souther.compiler.inputs.TermPath, Integer>> out = new ArrayList<>();
+        out.add(Map.of());
+        for (Map.Entry<souther.compiler.inputs.TermPath, Integer> step : held.entrySet()) {
+            List<Map<souther.compiler.inputs.TermPath, Integer>> wider = new ArrayList<>();
+            for (Map<souther.compiler.inputs.TermPath, Integer> each : out) {
+                for (int i = 0; i < step.getValue() && wider.size() < MOST_READINGS; i++) {
+                    Map<souther.compiler.inputs.TermPath, Integer> deeper =
+                            new LinkedHashMap<>(each);
+                    deeper.put(step.getKey(), i);
+                    wider.add(deeper);
+                }
+            }
+            out = wider;
+        }
+        return out;
+    }
+
+    /** How many readings of one row a point is tried against. */
+    private static final int MOST_READINGS = 256;
+
+    /**
      * Whether any row stands at one item of a border.
      *
      * <p>One walk for every kind of line. What a row put at the item is the quantity's to read — it
@@ -652,15 +816,34 @@ final class Coverages {
                                      site) {
         boolean unreadable = false;
         for (RowOutcome row : rows) {
-            switch (quantity.standsAt(criterion, path -> where.valueAt(row, path))) {
-                case UNREADABLE -> unreadable = true;
-                case NO -> { }
-                case YES -> {
-                    if (site.stream().allMatch(seenBy(row)::reached)) {
-                        return Met.YES;
-                    }
+            // A row has more than one value at a position inside a sequence, and standing at a point
+            // is one element standing there. Asked for one value, such a row answered with none and
+            // every point on such a line came back undecided — a measurement that could not look,
+            // said of a row that wrote the values plainly.
+            // The first reading both answers the point and says which steps the line's positions
+            // take; the rest are tried under each choice those steps allow.
+            Map<souther.compiler.inputs.TermPath, Integer> held = new LinkedHashMap<>();
+            OneReadingOfARow first = new OneReadingOfARow(where, row, Map.of(), held);
+            boolean stands = false;
+            boolean stopped = false;
+            for (OneReadingOfARow reading : readings(where, row, quantity, criterion, first, held)) {
+                switch (quantity.standsAt(criterion, reading)) {
+                    // A reading that could not look, unless what it could not find was an element
+                    // the row wrote none of — that is a row that was read and does not stand, and
+                    // said of the reading it happened in rather than of the row, since another
+                    // reading of the same row may reach the point.
+                    case UNREADABLE -> stopped = stopped || !reading.wroteNothing();
+                    case NO -> { }
+                    case YES -> stands = true;
+                }
+                if (stands) {
+                    break;
                 }
             }
+            if (stands && site.stream().allMatch(seenBy(row)::reached)) {
+                return Met.YES;
+            }
+            unreadable = unreadable || stopped;
         }
         return unreadable ? Met.UNREADABLE : Met.NO;
     }

@@ -374,12 +374,12 @@ public final class InteractionCells {
         int deepest = -1;
         for (int i = 0; i < axes.size(); i++) {
             TermPath at = axes.get(i).path();
-            if (!at.head().equals(path.head()) || at.fields().size() > path.fields().size()) {
+            if (!at.head().equals(path.head()) || at.steps().size() > path.steps().size()) {
                 continue;
             }
-            if (path.fields().subList(0, at.fields().size()).equals(at.fields())
-                    && at.fields().size() > deepest) {
-                deepest = at.fields().size();
+            if (path.steps().subList(0, at.steps().size()).equals(at.steps())
+                    && at.steps().size() > deepest) {
+                deepest = at.steps().size();
                 found = i;
             }
         }

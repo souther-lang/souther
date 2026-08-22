@@ -91,16 +91,19 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().get(0);
         Core body = checked.behaviorBodies().get(spec.name());
         CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
-        GuardThresholds.Guards guards = GuardThresholds.of(spec.name(), body, plan,
-                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get(spec.name()), symbols);
+        InputDomain domain = compilation.db()
+                .ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get(spec.name());
+        GuardThresholds.Guards guards =
+                GuardThresholds.of(spec.name(), body, plan, domain, symbols);
         Partitions.Partitioning p = Partitions.withThresholds(
-                Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(spec.name()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 guards.thresholds(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
         List<String> names = new ArrayList<>();
         spec.params().forEach(each -> names.add(each.name()));
         Generator.Subject subject = new Generator.Subject(
-                new BehaviorInputs(names, sigs.get(spec.name()).inputTypes(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), p.axes());
+                new BehaviorInputs(names, sigs.get(spec.name()).inputTypes(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), p.axes(),
+                HeldCounts.of(domain, symbols));
 
         List<String> out = new ArrayList<>();
         for (Axis axis : p.axes()) {

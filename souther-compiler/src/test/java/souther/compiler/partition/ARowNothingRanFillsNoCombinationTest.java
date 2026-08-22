@@ -140,7 +140,7 @@ class ARowNothingRanFillsNoCombinationTest {
     private static String labelOf(List<Axis> axes, Map<AxisId, Classification> sitting) {
         List<String> parts = axes.stream()
                 .map(axis -> axis.term() + "="
-                        + ((Classification.Classified) sitting.get(axis.id())).classId())
+                        + String.join("|", ((Classification.Classified) sitting.get(axis.id())).classIds()))
                 .toList();
         return String.join(" x ", parts);
     }
@@ -190,7 +190,7 @@ class ARowNothingRanFillsNoCombinationTest {
                     new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
                             sig.inputTypes(), symbols,
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                    partitioning.axes()),
+                    partitioning.axes(), HeldCounts.of(inputs, symbols)),
                     Interactions.of(body, plan, inputs, symbols));
         }
     }

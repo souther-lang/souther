@@ -910,6 +910,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             + " chosen";
             case UNSUPPORTED_PARTITION_SHAPE ->
                     "it relates two positions rather than dividing one";
+            case RULE_ABOUT_A_DERIVED_VALUE ->
+                    "it is about a value made from this one, and what it says about the values here"
+                            + " is not worked out";
             // And the four a position reaches, written about the position, because that is all
             // there is: nothing observed a rule to name. Which reasons reach which of the two is
             // settled by the authority a reason belongs to

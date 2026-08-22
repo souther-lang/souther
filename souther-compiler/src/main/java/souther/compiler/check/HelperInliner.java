@@ -341,6 +341,10 @@ public final class HelperInliner {
      */
     private final java.util.SequencedSet<String> leftStanding = new java.util.LinkedHashSet<>();
 
+    /** Bindings holding the same elements as another binding, and bindings holding elements made
+     *  from another's. Written where an expansion removes the operation that says so. */
+    private final ElementProvenance.Builder provenance = new ElementProvenance.Builder();
+
     /** Every recursion in reach, which is exactly what {@link #inline} leaves a call standing to —
      *  this module's own, what its imports publish to it, and the library underneath both. What a
      *  standing call can be typed against, whatever this module turns out to reach. */
@@ -379,6 +383,72 @@ public final class HelperInliner {
      */
     public java.util.SequencedSet<String> leftStanding() {
         return java.util.Collections.unmodifiableSequencedSet(leftStanding);
+    }
+
+    /**
+     * Where the elements of what this expansion's bindings hold came from.
+     *
+     * <p>Taken from the same place {@link #leftStanding} is: the inliner was made for this body, so
+     * what it wrote down is this body's. An operation over a collection is expanded into a walk, and
+     * afterwards nothing in the tree says its answer held the elements of anything — so the relation
+     * is written while the operation is still there and read by whoever needs it later.
+     */
+    public ElementProvenance provenance() {
+        return provenance.built();
+    }
+
+    /**
+     * Records where the elements of what {@code binding} holds came from, if from anywhere.
+     *
+     * <p>Read off the expansion the argument is. What operation it was is what the expansion carries
+     * ({@link Hir.Expansion#callee}), and which of its arguments held the container is what the
+     * library's signature says ({@link Combinators}). Which binding that argument became is counted
+     * rather than named: an expansion writes a binding per value argument in the parameters' order,
+     * and a combinator's one function argument leaves none — so the container's place among the
+     * bindings is its parameter's, one earlier where the function came before it.
+     *
+     * <p>Two relations and not one. Where the operation answers the elements it was given, what the
+     * two bindings hold are the same values and a rule about one is a rule about the other; where it
+     * answers what a closure made of them, the values came from there and are not those values, and
+     * only the first may be walked through.
+     */
+    private void elementsCameFrom(Hir.Binder binding, Hir.Expr argument) {
+        if (!(argument instanceof Hir.Expansion expansion)) {
+            return;
+        }
+        ArgumentRef holds = ElementLineage.holdsTheElementsOf(expansion.callee());
+        ArgumentRef made = holds != null ? null
+                : ElementLineage.derivesItsElementsFrom(expansion.callee());
+        BindingId container = boundFor(expansion, holds != null ? holds : made);
+        if (container == null) {
+            return;
+        }
+        if (holds != null) {
+            provenance.holdsTheSameAs(binding.id(), container);
+        } else {
+            provenance.derivesFrom(binding.id(), container);
+        }
+    }
+
+    /**
+     * The binding {@code expansion} wrote for the argument {@code which} names, or null where it
+     * wrote none.
+     *
+     * <p>Counted rather than named. An expansion writes a binding per value argument in the
+     * parameters' order and a function argument leaves none, so the argument's place among the
+     * bindings is its parameter's, one earlier where a function came before it. An operation taking
+     * no function has none to skip, which is why the closure is asked for separately rather than
+     * assumed.
+     */
+    private static BindingId boundFor(Hir.Expansion expansion, ArgumentRef which) {
+        if (which == null) {
+            return null;
+        }
+        int parameter = which.positionIn(expansion.callee());
+        Combinators.Combinator handed = Combinators.of(expansion.callee());
+        int at = parameter - (handed != null && handed.closureArg() < parameter ? 1 : 0);
+        return at < 0 || at >= expansion.bound().size() ? null
+                : expansion.bound().get(at).binder().id();
     }
 
     /**
@@ -1233,6 +1303,11 @@ public final class HelperInliner {
                 // be a sum (an annotated `s: S`) is not narrowed to the argument's specific
                 // case when the body is re-checked inline — a `match s` inside still sees S.
                 bound.add(new Hir.Bound(f, instantiated(p.type(), applied), arg));
+                // Where the argument is itself the expansion of an operation over a collection,
+                // what this binding holds came from that operation's own container — and by the
+                // time anything reads the tree, the operation is gone. Recorded here, which is the
+                // one place both ends are in hand.
+                elementsCameFrom(f, arg);
             }
         }
         return new Arguments(subst, bound, given, unreduced);

@@ -235,5 +235,34 @@ public final class DeclaredBounds {
                 held == null ? 0 : CountDomain.leastFrom(held.bounds().min()));
     }
 
+    /**
+     * How many of whatever counts a value of {@code type} the rules on it allow it to hold, or every
+     * number where they cap it in no way.
+     *
+     * <p>The dual of {@link #leastCountOf} and asked for the same reason: a rule capping a value at
+     * none is written on the type as readily as on the record holding one, and a reader finding only
+     * the second offered a value at a position the first leaves no room for.
+     */
+    public static int mostCountOf(Type type, Symbols symbols) {
+        ValueName.Stdlib counts = NumericMeasures.takenOf(type, symbols);
+        if (counts == null) {
+            return Integer.MAX_VALUE;
+        }
+        Bounds sized = of(type, symbols, Carrier.WHOLE, counts);
+        return sized == null || sized.max() == null ? Integer.MAX_VALUE
+                : CountDomain.mostFrom(sized.max().at());
+    }
+
+    /**
+     * The same, where the record the position sits in has a rule about it too.
+     *
+     * <p>The lower of the two, because both are rules the construction has to satisfy -- which is
+     * {@link #leastCountOf}'s argument at the other end.
+     */
+    public static int mostCountOf(Type type, Symbols symbols, FieldDomains.Held held) {
+        return Math.min(mostCountOf(type, symbols),
+                held == null ? Integer.MAX_VALUE : CountDomain.mostFrom(held.bounds().max()));
+    }
+
     private DeclaredBounds() {}
 }
