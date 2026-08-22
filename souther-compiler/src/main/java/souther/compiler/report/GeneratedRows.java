@@ -123,10 +123,16 @@ public final class GeneratedRows {
      * <p>An edge is offered where the caller asked for edges, and everything else is offered either
      * way: a run that did not ask about the lines a model draws still printed the arms and the cases
      * nothing reaches, and what the generator can do about those does not depend on the flag.
+     *
+     * <p>What an edge is, is read off what the finding is about and not off its kind. A border owes
+     * rows at four points and they arrive under two kinds — the two against the line and the two away
+     * from it — so a flag written to one of the kinds offered the caller who asked for no edges the
+     * other two.
      */
     private static List<Adequacy.GapDisposition> shown(Adequacy.Filling filling, boolean boundaries) {
         return filling.gaps().stream()
-                .filter(each -> boundaries || each.gap().kind() != Adequacy.Kind.BOUNDARY_UNMET)
+                .filter(each -> boundaries
+                        || !(each.gap().about() instanceof About.APointOfABorder))
                 .toList();
     }
 

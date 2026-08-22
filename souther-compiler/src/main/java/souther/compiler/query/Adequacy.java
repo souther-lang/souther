@@ -1641,12 +1641,12 @@ public final class Adequacy {
          * There is nothing to match and nothing for the two readings to disagree about.
          */
         private static GenerationOutcome atEdge(Finding gap, BorderAssessment.Point point) {
-            if (!point.role().againstTheLine()) {
-                // A point away from the line is reported under no code and is not a gap. Reaching
-                // this is the disposition of a finding and the role disagreeing about one point.
-                throw new IllegalStateException("not a gap a build refuses: " + gap);
-            }
-            String subject = point.border().axis() + " = " + point.against();
+            // Of whichever of the border's four points the finding is about. Which of them a build
+            // refuses over is the criterion's answer and the loop above has already asked it; asking
+            // again here — and this used to answer that only the two against the line can be gaps —
+            // is a second criterion, and it said the impossible about the two a build held to
+            // reliable domain coverage refuses over.
+            String subject = point.said();
             if (!(point.item() instanceof ItemAssessment.Owed owed)) {
                 // A gap was found at a point nobody is owed a row at, which is the finding and
                 // the assessment disagreeing about the same border rather than a row that could
