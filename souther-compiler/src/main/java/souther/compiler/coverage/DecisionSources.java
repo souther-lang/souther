@@ -39,10 +39,22 @@ import java.util.Set;
  * question is asked of the whole condition and followed through the bindings it reads and the
  * helpers it calls. Helpers are not recursive, so following them ends.
  */
-public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork) {
+public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolean read) {
 
-    /** Nothing read, which is what a reading with no declarations to walk comes to. */
-    public static final DecisionSources NONE = new DecisionSources(Map.of());
+    /**
+     * No reading was taken.
+     *
+     * <p>Told from a reading that was taken and found nothing, which is what a module with no forks
+     * comes to. A caller handed this one has no declarations behind it and gets the answer that was
+     * given before any of this was read: copies of a fork are one thing to cover. A caller handed a
+     * reading that was taken gets refused where it holds no entry, because there the absence is the
+     * bookkeeping having missed a fork rather than there being nothing to say.
+     */
+    public static final DecisionSources NONE = new DecisionSources(Map.of(), false);
+
+    public DecisionSources(Map<CoverageOrigin, DecisionSource> byFork) {
+        this(byFork, true);
+    }
 
     public DecisionSources {
         byFork = Map.copyOf(byFork);
@@ -51,23 +63,33 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork) {
     /**
      * Who decides at {@code fork}.
      *
-     * <p>{@link DecisionSource#OWN} where nothing was read about it. A fork this walk never reached
-     * is one no declaration it was handed wrote, and what a caller does with an unknown fork is
-     * treat its copies as one — which is the answer that was given before any of this was read, and
-     * the one that asks an author for no row they do not owe.
+     * <p>Refused where nothing was read about it. Both answers are written down, so having no
+     * entry is not one of them: it says this reading never saw the fork, which is a fact about the
+     * bookkeeping and not about the model. Answered {@code Own} instead, every copy of a fork the
+     * caller decides would be counted as one — the very thing this exists to stop — and the day a
+     * lowering makes a fork out of something new, it would go on being counted that way with
+     * nothing saying so.
      */
     public DecisionSource at(CoverageOrigin fork) {
         DecisionSource said = byFork.get(fork);
-        return said == null ? DecisionSource.OWN : said;
+        if (said == null && !read) {
+            return DecisionSource.OWN;
+        }
+        if (said == null) {
+            throw new IllegalStateException("no declaration this reading was handed wrote " + fork
+                    + "; a fork the arms are counted at is one whose decision somebody owns, and"
+                    + " answering that nobody does counts every copy of it as one");
+        }
+        return said;
     }
 
     /**
      * What {@code declarations} say about the forks they write, keyed the way a call reaches them.
      *
      * <p>Read in two passes because one declaration's forks can rest on another's answer. The first
-     * settles, for each declaration, which of the rules it was handed its own answer depends on; the
-     * second reads the forks with those summaries in hand. The first is taken to a fixed point
-     * rather than in an order, so nothing here has to know which declaration calls which.
+     * settles which arguments each declaration answers out of ({@link AnswerDependencies}); the
+     * second reads the forks with those summaries in hand, and projects them onto the parameters
+     * that carry a rule.
      */
     public static DecisionSources of(Map<String, Hir.FnDef> reachable, Hir.FnDef... own) {
         Map<String, Hir.FnDef> declarations = new LinkedHashMap<>(reachable);
@@ -76,42 +98,15 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork) {
                 declarations.put(each.name(), each);
             }
         }
-        Map<String, Set<Integer>> answersOn = new LinkedHashMap<>();
-        for (int pass = 0; pass < declarations.size() + 1; pass++) {
-            boolean moved = false;
-            for (Map.Entry<String, Hir.FnDef> each : declarations.entrySet()) {
-                Set<Integer> was = answersOn.getOrDefault(each.getKey(), Set.of());
-                Set<Integer> now = answerRestsOn(each.getValue(), answersOn);
-                if (!now.equals(was)) {
-                    answersOn.put(each.getKey(), now);
-                    moved = true;
-                }
-            }
-            if (!moved) {
-                break;
-            }
-        }
+        AnswerDependencies answersOn = AnswerDependencies.of(declarations);
         Map<CoverageOrigin, DecisionSource> byFork = new LinkedHashMap<>();
         for (Hir.FnDef fn : declarations.values()) {
             forks(fn, answersOn, byFork);
         }
-        return byFork.isEmpty() ? NONE : new DecisionSources(byFork);
+        return new DecisionSources(byFork);
     }
 
-    /** Which of {@code fn}'s function parameters the value it answers with rests on. */
-    private static Set<Integer> answerRestsOn(Hir.FnDef fn, Map<String, Set<Integer>> answersOn) {
-        if (!(fn.body() instanceof Hir.FnBody.Written written)) {
-            return Set.of();
-        }
-        Rules rules = Rules.of(fn);
-        Set<String> on = new LinkedHashSet<>();
-        rules.restsOn(written.expr(), answersOn, new LinkedHashMap<>(), on);
-        Set<Integer> slots = new LinkedHashSet<>();
-        on.forEach(name -> slots.add(rules.slotOf(name)));
-        return slots;
-    }
-
-    private static void forks(Hir.FnDef fn, Map<String, Set<Integer>> answersOn,
+    private static void forks(Hir.FnDef fn, AnswerDependencies answersOn,
                               Map<CoverageOrigin, DecisionSource> out) {
         if (!(fn.body() instanceof Hir.FnBody.Written written)) {
             return;
@@ -127,11 +122,20 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork) {
      * afresh at each fork found the name and not what it stands for — and called a fork the caller
      * decides the declaration's own.
      */
-    private static void forks(Hir.Expr e, Rules rules, Map<String, Set<Integer>> answersOn,
+    private static void forks(Hir.Expr e, Rules rules, AnswerDependencies answersOn,
                               Map<BindingId, Set<String>> bound,
                               Map<CoverageOrigin, DecisionSource> out) {
         switch (e) {
             case Hir.If iff -> said(iff.origin(), iff.cond(), rules, answersOn, bound, out);
+            // Every construct that bears arms, and by what settles which arm is taken. A `match`
+            // decides by its subject as an `if` decides by its condition, and a construction that
+            // may fail by the value it is given — so a rule the caller supplied reaches all three
+            // the same way. Left out, the arms of a `match` over a rule the caller wrote were one
+            // obligation however many rules were handed in.
+            case Hir.Match match ->
+                    said(match.origin(), match.scrutinee(), rules, answersOn, bound, out);
+            case Hir.IfConstructed made ->
+                    said(made.origin(), made.construct(), rules, answersOn, bound, out);
             // The guards of a comprehension are forks of the lowering rather than of the source, and
             // the lowering runs after the rule has been substituted in. Read here, where the rule is
             // still a parameter: read afterwards, a guard resting on a rule the caller supplied is a
@@ -157,7 +161,7 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork) {
     }
 
     private static void said(CoverageOrigin fork, Hir.Expr cond, Rules rules,
-                             Map<String, Set<Integer>> answersOn,
+                             AnswerDependencies answersOn,
                              Map<BindingId, Set<String>> bound,
                              Map<CoverageOrigin, DecisionSource> out) {
         Set<String> on = new LinkedHashSet<>();
@@ -183,10 +187,6 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork) {
             return new Rules(byBinding, inOrder);
         }
 
-        int slotOf(String parameter) {
-            return inOrder.indexOf(parameter);
-        }
-
         /**
          * Which of these rules the value of {@code e} rests on.
          *
@@ -195,7 +195,7 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork) {
          * to, which is followed; or it hands the rule to a helper whose answer it uses, which is
          * followed through that helper's own summary.
          */
-        void restsOn(Hir.Expr e, Map<String, Set<Integer>> answersOn,
+        void restsOn(Hir.Expr e, AnswerDependencies answersOn,
                      Map<BindingId, Set<String>> bound, Set<String> out) {
             switch (e) {
                 case Hir.Var.Denoting named when named.denotes() instanceof ValueName.Local local -> {
@@ -217,7 +217,7 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork) {
                     return;
                 }
                 case Hir.Apply call when call.function() instanceof Hir.Var.Denoting callee -> {
-                    Set<Integer> uses = answersOn.getOrDefault(callee.reaches(), Set.of());
+                    Set<Integer> uses = answersOn.of(callee.reaches());
                     for (int i = 0; i < call.args().size(); i++) {
                         // Only the arguments the callee's answer rests on. An argument it never
                         // reads decides nothing about what this call comes to, whatever the rule

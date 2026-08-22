@@ -487,4 +487,76 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
 
         assertEquals(2, twice.obligations(), "one rule, copied twice");
     }
+
+    /**
+     * A rule reaching a fork through an argument of any type is still the caller's.
+     *
+     * <p>Whether an argument reaches the answer is about the flow of values, and a reading that
+     * followed only the parameters carrying a rule stepped over a helper answering out of a
+     * {@code Bool}. What the fork rested on was there and was not followed, so the rules two call
+     * sites wrote were counted as one.
+     */
+    @Test
+    void aRuleReachingTheForkThroughAPlainArgumentIsStillTheCallers() {
+        Adequacy.BranchEvidence twice = arms("""
+                module example.rules
+
+                data Yes
+                data No
+                data Verdict = Yes | No
+                data Count = Int
+
+                let relay (b: Bool): Bool = b
+
+                let decide (p: (Int) -> Bool, x: Int): Verdict =
+                    if relay(p(x)) then Yes else No
+
+                behavior twice : (a: Int, b: Int) -> Count
+                    constructs Count
+                let twice (a, b) =
+                    Count((if decide(n -> n < 18, a) == Yes then 1 else 0)
+                        + (if decide(m -> 18 < m, b) == Yes then 1 else 0))
+
+                example twice
+                    | "under and under" : (1, 1) -> Count(1)
+                """, "twice");
+
+        assertEquals(8, twice.obligations(),
+                "the helper's fork is one obligation per rule handed to it, beside the two here");
+    }
+
+    /**
+     * And a {@code match} decides by its subject as an {@code if} decides by its condition.
+     *
+     * <p>Every construct that bears arms is asked the same question. Asked of the {@code if} alone,
+     * the arms of a {@code match} over what a supplied rule answered were one obligation however
+     * many rules were handed in — the same silent count, one construct over.
+     */
+    @Test
+    void aMatchOverASuppliedRulesAnswerIsTheCallersToDecide() {
+        Adequacy.BranchEvidence twice = arms("""
+                module example.rules
+
+                data A
+                data B
+                data Choice = A | B
+                data Count = Int
+
+                let decide (p: (Int) -> Choice, x: Int): Int =
+                    match p(x) with
+                        | A -> 1
+                        | B -> 0
+
+                behavior twice : (a: Int, b: Int) -> Count
+                    constructs Count
+                let twice (a, b) =
+                    Count(decide(n -> A, a) + decide(m -> B, b))
+
+                example twice
+                    | "one each" : (1, 1) -> Count(1)
+                """, "twice");
+
+        assertEquals(4, twice.obligations(), "one match per rule handed in");
+        assertEquals(2, twice.covered().size(), "and the one row reaches one arm of each");
+    }
 }

@@ -62,16 +62,16 @@ public final class CoverageSites {
      * that came out alike were counted as one obligation, and a rule nothing exercised was reported
      * as covered.
      */
-    private static DecidedBy decidedAt(Core.If fork, DecisionSources decisions,
-                                       SuppliedRules supplied) {
-        if (!(decisions.at(fork.origin()) instanceof DecisionSource.Supplied by)) {
+    private static DecidedBy decidedAt(CoverageOrigin fork, Core decision,
+                                       DecisionSources decisions, SuppliedRules supplied) {
+        if (!(decisions.at(fork) instanceof DecisionSource.Supplied by)) {
             return DecidedBy.THE_DECLARATION;
         }
         // The expansion this copy of the fork belongs to, which is the one that was handed rules at
         // the parameters the declaration named. Asked of those parameters and not of whatever
         // supplied-looking thing stands in the condition: a fork resting on one of them can hold a
         // combinator of its own inside it, and the rule that one was handed decides nothing here.
-        for (BindingOwner owner : within(fork)) {
+        for (BindingOwner owner : within(decision)) {
             List<SuppliedRules.RuleIdentity> rules = new ArrayList<>();
             for (String parameter : by.parameters()) {
                 SuppliedRules.RuleIdentity rule = supplied.at(owner, parameter);
@@ -86,10 +86,10 @@ public final class CoverageSites {
         return DecidedBy.NOT_SAID;
     }
 
-    /** The expansions this fork's condition stands inside, innermost first. */
-    private static List<BindingOwner> within(Core.If fork) {
+    /** The expansions what settles this fork stands inside, innermost first. */
+    private static List<BindingOwner> within(Core decision) {
         List<BindingOwner> out = new ArrayList<>();
-        owners(fork.cond(), out);
+        owners(decision, out);
         return out;
     }
 
@@ -639,7 +639,8 @@ public final class CoverageSites {
                     // Which rule this fork decides by, taken before its arms are numbered: two
                     // calls of one library combinator are one fork inlined twice and are not one
                     // thing to cover, and what tells them apart is the rule each was handed.
-                    DecidedBy decided = decidedAt(iff, decisions, supplied);
+                    DecidedBy decided =
+                            decidedAt(iff.origin(), iff.cond(), decisions, supplied);
                     ControlPointId.ArmOccurrence then =
                             armOf(HELD, iff, iff.origin(), 0, iff.then(), inside, decided);
                     walk(iff.then(), inside);
@@ -656,12 +657,17 @@ public final class CoverageSites {
                 }
                 case Core.Match m -> {
                     walk(m.scrutinee(), inside);
+                    // What a `match` decides by is its subject, as an `if` decides by its condition.
+                    // A subject the caller's rule answered is a decision the caller made, and its
+                    // arms are one obligation per rule handed in.
+                    DecidedBy decided =
+                            decidedAt(m.origin(), m.scrutinee(), decisions, supplied);
                     ControlPointId.ArmOccurrence[] arms =
                             new ControlPointId.ArmOccurrence[m.cases().size()];
                     for (int i = 0; i < m.cases().size(); i++) {
                         Core.Case arm = m.cases().get(i);
                         arms[i] = armOf(matched(arm), m, m.origin(), i, arm.body(), inside,
-                                DecidedBy.THE_DECLARATION);
+                                decided);
                         walk(arm.body(), inside);
                     }
                     byNode.put(m, probesOf(arms));
@@ -669,15 +675,16 @@ public final class CoverageSites {
                 }
                 case Core.IfConstructed ic -> {
                     ic.construct().values().forEach(given -> walk(given.value(), inside));
+                    // And what an attempted construction decides by is the value it is given.
+                    DecidedBy decided = decidedAt(ic.origin(), ic.construct(), decisions, supplied);
                     ControlPointId.ArmOccurrence[] arms =
                             new ControlPointId.ArmOccurrence[1 + ic.els().size()];
-                    arms[0] = armOf(BUILT, ic, ic.origin(), 0,
-                            ic.then(), inside, DecidedBy.THE_DECLARATION);
+                    arms[0] = armOf(BUILT, ic, ic.origin(), 0, ic.then(), inside, decided);
                     walk(ic.then(), inside);
                     for (int i = 0; i < ic.els().size(); i++) {
                         Core.ElseArm arm = ic.els().get(i);
                         arms[i + 1] = armOf(refused(arm), ic, ic.origin(), i + 1,
-                                arm.body(), inside, DecidedBy.THE_DECLARATION);
+                                arm.body(), inside, decided);
                         walk(arm.body(), inside);
                     }
                     byNode.put(ic, probesOf(arms));
