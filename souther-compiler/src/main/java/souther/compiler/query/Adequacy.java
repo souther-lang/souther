@@ -24,7 +24,7 @@ import souther.compiler.partition.PointRole;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.Generator;
-import souther.compiler.partition.RowClasses;
+import souther.compiler.partition.InputClassifications;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -1938,7 +1938,7 @@ public final class Adequacy {
             // body's combinations the row was seen filling.
             List<Generator.ObservedRow> existing = rows.stream()
                     .map(row -> new Generator.ObservedRow(
-                            RowClasses.of(row, inputs, partitioning.axes()),
+                            InputClassifications.of(row.inputs(), inputs, partitioning.axes()),
                             watched(row, recording)))
                     .toList();
             return Generator.fill(subject, existing, check,

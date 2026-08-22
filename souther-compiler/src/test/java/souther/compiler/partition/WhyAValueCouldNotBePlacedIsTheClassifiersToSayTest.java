@@ -122,7 +122,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
     }
 
     private static Classification at(Read read, RowOutcome row, String path) {
-        Map<AxisId, Classification> classes = RowClasses.of(row, read.inputs(), read.axes());
+        Map<AxisId, Classification> classes = InputClassifications.of(row.inputs(), read.inputs(), read.axes());
         return classes.entrySet().stream().filter(e -> e.getKey().term().equals(path))
                 .map(Map.Entry::getValue).findFirst()
                 .orElseThrow(() -> new AssertionError("no axis at " + path));
@@ -195,7 +195,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
         RowOutcome row = giving(read, "plain", new ObservedValue.Text("x"));
 
         assertThrows(IllegalStateException.class,
-                () -> RowClasses.of(row, read.inputs(), read.axes()));
+                () -> InputClassifications.of(row.inputs(), read.inputs(), read.axes()));
     }
 
     /** And a value every class could read still lands where it did. */
@@ -242,7 +242,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
                 _ -> Membership.MATCH);
 
         assertEquals(Classification.in("c2"),
-                RowClasses.of(read.row(), read.inputs(), axes).values().iterator().next());
+                InputClassifications.of(read.row().inputs(), read.inputs(), axes).values().iterator().next());
     }
 
     /**
@@ -260,7 +260,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
                 _ -> Membership.NO_MATCH, _ -> Membership.NO_MATCH);
 
         IllegalStateException thrown = assertThrows(IllegalStateException.class,
-                () -> RowClasses.of(read.row(), read.inputs(), axes));
+                () -> InputClassifications.of(read.row().inputs(), read.inputs(), axes));
         org.junit.jupiter.api.Assertions.assertTrue(
                 thrown.getMessage().contains("holds a value it read"), thrown.getMessage());
     }
@@ -280,7 +280,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
                 _ -> new Membership.Incomplete(Incompleteness.Code.VALUE_UNREADABLE));
 
         IllegalStateException thrown = assertThrows(IllegalStateException.class,
-                () -> RowClasses.of(read.row(), read.inputs(), axes));
+                () -> InputClassifications.of(read.row().inputs(), read.inputs(), axes));
         org.junit.jupiter.api.Assertions.assertTrue(
                 thrown.getMessage().contains("disagree about why"), thrown.getMessage());
     }

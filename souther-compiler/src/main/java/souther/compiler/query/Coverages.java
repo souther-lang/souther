@@ -29,7 +29,7 @@ import souther.compiler.partition.BoundaryLine;
 import souther.compiler.partition.PartitionClass;
 import souther.compiler.partition.Partitions;
 import souther.compiler.partition.BehaviorInputs;
-import souther.compiler.partition.RowClasses;
+import souther.compiler.partition.InputClassifications;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -241,7 +241,7 @@ final class Coverages {
                            List<Incompleteness> unseen) {
             List<Map<AxisId, Classification>> read = new ArrayList<>();
             for (RowOutcome row : rows) {
-                read.add(RowClasses.of(row, where, axes));
+                read.add(InputClassifications.of(row.inputs(), where, axes));
             }
             return new Readings(List.copyOf(read), List.copyOf(unseen));
         }
@@ -721,7 +721,7 @@ final class Coverages {
 
         @Override
         public souther.compiler.observe.ObservedValue at(souther.compiler.inputs.TermPath path) {
-            List<BehaviorInputs.Occurrence> values = where.occurrencesAt(row, path);
+            List<BehaviorInputs.Occurrence> values = where.occurrencesAt(row.inputs(), path);
             if (values == null) {
                 unreadable = true;
                 return null;   // the walk and the type disagree, which is the quantity's to report
