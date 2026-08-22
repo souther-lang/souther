@@ -27,8 +27,9 @@ import java.util.Map;
  * settle them differently without the program meaning anything different.
  *
  * <p>Only the modules this compile checked are here. A call in a body may name a behavior of a
- * module read off the path, and that module is not among {@link #modules()}: it was compiled
- * elsewhere, and what it is here is a name and a signature, not a body to walk.
+ * module read off the path, and that module is not among {@link #modules()}: what such a call
+ * carries is the identity resolution gave it, and neither the behavior's own signature nor its
+ * body is part of this snapshot.
  */
 public final class CheckedProgram {
 

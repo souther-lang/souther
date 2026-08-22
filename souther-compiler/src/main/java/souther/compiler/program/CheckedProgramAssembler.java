@@ -7,8 +7,8 @@ import souther.compiler.check.Lower;
 import souther.compiler.check.Sig;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Composition;
-import souther.compiler.diag.CompileException;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.query.Acceptance;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Compositions;
@@ -40,20 +40,11 @@ final class CheckedProgramAssembler {
 
     static CheckedProgram of(List<String> sources, ModulePath path) {
         Compilation compilation = Compilation.ofSources(sources, path);
-        CompileException structural = compilation.structuralFailure();
-        if (structural != null) {
-            throw structural;
-        }
+        // The language's verdict, asked where a batch compile asks it. Stopping at the check would
+        // make this the one reading that accepts a program with a row that disagrees — and an
+        // output built on it would ship an artifact for what another output refuses to build.
+        Acceptance.of(compilation);
         Db db = compilation.db();
-        // Ask for every module's check before reading any of it: a module that did not check is a
-        // program that did not, however much of it the module in front of this one had.
-        for (String module : compilation.modules()) {
-            db.ask(new Bodies.Checked(module));
-        }
-        CompileException failed = compilation.failure();
-        if (failed != null) {
-            throw failed;
-        }
         List<CheckedModule> modules = new ArrayList<>();
         for (String module : compilation.modules()) {
             modules.add(moduleOf(db, module));
@@ -144,7 +135,11 @@ final class CheckedProgramAssembler {
         checked.emittedHelpers().forEach((name, body) -> {
             Hir.FnDef fn = defined.get(name);
             if (fn == null) {
-                return;
+                // A call in a body reaches this helper by name, so a snapshot without it hands an
+                // output a call to something it was never given. Nothing here can put that right,
+                // and letting it through is what makes it the reader's problem.
+                throw new IllegalStateException("the checked helper `" + module + "." + name
+                        + "` has no definition to read what it takes from");
             }
             List<CheckedHelper.Parameter> parameters = new ArrayList<>();
             for (Hir.FnParam parameter : fn.params()) {

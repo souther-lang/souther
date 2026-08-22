@@ -72,6 +72,19 @@ public class CompileException extends RuntimeException {
     }
 
     /**
+     * One error, with the file it is listed under.
+     *
+     * <p>What {@link #of(Diagnostic)} answers with and the file as well. A caller that has the file
+     * and hands over the bare diagnostic drops it, and where a row is written is not always the
+     * module it contributes to — an {@code examples for} file is a file of its own.
+     */
+    public static CompileException ofReported(Located reported) {
+        Diagnostic only = reported.diagnostic();
+        return new CompileException(List.of(reported),
+                format(positionOf(only), only.code(), DiagnosticRenderer.legacyBody(only)));
+    }
+
+    /**
      * Several errors found across several sources, each carrying the file it is listed under — a
      * multi-module compile reporting every module's failing examples rather than the first module's.
      */

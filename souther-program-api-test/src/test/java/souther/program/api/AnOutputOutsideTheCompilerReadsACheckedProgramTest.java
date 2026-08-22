@@ -1,12 +1,16 @@
 package souther.program.api;
 
+import souther.compiler.Compiler;
 import souther.compiler.core.Composition;
+import souther.compiler.diag.CompileException;
 import souther.compiler.core.Core;
 import souther.compiler.program.CheckedBehavior;
 import souther.compiler.program.CheckedHelper;
 import souther.compiler.program.CheckedImplementation;
 import souther.compiler.program.CheckedModule;
 import souther.compiler.program.CheckedProgram;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
@@ -18,7 +22,9 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -58,6 +64,39 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
             let toDeep (d) = Deep { depth = d.value }
 
             behavior measure = measureDepth >-> toDeep
+            """;
+
+
+    /**
+     * A composition where a case leaves the main line: {@code classify} answers a {@code Domestic}
+     * or an {@code Overseas}, and {@code priceIt} takes only the first.
+     */
+    private static final String ROUTED = """
+            module demo
+
+            data Order    = { total: Int }
+            data Domestic = { total: Int }
+            data Overseas = { total: Int }
+            data Priced   = { total: Int }
+            data Shipped  = { total: Int }
+
+            behavior classify : (o: Order) -> Domestic | Overseas
+                constructs Domestic, Overseas
+
+            let classify (o) = {
+                guard o.total <= 100 else Overseas { total = o.total }
+                Domestic { total = o.total }
+            }
+
+            behavior priceIt : (d: Domestic) -> Priced constructs Priced
+
+            let priceIt (d) = Priced { total = d.total }
+
+            behavior shipIt : (p: Priced) -> Shipped constructs Shipped
+
+            let shipIt (p) = Shipped { total = p.total }
+
+            behavior process = classify >-> priceIt >-> shipIt
             """;
 
     private static CheckedModule demo() {
@@ -143,6 +182,88 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
         for (Composition.Stage stage : composed.stages()) {
             assertNotNull(stage.answers(), "what the stage answers is on the stage");
         }
+    }
+
+    /**
+     * A program the language refuses is not one of these, whatever the checker made of it.
+     *
+     * <p>In Souther a row that disagrees is a compile error, so a model whose {@code example} does
+     * not hold is a model that did not compile. Every body in this one types; the checker has
+     * nothing against it; and it is refused all the same. Answering with a snapshot here would put
+     * an output on the far side of a gate the JVM build stops at — one output shipping an artifact
+     * for a program the other refuses to build, with nothing to say which of them is right.
+     */
+    @Test
+    void aProgramWhoseRowDoesNotHoldIsRefusedHereToo() {
+        assertThrows(CompileException.class, () -> CheckedProgram.of(List.of(WRONG_ROW)),
+                "the checker typed every body of it");
+
+        // and the batch compiler refuses it for the same reason, which is the point
+        assertThrows(CompileException.class, () -> Compiler.compile(WRONG_ROW));
+    }
+
+    private static final String WRONG_ROW = """
+            module demo
+
+            data Amount = Int
+
+            behavior double : (a: Amount) -> Amount constructs Amount
+
+            let double (a) = Amount(a.value * 2)
+
+            example double
+                | "twice" : (Amount(2)) -> Amount(5)
+            """;
+
+    /**
+     * Which cases a stage is offered, and which have left the main line.
+     *
+     * <p>The value this boundary was widened for. A composition routes by case (spec
+     * §type-routing): a stage runs where the running value is one it accepts, and anything else is
+     * answered with rather than offered onward. An output that emitted the stages in order and
+     * applied each to whatever arrived would compile this model into a different program, and the
+     * stage list alone would not say so.
+     */
+    @Test
+    void aStageIsOfferedTheCasesItAcceptsAndTheRestHaveLeftTheMainLine() {
+        CheckedModule demo = CheckedProgram.of(List.of(ROUTED)).module("demo");
+        Composition composed = ((CheckedImplementation.Composed)
+                named(demo, "process").implementation()).composition();
+
+        assertEquals(List.of(new ValueName.Behavior("demo", "classify"),
+                        new ValueName.Behavior("demo", "priceIt"),
+                        new ValueName.Behavior("demo", "shipIt")),
+                composed.stages().stream().map(Composition.Stage::behavior).toList());
+
+        // the first stage takes the composition's own argument, so nothing is routed into it
+        assertTrue(composed.stages().get(0).routing() instanceof Composition.Routing.Always);
+
+        // `priceIt` takes a Domestic and nothing else, so an Overseas has left the main line here
+        assertEquals(List.of("Domestic"), acceptedBy(composed.stages().get(1)),
+                "the cases this stage is offered");
+
+        // and it stays off it: what follows is not offered the case `priceIt` was never given
+        assertFalse(acceptedBy(composed.stages().get(2)).contains("Overseas"),
+                "a case that left the main line is not offered to what follows");
+
+        // the composition still answers with it, which is what leaving the main line means
+        assertTrue(answeredCases(composed).contains("Overseas"),
+                "what the composition answers: " + composed.answers());
+    }
+
+    /** The cases {@code stage} is offered, by name. */
+    private static List<String> acceptedBy(Composition.Stage stage) {
+        assertInstanceOf(Composition.Routing.OnCases.class, stage.routing(),
+                "a running value that carries cases is routed by them");
+        return ((Composition.Routing.OnCases) stage.routing()).accepted().stream()
+                .map(TypeSymbol::name).toList();
+    }
+
+    /** The cases the composition itself answers with, by name. */
+    private static List<String> answeredCases(Composition composed) {
+        Type answers = composed.answers();
+        assertInstanceOf(Type.Union.class, answers, "a composition that drops a case answers a sum");
+        return ((Type.Union) answers).members().stream().map(TypeSymbol::name).sorted().toList();
     }
 
     /**

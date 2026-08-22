@@ -9,14 +9,11 @@ import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.Located;
 import souther.compiler.examples.Deadline;
 import souther.compiler.examples.EvaluationPolicy;
-import souther.compiler.examples.ExampleVerifier;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.query.Acceptance;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Db;
 import souther.compiler.query.Front;
-import souther.compiler.query.Report;
-import souther.compiler.query.Output;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -221,53 +218,10 @@ public final class Compiler {
             compilation.withEvaluationPolicy(policy);
         }
         compilation.measure(measure);
-        Db db = compilation.db();
 
-        CompileException structural = compilation.structuralFailure();
-        if (structural != null) {
-            throw structural;
-        }
-
-        db.ask(new Output.All());
-        CompileException failed = compilation.failure();
-        if (failed != null) {
-            throw failed;
-        }
-        for (String module : compilation.modules()) {
-            if (!db.ask(new Output.ConstConstructions(module)).present()) {
-                CompileException bad = compilation.failure();
-                if (bad != null) {
-                    throw bad;
-                }
-            }
-            List<Diagnostic> failures = new ArrayList<>();
-            for (SourceId id : compilation.exampleSourcesOf(module)) {
-                // What the rows name themselves, before what they state: a name says which row is
-                // meant, and two rows sharing one leave every later report about either of them
-                // saying it of both.
-                for (Report failure : Report.errorsIn(db.ask(new Front.RowNames(id)).reports())) {
-                    failures.add(failure.diagnostic());
-                }
-                // Only the errors: this key also carries what a clean run wants to say about how well
-                // the rows cover the model, and a warning is not a reason to fail the build.
-                for (Report failure : Report.errorsIn(db.ask(Output.Examples.asked(db, module, id)).reports())) {
-                    failures.add(failure.diagnostic());
-                }
-            }
-            // Asked whether or not the rows ran: what two written statements say about each other
-            // is readable when nothing is.
-            db.ask(new Output.SaidDisagreements(module));
-            if (failures.size() == 1) {
-                throw CompileException.of(failures.get(0));
-            }
-            if (!failures.isEmpty()) {
-                throw CompileException.ofAll(failures, ExampleVerifier.legacySummary(failures));
-            }
-        }
-        for (String module : compilation.modules()) {
-            compilation.answerWarnings(module);
-        }
-        warningsOut.addAll(compilation.warnings());
+        // What the language refuses over, asked where it is written down. Read here rather than
+        // repeated: a second reading is a second answer to whether this program is accepted.
+        Acceptance.of(compilation, warningsOut);
         return compilation;
     }
 
@@ -436,49 +390,10 @@ public final class Compiler {
             compilation.withEvaluationPolicy(policy);
         }
         compilation.measure(measure);
-        Db db = compilation.db();
 
-        CompileException structural = compilation.structuralFailure();
-        if (structural != null) {
-            throw structural;
-        }
-
-        db.ask(new Output.All());
-        CompileException failed = compilation.failure();
-        if (failed != null) {
-            throw failed;
-        }
-
-        // Every module's classes are now present, so a constant construction and an example can
-        // resolve a cross-module reference — including into a dependency, whose classes come off the
-        // same path its declarations were read from.
-        // Each failing row with the file it is listed under: a row from an `examples for` file is
-        // written in that file, not in the module it contributes to.
-        List<Located> exampleFailures = new ArrayList<>();
-        for (String module : compilation.modules()) {
-            if (!db.ask(new Output.ConstConstructions(module)).present()) {
-                CompileException bad = compilation.failure();
-                if (bad != null) {
-                    throw bad;
-                }
-                continue;
-            }
-            for (SourceId id : compilation.exampleSourcesOf(module)) {
-                for (Report failure : Report.errorsIn(db.ask(Output.Examples.asked(db, module, id)).reports())) {
-                    exampleFailures.add(new Located(failure.diagnostic(),
-                            souther.compiler.diag.ReportContext.inFile(id)));
-                }
-            }
-            db.ask(new Output.SaidDisagreements(module));
-        }
-        for (String module : compilation.modules()) {
-            compilation.answerWarnings(module);
-        }
-        warningsOut.addAll(compilation.warnings());
-        if (!exampleFailures.isEmpty()) {
-            throw CompileException.ofAllReported(exampleFailures,
-                    ExampleVerifier.legacySummary(Located.diagnosticsOf(exampleFailures)));
-        }
+        // What the language refuses over, asked where it is written down. Read here rather than
+        // repeated: a second reading is a second answer to whether this program is accepted.
+        Acceptance.of(compilation, warningsOut);
         return compilation;
     }
     /**
