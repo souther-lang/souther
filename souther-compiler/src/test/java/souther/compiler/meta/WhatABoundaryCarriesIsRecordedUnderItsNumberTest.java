@@ -114,19 +114,36 @@ class WhatABoundaryCarriesIsRecordedUnderItsNumberTest {
     /** An array the fixture left empty, which says its own name and nothing about what it holds. */
     private static final String UNREAD = "nothing";
 
-    /** What a member holds, as coarsely as the wire distinguishes it: a value of another kind is a
-     *  member a reader of this number cannot take. */
+    /**
+     * What a member holds, as coarsely as the wire distinguishes it: a value of another kind is a
+     * member a reader of this number cannot take.
+     *
+     * <p>Every kind a class file can carry, and no default. A word this did not have was written as
+     * whatever Java calls the class it arrived as, which records a shape in a vocabulary nothing
+     * decided — and a boundary described in words nobody chose is one a reader of the record cannot
+     * hold a compiler to. Listed out, a kind this does not have a word for is a compile error here
+     * rather than a line in the record.
+     */
     private static String kindOf(AnnotationValue value) {
         return switch (value) {
             case AnnotationValue.OfString _ -> "string";
-            case AnnotationValue.OfInt _ -> "int";
             case AnnotationValue.OfBoolean _ -> "boolean";
+            case AnnotationValue.OfByte _ -> "byte";
+            case AnnotationValue.OfChar _ -> "char";
+            case AnnotationValue.OfShort _ -> "short";
+            case AnnotationValue.OfInt _ -> "int";
+            case AnnotationValue.OfLong _ -> "long";
+            case AnnotationValue.OfClass _ -> "class";
+            case AnnotationValue.OfFloat _ -> "float";
+            case AnnotationValue.OfDouble _ -> "double";
+            case AnnotationValue.OfEnum e -> "enum " + e.className().stringValue();
+            case AnnotationValue.OfAnnotation a -> "annotation "
+                    + a.annotation().className().stringValue();
             // Said as what it is rather than guessed at. An empty array read as an array of strings
             // records a shape nothing measured, and the member's element type could then move
             // without this moving with it.
             case AnnotationValue.OfArray array -> "array of "
                     + (array.values().isEmpty() ? UNREAD : kindOf(array.values().getFirst()));
-            default -> value.getClass().getSimpleName();
         };
     }
 
