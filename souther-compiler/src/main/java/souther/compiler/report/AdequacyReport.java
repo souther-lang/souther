@@ -376,15 +376,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // boundary measure is made in full. Holding the verdict open for it would say a
                 // model was unmeasured on the strength of the one measure that was.
                 add(measures, behavior.partition().bounded().status());
-                // And of a border's four points, the two a build refuses over. Which of them is a
-                // gap a build is held to is decided per measure, and a measure that refuses nothing
-                // cannot leave a verdict undetermined for want of an answer — read that way, a row
-                // whose value could not be read at an IN point held a model open while every point
-                // a build asks about had been measured in full. What the report says about itself
-                // still reads all four: how much of the measurement was made and what a build is
-                // held to are two questions.
+                // And of a border's four points, the ones the criterion asks for. A measure that
+                // refuses nothing cannot leave a verdict undetermined for want of an answer — read
+                // the other way, a row whose value could not be read at a point no build is held to
+                // held a model open while every point it does ask about had been measured in full.
+                // Which points those are is the criterion's answer and not a second reading of it
+                // here: a build refusing over a missing IN row and calling a model satisfied while
+                // the IN point could not be measured would be held to one criterion in one place
+                // and another in the other. What the report says about itself still reads all four:
+                // how much of the measurement was made and what a build is held to are two
+                // questions.
                 BorderAssessment.pointsOf(behavior.partition().boundaries()).stream()
-                        .filter(p -> p.role().againstTheLine())
+                        .filter(p -> asked.criterion().requires(p.role()))
                         .forEach(p -> add(measures, p.item().status()));
                 // A dropped axis that was carrying a line some rule drew took boundaries with it, and
                 // nothing can ask about them now. One that was only classifying took a measure no

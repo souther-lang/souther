@@ -26,6 +26,7 @@ import souther.compiler.observe.Counting;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
 import souther.compiler.partition.Axis;
+import souther.compiler.partition.PointRole;
 import souther.compiler.partition.AxisId;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.partition.GenerationOutcome;
@@ -91,6 +92,24 @@ public final class Adequacy {
 
         /** Those, and the points away from the line. */
         RELIABLE_DOMAIN;
+
+        /**
+         * Whether a build held to this is owed a row at {@code role}.
+         *
+         * <p>Beside {@link #refuses}, because a criterion has two consequences and they have to be
+         * one answer. Which findings violate it and which of a border's points must have come to an
+         * answer for a verdict to mean anything are the same statement read two ways: a build that
+         * refuses over a missing {@code IN} row and calls a model satisfied while the {@code IN}
+         * point could not be measured is holding it to a criterion in one place and not in the
+         * other. That is the shape issue #937 is about, and reading the roles off {@code refuses}
+         * would only be it again — a role is not a kind, and the two would agree until one moved.
+         */
+        public boolean requires(PointRole role) {
+            return switch (role) {
+                case ON, OFF -> true;
+                case IN, OUT -> this == RELIABLE_DOMAIN;
+            };
+        }
 
         /**
          * Whether a build held to this refuses over {@code kind}.
