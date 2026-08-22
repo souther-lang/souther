@@ -529,7 +529,7 @@ class FormatterTest {
                 let f (r, clock) = r
                 fake lookup
                     | (R { x = 1 }) -> R { x = 2 }
-                    | _ -> R { x = 0 }
+                    | _             -> R { x = 0 }
                 example f
                     | (R { x = 1 }) with clock = "t" -> R { x = 1 }
                 """;

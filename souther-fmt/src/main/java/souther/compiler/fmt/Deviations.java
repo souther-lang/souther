@@ -147,7 +147,8 @@ public final class Deviations {
         List<Family> families = List.of(Witnesses::tokens, Witnesses::spacing,
                 Witnesses::separation,
                 Witnesses::indentation, Witnesses::forced, Witnesses::settled,
-                Witnesses::conditional, Witnesses::comments, Witnesses::lineEnds);
+                Witnesses::conditional, Witnesses::comments, Witnesses::lineEnds,
+                Witnesses::columns);
         for (Family family : families) {
             try {
                 out.addAll(family.of(source, canonical, pairing));
@@ -202,6 +203,9 @@ public final class Deviations {
         for (Rewrites.Kind k : Rewrites.Kind.values()) {
             out.add(k.said());
         }
+        for (Columns.Stop stop : Columns.Stop.values()) {
+            out.add(stop.said());
+        }
         return out;
     }
 
@@ -231,6 +235,9 @@ public final class Deviations {
             case Witness.TrailingComment _ -> A_TRAILING_COMMENT;
             case Witness.CommentAbove _ -> A_COMMENT_ABOVE;
             case Witness.CommentCarrier _ -> A_COMMENT_IS_CARRIED;
+            // One statement per stop rather than one for the rule. A reader is being told which
+            // column their row missed, and the tables have different ones.
+            case Witness.AtAColumn c -> c.unit().stop().said();
         };
     }
 
@@ -248,6 +255,7 @@ public final class Deviations {
             case Witness.TrailingComment t -> quoted(t.canonical());
             case Witness.CommentAbove a -> lineBreaks(a.canonical());
             case Witness.CommentCarrier _ -> "somewhere else";
+            case Witness.AtAColumn c -> "column " + c.canonical();
         };
     }
 
@@ -266,6 +274,8 @@ public final class Deviations {
             case Witness.TrailingComment t -> quoted(t.source());
             case Witness.CommentAbove a -> lineBreaks(a.source());
             case Witness.CommentCarrier _ -> "here";
+            case Witness.AtAColumn c -> c.source().size() == 1
+                    ? "column " + c.source().get(0) : "columns " + c.source();
         };
     }
 

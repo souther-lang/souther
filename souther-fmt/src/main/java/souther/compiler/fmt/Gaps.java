@@ -28,13 +28,33 @@ final class Gaps {
         List<Slot> slots = new ArrayList<>();
         collect(doc, null, slots);
         List<String> answers = new ArrayList<>();
+        List<Columns.Stop> stops = new ArrayList<>();
         for (int i = 0; i < slots.size(); i++) {
             if (slots.get(i) instanceof GapSlot gap) {
                 answers.add(gap.policy() == TokenDoc.Break.ALWAYS
                         ? null : spell(slots, i, gap.policy()));
+                stops.add(gap.policy() == TokenDoc.Break.ALWAYS ? null : stopAt(slots, i));
             }
         }
-        return lower(doc, answers, new int[1]);
+        return lower(doc, answers, stops, new int[1], null);
+    }
+
+    /**
+     * The column a boundary is a stop of, or null where it is not one.
+     *
+     * <p>Read from the same pair the spacing rule is: the construct joining the two tokens, and the
+     * one on the right. Asked here rather than where the document is built so that a construct
+     * cannot make itself a table by writing one, which is the arrangement {@link TokenDoc} takes
+     * away for the separator and would leave standing for the column.
+     */
+    private static Columns.Stop stopAt(List<Slot> slots, int i) {
+        TokenSlot left = nearestToken(slots, i, -1);
+        TokenSlot right = nearestToken(slots, i, 1);
+        if (left == null || right == null || crossesAComment(slots, i)) {
+            return null;
+        }
+        Within joining = deepestHolding(left.within(), right.within());
+        return joining == null ? null : Columns.at(joining.kind(), right.kind());
     }
 
     /** The construct a token is under, and the ones above that. One of these is built per node
@@ -253,7 +273,14 @@ final class Gaps {
         return a == b ? a : null;
     }
 
-    private static Doc lower(TokenDoc doc, List<String> answers, int[] next) {
+    /**
+     * The document the renderer lays out. {@code table} is the table the part being lowered is
+     * written inside, or null where it is written inside none — an identity made where a table's
+     * construct is entered, so that two {@code example}s written the same way close their widths
+     * over themselves without anyone comparing what they are called.
+     */
+    private static Doc lower(TokenDoc doc, List<String> answers, List<Columns.Stop> stops,
+            int[] next, Columns.TableRef table) {
         return switch (doc) {
             case TokenDoc.Nil _ -> Doc.NIL;
             case TokenDoc.MustBreak _ -> Doc.mustBreak();
@@ -262,28 +289,44 @@ final class Gaps {
             case TokenDoc.Token t -> Doc.text(t.lexeme());
             case TokenDoc.Comment c -> Doc.text(c.text());
             case TokenDoc.Trailing t -> Doc.trailing(t.text());
-            case TokenDoc.Node n -> lower(n.doc(), answers, next);
-            case TokenDoc.At a -> Doc.at(a.place(), lower(a.doc(), answers, next));
+            case TokenDoc.Node n -> lower(n.doc(), answers, stops, next,
+                    Columns.isTable(n.kind()) ? new Columns.TableRef() : table);
+            case TokenDoc.At a -> Doc.at(a.place(), lower(a.doc(), answers, stops, next, table));
             case TokenDoc.PointOf p -> Doc.pointOf(p.place());
             case TokenDoc.Carries _, TokenDoc.Vacant _ -> throw new IllegalStateException(
                     "a carrier reached the layout unresolved");
-            case TokenDoc.Nest n -> Doc.nest(n.indent(), lower(n.doc(), answers, next));
-            case TokenDoc.Group g -> Doc.group(lower(g.doc(), answers, next));
+            case TokenDoc.Nest n -> Doc.nest(n.indent(),
+                    lower(n.doc(), answers, stops, next, table));
+            case TokenDoc.Group g -> Doc.group(lower(g.doc(), answers, stops, next, table));
             case TokenDoc.Concat c -> {
                 List<Doc> parts = new ArrayList<>();
                 for (TokenDoc part : c.parts()) {
-                    parts.add(lower(part, answers, next));
+                    parts.add(lower(part, answers, stops, next, table));
                 }
                 yield Doc.concat(parts);
             }
             case TokenDoc.Gap g -> {
-                String flat = answers.get(next[0]++);
-                yield switch (g.policy()) {
+                String flat = answers.get(next[0]);
+                Columns.Stop stop = stops.get(next[0]);
+                next[0]++;
+                Doc separator = switch (g.policy()) {
                     case ALWAYS -> g.indents() ? Doc.hardline(g.forced())
                             : Doc.blankLine(g.forced());
                     case MAY -> flat.isEmpty() ? Doc.softline() : Doc.line();
                     case NEVER -> flat.isEmpty() ? Doc.NIL : Doc.text(flat);
                 };
+                if (stop == null) {
+                    yield separator;
+                }
+                if (table == null) {
+                    throw new IllegalStateException(
+                            "a stop of " + stop + " outside any table; a column is one stop of one"
+                                    + " table and the rows of that table are what it is closed"
+                                    + " over");
+                }
+                // After the separator, never instead of it. What stands between two tokens is the
+                // spacing rule's answer and the column says only where the one on the right begins.
+                yield Doc.concat(separator, Doc.columnStop(new Columns.Unit(table, stop)));
             }
         };
     }
