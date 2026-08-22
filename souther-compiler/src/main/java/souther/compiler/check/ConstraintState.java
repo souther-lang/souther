@@ -224,7 +224,7 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
         // twice would keep the second reading and drop the first without a word, which is the one
         // way this can be got wrong now that it cannot combine two of them. An assertion because a
         // throw would be caught by the fail-open around the reading and leave it silently dropped.
-        assert values.equals(ConjoinedAdmissibleValues.<A>top())
+        assert values.readingsTaken() == 0
                 : "the values of a state are read once, and these were read over " + values;
         // The reading met with what nothing read leaves, and then held as a conjunction of one.
         // Met and not assigned, which is not the same answer, and the difference is a reading of one

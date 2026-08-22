@@ -226,12 +226,17 @@ class TheInputsEmptinessHasOneOwnerTest {
      */
     @Test
     void whatAParameterHandsOverAnswersNoSuchQuestion() {
-        for (Method each : FieldDomains.Settled.class.getDeclaredMethods()) {
-            assertTrue(each.getReturnType() != Optional.class && each.getReturnType() != boolean.class,
-                    "`" + each.getName() + "` looks like a second answerer of whether anything is"
-                            + " left. A reading of one parameter supplies rules and answers nothing:"
-                            + " ask the state they are said together in");
-        }
+        List<String> offered = java.util.Arrays.stream(FieldDomains.Settled.class.getMethods())
+                .filter(each -> each.getDeclaringClass() == FieldDomains.Settled.class)
+                .map(Method::getName)
+                .sorted()
+                .toList();
+
+        assertEquals(List.of("constraintsOver"), offered,
+                "a reading of one parameter supplies rules and answers nothing, so handing them"
+                        + " over is the whole of what it offers. Whatever was added here answers"
+                        + " something, and whether anything is left is answered by the state the"
+                        + " rules are said together in");
     }
 
     /** What proves the input holds nothing, read off the one thing that answers. */

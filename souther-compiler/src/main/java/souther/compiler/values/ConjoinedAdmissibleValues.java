@@ -105,6 +105,18 @@ public final class ConjoinedAdmissibleValues<A> {
     }
 
     /**
+     * How many readings have been taken into this.
+     *
+     * <p>A count of readings and not of anything they say. What it is for is a caller that takes a
+     * reading in once and has to be able to say so — {@link
+     * souther.compiler.check.ConstraintState#takingValuesRead} is written against nothing having
+     * been taken in yet, and a second reading arriving there would replace the first without a word.
+     */
+    public int readingsTaken() {
+        return factors.size();
+    }
+
+    /**
      * Whether nothing satisfies the readings together.
      *
      * <p>Any factor on its own. The others say nothing about the positions it names, so nothing they
@@ -250,16 +262,6 @@ public final class ConjoinedAdmissibleValues<A> {
             out.add(component);
         }
         return out;
-    }
-
-    @Override
-    public boolean equals(Object other) {
-        return other instanceof ConjoinedAdmissibleValues<?> also && factors.equals(also.factors);
-    }
-
-    @Override
-    public int hashCode() {
-        return factors.hashCode();
     }
 
     @Override
