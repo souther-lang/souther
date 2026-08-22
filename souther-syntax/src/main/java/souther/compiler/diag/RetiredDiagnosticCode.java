@@ -20,6 +20,7 @@ public enum RetiredDiagnosticCode {
     E1401,
     E1505,
     E1601,
+    E1612,
     E1625,
     E1801;
 

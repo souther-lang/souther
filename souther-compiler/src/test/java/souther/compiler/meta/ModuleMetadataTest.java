@@ -15,7 +15,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -56,25 +55,35 @@ class ModuleMetadataTest {
     }
 
     @Test
-    void aBehaviorCarriesItsSignatureAndWhetherItIsInjected() {
+    void aBehaviorCarriesItsSignatureAndWhereItsBodyComesFrom() {
         Map<String, byte[]> classes = Compiler.compile(UP);
 
         Annotation charge = annotation(classes, "shared.money.Charge", "SoutherBehavior");
         assertEquals("""
                 behavior charge : (a: Amount) -> Receipt | Declined
                     constructs Receipt""", string(charge, "signature"));
-        assertFalse(bool(charge, "injected"), "charge has a let, so nothing injects it");
+        assertEquals("implemented", string(charge, "implementation"),
+                "charge has a let, so nothing injects it");
     }
 
+    /** Three words and not a flag: which of the two body-less states a behavior is in cannot be
+     * worked out again from what is published, because the `let` that decides is not. */
     @Test
-    void aBehaviorWithNoLetIsMarkedInjected() {
+    void aBehaviorWithNoLetCarriesWhichOfTheTwoStatesItIsIn() {
         Map<String, byte[]> classes = Compiler.compile("""
-                module shared.ledger exposing ( Entry, record )
+                module shared.ledger exposing ( Entry, record, audited )
                 data Entry = { amount: Int }
                 behavior record : (e: Entry) -> Entry
+                behavior audited : (e: Entry) -> Entry
+                    depends on record
                 """);
 
-        assertTrue(bool(annotation(classes, "shared.ledger.Record", "SoutherBehavior"), "injected"));
+        assertEquals("injected",
+                string(annotation(classes, "shared.ledger.Record", "SoutherBehavior"),
+                        "implementation"));
+        assertEquals("unimplemented",
+                string(annotation(classes, "shared.ledger.Audited", "SoutherBehavior"),
+                        "implementation"));
     }
 
     @Test
@@ -258,10 +267,6 @@ class ModuleMetadataTest {
 
     private static String string(Annotation a, String name) {
         return ((AnnotationValue.OfString) member(a, name)).stringValue();
-    }
-
-    private static boolean bool(Annotation a, String name) {
-        return ((AnnotationValue.OfBoolean) member(a, name)).booleanValue();
     }
 
     private static int integer(Annotation a, String name) {

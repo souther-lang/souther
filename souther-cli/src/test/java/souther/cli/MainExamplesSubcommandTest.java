@@ -98,7 +98,7 @@ class MainExamplesSubcommandTest {
         assertTrue(out.contains("findMember"), out);
         assertTrue(out.contains("injected"), out);
         assertTrue(out.contains("implemented"), out);
-        assertTrue(out.contains("2 behaviors: 1 implemented, 1 injected; 2 rows waiting for a `let`."),
+        assertTrue(out.contains("2 behaviors: 1 implemented, 0 unimplemented, 1 injected; 2 rows waiting for a `let`."),
                 out);
     }
 
@@ -108,7 +108,7 @@ class MainExamplesSubcommandTest {
 
         assertTrue(out.contains("submit"), out);
         assertFalse(out.contains("findMember"), out);
-        assertTrue(out.contains("1 behavior: 1 implemented, 0 injected; 0 rows waiting"), out);
+        assertTrue(out.contains("1 behavior: 1 implemented, 0 unimplemented, 0 injected; 0 rows waiting"), out);
     }
 
     /**

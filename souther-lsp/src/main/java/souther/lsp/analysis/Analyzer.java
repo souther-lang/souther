@@ -1385,7 +1385,8 @@ public final class Analyzer {
     /** The {@code let} a behavior is owed, where it is owed one. */
     private static Optional<CompletionItem> implementationToWrite(
             Prepared prepared, Hir.BehaviorDef declared, String module) {
-        if (!(declared instanceof Hir.SpecBehavior behavior) || !prepared.injected(behavior)) {
+        if (!(declared instanceof Hir.SpecBehavior behavior)
+                || prepared.implementationOf(behavior).hasBody()) {
             return Optional.empty();
         }
         List<SpecImplementation.Parameter> parameters = SpecImplementation.parameters(behavior);
@@ -1421,7 +1422,9 @@ public final class Analyzer {
             return Optional.empty();
         }
         List<BehaviorRequirement> required = List.of();
-        if (!prepared.injected(declared)) {
+        // A behavior that takes dependencies as arguments is offered a row that supplies them,
+        // whether or not its `let` has been written yet. An injection target takes none.
+        if (!prepared.implementationOf(declared).isInjectionTarget()) {
             required = requirements.get(declared.name());
             if (required == null) {
                 return Optional.empty();

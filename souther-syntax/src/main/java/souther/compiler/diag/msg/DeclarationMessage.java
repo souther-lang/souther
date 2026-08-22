@@ -14,8 +14,12 @@ public sealed interface DeclarationMessage extends Message {
     @Code(DiagnosticCode.E1317)
     record ItExpectsAnotherType(String what, Object expects, String got) implements DeclarationMessage, Reported {}
 
-    @Code(DiagnosticCode.E1612)
-    record AnInjectionTargetCannotDependOnAnything(String behavior) implements DeclarationMessage, Reported {}
+    @Code(DiagnosticCode.E1627)
+    record ItRestsOnABehaviorNobodyHasWritten(String behavior, String rested)
+            implements DeclarationMessage, Reported {}
+
+    record WriteItsLetOrLeaveThisOneUnwrittenToo(String rested, String behavior)
+            implements DeclarationMessage, Supporting {}
 
     @Code(DiagnosticCode.E1024)
     record ItCannotBeHeldAsAValueHere(String name, String what) implements DeclarationMessage, Reported {}

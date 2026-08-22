@@ -65,7 +65,7 @@ public interface PublishedClasses {
     /** What one class was annotated with. A class carries at most one of each, which the reading
      *  holds it to rather than taking whichever it met last. */
     record Declarations(SoutherModuleView module, String data, String behaviorSignature,
-                        Boolean behaviorInjected) {}
+                        String behaviorImplementation) {}
 
     /**
      * The {@code $Module} annotation's members, as a reader here uses them.

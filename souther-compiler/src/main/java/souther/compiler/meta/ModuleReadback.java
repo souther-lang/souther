@@ -9,6 +9,7 @@ import souther.compiler.codegen.Backend;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.frontend.CstFrontend;
+import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.ValueName;
@@ -122,7 +123,7 @@ public final class ModuleReadback {
             return unreadable(moduleName, new Readback.Failure.Incompatible(m.compiler()));
         }
         StringBuilder declarations = new StringBuilder();
-        Set<String> injected = new LinkedHashSet<>();
+        Map<String, BehaviorImplementation> implementations = new LinkedHashMap<>();
         for (String type : m.types()) {
             PublishedClasses.Declarations carried;
             switch (classes.of(moduleName + "." + type)) {
@@ -161,9 +162,16 @@ public final class ModuleReadback {
                 return unreadable(moduleName, new Readback.Failure.DeclarationMissing(behavior));
             }
             declarations.append('\n').append(carried.behaviorSignature()).append('\n');
-            if (Boolean.TRUE.equals(carried.behaviorInjected())) {
-                injected.add(behavior);
+            BehaviorImplementation implementation;
+            try {
+                implementation =
+                        BehaviorImplementation.readingWritten(carried.behaviorImplementation());
+            } catch (IllegalArgumentException | NullPointerException e) {
+                // A word this compiler does not know is metadata of its name carrying something
+                // else, which is the one thing a reading here refuses over.
+                return unreadable(moduleName, new Readback.Failure.UnreadableMetadata());
             }
+            implementations.put(behavior, implementation);
         }
         for (String helper : m.invariantHelpers()) {
             declarations.append('\n').append(helper).append('\n');
@@ -214,7 +222,8 @@ public final class ModuleReadback {
                     crossed.get(0), crossed.subList(1, crossed.size())));
         }
         return new Readback.Ready<>(
-                new AsRead(checked.module(), declared.declarations(), injected, checked.claims()));
+                new AsRead(checked.module(), declared.declarations(), implementations,
+                        checked.claims()));
     }
 
     /**
@@ -225,14 +234,15 @@ public final class ModuleReadback {
      * the end, rather than a value somebody assembled that looks like one.
      */
     record AsRead(Ast.Module module, Map<String, Ast.Def> declarations,
-                  Set<String> injectedBehaviors,
+                  Map<String, BehaviorImplementation> behaviorImplementations,
                   java.util.List<Scoping.Claim> libraryClaims) implements ReadableModule {
 
         /** Copied, because this is an answer a compilation remembers and an answer it remembers is
          *  a value. */
         AsRead {
             declarations = Collections.unmodifiableMap(new LinkedHashMap<>(declarations));
-            injectedBehaviors = Collections.unmodifiableSet(new LinkedHashSet<>(injectedBehaviors));
+            behaviorImplementations =
+                    Collections.unmodifiableMap(new LinkedHashMap<>(behaviorImplementations));
             libraryClaims = List.copyOf(libraryClaims);
         }
     }

@@ -1,6 +1,7 @@
 package souther.compiler.meta;
 
 import souther.compiler.Compiler;
+import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.ast.Ast;
 import souther.compiler.codegen.Backend;
 import souther.compiler.frontend.CstFrontend;
@@ -106,19 +107,29 @@ class ModuleReadbackTest {
                 read.module().imports().stream().map(Ast.Import::module).toList());
     }
 
-    /** No `let` comes back for any behavior, so which ones are injection targets cannot be read off
-     * the module; it is carried beside it. */
+    /** No `let` comes back for any behavior, so where each one's body comes from cannot be read off
+     * the module; it is carried beside it. Three states and not two: a behavior Souther is to
+     * implement and nobody has would arrive as one Java supplies if a reader worked it out again,
+     * and an importer would be told it may hand an implementation in (issue #936). */
     @Test
-    void whichBehaviorsAreInjectedIsCarried() {
+    void whereEachBehaviorsBodyComesFromIsCarried() {
         ReadableModule read = readBack("shared.ledger", Compiler.compile("""
-                module shared.ledger exposing ( Entry, record, double )
+                module shared.ledger exposing ( Entry, record, double, audited )
                 data Entry = { amount: Int }
                 behavior record : (e: Entry) -> Entry
                 behavior double : (e: Entry) -> Entry constructs Entry
                 let double (e) = Entry { amount = e.amount * 2 }
+                behavior audited : (e: Entry) -> Entry
+                    depends on record
                 """));
 
+        assertEquals(Map.of(
+                        "record", BehaviorImplementation.INJECTION_TARGET,
+                        "double", BehaviorImplementation.IMPLEMENTED,
+                        "audited", BehaviorImplementation.UNIMPLEMENTED),
+                read.behaviorImplementations());
         assertEquals(Set.of("record"), read.injectedBehaviors());
+        assertEquals(Set.of("audited"), read.unwrittenBehaviors());
     }
 
     /** A composition declares stages; what comes back is the signature it computes to, with every
@@ -366,7 +377,8 @@ class ModuleReadbackTest {
                 return read.of(binaryName);
             }
             return new PublishedClasses.Carried.Declared(new PublishedClasses.Declarations(
-                    as.apply(d.module()), d.data(), d.behaviorSignature(), d.behaviorInjected()));
+                    as.apply(d.module()), d.data(), d.behaviorSignature(),
+                    d.behaviorImplementation()));
         };
     }
 

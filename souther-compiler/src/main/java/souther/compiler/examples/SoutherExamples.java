@@ -200,7 +200,7 @@ public final class SoutherExamples {
     }
 
     /**
-     * A behavior that implements itself is not one a binding makes runnable.
+     * A binding is of an injection target, and of nothing else.
      *
      * <p>What a binding adds is the rows that had nothing to run them. A behavior with a `let` body
      * was runnable before anything was bound, and its rows are run by that body where a compile runs
@@ -209,6 +209,10 @@ public final class SoutherExamples {
      * difference as the model's. Whether such a replacement is a thing to offer is its own question,
      * and it is not this one.
      *
+     * <p>A behavior Souther is to implement and nobody has is refused for the other reason: no base
+     * was emitted for it, because the model says its body is to be written here. An instance offered
+     * for one is an instance of something the declaration does not describe.
+     *
      * <p>Refused where the binding is made rather than where a row would notice. A caller who bound
      * the wrong instance is told what is wrong with the instance, not told that some row of some
      * behavior did not hold.
@@ -216,10 +220,19 @@ public final class SoutherExamples {
     private void refuseIfItHasABody(String module, String behavior) {
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         for (Hir.BehaviorDef declared : prepared.behaviors()) {
-            if (declared.name().equals(behavior) && !prepared.injected(declared)) {
-                throw new IllegalArgumentException("`" + module + "." + behavior + "` has an"
-                        + " implementation of its own, so its rows are run by that; a binding is of a"
-                        + " behavior written without one");
+            if (!declared.name().equals(behavior)) {
+                continue;
+            }
+            switch (prepared.implementationOf(declared)) {
+                case INJECTION_TARGET -> { }
+                case IMPLEMENTED -> throw new IllegalArgumentException(
+                        "`" + module + "." + behavior + "` has an implementation of its own, so its"
+                                + " rows are run by that; a binding is of a behavior written without"
+                                + " one");
+                case UNIMPLEMENTED -> throw new IllegalArgumentException(
+                        "`" + module + "." + behavior + "` is Souther's to implement and has no"
+                                + " `let` yet, so its rows are waiting for one; a binding is of a"
+                                + " behavior Java supplies");
             }
         }
     }

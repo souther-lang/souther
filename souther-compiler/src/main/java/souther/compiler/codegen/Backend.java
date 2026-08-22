@@ -322,6 +322,11 @@ public final class Backend {
         // (their base lives in the declaring module) are requirements too, so a composition here
         // injects and binds them (spec §composition-with-requirements) — but no base is generated for them here.
         Set<ValueName.Behavior> requiredNames = Requirements.injectedNames(module, importedInjected);
+        // Beside them, and not among them: a behavior Souther is to implement and nobody has is
+        // nothing to inject — no base is emitted for it, so there is nothing a caller could be
+        // handed. `requiredNames` grows below with every behavior held as a field, which is why
+        // what is unwritten is asked of the declarations rather than read off what is left over.
+        Set<ValueName.Behavior> unwrittenNames = Requirements.unwrittenNames(module);
         Map<ValueName.Behavior, Type> requiredSuccess = new HashMap<>();
         Map<ValueName.Behavior, List<Type>> requiredParam = new HashMap<>();
         for (Hir.BehaviorDef bd : module.behaviors()) {
@@ -453,6 +458,18 @@ public final class Backend {
                             out.put(new GeneratedClass.BehaviorInterface(module.name(), spec.name()),
                                     b.generateBehaviorInterface(spec.name(), pts, b.successType(spec.ret()),
                                             requiredBy(spec)));
+                        } else if (unwrittenNames.contains(
+                                new ValueName.Behavior(module.name(), spec.name()))) {
+                            // Souther's to implement and not written (spec §unwritten-behavior).
+                            // The declaration is emitted so its name exists; nothing that would need
+                            // the body it has not got is.
+                            List<Type> pts = new ArrayList<>();
+                            for (Hir.Param p : spec.params()) {
+                                pts.add(b.successType(p.type()));
+                            }
+                            out.put(new GeneratedClass.BehaviorInterface(module.name(), spec.name()),
+                                    b.generateUnwrittenBehaviorInterface(spec.name(), pts,
+                                            b.successType(spec.ret())));
                         }
                         // else: injection target — its abstract base was generated above (spec §java-base-class)
                     }
@@ -858,6 +875,27 @@ public final class Backend {
      */
     private byte[] generateBehaviorInterface(String name, List<Type> paramTypes, Type retType,
                                              List<ValueName.Behavior> dependsOn) {
+        return behaviorInterface(name, paramTypes, retType, dependsOn);
+    }
+
+    /**
+     * The same interface for a behavior Souther is to implement and nobody has (spec
+     * §unwritten-behavior).
+     *
+     * <p>The name exists, so a module that imports it reads a declaration and a report can say what
+     * it owes. What it does not carry is the {@code of()}/{@code bind(...)} factory: there is no
+     * {@code $Impl} for it to build, and a factory naming a class nothing emitted is a link error
+     * held until a caller reaches it. It is not the abstract base either — that base is what a Java
+     * implementation extends, and this behavior's implementation is Souther's to write.
+     */
+    private byte[] generateUnwrittenBehaviorInterface(String name, List<Type> paramTypes,
+                                                      Type retType) {
+        return behaviorInterface(name, paramTypes, retType, null);
+    }
+
+    /** {@code dependsOn} null where there is no implementation to build, so no factory is written. */
+    private byte[] behaviorInterface(String name, List<Type> paramTypes, Type retType,
+                                     List<ValueName.Behavior> dependsOn) {
         ClassDesc cdI = cdBehavior(name);
         ClassDesc cdImpl = cdBehaviorImpl(name);
         boolean single = paramTypes.size() == 1;
@@ -870,7 +908,9 @@ public final class Backend {
                 // no Behavior supertype (it takes one argument): declare the typed apply directly
                 emitAbstractApply(cb, name, paramTypes, retType);
             }
-            emitBehaviorFactory(cb, cdI, cdImpl, dependsOn);
+            if (dependsOn != null) {
+                emitBehaviorFactory(cb, cdI, cdImpl, dependsOn);
+            }
         });
     }
 

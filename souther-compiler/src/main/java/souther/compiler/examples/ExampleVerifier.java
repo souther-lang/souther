@@ -687,16 +687,8 @@ public final class ExampleVerifier {
      *                  where there was nothing to hold — the answer is this compile's own, or
      *                  nothing answers the behavior at all
      */
-    /**
-     * @param injected whether the behavior is written without a body. What that decides here is who
-     *                 checks its {@code ensures}: a behavior with a body checks its own answer where
-     *                 it answers, and an injected one has no body to check in, so every crossing into
-     *                 generated code checks it ({@code EnsuresEnforcement.AtEachCrossing}). A row
-     *                 applying one is such a crossing, and where a behavior is only ever entered
-     *                 through a row it is the only one there is.
-     */
     private record ExampleTarget(String name, List<BehaviorRequirement> requirements,
-                                 Answerer.Answer answer, Agreement agreement, boolean injected) {
+                                 Answerer.Answer answer, Agreement agreement) {
 
         /**
          * Whether values may be handed to what answers this behavior, and if so to what.
@@ -764,8 +756,7 @@ public final class ExampleVerifier {
             }
             Answerer.Answer answer = answerer.of(name);
             return new ExampleTarget(name, requirements.getOrDefault(name, List.of()), answer,
-                    heldTo(name, answer),
-                    b instanceof Hir.SpecBehavior spec && module.injected(spec));
+                    heldTo(name, answer));
         }
         return null;
     }
@@ -970,13 +961,13 @@ public final class ExampleVerifier {
                 : said;
     }
 
-    /** The injected behavior named {@code name} in this module — a valid target for a fake; null if
-     * not found or not injected. How a behavior is written is the module's to say, so the rule is
+    /** The injection target named {@code name} in this module — a valid target for a fake; null if
+     * not found or not one. How a behavior is written is the module's to say, so the rule is
      * read from there rather than spelled again here. */
     private Hir.SpecBehavior injectedSpec(String name) {
         for (Hir.BehaviorDef b : module.behaviors()) {
             if (b instanceof Hir.SpecBehavior spec && spec.name().equals(name)
-                    && module.injected(spec)) {
+                    && module.implementationOf(spec).isInjectionTarget()) {
                 return spec;
             }
         }

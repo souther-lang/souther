@@ -4,6 +4,7 @@ import souther.compiler.query.ClaimAnnotations;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.diag.QuotedFrom;
@@ -97,7 +98,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * @param findings  what the measures found and nothing filled, which is what the lines under this
      *                  behavior print and what a build is warned about — one list, read three ways
      */
-    public record BehaviorReport(String name, boolean injected, int rows, int pending,
+    public record BehaviorReport(String name, BehaviorImplementation implementation,
+                                 int rows, int pending,
                                  MeasurementStatus status,
                                  Adequacy.SignatureEvidence signature,
                                  PartitionEvidence partition,
@@ -233,7 +235,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             Adequacy.BranchEvidence branch =
                     branches == null ? null : branches.get(behavior.name());
             behaviors.add(new BehaviorReport(behavior.name(),
-                    module.injected(behavior),
+                    module.implementationOf(behavior),
                     rows.size(), pending,
                     unreadable ? MeasurementStatus.PARTIAL : statusOf(signature, partition, branch),
                     signature, partition,
@@ -420,22 +422,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     public String human(SourceNameResolver names) {
         StringBuilder out = new StringBuilder();
-        int implemented = 0;
-        int injected = 0;
+        Map<BehaviorImplementation, Integer> counted =
+                new java.util.EnumMap<>(BehaviorImplementation.class);
+        for (BehaviorImplementation each : BehaviorImplementation.values()) {
+            counted.put(each, 0);
+        }
         for (ModuleReport module : modules) {
             out.append(String.format("%s measurement: %s%n",
                     DisplayColumns.padRight(module.module(), 56),
                     module.status().name().toLowerCase(java.util.Locale.ROOT)));
             for (BehaviorReport behavior : module.behaviors()) {
-                if (behavior.injected()) {
-                    injected++;
-                } else {
-                    implemented++;
-                }
+                counted.merge(behavior.implementation(), 1, Integer::sum);
                 out.append(String.format("  %s %s rows %-4d pending %d%n",
                         DisplayColumns.padRight(behavior.name(), 24),
-                        DisplayColumns.padRight(
-                                behavior.injected() ? "injected" : "implemented", 13),
+                        DisplayColumns.padRight(behavior.implementation().written(), 13),
                         behavior.rows(), behavior.pending()));
                 signature(out, behavior);
                 partition(out, behavior, module.declaredIn(), names);
@@ -450,9 +450,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             said(out, module.incompleteness().stream()
                     .filter(gap -> gap.behavior().isEmpty()).toList(), names);
         }
-        int total = implemented + injected;
-        out.append(String.format("%n%d %s: %d implemented, %d injected; %d %s waiting for a `let`.%n",
-                total, total == 1 ? "behavior" : "behaviors", implemented, injected,
+        int total = counted.values().stream().mapToInt(Integer::intValue).sum();
+        out.append(String.format("%n%d %s: %d implemented, %d unimplemented, %d injected;"
+                        + " %d %s waiting for a `let`.%n",
+                total, total == 1 ? "behavior" : "behaviors",
+                counted.get(BehaviorImplementation.IMPLEMENTED),
+                counted.get(BehaviorImplementation.UNIMPLEMENTED),
+                counted.get(BehaviorImplementation.INJECTION_TARGET),
                 pendingRows(), pendingRows() == 1 ? "row" : "rows"));
         // Last, and its own line. What the measurement managed is said above, per module; this is the
         // other question, and the two were one word until they disagreed in front of a reader.
@@ -1117,17 +1121,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
-     * The same, for the one field with no enum behind it.
-     *
-     * <p>Whether a behavior has a {@code let} is a boolean, and these are the two words it is written
-     * as. Having no enum is why it needs this more than the others rather than less: nothing else in
-     * the compiler says what these words are.
-     */
-    public static String implementationWord(boolean injected) {
-        return injected ? "injected" : "implemented";
-    }
-
-    /**
      * Whether the partition measure is the one that answers this question.
      *
      * <p>Which values may stand somewhere, which classes hold them, and which value a rule tells
@@ -1319,7 +1312,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             for (BehaviorReport behavior : module.behaviors()) {
                 ObjectNode b = behaviors.addObject();
                 b.put("name", behavior.name());
-                b.put("implementation", implementationWord(behavior.injected()));
+                b.put("implementation", behavior.implementation().written());
                 b.put("rows", behavior.rows());
                 b.put("pending", behavior.pending());
                 b.put("status", wire(behavior.status()));

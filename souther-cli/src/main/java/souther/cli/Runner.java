@@ -410,9 +410,17 @@ public final class Runner {
             }
             if (b instanceof Hir.SpecBehavior spec) {
                 if (!implemented.contains(name)) {
-                    return fail("run.behavior.noimpl",
-                            "`" + name + "` has no implementation (it is injected from Java). "
-                                    + "Available to run: " + available + ".", name, available);
+                    // Two ways to have no body, and they send an author to different places: one is
+                    // supplied from Java and the other is a `let` this model has not written yet.
+                    return spec.dependsOn().isEmpty()
+                            ? fail("run.behavior.noimpl",
+                                    "`" + name + "` has no implementation (it is injected from"
+                                            + " Java). Available to run: " + available + ".",
+                                    name, available)
+                            : fail("run.behavior.unwritten",
+                                    "`" + name + "` declares what it depends on and has no `let`"
+                                            + " yet, so there is nothing to run. Available to run: "
+                                            + available + ".", name, available);
                 }
                 if (!spec.dependsOn().isEmpty()) {
                     String dependencies = dependencyNames(spec);

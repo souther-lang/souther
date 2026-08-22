@@ -325,7 +325,8 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
     /** What one behavior's partition makes of the whole report, with nothing else asked about. */
     private static AdequacyReport.AdequacyStatus verdictOf(PartitionEvidence partition) {
         AdequacyReport.BehaviorReport behavior = new AdequacyReport.BehaviorReport(
-                "weigh", false, 1, 0, MeasurementStatus.COMPLETE, null, partition,
+                "weigh", souther.compiler.check.BehaviorImplementation.IMPLEMENTED,
+                1, 0, MeasurementStatus.COMPLETE, null, partition,
                 souther.compiler.query.ClaimAnnotations.NONE, null, List.of());
         return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test", Adequacy.Level.ALL,
                 MeasurementStatus.COMPLETE,

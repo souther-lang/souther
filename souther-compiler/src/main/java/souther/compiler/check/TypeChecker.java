@@ -77,6 +77,7 @@ public final class TypeChecker {
     public static Reported checkModule(Hir.Module module, Symbols symbols, ReadingPolicy policy,
                                        Map<String, Sig> sigs,
                                        Set<ValueName.Behavior> importedInjected,
+                                       Set<ValueName.Behavior> importedUnwritten,
                                        Hir.Module lowered, Map<ValueName.Behavior, ReqSig> reqSigs,
                                        Map<ValueName.Behavior, ReqSig> calleeSigs,
                                        Map<String, Type> recursiveHelperFns,
@@ -86,7 +87,8 @@ public final class TypeChecker {
         List<CompileException> errors = new ArrayList<>();
         boolean stopped = false;
         try {
-            checkRecovering(module, symbols, policy, sigs, importedInjected, lowered, calleeSigs, errors,
+            checkRecovering(module, symbols, policy, sigs, importedInjected, importedUnwritten,
+                    lowered, calleeSigs, errors,
                     elaborated, abandoned, reqSigs, recursiveHelperFns, imported, settled);
         } catch (Unanswerable e) {
             abandoned.add(e);
@@ -182,6 +184,7 @@ public final class TypeChecker {
     static void checkRecovering(Hir.Module module, Symbols symbols, ReadingPolicy policy,
                                         Map<String, Sig> sigs,
                                        Set<ValueName.Behavior> importedInjected,
+                                       Set<ValueName.Behavior> importedUnwritten,
                                         Hir.Module lowered, Map<ValueName.Behavior, ReqSig> calleeSigs,
                                         List<CompileException> errors,
                                         Elaborated elaborated, List<Unanswerable> abandoned,
@@ -416,15 +419,13 @@ public final class TypeChecker {
             throw CompileException.ofAll(unitEntries, DiagnosticRenderer.legacyBody(unitEntries.get(0)));
         }
         for (Hir.BehaviorDef b : module.behaviors()) {
-            if (b instanceof Hir.SpecBehavior spec && !fns.containsKey(spec.name())) {
-                // `depends on` names what an implementation calls (§depends-on), and an injection target has
-                // no implementation here — the Java side provides it (§injected-behavior). Declaring `depends on` on
-                // one is meaningless: nothing calls those behaviors, and nothing injects them. The
-                // behavior that composes or calls this one carries the requirement instead (§injected-behavior).
-                if (!spec.dependsOn().isEmpty()) {
-                    throw CompileException.of(Diagnostic
-                                    .at(spec.pos()).say(new DeclarationMessage.AnInjectionTargetCannotDependOnAnything(spec.name())).build());
-                }
+            // `depends on` names what an implementation calls (§depends-on), so a behavior that
+            // writes one takes those dependencies as arguments of a `let` — which makes it Souther's
+            // to implement whether or not the `let` has been written yet (§unwritten-behavior). What
+            // Java supplies is the behavior that writes no clause and no `let` (§injected-behavior),
+            // and only that one gets a base for an implementation to extend.
+            if (b instanceof Hir.SpecBehavior spec
+                    && Requirements.implementationOf(b, fns.keySet()).isInjectionTarget()) {
                 SpecChecker.checkInjectionConstructs(spec, symbols, exposeAll, exposed);
                 injectionTargets.add(spec.name());
             }
@@ -447,6 +448,8 @@ public final class TypeChecker {
         // Fail-fast with the reqSigs it reads: a `depends on` that named something else leaves the call
         // untypeable, and the body check would report it as a call to an unknown name (E1023).
         SpecChecker.checkRequiresAreInjectionTargets(module, reqSigs, calleeSigs);
+        // Nothing that is built here may hold a behavior nobody has written (spec §unwritten-behavior).
+        SpecChecker.checkNothingBuiltHereRestsOnAnUnwrittenBehavior(module, importedUnwritten);
         // Fail-fast too: a behavior reaching itself has no first element to build, and the code that
         // works out requirement sets and emits classes would walk the loop.
         SpecChecker.checkBehaviorsDoNotRecurse(module);
