@@ -154,6 +154,30 @@ class AWitnessIsProjectedThroughItsOwnUnitAndNotTheWholeFileTest {
         return out;
     }
 
+    /** Which stops are written to a column, by sweeping the canonical form's stops. */
+    private static List<Witnesses.CanonicalStop> sweptAt(List<Witnesses.CanonicalStop> stops,
+            Columns.Unit unit) {
+        List<Witnesses.CanonicalStop> out = new ArrayList<>();
+        for (Witnesses.CanonicalStop stop : stops) {
+            if (stop.occurrence().unit().equals(unit)) {
+                out.add(stop);
+            }
+        }
+        return out;
+    }
+
+    /** Every column any stop of a canonical form is written to, in the order they are met. */
+    private static List<Columns.Unit> columnsOf(List<Witnesses.CanonicalStop> stops) {
+        Set<Columns.Unit> seen = new java.util.LinkedHashSet<>();
+        List<Columns.Unit> out = new ArrayList<>();
+        for (Witnesses.CanonicalStop stop : stops) {
+            if (seen.add(stop.occurrence().unit())) {
+                out.add(stop.occurrence().unit());
+            }
+        }
+        return out;
+    }
+
     /** Every group any opportunity of a layout names, in the order they are met. */
     private static List<Doc.GroupRef> groupsOf(Layout layout) {
         Set<Doc.GroupRef> seen = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
@@ -297,7 +321,15 @@ class AWitnessIsProjectedThroughItsOwnUnitAndNotTheWholeFileTest {
             for (Doc.NestRef level : levelsOf(lines)) {
                 under.put(level, sweptUnder(lines, level));
             }
-            Repair.Round swept = new Repair.Round(source, canonical, pairing, settling, under);
+            List<Witnesses.CanonicalStop> stops =
+                    Witnesses.stops(canonical, pairing.writesCode());
+            Map<Columns.Unit, List<Witnesses.CanonicalStop>> atAColumn =
+                    new java.util.LinkedHashMap<>();
+            for (Columns.Unit unit : columnsOf(stops)) {
+                atAColumn.put(unit, sweptAt(stops, unit));
+            }
+            Repair.Round swept =
+                    new Repair.Round(source, canonical, pairing, settling, under, atAColumn);
             Repair.Round gathered = new Repair.Round(source, canonical, pairing);
 
             for (Witness w : witnesses(source, canonical, pairing)) {

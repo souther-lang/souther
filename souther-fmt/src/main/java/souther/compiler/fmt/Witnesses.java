@@ -26,7 +26,7 @@ import java.util.Set;
  * <p>One family per rule, and each of them answers about its own unit: a boundary for spacing, a pair
  * of items for separation, a pair of levels for indentation, a group for conditional layout, a
  * comment for the rules about comments, a site of the source for the rules about which code tokens
- * are written.
+ * are written, a column of a table for the rule that lines its rows up.
  *
  * <p>A family reads the results of the rules it depends on rather than competing with them, and
  * where what it depends on is not settled yet it says nothing: the rules are asked again once it is.
@@ -511,9 +511,27 @@ final class Witnesses {
                             + " asks what the source has between the same two");
         }
         List<Gaps.Boundary> boundaries = between(canonical.construction().doc(), writes.size());
+        // At a stop the run holds this rule's answer and then the column's padding, and this is
+        // asked about the first of them. Where the source wrote spaces there, all of it is the
+        // column's and this says nothing; where it wrote anything else, what it wrote is not
+        // padding and the column rule has no answer about it, so this one does — and the round
+        // after it, with the separator written, is where the column is asked.
+        Map<Integer, String> atAColumn = new LinkedHashMap<>();
+        Set<Integer> padded = new LinkedHashSet<>();
+        for (CanonicalStop stop : stops(canonical, writes)) {
+            atAColumn.put(stop.adjacency(), stop.separator());
+            if (padsAfterTheSeparator(source, had.get(stop.adjacency()),
+                    had.get(stop.adjacency() + 1), stop.separator())) {
+                padded.add(stop.adjacency());
+            }
+        }
         List<Witness> out = new ArrayList<>();
         for (int i = 0; i + 1 < writes.size(); i++) {
-            String wrote = text.substring(writes.get(i).end(), writes.get(i + 1).start());
+            if (padded.contains(i)) {
+                continue;
+            }
+            String wrote = atAColumn.containsKey(i) ? atAColumn.get(i)
+                    : text.substring(writes.get(i).end(), writes.get(i + 1).start());
             if (wrote.indexOf('\n') >= 0) {
                 continue;   // the canonical form breaks here, so it writes no spacing
             }
@@ -532,6 +550,144 @@ final class Witnesses {
                             writes.get(i + 1).kind()),
                     wrote, has));
         }
+        return out;
+    }
+
+    /**
+     * One stop of the canonical form, and which adjacency of its code tokens it stands at.
+     *
+     * <p>The layout says where a stop is as an offset into the text it wrote. What a rule holding
+     * two texts side by side can use is which pair of tokens it stands between, since that is the
+     * one thing the two share — so the offset is read once, here, and everything downstream is
+     * about the adjacency.
+     */
+    record CanonicalStop(ColumnOccurrence occurrence, int adjacency, String separator) {
+    }
+
+    /**
+     * Whether what the source writes at a stop reads as the separator and then this rule's padding.
+     *
+     * <p>The canonical form writes a separator and then the spaces that carry the connector out to
+     * the column, and this asks whether the source's run comes apart the same way: the separator
+     * itself, and after it spaces and nothing else. That is the whole of what divides the two
+     * families at a stop, and it is asked in one place because they must neither both answer about
+     * the same characters — a conflict the repair refuses — nor both stay silent, which leaves a
+     * difference no rule accounts for.
+     *
+     * <p>Both halves are the question. Asked only whether what stands there is spaces, a run that
+     * is <em>empty</em> answers yes — a source that wrote no separator at all would be this rule's,
+     * and a one-row table with no space before its arrow would be told that its rows do not line up
+     * with each other. And a tab reaches a column as well as spaces do, so a run this admitted on
+     * the strength of the column it arrived at would leave a text that is not the canonical form
+     * with nothing said against it.
+     *
+     * <p>Written against {@code separator} rather than against one space, so a stop whose separator
+     * is nothing needs no second reading of this: the prefix is there vacuously and all of the run
+     * is padding.
+     */
+    static boolean padsAfterTheSeparator(String source, SyntaxToken before, SyntaxToken after,
+            String separator) {
+        String run = source.substring(before.end(), after.start());
+        return run.startsWith(separator)
+                && run.substring(separator.length()).chars().allMatch(c -> c == ' ');
+    }
+
+    /**
+     * Every stop the canonical form wrote, with the adjacency it stands at.
+     *
+     * <p>Read by the two rules that have to know about a stop: the column rule, whose units these
+     * are, and the spacing rule, which is not asked at one. Two readers of one value, so that a
+     * boundary cannot be a stop for the first and an ordinary boundary for the second.
+     */
+    static List<CanonicalStop> stops(Formatter.CanonicalForm canonical, List<SyntaxToken> writes) {
+        List<CanonicalStop> out = new ArrayList<>();
+        int i = 0;
+        for (ColumnOccurrence stop : canonical.layout().stops()) {
+            while (i + 1 < writes.size() && writes.get(i + 1).start() < stop.at()) {
+                i++;
+            }
+            if (i + 1 >= writes.size() || writes.get(i).end() > stop.at()) {
+                throw new IllegalStateException(
+                        "a column stop at offset " + stop.at() + " stands at no adjacency of the"
+                                + " canonical form's tokens; a stop is written between the"
+                                + " separator and the connector after it");
+            }
+            out.add(new CanonicalStop(stop, i,
+                    canonical.layout().text().substring(writes.get(i).end(), stop.at())));
+        }
+        return out;
+    }
+
+    /**
+     * What the column rule has against {@code source}: for each column of each table, the display
+     * column the canonical form writes the connector at, and the ones the source's rows come to.
+     *
+     * <p>What a row comes to is where its connector stands with the padding the source wrote and
+     * everything before it on the line as the canonical form has it — not the column the connector
+     * physically occupies in the source. An absolute column is the sum of everything to its left:
+     * the indent, every separator, and every column before it on the line. Read that way, a table
+     * an author lined up correctly and indented one column too deep departs from this rule at every
+     * row, and repairing the indentation is what makes those departures go away — which is a rule
+     * reporting somebody else's difference as its own. {@link Witness.Indentation} met the same
+     * thing and answers with a step rather than with a column for the same reason.
+     *
+     * <p>So what is read from the source is the padding, which is this rule's own, and it is said
+     * as the column that padding comes to. Where the rest of the line is already canonical the two
+     * are the same number, which is every source that has nothing else wrong with it.
+     *
+     * <p>A row the canonical form writes down the page has no stop, so it is not asked about here.
+     * Neither is a row the source broke: its connector opens a line there, and a column is not
+     * something a line's first token can be at. What the source did instead is the conditional
+     * layout rule's to report, and once that is repaired this is asked again.
+     */
+    static List<Witness> columns(String source, Formatter.CanonicalForm canonical) {
+        return columns(source, canonical, new Pairing(source, canonical));
+    }
+
+    /** The same, for a caller that has already read the two texts' tokens. */
+    static List<Witness> columns(String source, Formatter.CanonicalForm canonical,
+            Pairing pairing) {
+        List<SyntaxToken> had = pairing.hadCode();
+        List<SyntaxToken> writes = pairing.writesCode();
+        if (had.size() != writes.size()) {
+            throw new NoCorrespondence(
+                    "the source has " + had.size() + " tokens and its canonical form "
+                            + writes.size() + "; the two cannot be held side by side and this rule"
+                            + " asks where the source wrote the same connector");
+        }
+        Map<Columns.Unit, Integer> written = new LinkedHashMap<>();
+        for (ColumnDecision decision : canonical.layout().columns()) {
+            written.put(decision.unit(), decision.column());
+        }
+        Map<Columns.Unit, Set<Integer>> hadAt = new LinkedHashMap<>();
+        for (CanonicalStop stop : stops(canonical, writes)) {
+            int i = stop.adjacency();
+            String between = source.substring(had.get(i).end(), had.get(i + 1).start());
+            if (between.indexOf('\n') >= 0 || between.contains("//")) {
+                continue;
+            }
+            if (!padsAfterTheSeparator(source, had.get(i), had.get(i + 1), stop.separator())) {
+                continue;   // the spacing rule is answering this run; asked again once it has
+            }
+            // The run comes apart, so what is left of it after the separator is spaces and each of
+            // them is one column.
+            int padding = between.length() - stop.separator().length();
+            hadAt.computeIfAbsent(stop.occurrence().unit(), _ -> new LinkedHashSet<>())
+                    .add(stop.occurrence().naturalColumn() + padding);
+        }
+        List<Witness> out = new ArrayList<>();
+        hadAt.forEach((unit, columns) -> {
+            Integer column = written.get(unit);
+            if (column == null) {
+                throw new IllegalStateException(
+                        "a row was written to " + unit.stop() + " and the layout says no column is"
+                                + " there; a stop and the decision it is written to are made by one"
+                                + " run");
+            }
+            if (!columns.equals(Set.of(column))) {
+                out.add(new Witness.AtAColumn(unit, column, List.copyOf(columns)));
+            }
+        });
         return out;
     }
 

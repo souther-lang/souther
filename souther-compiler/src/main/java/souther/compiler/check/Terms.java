@@ -223,27 +223,30 @@ final class Terms {
      * what made {@code a * b} name nothing where it is written and something where it is bound —
      * which is a name changing what can be said of an expression.
      *
-     * <p>The environment is what carries a binding, and this walk takes no leaf rule of its own. It
-     * took one so that a binding could be read through by answering the binder's reads with the form
-     * its value had — a second account of what a name means, beside the one {@link Denotations}
-     * keeps, and weaker than it by exactly the values the arithmetic cannot read. Inside a
-     * reduction's step, where nothing else enters a binding, that weaker account was the only one
-     * there was and a helper taking a record ended the read (#867). A leaf rule handed in is where
-     * such an account can be written, so there is none.
+     * <p>The environment is what carries a binding, and what this walk is told about one is an
+     * expression. It once answered a binder's reads with the form its value had — a second account
+     * of what a name means, beside the one {@link Denotations} keeps, and weaker than it by exactly
+     * the values the arithmetic cannot read. Inside a reduction's step, where nothing else enters a
+     * binding, that weaker account was the only one there was and a helper taking a record ended the
+     * read (ADR-0106). What is handed in now is {@link #readThrough}, which says which value a name
+     * denotes and cannot say what its arithmetic comes to, so there is nowhere for such an account
+     * to be written.
      */
     LinearForm<FactSubject> affineOf(Core raw, Denotations at) {
-        return AffineForms.of(raw, at, leaves);
+        return AffineForms.of(raw, at, affineReading);
     }
 
     /**
-     * What this reader calls a leaf, which is the whole of what is its own about the walk.
+     * What this reader answers about its own environment, which is the whole of what is its own
+     * about the walk.
      *
      * <p>Which nodes compose is a fact about the language and is {@link AffineForms}'s; what a leaf
-     * is called and what a name means inside a binding are this reader's. The measure that finds the
-     * line a rule draws reads the same tree through the same walk with its own answers to these.
+     * is called, what a name means inside a binding, and which value a name denotes are this
+     * reader's. The measure that finds the line a rule draws reads the same tree through the same
+     * walk with its own answers to these.
      */
-    private final AffineForms.Leaves<FactSubject, Denotations> leaves =
-            new AffineForms.Leaves<>() {
+    private final AffineForms.Reading<FactSubject, Denotations> affineReading =
+            new AffineForms.Reading<>() {
 
                 @Override
                 public LinearForm<FactSubject> leafOf(Core e, Denotations at) {
@@ -253,6 +256,12 @@ final class Terms {
                 @Override
                 public Denotations inside(Core.LetIn li, Denotations at) {
                     return Terms.this.inside(li, at);
+                }
+
+                @Override
+                public AffineForms.ReadThrough<Denotations> readThrough(Core.Read read,
+                                                                        Denotations at) {
+                    return Terms.this.readThrough(read, at);
                 }
 
                 @Override
@@ -357,30 +366,36 @@ final class Terms {
         if (counted != null) {
             return LinearForm.constant(counted);
         }
-        // A name given arithmetic over terms the check names is related to that arithmetic (spec
-        // §invariant-discharge-terms). Read through it, as the `let` node above is read through:
-        // the name and the expression it was given are one value, and reading one as an atom of
-        // its own leaves a guard on the name saying nothing about the value it was built from.
-        LinearForm<FactSubject> given = givenForm(n, at);
-        if (given != null) {
-            return given;
-        }
         FactSubject atom = atomOf(n, at);
         return atom == null ? null : LinearForm.atom(atom);
     }
 
     /**
-     * The form of what a name was given, where the name stands for a term of its own and what it was
-     * given is arithmetic this can read. A name given a location is not this — {@link #atomOf}
-     * answers that with the location, which is what the seeding wrote about.
+     * What a name denotes, where the name stands for a term of its own and what it was given is
+     * arithmetic this can read (spec §invariant-discharge-terms). The name and the expression it was
+     * given are one value, and reading the name as an atom of its own leaves a guard on it saying
+     * nothing about the value it was built from.
+     *
+     * <p>A name given a location is not this — {@link #atomOf} answers that with the location, which
+     * is what the seeding wrote about — and neither is a name given a value written in the source,
+     * which {@link #writtenValue} follows whatever the name denotes.
+     *
+     * <p>What is answered is the expression, and the environment it is read in. Reading it is
+     * {@link AffineForms}'s: this once did the reading itself, and a caller that can answer with a
+     * form is a caller that can keep an account of the arithmetic beside the one walk that has one.
      */
-    private LinearForm<FactSubject> givenForm(Core e, Denotations at) {
-        if (!(e instanceof Core.Read r) || !computesAsWhatItWasGiven(r.binding(), at)
-                || affineScalarBase(e.type()) == null) {
+    private AffineForms.ReadThrough<Denotations> readThrough(Core.Read read, Denotations at) {
+        if (!computesAsWhatItWasGiven(read.binding(), at)
+                || affineScalarBase(read.type()) == null) {
             return null;
         }
-        Core given = at.valueOf(r.binding());
-        return given == null || given == e ? null : affineOf(given, at);
+        Core given = at.valueOf(read.binding());
+        // The environment at the read. A binding is entered where its body is walked, so what a
+        // name was given is read under the bindings that were in scope where it was made and under
+        // whatever was bound after it; a binding tells itself from every other, so nothing bound
+        // later answers for a name this one holds.
+        return given == null || given == read ? null
+                : new AffineForms.ReadThrough<>(given, at);
     }
 
     /**

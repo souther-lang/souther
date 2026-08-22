@@ -148,7 +148,29 @@
           "status" : "complete"
         },
         "notDerivable" : [ ],
-        "notRead" : [ ],
+        "notRead" : [ {
+          "position" : "item.price",
+          "reason" : "unsupported_syntax",
+          "rule" : "comparison@0:61:15",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.catalog",
+            "behavior" : "discount",
+            "ordinal" : 8,
+            "lowered" : 0
+          }
+        }, {
+          "position" : "rate",
+          "reason" : "unsupported_syntax",
+          "rule" : "comparison@0:61:15",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.catalog",
+            "behavior" : "discount",
+            "ordinal" : 8,
+            "lowered" : 0
+          }
+        } ],
         "omitted" : [ ]
       },
       "branch" : {
@@ -158,7 +180,31 @@
         "countedTogether" : [ ],
         "unreached" : [ ]
       },
-      "findings" : [ ]
+      "findings" : [ {
+        "kind" : "partition_not_read",
+        "disposition" : "reported",
+        "subject" : "item.price",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.catalog",
+          "behavior" : "discount",
+          "ordinal" : 8,
+          "lowered" : 0
+        },
+        "reason" : "unsupported_syntax"
+      }, {
+        "kind" : "partition_not_read",
+        "disposition" : "reported",
+        "subject" : "rate",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.catalog",
+          "behavior" : "discount",
+          "ordinal" : 8,
+          "lowered" : 0
+        },
+        "reason" : "unsupported_syntax"
+      } ]
     } ]
   }, {
     "module" : "conformance.shipping",
@@ -624,6 +670,7 @@
     } ]
   } ],
   "sources" : {
+    "0" : "catalog.sou",
     "1" : "shipping.sou"
   }
 }

@@ -244,6 +244,24 @@ departure to break off: the `else` ends the guard's own line and the clauses go 
         | unique -> DuplicateProduct
 ```
 
+An `example` and a `fake` are decision tables, and their rows are read against each other: which
+input differs between two rows is what writing them one under the other is for. So the connectors of
+a table's rows are written at one column — the `:` and the `->` of an `example`, the `->` of a
+`fake` — with the shorter rows padded out to the widest. Adding a row rewrites the table where the
+new one is the widest, which is the diff a table asks for. Whatever the author lined up by hand is
+derived again like everything else, and a row too long for one line is written down the page and
+takes no part in the columns. The padding is measured in columns on the screen, so a table whose
+descriptions are Japanese lines up on a screen rather than on a character count, and it is written
+as spaces — a tab reaches a column too, and what a source wrote there is the rule about what goes
+between two tokens' to say rather than the column's.
+
+```
+example priceOfTheFirstGlass
+    | "off peak, no coupon" : (OffPeak, NoCoupon)     -> Price(490)
+    | "happy hour"          : (HappyHour, NoCoupon)   -> Price(290)
+    | "with a coupon"       : (OffPeak, WithCoupon)   -> Price(100)
+```
+
 A comment keeps what it was written about. On the line of the code it follows it stays there; on a
 line of its own it goes above what follows it, unless a blank line separates it from that and none
 separates it from the code above, in which case it stays under that code. A comment with nothing
@@ -269,7 +287,10 @@ rest of the rules are about:
 What stands between two tokens the same line holds:
 
 - what goes between two tokens on a line — one space, or none. The two answers quote the characters,
-  so a source that wrote a line break where neither text ends a line reads it back as `\n`.
+  so a source that wrote a line break where neither text ends a line reads it back as `\n`. At a
+  table's column this answers about the separator and the column rule about the padding after it,
+  so what is written there is this rule's until the separator is what the canonical form has —
+  a tab, or no space at all, is quoted here rather than reported as a column the row missed.
 
 Whether a construct is written down the page at all. The two answers are `on one line` and `down the
 page`, and which rule is named is which one decided the form:
@@ -301,6 +322,19 @@ How far in a line begins. The two answers are columns:
 - one level deeper is one indent further in — a step, and not a column the rule never states.
 - a line the file holds begins at column zero — the outermost level, which has no level outside it
   to be measured from.
+
+Where a table's rows line up. An `example` and a `fake` write the connectors of every row at one
+column, and the two answers are columns:
+
+- the rows of a table of examples write their : at one column — the description was padded out to
+  the widest one in the table, or was not.
+- the rows of a table of examples write their -> at one column — the same, for the input.
+- the rows of a table of fakes write their -> at one column — a `fake` has the one column, since its
+  rows have no description.
+
+The column a row is said to be at is where the padding it wrote carries it, with the rest of the
+line as the canonical form has it. So a table lined up correctly and indented one column too deep is
+told about its indentation and nothing else, rather than about every row.
 
 What separates one thing from another, and what ends:
 
