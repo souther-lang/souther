@@ -44,7 +44,8 @@ class ACosetWhoseValuesFillNamesAMemberTheRunHoldsTest {
     }
 
     private static Count named(CandidateDomain of) {
-        return assertInstanceOf(CandidateDomain.Somewhere.class, of).at();
+        return of instanceof CandidateDomain.One one ? one.at()
+                : assertInstanceOf(CandidateDomain.Somewhere.class, of).at();
     }
 
     /**
@@ -98,6 +99,27 @@ class ACosetWhoseValuesFillNamesAMemberTheRunHoldsTest {
 
         assertTrue(between("0", false, "5e-25").admits(named(may)), named(may).toString());
         assertTrue(onTheCoset(named(may), Rational.ZERO, Rational.of(3)), named(may).toString());
+    }
+
+    /**
+     * A run holding one value answers whether that value is a member, and the answer is a proof
+     * either way.
+     *
+     * <p>The one branch here that can take a coverage item away. Everywhere else a coset whose values
+     * fill answers {@link CandidateDomain.Somewhere}, which settles nothing; a run down to a point is
+     * the case where membership is decided rather than sampled, and {@link CandidateDomain.None}
+     * from it reaches {@code Impossible}. Two thirds is not a decimal a model writes, so two is no
+     * member of a coset of three — and three is.
+     */
+    @Test
+    void aRunDownToOnePointDecidesWhetherThatPointIsAMember() {
+        assertInstanceOf(CandidateDomain.None.class, CandidateDomain.of(
+                new AffinePreimage.Filling(Rational.ZERO, Rational.of(3)),
+                between("2", true, "2")));
+
+        assertEquals(Count.of(new BigDecimal("3")), named(CandidateDomain.of(
+                new AffinePreimage.Filling(Rational.ZERO, Rational.of(3)),
+                between("3", true, "3"))));
     }
 
     /** Ends that have crossed are the one thing an empty answer here means, and it is decided on the

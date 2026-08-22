@@ -147,6 +147,24 @@ class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
                 new AffinePreimage.Stepping(at(7), at(2)));
     }
 
+    /**
+     * Taking the units out of a value answers for every value, which it did not when it was a helper
+     * of one caller.
+     *
+     * <p>Nothing divides into zero, or everything does — either way what is left of it is itself,
+     * and a loop looking for the last factor of two in it does not end. The caller this was written
+     * for had refused zero before it asked, and moving it onto {@link Rational} took the body and
+     * left the refusal behind.
+     */
+    @Test
+    void takingTheUnitsOutOfAValueAnswersForEveryValue() {
+        assertEquals(Rational.ZERO, Rational.ZERO.unitsRemoved());
+        assertEquals(at(3), at(3).unitsRemoved());
+        assertEquals(Rational.ONE, at(20).unitsRemoved());
+        // One below zero is a unit as well, so three and minus three generate the same decimals.
+        assertEquals(at(3), at(-3).unitsRemoved());
+    }
+
     /** And a generator the decimals treat as nothing is nothing: two is a unit among them, so a
      *  coset of two is every decimal there is. */
     @Test

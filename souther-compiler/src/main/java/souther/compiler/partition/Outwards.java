@@ -40,14 +40,19 @@ final class Outwards {
      * <p>Stops early where neither direction has a value left, which is what makes a bounded run
      * cost its own width rather than the whole allowance.
      *
-     * @param first         a value of the run, which the caller has one of before it asks
+     * @param first         a value of the run. Refused where it is none, since a caller with no
+     *                      value to start from has composed nothing — which is not the same as a run
+     *                      with nothing in it, and an empty answer here would be read as the second
      * @param by            the distance between neighbouring candidates, positive
      * @param howManyValues how many to yield, counting {@code first}
      */
     static List<Place> from(Place first, Count by, Carrier carrier, NumericDomain.Bounds within,
                             int howManyValues) {
-        if (first == null) {
-            return List.of();
+        if (first == null || !within.admits(first)) {
+            throw new IllegalArgumentException(
+                    "walking outward starts from a value of the run, and a caller that has none has"
+                            + " composed nothing rather than found a run with nothing in it: "
+                            + first);
         }
         // One place where the carrier's values do not count. There is no next place to step to, so
         // the one the caller started from is the whole of what there is to try.

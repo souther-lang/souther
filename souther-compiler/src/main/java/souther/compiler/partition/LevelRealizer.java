@@ -133,8 +133,11 @@ public final class LevelRealizer {
      * the one the ranges leave is the whole of what there is to try.
      */
     private static List<Place> alongTheLine(NumericDomain.Bounds together, Carrier carrier) {
-        return Outwards.from(carrier.somethingInside(together.min(), together.max()),
-                Count.of(1), carrier, together, HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT);
+        // Nothing composed, which is this one's own answer and not something to ask a walk about.
+        Place first = carrier.somethingInside(together.min(), together.max());
+        return first == null ? List.of()
+                : Outwards.from(first, Count.of(1), carrier, together,
+                        HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT);
     }
 
     /**
@@ -157,15 +160,21 @@ public final class LevelRealizer {
     /**
      * Every position of a form, at values that put the form where the item asks.
      *
-     * <p>A bounded search over the whole numbers: each position runs between the ends its own rules
-     * leave, the coefficients are the form's, and what is asked for is a level. Pruned by the two
-     * things that settle it without looking — what the positions still to be chosen can add up to,
-     * and whether the residue is a multiple of what their coefficients can make.
+     * <p>Depth-first over the positions, each of them standing where {@link CandidateDomain} says it
+     * may: inside the run its own rules leave, and on the coset the coefficients of the rest can
+     * land on. Both are facts that settle the position without looking and both are in the set
+     * rather than beside it — held as a test applied after choosing, the second one settled nothing
+     * wherever the first left a single candidate to choose.
      *
-     * <p><b>Three answers, and the difference between them is the point.</b> Exhausting a box every
-     * position of which is bounded proves the level is out of reach; running past the budget, or
-     * meeting a position nothing bounds, proves nothing at all (ADR-0091). Reported as one, a search
-     * that ran out would take a coverage item away.
+     * <p>Over whole numbers and over decimals alike. A position whose values fill is held to a coset
+     * that is dense and is still not every value, so what it can be given is one member of that and
+     * never the next one along.
+     *
+     * <p><b>Three answers, and the difference between them is the point.</b> A walk of a position
+     * every value of which could be tried and was proves the level is out of reach; running past the
+     * budget, or standing a position somewhere it has more values than this looked at, proves
+     * nothing at all (ADR-0091). Reported as one, a search that ran out would take a coverage item
+     * away.
      *
      * <p>A side is asked for at the first level past the one it starts from, and then at the next,
      * for as many as {@link LevelCandidateSource} offers. Which levels those are, and how many, is
@@ -224,11 +233,18 @@ public final class LevelRealizer {
      * for the same reason that one does — it is what a run gives up, and a bound on anything else
      * has to be turned into one before it means anything.
      *
-     * <p><b>Not a measured number.</b> Every one of the fifty-three progressions the suite reaches
-     * gives up its row at the first value, so nothing here needs a second and this many is as
-     * arbitrary as any other more than one. What says it should be more than one is the defect a
-     * pair on a line was repaired for: the arithmetic names values the rules may still refuse, and
-     * refusing one is no reason to stop.
+     * <p><b>Nothing this language can state needs a second value.</b> What a step past the first one
+     * buys is a value the arithmetic names and a rule takes out of the middle of a run — and a rule
+     * that takes one value out without moving an end is an inequation. The models here have no
+     * spelling for one, and the only place a region is handed the negation of an equality is the
+     * side of a cut a form's border is never reached from. So all fifty-three progressions the suite
+     * reaches give up their row at the first value, and none of them could do otherwise.
+     *
+     * <p>Kept all the same, because what makes it unreachable is a fact about the surface and not
+     * about this search: the day a model can say a value is out, or a reading hands a region one,
+     * the first member of a coset is refusable and the next is the answer. That is the day this
+     * number starts mattering and the day it can be measured; until then it is as arbitrary as any
+     * other more than one.
      */
     private static final int VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT = 16;
 
@@ -587,13 +603,18 @@ public final class LevelRealizer {
         }
 
         /**
-         * What the rules leave this position, narrowed to the values that leave the rest a residue
-         * they can reach.
+         * The run this position has, narrowed by what the positions after it can add up to.
          *
-         * <p>What the positions after this one can add up to is an interval; what this one has to
-         * contribute for the residue to land in it is another. Both are proofs — a value outside
-         * either is one no assignment of the rest completes — so the walk runs between them rather
-         * than between the position's own ends.
+         * <p>The interval half of where it may stand and not the whole of it. What the rest can add
+         * up to is an interval; what this one has to contribute for the residue to land in it is
+         * another; both are proofs, so the run is the tighter of them and not the position's own
+         * ends. Which values of that run leave the rest a residue their coefficients land on is the
+         * other half, and {@link CandidateDomain} is where the two meet.
+         *
+         * <p>Read off the rules as they stood before anything was fixed. A form's suffix has a run
+         * inside the region at hand as well, and it is narrower wherever a rule relates the
+         * positions — asking for that one is the change the walk's own cost note argues against, and
+         * it is a question of its own rather than part of where a position may stand.
          */
         private NumericDomain.Bounds leaving(int rest, java.math.BigDecimal owed,
                                              java.math.BigDecimal coef,
