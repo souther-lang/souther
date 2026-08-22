@@ -1,18 +1,18 @@
 {
   "schemaVersion" : 4,
   "compilerVersion" : "<version>",
-  "status" : "complete",
+  "status" : "partial",
   "adequacy" : "not_satisfied",
   "modules" : [ {
     "module" : "conformance.catalog",
-    "status" : "complete",
+    "status" : "partial",
     "incompleteness" : [ ],
     "behaviors" : [ {
       "name" : "discount",
       "implementation" : "implemented",
       "rows" : 4,
       "pending" : 0,
-      "status" : "complete",
+      "status" : "partial",
       "signature" : {
         "status" : "complete",
         "output" : {
@@ -208,14 +208,14 @@
     } ]
   }, {
     "module" : "conformance.shipping",
-    "status" : "complete",
+    "status" : "partial",
     "incompleteness" : [ ],
     "behaviors" : [ {
       "name" : "台帳へ書く",
       "implementation" : "injected",
       "rows" : 6,
       "pending" : 6,
-      "status" : "complete",
+      "status" : "partial",
       "signature" : {
         "status" : "complete",
         "output" : {
@@ -390,7 +390,7 @@
       "implementation" : "implemented",
       "rows" : 10,
       "pending" : 0,
-      "status" : "complete",
+      "status" : "partial",
       "signature" : {
         "status" : "complete",
         "output" : {

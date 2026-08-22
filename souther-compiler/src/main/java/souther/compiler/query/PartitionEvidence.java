@@ -257,6 +257,12 @@ public record PartitionEvidence(PartitionDerivation partitioned, BoundaryDerivat
             public MeasurementStatus status() {
                 return status;
             }
+
+            /** No row was written, which is a measurement nobody asked for and not one that failed. */
+            @Override
+            public boolean somethingWasUnreadable() {
+                return false;
+            }
         }
 
         public static final PairSpace NONE =
@@ -363,6 +369,12 @@ public record PartitionEvidence(PartitionDerivation partitioned, BoundaryDerivat
             @Override
             public MeasurementStatus status() {
                 return status;
+            }
+
+            /** No row was written, which is a measurement nobody asked for and not one that failed. */
+            @Override
+            public boolean somethingWasUnreadable() {
+                return false;
             }
         }
 

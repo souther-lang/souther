@@ -76,6 +76,12 @@ public sealed interface ItemAssessment {
             public MeasurementStatus status() {
                 return status;
             }
+
+            /** The run that would have answered went without its instrumentation. The other two are a measurement nobody asked for. */
+            @Override
+            public boolean somethingWasUnreadable() {
+                return this == ARMS_UNREADABLE;
+            }
         }
 
         default boolean hit() {

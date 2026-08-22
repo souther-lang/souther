@@ -143,26 +143,51 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     /**
      * What a behavior's own measures make of it.
      *
-     * <p>A measure that came back partial is a measure that could not be made, and the status above it
-     * has to say so — a report opening with `complete` over a line reading `undecided` is the one
-     * confusion this field exists to prevent. `UNAVAILABLE` is not a degradation: a measure nobody
-     * asked for, or one a behavior has nothing to answer, is not a measure that failed.
+     * <p>A measure that could not read what it needed is one this has to say so about — a report
+     * opening with {@code complete} over a measure of its own reading {@code partial} is the
+     * contradiction this field exists to prevent, and it is one this used to write: the two measures
+     * that answer for their own reading were the two it did not ask.
+     *
+     * <p><b>Asked of every measure and of nothing else.</b> Each of them answers whether it was made
+     * in full, and each carries a reason where it has no number that says which kind of no-number it
+     * is. So this is a fold and not a list of things to remember — a position dropped past the axis
+     * limit reaches it through the measure that lost by it, and reading the dropped ones here as
+     * well was that fact arriving twice, once in a measure's answer and once behind its back.
+     *
+     * <p>A measure nobody asked for is not a degradation, and neither is one a behavior has nothing
+     * to answer. Which of those a no-number is, is the reason's own answer
+     * ({@link souther.compiler.observe.MeasureReason#somethingWasUnreadable}) and never the
+     * constant's name.
      */
     private static MeasurementStatus statusOf(Adequacy.SignatureEvidence signature,
                                               PartitionEvidence partition,
                                               Adequacy.BranchEvidence branch) {
-        boolean partial = signature != null && signature.status() == MeasurementStatus.PARTIAL;
-        partial |= branch != null && branch.status() == MeasurementStatus.PARTIAL;
+        boolean partial = signature != null && fellShort(signature.status(), signature.reason());
+        partial |= branch != null && fellShort(branch.status(), branch.reason());
         if (partition != null) {
+            // The two that answer for the reading of the model's rules, which is what this field is
+            // about and what it did not ask.
+            partial |= fellShort(partition.partitioned().status(),
+                    partition.partitioned().reason());
+            partial |= fellShort(partition.bounded().status(), partition.bounded().reason());
             partial |= partition.axes().stream()
-                    .anyMatch(a -> a.status() == MeasurementStatus.PARTIAL);
+                    .anyMatch(a -> fellShort(a.status(), a.reason()));
             partial |= BorderAssessment.pointsOf(partition.boundaries()).stream()
-                    .anyMatch(p -> p.item().status() == MeasurementStatus.PARTIAL);
-            partial |= partition.pairs().status() == MeasurementStatus.PARTIAL;
-            // What was dropped for being past a limit is measurement that did not happen either.
-            partial |= !partition.omitted().isEmpty() || partition.pairs().truncated();
+                    .anyMatch(p -> fellShort(p.item().status(), p.item().whyNotMeasured()));
+            partial |= fellShort(partition.pairs().status(), partition.pairs().reason());
+            // The one fact no status carries: the combinations were too many to walk, so the
+            // numbers beside them describe part of the space.
+            partial |= partition.pairs().truncated();
         }
         return partial ? MeasurementStatus.PARTIAL : MeasurementStatus.COMPLETE;
+    }
+
+    /** Whether one measure was not made in full: it read part of what it needed, or it read none of
+     *  it and says that is why. */
+    private static boolean fellShort(MeasurementStatus status,
+                                     souther.compiler.observe.MeasureReason reason) {
+        return status == MeasurementStatus.PARTIAL
+                || (reason != null && reason.somethingWasUnreadable());
     }
 
     private static ModuleReport moduleReport(Compilation compilation, String name, Prepared module) {
@@ -650,11 +675,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             int excluded = (int) measuredAxes.stream()
                     .flatMap(each -> behavior.claimed().at(each.path()).stream())
                     .filter(ClaimAnnotations.Said::settled).count();
-            out.append(String.format("    partition   axes %d   equivalence partitions %d/%d%s%s%n",
+            out.append(String.format("    partition   axes %d   equivalence partitions %d/%d%s%s%s%n",
                     partition.axes().size(), covered, classes,
                     excluded == 0 ? "" : "   excluded " + excluded,
                     notes(partition.axes(), a -> !a.status().counted(),
-                            a -> whyNoAxis(a.reason()))));
+                            a -> whyNoAxis(a.reason())),
+                    inFull(partition.partitioned().status())));
             // The position as well as the class. A class name alone is the same words about two
             // positions of one behavior whose types divide into classes named after the same cases,
             // and a reader told one of them cannot say which position to write the row at. Which
@@ -746,13 +772,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             out.append(String.format("    border      %s%n",
                     whyNoBoundary(partition.bounded().reason())));
         } else {
-            out.append(String.format("    border      borders %d   coverage items %d/%d%s%s%s%n",
+            out.append(String.format("    border      borders %d   coverage items %d/%d%s%s%s%s%n",
                     partition.boundaries().size(), met, measured.size(),
                     excluded == 0 ? "" : "   excluded " + excluded,
                     notes(points,
                             p -> owed(p).coverage() instanceof ItemAssessment.Coverage.NotMeasured,
                             p -> whyNoBoundaryItem(owed(p).coverage())),
-                    undecided == 0 ? "" : "   (" + undecided + " undecided: a value was not read)"));
+                    undecided == 0 ? "" : "   (" + undecided + " undecided: a value was not read)",
+                    inFull(partition.bounded().status())));
         }
         // A border the model drew that nothing here answered for, said whether or not one came of
         // it. It is exactly where none did that the question stands, so this cannot be written by
@@ -1068,12 +1095,33 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         };
     }
 
+    /**
+     * That a measure with numbers was not made in full, where it was not.
+     *
+     * <p>The numbers alone read the same either way, which is the thing this whole measure-level
+     * answer is against: a behavior one of whose rules this compiler could not read showed the line
+     * it did draw and the same {@code borders 1   coverage items 4/4} a model read to the end gets.
+     * Why it was not is beside it already — the rules nothing took in, the positions past the axis
+     * limit — so this says which measure they cost rather than saying them again.
+     */
+    private static String inFull(MeasurementStatus status) {
+        return status == MeasurementStatus.PARTIAL ? "   (not all of it was measured)" : "";
+    }
+
+    /**
+     * Why a measure with no number has none, in the words a document promises.
+     *
+     * <p>Said of the rules and not of their absence. A behavior whose only rule about a pair of
+     * positions relates them has rules — printed a line above, by name — and they divide no
+     * position and draw no line; a sentence saying the model has none would read as contradicting
+     * the rule beside it.
+     */
     private static String whyNoPartition(souther.compiler.query.PartitionDerivation.Reason reason) {
         return switch (reason) {
             case THE_READING_DID_NOT_RUN_OUT ->
                     "not measured (no partition axis was derived at any position)";
             case NOTHING_IS_DIVIDED ->
-                    "not applicable (the model divides no position of this behavior)";
+                    "not applicable (the rules of this behavior divide no position)";
             case NO_SUBJECT -> "not applicable (this behavior is measured at its stages)";
         };
     }
@@ -1083,7 +1131,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case THE_READING_DID_NOT_RUN_OUT ->
                     "not measured (no line was derived at any position)";
             case NO_RULE_DRAWS_A_LINE ->
-                    "not applicable (no rule of the model draws a line on this behavior)";
+                    "not applicable (the rules of this behavior draw no line)";
             case NO_SUBJECT -> "not applicable (this behavior is measured at its stages)";
         };
     }

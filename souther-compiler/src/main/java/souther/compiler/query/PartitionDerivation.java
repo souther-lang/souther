@@ -88,6 +88,12 @@ public sealed interface PartitionDerivation {
         public MeasurementStatus status() {
             return status;
         }
+
+        /** Exactly {@link #THE_READING_DID_NOT_RUN_OUT}, which is what the words say: the other two are answers about the model, and no row and no reading would change either. */
+        @Override
+        public boolean somethingWasUnreadable() {
+            return this == THE_READING_DID_NOT_RUN_OUT;
+        }
     }
 
     /** The measure was made in full: every question it answers was answered, and these are the
