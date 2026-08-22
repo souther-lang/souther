@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
@@ -88,7 +89,7 @@ public record InvariantBound(boolean lower, Endpoint end) {
         // `0 <= value` says what `value >= 0` says: read the value-bearing side as the left one.
         Hir.Expr left = bin.left();
         Hir.Expr right = bin.right();
-        Hir.BinOp op = bin.op();
+        BinOp op = bin.op();
         if (!isValue(left) && isValue(right)) {
             Hir.Expr swap = left;
             left = right;
@@ -126,7 +127,7 @@ public record InvariantBound(boolean lower, Endpoint end) {
      * @param op    the operator, with the count on the left however the clause was spelled
      * @param count what it is compared against
      */
-    public record SizeComparison(Hir.BinOp op, BigDecimal count) {}
+    public record SizeComparison(BinOp op, BigDecimal count) {}
 
     /**
      * The comparison {@code clause} makes about {@code measure} taken of {@code subject}, or empty
@@ -146,7 +147,7 @@ public record InvariantBound(boolean lower, Endpoint end) {
         }
         Hir.Expr left = bin.left();
         Hir.Expr right = bin.right();
-        Hir.BinOp op = bin.op();
+        BinOp op = bin.op();
         if (!takesSizeOf(left, measure, subject) && takesSizeOf(right, measure, subject)) {
             Hir.Expr swap = left;
             left = right;
@@ -175,7 +176,7 @@ public record InvariantBound(boolean lower, Endpoint end) {
      * @param op    the comparison, with the coordinate on its left
      * @param bound what the coordinate is compared against
      */
-    static Read at(Hir.BinOp op, Hir.Expr bound, Carrier carrier) {
+    static Read at(BinOp op, Hir.Expr bound, Carrier carrier) {
         if (carrier == null || bound == null) {
             return NO_END;
         }
@@ -184,17 +185,17 @@ public record InvariantBound(boolean lower, Endpoint end) {
     }
 
     /** Which comparison an operand on the right states of one on the left. */
-    static Hir.BinOp flipped(Hir.BinOp op) {
+    static BinOp flipped(BinOp op) {
         return mirrored(op);
     }
 
     /** Whether {@code op} says where values stop rather than which one a value is. */
-    static boolean ordering(Hir.BinOp op) {
+    static boolean ordering(BinOp op) {
         return ComparisonClaim.orders(op);
     }
 
     /** One end, from the comparison and how the carrier's counts are spaced. */
-    private static Read ordered(Hir.BinOp op, Place bound, Carrier carrier) {
+    private static Read ordered(BinOp op, Place bound, Carrier carrier) {
         boolean steps = carrier.spacing() == Granularity.DISCRETE;
         return switch (op) {
             case GE -> placed(true, Endpoint.inclusive(bound));
@@ -247,12 +248,12 @@ public record InvariantBound(boolean lower, Endpoint end) {
         return e instanceof Hir.Var v && v.name().equals(VALUE);
     }
 
-    private static Hir.BinOp mirrored(Hir.BinOp op) {
+    private static BinOp mirrored(BinOp op) {
         return switch (op) {
-            case LT -> Hir.BinOp.GT;
-            case LE -> Hir.BinOp.GE;
-            case GT -> Hir.BinOp.LT;
-            case GE -> Hir.BinOp.LE;
+            case LT -> BinOp.GT;
+            case LE -> BinOp.GE;
+            case GT -> BinOp.LT;
+            case GE -> BinOp.LE;
             default -> op;
         };
     }

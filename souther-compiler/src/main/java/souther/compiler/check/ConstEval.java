@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 
 import java.math.BigDecimal;
@@ -76,7 +77,7 @@ public final class ConstEval {
         // condition down with it — so a construction the language calls constant would be checked
         // where it was written one way and not the other.
         if (l.orElse(null) instanceof Boolean settled
-                && (bin.op() == Hir.BinOp.AND && !settled || bin.op() == Hir.BinOp.OR && settled)) {
+                && (bin.op() == BinOp.AND && !settled || bin.op() == BinOp.OR && settled)) {
             return Optional.of(settled);
         }
         Optional<Object> r = eval(bin.right());
@@ -103,7 +104,7 @@ public final class ConstEval {
         };
     }
 
-    private static Optional<Object> compare(Hir.BinOp op, Object a, Object b) {
+    private static Optional<Object> compare(BinOp op, Object a, Object b) {
         Integer c = order(a, b);
         if (c == null) {
             return Optional.empty();
@@ -131,7 +132,7 @@ public final class ConstEval {
         return null;
     }
 
-    private static Optional<Object> arith(Hir.BinOp op, Object a, Object b) {
+    private static Optional<Object> arith(BinOp op, Object a, Object b) {
         if (a instanceof Long x && b instanceof Long y) {
             // The same kernels the operators emit: an Int that overflows aborts rather than wrapping,
             // so a fold that wrapped would answer what the run time refuses to compute.
@@ -206,6 +207,7 @@ public final class ConstEval {
         /** Raised where the engine has read past the budget. Not an error in the program: it says
          * only that this is not answered here. */
         static final class Spent extends RuntimeException {
+            private static final long serialVersionUID = 1L;
             Spent() {
                 super(null, null, false, false);
             }

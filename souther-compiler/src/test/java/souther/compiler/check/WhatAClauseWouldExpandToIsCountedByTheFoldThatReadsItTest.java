@@ -1,8 +1,8 @@
 package souther.compiler.check;
 
+import souther.compiler.types.BinOp;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.CoverageOrigin;
@@ -39,12 +39,12 @@ class WhatAClauseWouldExpandToIsCountedByTheFoldThatReadsItTest {
     }
 
     private static Core and(Core left, Core right) {
-        return new Core.Binary(Hir.BinOp.AND, left, right, CoverageOrigin.unwritten(), Type.BOOL,
+        return new Core.Binary(BinOp.AND, left, right, CoverageOrigin.unwritten(), Type.BOOL,
                 POS);
     }
 
     private static Core or(Core left, Core right) {
-        return new Core.Binary(Hir.BinOp.OR, left, right, CoverageOrigin.unwritten(), Type.BOOL,
+        return new Core.Binary(BinOp.OR, left, right, CoverageOrigin.unwritten(), Type.BOOL,
                 POS);
     }
 

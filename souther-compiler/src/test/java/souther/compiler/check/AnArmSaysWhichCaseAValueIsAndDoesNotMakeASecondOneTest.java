@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
@@ -57,13 +58,13 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
     @Test
     void anArmOverOneCaseIsAboutTheValueItOpened() {
         Core answer = answer();
-        Hir.Binder x = binders.binder("x", POS);
+        Core.Binder x = CoreBinders.of(binders.binder("x", POS));
 
         PathEngine.Entered in = engine.enteringArm(
                 arm(new Core.ResolvedPattern.Single(CaseSelector.direct(FOUND)), x),
                 answer, Known.top(), Denotations.none());
 
-        FactSubject opened = in.at().subject(x.id());
+        FactSubject opened = in.at().subject(x.binding());
         assertNotNull(opened, "an arm binds something to be known about");
         assertEquals(engine.terms().subjectOf(answer, Denotations.none()), opened,
                 "the value the arm opened is the value it was given");
@@ -72,7 +73,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
     @Test
     void anArmOverSeveralCasesIsAboutTheValueItOpened() {
         Core answer = answer();
-        Hir.Binder x = binders.binder("x", POS);
+        Core.Binder x = CoreBinders.of(binders.binder("x", POS));
 
         PathEngine.Entered in = engine.enteringArm(
                 arm(new Core.ResolvedPattern.AnyOf(
@@ -80,7 +81,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
                         Type.ref(FOUND)), x),
                 answer, Known.top(), Denotations.none());
 
-        assertEquals(engine.terms().subjectOf(answer, Denotations.none()), in.at().subject(x.id()),
+        assertEquals(engine.terms().subjectOf(answer, Denotations.none()), in.at().subject(x.binding()),
                 "an arm naming several says the value is one of them, and it is still that value");
     }
 
@@ -89,15 +90,15 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
     @Test
     void twoArmsOverOneAnswerOpenOneValue() {
         Core answer = answer();
-        Hir.Binder first = binders.binder("a", POS);
-        Hir.Binder second = binders.binder("b", POS);
+        Core.Binder first = CoreBinders.of(binders.binder("a", POS));
+        Core.Binder second = CoreBinders.of(binders.binder("b", POS));
 
         FactSubject one = engine.enteringArm(
                 arm(new Core.ResolvedPattern.Single(CaseSelector.direct(FOUND)), first),
-                answer, Known.top(), Denotations.none()).at().subject(first.id());
+                answer, Known.top(), Denotations.none()).at().subject(first.binding());
         FactSubject other = engine.enteringArm(
                 arm(new Core.ResolvedPattern.Single(CaseSelector.direct(FOUND)), second),
-                answer, Known.top(), Denotations.none()).at().subject(second.id());
+                answer, Known.top(), Denotations.none()).at().subject(second.binding());
 
         assertEquals(one, other);
     }
@@ -107,14 +108,14 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
     @Test
     void whatAnOptionalHoldsIsWhatThatOptionalHolds() {
         Core answer = optionalAnswer();
-        Hir.Binder x = binders.binder("x", POS);
+        Core.Binder x = CoreBinders.of(binders.binder("x", POS));
 
         PathEngine.Entered in = engine.enteringArm(
                 arm(new Core.ResolvedPattern.Single(CaseSelector.optionPresent(Type.INT)), x),
                 answer, Known.top(), Denotations.none());
 
         FactSubject optional = engine.terms().subjectOf(answer, Denotations.none());
-        FactSubject held = in.at().subject(x.id());
+        FactSubject held = in.at().subject(x.binding());
         assertNotNull(held, "what it binds is something to be known about");
         assertNotEquals(optional, held, "an optional is not what it holds");
         assertEquals(engine.terms().heldBy(optional), held);
@@ -125,15 +126,15 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
     @Test
     void twoArmsOverOneOptionalOpenOneValue() {
         Core answer = optionalAnswer();
-        Hir.Binder first = binders.binder("a", POS);
-        Hir.Binder second = binders.binder("b", POS);
+        Core.Binder first = CoreBinders.of(binders.binder("a", POS));
+        Core.Binder second = CoreBinders.of(binders.binder("b", POS));
 
         FactSubject one = engine.enteringArm(
                 arm(new Core.ResolvedPattern.Single(CaseSelector.optionPresent(Type.INT)), first),
-                answer, Known.top(), Denotations.none()).at().subject(first.id());
+                answer, Known.top(), Denotations.none()).at().subject(first.binding());
         FactSubject other = engine.enteringArm(
                 arm(new Core.ResolvedPattern.Single(CaseSelector.optionPresent(Type.INT)), second),
-                answer, Known.top(), Denotations.none()).at().subject(second.id());
+                answer, Known.top(), Denotations.none()).at().subject(second.binding());
 
         assertEquals(one, other);
     }
@@ -144,14 +145,14 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
     void openingAWrittenOptionalNamesWhatItWasWrittenWith() {
         Core three = new Core.Int(3, Type.INT, POS);
         Core written = new Core.OptionSome(three, Type.option(Type.INT), POS);
-        Hir.Binder x = binders.binder("x", POS);
+        Core.Binder x = CoreBinders.of(binders.binder("x", POS));
 
         PathEngine.Entered in = engine.enteringArm(
                 arm(new Core.ResolvedPattern.Single(CaseSelector.optionPresent(Type.INT)), x),
                 written, Known.top(), Denotations.none());
 
         assertEquals(engine.terms().subjectOf(three, Denotations.none()),
-                in.at().subject(x.id()));
+                in.at().subject(x.binding()));
     }
 
     /** The arm's name stands for the value it opened, and not for nothing. A reader following what a
@@ -159,13 +160,13 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
     @Test
     void anArmsNameStandsForTheValueItOpened() {
         Core answer = answer();
-        Hir.Binder x = binders.binder("x", POS);
+        Core.Binder x = CoreBinders.of(binders.binder("x", POS));
 
         PathEngine.Entered in = engine.enteringArm(
                 arm(new Core.ResolvedPattern.Single(CaseSelector.direct(FOUND)), x),
                 answer, Known.top(), Denotations.none());
 
-        assertEquals(answer, in.at().valueOf(x.id()),
+        assertEquals(answer, in.at().valueOf(x.binding()),
                 "what the arm opened is what its name was given");
     }
 
@@ -180,8 +181,8 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
     @Test
     void aRuleAboutACaseReachesAMatchOverWhatAnOuterArmBound() {
         Core answer = numericAnswer();
-        Hir.Binder x = binders.binder("x", POS);
-        Hir.Binder y = binders.binder("y", POS);
+        Core.Binder x = CoreBinders.of(binders.binder("x", POS));
+        Core.Binder y = CoreBinders.of(binders.binder("y", POS));
         PathEngine reading = new PathEngine(Symbols.none(), Map.of(),
                 Map.of(FIND, statesThatTheIntIsPositive()), Terms.Of.THE_DISCHARGE_TREE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
@@ -192,9 +193,9 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
                 answer, Known.top(), Denotations.none()).at();
         Core.Case inner = arm(new Core.ResolvedPattern.Single(CaseSelector.direct(AN_INT)), y);
         PathEngine.Entered in = reading.enteringArm(inner,
-                new Core.Read("x", x.id(), answer.type(), POS), Known.top(), outer);
+                new Core.Read("x", x.binding(), answer.type(), POS), Known.top(), outer);
 
-        FactSubject opened = in.at().subject(y.id());
+        FactSubject opened = in.at().subject(y.binding());
         assertTrue(in.known().speaksOf(opened),
                 "the rule the behavior stated about its Int case was taken in here");
     }
@@ -202,8 +203,8 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
     /** {@code ensures | Int v -> v > 0}, as the analysis holds it. */
     private static StatedContract statesThatTheIntIsPositive() {
         BindingId value = new Hir.Binders(new BindingOwner.OfValue("demo", "findIt"))
-                .binder("v", POS).id();
-        Core states = new Core.Binary(Hir.BinOp.GT,
+                .binder("v", POS).binding();
+        Core states = new Core.Binary(BinOp.GT,
                 new Core.Read("v", value, Type.INT, POS), new Core.Int(0, Type.INT, POS),
                 souther.compiler.types.CoverageOrigin.unwritten(), Type.BOOL, POS);
         return new StatedContract(FIND, List.of(), Type.INT,
@@ -213,8 +214,8 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
                                 new souther.compiler.check.TypedClause.Typed(states))))));
     }
 
-    private Core.Case arm(Core.ResolvedPattern pattern, Hir.Binder binder) {
-        return new Core.Case(pattern, binder, new Core.Read(binder.name(), binder.id(),
+    private Core.Case arm(Core.ResolvedPattern pattern, Core.Binder binder) {
+        return new Core.Case(pattern, binder, new Core.Read(binder.name(), binder.binding(),
                 pattern.bindType(), POS), POS);
     }
 

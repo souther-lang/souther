@@ -1,6 +1,5 @@
 package souther.compiler.flow;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 
 /**
@@ -36,7 +35,7 @@ public interface Naming<P> {
     P join(P held, P more);
 
     /** The naming inside a {@code let}, which may have words for the name it binds. */
-    Naming<P> under(Hir.Binder binder, Core value);
+    Naming<P> under(Core.Binder binder, Core value);
 
     /**
      * That {@code value} came out {@code held}, or null where this naming has no words for it.

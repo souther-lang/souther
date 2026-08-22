@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
@@ -44,7 +45,7 @@ public final class BinaryElaborator {
         if (read.type() instanceof Type.Erroneous) {
             throw new Unanswerable(bin.pos());
         }
-        if (bin.op() == Hir.BinOp.AND || bin.op() == Hir.BinOp.OR) {
+        if (bin.op() == BinOp.AND || bin.op() == BinOp.OR) {
             Elaborator.requireType(e, read.type(), Type.BOOL, ctx.symbols(),
                     "operand of logical operator");
         }
@@ -254,15 +255,15 @@ public final class BinaryElaborator {
      * the one the operator accepts is the answer. Where it accepts neither, nothing follows and the
      * answer is null.
      */
-    static Type operandBeside(Hir.BinOp op, Type other, boolean onTheRight, Symbols symbols) {
-        if (op == Hir.BinOp.AND || op == Hir.BinOp.OR) {
+    static Type operandBeside(BinOp op, Type other, boolean onTheRight, Symbols symbols) {
+        if (op == BinOp.AND || op == BinOp.OR) {
             return Type.BOOL;
         }
         if (other == null) {
             return null;
         }
         Type base = TypeOps.directNumericNewtypeBase(other, symbols);
-        if (base == null || !(op == Hir.BinOp.MUL || op == Hir.BinOp.DIV)) {
+        if (base == null || !(op == BinOp.MUL || op == BinOp.DIV)) {
             return other;
         }
         for (Type candidate : List.of(other, base)) {

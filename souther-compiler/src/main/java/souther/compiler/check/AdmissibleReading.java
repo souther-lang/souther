@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Hir;
+import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
 import souther.compiler.types.Type;
 import souther.compiler.values.AdmissibleValues;
@@ -86,10 +86,10 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<FactSubj
     /** An equality names a value and a denial leaves the rest; nothing else here is read. */
     @Override
     public AdmissibleValues<FactSubject> leaf(Core e, boolean positive) {
-        if (e instanceof Core.Binary b && (b.op() == Hir.BinOp.EQ || b.op() == Hir.BinOp.NE)) {
+        if (e instanceof Core.Binary b && (b.op() == BinOp.EQ || b.op() == BinOp.NE)) {
             // Which of the two it states, once the denials above have been counted: `/=` denied
             // states the equality, and `==` denied denies it.
-            return comparison(b, (b.op() == Hir.BinOp.EQ) == positive);
+            return comparison(b, (b.op() == BinOp.EQ) == positive);
         }
         return unreadable(e);
     }

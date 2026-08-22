@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.types.BinOp;
 import souther.compiler.values.AdmissibleValues;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Combinators.Handed;
@@ -413,10 +414,6 @@ public final class InvariantChecker {
         }
     }
 
-    /** {@link Seeded} for one declaration. A declaration this cannot read is one whose fields it says
-     * nothing about, which is the same answer as a declaration with no rules — so nothing about the
-     * declaration throws. {@link Terms.OneTermTwoKinds} is not about the declaration and is not
-     * caught ({@link #gaveUp}). */
     /**
      * How far a seeding reads at each name it meets.
      *
@@ -452,6 +449,10 @@ public final class InvariantChecker {
         }
     }
 
+    /** {@link Seeded} for one declaration. A declaration this cannot read is one whose fields it says
+     * nothing about, which is the same answer as a declaration with no rules — so nothing about the
+     * declaration throws. {@link Terms.OneTermTwoKinds} is not about the declaration and is not
+     * caught ({@link #gaveUp}). */
     static Seeded seedFields(TypeSymbol named, Hir.Data data, Symbols symbols,
                              ReadingPolicy policy) {
         return seedFields(named, data, symbols, policy, Map.of());
@@ -808,15 +809,6 @@ public final class InvariantChecker {
     private record Written(RuleRef.Invariant from, Core clause) {}
 
     /**
-     * Told what a walk over a value gathers, as it gathers it.
-     *
-     * <p>What it found and what it lost, because the second is not visible in the first. A clause
-     * that states nothing the check can read is dropped before any reading sees it, and which
-     * position it governed is what is not known about it — so a collector told only of the clauses
-     * that arrived would take them for every clause there is, and answer for a declaration on the
-     * strength of rules it never saw.
-     */
-    /**
      * Whether the value a stop was taken at is one every value of what is being read has.
      *
      * <p>Two questions are asked of one stop and they do not have one answer. What a position
@@ -844,6 +836,15 @@ public final class InvariantChecker {
         BY_SOME_VALUES
     }
 
+    /**
+     * Told what a walk over a value gathers, as it gathers it.
+     *
+     * <p>What it found and what it lost, because the second is not visible in the first. A clause
+     * that states nothing the check can read is dropped before any reading sees it, and which
+     * position it governed is what is not known about it — so a collector told only of the clauses
+     * that arrived would take them for every clause there is, and answer for a declaration on the
+     * strength of rules it never saw.
+     */
     interface Gathering {
 
         /**
@@ -1139,7 +1140,7 @@ public final class InvariantChecker {
                     at, byName, raised, took, typeAt, parts, raisedByPart);
             return;
         }
-        if (bin.op() == Hir.BinOp.AND) {
+        if (bin.op() == BinOp.AND) {
             // One rule the author wrote, so what it raises is what its conjuncts raise together.
             direct(bin.left(), from, at, byName, out, unread, narrowers, raised, took, typeAt,
                     parts, raisedByPart);
@@ -1147,7 +1148,7 @@ public final class InvariantChecker {
                     parts, raisedByPart);
             return;
         }
-        if (!InvariantBound.ordering(bin.op()) && bin.op() != Hir.BinOp.EQ) {
+        if (!InvariantBound.ordering(bin.op()) && bin.op() != BinOp.EQ) {
             settle(bin, from, states(bin, at, byName), new InvariantBound.Read.NoEnd(),
                     at, byName, raised, took, typeAt, parts, raisedByPart);
             return;
@@ -1156,7 +1157,7 @@ public final class InvariantChecker {
         // says.
         Coordinate found = byName.get(nameOf(bin.left(), at));
         Core bound = bin.right();
-        Hir.BinOp op = bin.op();
+        BinOp op = bin.op();
         if (found == null) {
             found = byName.get(nameOf(bin.right(), at));
             bound = bin.left();
@@ -1337,19 +1338,6 @@ public final class InvariantChecker {
     }
 
     /**
-     * What one side of a comparison came to here.
-     *
-     * <p>Which coordinates it names is the recursive question and whether it <em>is</em> one is the
-     * narrower one, and the two are what tell a coordinate inside an expression from a coordinate.
-     * Asked the narrow question alone, {@code y + 1} named nothing and a clause relating two
-     * coordinates came back as a form nobody could read — which is the answer a {@code guard}
-     * writing the same comparison does not get.
-     *
-     * <p>By the place and not by the name. A place answers to more than one name — a number is
-     * called one thing by the interval algebra and another by everything else — so two sides
-     * naming one place through two of its names would be a comparison against another position.
-     */
-    /**
      * The coordinates the quantity this clause cuts is over, or null where the arithmetic read no
      * form at all.
      *
@@ -1380,6 +1368,19 @@ public final class InvariantChecker {
         return over;
     }
 
+    /**
+     * What one side of a comparison came to here.
+     *
+     * <p>Which coordinates it names is the recursive question and whether it <em>is</em> one is the
+     * narrower one, and the two are what tell a coordinate inside an expression from a coordinate.
+     * Asked the narrow question alone, {@code y + 1} named nothing and a clause relating two
+     * coordinates came back as a form nobody could read — which is the answer a {@code guard}
+     * writing the same comparison does not get.
+     *
+     * <p>By the place and not by the name. A place answers to more than one name — a number is
+     * called one thing by the interval algebra and another by everything else — so two sides
+     * naming one place through two of its names would be a comparison against another position.
+     */
     private UnreadComparison.Side<String> sideOf(Core e, Denotations at,
                                                  Map<FactSubject, Coordinate> byName) {
         List<Coordinate> named = coordinatesIn(e, at, byName);
@@ -1714,7 +1715,7 @@ public final class InvariantChecker {
         if (!(handed.step().type() instanceof Type.FnOf fn)) {
             return in;
         }
-        List<Hir.Binder> params = handed.step().params();
+        List<Core.Binder> params = handed.step().params();
         Entered out = in;
         for (int i = 0; i < params.size() && i < fn.params().size(); i++) {
             if (params.get(i) == handed.element()) {

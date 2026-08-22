@@ -1,6 +1,5 @@
 package souther.compiler.interaction;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ComparisonOccurrence;
@@ -67,7 +66,7 @@ final class CoverageNaming implements Naming<Outcome> {
     }
 
     @Override
-    public CoverageNaming under(Hir.Binder binder, Core value) {
+    public CoverageNaming under(Core.Binder binder, Core value) {
         return new CoverageNaming(plan, symbols, reads.and(binder, value));
     }
 

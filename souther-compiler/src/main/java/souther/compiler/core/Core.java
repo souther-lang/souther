@@ -1,5 +1,6 @@
 package souther.compiler.core;
 
+import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.CoverageOrigin;
@@ -9,7 +10,6 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.ast.Hir;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -86,6 +86,28 @@ public sealed interface Core {
         }
     }
 
+    /**
+     * A binding this tree makes: a {@code let}, a lambda's parameter, a {@code match} arm's name.
+     *
+     * <p>Core's own, and not the resolved tree's binder. What a backend has of a binding is which
+     * one it is and what to call the local — the two here. The rest of a resolved binder is about
+     * the characters an author typed: the spelling before a desugaring canonicalised it, and where
+     * the name was written, which is what a cursor is compared against. A backend has no cursor and
+     * emits no spelling, and Core naming that form put {@code souther.compiler.ast} on what a
+     * backend outside this compiler reads.
+     *
+     * <p>One spelling for the binding. The resolved binder answers it as both {@code binding()} and
+     * {@code id()}, and a reader that has to pick between two names for one thing is a reader that
+     * can be read two ways.
+     */
+    record Binder(String name, BindingId binding) {
+
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
     /** A read of something the body binds: a parameter, a {@code let}, a lambda's parameter, a
      * {@code match} arm's binding. {@code binding} is which one; {@code name} is what to call the
      * local it is emitted as, and what a diagnostic quotes. */
@@ -99,8 +121,8 @@ public sealed interface Core {
 
     record FieldAccess(Core target, String field, Type type, SourcePos pos) implements Core {}
 
-    /** {@code origin} is where the comparison was written; see {@link Hir.Binary}. */
-    record Binary(Hir.BinOp op, Core left, Core right, CoverageOrigin origin, Type type,
+    /** {@code origin} is where the comparison was written; see {@link souther.compiler.ast.Hir.Binary}. */
+    record Binary(BinOp op, Core left, Core right, CoverageOrigin origin, Type type,
                   SourcePos pos) implements Core {}
 
     /**
@@ -252,10 +274,11 @@ public sealed interface Core {
      */
     record Apply(Read fn, List<Core> args, Type type, SourcePos pos) implements Core {}
 
-    /** {@code origin} is the fork the source wrote this as, carried from the AST so that the copies
-     * an expansion made of one fork are one coverage obligation ({@link CoverageOrigin}). */
     /**
-     * {@code expansion} is which copy of a body this fork stands in, innermost first, empty where it
+     * {@code origin} is the fork the source wrote this as, carried from the AST so that the copies
+     * an expansion made of one fork are one coverage obligation ({@link CoverageOrigin}).
+     *
+     * <p>{@code expansion} is which copy of a body this fork stands in, innermost first, empty where it
      * stands in the body as written. What settles a fork can be a rule the caller supplied, and which rule that
      * was is a fact about this copy — so it travels with the fork rather than being recovered from
      * whatever names the fork's own subtree happens to hold. A rewrite that keeps a fork keeps this.
@@ -274,14 +297,13 @@ public sealed interface Core {
      * <p>With one departure naming no clause, any failure takes it. With several, the failing clause
      * the {@code Result} carries selects one; the checker has already established that every named
      * clause is answered, so one always matches.
-     */
-    /**
-     * {@code expansion} is which copy of a body this fork stands in, innermost first, empty where it
+     *
+     * <p>{@code expansion} is which copy of a body this fork stands in, innermost first, empty where it
      * stands in the body as written. What settles a fork can be a rule the caller supplied, and which rule that
      * was is a fact about this copy — so it travels with the fork rather than being recovered from
      * whatever names the fork's own subtree happens to hold. A rewrite that keeps a fork keeps this.
      */
-    record IfConstructed(Construct construct, Hir.Binder binder, Core then, List<ElseArm> els,
+    record IfConstructed(Construct construct, Binder binder, Core then, List<ElseArm> els,
                          CoverageOrigin origin, Type type, SourcePos pos,
                          List<souther.compiler.types.BindingOwner> expansion) implements Core {
     }
@@ -293,7 +315,7 @@ public sealed interface Core {
     /** A local binding. What the source wrote as its type — {@code let x: T = e} — is already in
      * {@code value}'s type: the checker pushed the annotation into the value when it typed it, so an
      * empty collection bound here materialises at the written type rather than a bottom (issue #71). */
-    record LetIn(Hir.Binder binder, Core value, Core body, Type type, SourcePos pos) implements Core {
+    record LetIn(Binder binder, Core value, Core body, Type type, SourcePos pos) implements Core {
 
         public String name() {
             return binder.name();
@@ -305,11 +327,11 @@ public sealed interface Core {
      * inline, and only a block that escapes into a first-class position becomes a class. Its {@code
      * type} is the {@link Type.FnOf} the checker gave it — the parameter types the context fixed, and
      * the body's result type. */
-    record Block(List<Hir.Binder> params, Core body, Type type, SourcePos pos) implements Core {
+    record Block(List<Binder> params, Core body, Type type, SourcePos pos) implements Core {
 
         /** How the parameters were written, in order. */
         public List<String> paramNames() {
-            return params.stream().map(Hir.Binder::name).toList();
+            return params.stream().map(Binder::name).toList();
         }
     }
 
@@ -436,11 +458,11 @@ public sealed interface Core {
     }
 
     /** One arm of a {@code match}: what it selects, what it calls the value, and what it answers. */
-    record Case(ResolvedPattern pattern, Hir.Binder binding, Core body, SourcePos pos) {
+    record Case(ResolvedPattern pattern, Binder binder, Core body, SourcePos pos) {
 
         /** How the binding was written, or null where the arm binds nothing. */
         public String bindingName() {
-            return binding == null ? null : binding.name();
+            return binder == null ? null : binder.name();
         }
 
         /** The cases this arm answers for. */
@@ -456,7 +478,7 @@ public sealed interface Core {
         /** The same arm answering a rewritten body — what a pass rewriting expressions produces, so
          * a rewrite carries what the arm selects and binds rather than restating it. */
         public Case answering(Core rewritten) {
-            return rewritten == body ? this : new Case(pattern, binding, rewritten, pos);
+            return rewritten == body ? this : new Case(pattern, binder, rewritten, pos);
         }
     }
 
@@ -644,14 +666,14 @@ public sealed interface Core {
             case If iff -> new If(withoutItsPlace(iff.cond()), withoutItsPlace(iff.then()),
                     withoutItsPlace(iff.els()), null, iff.type(), null, List.of());
             case IfConstructed ic -> new IfConstructed(constructWithoutItsPlace(ic.construct()),
-                    binderWithoutItsPlace(ic.binder()), withoutItsPlace(ic.then()),
+                    ic.binder(), withoutItsPlace(ic.then()),
                     ic.els().stream()
                             .map(arm -> new ElseArm(arm.clause(), withoutItsPlace(arm.body())))
                             .toList(),
                     null, ic.type(), null, List.of());
-            case LetIn li -> new LetIn(binderWithoutItsPlace(li.binder()), withoutItsPlace(li.value()),
+            case LetIn li -> new LetIn(li.binder(), withoutItsPlace(li.value()),
                     withoutItsPlace(li.body()), li.type(), null);
-            case Block b -> new Block(b.params().stream().map(Core::binderWithoutItsPlace).toList(),
+            case Block b -> new Block(b.params(),
                     withoutItsPlace(b.body()), b.type(), null);
             case ListLit lit -> new ListLit(allWithoutTheirPlace(lit.elements()), lit.type(), null);
             case OptionSome so -> new OptionSome(withoutItsPlace(so.value()), so.type(), null);
@@ -661,7 +683,7 @@ public sealed interface Core {
             case Construct nd -> constructWithoutItsPlace(nd);
             case Match m -> new Match(withoutItsPlace(m.scrutinee()),
                     m.cases().stream()
-                            .map(c -> new Case(c.pattern(), binderWithoutItsPlace(c.binding()),
+                            .map(c -> new Case(c.pattern(), c.binder(),
                                     withoutItsPlace(c.body()), null))
                             .toList(),
                     null, m.type(), null, List.of());
@@ -682,28 +704,6 @@ public sealed interface Core {
                         .map(v -> new FieldValue(v.field(), withoutItsPlace(v.value()), null))
                         .toList(),
                 nd.type(), null);
-    }
-
-    /** A binder with its place taken out. What it is stays: a binding is told from another by its
-     *  {@link BindingId}, which is what it was answered with and not where it was written. */
-    private static Hir.Binder binderWithoutItsPlace(Hir.Binder b) {
-        return b == null ? null
-                : new Hir.Binder(nameWithoutItsPlace(b.written()), b.binding(), null);
-    }
-
-    /**
-     * A name with its place taken out, which is a name nobody wrote.
-     *
-     * <p>The spelling goes with the places. A {@link souther.compiler.ast.WrittenName} has two
-     * states and not three — spelled and written somewhere, or spelled nowhere — because segments
-     * without a spelling reads as unwritten to whoever asks and as written to whoever underlines.
-     * A spelling is a claim about characters in a file, so a form that has dropped where the
-     * characters are has no spelling to keep.
-     */
-    private static souther.compiler.ast.WrittenName nameWithoutItsPlace(
-            souther.compiler.ast.WrittenName n) {
-        return n == null ? null
-                : new souther.compiler.ast.WrittenName(n.canonical(), null, List.of(), null);
     }
 
     /**

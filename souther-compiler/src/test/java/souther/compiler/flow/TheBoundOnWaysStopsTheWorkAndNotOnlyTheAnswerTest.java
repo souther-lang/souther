@@ -2,7 +2,6 @@ package souther.compiler.flow;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -136,7 +135,7 @@ class TheBoundOnWaysStopsTheWorkAndNotOnlyTheAnswerTest {
         }
 
         @Override
-        public Naming<Marks> under(Hir.Binder binder, Core value) {
+        public Naming<Marks> under(Core.Binder binder, Core value) {
             return this;
         }
 

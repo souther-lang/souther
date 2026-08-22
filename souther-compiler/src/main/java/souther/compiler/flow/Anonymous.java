@@ -1,6 +1,5 @@
 package souther.compiler.flow;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 
 /**
@@ -31,7 +30,7 @@ public final class Anonymous implements Naming<AnonymousPath> {
     }
 
     @Override
-    public Naming<AnonymousPath> under(Hir.Binder binder, Core value) {
+    public Naming<AnonymousPath> under(Core.Binder binder, Core value) {
         return this;
     }
 

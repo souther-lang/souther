@@ -15,8 +15,6 @@ import java.lang.classfile.constantpool.PoolEntry;
 import java.lang.classfile.constantpool.StringEntry;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -54,11 +52,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class TheAbiIsSpelledInOnePlaceTest {
 
-    /**
-     * Everything this covers, read off the reactor rather than listed here. A list of its own would
-     * say what was true when it was written: a module added to the build and not to the list would
-     * leave this passing over a tree it never read, which is the shape it exists to refuse.
-     */
 
     /** What a string-concatenation recipe stands each argument as, so a joint in an assembled name is
      *  visible where a word in a sentence is not. */
@@ -90,6 +83,9 @@ class TheAbiIsSpelledInOnePlaceTest {
                 Path classes = repoRoot().resolve(module).resolve(where);
                 if (where.endsWith("test-classes") && !Files.isDirectory(classes)) {
                     continue;   // a module with no tests of its own
+                }
+                if (where.endsWith("target/classes") && !Reactor.hasMainSources(module)) {
+                    continue;   // a module with no main sources of its own
                 }
                 assertTrue(Files.isDirectory(classes),
                         module + " has no built classes: this test covers what has been built, so a"
@@ -140,6 +136,9 @@ class TheAbiIsSpelledInOnePlaceTest {
     void andNothingOutsideTheAbiCapitalizesABehaviorsFirstLetter() {
         List<String> callers = new ArrayList<>();
         for (String module : Reactor.modules()) {
+            if (!Reactor.hasMainSources(module)) {
+                continue;   // a module with no main sources of its own
+            }
             Path classes = repoRoot().resolve(module).resolve("target/classes");
             assertTrue(Files.isDirectory(classes), module + " has no built classes");
             walkFor(classes, callers, TheAbiIsSpelledInOnePlaceTest::capitalizes);

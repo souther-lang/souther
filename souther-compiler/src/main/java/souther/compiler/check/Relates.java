@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Hir;
+import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
 
 import java.util.Set;
@@ -30,8 +30,8 @@ final class Relates {
      * the positions in it is what a reading could not work out. Counting the positions instead reads
      * {@code validPair(left, right)} as a relation, which it may not be.
      */
-    private static final Set<Hir.BinOp> COMPARES = Set.of(Hir.BinOp.EQ, Hir.BinOp.NE,
-            Hir.BinOp.LT, Hir.BinOp.LE, Hir.BinOp.GT, Hir.BinOp.GE);
+    private static final Set<BinOp> COMPARES = Set.of(BinOp.EQ, BinOp.NE,
+            BinOp.LT, BinOp.LE, BinOp.GT, BinOp.GE);
 
     /**
      * Whether {@code e} compares one of the positions being read with another of them.

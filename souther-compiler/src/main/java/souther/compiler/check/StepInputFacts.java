@@ -70,7 +70,7 @@ record StepInputFacts(Map<FactSubject, Bounds> at, Map<FactSubject, Granularity>
                              Symbols symbols, ReadingPolicy policy,
                              Set<FactSubject> namedByTheStep) {
         Gathering gathering = new Gathering(terms, namedByTheStep);
-        List<Hir.Binder> params = r.step().params();
+        List<Core.Binder> params = r.step().params();
         for (int i = 0; i < params.size(); i++) {
             if (params.get(i) == r.accumulator()) {
                 continue;
@@ -105,9 +105,9 @@ record StepInputFacts(Map<FactSubject, Bounds> at, Map<FactSubject, Granularity>
      * places under whatever subject the parameter was entered as. So the projection is the path read
      * off one and put back on the other, and nothing here reads a declaration.
      */
-    private static void guaranteed(Hir.Binder param, Type handed, Denotations inside, Terms terms,
+    private static void guaranteed(Core.Binder param, Type handed, Denotations inside, Terms terms,
                                    Symbols symbols, ReadingPolicy policy, Gathering gathering) {
-        FactSubject root = inside.subject(param.id());
+        FactSubject root = inside.subject(param.binding());
         if (root == null || !(handed instanceof Type.Ref ref)
                 || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data)) {
             return;

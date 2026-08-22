@@ -38,6 +38,7 @@
         <module>souther-lsp</module>
         <module>souther-cli</module>
         <module>souther-bench</module>
+        <module>souther-program-api-test</module>
     </modules>
 
     <scm>

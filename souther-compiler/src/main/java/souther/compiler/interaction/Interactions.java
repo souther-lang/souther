@@ -1,6 +1,6 @@
 package souther.compiler.interaction;
 
-import souther.compiler.ast.Hir;
+import souther.compiler.types.BinOp;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
@@ -235,7 +235,7 @@ public final class Interactions {
                 // Over the bound the walk does not go in either. There is no arm here to fall back
                 // on — what leads to the right of one of these is the left having come out a way,
                 // and nothing records a value coming out a way.
-                if (reading.waysTo(binary.left(), binary.op() == Hir.BinOp.AND)
+                if (reading.waysTo(binary.left(), binary.op() == BinOp.AND)
                         instanceof Ways.Known<Outcome> through) {
                     List<List<Decision>> ways = heldTo(reaches, holdsOf(through.paths()));
                     if (ways.size() <= MOST_WAYS_IN) {
@@ -457,7 +457,7 @@ public final class Interactions {
     }
 
     /** The values one run of {@code op} is over, and the nodes the run is written as. */
-    private static void run(Core e, Hir.BinOp op, List<Core> operands, List<Core> inner) {
+    private static void run(Core e, BinOp op, List<Core> operands, List<Core> inner) {
         if (e instanceof Core.Binary binary && binary.op() == op) {
             inner.add(binary);
             run(binary.left(), op, operands, inner);

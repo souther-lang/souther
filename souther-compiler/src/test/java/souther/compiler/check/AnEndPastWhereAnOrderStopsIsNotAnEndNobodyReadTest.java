@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.types.BinOp;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
@@ -35,7 +36,7 @@ class AnEndPastWhereAnOrderStopsIsNotAnEndNobodyReadTest {
     /** The ordinary reading, which sharpens a strict end onto the count beside it. */
     @Test
     void aStrictEndInsideTheOrderLandsOnTheCountBesideIt() {
-        InvariantBound.Read read = InvariantBound.at(Hir.BinOp.GT, whole(5), Carrier.WHOLE);
+        InvariantBound.Read read = InvariantBound.at(BinOp.GT, whole(5), Carrier.WHOLE);
 
         InvariantBound.Read.AnEnd end = assertInstanceOf(InvariantBound.Read.AnEnd.class, read);
         assertEquals(new InvariantBound(true, Endpoint.inclusive(Count.of(6))), end.bound());
@@ -51,7 +52,7 @@ class AnEndPastWhereAnOrderStopsIsNotAnEndNobodyReadTest {
     @Test
     void aStrictEndAtTheLastValueOfTheOrderLeavesNothing() {
         InvariantBound.Read read =
-                InvariantBound.at(Hir.BinOp.GT, whole(Long.MAX_VALUE), Carrier.WHOLE);
+                InvariantBound.at(BinOp.GT, whole(Long.MAX_VALUE), Carrier.WHOLE);
 
         assertInstanceOf(InvariantBound.Read.PastWhereTheOrderStops.class, read);
     }
@@ -65,14 +66,14 @@ class AnEndPastWhereAnOrderStopsIsNotAnEndNobodyReadTest {
     @Test
     void anEqualityStatesNoEnd() {
         assertInstanceOf(InvariantBound.Read.NoEnd.class,
-                InvariantBound.at(Hir.BinOp.EQ, whole(5), Carrier.WHOLE));
+                InvariantBound.at(BinOp.EQ, whole(5), Carrier.WHOLE));
     }
 
     /** And so does an ordering against something the order has no value for. */
     @Test
     void aLiteralTheOrderDoesNotReadStatesNoEnd() {
         assertInstanceOf(InvariantBound.Read.NoEnd.class,
-                InvariantBound.at(Hir.BinOp.GT, new Hir.StringLit("x", NOWHERE, null),
+                InvariantBound.at(BinOp.GT, new Hir.StringLit("x", NOWHERE, null),
                         Carrier.WHOLE));
     }
 }

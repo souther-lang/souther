@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Hir;
+import souther.compiler.types.BinOp;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Symbols;
@@ -46,7 +46,7 @@ record ComparedLine(NumericTerm term, Place value, Carrier carrier,
      */
     static ComparedLine of(Core.Binary comparison, AffineReading read, InputReads reads,
                            Symbols symbols) {
-        Hir.BinOp op = comparison.op();
+        BinOp op = comparison.op();
         NumericTerm term = GuardThresholds.termOf(comparison.left(), reads, symbols);
         Place value = Carrier.writtenOn(comparison.right(), comparison.left().type(), symbols);
         if (term == null || value == null) {
@@ -105,12 +105,12 @@ record ComparedLine(NumericTerm term, Place value, Carrier carrier,
         };
     }
 
-    private static Hir.BinOp mirrored(Hir.BinOp op) {
+    private static BinOp mirrored(BinOp op) {
         return switch (op) {
-            case LT -> Hir.BinOp.GT;
-            case LE -> Hir.BinOp.GE;
-            case GT -> Hir.BinOp.LT;
-            case GE -> Hir.BinOp.LE;
+            case LT -> BinOp.GT;
+            case LE -> BinOp.GE;
+            case GT -> BinOp.LT;
+            case GE -> BinOp.LE;
             default -> op;
         };
     }

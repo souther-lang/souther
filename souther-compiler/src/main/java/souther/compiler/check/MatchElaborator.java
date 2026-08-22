@@ -126,7 +126,7 @@ public final class MatchElaborator {
             Core body = Elaborator.liftIntoOption(
                     Elaborator.elaborate(c.body(), bound(env, c.binding(), bindType), ctx, expected),
                     expected, ctx.symbols());
-            arms.add(new Core.Case(pattern, c.binding(), body, c.pos()));
+            arms.add(new Core.Case(pattern, CoreBinders.of(c.binding()), body, c.pos()));
             branchType = mergeBranch(m, branchType, body.type(), c, expected);
         }
         List<String> missing = new ArrayList<>();
@@ -178,7 +178,7 @@ public final class MatchElaborator {
             Core body = Elaborator.liftIntoOption(
                     Elaborator.elaborate(c.body(), bound(env, c.binding(), bind), ctx, expected),
                     expected, ctx.symbols());
-            arms.add(new Core.Case(new Core.ResolvedPattern.Single(selector), c.binding(), body, c.pos()));
+            arms.add(new Core.Case(new Core.ResolvedPattern.Single(selector), CoreBinders.of(c.binding()), body, c.pos()));
             branchType = mergeBranch(m, branchType, body.type(), c, expected);
         }
         List<String> missing = new ArrayList<>();

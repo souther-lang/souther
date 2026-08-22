@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.types.BinOp;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
@@ -1015,11 +1016,6 @@ public final class Resolve {
     }
 
     /**
-     * The fields of a declaration, as the names its own invariant reads — the ones written here and
-     * the ones a spread brings in, which are as much this declaration's fields as the written ones
-     * (and are what a spread-in invariant was written against).
-     */
-    /**
      * Where each field this declaration writes is written, against the binding it introduces inside
      * an invariant.
      *
@@ -1037,6 +1033,11 @@ public final class Resolve {
         }
     }
 
+    /**
+     * The fields of a declaration, as the names its own invariant reads — the ones written here and
+     * the ones a spread brings in, which are as much this declaration's fields as the written ones
+     * (and are what a spread-in invariant was written against).
+     */
     private Bindings boundFields(Ast.Data d, TypeSymbol declared) {
         Bindings bound = Bindings.NONE;
         // which binding each field is is answered in one place, so the pass that emits this
@@ -1267,7 +1268,7 @@ public final class Resolve {
             case Ast.BoolLit x -> new Hir.BoolLit(x.value(), x.pos(), x.region());
             case Ast.Unreachable x -> new Hir.Unreachable(x.reason(), x.pos(), x.region());
             case Ast.Neg x -> new Hir.Neg(expr(x.operand(), bound), x.pos(), x.region());
-            case Ast.Binary x -> new Hir.Binary(Hir.BinOp.valueOf(x.op().name()),
+            case Ast.Binary x -> new Hir.Binary(BinOp.valueOf(x.op().name()),
                     expr(x.left(), bound), expr(x.right(), bound), x.origin(), x.pos(), x.region());
             case Ast.If x -> new Hir.If(expr(x.cond(), bound), expr(x.then(), bound),
                     expr(x.els(), bound), x.origin(), x.pos(), x.region());

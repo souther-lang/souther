@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -72,7 +71,7 @@ final class Reductions {
      * <p>The element and the container come from {@link Combinators}, so a caller reading this reads
      * one answer about the call rather than two it has to line up itself.
      */
-    record Reducing(Core seed, Core.Block step, Hir.Binder accumulator, Hir.Binder element,
+    record Reducing(Core seed, Core.Block step, Core.Binder accumulator, Core.Binder element,
                     Core container) {}
 
     /** The reduction {@code operation} is, or null where it reduces nothing — including where it

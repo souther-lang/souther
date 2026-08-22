@@ -1,6 +1,6 @@
 package souther.compiler.core;
 
-import souther.compiler.ast.Hir;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 
@@ -118,8 +118,8 @@ public final class GrowingFold {
     private static Core joinedThroughBinding(Core.LetIn binding) {
         if (!(binding.body() instanceof Core.Call outer) || outer.fn() != BUILD
                 || !(outer.args().get(1) instanceof Core.Read walked)
-                || !walked.binding().equals(binding.binder().id())
-                || uses(binding.body(), binding.binder().id()) != 1) {
+                || !walked.binding().equals(binding.binder().binding())
+                || uses(binding.body(), binding.binder().binding()) != 1) {
             return null;
         }
         List<Core.LetIn> kept = new ArrayList<>();
@@ -132,7 +132,7 @@ public final class GrowingFold {
             return null;
         }
         for (Core.LetIn k : kept) {
-            if (uses(outer.args().get(0), k.binder().id()) > 0) {
+            if (uses(outer.args().get(0), k.binder().binding()) > 0) {
                 return null;
             }
         }
@@ -216,16 +216,16 @@ public final class GrowingFold {
      * see through. A binding of a binding is followed the same way, so the set is closed rather than
      * one level deep.
      */
-    private static Set<BindingId> aliases(Core body, Hir.Binder acc) {
+    private static Set<BindingId> aliases(Core body, Core.Binder acc) {
         Set<BindingId> names = new LinkedHashSet<>();
-        names.add(acc.id());
+        names.add(acc.binding());
         int before;
         do {
             before = names.size();
             count(body, e -> {
                 if (e instanceof Core.LetIn li && li.value() instanceof Core.Read v
                         && names.contains(v.binding())) {
-                    names.add(li.binder().id());
+                    names.add(li.binder().binding());
                 }
                 return false;
             }, new int[1]);
@@ -367,7 +367,7 @@ public final class GrowingFold {
 
     /** {@code acc ++ rhs} as an add to the builder. */
     private static Core appended(Core e, Set<BindingId> acc) {
-        if (!(e instanceof Core.Binary b) || b.op() != Hir.BinOp.CONCAT
+        if (!(e instanceof Core.Binary b) || b.op() != BinOp.CONCAT
                 || !(b.left() instanceof Core.Read v) || !acc.contains(v.binding())) {
             return null;
         }
@@ -410,7 +410,7 @@ public final class GrowingFold {
                                 iff.expansion());
             }
             case Core.LetIn li -> {
-                if (acc.contains(li.binder().id()) && !(li.value() instanceof Core.Read v
+                if (acc.contains(li.binder().binding()) && !(li.value() instanceof Core.Read v
                         && acc.contains(v.binding()))) {
                     return null;   // one of the accumulator's names now stands for something else
                 }
@@ -421,7 +421,7 @@ public final class GrowingFold {
             case Core.Match m -> {
                 List<Core.Case> cases = new ArrayList<>();
                 for (Core.Case c : m.cases()) {
-                    if (c.binding() != null && acc.contains(c.binding().id())) {
+                    if (c.binder() != null && acc.contains(c.binder().binding())) {
                         return null;
                     }
                     Core body = answers(c.body(), acc, found, growth);

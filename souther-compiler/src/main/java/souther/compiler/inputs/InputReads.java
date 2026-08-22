@@ -1,6 +1,5 @@
 package souther.compiler.inputs;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
@@ -82,7 +81,7 @@ public record InputReads(InputDomain read, Map<BindingId, String> roots,
     }
 
     /** The same, inside what {@code binder} binds. */
-    public InputReads and(Hir.Binder binder, Core value) {
+    public InputReads and(Core.Binder binder, Core value) {
         if (binder == null || binder.binding() == null || value == null) {
             return this;
         }

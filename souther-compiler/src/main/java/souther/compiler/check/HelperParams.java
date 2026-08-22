@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.types.BindingId;
@@ -592,7 +593,7 @@ final class HelperParams {
          * always one type — scaling a numeric newtype asks the other side for the base it wraps — so
          * what is asked is answered where that rule is stated rather than restated here.
          */
-        private void visitOperand(Hir.Expr operand, Hir.Expr beside, Hir.BinOp op, boolean onTheRight,
+        private void visitOperand(Hir.Expr operand, Hir.Expr beside, BinOp op, boolean onTheRight,
                                   Scope env, BindingId target) {
             if (pinned != null || !mentions(operand, target)) {
                 return;

@@ -1,12 +1,12 @@
 package souther.compiler.codegen;
 
+import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.ValueName;
 import souther.compiler.check.ConstEval;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
-import java.util.List;
 import java.util.Optional;
 
 /**
@@ -103,7 +103,7 @@ public final class InvariantConstraints {
         // `0 <= value` says what `value >= 0` says: read the value-bearing side as the left one.
         Hir.Expr left = bin.left();
         Hir.Expr right = bin.right();
-        Hir.BinOp op = bin.op();
+        BinOp op = bin.op();
         if (!bearsValue(left) && bearsValue(right)) {
             Hir.Expr swap = left;
             left = right;
@@ -137,7 +137,7 @@ public final class InvariantConstraints {
      * duplicates while mapping it (spec §collections), so a constraint chained after that mapping is no
      * longer on a typed decoder, and one chained before it would count the duplicates.
      */
-    private static Optional<Constraint> ofListSize(Hir.BinOp op, Hir.Expr left, Hir.Expr right) {
+    private static Optional<Constraint> ofListSize(BinOp op, Hir.Expr left, Hir.Expr right) {
         Integer n = sizeBound("List.length", left, right);
         if (n == null) {
             return Optional.empty();
@@ -155,7 +155,7 @@ public final class InvariantConstraints {
 
     /** The same for a map, which Raoh decodes as a record of its values and bounds by entry count.
      * There is no emptiness constraint of its own there, so {@code >= 1} is a minimum of one. */
-    private static Optional<Constraint> ofMapSize(Hir.BinOp op, Hir.Expr left, Hir.Expr right) {
+    private static Optional<Constraint> ofMapSize(BinOp op, Hir.Expr left, Hir.Expr right) {
         Integer n = sizeBound("Map.size", left, right);
         if (n == null) {
             return Optional.empty();
@@ -204,7 +204,7 @@ public final class InvariantConstraints {
         return Optional.empty();
     }
 
-    private static Optional<Constraint> ofStringLength(Hir.BinOp op, Hir.Expr left, Hir.Expr right) {
+    private static Optional<Constraint> ofStringLength(BinOp op, Hir.Expr left, Hir.Expr right) {
         if (!(left instanceof Hir.Apply call) || !applies(call, "String.length")
                 || call.args().size() != 1 || !isValue(call.args().get(0))) {
             return Optional.empty();
@@ -226,7 +226,7 @@ public final class InvariantConstraints {
         };
     }
 
-    private static Optional<Constraint> ofInt(Hir.BinOp op, Hir.Expr left, Hir.Expr right) {
+    private static Optional<Constraint> ofInt(BinOp op, Hir.Expr left, Hir.Expr right) {
         if (!isValue(left)) {
             return Optional.empty();
         }
@@ -247,7 +247,7 @@ public final class InvariantConstraints {
         };
     }
 
-    private static Optional<Constraint> ofDecimal(Hir.BinOp op, Hir.Expr left, Hir.Expr right) {
+    private static Optional<Constraint> ofDecimal(BinOp op, Hir.Expr left, Hir.Expr right) {
         if (!isValue(left)) {
             return Optional.empty();
         }
@@ -300,12 +300,12 @@ public final class InvariantConstraints {
                 && local.id().equals(b.params().get(0).id());
     }
 
-    private static Hir.BinOp mirrored(Hir.BinOp op) {
+    private static BinOp mirrored(BinOp op) {
         return switch (op) {
-            case LT -> Hir.BinOp.GT;
-            case LE -> Hir.BinOp.GE;
-            case GT -> Hir.BinOp.LT;
-            case GE -> Hir.BinOp.LE;
+            case LT -> BinOp.GT;
+            case LE -> BinOp.GE;
+            case GT -> BinOp.LT;
+            case GE -> BinOp.LE;
             default -> op;   // == and /= read the same either way
         };
     }

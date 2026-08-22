@@ -1,6 +1,6 @@
 package souther.compiler.coverage;
 
-import souther.compiler.ast.Hir;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
@@ -90,7 +90,7 @@ public sealed interface SourceOutcome {
      * <p>Not an arm and counted as one nowhere. A condition stops as soon as it is settled, so which
      * arm a row landed in does not say which comparison ran.
      */
-    record Compared(Hir.BinOp op) implements SourceOutcome {}
+    record Compared(BinOp op) implements SourceOutcome {}
 
     /** Whether this is one of the arms a branch measure counts. */
     default boolean isArm() {

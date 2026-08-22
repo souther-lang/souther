@@ -1,6 +1,5 @@
 package souther.compiler.codegen;
 
-import souther.compiler.check.MatchElaborator;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.ClauseHelpers;
 import souther.compiler.ast.Hir;
@@ -33,7 +32,6 @@ import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Consumer;
 
 import static souther.compiler.codegen.Descriptors.*;
@@ -126,11 +124,6 @@ final class CodecGen {
     }
 
     /**
-     * Pushes the decoder a map key is read with. A key always arrives as a {@code String} — a JSON
-     * object's keys are strings, and the neutral map's are too — so the temporal key is the
-     * string-then-parse form for every source, not the direct temporal factory a field value uses.
-     */
-    /**
      * The only way this backend builds a decoder for text: Raoh's string leaf, canonicalized.
      *
      * <p>Every string that reaches the domain from outside comes through here — a field, a newtype's
@@ -150,6 +143,11 @@ final class CodecGen {
     }
 
 
+    /**
+     * Pushes the decoder a map key is read with. A key always arrives as a {@code String} — a JSON
+     * object's keys are strings, and the neutral map's are too — so the temporal key is the
+     * string-then-parse form for every source, not the direct temporal factory a field value uses.
+     */
     private void emitKeyDecoder(CodeBuilder code, MapKeyRepresentation key) {
         switch (key) {
             // a named key runs its own decoder: a newtype's applies its invariant, an enumeration's
@@ -1006,7 +1004,7 @@ final class CodecGen {
         code.invokevirtual(CD_ROk, "value", MTD_Object);
         int inputSlot = gen.slot(inputType);
         unbox(code, inputType, inputSlot);
-        gen.bind(prim.input(), inputSlot, inputType);
+        gen.bind(prim.input().binding(), prim.input().name(), inputSlot, inputType);
 
         for (Hir.DecStmt stmt : prim.stmts()) {
             switch (stmt) {
@@ -1014,7 +1012,7 @@ final class CodecGen {
                     Type t = gen.expr(let.value());
                     int slot = gen.slot(t);
                     store(code, slot, t);
-                    gen.bind(let.binder(), slot, t);
+                    gen.bind(let.binder().binding(), let.binder().name(), slot, t);
                 }
             }
         }
@@ -1066,7 +1064,7 @@ final class CodecGen {
         Type innerType = bindType(dec.inner());
         int inSlot = gen.slot(innerType);
         unbox(code, innerType, inSlot);                             // cast Object -> Y, store
-        gen.bind(dec.input(), inSlot, innerType);
+        gen.bind(dec.input().binding(), dec.input().name(), inSlot, innerType);
         emitConstructCall(code, gen, cdName, dec.result(), fields);
     }
 
@@ -1199,11 +1197,11 @@ final class CodecGen {
                 code.invokestatic(CD_Option, "ofNullable", MTD_ofNullable, true);
                 int vSlot = gen.slot(t);
                 code.astore(vSlot);
-                gen.bind(bind.binder(), vSlot, t);
+                gen.bind(bind.binder().binding(), bind.binder().name(), vSlot, t);
             } else {
                 int vSlot = gen.slot(t);
                 unbox(code, t, vSlot);
-                gen.bind(bind.binder(), vSlot, t);
+                gen.bind(bind.binder().binding(), bind.binder().name(), vSlot, t);
             }
         }
         emitConstructCall(code, gen, cdName, obj.result(), fields);
@@ -1284,6 +1282,16 @@ final class CodecGen {
     }
 
     /**
+     * Which half of the invariant to emit. A map's keys are converted between the two: a mapped
+     * constraint is one of Raoh's own and has to reach the typed leaf, which is before the
+     * conversion, while a refined clause is the model's own predicate and has to read the map the
+     * model declared — {@code Map<UserId, V>} with canonical keys, not the {@code Map<String, V>} the
+     * object decoded to. Splitting them keeps declaration order, because a clause that needs refining
+     * makes every later clause refined too ({@link #invariantsOf}), so the mapped ones are a prefix.
+     */
+    private enum ConstraintPhase { MAPPED, REFINED, BOTH }
+
+    /**
      * Constrains the leaf decoder on the stack with the newtype's invariant, clause by clause in the
      * order they are declared (issue #83). A clause the mapping recognises becomes the Raoh constraint
      * that says the same thing, so the failure carries that constraint's code, metadata and default
@@ -1298,16 +1306,6 @@ final class CodecGen {
      * the order a failure is reported in — the same order {@code __construct} decides in, so the
      * boundary and an attempted construction name the same clause for the same value.
      */
-    /**
-     * Which half of the invariant to emit. A map's keys are converted between the two: a mapped
-     * constraint is one of Raoh's own and has to reach the typed leaf, which is before the
-     * conversion, while a refined clause is the model's own predicate and has to read the map the
-     * model declared — {@code Map<UserId, V>} with canonical keys, not the {@code Map<String, V>} the
-     * object decoded to. Splitting them keeps declaration order, because a clause that needs refining
-     * makes every later clause refined too ({@link #invariantsOf}), so the mapped ones are a prefix.
-     */
-    private enum ConstraintPhase { MAPPED, REFINED, BOTH }
-
     private void emitInvariantConstraints(CodeBuilder code, ClassDesc cdName, Type base,
                                           Invariants invariants) {
         emitInvariantConstraints(code, cdName, base, invariants, ConstraintPhase.BOTH);
@@ -1596,7 +1594,7 @@ final class CodecGen {
                 code.checkcast(cdName);
                 int selfSlot = gen.slot(Type.ref(data.declares()));
                 code.astore(selfSlot);
-                gen.bind(enc.self(), selfSlot, Type.ref(data.declares()));
+                gen.bind(enc.self().binding(), enc.self().name(), selfSlot, Type.ref(data.declares()));
                 emitRawExpr(code, gen, enc.result());
                 code.areturn();
             });
@@ -1639,7 +1637,7 @@ final class CodecGen {
                 code.invokevirtual(CD_OptionSome, "value", MTD_Object);
                 int slot = gen.slot(elemType);
                 unbox(code, elemType, slot);
-                gen.bind(o.elem(), slot, elemType);
+                gen.bind(o.elem().binding(), o.elem().name(), slot, elemType);
                 emitRawExpr(code, gen, o.inner());          // Some(v) -> encode v
                 code.goto_(end);
                 code.labelBinding(none);
@@ -1710,7 +1708,7 @@ final class CodecGen {
         code.invokevirtual(CD_OptionSome, "value", MTD_Object);   // map, valueObj
         int slot = gen.slot(elemType);
         unbox(code, elemType, slot);                    // map (value bound to local)
-        gen.bind(o.elem(), slot, elemType);
+        gen.bind(o.elem().binding(), o.elem().name(), slot, elemType);
         code.dup();                                     // map, map
         code.loadConstant(key);                         // map, map, key
         emitRawExpr(code, gen, o.inner());              // map, map, key, encoded

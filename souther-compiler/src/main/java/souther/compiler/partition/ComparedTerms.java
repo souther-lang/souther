@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Hir;
+import souther.compiler.types.BinOp;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Symbols;
@@ -98,19 +98,19 @@ record ComparedTerms(NumericTerm on, NumericTerm against, Carrier carrier,
 
     /** Which side the left of the comparison is on where the comparison is satisfied. Read off the
      *  operator as written, since neither side is turned round here. */
-    private static boolean onIsAbove(Hir.BinOp op) {
-        return op == Hir.BinOp.GT || op == Hir.BinOp.GE;
+    private static boolean onIsAbove(BinOp op) {
+        return op == BinOp.GT || op == BinOp.GE;
     }
 
     /** Whether an operator orders its two sides, which {@code ==} and {@code /=} do not. */
-    private static boolean ordersStrictly(Hir.BinOp op) {
+    private static boolean ordersStrictly(BinOp op) {
         return switch (op) {
             case LT, LE, GT, GE -> true;
             case EQ, NE, AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
         };
     }
 
-    private static boolean holdsAtTheLine(Hir.BinOp op) {
-        return op == Hir.BinOp.LE || op == Hir.BinOp.GE;
+    private static boolean holdsAtTheLine(BinOp op) {
+        return op == BinOp.LE || op == BinOp.GE;
     }
 }
