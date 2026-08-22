@@ -576,15 +576,11 @@ public final class NumericDomain<A> {
     /**
      * Whether {@code Σ c·x + k <= 0} (or {@code < 0}) follows.
      *
-     * <p>Two ways, and the second reads the first. What the box leaves the goal's own positions
-     * bounds it; and a rule kept as written carries a goal onward wherever the box proves the
-     * difference between the two — {@code f <= 0} together with {@code g - f <= 0} gives
-     * {@code g <= 0}. That is what relates a guard over a computed value to what the type of the
-     * value it was compared against guarantees.
-     *
-     * <p>One rule, once. The residual is proven against the box alone, so two rules are never added
-     * together through this. What the box already holds of them is another matter and is not this
-     * step: the rules that narrow it have all been read into it, each on its own.
+     * <p>Which is a question about how high the goal reaches, and nothing here answers that. What
+     * the routes are and how many rules one of them may take are {@link FormReach}'s, said there
+     * once. A second account of them beside this method is a second thing to keep true, and the one
+     * that stood here had gone on saying the residual is bounded by the ranges alone after the
+     * relations had been added to it.
      */
     private boolean proves(Goal<A> goal, boolean strict, boolean withRules) {
         RationalCut highest = highestProven(goal, withRules);
@@ -608,9 +604,8 @@ public final class NumericDomain<A> {
      *
      * <p>What the derivation is belongs to {@link FormReach}, and it is not this class's because it
      * is not only this class's question: a rule being reduced asks it of the rest of its own form,
-     * and the two readings had come apart in exactly the way the ranges and the proof once had
-     *. So the routes, and the rule that a reading composes at most one other rule, are said
-     * there and read from here.
+     * and the two readings had come apart in exactly the way the ranges and the proof once had. The
+     * routes, and how many rules one of them may take, are said there and read from here.
      *
      * @param withRules false to ask what the ends and the closed relations between them say, leaving
      *                  the rules beside them out. A different question from what the rules say, and

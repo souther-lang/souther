@@ -19,11 +19,22 @@ import java.util.Map;
  * against guarantees. Whichever route bounds it tightest is the answer, and a route that bounds it
  * not at all costs nothing.
  *
- * <p><b>One rule, once.</b> The residual is bounded by the ends and the differences alone, so two
- * rules are never added together inside one reading. What is derived from a reading becomes an end
- * the next round reads, so a chain of rules composes through successive ranges rather than by being
- * combined here — which is what keeps a reading a function of the state it was handed rather than of
- * how many times it is asked.
+ * <p><b>One rule to a query, and this is where that is said.</b> The unit is one call to
+ * {@link #of}: it may take one rule as a premise, and the residual left once that premise is off is
+ * bounded by the ends and the differences and by nothing further, so no query adds two rules
+ * together. The unit matters because a caller's own act is usually larger than a query — reducing a
+ * rule one position at a time is one act and asks a query per position, so what such an act depends
+ * on is its own rule and whatever single premise each query took. The two are not the same count,
+ * and saying "one rule" without saying one rule to what is what left it readable both ways.
+ *
+ * <p>Longer chains are not this. What a query derives becomes an end the next round reads, so rules
+ * compose through successive ranges — which is what keeps a query a function of the state it was
+ * handed rather than of how many times it has been asked.
+ *
+ * <p><b>Nothing else states this rule.</b> Every reader here is a reader and points back; a copy of
+ * it beside a caller is a second statement to keep true, and the one that stood beside
+ * {@link NumericDomain#proves} went on describing a residual bounded by the ends alone after the
+ * differences had been added to it.
  *
  * <p><b>Held two ways before this, and the two disagreed.</b> The question a goal asked read the
  * ends, the differences and one rule; the question a rule's own reduction asked read the ends alone

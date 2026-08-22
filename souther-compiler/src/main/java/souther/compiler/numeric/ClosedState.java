@@ -26,9 +26,9 @@ import java.util.function.Function;
  * finds goes back through the differences, and round again. A round reads only what the round before
  * it produced, so no rule's answer depends on which rule ran first.
  *
- * <p>What "against what the closure leaves" means is {@link FormReach}: the ends, the relations
- * between them, and one other rule. So a chain of rules composes here, through the ends a round
- * hands the next one, and not inside any one reading.
+ * <p>What "against what the closure leaves" means is {@link FormReach}, which says what it reads
+ * and how much of it one query may take. A chain of rules composes here, through the ends a round
+ * hands the next one.
  *
  * <p><b>The rounds are not run to a fixed point, and do not claim to be.</b> Narrowing over a general
  * sum need not settle in finitely many rounds: two rules each halving the other's bound descend
