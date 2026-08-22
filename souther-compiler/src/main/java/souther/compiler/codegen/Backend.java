@@ -1196,7 +1196,7 @@ public final class Backend {
      * first is not read back and needs no number. The second is not read back either and needs one
      * all the same: a class in a jar runs, and what it calls has to be there when it does.
      */
-    public static final int BOUNDARY_VERSION = 17;
+    public static final int BOUNDARY_VERSION = 18;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java

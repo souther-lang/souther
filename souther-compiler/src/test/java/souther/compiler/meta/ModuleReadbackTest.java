@@ -365,6 +365,55 @@ class ModuleReadbackTest {
     }
 
     /** {@code classes}, with whatever their `$Module` annotation says rewritten by {@code as}. */
+    /**
+     * A jar written before a behavior carried where its body comes from.
+     *
+     * <p>Its behavior annotation holds the flag that word replaced, and this compiler asks for the
+     * word. Which answer the reading gives turns on the number: at a boundary this compiler does not
+     * share the module is refused for the reason it was refused, and at one it does share the same
+     * bytes come back as metadata of this compiler's name carrying something else. The second is what
+     * would have shipped had the number stayed where it was (issue #936).
+     */
+    @Test
+    void aJarWritingTheOlderBehaviorMemberIsRefusedAtItsOwnBoundaryAndNotAtThisOne() {
+        Map<String, byte[]> classes = Compiler.compile("""
+                module shared.ledger exposing ( Entry, record )
+                data Entry = { amount: Int }
+                behavior record : (e: Entry) -> Entry
+                """);
+
+        Readback.Failure.Incompatible why = assertInstanceOf(Readback.Failure.Incompatible.class,
+                refusalOf("shared.ledger", asItWasWritten(classes, Backend.BOUNDARY_VERSION - 1)),
+                "the number it was written under says so before a member is read");
+        assertEquals("0.0.1-before", why.compiler());
+
+        assertInstanceOf(Readback.Failure.UnreadableMetadata.class,
+                refusalOf("shared.ledger", asItWasWritten(classes, Backend.BOUNDARY_VERSION)),
+                "at this number the same bytes are ours and say something else");
+    }
+
+    /** {@code classes} as a compiler that wrote {@code injected} rather than {@code implementation}
+     *  published them, at {@code boundary}. */
+    private static PublishedClasses asItWasWritten(Map<String, byte[]> classes, int boundary) {
+        ClassFileDeclarations read = new ClassFileDeclarations(classes::get);
+        return binaryName -> {
+            if (!(read.of(binaryName)
+                    instanceof PublishedClasses.Carried.Declared(
+                            PublishedClasses.Declarations d))) {
+                return read.of(binaryName);
+            }
+            PublishedClasses.SoutherModuleView m = d.module();
+            return new PublishedClasses.Carried.Declared(new PublishedClasses.Declarations(
+                    m == null ? null : new PublishedClasses.SoutherModuleView(
+                            boundary, "0.0.1-before", m.header(), m.imports(), m.types(),
+                            m.behaviors(), m.invariantHelpers()),
+                    d.data(), d.behaviorSignature(),
+                    // What the older compiler wrote in its place is a flag, and no word of ours
+                    // reads as one.
+                    d.behaviorSignature() == null ? null : "true"));
+        };
+    }
+
     private static PublishedClasses viewing(
             Map<String, byte[]> classes,
             java.util.function.UnaryOperator<PublishedClasses.SoutherModuleView> as) {
