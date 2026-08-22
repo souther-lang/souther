@@ -394,7 +394,7 @@ class CoverageSitesTest {
         assertEquals("case UnderThirty", souther.compiler.report.ArmVocabulary.label(plan.site(arms[0])));
 
         Core.Match copy = new Core.Match(match.scrutinee(), match.cases(), match.origin(),
-                match.type(), match.pos());
+                match.type(), match.pos(), java.util.List.of());
         assertEquals(match, copy, "an equal node is easy to make");
         assertNull(plan.probesOf(copy),
                 "and it is not this one: a value-keyed plan would hand the emitter another arm's probe");

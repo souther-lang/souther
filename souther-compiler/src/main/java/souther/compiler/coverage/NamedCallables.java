@@ -19,19 +19,19 @@ import java.util.Map;
  * <p>Carried down the body rather than gathered over it, because a name means what the nearest
  * binding of it gave it. Chains keep the answer: {@code let g = f} stands for whatever {@code f}
  * does.
+ *
+ * <p>One reading, asked where the declarations are walked and asked again where a body is expanded.
+ * The two ask it of the same tree and act on it differently — one decides what a fork rests on, the
+ * other which declaration a copy is of — and written apart they would agree by having been derived
+ * alike, until the day one of them learned a shape the other did not.
  */
-record NamedCallables(Map<BindingId, String> byBinding) {
+public record NamedCallables(Map<BindingId, String> byBinding) {
 
     /** Nothing bound. */
-    static final NamedCallables NONE = new NamedCallables(Map.of());
+    public static final NamedCallables NONE = new NamedCallables(Map.of());
 
-    NamedCallables {
+    public NamedCallables {
         byBinding = Map.copyOf(byBinding);
-    }
-
-    /** What {@code binding} stands for, or null where it holds no callable this can name. */
-    String at(BindingId binding) {
-        return byBinding.get(binding);
     }
 
     /**
@@ -40,13 +40,13 @@ record NamedCallables(Map<BindingId, String> byBinding) {
      * <p>{@code null} where it names no declaration at all -- a parameter holding a function, say,
      * whose callable is decided by whoever called this.
      */
-    String reached(Hir.Var.Denoting named) {
+    public String reached(Hir.Var.Denoting named) {
         return named.denotes() instanceof ValueName.Local local ? byBinding.get(local.id())
                 : named.reaches();
     }
 
     /** The same, with {@code binding} standing for whatever {@code value} is. */
-    NamedCallables and(BindingId binding, Hir.Expr value) {
+    public NamedCallables and(BindingId binding, Hir.Expr value) {
         String callable = value instanceof Hir.Var.Denoting named ? reached(named) : null;
         if (binding == null || callable == null) {
             return this;

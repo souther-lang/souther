@@ -262,10 +262,6 @@ public sealed interface Core {
      */
     record If(Core cond, Core then, Core els, CoverageOrigin origin, Type type, SourcePos pos,
               List<souther.compiler.types.BindingOwner> expansion) implements Core {
-
-        public If(Core cond, Core then, Core els, CoverageOrigin origin, Type type, SourcePos pos) {
-            this(cond, then, els, origin, type, pos, List.of());
-        }
     }
 
     /**
@@ -288,11 +284,6 @@ public sealed interface Core {
     record IfConstructed(Construct construct, Hir.Binder binder, Core then, List<ElseArm> els,
                          CoverageOrigin origin, Type type, SourcePos pos,
                          List<souther.compiler.types.BindingOwner> expansion) implements Core {
-
-        public IfConstructed(Construct construct, Hir.Binder binder, Core then, List<ElseArm> els,
-                             CoverageOrigin origin, Type type, SourcePos pos) {
-            this(construct, binder, then, els, origin, type, pos, List.of());
-        }
     }
 
     /** One departure of an attempted construction: the clause it answers ({@link Optional#empty()}
@@ -477,11 +468,6 @@ public sealed interface Core {
      */
     record Match(Core scrutinee, List<Case> cases, CoverageOrigin origin, Type type, SourcePos pos,
                  List<souther.compiler.types.BindingOwner> expansion) implements Core {
-
-        public Match(Core scrutinee, List<Case> cases, CoverageOrigin origin, Type type,
-                     SourcePos pos) {
-            this(scrutinee, cases, origin, type, pos, List.of());
-        }
     }
 
     /** {@code unreachable "reason"}: the position it stands in gets no value, and the reason is the
@@ -624,7 +610,9 @@ public sealed interface Core {
      * would be recomputed by both. Comparing this instead is what tells the two apart.
      *
      * <p>Every place comes out null rather than blank, so a tree that escapes here and is asked
-     * where it is says so at once. Nothing emits one of these, reports on one, or measures one.
+     * where it is says so at once. Which copy of a body a fork stands in is one of them: it is where
+     * the fork is and not what it says, and two readings of one term are the same term whichever
+     * copy each was read out of. Nothing emits one of these, reports on one, or measures one.
      *
      * <p>Written out a case at a time, like {@link #atSlots}: a node's place is on the node, so
      * there is no slot to hand a rewrite. The switch is over a sealed type, so a node kind added
@@ -654,13 +642,13 @@ public sealed interface Core {
                     new PreservedCall(p.operation(), allWithoutTheirPlace(p.args()), p.type(), null);
             case Apply a -> new Apply(readWithoutItsPlace(a.fn()), allWithoutTheirPlace(a.args()), a.type(), null);
             case If iff -> new If(withoutItsPlace(iff.cond()), withoutItsPlace(iff.then()),
-                    withoutItsPlace(iff.els()), null, iff.type(), null);
+                    withoutItsPlace(iff.els()), null, iff.type(), null, List.of());
             case IfConstructed ic -> new IfConstructed(constructWithoutItsPlace(ic.construct()),
                     binderWithoutItsPlace(ic.binder()), withoutItsPlace(ic.then()),
                     ic.els().stream()
                             .map(arm -> new ElseArm(arm.clause(), withoutItsPlace(arm.body())))
                             .toList(),
-                    null, ic.type(), null);
+                    null, ic.type(), null, List.of());
             case LetIn li -> new LetIn(binderWithoutItsPlace(li.binder()), withoutItsPlace(li.value()),
                     withoutItsPlace(li.body()), li.type(), null);
             case Block b -> new Block(b.params().stream().map(Core::binderWithoutItsPlace).toList(),
@@ -676,7 +664,7 @@ public sealed interface Core {
                             .map(c -> new Case(c.pattern(), binderWithoutItsPlace(c.binding()),
                                     withoutItsPlace(c.body()), null))
                             .toList(),
-                    null, m.type(), null);
+                    null, m.type(), null, List.of());
         };
     }
 

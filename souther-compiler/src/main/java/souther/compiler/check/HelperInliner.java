@@ -353,8 +353,11 @@ public final class HelperInliner {
      *  same question wherever the name is read. */
     private final Map<BindingId, souther.compiler.coverage.SuppliedRules.RuleIdentity> rules = new LinkedHashMap<>();
     /** Which declaration each binding that holds a callable stands for. A name is where a callable
-     *  was put, and the copies a call through it makes are copies of what it holds. */
-    private final Map<BindingId, String> callables = new LinkedHashMap<>();
+     *  was put, and the copies a call through it makes are copies of what it holds. Read by the same
+     *  thing that reads it where the declarations are walked, so the two cannot come to disagree
+     *  about what a name means. */
+    private souther.compiler.coverage.NamedCallables callables =
+            souther.compiler.coverage.NamedCallables.NONE;
 
     /** Every recursion in reach, which is exactly what {@link #inline} leaves a call standing to —
      *  this module's own, what its imports publish to it, and the library underneath both. What a
@@ -868,15 +871,12 @@ public final class HelperInliner {
      * a declaration of that name, of which there is none.
      */
     private String reaches(Hir.Var.Denoting named) {
-        return named.denotes() instanceof ValueName.Local local ? callables.get(local.id())
-                : named.reaches();
+        return callables.reached(named);
     }
 
-    /** Says that {@code binding} holds the callable {@code declaration}. */
-    private void holds(BindingId binding, String declaration) {
-        if (declaration != null) {
-            callables.put(binding, declaration);
-        }
+    /** Says that {@code binding} holds whatever {@code value} is. */
+    private void holds(BindingId binding, Hir.Expr value) {
+        callables = callables.and(binding, value);
     }
 
     /** Says that {@code binding} holds {@code rule}, where anything says what it holds. */
@@ -1121,7 +1121,7 @@ public final class HelperInliner {
                     BindingId alias = li.binder().id();
                     writing.scopedLambdas().put(alias, new ScopedLambda(aliased));
                     stands(alias, ruleOf((Hir.Var.Denoting) value));
-                    holds(alias, reaches((Hir.Var.Denoting) value));
+                    holds(alias, value);
                     Hir.Expr aliasBody = inline(li.body());
                     writing.scopedLambdas().remove(alias);
                     yield references(aliasBody, alias)
@@ -1154,9 +1154,7 @@ public final class HelperInliner {
                 // for one declaration would come out as two rules written in two places.
                 stands(bound, li.value() instanceof Hir.Var.Denoting named ? ruleOf(named)
                         : ruleOf(lambda));
-                if (li.value() instanceof Hir.Var.Denoting named) {
-                    holds(bound, reaches(named));
-                }
+                holds(bound, li.value());
                 Hir.Expr body = inline(li.body());
                 writing.scopedLambdas().remove(bound);
                 // if the binding is still read, the function was used as a value, not just applied —

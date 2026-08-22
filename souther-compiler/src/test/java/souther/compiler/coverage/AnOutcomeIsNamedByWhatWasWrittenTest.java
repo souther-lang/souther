@@ -290,7 +290,7 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
         Core answer = new Core.Int(1, souther.compiler.types.Type.INT, at);
         Core fork = new Core.If(new Core.Bool(true, souther.compiler.types.Type.BOOL, at),
                 answer, new Core.Int(2, souther.compiler.types.Type.INT, at),
-                CoverageOrigin.unwritten(), souther.compiler.types.Type.INT, at);
+                CoverageOrigin.unwritten(), souther.compiler.types.Type.INT, at, java.util.List.of());
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> CoverageSites.of(Map.of("b", fork), souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE));
