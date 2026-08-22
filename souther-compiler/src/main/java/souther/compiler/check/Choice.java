@@ -25,11 +25,16 @@ import java.util.List;
  * the values have them, while a reader that wants more is handed the node rather than going back to
  * the tree to find it for itself.
  *
- * <p>Which is what makes a reader stop when a kind of choice is added. A reader that needs more than
- * the values switches over {@link Decides}, which is sealed, so a kind added without an arm there
- * does not compile. Answering by {@link Kind} alone does not do that, and looked as though it did:
- * a reader can take a decision about a kind and go on doing nothing about it, which is a tripwire
- * that reads as holding while the reader that matters was never asked.
+ * <p>Which is also where a reader is made to stop. {@link Kind} on its own stops nobody: it is a
+ * label, and a kind nothing produces is inert — adding one and answering for it compiles, and
+ * should. What a new choice really needs is a case in {@link #of}, and then a way for each of its
+ * arms to be decided. So the sum to switch over is {@link Decides}, which is what a reader has to
+ * interpret to do anything at all, and a new way of deciding an arm fails exhaustiveness at every
+ * such reader until it is handled.
+ *
+ * <p>That distinction is this class's own history. The forcing was first put on {@link Kind}, at a
+ * reader that did not open anything, and a kind could be declared a split while no reader opened
+ * one — a tripwire that read as holding, which is worse than none, since the words claimed it.
  */
 record Choice(Kind kind, Core asked, List<Arm> arms) {
 

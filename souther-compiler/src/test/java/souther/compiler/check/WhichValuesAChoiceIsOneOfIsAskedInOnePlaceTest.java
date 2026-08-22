@@ -33,8 +33,11 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  */
 class WhichValuesAChoiceIsOneOfIsAskedInOnePlaceTest {
 
-    /** The arms of {@code Core} that answer one of several values. */
-    private static final Set<String> ANSWER_ONE_OF_SEVERAL =
+    /** The arms of {@code Core} that are a choice by their shape — the ones {@link Choice} answers
+     * for. Named against its opposite: what a shape can say is whether every value written at that
+     * node is one of several, and for a call it cannot, so a call is on the other side whatever the
+     * operation turns out to be (#974). */
+    private static final Set<String> A_CHOICE_BY_ITS_SHAPE =
             Set.of("If", "Match", "IfConstructed");
 
     /** Every arm {@code Core} declares. */
@@ -58,18 +61,18 @@ class WhichValuesAChoiceIsOneOfIsAskedInOnePlaceTest {
     @Test
     void everyArmOfCoreIsClassifiedAndTheChoicesAreAmongThem() {
         Set<String> arms = coreArms();
-        Set<String> named = new LinkedHashSet<>(ANSWER_ONE_OF_SEVERAL);
+        Set<String> named = new LinkedHashSet<>(A_CHOICE_BY_ITS_SHAPE);
         named.removeAll(arms);
         assertEquals(Set.of(), named,
                 "a node named here is not an arm of Core, so this rule is about something the"
                         + " language no longer has");
 
         Set<String> unclassified = new LinkedHashSet<>(arms);
-        unclassified.removeAll(ANSWER_ONE_OF_SEVERAL);
+        unclassified.removeAll(A_CHOICE_BY_ITS_SHAPE);
         unclassified.removeAll(NOT_A_CHOICE_BY_ITS_SHAPE);
         assertEquals(Set.of(), unclassified,
                 "Core has an arm nobody has classified."
-                        + " Decide which: a choice goes in ANSWER_ONE_OF_SEVERAL and into Choice.of,"
+                        + " Decide which: a choice goes in A_CHOICE_BY_ITS_SHAPE and into Choice.of,"
                         + " and anything else goes in NOT_A_CHOICE_BY_ITS_SHAPE. Defaulting it"
                         + " silently is how an attempted construction went unread");
     }

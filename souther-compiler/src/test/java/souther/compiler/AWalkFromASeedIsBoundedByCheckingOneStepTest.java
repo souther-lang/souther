@@ -55,6 +55,16 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
                 invariant nn = value >= 0
                 invariant cap = value <= 5
 
+            data Held =
+                { amount: NonNegInt
+                }
+
+            data Holding = Held | Empty
+
+            data Boxed =
+                { held: Holding
+                }
+
             data Classed =
                 { kind: Kind
                 , amount: NonNegInt
@@ -594,5 +604,13 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
                 let total (xs) = Money(List.fold((sum, x) ->
                     if NonNegInt(x.amount.value) as n then sum + n.value else sum, 0, xs))
                 """)), "and this one reads what the attempt built, which nothing here has entered");
+        assertTrue(owed(compiled("""
+                behavior total : (xs: List<Boxed>) -> Money
+                    constructs Money
+
+                let total (xs) = Money(List.fold((sum, x) -> match x.held with
+                    | Held as h -> sum + h.amount.value
+                    | Empty -> sum, 0, xs))
+                """)), "and this one reads what a `match` arm bound, which is the same thing again");
     }
 }

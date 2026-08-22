@@ -30,11 +30,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * where the memo could stop holding unremarked, since a walk's readings are the ones nothing outside
  * could see.
  *
- * <p>Nothing here is a bound on how many readings there are. That is
- * {@link HowFarSplitsAreOpenedIsBoundedByWhatARereadingCostsTest}'s, and it is a different unit — it
- * counts re-readings of a body, and an arm read is a question put to a domain. Sharing a number
- * between the two would say they are one unit. What holds them together instead is that neither
- * compounds: readings are capped, and within one, recipes are not re-evaluated.
+ * <p>Nothing here is a bound on how many readings there are, and there is no such bound to lean on.
+ * How far splits are opened is a different question in a different unit — it counts re-readings of a
+ * body, and an arm read is a question put to a domain — and its own policy lets the first split on a
+ * path be opened however wide it is
+ * ({@link HowFarSplitsAreOpenedIsBoundedByWhatARereadingCostsTest}). Measured, a match of eighty
+ * cases is opened and the body is read a hundred and sixty times. So this states nothing about what
+ * a whole compilation costs. What it states is that <em>this</em> adds no factor: within one reading
+ * the recipes do not multiply through nested choices, whatever produced the reading.
  */
 class ARecipeIsEvaluatedOnceForTheReadingThatAsksItTest {
 

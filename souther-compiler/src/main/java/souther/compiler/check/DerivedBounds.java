@@ -94,7 +94,7 @@ final class DerivedBounds {
                 derive(atom, base, terms, derived, new LinkedHashSet<>());
             }
         }
-        watched(derived.evaluated);
+        derived.watched();
         NumericDomain<FactSubject> out = base;
         for (Map.Entry<FactSubject, Bounds> one : derived.answered.entrySet()) {
             out = taking(out, one.getKey(), one.getValue(), terms);
@@ -128,17 +128,6 @@ final class DerivedBounds {
         return out;
     }
 
-    /** Records the recipes this reading evaluated, where a test is reading them. Every atom here
-     * had its recipe put through {@link Intervals}, and an atom appears once per evaluation rather
-     * than once per name: what is stated about this reading is what it did, and a reader wanting the
-     * set of what it reached takes the set. */
-    private static void watched(List<FactSubject> evaluated) {
-        List<List<FactSubject>> watching = WATCHING;
-        if (watching != null) {
-            watching.add(List.copyOf(evaluated));
-        }
-    }
-
     /**
      * What one reading has answered, and the recipes it evaluated to answer it.
      *
@@ -148,11 +137,32 @@ final class DerivedBounds {
      * was done, and it is a list because an atom appearing twice in it is the memo not holding —
      * which is exactly what a set cannot say. Counted where a recipe is really put through, past the
      * answer a second ask comes back with, so what it holds is work and not asks.
+     *
+     * <p>The second half is kept only while a test is reading it. Every compilation would otherwise
+     * write a value per recipe evaluated for nobody, and a hook a compilation pays for is one its
+     * answer could come to depend on.
      */
     private static final class Memo {
 
         private final Map<FactSubject, Bounds> answered = new LinkedHashMap<>();
-        private final List<FactSubject> evaluated = new ArrayList<>();
+
+        /** Null wherever no test is reading, which is every compilation but a test's. Kept as
+         * whether-to-record rather than as a list nobody reads, for the reason
+         * {@link InvariantChecker#OPENING} is: a hook that costs a compilation something is one the
+         * answer could come to depend on, and this one records a value per recipe evaluated. */
+        private final List<FactSubject> evaluated = WATCHING == null ? null : new ArrayList<>();
+
+        void evaluating(FactSubject atom) {
+            if (evaluated != null) {
+                evaluated.add(atom);
+            }
+        }
+
+        void watched() {
+            if (evaluated != null) {
+                WATCHING.add(List.copyOf(evaluated));
+            }
+        }
     }
 
     /**
@@ -172,7 +182,7 @@ final class DerivedBounds {
         if (!deriving.add(atom)) {
             throw new AnAtomComputedFromItself(atom);
         }
-        done.evaluated.add(atom);
+        done.evaluating(atom);
         Bounds bounds = boundsFor(atom, base, terms, done, deriving);
         deriving.remove(atom);
         done.answered.put(atom, bounds);
@@ -204,7 +214,7 @@ final class DerivedBounds {
                 // A reading, and watched as one. What the walk reads is where a step's own recipes
                 // are evaluated, so a reading that could not be seen here was the one place the
                 // memo could stop holding without anything saying so.
-                watched(memo.evaluated);
+                memo.watched();
                 return answer;
             });
         }
