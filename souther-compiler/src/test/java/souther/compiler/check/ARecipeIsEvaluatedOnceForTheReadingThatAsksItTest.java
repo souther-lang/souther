@@ -11,25 +11,32 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * What a body of choices standing inside choices costs the reading that bounds them.
+ * A recipe standing under several others is evaluated once for the reading that asks it.
  *
- * <p>Two bounds meet here and they are not in the same unit. How far the case splits down one path
- * are opened bounds <em>readings of a body</em>
- * ({@link HowFarSplitsAreOpenedIsBoundedByWhatARereadingCostsTest}); what a choice costs is a
- * <em>reading of a form</em> per arm, which is a question put to a domain. Sharing the number
- * between them would say the two are one unit, and they are not: what the split bound is protecting
- * against is re-reading a body, and an arm is not one.
+ * <p>What a reading is, is one evaluation of the recipes against one domain. So this is not a claim
+ * that a body of choices costs a fixed amount: two readings against two domains evaluate the same
+ * recipe twice and are right to, which is why a walk's own readings each take a memo of their own —
+ * what is derived under an assumed accumulator is not what is derived without one. What is claimed
+ * is that <em>within</em> a reading nothing is derived twice, which is what makes the recipes an
+ * evaluation over a graph rather than over the tree of paths through it.
  *
- * <p>What has to hold instead is that the arms do not compound. A choice standing inside a choice is
- * a recipe standing under another, and the memo one reading keeps means each is evaluated once for
- * that reading — so nesting costs the number of the choices and not the product of their widths.
- * That is the property a shared constant would not have given and that removing the memo would take
- * away, so it is fixed here rather than described.
+ * <p>Measured on choices inside choices because that is where the difference shows. A choice under
+ * a choice is reached once by each arm above it, so a reading that forgot what it had answered
+ * would evaluate the arms of every choice under every arm of the one above — and the cost of one
+ * more level would double instead of holding still.
  *
  * <p>Read inside a fold's step, which is where nothing else bounds a choice: the region walk opens a
- * split in a value position instead, and where it does, no recipe is evaluated at all.
+ * split in a value position instead, and where it does, no recipe is evaluated at all. It is also
+ * where the memo could stop holding unremarked, since a walk's readings are the ones nothing outside
+ * could see.
+ *
+ * <p>Nothing here is a bound on how many readings there are. That is
+ * {@link HowFarSplitsAreOpenedIsBoundedByWhatARereadingCostsTest}'s, and it is a different unit — it
+ * counts re-readings of a body, and an arm read is a question put to a domain. Sharing a number
+ * between the two would say they are one unit. What holds them together instead is that neither
+ * compounds: readings are capped, and within one, recipes are not re-evaluated.
  */
-class ChoicesInsideChoicesCostTheirNumberAndNotTheirProductTest {
+class ARecipeIsEvaluatedOnceForTheReadingThatAsksItTest {
 
     private static final String HEAD = """
             module demo
@@ -54,8 +61,9 @@ class ChoicesInsideChoicesCostTheirNumberAndNotTheirProductTest {
                 """.formatted(e);
     }
 
-    /** Every recipe every reading of {@code module} evaluated, counted with repeats across readings
-     * and without them inside one — which is what the memo makes true. */
+    /** How many recipes were evaluated while compiling {@code module}, over every reading there was.
+     * {@link DerivedBounds#WATCHING} records an atom once per evaluation, so a memo that stopped
+     * holding shows here and a memo that held does not. */
     private static int recipesEvaluated(String module) {
         List<List<FactSubject>> watching = new ArrayList<>();
         DerivedBounds.WATCHING = watching;
@@ -68,9 +76,12 @@ class ChoicesInsideChoicesCostTheirNumberAndNotTheirProductTest {
     }
 
     /**
-     * The cost of one more level is the same at every depth. A reading that forgot what it had
-     * derived would evaluate the arms of every choice under every arm of the one above it, and the
-     * increments would double instead of holding still.
+     * The cost of one more level of nesting is the same at every depth.
+     *
+     * <p>Which follows from the memo and from nothing else here: the readings are the same readings
+     * at every depth — one per candidate range, against one domain each — and what changes is only
+     * how many recipes stand under the step's own form. So a level costs its own recipes once, and
+     * the increments hold still.
      */
     @Test
     void oneMoreLevelOfNestingCostsTheSameAtEveryDepth() {
@@ -87,8 +98,8 @@ class ChoicesInsideChoicesCostTheirNumberAndNotTheirProductTest {
         assertTrue(steps.get(0) > 0, "a level costs something, or this is watching nothing: " + counts);
         for (int i = 1; i < steps.size(); i++) {
             assertEquals(steps.get(0), steps.get(i),
-                    "the sixth level costs what the second did, so the arms do not compound: "
-                            + counts);
+                    "the sixth level costs what the second did, so a recipe under two arms was"
+                            + " evaluated for the reading and not for each arm: " + counts);
         }
     }
 

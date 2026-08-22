@@ -22,7 +22,32 @@ import java.util.List;
  */
 sealed interface Derivation {
 
-    record Product(LinearForm<FactSubject> left, LinearForm<FactSubject> right) implements Derivation {}
+    /**
+     * The forms this recipe is read from.
+     *
+     * <p>Answered by the recipe and not worked out from its shape. What a recipe is read from is not
+     * the same question as what it is arithmetic over, and the two look alike only while every
+     * recipe is arithmetic: a product's operands are both, and a choice's arms are read from without
+     * being arithmetic over anything, and what chose between them would be read from without even
+     * standing in the answer. A reader that decided the question by looking at which components
+     * happen to be forms would be answering a semantic question by a naming convention, and would
+     * miss the first one that arrives inside something else.
+     *
+     * <p>What it is for is {@link Terms#reached}, which is what says which places a form is about.
+     * {@link StepInputFacts} keeps only the places a step names, so a form a recipe is read from and
+     * that walk does not reach leaves those places unbounded — and nothing else says so.
+     *
+     * <p>Abstract, so that a recipe added later is asked this before it compiles.
+     */
+    List<LinearForm<FactSubject>> formsRead();
+
+    record Product(LinearForm<FactSubject> left, LinearForm<FactSubject> right) implements Derivation {
+
+        @Override
+        public List<LinearForm<FactSubject>> formsRead() {
+            return List.of(left, right);
+        }
+    }
 
     /**
      * A value that is one of several: an {@code if}, a {@code match}, and anything else that answers
@@ -34,12 +59,18 @@ sealed interface Derivation {
      * about the thing that stands there — and until this arm existed nothing was filed under that
      * name, so the value came out with no range whatever its arms answered.
      *
-     * <p>What is recorded is the arms and not what chose between them. The condition holds exactly
-     * where its arm is the answer, so reading it would sharpen this — {@code if a + x < 100 then
-     * a + x else 100} lies below a hundred only by its conditions — and it is a second reading of
-     * conditions beside {@link Predicates#assumeCond}, which is a thing to do once and not twice.
-     * Left out, the range is the arms together, which is sound and is narrower than what an author
-     * can write.
+     * <p>What is recorded is the arms, and what chose between them is not here yet. The condition
+     * holds exactly where its arm is the answer, so an arm read under it says more than the arm
+     * alone — {@code if a + x < 100 then a + x else 100} lies below a hundred only by its conditions
+     * — and reading one needs the account of what a condition states that {@link
+     * Predicates#assumeCond} keeps, which is a thing to have once and not twice. Until that account
+     * is somewhere both readers can ask, the range is the arms together: sound, and narrower than
+     * what an author can write. The same is true of the operations the library defines by cases
+     * ({@code DischargeRules.CHOOSES}), which are choices this has no producer for yet.
+     *
+     * <p>Both of those are this recipe unfinished and not this recipe's limit. What a choice is —
+     * a value that is one of several — is what is settled here; which choices are found and how
+     * finely each arm is read are the parts still to connect.
      *
      * @param arms what stands in each arm, as a form each. Every arm or none: an arm the walk could
      *             not read leaves the choice with no recipe at all, since a range that left one of
@@ -49,6 +80,11 @@ sealed interface Derivation {
 
         public Chosen {
             arms = List.copyOf(arms);
+        }
+
+        @Override
+        public List<LinearForm<FactSubject>> formsRead() {
+            return arms;
         }
     }
 
@@ -68,5 +104,13 @@ sealed interface Derivation {
      *                      path.
      */
     record Quotient(LinearForm<FactSubject> numerator, LinearForm<FactSubject> divisor,
-                    NumericDomain.Bounds divisorExtent) implements Derivation {}
+                    NumericDomain.Bounds divisorExtent) implements Derivation {
+
+        /** The extent is not among them: it is what the operator's divisor can be at all, which is a
+         * range and names no place. */
+        @Override
+        public List<LinearForm<FactSubject>> formsRead() {
+            return List.of(numerator, divisor);
+        }
+    }
 }

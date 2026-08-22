@@ -119,11 +119,11 @@ final class Terms {
      * <p>What is followed is what the recipe is <em>read from</em> and not what it is arithmetic
      * over. The two are the same for a product, whose operands are its arithmetic, and they come
      * apart the moment a recipe holds something that decides which of its parts answers rather than
-     * being one of them — a choice's arms are read from today, and what chose between them would be
-     * too. So a form standing anywhere in a recipe is one this walks, and that is held to the
-     * recipes themselves ({@code WhatARecipeIsReadFromIsWhatAReadingReachesTest}) rather than
-     * described here, since a reader that missed one would leave the places under it unbounded and
-     * nothing else would say so ({@link StepInputFacts}).
+     * being one of them. Which is which is the recipe's own answer ({@link Derivation#formsRead})
+     * and not this walk's: a reader deciding it by which components happen to be forms would be
+     * answering a semantic question by a naming convention, and this is the reader that would go
+     * wrong quietly — a form it does not reach leaves the places under it unbounded and nothing else
+     * says so ({@link StepInputFacts}).
      */
     Set<FactSubject> reached(LinearForm<FactSubject> form) {
         Set<FactSubject> out = new java.util.LinkedHashSet<>();
@@ -133,17 +133,9 @@ final class Terms {
             if (!out.add(atom)) {
                 continue;
             }
-            switch (derivations.get(atom)) {
-                case Derivation.Product p -> {
-                    todo.addAll(p.left().coefs().keySet());
-                    todo.addAll(p.right().coefs().keySet());
-                }
-                case Derivation.Quotient q -> {
-                    todo.addAll(q.numerator().coefs().keySet());
-                    todo.addAll(q.divisor().coefs().keySet());
-                }
-                case Derivation.Chosen c -> c.arms().forEach(f -> todo.addAll(f.coefs().keySet()));
-                case null -> { }
+            Derivation recipe = derivations.get(atom);
+            if (recipe != null) {
+                recipe.formsRead().forEach(f -> todo.addAll(f.coefs().keySet()));
             }
             InductiveBounds.Walk under = reductions.get(atom);
             if (under != null) {

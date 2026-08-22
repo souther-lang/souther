@@ -56,8 +56,9 @@ final class DerivedBounds {
      * <p>A reading is one evaluation of the recipes against one domain, and a walk's own readings
      * are among them: what a step names is evaluated there and nowhere else, so a walk whose
      * readings were unwatched would be exactly where the memo could stop holding unremarked. What
-     * that memo makes true is that a recipe standing under several is evaluated once for the
-     * reading, so choices inside choices cost their number and not their product.
+     * the memo makes true is a claim about one reading and not about a body — a recipe asked twice
+     * under two domains is evaluated twice and rightly so, and what may not happen is the same
+     * recipe evaluated twice for one of them.
      */
     static List<List<FactSubject>> WATCHING;
 
@@ -144,9 +145,9 @@ final class DerivedBounds {
      * <p>Two halves and not one, because they say different things. What was answered is what a
      * second ask of the same atom comes back with, which is what makes the recipes an evaluation over
      * a graph rather than over the tree of paths through it. What was evaluated is how much of that
-     * was done, and it is a list because an atom evaluated twice is the memo not holding — which is
-     * exactly what a set cannot say, and is what nesting costs the product rather than the number
-     * looks like from outside.
+     * was done, and it is a list because an atom appearing twice in it is the memo not holding —
+     * which is exactly what a set cannot say. Counted where a recipe is really put through, past the
+     * answer a second ask comes back with, so what it holds is work and not asks.
      */
     private static final class Memo {
 
