@@ -53,4 +53,41 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <!-- The nullness gate runs here in every build, `mvn test` included, because this is the module
+         whose packages declare `@NullMarked`. What the gate asks for is `errorprone.gate` in the
+         root pom, including why that is a property rather than written out here.
+
+         Which modules carry this block is not a thing to remember. A `@NullMarked` package in a
+         module that does not run the gate, and a module that runs the gate and declares no such
+         package, are both refused by a check in souther-bench that reads the two sets off the
+         tree. -->
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <compilerArgs combine.children="append">
+                        <arg>-XDcompilePolicy=simple</arg>
+                        <arg>--should-stop=ifError=FLOW</arg>
+                        <arg>${errorprone.gate}</arg>
+                    </compilerArgs>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>com.google.errorprone</groupId>
+                            <artifactId>error_prone_core</artifactId>
+                            <version>${errorprone.version}</version>
+                        </path>
+                        <path>
+                            <groupId>com.uber.nullaway</groupId>
+                            <artifactId>nullaway</artifactId>
+                            <version>${nullaway.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
 </project>
