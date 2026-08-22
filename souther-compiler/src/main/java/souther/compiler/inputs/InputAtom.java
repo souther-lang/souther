@@ -1,26 +1,49 @@
 package souther.compiler.inputs;
 
 /**
- * One number the rules reaching a behavior's input are about, in the words of the input rather than
+ * One subject the rules reaching a behavior's input are about, in the words of the input rather than
  * of the value a rule was written on.
+ *
+ * <p>A subject and not a number. What a rule is filed under reaches whichever reading has a word for
+ * it — a relation between numbers, a bound on an order, the values a position may take, a predicate
+ * about one — and all of those are carried across together, so what is here is the vocabulary of the
+ * whole of what a reading came to. The distinctions below are drawn where the arithmetic needs them
+ * and hold of the rest without being about it.
  *
  * <p>The rules relating a behavior's positions are read one parameter at a time, of the declaration
  * each parameter holds, and what they are about there are that declaration's own positions. Asked
- * about as rules of the input, they are about the same numbers under other names — so what is here
+ * about as rules of the input, they are about the same subjects under other names — so what is here
  * is the vocabulary those rules are carried into, and carrying them is a renaming
- * ({@link souther.compiler.numeric.NumericDomain#over}) rather than a second reading of them.
+ * ({@link souther.compiler.check.ConstraintState#renamed}) rather than a second reading of them.
+ *
+ * <p><b>Two parameters cannot collide here, and that is this type's to guarantee.</b> Every one of
+ * these carries the parameter it sits under, in both kinds, so two subjects arriving from two
+ * parameters are two of these whatever the declarations called them — {@code x} of one record and
+ * {@code x} of another are {@code p.x} and {@code q.x} and nothing has to check it. Which matters
+ * because the readings are renamed one parameter at a time, each under a renaming of its own: what
+ * holds inside one of them is that renaming's to refuse, and what holds between two of them is held
+ * by these constructors and by nothing else.
  *
  * <p><b>Two kinds, and the second is what keeps the carrying from widening.</b> A reading of a
- * declaration relates numbers the input has a term for and numbers it has none for, and a rule
+ * declaration is about subjects the input has a term for and subjects it has none for, and a rule
  * reaching one of the latter still holds two of the former apart. Dropped on the way across, that
  * rule would be gone and what the rules leave would come back wider than it is — the one direction
- * nothing downstream can see. So a number the input cannot name is carried under a name of its own
+ * nothing downstream can see. So a subject the input cannot name is carried under a name of its own
  * and stays in the constraints, where it goes on relating what it relates and is never asked about.
  */
 sealed interface InputAtom {
 
     /**
-     * A number this input has a term for, which is what a caller asks about.
+     * A subject this input has a term for, which is what a caller asks about.
+     *
+     * <p>Spelled as a place, which is what the arithmetic needs of the subjects it counts. What a
+     * position is bounded to on its order and which values it may take are filed under the position
+     * itself, so those cross under this name as well and under the same one as the number at it.
+     *
+     * <p>A predicate does not, and that is not this kind falling short. What a predicate is settled
+     * about is the call that states it — {@code List.allDistinctBy(xs)} rather than {@code xs} — so
+     * it is its own subject and crosses as {@link Anonymous}, where it goes on settling what it
+     * settles without anybody out here having a term for it.
      *
      * <p>Held as where the number sits and which number of that place it is, and not as the term
      * itself. A term carries how the count was written — which standard-library measure was taken —

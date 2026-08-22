@@ -3,6 +3,7 @@ package souther.compiler.meta;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Exposing;
+import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.ModuleUniverse;
 import souther.compiler.check.Registry;
 import souther.compiler.check.Resolve;
@@ -142,13 +143,26 @@ public final class PublishedUniverse {
     /**
      * A module as the front end reads it, with what its declarations do not say.
      *
-     * <p>Which behaviors are left to be injected is not written in a declaration and does not
-     * survive as source, so it travels beside the module ({@link ReadableModule}). It decides
-     * whether an implementation may be supplied for a behavior at all, which is as much a fact about
-     * a crossing as the behavior's signature is — so it travels this far too, rather than being
-     * dropped where a reading turns into declarations.
+     * <p>Where a behavior's body comes from is not written in a declaration and does not survive as
+     * source, so it travels beside the module ({@link ReadableModule}). It decides whether an
+     * implementation may be supplied for a behavior at all, which is as much a fact about a crossing
+     * as the behavior's signature is — so it travels this far too, rather than being dropped where a
+     * reading turns into declarations.
      */
-    public record Read(Hir.Module module, Set<String> injectedBehaviors) {}
+    public record Read(Hir.Module module,
+                       Map<String, BehaviorImplementation> behaviorImplementations) {
+
+        /** The behaviors of it Java supplies, read off the states. */
+        public Set<String> injectedBehaviors() {
+            Set<String> injected = new java.util.LinkedHashSet<>();
+            behaviorImplementations.forEach((name, implementation) -> {
+                if (implementation.isInjectionTarget()) {
+                    injected.add(name);
+                }
+            });
+            return injected;
+        }
+    }
 
     /**
      * What was read, as the universe a module is resolved against.
@@ -257,6 +271,6 @@ public final class PublishedUniverse {
                     new Readback.Failure.UnresolvedPublishedNames());
         }
         return new Readback.Ready<>(new Read(resolution.module(),
-                readable.injectedBehaviors()));
+                readable.behaviorImplementations()));
     }
 }

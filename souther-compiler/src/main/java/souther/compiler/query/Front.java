@@ -13,6 +13,7 @@ import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.msg.ImportMessage;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.check.Exposing;
+import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.Scoping;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.meta.ModulePath;
@@ -371,7 +372,7 @@ public final class Front {
      * The modules this compilation reaches that no source declares, read off the path. A module
      * found there brings its own reaches with it, so a dependency of a dependency arrives too.
      *
-     * <p>Which of its behaviors are injection targets comes with it: no {@code let} is published, so
+     * <p>Where each of its behaviors gets its body comes with it: no {@code let} is published, so
      * that cannot be read off a module here the way it is read off a source.
      */
     public record FromPath() implements Key<FromPath.Of> {
@@ -381,7 +382,8 @@ public final class Front {
          * from the module alone.
          *
          * <p>One record and not a map apiece. Each of these is a fact about the module that was lost
-         * on the way in — the injection targets because no {@code let} was published, the library
+         * on the way in — where each behavior's body comes from because no {@code let} was
+         * published, the library
          * names because the lines that carried them are dropped once read, where it was reached
          * because a source of this compile is the only place a reader can be sent. A second map is a
          * second place to remember to fill, and the one that was not filled is what left an
@@ -412,8 +414,9 @@ public final class Front {
                 return read.declarations();
             }
 
-            public Set<String> injectedBehaviors() {
-                return read.injectedBehaviors();
+            /** Where each of its behaviors gets its body, as the module that declared it decided. */
+            public Map<String, BehaviorImplementation> behaviorImplementations() {
+                return read.behaviorImplementations();
             }
 
             public List<Scoping.Claim> libraryClaims() {

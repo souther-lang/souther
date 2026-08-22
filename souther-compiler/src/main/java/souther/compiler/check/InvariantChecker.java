@@ -380,7 +380,7 @@ public final class InvariantChecker {
      *                 borrowing that answer would settle each reading's completeness by a fragment
      *                 that is not its own
      */
-    record Seeded(ConstraintState constraints, Map<String, FactSubject> atoms, Map<String, FactSubject> keys,
+    record Seeded(ConstraintState<FactSubject> constraints, Map<String, FactSubject> atoms, Map<String, FactSubject> keys,
                   Map<String, FactSubject> held, Reading reading, ReadingEvidence took,
                   boolean everyClauseRead, Set<String> notGathered,
                   Set<String> unreadOfEveryValue,
@@ -399,7 +399,7 @@ public final class InvariantChecker {
         /** What a walk that fell over comes to: no position named, no rule read, and saying so of
          *  every position, since nothing here knows which of them the rules were about. */
         static Seeded nothingRead() {
-            return new Seeded(ConstraintState.top(), Map.of(), Map.of(), Map.of(),
+            return new Seeded(ConstraintState.<FactSubject>top(), Map.of(), Map.of(), Map.of(),
                     new Reading(List.of(), List.of(), Map.of(), Map.of(), Map.of()),
                     new ReadingEvidence(),
                     false, Set.of(FieldDomains.THE_VALUE), Set.of(FieldDomains.THE_VALUE),
@@ -639,7 +639,7 @@ public final class InvariantChecker {
             // recognised by.
             Reading reading = c.directsIn(written, at, atoms, keys, held, typeAt, took,
                     new PartsRead(readBy, adoptedBy));
-            ConstraintState constraints = k.constraints()
+            ConstraintState<FactSubject> constraints = k.constraints()
                     .takingValuesRead(stated.values())
                     .taking(stated.ordered());
             // How each atom's values are spaced, kept so that settling one afterwards states the

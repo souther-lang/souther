@@ -132,15 +132,18 @@ public final class DeclarationAgreement {
             if (ours == null || theirs == null || !sameShape(ours, theirs, new Bound())) {
                 return new Agreement.Disagree(what.module(), what.name());
             }
-            // Which behaviors are left to be injected is not in a declaration and does not survive
-            // as source, so it travels beside the module. It decides whether an implementation may
-            // be supplied for a behavior at all, which is as much a fact about the crossing as the
+            // Where a behavior's body comes from is not in a declaration and does not survive as
+            // source, so it travels beside the module. It decides whether an implementation may be
+            // supplied for a behavior at all, which is as much a fact about the crossing as the
             // signature is: two builds that disagree about it disagree about whether anything may
-            // be handed in there. Asked of the behaviors this crossing reaches, like everything
-            // else — the module's other behaviors are nothing a row of this one meets.
+            // be handed in there. The whole state and not one of its readings — two builds calling
+            // a behavior unwritten and injected respectively agree about neither. Asked of the
+            // behaviors this crossing reaches, like everything else — the module's other behaviors
+            // are nothing a row of this one meets.
             if (what instanceof Reached.ABehavior
-                    && here.injectedBehaviors().contains(what.name())
-                            != there.injectedBehaviors().contains(what.name())) {
+                    && !java.util.Objects.equals(
+                            here.behaviorImplementations().get(what.name()),
+                            there.behaviorImplementations().get(what.name()))) {
                 return new Agreement.Disagree(what.module(), what.name());
             }
             follow(ours);

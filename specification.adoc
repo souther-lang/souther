@@ -2368,7 +2368,7 @@ What is written is the name of a behavior whose *requirement set is not empty* (
 
 A behavior with an empty requirement set is not written here. It depends on nothing, so there is nothing to inject, and it is called directly (<<calling-a-behavior>>). Writing one in `+depends on+` is rejected where the clause is written (<<e1607>>), as is a `+>->+` composition — whose requirements are inferred from its stages and are not written, so requiring one would make a caller declare a set that changes when an upstream stage changes — and as is a name that is no behavior in scope.
 
-Only a simple behavior with a `+let+` may have `+depends on+`. A behavior with no implementation does not write it: it is the leaf of the dependency, and its name being listed is itself the statement of dependency. A `+>->+` composition does not write it either: it is decided by the union over stages, readable from the stages (<<composition-with-requirements>>).
+Only a simple behavior whose implementation is Souther's may have `+depends on+`. An injection target does not write it: it is the leaf of the dependency, and its name being listed is itself the statement of dependency. Writing the clause is what says the implementation is Souther's, so a behavior that writes it and has no `+let+` yet is one nobody has written rather than an injection target (<<unwritten-behavior>>). A `+>->+` composition does not write it either: it is decided by the union over stages, readable from the stages (<<composition-with-requirements>>).
 
 ==== Correspondence to the spec DSL
 
@@ -2675,9 +2675,9 @@ A `+let+` may implement a behavior only when both are in the *same module*. A be
 [#injected-behavior]
 === A behavior with no implementation — outside-world dependency
 
-*If a behavior with only a type has no implementation*, its implementation is injected from Java.
+*If a behavior with only a type has no implementation and declares nothing to depend on*, its implementation is injected from Java.
 
-[[an-injection-target-declares-no-depends-on]]A behavior with no `+let+` MUST NOT declare `+depends on+`. It is what gets injected, and what a dependency is supplied to is the behavior that calls or composes it (<<depends-on>>); a target declaring its own would be asking to be handed something before it exists. It corresponds to the spec DSL's `+// depends:+` and `+// side effect:+`.
+Two things are written the same way, and the clause tells them apart. A behavior with no `+let+` that declares `+depends on+` takes those dependencies as arguments of a `+let+` (<<depends-on>>), so it is Souther's to implement; with no `+let+` it is one nobody has written (<<unwritten-behavior>>). An injection target is the one that declares nothing to depend on: it is what gets injected, and what a dependency is supplied to is the behavior that calls or composes it. It corresponds to the spec DSL's `+// depends:+` and `+// side effect:+`.
 
 An implementation is either a same-named `+let+` (<<fn-declaration>>) or a right-hand `+>->+` composition (<<composition>>). A `+>->+` composition behavior has no `+let+` but does have an implementation, so it is not subject to injection. What is injected is only one that wrote a type and no `+let+`.
 
@@ -2702,6 +2702,23 @@ Typical uses: DB query, HTTP call, file I/O, clock, ID generation, message sendi
 Forgetting to write an implementation is not an error; that behavior simply becomes subject to injection. But a caller MUST write that name in `+depends on+` (<<depends-on>>), and doing so surfaces it in a `+bind+` argument (<<jvm-behavior>>). If there is no caller, it is not caught within the `+.sou+`.
 
 Which behaviors get a `+let+` and which are injected is not decided mechanically from the DSL. The spec DSL's `+// depends:+` is a note, not an obligation, so its absence does not mean an internal implementation. The 1:1 of <<non-functional>> is a declaration correspondence: one DSL behavior line maps to one Souther behavior declaration. It does not decide the implementation form (`+let+` / injection / `+>->+` composition). The model author chooses the form using the DSL's `+// depends:+` and `+// side effect:+` as cues: a note suggests injection, an internal computation a `+let+`, a chain of state transitions a `+>->+`.
+
+[#unwritten-behavior]
+=== A behavior Souther is to implement and nobody has
+
+A behavior that declares `+depends on+` and writes no `+let+` is one whose implementation is Souther's and has not been written. It is not an injection target: what it depends on is passed to it by its own `+let+` (<<depends-on>>), so there is nothing for Java to be handed and no base is generated for it (<<java-base-class>>).
+
+[,souther]
+----
+behavior quote : (cart: Cart) -> Priced
+    depends on price
+----
+
+This is the state a model written example-first passes through. The rows go down before the body, and until the `+let+` arrives they are recorded rather than evaluated (<<example-pending>>) — the same as the rows of a behavior with no `+let+` and no clause. Waiting is not an error and is not warned about; how many rows are waiting is reported by `+souther examples+`.
+
+Its name exists. Another behavior MAY declare `+depends on+` on it, a module that imports it reads its declaration, and where each behavior's body comes from travels with the module rather than being worked out again from it — a reader with two states to sort three declarations into would take this one for an injection target and tell an importer it may hand an implementation in.
+
+[[nothing-built-rests-on-an-unwritten-behavior]]What is refused is resting on it from something that is built here: a behavior with a `+let+` of its own that names it in `+depends on+`, or a `+>->+` composition that names it as a stage (<<e1627>>). Such a behavior holds it as an injected field and nothing can supply that field. Resting on it from another behavior that is itself unwritten is not refused: that graph is the specification, and the bodies arrive one at a time from the leaves.
 
 [#java-base-class]
 === Java base-class generation
@@ -3040,7 +3057,7 @@ An *expected* value is not one the model is given and is not held to this rule. 
 
 What a row wrote is more than the names in it. The form states which collection it is where it says so — `+Set.fromList([ 1 ])+`, `+Set.empty+`, and a helper answering with a `+Set+` state a set, while `+[ 1 ]+` and `+[ ]+` state neither and take the answer's — that a map's keys are distinct, and that a record has a value for every field it has. A row writing a set where a list came out has written a value of another type (<<e1905>>); a construction with no value for a field that is not optional is refused as it is in a body (<<e1005>>), and two entries under one key are `+Map.fromList+`'s to resolve there as anywhere, so the map the row states is the one it resolves to. Leaving a field out states `+None+` and states only that (<<optional>>).
 
-A behavior with a `+let+` implementation is evaluated (<<fn>>), and so is a `+>->+` composition (<<composition>>). An injected behavior (no `+let+`, <<injected-behavior>>) has nothing to run, so its rows are *recorded* rather than evaluated (<<example-pending>>). A target that is not a behavior at all — a helper `+let+` of that name — is <<e1902>>. A behavior's `+depends on+` dependencies are supplied by fakes at the example (<<example-fakes>>).
+A behavior with a `+let+` implementation is evaluated (<<fn>>), and so is a `+>->+` composition (<<composition>>). A behavior with no `+let+` has nothing to run, so its rows are *recorded* rather than evaluated (<<example-pending>>) — whether Java is to supply the body (<<injected-behavior>>) or Souther is and nobody has (<<unwritten-behavior>>). A target that is not a behavior at all — a helper `+let+` of that name — is <<e1902>>. A behavior's `+depends on+` dependencies are supplied by fakes at the example (<<example-fakes>>).
 
 A composition's row is written like any other. Its arguments are the first stage's (<<sequential-composition>>), and its expected result is any case of the composition's output — including one that departed the main line at an earlier stage (<<type-routing>>), which is the part no stage's own example can state, because the routing is not any stage's rule.
 
@@ -3258,7 +3275,9 @@ An input position carries the same three, with *executed* in place of *observed*
 
 Which measures could have found a gap is what was asked for and what the model has, and not what the evidence looks like. A behavior whose arms were never asked about, one that has no arms to reach — a `+>->+` composition, whose stages have them and which has none of its own — and one whose arms could not be measured are all three without arm evidence, and only the last of them leaves the answer undetermined. The same holds of a position dropped for being past the axis limit: dropping one a rule had drawn a line on loses boundaries nothing can ask about now, and dropping one that was only classifying loses a measure no build refuses over.
 
-*What refuses a build.* A gap a measure came to an answer about, whichever of the two ways a build asks: `+souther compile --adequacy all --warnings error+` and `+souther examples --strict+` refuse the same findings. How many rows are waiting for a `+let+` refuses nothing. A build that failed on one would fail on the record of what an injected behavior owes, which is what <<example-pending>> says a model being migrated onto is made of.
+*What refuses a build.* A gap a measure came to an answer about and the criterion the build asked for asks for. Both ways of asking read the same answer: `+souther compile --adequacy all --warnings error+` and `+souther examples --strict+` refuse the same findings, both being held to simplified domain coverage. `+souther examples+` names no criterion of its own, so a build wanting the other one asks `+souther compile --adequacy reliable-domain --warnings error+`. How many rows are waiting for a `+let+` refuses nothing. A build that failed on one would fail on the record of what an injected behavior owes, which is what <<example-pending>> says a model being migrated onto is made of.
+
+*What is measured and what a build is held to are two things it asks for.* `+--adequacy+` names both at once, and the words are presets rather than a single ladder. `+off+` measures nothing. `+witness+` reads what the rows already established. `+all+` adds what the arms and the boundaries take a second run to find out, and holds the build to simplified domain coverage. `+reliable-domain+` measures the same as `+all+` and holds the build to reliable domain coverage, which adds the two points away from each line (<<a-border-owes-four-points>>, <<e1917>>). The last two differ in the bar and not in the work: the points away from a line come off the same assessment as the points against it, so a fourth level would have said nothing about how much to measure.
 
 *A selector names a subject or the command is refused.* `+souther examples --module+` and `+--behavior+` narrow what is reported, and a name that resolves to no subject is a usage error rather than a report of nothing. A report of nothing says the measurement was made and found no gap, which is what a build reading it is entitled to accept. The two names are resolved together, so names that each resolve and hold nothing between them select nothing; and they are resolved against what the sources declare rather than against what reached the report, so a subject that resolves and then cannot be measured is reported as `+partial+` and is not a selector that named nothing.
 
@@ -5424,16 +5443,10 @@ Behavior `submit` is exposed and its input names `Draft`, which this module does
 
 Reported where an exposed behavior's input or output, or an exposed data's field, names a type this module keeps to itself (<<an-exposed-signature-names-only-exposed-types>>). A caller would be handed a value of a type it cannot name. An injection target says it differently, because there the caller is Java.
 
-[#e1612]
-=== An injection target declares `depends on`
+[#e1612-removed]
+=== (retired)
 
-[,text]
-----
-behavior `now` has no `let`, so it is an injection target; it cannot declare `depends on` — the
-behavior that calls or composes it does.
-----
-
-Reported where a behavior with no `+let+` writes a `+depends on+` clause (<<an-injection-target-declares-no-depends-on>>). It is the thing being supplied, and what a dependency is supplied to is the behavior that reaches it.
+E1612 is retired. It refused a behavior with no `+let+` that wrote a `+depends on+` clause, on the reading that a behavior with no `+let+` is an injection target. That reading answered two questions with one fact: whether Java supplies the body, and whether the body has been written yet. The clause tells them apart — a behavior that declares `+depends on+` takes those dependencies as arguments of a `+let+`, so it is Souther's to implement, and with no `+let+` it is one nobody has written (<<unwritten-behavior>>). What is refused now is resting on such a behavior from something that is built here (<<e1627>>).
 
 [#e1613]
 === A union member cannot be named in an arm
@@ -5536,6 +5549,17 @@ Said where the name is written, once for each occurrence, and the module is not 
 What is not reported is the other direction. A row names such a value wherever the row is written — beside the values in the attached file, or inline in the model source — because the values join the module the rows join and a row is what the file is for. A `+fake+` names one as a row does, and one attached value names another. An attached value naming the model's own `+let+` is a fixture reading the model, which is what a fixture is.
 
 The fix is to declare the value in the module's own source. A value the model is written against is part of the model, and the attached file goes on reaching it from there.
+
+[#e1627]
+=== Something built here rests on a behavior nobody has written
+
+[,text]
+----
+`quote` is built here and rests on `price`, which declares what it depends on and has no
+`let`, so Souther is the one to implement it and nobody has.
+----
+
+Reported where the name is written — in a `+depends on+` clause, or as a `+>->+` stage (<<unwritten-behavior>>). The behavior naming it has a body, so it is built here and holds the named one as an injected field, and nothing can supply that field: Java has no base to extend, because the model says the body is Souther's, and Souther has not written it. Declaring the unwritten behavior is not an error, and neither is resting on it from another behavior that is itself unwritten.
 
 [#e1701]
 === behavior composition type mismatch
@@ -6033,11 +6057,25 @@ Hint: A row at the nearest value the border keeps in is what shows the border do
 
 A warning, and one that needs the arms measured where the line was drawn by a fork of the body (<<example-branch-coverage>>): meeting such a line takes reaching the comparison, not writing the value. A line an invariant drew is decided without that. The rule that drew it is named, because the same value can be a border of several and reaching it through one leaves the others unmet.
 
-Said of the two points against the line and of neither of the two away from it (<<a-border-owes-four-points>>). Those two are what simplified domain coverage asks for and what a row on the line shows that no other row does; the points inside and outside are reported and warned about by nothing, which is the same decision made per measure everywhere else (<<example-adequacy>>) and not a claim that one criterion is the bar.
+Said of the two points against the line and of neither of the two away from it (<<a-border-owes-four-points>>). Those two are what simplified domain coverage asks for and what a row on the line shows that no other row does; the points inside and outside are the two items reliable domain coverage adds, and a build held to that criterion is told about them under <<e1917>>. Which of the two criteria a build is held to is what it asked for (<<example-adequacy>>), and the report still names neither as satisfied.
 
 Which of the two it is, in the word the report gives it (<<a-border-says-which-point-it-owes>>). One finding is told on two surfaces, and a reader handed this vocabulary by the report was working it out again here. `+ON+` and `+OFF+` are the technique's terms rather than English words for it, so they are the same in every catalog and what a catalog holds is the sentence around them. The rule is named as the one that drew the border and not as one drawing its line here: only one of the two points carries the value the rule was written with, so the other would be told the line is where it is not. The hint follows the point and is said in the same words — what a row at the nearest value the border keeps in shows, and what one at the nearest value it keeps out shows. Not which side of the line the value falls on: which of the two points carries the line's own value turns on the border being closed or open (<<a-border-owes-four-points>>), so a hint keyed on that would be a second reading of one finding under a sentence that has just named the role. What tells `+<=+` from `+<+` is the border being closed or open, which the report says of the border.
 
 The fork is named by the construct it was written as — an `+if+`, a `+guard+`, or a guard comprehension (<<stdlib-list>>) — and where it is written is pointed at rather than said, a place being something only a reader's own files give a name to. All three lower to one form before anything runs, so the word comes from where the source was read and not from the shape it was lowered to.
+
+[#e1917]
+=== No row is at a point away from a boundary
+
+[,text]
+----
+No row is at an IN point of submit/cost, 50, away from the border the `guard` draws.
+Hint: A row well inside is what shows the border, and not something else about the value, is
+what divides the two.
+----
+
+[[every-border-has-a-row-away-from-its-line]]A warning, and only to a build held to reliable domain coverage. The same assessment of the same border answers this and <<e1916>>; what differs is which of the four points a build is asked for (<<a-border-owes-four-points>>). A build that asked for simplified domain coverage is not told this, and the points are still reported.
+
+Told apart from <<e1916>> by a code of its own rather than by the role in the sentence. One code covering both would be a build asking to be held to the first criterion and refused over the second's items.
 
 [#e1918]
 === No row goes through an arm

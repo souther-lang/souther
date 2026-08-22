@@ -25,13 +25,13 @@ import java.util.Set;
  * reading refutes took something more than the values to settle. Which something is not recorded, so
  * it is not claimed either.
  */
-record Known(ConstraintState constraints, List<Quantified> quantified,
+record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantified,
                      Set<FactSubject> spoken, Unguarded unguarded) {
 
     /** What holds of the values here whatever the path did — what a type guarantees of a value and
      * what a name was given. It carries no quantifiers and no spoken terms: those decide which
      * clauses are read at all, and both readings are asked about the same clauses. */
-    record Unguarded(ConstraintState constraints) {
+    record Unguarded(ConstraintState<FactSubject> constraints) {
 
         Unguarded taking(LinearForm<FactSubject> f, Rel rel, Map<FactSubject, Granularity> kinds) {
             return new Unguarded(constraints.taking(f, rel, kinds));
@@ -45,7 +45,7 @@ record Known(ConstraintState constraints, List<Quantified> quantified,
             return constraints.numbers();
         }
 
-        PredicateFacts facts() {
+        PredicateFacts<FactSubject> facts() {
             return constraints.facts();
         }
     }
@@ -59,7 +59,7 @@ record Known(ConstraintState constraints, List<Quantified> quantified,
     }
 
     /** The predicates this state has settled, read the same way and for the same reason. */
-    PredicateFacts facts() {
+    PredicateFacts<FactSubject> facts() {
         return constraints.facts();
     }
 
@@ -85,8 +85,8 @@ record Known(ConstraintState constraints, List<Quantified> quantified,
     enum Held { OF_THE_VALUE, ON_THE_PATH }
 
     static Known top() {
-        return new Known(ConstraintState.top(), List.of(), Set.of(),
-                new Unguarded(ConstraintState.top()));
+        return new Known(ConstraintState.<FactSubject>top(), List.of(), Set.of(),
+                new Unguarded(ConstraintState.<FactSubject>top()));
     }
 
     /** This, with {@code f rel 0} taken as holding as far as {@code held} reaches. */

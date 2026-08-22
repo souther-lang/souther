@@ -199,7 +199,7 @@ class AMeasureWithNoNumberSaysWhyTest {
                     border      not measured (no line was derived at any position)
                     branch      not measured (no row names this behavior)
 
-                7 behaviors: 6 implemented, 1 injected; 0 rows waiting for a `let`.
+                7 behaviors: 6 implemented, 0 unimplemented, 1 injected; 0 rows waiting for a `let`.
                 adequacy: undetermined
                 """, human());
     }

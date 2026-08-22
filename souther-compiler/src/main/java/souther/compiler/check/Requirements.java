@@ -32,8 +32,7 @@ public final class Requirements {
     private Requirements() {}
 
     /**
-     * Whether {@code behavior} is written with no implementation to run — an injected one, supplied
-     * from Java (spec §injected-behavior).
+     * Where {@code behavior}'s body comes from (spec §injected-behavior, §unwritten-behavior).
      *
      * <p>How the behavior is written, and nothing else. It answers no question about what a compile
      * emitted for it or about what a run can apply: those are settled where they happen, and a reader
@@ -43,8 +42,9 @@ public final class Requirements {
      * module wrote, so a caller hands it over rather than a spelling to look one up by — and there is
      * then no answer to give for a name that names no behavior.
      */
-    public static boolean injected(Hir.Module module, Hir.BehaviorDef behavior) {
-        return bodyless(behavior, definedNames(module));
+    public static BehaviorImplementation implementationOf(Hir.Module module,
+                                                          Hir.BehaviorDef behavior) {
+        return implementationOf(behavior, definedNames(module));
     }
 
     /**
@@ -61,18 +61,37 @@ public final class Requirements {
         Set<String> fns = definedNames(module);
         Set<ValueName.Behavior> injected = new LinkedHashSet<>(importedInjected);
         for (Hir.BehaviorDef bd : module.behaviors()) {
-            if (bodyless(bd, fns)) {
+            if (implementationOf(bd, fns).isInjectionTarget()) {
                 injected.add(new ValueName.Behavior(module.name(), bd.name()));
             }
         }
         return injected;
     }
 
-    /** The one rule, so the set above and the question about a single behavior cannot come apart: a
-     *  behavior stating only its specification, with no {@code let} of its name to implement it. A
-     *  {@code >->} composition is its own implementation and is never this. */
-    private static boolean bodyless(Hir.BehaviorDef bd, Set<String> fns) {
-        return bd instanceof Hir.SpecBehavior spec && !fns.contains(spec.name());
+    /** The behaviors of {@code module} Souther is to implement and nobody has, which is the state a
+     *  model written example-first passes through (spec §unwritten-behavior). */
+    public static Set<ValueName.Behavior> unwrittenNames(Hir.Module module) {
+        Set<String> fns = definedNames(module);
+        Set<ValueName.Behavior> unwritten = new LinkedHashSet<>();
+        for (Hir.BehaviorDef bd : module.behaviors()) {
+            if (implementationOf(bd, fns) == BehaviorImplementation.UNIMPLEMENTED) {
+                unwritten.add(new ValueName.Behavior(module.name(), bd.name()));
+            }
+        }
+        return unwritten;
+    }
+
+    /** How this representation asks {@link BehaviorImplementation#of}: a {@code >->} composition is
+     *  its own implementation, and a behavior stating only its specification has a body here when a
+     *  {@code let} of its name does.
+     *
+     *  <p>Public so that a checker walking the same module with the definition names already in hand
+     *  reads this rather than counting the {@code let}s again. */
+    public static BehaviorImplementation implementationOf(Hir.BehaviorDef bd, Set<String> fns) {
+        if (!(bd instanceof Hir.SpecBehavior spec)) {
+            return BehaviorImplementation.IMPLEMENTED;
+        }
+        return BehaviorImplementation.of(fns.contains(spec.name()), !spec.dependsOn().isEmpty());
     }
 
     /** The names the module's definitions are written under. */
