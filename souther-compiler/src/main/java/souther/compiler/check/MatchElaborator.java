@@ -136,7 +136,7 @@ public final class MatchElaborator {
                 throw CompileException.of(Diagnostic.at(c.pos())
                         .say(new MatchMessage.AnAlternativeAddsNothingToThisArm(
                                 c.caseTypes().get(redundant.adds()).written(),
-                                c.caseTypes().get(redundant.already()).written()))
+                                c.caseTypes().get(redundant.covering()).written()))
                         .build());
             }
             CasePartition.Overlap overlap = partition.take(answersFor, armIndex);

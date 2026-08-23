@@ -98,7 +98,7 @@ final class CasePartition {
     record Duplicate(int again, int first) {}
 
     /**
-     * An alternative of one arm that answers for nothing the arm did not already answer for.
+     * An alternative of one arm that answers for nothing another of them answers for too.
      *
      * <p>Null where each alternative adds something. What makes one redundant is inclusion and not
      * spelling: {@code | Station | OnceKind} answers for a station under either name, and so does
@@ -134,8 +134,16 @@ final class CasePartition {
         return null;
     }
 
-    /** An alternative that adds nothing, and the one that already answered for it. */
-    record Redundant(int adds, int already) {}
+    /**
+     * An alternative that adds nothing, and the one that covers it.
+     *
+     * <p>Covers and not answered-first. The inclusion is looked for in both directions, so where
+     * one alternative is strictly inside another the covering one may be written after it —
+     * {@code | Station | OnceKind} is reported at {@code Station} with {@code OnceKind} as what
+     * covers it. Only a pair answering alike is settled by which came first, and there the earlier
+     * one is the covering one.
+     */
+    record Redundant(int adds, int covering) {}
 
     /** The atoms no arm answered for, in the order the subject states them. */
     List<TypeSymbol> unanswered() {
