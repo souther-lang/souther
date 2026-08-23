@@ -431,6 +431,62 @@ final class Terms {
     }
 
     /**
+     * The same, saying where the reading stopped where it did.
+     *
+     * <p>Beside the above and carrying what it discards. Which expression had no rule here is a
+     * fact about that expression, and a caller handed nothing back had to reconstruct it from the
+     * shape of what it asked about — which is a second account of this walk, written by whoever
+     * needed one. The environment travels with the expression for the reason
+     * {@link AffineForms.ReadThrough} gives.
+     */
+    AffineForms.Outcome<FactSubject, Denotations> outcomeOf(Core raw, Denotations at) {
+        return outcomeOf(raw, at, subject -> true);
+    }
+
+    /**
+     * The same, naming only the atoms {@code names} accepts.
+     *
+     * <p>For a reader whose subjects are narrower than this one's. What may be named here is what
+     * the discharge procedure can carry a fact about, which is every number it can identify; what a
+     * measure may name is a coordinate of the value a clause is written about, which is fewer. A
+     * reader that took this one's atoms and then found it had no coordinate for one of them was
+     * holding a form it could not use and had thrown away the expression that made it — after which
+     * what it said about the rule came from the shape of the whole side.
+     *
+     * <p>So the narrowing goes in rather than the failure coming out. An expression whose value this
+     * reader cannot name is one the walk stops at, and a stop comes back with the expression and the
+     * environment it was read in, like every other.
+     */
+    AffineForms.Outcome<FactSubject, Denotations> outcomeOf(Core raw, Denotations at,
+            java.util.function.Predicate<FactSubject> names) {
+        return AffineForms.outcome(raw, at, new AffineForms.Reading<FactSubject, Denotations>() {
+
+            @Override
+            public LinearForm<FactSubject> leafOf(Core e, Denotations where) {
+                LinearForm<FactSubject> named = affineReading.leafOf(e, where);
+                return named == null || named.coefs().keySet().stream().allMatch(names)
+                        ? named : null;
+            }
+
+            @Override
+            public Denotations inside(Core.LetIn li, Denotations where) {
+                return affineReading.inside(li, where);
+            }
+
+            @Override
+            public AffineForms.ReadThrough<Denotations> readThrough(Core.Read read,
+                                                                    Denotations where) {
+                return affineReading.readThrough(read, where);
+            }
+
+            @Override
+            public boolean readsThrough(Core.FieldAccess fa, Denotations where) {
+                return affineReading.readsThrough(fa, where);
+            }
+        });
+    }
+
+    /**
      * What this reader answers about its own environment, which is the whole of what is its own
      * about the walk.
      *
@@ -579,7 +635,7 @@ final class Terms {
      * {@link AffineForms}'s: this once did the reading itself, and a caller that can answer with a
      * form is a caller that can keep an account of the arithmetic beside the one walk that has one.
      */
-    private AffineForms.ReadThrough<Denotations> readThrough(Core.Read read, Denotations at) {
+    AffineForms.ReadThrough<Denotations> readThrough(Core.Read read, Denotations at) {
         if (!computesAsWhatItWasGiven(read.binding(), at)
                 || affineScalarBase(read.type()) == null) {
             return null;

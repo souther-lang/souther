@@ -59,15 +59,17 @@ public sealed interface BlockReason {
                     case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
                          UnreadValueRule _, CompetingCoordinates _ -> true;
                     // The rule was read and it divides neither position, which is what it says and
-                    // not something missing here.
-                    case ComparisonBetweenPositions _ -> false;
+                    // not something missing here. Nor does a rule read to the end whose quantity is
+                    // empty: there was no line in it, so none is owed.
+                    case ComparisonBetweenPositions _, ComparisonCuttingNothing _ -> false;
                 };
                 case BOUNDARY -> switch (this) {
                     case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
                          UnreadValueRule _, CompetingCoordinates _ -> true;
                     // Whatever line such a rule places is placed by the reading that reaches it, and
-                    // where none is placed none was owed.
-                    case ComparisonBetweenPositions _ -> false;
+                    // where none is placed none was owed. A rule whose quantity is empty places
+                    // none either, and for the same reason: there was nothing in it to place.
+                    case ComparisonBetweenPositions _, ComparisonCuttingNothing _ -> false;
                 };
             };
         }
@@ -211,6 +213,19 @@ public sealed interface BlockReason {
      * first would go looking for a syntax this compiler handles perfectly well.
      */
     record CompetingCoordinates() implements AboutARule {}
+
+    /**
+     * The comparison was read to the end and cuts no quantity at all.
+     *
+     * <p>{@code a - a > 0} names a position and states nothing about its values: what it compares
+     * is a number the position does not appear in. Nothing here fell short — the form was read
+     * completely, and there was no line in it to draw.
+     *
+     * <p>Its own case beside {@link UnreadComparisonForm}, which is the answer for a form that was
+     * not read. The two were one absence and so one word, and a rule this compiler had read from
+     * end to end was reported as one whose spelling defeated it.
+     */
+    record ComparisonCuttingNothing() implements AboutARule {}
 
     /**
      * The comparison relates two positions rather than dividing one.

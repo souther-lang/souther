@@ -569,7 +569,7 @@
         "notDerivable" : [ "指示.記録時刻" ],
         "notRead" : [ {
           "position" : "指示.受付日",
-          "reason" : "unsupported_syntax",
+          "reason" : "rule_about_a_derived_value",
           "rule" : "comparison@1:52:57",
           "ruleId" : {
             "kind" : "comparison",
@@ -580,7 +580,7 @@
           }
         }, {
           "position" : "指示.締切",
-          "reason" : "unsupported_syntax",
+          "reason" : "rule_about_a_derived_value",
           "rule" : "comparison@1:52:57",
           "ruleId" : {
             "kind" : "comparison",
@@ -591,7 +591,7 @@
           }
         }, {
           "position" : "指示.集荷時刻",
-          "reason" : "unsupported_syntax",
+          "reason" : "rule_about_a_derived_value",
           "rule" : "comparison@1:54:50",
           "ruleId" : {
             "kind" : "comparison",
@@ -637,7 +637,7 @@
           "ordinal" : 4,
           "lowered" : 0
         },
-        "reason" : "unsupported_syntax"
+        "reason" : "rule_about_a_derived_value"
       }, {
         "kind" : "partition_not_read",
         "disposition" : "reported",
@@ -649,7 +649,7 @@
           "ordinal" : 4,
           "lowered" : 0
         },
-        "reason" : "unsupported_syntax"
+        "reason" : "rule_about_a_derived_value"
       }, {
         "kind" : "partition_not_read",
         "disposition" : "reported",
@@ -661,7 +661,7 @@
           "ordinal" : 5,
           "lowered" : 0
         },
-        "reason" : "unsupported_syntax"
+        "reason" : "rule_about_a_derived_value"
       }, {
         "kind" : "partition_not_read",
         "disposition" : "reported",

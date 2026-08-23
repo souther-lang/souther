@@ -149,6 +149,15 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         RULE_ABOUT_A_DERIVED_VALUE,
         /**
+         * A rule naming this position was read to the end and cuts nothing at all: what it compares
+         * is a number the position does not appear in.
+         *
+         * <p>Its own word because nothing is owed on its account. A reader told the spelling
+         * defeated this compiler would go looking for a form to rewrite, and the form was read
+         * completely — there was no line in the rule to draw.
+         */
+        RULE_CUTS_NOTHING,
+        /**
          * The position holds its values inside something this does not reach into — the elements of
          * a collection, what an optional holds, what a map holds. One word for all of them: which
          * reaching is missing is a fact about this compiler, and the model reads the same either

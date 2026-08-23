@@ -7,6 +7,7 @@ import souther.compiler.check.Required;
 import souther.compiler.check.RuleAccounting;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.UnreadComparison;
+import souther.compiler.check.ValueOrigin;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
@@ -218,20 +219,19 @@ public final class GuardThresholds {
             List<TermPath> named = new ArrayList<>();
             mentioned(binary.left(), reads, symbols, named);
             mentioned(binary.right(), reads, symbols, named);
-            BlockReason.AboutARule why = why(binary, reads, symbols);
+            final BlockReason.AboutARule why = why(binary, reads, symbols);
             // The rule the author wrote, read off the source. Which comparison it is is the
             // behavior and the construct the source wrote; where a reader is sent is where it is
             // written. Neither comes from the plan: a comparison in a fork both of whose arms can
             // record nothing is numbered nowhere, and a model states its rules regardless.
             RuleRef.Comparison rule = new RuleRef.Comparison(behavior, binary.origin());
             souther.compiler.check.RuleCitation cited = citationOf(binary, plan.comparisons());
-            // A comparison naming no position of the input, whose terms came from one. An operation
-            // made the value it compares out of what stands there, so the rule is about that
-            // position's values and this cannot say what it says about them — which is not the same
-            // as a body that wrote no rule, and used to read as one.
+            // A comparison naming no position of the input, whose terms came from one. Where the
+            // rule is filed and nothing else: what it says is the reading's answer, and deciding it
+            // here made the same fact about one comparison come out one way for an element and
+            // another for a number — which is not a difference between the two rules.
             if (named.isEmpty()) {
                 cameFrom(binary, reads, symbols, named);
-                why = new BlockReason.RuleAboutADerivedValue();
             }
             for (TermPath each : named) {
                 // One per position the comparison names, and told from its neighbours by the rule as
@@ -302,46 +302,77 @@ public final class GuardThresholds {
      * says anything about a position at all. Sharing a reader between the two turns an expression
      * the derivation does not model into a position nothing compares: {@code p.x + 1 < 10} named no
      * position, and came back as one the model divides no way two tokens from a comparison about it.
+     *
+     * <p>What an expression is made of here, and what stood at each position it named.
+     *
+     * <p>The type comes back with the walk because the walk is where it is known. Whether a line can
+     * be drawn on a position is asked of what the comparison compares — a position declared as one
+     * case of an enumeration is ordered by its sum and carries none of the sum's places — and looked
+     * up afterwards from the reading of the inputs it was the declaration's answer instead, which is
+     * a different question about the same name.
      */
-    private static void mentioned(Core e, InputReads reads, Symbols symbols,
-                                  List<TermPath> out) {
-        // A name is what the reading of the input says it is, and there are four answers rather
-        // than a position and nothing. A name given arithmetic over positions mentions those
-        // positions, and reading it as a node with no children left every rule written over such a
-        // name looking like a rule about nothing — which is the same answer a model with no rule
-        // there gives.
-        if (e instanceof Core.Read read) {
-            switch (reads.meaningOf(read, symbols)) {
-                case ReadMeaning.Position at -> {
-                    if (!out.contains(at.path())) {
-                        out.add(at.path());
-                    }
+    record Names(ValueOrigin<TermPath> origin, java.util.Map<TermPath, Type> met) {}
+
+    /** What {@code e} is made of, for a caller that has no use for the types. */
+    static ValueOrigin<TermPath> originOf(Core e, InputReads reads, Symbols symbols) {
+        return namesIn(e, reads, symbols).origin();
+    }
+
+    /** The same, with what stood at each position the walk met. */
+    static Names namesIn(Core e, InputReads reads, Symbols symbols) {
+        java.util.Map<TermPath, Type> met = new java.util.LinkedHashMap<>();
+        return new Names(ValueOrigin.of(e, reads,
+                new ValueOrigin.Reading<TermPath, InputReads>() {
+
+            /**
+             * A name is what the reading of the input says it is, and there are four answers rather
+             * than a position and nothing. Only the first of them is a position; a name given
+             * arithmetic over positions is read through, and the two that name nothing are told
+             * apart by where the difference is read rather than here.
+             */
+            @Override
+            public TermPath positionOf(Core here, InputReads at) {
+                TermPath found = pathOf(here, at);
+                if (found != null) {
+                    met.putIfAbsent(found, here.type());
                 }
-                // In the environment the answer came with, which is the one the arithmetic reads
-                // it in too. Taking the one this walk happens to hold would be this reader deciding
-                // for itself where a name's value is read, beside a reader that was told.
-                case ReadMeaning.Through through ->
-                        mentioned(through.value(), through.at(), symbols, out);
-                // An element an operation handed out that stands at no position, and a name this
-                // reading knows nothing about. Neither mentions a position, and they are told apart
-                // where the difference is read rather than here.
-                case ReadMeaning.Element _ -> { }
-                case ReadMeaning.Unknown _ -> { }
+                return found;
             }
-            return;
-        }
-        if (!(e instanceof Core.PreservedCall)) {
-            TermPath here = reads.pathOf(e, symbols);
-            if (here != null) {
-                if (!out.contains(here)) {
-                    out.add(here);
+
+            private TermPath pathOf(Core here, InputReads at) {
+                if (here instanceof Core.Read read) {
+                    return at.meaningOf(read, symbols) instanceof ReadMeaning.Position position
+                            ? position.path() : null;
                 }
-                return;   // what is under it is the same position, named once
+                // A call the language defines the meaning of stands for what it answers and not for
+                // a location, however the reading spells the two apart.
+                return here instanceof Core.PreservedCall ? null : at.pathOf(here, symbols);
             }
-        }
-        InputReads inside = e instanceof Core.LetIn let ? reads.and(let.binder(), let.value())
-                : reads;
-        Core.forEachChild(e, child -> mentioned(child, inside, symbols, out));
+
+            @Override
+            public TermPath madeFrom(Core here, InputReads at) {
+                return at.cameFrom(here, symbols);
+            }
+
+            /**
+             * In the environment the answer came with, which is the one the arithmetic reads it in
+             * too. Taking the one this walk happens to hold would be this reader deciding for
+             * itself where a name's value is read, beside a reader that was told.
+             */
+            @Override
+            public souther.compiler.check.AffineForms.ReadThrough<InputReads> readThrough(
+                    Core.Read read, InputReads at) {
+                return at.meaningOf(read, symbols) instanceof ReadMeaning.Through through
+                        ? new souther.compiler.check.AffineForms.ReadThrough<>(
+                                through.value(), through.at())
+                        : null;
+            }
+
+            @Override
+            public InputReads inside(Core.LetIn li, InputReads at) {
+                return at.and(li.binder(), li.value());
+            }
+        }), met);
     }
 
     /**
@@ -354,9 +385,13 @@ public final class GuardThresholds {
      */
     static BlockReason.AboutARule why(Core.Binary comparison, InputReads reads,
                            Symbols symbols) {
-        return UnreadComparison.why(sideOf(comparison.left(), reads, symbols),
-                sideOf(comparison.right(), reads, symbols),
-                quantityOf(comparison, reads, symbols));
+        Names left = namesIn(comparison.left(), reads, symbols);
+        Names right = namesIn(comparison.right(), reads, symbols);
+        java.util.Map<TermPath, Type> met = new java.util.LinkedHashMap<>(left.met());
+        right.met().forEach(met::putIfAbsent);
+        return UnreadComparison.why(left.origin(), right.origin(),
+                quantityOf(comparison, reads, symbols, met),
+                at -> met.containsKey(at) && orderable(met.get(at), symbols));
     }
 
     /**
@@ -367,17 +402,30 @@ public final class GuardThresholds {
      * parameter. What is done with the answer is {@link UnreadComparison}'s, so a clause of the same
      * shape two declarations away is described in the same words.
      */
-    private static java.util.Set<TermPath> quantityOf(Core.Binary comparison, InputReads reads,
-                                                      Symbols symbols) {
-        AffineReading read = AffineReading.of(comparison, reads, symbols);
-        if (read == null) {
-            return null;
+    private static UnreadComparison.Quantity<TermPath> quantityOf(Core.Binary comparison,
+                                                                  InputReads reads,
+                                                                  Symbols symbols,
+                                                                  java.util.Map<TermPath, Type> met) {
+        // Each of the three the reading can come to, and no fourth made out of an absence. Where it
+        // stopped, the expression and the environment it was being read in come back together, so
+        // this does not read it again in whatever it happens to hold.
+        switch (AffineReading.read(comparison, reads, symbols)) {
+            case AffineReading.OfAComparison.Stopped stopped -> {
+                Names here = namesIn(stopped.node(), stopped.at(), symbols);
+                here.met().forEach(met::putIfAbsent);
+                return new UnreadComparison.Quantity.NotRead<>(here.origin());
+            }
+            case AffineReading.OfAComparison.CutsNothing _ -> {
+                return new UnreadComparison.Quantity.CutsNothing<>();
+            }
+            case AffineReading.OfAComparison.Cuts cuts -> {
+                java.util.Set<TermPath> over = new java.util.LinkedHashSet<>();
+                for (NumericTerm atom : cuts.read().form().coefs().keySet()) {
+                    over.add(atom.path());
+                }
+                return new UnreadComparison.Quantity.Over<>(over);
+            }
         }
-        java.util.Set<TermPath> over = new java.util.LinkedHashSet<>();
-        for (NumericTerm atom : read.form().coefs().keySet()) {
-            over.add(atom.path());
-        }
-        return over;
     }
 
     /**
@@ -393,22 +441,17 @@ public final class GuardThresholds {
      * one, a side would be carrying two answers to "which position is this about" and the
      * comparison between them would be settled by whichever the caller looked at.
      */
-    private static UnreadComparison.Side<TermPath> sideOf(Core e, InputReads reads,
-                                                          Symbols symbols) {
-        List<TermPath> named = mentionedIn(e, reads, symbols);
-        if (named.isEmpty()) {
-            return new UnreadComparison.Side.NamesNothing<>();
-        }
-        return termOf(e, reads, symbols) == null
-                ? new UnreadComparison.Side.NamesInside<>(new java.util.LinkedHashSet<>(named))
-                : new UnreadComparison.Side.IsOne<>(named.getFirst(),
-                        orderable(e.type(), symbols));
+    static List<TermPath> mentionedIn(Core e, InputReads reads, Symbols symbols) {
+        return new ArrayList<>(originOf(e, reads, symbols).positions());
     }
 
-    static List<TermPath> mentionedIn(Core e, InputReads reads, Symbols symbols) {
-        List<TermPath> out = new ArrayList<>();
-        mentioned(e, reads, symbols, out);
-        return out;
+    /** The same, added to what a caller has already gathered from beside it. */
+    private static void mentioned(Core e, InputReads reads, Symbols symbols, List<TermPath> out) {
+        for (TermPath each : originOf(e, reads, symbols).positions()) {
+            if (!out.contains(each)) {
+                out.add(each);
+            }
+        }
     }
 
     /**

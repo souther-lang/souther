@@ -1318,22 +1318,79 @@ public final class InvariantChecker {
      */
     private List<Coordinate> coordinatesIn(Core e, Denotations at,
                                            Map<FactSubject, Coordinate> byName) {
+        Places places = placesIn(e, at, byName);
         List<Coordinate> out = new ArrayList<>();
-        coordinates(e, at, byName, out);
+        for (String path : places.origin().positions()) {
+            out.add(places.met().get(path));
+        }
         return out;
     }
 
-    private void coordinates(Core e, Denotations at, Map<FactSubject, Coordinate> byName,
-                             List<Coordinate> out) {
-        FactSubject named = nameOf(e, at);
-        Coordinate here = named == null ? null : byName.get(named);
-        if (here != null) {
-            if (out.stream().noneMatch(had -> had.path().equals(here.path()))) {
-                out.add(here);
+    /**
+     * What one expression is made of here, and which coordinate each place it named turned out to
+     * be.
+     *
+     * <p>By the place and not by the whole of what a coordinate is. One place answers to more than
+     * one name and the names carry the same rules, so a clause about one position is named once —
+     * held under the coordinate instead, two names of one place would be two.
+     */
+    private record Places(ValueOrigin<String> origin, Map<String, Coordinate> met) {}
+
+    /** What the place {@code path} is counted on, off whichever side of the comparison met it. */
+    private static Carrier carrierAt(String path, Places left, Places right) {
+        Coordinate here = left.met().containsKey(path) ? left.met().get(path)
+                : right.met().get(path);
+        return here == null ? null : here.carrier();
+    }
+
+    /**
+     * What {@code e} is made of, in this reader's places.
+     *
+     * <p>The walk is {@link ValueOrigin}'s, so a clause and a {@code guard}'s comparison of the same
+     * shape are taken apart the same way. What is this reader's own is the lookup: a clause names a
+     * coordinate of the value it is written about, where a body names a position of an input.
+     */
+    private Places placesIn(Core e, Denotations at, Map<FactSubject, Coordinate> byName) {
+        Map<String, Coordinate> met = new LinkedHashMap<>();
+        ValueOrigin<String> origin = ValueOrigin.of(e, at,
+                new ValueOrigin.Reading<String, Denotations>() {
+
+            @Override
+            public String positionOf(Core here, Denotations where) {
+                FactSubject named = nameOf(here, where);
+                Coordinate found = named == null ? null : byName.get(named);
+                if (found == null) {
+                    return null;
+                }
+                met.putIfAbsent(found.path(), found);
+                return found.path();
             }
-            return;   // a coordinate names itself, and nothing under it is a coordinate of its own
-        }
-        Core.forEachChild(e, child -> coordinates(child, at, byName, out));
+
+            /** A clause is written about the value in front of it, and there is no operation here
+             *  that hands one of its parts out under a name of its own. */
+            @Override
+            public String madeFrom(Core here, Denotations where) {
+                return null;
+            }
+
+            /**
+             * What a name denotes, and the environment a {@code let}'s body is read in, both off
+             * {@link Terms} — which is where a binding is entered for every reader that goes inside
+             * one. Answered here instead, this would be a third account of what a name means beside
+             * the two that already agree.
+             */
+            @Override
+            public AffineForms.ReadThrough<Denotations> readThrough(Core.Read name,
+                                                                    Denotations where) {
+                return terms.readThrough(name, where);
+            }
+
+            @Override
+            public Denotations inside(Core.LetIn li, Denotations where) {
+                return terms.inside(li, where);
+            }
+        });
+        return new Places(origin, met);
     }
 
     /**
@@ -1360,8 +1417,11 @@ public final class InvariantChecker {
         if (!InvariantBound.ordering(comparison.op())) {
             return;
         }
-        BlockReason.AboutARule why = UnreadComparison.why(sideOf(comparison.left(), at, byName),
-                sideOf(comparison.right(), at, byName), quantityOf(comparison, at, byName));
+        Places left = placesIn(comparison.left(), at, byName);
+        Places right = placesIn(comparison.right(), at, byName);
+        BlockReason.AboutARule why = UnreadComparison.why(left.origin(), right.origin(),
+                quantityOf(comparison, at, byName),
+                place -> carrierAt(place, left, right) != null);
         for (Coordinate each : coordinatesIn(comparison, at, byName)) {
             FieldDomains.Unread said =
                     new FieldDomains.Unread(each.path(), each.measured(), from, comparison, why);
@@ -1380,53 +1440,32 @@ public final class InvariantChecker {
      * of the same shape in a body two declarations away is described in the same words — which is
      * what {@code invariant Int.add(length.value, width.value) <= 150} and the guard beside it are.
      */
-    private java.util.Set<String> quantityOf(Core.Binary comparison, Denotations at,
-                                             Map<FactSubject, Coordinate> byName) {
-        NumericDomain.LinearForm<FactSubject> left = terms.affineOf(comparison.left(), at);
-        NumericDomain.LinearForm<FactSubject> right = terms.affineOf(comparison.right(), at);
-        if (left == null || right == null) {
-            return null;
-        }
-        java.util.Set<String> over = new LinkedHashSet<>();
-        for (FactSubject atom : left.minus(right).coefs().keySet()) {
-            Coordinate here = byName.get(atom);
-            if (here == null) {
-                // An atom this reading has no coordinate for. Counted as absent, a quantity over two
-                // positions would come back as one and this reader would describe the rule
-                // differently from the one that reads the same shape in a body — which is the thing
-                // sharing the rule was meant to stop.
-                return null;
+    private UnreadComparison.Quantity<String> quantityOf(Core.Binary comparison, Denotations at,
+                                                         Map<FactSubject, Coordinate> byName) {
+        // Named against this reader's own coordinates rather than against every number the
+        // discharge procedure can identify. A value that is a number and is no coordinate of the
+        // subject is one the walk stops at, so the expression and its environment come back
+        // together — read as an atom and found unprojectable afterwards, both were already gone.
+        AffineForms.Outcome<FactSubject, Denotations> left =
+                terms.outcomeOf(comparison.left(), at, byName::containsKey);
+        AffineForms.Outcome<FactSubject, Denotations> right =
+                terms.outcomeOf(comparison.right(), at, byName::containsKey);
+        for (AffineForms.Outcome<FactSubject, Denotations> side : java.util.List.of(left, right)) {
+            if (side instanceof AffineForms.Outcome.StoppedAt<FactSubject, Denotations> stopped) {
+                return new UnreadComparison.Quantity.NotRead<>(
+                        placesIn(stopped.node(), stopped.at(), byName).origin());
             }
-            over.add(here.path());
         }
-        return over;
-    }
-
-    /**
-     * What one side of a comparison came to here.
-     *
-     * <p>Which coordinates it names is the recursive question and whether it <em>is</em> one is the
-     * narrower one, and the two are what tell a coordinate inside an expression from a coordinate.
-     * Asked the narrow question alone, {@code y + 1} named nothing and a clause relating two
-     * coordinates came back as a form nobody could read — which is the answer a {@code guard}
-     * writing the same comparison does not get.
-     *
-     * <p>By the place and not by the name. A place answers to more than one name — a number is
-     * called one thing by the interval algebra and another by everything else — so two sides
-     * naming one place through two of its names would be a comparison against another position.
-     */
-    private UnreadComparison.Side<String> sideOf(Core e, Denotations at,
-                                                 Map<FactSubject, Coordinate> byName) {
-        List<Coordinate> named = coordinatesIn(e, at, byName);
-        if (named.isEmpty()) {
-            return new UnreadComparison.Side.NamesNothing<>();
+        NumericDomain.LinearForm<FactSubject> whole =
+                ((AffineForms.Outcome.Composed<FactSubject, Denotations>) left).form()
+                        .minus(((AffineForms.Outcome.Composed<FactSubject, Denotations>) right)
+                                .form());
+        java.util.Set<String> over = new LinkedHashSet<>();
+        for (FactSubject atom : whole.coefs().keySet()) {
+            over.add(byName.get(atom).path());
         }
-        FactSubject itself = nameOf(e, at);
-        Coordinate here = itself == null ? null : byName.get(itself);
-        return here == null
-                ? new UnreadComparison.Side.NamesInside<>(new LinkedHashSet<>(
-                        named.stream().map(Coordinate::path).toList()))
-                : new UnreadComparison.Side.IsOne<>(here.path(), here.carrier() != null);
+        return over.isEmpty() ? new UnreadComparison.Quantity.CutsNothing<>()
+                : new UnreadComparison.Quantity.Over<>(over);
     }
 
     /**
