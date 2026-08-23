@@ -11,6 +11,7 @@ import souther.compiler.numeric.NumericDomain.Rel;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -129,7 +130,9 @@ final class DerivedNumericFacts {
         ReadingDomain reading = readingOf(base, terms, asked);
         Memo derived = new Memo();
         if (terms.knowsAnything() && !reading.isBottom()) {
-            for (FactSubject atom : roots(terms, base.atomsSpokenOf(), asked)) {
+            Set<FactSubject> from = new LinkedHashSet<>(asked);
+            from.addAll(base.atomsSpokenOf());
+            for (FactSubject atom : toDerive(terms, from)) {
                 derive(atom, reading, terms, derived, new LinkedHashSet<>(),
                         ContextMultiplicity.ofOneReading());
             }
@@ -150,10 +153,14 @@ final class DerivedNumericFacts {
      * What a value carries is true in every domain — a size is never negative whatever a guard said —
      * so it is not something a recipe derives but something the reading starts from, and a reading
      * that started without it answered about a fold's step as though nothing were known of anything
-     * the step named (#988). Made only by {@link #readingOf}, and every operation that moves a
-     * reading along is here, so there is no way to reach {@link #derive} with a domain that skipped
-     * it. A rule written down and checked by reading the callers is a rule the next caller does not
-     * read.
+     * the step named (#988).
+     *
+     * <p>A class with a constructor of its own, and not a record. A record's canonical constructor is
+     * as accessible as the record is, and this one has to be seen by {@link InductiveBounds} — so as
+     * a record, any reader in this package could wrap a raw domain and reach {@link #derive} with a
+     * reading that had skipped the first stage, which is the thing the type is here to stop. Written
+     * this way the stage is not a rule to follow: it is the only way to hold one of these. Every
+     * operation that moves a reading along is here for the same reason.
      *
      * <p>What it reaches is not kept beside it. An arm's statements and a candidate for an
      * accumulator are relations over atoms the recipe already declared it reads from
@@ -161,7 +168,17 @@ final class DerivedNumericFacts {
      * can reach was spoken for when it was made — and a set carried through the moves would be a
      * second writing of that, read by nobody and true only for as long as nobody changed a move.
      */
-    record ReadingDomain(NumericDomain<FactSubject> domain) {
+    static final class ReadingDomain {
+
+        private final NumericDomain<FactSubject> domain;
+
+        private ReadingDomain(NumericDomain<FactSubject> domain) {
+            this.domain = domain;
+        }
+
+        private NumericDomain<FactSubject> domain() {
+            return domain;
+        }
 
         boolean isBottom() {
             return domain.isBottom();
@@ -234,25 +251,32 @@ final class DerivedNumericFacts {
     }
 
     /**
-     * The atoms this reading is to derive from: the ones the question names or the domain speaks of
-     * that were recorded as computed. Walked from the asking side rather than from the table, so
-     * what it costs is what the question is about and not how much arithmetic the behavior contains.
+     * The atoms a reading asked about {@code asked} is to derive from: everything reading those
+     * reaches that was recorded as computed.
      *
-     * <p>What a reading <em>reaches</em> is a wider set than this and is a different question. An
-     * atom under a recipe is reached — that is what says a place must be kept for it, and what says
-     * its intrinsic facts belong in the reading — and it is derived when the recipe over it is read
-     * and not before. Made roots as well, every operand of every recipe would be evaluated whether
-     * the question came near it or not, which is a cost the reaching was never about.
+     * <p>One answer, and it was two. The reading a question is asked in answered it from the domain,
+     * and reading a form answered it from the atoms the form names — so a value the reading reached
+     * but the form did not name was a recipe nobody put through. That is not a narrowing at the
+     * edges: what a value carries relates it to other values, and {@code Decimal.toInt} carries that
+     * its answer is within one of what it rounded. Read where a clause names it, the thing it
+     * rounded is in the domain and is derived; read inside a step, the step names the answer and not
+     * what it rounded, and a product there was a value nothing bounded whatever its factors were.
+     * The same divergence as #988 and along the other edge of the same graph.
+     *
+     * <p>So it is asked once, and of what the values asked about carry
+     * ({@link Terms#carriedReachFrom}) rather than of a form's own atoms. What a caller supplies is
+     * only what it asked about.
+     *
+     * <p>That reaching and not the whole of one. A value under a recipe is reached too, and it is
+     * not wanted here: putting a recipe through a reading reads its operands as part of reading it,
+     * and asking for them here as well is asking for the same work once per arm a reading is copied
+     * into — which is a cost that compounds with nesting where the recipes' own reading does not
+     * ({@link ContextMultiplicity}). What only a relation names has no such second route, which is
+     * why it is this reaching that belongs here.
      */
-    private static Set<FactSubject> roots(Terms terms, Set<FactSubject> spokenOf,
-                                          Set<FactSubject> asked) {
+    private static Set<FactSubject> toDerive(Terms terms, Collection<FactSubject> asked) {
         Set<FactSubject> out = new LinkedHashSet<>();
-        for (FactSubject atom : asked) {
-            if (recorded(terms, atom)) {
-                out.add(atom);
-            }
-        }
-        for (FactSubject atom : spokenOf) {
+        for (FactSubject atom : terms.carriedReachFrom(asked)) {
             if (recorded(terms, atom)) {
                 out.add(atom);
             }
@@ -801,8 +825,14 @@ final class DerivedNumericFacts {
     private static Bounds boundsOf(LinearForm<FactSubject> form, ReadingDomain base, Terms terms,
                                    Memo done, Set<FactSubject> deriving, ContextMultiplicity copies) {
         ReadingDomain with = base;
-        for (FactSubject atom : form.coefs().keySet()) {
-            if (recorded(terms, atom)) {
+        for (FactSubject atom : toDerive(terms, form.coefs().keySet())) {
+            // An atom this is already in the middle of deriving is one the caller is deriving now,
+            // and its facts reach this reading through the recipe that is doing so. Reached here
+            // through what a value carries, it is a relation between two values and not a value
+            // built out of itself, so it is passed over rather than refused. The refusal stays where
+            // it is a computation reaching itself: an atom the form itself names is asked for
+            // outright, and a chain of recipes that comes back to one names it there.
+            if (!deriving.contains(atom) || form.coefs().containsKey(atom)) {
                 with = with.taking(derive(atom, base, terms, done, deriving, copies), terms);
             }
         }

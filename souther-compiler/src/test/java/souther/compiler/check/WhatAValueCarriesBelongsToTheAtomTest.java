@@ -278,6 +278,15 @@ class WhatAValueCarriesBelongsToTheAtomTest {
 
         assertEquals(List.of(), takingARawDomain,
                 "a domain reaches a recipe through `readingOf` or it does not reach one");
+
+        // And the other way in, which the parameters say nothing about: a reading anybody can make
+        // is a first stage anybody can skip. As a record this was open to the whole package, since a
+        // record's canonical constructor is as accessible as the record and this one has to be seen
+        // from `InductiveBounds`.
+        for (var made : DerivedNumericFacts.ReadingDomain.class.getDeclaredConstructors()) {
+            assertTrue(java.lang.reflect.Modifier.isPrivate(made.getModifiers()),
+                    "a reading is made where the first stage is run, and nowhere else");
+        }
     }
 
     private static NumericDomain<FactSubject> nothingKnown() {

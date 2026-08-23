@@ -227,6 +227,31 @@ final class Terms {
         return reachedFrom(form.coefs().keySet());
     }
 
+    /**
+     * Every atom reading {@code from} reaches by what those values carry, and no further.
+     *
+     * <p>The narrower of the two reachings and a different question from {@link #reachedFrom}. What
+     * is wanted where a recipe is put through a reading is the values a relation drags in —
+     * {@code Decimal.toInt} carries that its answer is within one of what it rounded, and what it
+     * rounded may be arithmetic nothing else names. The values under a recipe are not wanted there:
+     * reading a recipe reads its operands itself, and asking for them again multiplies with every
+     * arm a reading is copied into ({@link ContextMultiplicity}).
+     */
+    Set<FactSubject> carriedReachFrom(java.util.Collection<FactSubject> from) {
+        Set<FactSubject> out = new java.util.LinkedHashSet<>();
+        java.util.Deque<FactSubject> todo = new java.util.ArrayDeque<>(from);
+        while (!todo.isEmpty()) {
+            FactSubject atom = todo.poll();
+            if (!out.add(atom)) {
+                continue;
+            }
+            for (NumericConstraint fact : knowledgeOf(atom).intrinsic()) {
+                todo.addAll(fact.atoms());
+            }
+        }
+        return out;
+    }
+
     /** Every atom reading {@code from} reaches, the ones named among them. */
     Set<FactSubject> reachedFrom(java.util.Collection<FactSubject> from) {
         Set<FactSubject> out = new java.util.LinkedHashSet<>();
@@ -1337,19 +1362,6 @@ final class Terms {
         return named(interned.called(size, List.of(container)), Granularity.DISCRETE);
     }
 
-    /**
-     * The number {@code measure} answers of {@code from} and {@code to}, named as the call it is.
-     *
-     * <p>The same shape a clause writing that measure builds, so a rule stated in it and an invariant
-     * written in it name one value. How its values are spaced is read off what the library declares
-     * the measure to answer, which is what a clause reading the call is named with too — a count of
-     * whole days is one thing wherever it is written.
-     */
-    FactSubject measureKeyOf(ValueName.Stdlib measure, Term from, Term to) {
-        Prelude.PreludeEntry counts = Prelude.entry(measure.qualified());
-        return named(interned.called(measure, List.of(from, to)),
-                granularityOf(counts.signature().result()));
-    }
 
     /**
      * The atom a rule counting {@code e} would have bounded, or null where there is no such atom.

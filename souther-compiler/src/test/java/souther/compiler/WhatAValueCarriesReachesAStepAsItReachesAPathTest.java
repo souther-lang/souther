@@ -33,6 +33,9 @@ class WhatAValueCarriesReachesAStepAsItReachesAPathTest {
             data AtLeastTwo = Int
                 invariant twoUp = value >= 2
 
+            data NonNegD = Decimal
+                invariant nn = value >= 0.0m
+
             data Counted =
                 { items: List<Int>
                 }
@@ -110,6 +113,34 @@ class WhatAValueCarriesReachesAStepAsItReachesAPathTest {
 
                 let total (xs) = Positive(List.fold((a, c) -> a + List.length(c.items) * 2, 1, xs))
                 """), "twice something at or above nought is at or above nought");
+    }
+
+    /**
+     * And the other way about: what a value carries reaching the arithmetic under it.
+     *
+     * <p>The two kinds of edge are one graph and a reading has to walk both ways along it.
+     * {@code Decimal.toInt} carries that its answer is within one of what it rounded, and what it
+     * rounded is a product here — so the answer is at or above nought only once the product is, and
+     * the product is a recipe somebody has to put through this reading. Read where a clause names
+     * it, the product is in the domain and is derived. Read inside a step, the step names the answer
+     * and never the product, and a reading that derived only what the step named left it unbounded
+     * — the same divergence as the rows above, along the edge they do not use.
+     */
+    @Test
+    void whatAValueCarriesReachesTheArithmeticUnderIt() {
+        assertFalse(owed("""
+                behavior one : (d: NonNegD) -> Positive
+                    constructs Positive
+
+                let one (d) = Positive(Decimal.toInt(HALF_UP, d.value * d.value) + 1)
+                """), "on a path");
+        assertFalse(owed("""
+                behavior total : (xs: List<NonNegD>) -> Positive
+                    constructs Positive
+
+                let total (xs) = Positive(List.fold(
+                    (a, d) -> a + Decimal.toInt(HALF_UP, d.value * d.value), 1, xs))
+                """), "and inside a step, where the step names the answer and not what it rounded");
     }
 
     /**
