@@ -7,6 +7,7 @@
   "modules" : [ {
     "module" : "conformance.catalog",
     "status" : "partial",
+    "weakening" : [ "rule_unread" ],
     "incompleteness" : [ ],
     "behaviors" : [ {
       "name" : "discount",
@@ -14,6 +15,7 @@
       "rows" : 4,
       "pending" : 0,
       "status" : "partial",
+      "weakening" : [ "rule_unread" ],
       "signature" : {
         "status" : "complete",
         "output" : {
@@ -208,6 +210,7 @@
   }, {
     "module" : "conformance.shipping",
     "status" : "partial",
+    "weakening" : [ "rules_not_reached", "rule_unread" ],
     "incompleteness" : [ ],
     "behaviors" : [ {
       "name" : "台帳へ書く",
@@ -215,6 +218,7 @@
       "rows" : 6,
       "pending" : 6,
       "status" : "partial",
+      "weakening" : [ "rules_not_reached" ],
       "signature" : {
         "status" : "complete",
         "output" : {
@@ -390,6 +394,7 @@
       "rows" : 10,
       "pending" : 0,
       "status" : "partial",
+      "weakening" : [ "rule_unread", "rules_not_reached" ],
       "signature" : {
         "status" : "complete",
         "output" : {

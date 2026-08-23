@@ -58,6 +58,11 @@ public record OutputCaseEvidence(Set<TypeSymbol> declared, Measurement<Cases> ca
         }
     }
 
+    /** No row names this behavior, so nothing was established about its cases either way. */
+    public enum NoRows implements souther.compiler.observe.NotMeasuredReason {
+        NO_ROWS
+    }
+
     /** Why a behavior's output cases have no numbers. */
     public enum NotASum implements NotApplicableReason {
         /** The output is one data rather than a sum, so there is no case to cover and no row can
@@ -75,9 +80,16 @@ public record OutputCaseEvidence(Set<TypeSymbol> declared, Measurement<Cases> ca
 
     /** What the rows reached, from what they said and what could not be read of them. The one place
      *  the states are chosen between. */
-    public static OutputCaseEvidence of(String behavior, Set<TypeSymbol> declared, Cases cases) {
+    public static OutputCaseEvidence of(String behavior, Set<TypeSymbol> declared, Cases cases,
+                                        boolean anyRows) {
         if (declared.isEmpty()) {
             return none();
+        }
+        // Nothing was read where nothing was written. Counted as a reading that found no case, this
+        // said `complete` under a signature saying `no rows` — a child contradicting its parent,
+        // which is the shape the whole measurement model is against.
+        if (!anyRows) {
+            return new OutputCaseEvidence(declared, new Measurement.NotMeasured<>(NoRows.NO_ROWS));
         }
         return new OutputCaseEvidence(declared, cases.unclassifiedRows() == 0
                 ? new Measurement.Complete<>(cases)

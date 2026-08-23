@@ -2842,14 +2842,19 @@ public final class Adequacy {
             }
         }
 
+        // Whether anything was read at all. A behavior no row names has cases nobody counted, and
+        // a source that could not be evaluated may hold the rows that would have counted them —
+        // which is a measure that could not be finished rather than one nobody asked for, and is
+        // why this is not simply `rows.isEmpty()`.
+        boolean anyRows = !rows.isEmpty() || seen.someRowsUnseen();
         OutputCaseEvidence output = OutputCaseEvidence.of(name, declaredOut,
                 new OutputCaseEvidence.Cases(specified, observed, verified, unreadableOut,
-                        answered));
+                        answered), anyRows);
         List<InputCaseEvidence> inputs = new ArrayList<>(ins.size());
         for (int i = 0; i < ins.size(); i++) {
             inputs.add(InputCaseEvidence.of(name, i, declaredIn.get(i), inExcluded.get(i),
                     new InputCaseEvidence.Cases(inSpecified.get(i), inExecuted.get(i),
-                            inVerified.get(i), unreadableIn[i])));
+                            inVerified.get(i), unreadableIn[i]), anyRows));
         }
         // Asked before the rows are, because it is not about them. A signature with no sum anywhere
         // in it has nothing for this measure to be about, and writing every row anybody could write

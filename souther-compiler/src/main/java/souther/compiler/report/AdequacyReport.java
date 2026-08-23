@@ -1523,6 +1523,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             ObjectNode m = modulesOut.addObject();
             m.put("module", module.module());
             m.put("status", wire(module.status()));
+            weakening(m, module.weakenedBy());
             ArrayNode gaps = m.putArray("incompleteness");
             for (Incompleteness gap : module.incompleteness()) {
                 ObjectNode g = gaps.addObject();
@@ -1543,6 +1544,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 b.put("rows", behavior.rows());
                 b.put("pending", behavior.pending());
                 b.put("status", wire(behavior.status()));
+                weakening(b, behavior.weakenedBy());
                 signature(b, behavior.signature());
                 partition(b, behavior.partition(), behavior.claimed(), sources);
                 branch(b, behavior.branch(), sources);

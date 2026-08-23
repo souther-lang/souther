@@ -55,6 +55,11 @@ public record InputCaseEvidence(int at, Set<TypeSymbol> declared, Set<TypeSymbol
         }
     }
 
+    /** No row names this behavior. */
+    public enum NoRows implements souther.compiler.observe.NotMeasuredReason {
+        NO_ROWS
+    }
+
     /** Why one input's cases have no numbers. */
     public enum NotASum implements NotApplicableReason {
         /** The position is one data rather than a sum, so there is no case to cover. */
@@ -77,9 +82,13 @@ public record InputCaseEvidence(int at, Set<TypeSymbol> declared, Set<TypeSymbol
 
     /** The one place the states are chosen between. */
     public static InputCaseEvidence of(String behavior, int at, Set<TypeSymbol> declared,
-                                       Set<TypeSymbol> excluded, Cases cases) {
+                                       Set<TypeSymbol> excluded, Cases cases, boolean anyRows) {
         if (declared.isEmpty()) {
             return none(at);
+        }
+        if (!anyRows) {
+            return new InputCaseEvidence(at, declared, excluded,
+                    new Measurement.NotMeasured<>(NoRows.NO_ROWS));
         }
         return new InputCaseEvidence(at, declared, excluded, cases.unclassifiedRows() == 0
                 ? new Measurement.Complete<>(cases)
