@@ -321,16 +321,33 @@ final class DerivedNumericFacts {
      * <p>Said of every range a recipe answers with rather than in each recipe, so that a recipe
      * added later is held to it without being asked.
      *
-     * <p>Where the correction leaves nothing, the operation answers on no input the path admits, and
-     * the empty range is the proof of it: what it says is that this reading has no execution, which
-     * is what an operation aborting wherever it is reached leaves. That is a different thing from a
-     * rule with no operands to fire on, which says nothing and must not be read as an empty range
-     * ({@link #quotient}).
+     * <p><b>Where the correction leaves nothing, nothing is stated — and not an empty range.</b> The
+     * arithmetic worked out to values the value it is about cannot take, so the operation answers on
+     * no input this reading admits, and the operator that would have answered aborts instead. That
+     * the path therefore has no execution is a stronger thing than this procedure states: whether an
+     * operation aborts at all is settled by the divisor's own type or by a {@code require} (spec
+     * §invariant-discharge-arithmetic), and a reading is not where the language takes that on.
+     * Asserted as an empty range it would be a contradiction, and a contradictory domain proves
+     * every clause there is — which is the same trap a rule with no operands to fire on is kept out
+     * of ({@link #quotient}), and here it does not even hold: what a clause is refused by is not the
+     * numeric rules alone, so a construction would come out established by the numbers and refused
+     * by the predicates at once, which is the check disagreeing with itself.
+     *
+     * <p>So the value is one nothing is known of, and a construction over it is owed its clause as
+     * it is owed over any other such value. What is fixed is that nothing is known of it <em>as a
+     * number no {@code Int} is</em> — which is what a reading refused a construction by.
      */
     private static List<Fact> between(FactSubject atom, Bounds bounds, Terms terms) {
+        Bounds held = heldToWhatItCanBe(atom, bounds, terms);
+        return held.holdsAValue() ? List.of(new Fact.Between(atom, held)) : List.of();
+    }
+
+    /** {@code bounds} with an end outside what {@code atom}'s own kind of number holds pulled back
+     * to it — and holding no value where the arithmetic ran wholly outside it, which is what says
+     * the operation produced none. */
+    private static Bounds heldToWhatItCanBe(FactSubject atom, Bounds bounds, Terms terms) {
         Bounds extent = terms.extentOf(atom);
-        return List.of(new Fact.Between(atom,
-                extent == null ? bounds : bounds.noFurtherOutThan(extent)));
+        return extent == null ? bounds : bounds.noFurtherOutThan(extent);
     }
 
     /**
@@ -370,8 +387,17 @@ final class DerivedNumericFacts {
             return List.of();
         }
         Bounds numerator = boundsOf(quotient.numerator(), base, terms, done, deriving);
+        Bounds held = heldToWhatItCanBe(atom,
+                Intervals.truncatingQuotient(numerator, divisor), terms);
+        // Nothing at all, and not the halves that do not mention the range. What is left of a
+        // dividend relates the quotient to it, so a reading that dropped where the quotient lies and
+        // kept that relation would put the quotient back where the arithmetic had it — a number no
+        // `Int` is, reached the long way round.
+        if (!held.holdsAValue()) {
+            return List.of();
+        }
         List<Fact> facts = new ArrayList<>();
-        facts.addAll(between(atom, Intervals.truncatingQuotient(numerator, divisor), terms));
+        facts.add(new Fact.Between(atom, held));
         // What the divide left is `a - b * q`, which is a form the domain carries only where this
         // reading holds the divisor to one number: against a divisor left in a range, `b * q` is a
         // product of two values and relating the quotient to what it divided would mean deriving that

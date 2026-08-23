@@ -749,21 +749,27 @@ public final class NumericDomain<A> {
         }
 
         /**
-         * These ends, each of them no further out than {@code wider}'s.
+         * These ends held to {@code wider}: nothing at all where the two share no value, and
+         * otherwise each end this has no further out than {@code wider}'s.
          *
-         * <p>{@link #meet} with one difference, and the difference is what it is for: an end this
-         * has none of stays absent rather than taking {@code wider}'s. So this sharpens the ends
-         * that are here and states none that are not — which is what a reader correcting an answer
-         * wants, as against one adding a fact of its own. An arithmetic composed over numbers of any
-         * size can work out to a number the value it is about never is, and pulling that end back to
-         * where the values stop is a correction; saying where they stop when the arithmetic said
-         * nothing is a range the reader did not derive.
+         * <p>Two questions, and the first is about the range and not about either end. An arithmetic
+         * composed over numbers of any size can work out to values the thing it is about never
+         * takes, and where none of them is one of {@code wider}'s the answer is that there is no
+         * such value — which is a fact about the two ranges together. Asked end by end alone, a
+         * range lying wholly past one side of {@code wider} keeps whichever end it has none of and
+         * comes back holding values that were the reason to ask: everything above the largest whole
+         * number is still everything above it once its lower end has been pulled down.
          *
-         * <p>Where the correction crosses the other end, nothing is left — the arithmetic worked out
-         * to values the thing it is about cannot take, and a range holding none of them is what says
-         * so.
+         * <p>The second is {@link #meet} with one difference, and the difference is what it is for:
+         * an end this has none of stays absent rather than taking {@code wider}'s. So this sharpens
+         * the ends that are here and states none that are not — which is what a reader correcting an
+         * answer wants, as against one adding a fact of its own.
          */
         public Bounds noFurtherOutThan(Bounds wider) {
+            Bounds shared = meet(wider);
+            if (!shared.holdsAValue()) {
+                return shared;
+            }
             return new Bounds(min == null ? null : Endpoint.lower(min, wider.min),
                     max == null ? null : Endpoint.upper(max, wider.max));
         }
