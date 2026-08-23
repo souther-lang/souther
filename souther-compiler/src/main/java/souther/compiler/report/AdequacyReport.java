@@ -387,10 +387,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * one went unread.
      *
      * <p>Whether a measure applies at all is the measure's own answer, and never the shape of what
-     * came back. A behavior with no body has no arms, and a position dropped for being past the axis
-     * limit left no boundary behind — in both cases the numbers look exactly like a measure that was
-     * made and found nothing, so a report reading them back would call the first adequate and the
-     * second covered.
+     * came back. A behavior with no body has no arms, and a position whose rules the walk never
+     * reached leaves no boundary behind — in both cases the numbers look exactly like a measure
+     * that was made and found nothing, so a report reading them back would call the first adequate
+     * and the second covered.
      */
     private List<Measurement<?>> requiredMeasures() {
         List<Measurement<?>> measures = new ArrayList<>();
@@ -1186,8 +1186,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * <p>The numbers alone read the same either way, which is the thing this whole measure-level
      * answer is against: a behavior one of whose rules this compiler could not read showed the line
      * it did draw and the same {@code borders 1   coverage items 4/4} a model read to the end gets.
-     * Why it was not is beside it already — the rules nothing took in, the positions past the axis
-     * limit — so this says which measure they cost rather than saying them again.
+     * Why it was not is beside it already — the rules nothing took in, the positions the walk
+     * could not reach into — so this says which measure they cost rather than saying them again.
      */
     private static String inFull(MeasurementStatus status) {
         return status == MeasurementStatus.PARTIAL ? "   (not all of it was measured)" : "";

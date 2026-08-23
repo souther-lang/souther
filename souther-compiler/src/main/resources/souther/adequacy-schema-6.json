@@ -454,7 +454,7 @@
         },
         "claimsOffAxis": {
           "type": "array",
-          "description": "Claims about positions this report has no axis for — past the axis limit, or deeper than the walk goes. Named by position, and carrying `why` exactly where nothing settled the claim.",
+          "description": "Claims about positions this report has no axis for — a position deeper than the walk goes, or one whose rules the reading never arrived at. Named by position, and carrying `why` exactly where nothing settled the claim.",
           "items": {
             "type": "object",
             "required": ["at", "class", "reasons"],

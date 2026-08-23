@@ -350,10 +350,11 @@ class EveryFindingHasAGenerationDispositionTest {
     /**
      * Every case of a sum parameter is offered a row, however many positions the behavior takes.
      *
-     * <p>What used to be here asserted the other half of this: past the axis limit the thirteenth
-     * position had no axis, and its cases were answered {@code NO_AXIS_AT_THIS_POSITION}. The limit
-     * is gone and with it the only reading that produced a case at a position nothing divided, so
-     * what is left to hold is that the thirteenth is offered a row like the first.
+     * <p>What used to be here asserted the other half of this: a limit on how many positions one
+     * behavior is measured at left the thirteenth without an axis, and its cases were answered
+     * {@code NO_AXIS_AT_THIS_POSITION}. That limit is gone (#969) and with it the only reading that
+     * produced a case at a position nothing divided, so what is left to hold is that the thirteenth
+     * is offered a row like the first.
      */
     @Test
     void everyCaseOfASumParameterIsOfferedARow() {
