@@ -5,13 +5,19 @@ import souther.compiler.core.Core;
 /**
  * Whether one evaluation can answer, under what is known where it stands.
  *
- * <p>The path-sensitive half of a question {@link souther.compiler.coverage.NormalReturn} answers
- * without a path. That one reads the tree: an {@code unreachable} answers no value and so does
- * anything that evaluates one on its way, which is true of every run and is why it needs nothing
- * but the tree. This one is that same question narrowed by what a run reaching here has established
- * — the operands of a primitive lie where the guards left them, and the operation is defined on
- * some of those and not on others. So it can only answer where the wider reading has not, and the
- * two are one question at two strengths rather than two questions.
+ * <p>The same question {@link souther.compiler.coverage.NormalReturn} answers without a path, asked
+ * under one. That one reads the tree: an {@code unreachable} answers no value and so does anything
+ * that evaluates one on its way, which is true of every run and needs nothing but the tree. This one
+ * adds what a run reaching here has established — the operands of a primitive lie where the guards
+ * left them, and the operation is defined on some of those and not on others.
+ *
+ * <p>They agree where the tree is what says it, and this says it too: an {@code unreachable} is
+ * answered here as well, so a caller acting on this is not left needing the other. What this does
+ * not do is compose. {@code NormalReturn} answers about a whole expression by reading everything
+ * under it; this answers about the one evaluation it is handed, and the walk carries the answer
+ * forward, which reaches the same conclusion for everything the walk evaluates in order and stops at
+ * a region it does not carry facts out of. Under-reading, in the direction everything here
+ * under-reads.
  *
  * <p><b>Asked in two steps, because an operation answering no number is not an operation answering
  * nothing.</b> What a recipe says is about the number the operation computes
@@ -49,6 +55,12 @@ final class PathCompletion {
     Completion of(Core e, Known k, Denotations at) {
         if (k.reachesNothing()) {
             return Completion.MAY;
+        }
+        if (e instanceof Core.Unreachable said) {
+            // Written down rather than worked out, and it is the model that wrote it. Nothing about
+            // the path enters into it.
+            return new Completion.CannotComplete(
+                    new Completion.NoCompletionProof.TheModelSaysNothingArrives(said));
         }
         Core called = operationAt(e);
         if (called == null) {

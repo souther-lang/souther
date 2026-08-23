@@ -126,22 +126,33 @@ class ADivideRoundedToAScaleIsReadTest {
     }
 
     /**
-     * A scale no {@code int} holds is no scale here, and the range is not stated.
+     * A scale no {@code int} holds is a divide that answers nothing, so the arm below it is entered
+     * by no run.
      *
-     * <p>The backend narrows the scale to a Java {@code int} before it divides (#976), so a place
-     * count outside that is a division at a scale nothing proved here was about — a proof over the
-     * number as written would be a proof about a different division. The same model at two places
-     * discharges, which is what says this is the scale being refused and not the shape of the
-     * behavior.
+     * <p>A scale outside the ones the run time takes *aborts* (spec §stdlib-decimal), and this model
+     * holds the divisor off nought, so the call comes back as no case at all. Nothing under it is
+     * judged — not the construction, and not the clause it would otherwise owe.
+     *
+     * <p>Which is a different answer from the one below it, and the two used to be one. Read as "no
+     * scale here", an out-of-range scale and a scale a reading will not lay a grid out for both left
+     * the rule saying nothing; the first is the operation producing no value and the second is this
+     * compilation declining to work out where the value is. {@link #aScaleWiderThanAReadingLaysOutIsNoScale}
+     * is the control that says so: it is the same shape at a scale the run time does take, and it
+     * still reports.
+     *
+     * <p>Silence is read against {@link AConstructionAfterAnEvaluationThatAnswersNothingIsNotJudgedTest#
+     * aDivideAtAScaleTheRunTimeCannotTakeLeavesTheArmUnentered}, where the same scale stands over a
+     * construction the values refuse: at a scale that answers it is refused, and at this one nothing
+     * is said.
      */
     @Test
-    void aScaleTheRunTimeCannotDivideAtIsNoScale() {
-        assertEquals(List.of("E2011"), atScale("4294967298"));
+    void aScaleTheRunTimeCannotDivideAtIsADivideThatAnswersNothing() {
+        assertEquals(List.of(), atScale("4294967298"));
         assertEquals(List.of(), atScale("2"));
     }
 
     /**
-     * A scale wider than a reading will lay a grid out for is no scale here either.
+     * A scale wider than a reading will lay a grid out for is no scale here.
      *
      * <p>Two questions and not one. What the run time divides at is settled by the backend; what a
      * reading can afford to lay out is the compilation's

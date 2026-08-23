@@ -57,6 +57,15 @@ sealed interface Completion {
         record NoValue(Core operation, FactSubject answer) implements NoCompletionProof {}
 
         /**
+         * The model wrote that nothing arrives here.
+         *
+         * <p>Structural, and the one reason that is: it holds of every run and needs no path to say
+         * so, which is why {@link souther.compiler.coverage.NormalReturn} answers about it with the
+         * tree alone. The others are read under what a run reaching here has established.
+         */
+        record TheModelSaysNothingArrives(Core.Unreachable said) implements NoCompletionProof {}
+
+        /**
          * {@code made} fails its type's invariant on every path read here, so building it aborts.
          *
          * <p>Not an attempted construction, which is the other thing entirely: a failing invariant

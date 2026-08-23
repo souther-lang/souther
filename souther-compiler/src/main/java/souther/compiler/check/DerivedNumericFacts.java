@@ -120,6 +120,47 @@ final class DerivedNumericFacts {
         }
     }
 
+    /**
+     * What one of a rule's operands comes to, where a rule may not fire on it for two unlike
+     * reasons.
+     *
+     * <p>The same three answers {@link Says} has, one step earlier. A rule reads its operands before
+     * it reads its arithmetic, and an operand can settle the question there: a divisor this reading
+     * holds to nought is one no divide answers for, and a scale outside the ones the run time takes
+     * is one no division at it produces. Answered {@code null} — which is how both of these were
+     * answered — that is the same value as an operand the reading could not pin down, and the rule
+     * comes back saying nothing when what it has is the strongest thing it could say.
+     *
+     * <p>Which is the conflation {@link Says} was split to end, left behind at the operand end of
+     * the same rules. {@code x / 0} reached {@link Says.NoValueCameOfIt} through no route at all: the
+     * only producer is the projection of the arithmetic, and an operand that already settles the
+     * answer never gets that far.
+     *
+     * <p>What the operand settles is about the operation's <em>normal</em> answer and no more, as
+     * {@link Says.NoValueCameOfIt} is. {@code Int.divide(x, 0)} produces no number and comes back as
+     * {@code DivisionByZero} all the same, and which of the two that is belongs to the reader that
+     * knows the operation's other cases.
+     */
+    private sealed interface Operand<T> {
+
+        /** A value the rule can fire on. */
+        record Usable<T>(T it) implements Operand<T> {}
+
+        /** No normal answer comes of the operation, whatever the rest of it would have worked out
+         * to. */
+        record AndSoNoValueCameOfIt<T>() implements Operand<T> {}
+
+        /** Too little is known here for the rule to fire, and nothing follows from that. */
+        record AndNotEnoughIsKnown<T>() implements Operand<T> {}
+
+        /** What the rule this operand belongs to answers, where it is not one the rule can fire on.
+         * The atom is the rule's own, since it is that operation's answer that does not exist. */
+        default Says saying(FactSubject atom) {
+            return this instanceof AndSoNoValueCameOfIt
+                    ? new Says.NoValueCameOfIt(atom) : Says.NOTHING;
+        }
+    }
+
     /** At or above nought, as a range, for asking whether a reading put a value on that side. */
     private static final Bounds AT_OR_ABOVE_NOUGHT =
             new Bounds(Endpoint.inclusive(Count.ZERO), null);
@@ -578,10 +619,10 @@ final class DerivedNumericFacts {
     private static Says quotient(FactSubject atom, Derivation.TruncatingQuotient quotient,
                                  NumericDomain<FactSubject> base, Terms terms,
                                  Memo done, Set<FactSubject> deriving, ContextMultiplicity copies) {
-        Bounds divisor = divisorOf(quotient.divisor(), quotient.divisorExtent(), base, terms, done,
-                deriving, copies);
-        if (divisor == null) {
-            return Says.NOTHING;
+        Operand<Bounds> read = divisorOf(quotient.divisor(), quotient.divisorExtent(), base, terms,
+                done, deriving, copies);
+        if (!(read instanceof Operand.Usable<Bounds>(Bounds divisor))) {
+            return read.saying(atom);
         }
         Bounds numerator = boundsOf(quotient.numerator(), base, terms, done, deriving, copies);
         Says where = projected(atom,
@@ -619,10 +660,10 @@ final class DerivedNumericFacts {
     private static Says remainder(FactSubject atom, Derivation.TruncatingRemainder remainder,
                                   NumericDomain<FactSubject> base, Terms terms,
                                   Memo done, Set<FactSubject> deriving, ContextMultiplicity copies) {
-        Bounds divisor = divisorOf(remainder.divisor(), remainder.divisorExtent(), base, terms, done,
-                deriving, copies);
-        if (divisor == null) {
-            return Says.NOTHING;
+        Operand<Bounds> read = divisorOf(remainder.divisor(), remainder.divisorExtent(), base,
+                terms, done, deriving, copies);
+        if (!(read instanceof Operand.Usable<Bounds>(Bounds divisor))) {
+            return read.saying(atom);
         }
         return new Says.These(leftOver(LinearForm.atom(atom), divisor,
                 boundsOf(remainder.numerator(), base, terms, done, deriving, copies)));
@@ -691,14 +732,18 @@ final class DerivedNumericFacts {
     private static Says rounded(FactSubject atom, Derivation.RoundedQuotient rounded,
                                 NumericDomain<FactSubject> base, Terms terms,
                                 Memo done, Set<FactSubject> deriving, ContextMultiplicity copies) {
-        Bounds divisor = divisorOf(rounded.divisor(), rounded.divisorExtent(), base, terms, done,
-                deriving, copies);
-        if (divisor == null) {
-            return Says.NOTHING;
+        Operand<Bounds> read = divisorOf(rounded.divisor(), rounded.divisorExtent(), base, terms,
+                done, deriving, copies);
+        if (!(read instanceof Operand.Usable<Bounds>(Bounds divisor))) {
+            return read.saying(atom);
         }
         Bounds numerator = boundsOf(rounded.numerator(), base, terms, done, deriving, copies);
-        Integer places = placesOf(boundsOf(rounded.scale(), base, terms, done, deriving, copies),
-                terms.policy());
+        Operand<Integer> scale = placesOf(
+                boundsOf(rounded.scale(), base, terms, done, deriving, copies), terms.policy());
+        if (scale instanceof Operand.AndSoNoValueCameOfIt) {
+            return scale.saying(atom);
+        }
+        Integer places = scale instanceof Operand.Usable<Integer>(Integer at) ? at : null;
         Bounds answered = Intervals.roundedQuotient(numerator, divisor,
                 places == null ? 0 : places);
         if (places != null) {
@@ -746,18 +791,25 @@ final class DerivedNumericFacts {
      * leaves it nothing to be wrong about — the same reading a divide that aborts already gets
      * (spec §invariant-discharge-arithmetic).
      */
-    private static Integer placesOf(Bounds scale, ReadingPolicy policy) {
+    private static Operand<Integer> placesOf(Bounds scale, ReadingPolicy policy) {
         Endpoint low = scale.min();
         Endpoint high = scale.max();
         if (low == null || high == null || !low.inclusive() || !high.inclusive()
                 || Count.number(low.at()).compareTo(high.at()) != 0) {
-            return null;
+            // More than one grid, and a rule stated over two of them is a rule about neither.
+            return new Operand.AndNotEnoughIsKnown<>();
         }
         Integer places = ScaleRange.receivedUnchanged(Count.number(low.at()).at());
         if (places == null) {
-            return null;
+            // The one scale this reading holds it to is one the run time cannot receive, so the
+            // division at it aborts and produces no value (spec §stdlib-decimal). Which is a thing
+            // known and not a thing missing, and it was answered as the second.
+            return new Operand.AndSoNoValueCameOfIt<>();
         }
-        return policy.laysOutAGridAt(places) ? places : null;
+        // A grid this compilation will not lay out, which is what a reading can afford and not what
+        // the operation does.
+        return policy.laysOutAGridAt(places)
+                ? new Operand.Usable<>(places) : new Operand.AndNotEnoughIsKnown<>();
     }
 
     /**
@@ -787,13 +839,32 @@ final class DerivedNumericFacts {
         return Count.number(bounds.min().at()).at();
     }
 
-    /** What the operator divided by, or null where this rule has no divisor to fire on — see
-     * {@link #quotient}. */
-    private static Bounds divisorOf(LinearForm<FactSubject> form, Bounds extent,
+    /**
+     * What the operator divided by — see {@link #quotient} for what the two ways it may not be a
+     * divisor this rule fires on come from.
+     *
+     * <p>Zero is told apart from a range that merely holds it. A divide by nought answers no number
+     * whichever way it is spelled (spec §stdlib-int), so a reading that holds the divisor to nought
+     * and to nothing else has settled that the operation produced none; a reading that leaves nought
+     * among other values has settled nothing, since what a divide by a range straddling it comes to
+     * depends on how the values are spaced. The two were one answer, and it was the weaker one.
+     */
+    private static Operand<Bounds> divisorOf(LinearForm<FactSubject> form, Bounds extent,
                                     NumericDomain<FactSubject> base, Terms terms,
                                     Memo done, Set<FactSubject> deriving, ContextMultiplicity copies) {
         Bounds divisor = boundsOf(form, base, terms, done, deriving, copies).meet(extent);
-        return !divisor.holdsAValue() || divisor.admits(Count.ZERO) ? null : divisor;
+        if (!divisor.holdsAValue()) {
+            // The form and what the operator's divisor can be share nothing, so this operator has no
+            // divisor here at all — a rule that does not apply.
+            return new Operand.AndNotEnoughIsKnown<>();
+        }
+        if (!divisor.admits(Count.ZERO)) {
+            return new Operand.Usable<>(divisor);
+        }
+        BigDecimal only = theOneValueOf(divisor);
+        return only != null && only.signum() == 0
+                ? new Operand.AndSoNoValueCameOfIt<>()
+                : new Operand.AndNotEnoughIsKnown<>();
     }
 
     /**

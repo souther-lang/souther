@@ -205,6 +205,143 @@ class AConstructionAfterAnEvaluationThatAnswersNothingIsNotJudgedTest {
     }
 
     /**
+     * An operand a short-circuiting operator does not always evaluate, in both directions.
+     *
+     * <p>{@code &&} stops as soon as its left comes out false (spec
+     * §a-condition-stops-when-its-answer-is-settled), so its right runs on the runs the left came
+     * out true on and on no others. That makes it a branch and not a step, and both directions go
+     * wrong where it is read as a step: what it aborts on stops runs it never ran on, and what it
+     * builds is judged on runs it was never built on.
+     *
+     * <p>Read as the same expression with the two operands the other way round, because that is the
+     * one difference: on the left it runs whenever the operator does, and on the right it runs
+     * where the left came out true. Nothing else about either program changes.
+     */
+    @Test
+    void anOperandAShortCircuitDoesNotAlwaysEvaluateIsABranch() {
+        assertEquals(List.of("E2010"), reported(shortCircuiting(
+                "x < 0 && a * a > 0", "if flag then Nothing else Negative(x)")),
+                "the product that overflows runs only where the left came out true, which is"
+                        + " nowhere here — so it stops nothing and the construction is judged");
+        assertEquals(List.of(), reported(shortCircuiting(
+                "x < 0 && Negative(x).value < 0", "if flag then Nothing else Nothing")),
+                "and a construction on that side is built on no run, so it is not judged");
+        assertEquals(List.of("E2010"), reported(shortCircuiting(
+                "Negative(x).value < 0 && x < 0", "if flag then Nothing else Nothing")),
+                "the very same construction on the side that always runs is judged, which is what"
+                        + " says the row above is about where it stands and not about what it is");
+    }
+
+    /** A behavior that binds {@code condition} and answers {@code body}, under guards that hold
+     * {@code a} where every product of it overflows and {@code x} at or above nought. */
+    private static String shortCircuiting(String condition, String body) {
+        return DECLARATIONS + """
+                behavior f : (a: Int, x: Int) -> Negative | Nothing
+                    constructs Negative
+                let f (a, x) = {
+                    guard a >= 5000000000 else Nothing
+                    guard x >= 0 else Nothing
+                    let flag = %s
+                    %s
+                }
+                """.formatted(condition, body);
+    }
+
+    /**
+     * A divide by nought, which answers no number whichever way it is spelled — and the two
+     * spellings, which do not answer alike.
+     *
+     * <p>The operator aborts on a zero divisor; {@code Int.divide} comes back as
+     * {@code DivisionByZero}, which is a case an arm is reached at (spec §stdlib-int). So the same
+     * divisor settles the question one way for one of them and does not settle it at all for the
+     * other, and what tells them apart is the operation's own cases and not the divisor.
+     */
+    @Test
+    void aDivideByNoughtIsAnAbortForTheOperatorAndACaseForTheFunction() {
+        assertEquals(List.of(), reported(DECLARATIONS + """
+                behavior 割る : (x: Int) -> Negative | Nothing
+                    constructs Negative
+                let 割る (x) = {
+                    guard x >= 0 else Nothing
+                    guard x / 0 > 1 else Nothing
+                    Negative(x)
+                }
+                """), "the operator aborts on nought, so nothing after it is reached");
+        assertEquals(List.of("E2010"), reported(DECLARATIONS + """
+                behavior 割る : (x: Int) -> Negative | Nothing
+                    constructs Negative
+                let 割る (x) = {
+                    guard x >= 0 else Nothing
+                    match Int.divide(x, 0) with
+                        | Int as q -> Nothing
+                        | DivisionByZero -> Negative(x)
+                }
+                """), "the function answers a case for the same divisor, and that arm is reached");
+    }
+
+    /**
+     * A {@code Decimal} divide at a scale the run time cannot take, which aborts as an overflow does
+     * (spec §stdlib-decimal). The rule is the operand's and not the arithmetic's, so it is the same
+     * rule as the divisor's and it reaches the same answer.
+     */
+    @Test
+    void aDivideAtAScaleTheRunTimeCannotTakeLeavesTheArmUnentered() {
+        assertEquals(List.of(), reported(atScale("4294967298")),
+                "no run leaves the divide, so the construction the arm builds is not judged");
+        assertEquals(List.of("E2010"), reported(atScale("2")),
+                "and at a scale it does take the arm is entered and the value is refused");
+    }
+
+    /** A {@code Decimal} divide by a divisor held off nought, building a {@code Negative} the values
+     * refuse. */
+    private static String atScale(String places) {
+        return DECLARATIONS + """
+                behavior 割る : (x: Decimal, y: Decimal, n: Int) -> Negative | Nothing
+                    constructs Negative
+                let 割る (x, y, n) = {
+                    guard y >= 1m else Nothing
+                    guard n >= 0 else Nothing
+                    match Decimal.divide(x, y, %s, HALF_UP) with
+                        | Decimal as q -> Negative(n)
+                        | DivisionByZero -> Nothing
+                }
+                """.formatted(places);
+    }
+
+    /**
+     * An {@code unreachable} written in an earlier field, which answers nothing for a reason the
+     * tree alone gives.
+     *
+     * <p>Beside the rows above rather than one of them, because what shows it is different in kind:
+     * nothing about the path enters into it, and it is what
+     * {@link souther.compiler.coverage.NormalReturn} answers without one. What follows from it is
+     * the same, which is the point of there being one answer for a continuation to be given.
+     */
+    @Test
+    void anUnreachableInAnEarlierFieldLeavesTheFieldAfterItUnjudged() {
+        assertEquals(List.of(), reported(DECLARATIONS + """
+                data Pair = { l: Negative, r: Negative }
+
+                behavior 組む : (x: Int) -> Pair | Nothing
+                    constructs Pair, Negative
+                let 組む (x) = {
+                    guard x >= 0 else Nothing
+                    Pair { l = unreachable "the model says so", r = Negative(x) }
+                }
+                """), "the first field answers nothing, so the second is evaluated on no run");
+        assertEquals(List.of("E2010"), reported(DECLARATIONS + """
+                data Pair = { l: Negative, r: Negative }
+
+                behavior 組む : (x: Int) -> Pair | Nothing
+                    constructs Pair, Negative
+                let 組む (x) = {
+                    guard x >= 0 else Nothing
+                    Pair { l = Negative(x), r = unreachable "the model says so" }
+                }
+                """), "and the same two fields the other way round put it where runs reach it");
+    }
+
+    /**
      * A construction evaluated before the abort is a construction the program builds, and it is
      * judged.
      *

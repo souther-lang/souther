@@ -286,7 +286,7 @@ public final class ValueArrivals<P> {
                                 with(bound, let.binder(), value, let.value()))
                         : new Paths.Held<>(List.of());
             }
-            case Core.Binary binary when shortCircuits(binary.op()) ->
+            case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() ->
                     through(binary, naming, bound);
             case Core.If iff -> fork(iff, naming, bound);
             case Core.Match match -> arms(match, naming, bound);
@@ -633,11 +633,6 @@ public final class ValueArrivals<P> {
     }
 
     // ------------------------------------------------------------------- the tree
-
-    /** Whether the operator settles its answer without evaluating both sides. */
-    public static boolean shortCircuits(BinOp op) {
-        return op == BinOp.AND || op == BinOp.OR;
-    }
 
     /**
      * Every value this node is built out of, in the order it is written.

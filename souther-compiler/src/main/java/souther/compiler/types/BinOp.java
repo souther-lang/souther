@@ -30,4 +30,21 @@ public enum BinOp {
             case AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
         };
     }
+
+    /**
+     * Whether this stops as soon as its answer is settled, so that its right operand runs on some
+     * runs and not others (spec §a-condition-stops-when-its-answer-is-settled).
+     *
+     * <p>Here for the reason {@link #compares} is here. Which operands run is part of what the
+     * operator means, and every reader that has to know it was spelling the membership out again —
+     * a reading of what arrives, a reading of what an expression evaluates, a reading of what a row
+     * interacts with. Three spellings of one set are three sets an operator added later can land in
+     * differently.
+     */
+    public boolean stopsWhenItsAnswerIsSettled() {
+        return switch (this) {
+            case AND, OR -> true;
+            case EQ, NE, LT, LE, GT, GE, ADD, SUB, MUL, DIV, CONCAT -> false;
+        };
+    }
 }

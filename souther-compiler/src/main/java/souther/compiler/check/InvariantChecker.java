@@ -1711,14 +1711,29 @@ public final class InvariantChecker {
         return done instanceof Completion.CannotComplete ? known.reachingNothing() : known;
     }
 
-    /** What {@code e} evaluates, walked in the order it runs, each step handed what the one before
-     * it left. The order is {@link Evaluated}'s and not this walk's: a construction runs the field
+    /**
+     * What {@code e} evaluates, walked in the order it runs, each step handed what the one before it
+     * left.
+     *
+     * <p>The order is {@link Evaluated}'s and not this walk's: a construction runs the field
      * declared first and not the one written first, and a second account of that here would be a
-     * second thing to keep in step with the emitter. */
+     * second thing to keep in step with the emitter. So is which steps run at all — a
+     * short-circuiting operator's right operand runs on the runs its left did not answer for, and a
+     * walk that decided that for itself would be a second reading of what {@code &&} means.
+     *
+     * <p>A step that runs only sometimes is a region, entered under what has to hold for it to run.
+     * Which is the same treatment a branch gets and for the same reason: what it settles is true
+     * only there, and an evaluation inside it that answers nothing stops nothing outside it.
+     */
     private Known evaluating(Core e, Known k, Denotations at, ContextMultiplicity copies) {
         Known out = k;
-        for (Core each : Evaluated.inOrder(e)) {
-            out = walk(each, out, at, copies);
+        for (Evaluated.Step step : Evaluated.inOrder(e)) {
+            switch (step) {
+                case Evaluated.Step.Always(Core each) -> out = walk(each, out, at, copies);
+                case Evaluated.Step.OnlyWhere(Core asked, boolean comesOut, Core each) ->
+                        entering(each, predicates.assumeCond(asked, out, at, comesOut).known(), at,
+                                copies);
+            }
         }
         return out;
     }
