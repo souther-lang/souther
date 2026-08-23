@@ -197,7 +197,7 @@ public sealed interface Carrier {
         if (!(symbols.declarations().declaration(places.enumeration().key()) instanceof Hir.SumData sum)) {
             return null;
         }
-        List<TypeSymbol> cases = TypeOps.leafCases(sum, symbols);
+        List<TypeSymbol> cases = AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols);
         return cases.isEmpty() ? null : new Ordinal(places.enumeration(), cases);
     }
 

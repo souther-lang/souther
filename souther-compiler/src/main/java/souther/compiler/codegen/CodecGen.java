@@ -1,5 +1,6 @@
 package souther.compiler.codegen;
 
+import souther.compiler.check.AtomSpace;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.ClauseHelpers;
 import souther.compiler.ast.Hir;
@@ -334,7 +335,7 @@ final class CodecGen {
      */
     byte[] generateEnumSumDecoder(Hir.SumData sum, Src src) {
         ClassDesc cdDec = cd(decoderOf(sum, src));
-        List<TypeSymbol> cases = TypeOps.leafCases(sum, symbols);
+        List<TypeSymbol> cases = AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols);
         return build(cdDec, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_RDecoder);

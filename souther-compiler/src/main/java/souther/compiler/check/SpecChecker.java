@@ -217,7 +217,7 @@ public final class SpecChecker {
                 // against, and the other compositions still have theirs.
                 continue;
             }
-            Set<TypeSymbol> inferred = TypeOps.leafCases(sig.outputType(), symbols);
+            Set<TypeSymbol> inferred = new LinkedHashSet<>(AtomSpace.subjectAtoms(sig.outputType(), symbols));
             Hir.RetType declared = module.exposedOutputs().get(pipe.name());
             if (declared == null) {
                 throw CompileException.of(Diagnostic.at(pipe.pos())
@@ -232,7 +232,7 @@ public final class SpecChecker {
             if (TypeOps.restsOnAnUnresolvedName(declared)) {
                 throw new Unanswerable(declared.pos());
             }
-            Set<TypeSymbol> declaredCases = TypeOps.leafCases(declaredOut, symbols);
+            Set<TypeSymbol> declaredCases = new LinkedHashSet<>(AtomSpace.subjectAtoms(declaredOut, symbols));
             if (!inferred.equals(declaredCases)) {
                 throw CompileException.of(Diagnostic.at(pipe.pos())
                                 

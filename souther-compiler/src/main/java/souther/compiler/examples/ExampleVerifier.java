@@ -2,6 +2,7 @@ package souther.compiler.examples;
 
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.generated.MemoryClassLoader;
+import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Symbols;
@@ -1542,7 +1543,7 @@ public final class ExampleVerifier {
         if (result == null || !(out instanceof Type.Union)) {
             return result;
         }
-        for (TypeSymbol member : TypeOps.leafCases(out, symbols)) {
+        for (TypeSymbol member : AtomSpace.subjectAtoms(out, symbols)) {
             if (!member.isPrimitive() && member.module().equals(module.name())) {
                 continue;
             }

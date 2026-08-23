@@ -1,5 +1,6 @@
 package souther.compiler.codegen;
 
+import souther.compiler.check.AtomSpace;
 import souther.compiler.check.ReqSig;
 import souther.compiler.check.EnsuresEnforcement;
 import souther.compiler.check.Symbols;
@@ -430,7 +431,7 @@ final class CodegenContext {
             return List.of();
         }
         List<TypeSymbol> bridged = new ArrayList<>();
-        for (TypeSymbol member : TypeOps.leafCases(out, symbols)) {
+        for (TypeSymbol member : AtomSpace.subjectAtoms(out, symbols)) {
             if (member.isPrimitive() || !member.module().equals(module)) {
                 bridged.add(member);
             }

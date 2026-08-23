@@ -1,10 +1,10 @@
 package souther.compiler.codegen;
 
+import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.BehaviorContract.ContractParam;
 import souther.compiler.check.BehaviorContract.Guard;
 import souther.compiler.check.BehaviorContract.Rule;
-import souther.compiler.check.TypeOps;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.Refinement;
@@ -19,7 +19,6 @@ import java.lang.constant.ConstantDescs;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 import static souther.compiler.codegen.Descriptors.CD_ConstraintViolation;
 import static souther.compiler.codegen.Descriptors.CD_DeclaredCase;
@@ -157,7 +156,7 @@ final class EnsuresGen {
             if (!(rule.guard() instanceof Guard.Case(CaseSelector selector)) || rule.readsAnswer()) {
                 continue;
             }
-            Set<TypeSymbol> answersFor = answersFor(selector);
+            List<TypeSymbol> answersFor = answersFor(selector);
             if (answersFor.isEmpty()) {
                 continue;
             }
@@ -200,10 +199,10 @@ final class EnsuresGen {
      * leaves. It is what this answers rather than a rule about optionals — the question is asked of
      * the selector, and a selector that has nothing to answer with is not made into one that does.
      */
-    private Set<TypeSymbol> answersFor(CaseSelector selector) {
+    private List<TypeSymbol> answersFor(CaseSelector selector) {
         return selector.refinement() instanceof Refinement.Direct(Type bound) && bound != null
-                ? TypeOps.leafCases(bound, ctx.symbols)
-                : Set.of();
+                ? AtomSpace.subjectAtoms(bound, ctx.symbols)
+                : List.of();
     }
 
     /**

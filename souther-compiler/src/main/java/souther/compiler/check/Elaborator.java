@@ -472,8 +472,11 @@ public final class Elaborator {
                 return new Core.FieldAccess(targetCore, fa.field(), ft, fa.pos());
             }
         }
-        List<TypeSymbol> cases = TypeOps.sumCases(target, ctx.symbols());
-        if (cases != null) {
+        // Asked of a sum only. What a type is made of answers for anything — a data that is no sum
+        // is the one atom it is — and the question here is whether there are cases to read at all,
+        // which a type that is its own single leaf is not.
+        if (TypeOps.isSumType(target, ctx.symbols())) {
+            List<TypeSymbol> cases = AtomSpace.subjectAtoms(target, ctx.symbols());
             // A field every case spreads is the sum's own: the sharing is nominal, and the generated
             // sealed interface declares the accessor its cases already carry (issue #160). Only a
             // named sum, whose interface this compile emits — an anonymous union's cases are not
