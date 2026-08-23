@@ -718,12 +718,12 @@ final class Terms {
             case Choice.Decides.ACondition ignored -> at;
             // A departure is taken where nothing was built, so it has nothing to enter.
             case Choice.Decides.ItDeparted ignored -> at;
-            // An operation defined by cases answers a value the call was already given, written
-            // where the call is. It introduces no name, so there is nothing to enter.
-            case Choice.Decides.ByArgumentRelations ignored -> at;
             case Choice.Decides.ACase(Core.Case arm, Core scrutinee) -> opening(arm, scrutinee, at);
             case Choice.Decides.ItWasBuilt(Core.IfConstructed ic) ->
                     entering(read(ic.binder(), ic.construct().type(), ic.pos()), at);
+            // An operation defined by cases answers a value the call was already given, written
+            // where the call is. It introduces no name, so there is nothing to enter.
+            case Choice.Decides.ByArgumentRelations ignored -> at;
         };
     }
 

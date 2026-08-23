@@ -10,6 +10,7 @@ import java.lang.classfile.instruction.InvokeDynamicInstruction;
 import java.lang.classfile.instruction.InvokeInstruction;
 import java.lang.classfile.instruction.NewObjectInstruction;
 import java.lang.classfile.instruction.TypeCheckInstruction;
+import java.lang.constant.ClassDesc;
 import java.lang.constant.DirectMethodHandleDesc;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -78,7 +79,19 @@ final class Compiled {
          * a generic is read, so a rule counting those would be about the compiler's output rather
          * than about anything anybody wrote.
          */
-        ASKS
+        ASKS,
+
+        /**
+         * A type written as one case of a {@code switch} over what a value is.
+         *
+         * <p>What a reader of a sum names, which is the question a rule about reading a sum is
+         * really asking. Whether such a reader stops when the sum grows is not decided by the
+         * instruction it compiles to — a {@code switch} with a {@code default} is the same
+         * {@code invokedynamic} as one without, and only the second stops — so a rule written over
+         * the instruction is a rule about the wrong thing. What tells them apart is which cases were
+         * named, which is here.
+         */
+        NAMES
     }
 
     /**
@@ -138,9 +151,13 @@ final class Compiled {
                                 field.opcode() == Opcode.GETSTATIC
                                         || field.opcode() == Opcode.PUTSTATIC));
                         case InvokeDynamicInstruction reference -> {
+                            boolean switching = isATypeSwitch(reference);
                             for (var argument : reference.bootstrapArgs()) {
                                 if (argument instanceof DirectMethodHandleDesc handle) {
                                     found.add(referred(from, name, descriptor, handle));
+                                } else if (switching && argument instanceof ClassDesc labelled) {
+                                    found.add(new Site(from, name, descriptor, How.NAMES,
+                                            describedBy(labelled), "case", false));
                                 }
                             }
                         }
@@ -151,6 +168,15 @@ final class Compiled {
         }
         assertFalse(found.isEmpty(), "no compiled call was read at all");
         return found;
+    }
+
+    /** Whether this {@code invokedynamic} is a {@code switch} over what a value is. Asked of the
+     * bootstrap, because a class arrives in the bootstrap arguments of others for reasons that are
+     * not a case of anything — a record's own {@code equals} is handed the record. */
+    private static boolean isATypeSwitch(InvokeDynamicInstruction reference) {
+        DirectMethodHandleDesc bootstrap = reference.bootstrapMethod();
+        return bootstrap.owner().displayName().equals("SwitchBootstraps")
+                && bootstrap.methodName().equals("typeSwitch");
     }
 
     private static Site referred(String from, String method, String descriptor,
@@ -170,5 +196,12 @@ final class Compiled {
 
     private static String named(String internal) {
         return internal.replace('/', '.');
+    }
+
+    /** The name of what a descriptor describes, in the same words the rest of this answers in. */
+    private static String describedBy(ClassDesc type) {
+        String descriptor = type.descriptorString();
+        return descriptor.startsWith("L") && descriptor.endsWith(";")
+                ? named(descriptor.substring(1, descriptor.length() - 1)) : descriptor;
     }
 }
