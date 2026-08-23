@@ -576,13 +576,21 @@ final class Terms {
         Derivation made;
         if (meaning != null) {
             made = recipeFor(meaning, at);
-        } else if (asOperator(e) instanceof Core.PreservedCall call) {
-            recordingWalk(atom, call, e, at);
+        } else if (asOperator(e) instanceof Core.PreservedCall call
+                && Reductions.reducing(call, at) instanceof Reductions.Reducing walk) {
+            recordingWalk(atom, walk, e, at);
             return;
         } else {
             // What is left is a value that is one of several. Asked last because being one of
             // several is what a value is where nothing else says what it was computed from — a
             // choice between two quotients is a choice, and each of its arms is a quotient.
+            //
+            // What sends a reading here is that the value was none of the above, and not that the
+            // reading above it came to nothing: a walk this cannot read every part of is still a
+            // walk, and reading it a second way as the arms of a choice would answer about a value
+            // by whichever reader happened to get furthest. That is the same order the arithmetic is
+            // in — a meaning with no recipe stops rather than falling through — and it is why the
+            // question asked of a call is whether it is a walk rather than whether one was recorded.
             made = chosen(Choice.of(asOperator(e)), at);
         }
         if (made == null) {
@@ -596,8 +604,12 @@ final class Terms {
     }
 
     /**
-     * Records the walk {@code atom} is the answer of, where the call is a reduction and every part of
-     * it is a number this reads.
+     * Records the walk {@code atom} is the answer of, where every part of it is a number this reads.
+     *
+     * <p>Whether the call is a reduction at all is settled before this is called and not inside it.
+     * That question decides which reading owns the value, and a reader answering it here could only
+     * report the answer by declining to record — which the caller would have to read as "not a
+     * walk", and it is not.
      *
      * <p>Here for the reason {@link #recording} is here: an atom's name is made in this class, and
      * what is filed against a name belongs where the name is made. What is filed is numbers — a form
@@ -616,11 +628,7 @@ final class Terms {
      * choice it is and is bounded by what its arms answer ({@link Derivation.Chosen}). What stays
      * outside is a seed that is what some behavior answered.
      */
-    private void recordingWalk(FactSubject atom, Core.PreservedCall call, Core e, Denotations at) {
-        Reductions.Reducing walk = Reductions.reducing(call, at);
-        if (walk == null) {
-            return;
-        }
+    private void recordingWalk(FactSubject atom, Reductions.Reducing walk, Core e, Denotations at) {
         LinearForm<FactSubject> seed = affineOf(walk.seed(), at);
         if (seed == null) {
             return;
@@ -710,6 +718,9 @@ final class Terms {
             case Choice.Decides.ACondition ignored -> at;
             // A departure is taken where nothing was built, so it has nothing to enter.
             case Choice.Decides.ItDeparted ignored -> at;
+            // An operation defined by cases answers a value the call was already given, written
+            // where the call is. It introduces no name, so there is nothing to enter.
+            case Choice.Decides.ByArgumentRelations ignored -> at;
             case Choice.Decides.ACase(Core.Case arm, Core scrutinee) -> opening(arm, scrutinee, at);
             case Choice.Decides.ItWasBuilt(Core.IfConstructed ic) ->
                     entering(read(ic.binder(), ic.construct().type(), ic.pos()), at);

@@ -48,6 +48,16 @@ final class Conditions {
      * type guarantees of what the arm binds, which is a guarantee about a place rather than a
      * relation a condition wrote, and it is read where places are seeded.
      *
+     * <p>An operation the library defines by cases states the relations its case is reached under,
+     * which arrive already lowered to the values the call was given ({@link Choice}). Nothing about
+     * the operation is asked here, and nothing about it needs to be.
+     *
+     * <p>Written as a switch over {@link Choice.Decides} with an arm for every way of deciding. As an
+     * {@code instanceof} it answered "nothing is settled" for every way it had not been told about,
+     * which is the same silence a new producer would want to be stopped by: a value that is one of
+     * several would get its arms and lose what chose between them, and be bounded by their span with
+     * no arm ruled out.
+     *
      * <p><b>What the values a condition names guarantee is not here either, and the walk has it.</b>
      * {@link Predicates#assumeCond} takes {@link Predicates#sizeFacts} and
      * {@link Predicates#resultFacts} into what is known before it reads the condition at all: a size
@@ -60,10 +70,41 @@ final class Conditions {
      */
     static List<NumericConstraint> settledBy(Terms terms, Choice.Decides decidedBy, Denotations at) {
         List<NumericConstraint> out = new ArrayList<>();
-        if (decidedBy instanceof Choice.Decides.ACondition(Core cond, boolean holding)) {
-            stating(terms, cond, at, holding, out);
+        switch (decidedBy) {
+            case Choice.Decides.ACondition(Core cond, boolean holding) ->
+                    stating(terms, cond, at, holding, out);
+            case Choice.Decides.ByArgumentRelations(List<Choice.ArgumentRelation> relations) ->
+                    standing(terms, relations, at, out);
+            // A case and an attempt state nothing here. What choosing them settles is what the
+            // value's type guarantees of what the arm binds, which is a guarantee about a place
+            // rather than a relation, and it is read where places are seeded (#982). Written as arms
+            // of this switch and not left to a default: what a way of deciding settles is a question
+            // somebody has to answer, and "nothing" is an answer rather than the absence of one.
+            case Choice.Decides.ACase ignored -> { }
+            case Choice.Decides.ItWasBuilt ignored -> { }
+            case Choice.Decides.ItDeparted ignored -> { }
         }
         return out;
+    }
+
+    /**
+     * The relations the arguments of a library definition's case stand in, as constraints.
+     *
+     * <p>Already relations when they arrive ({@link Choice.ArgumentRelation}), so what is left is
+     * reading each side as a form. A side no form is read of states nothing and is left out, which
+     * is this method under-answering in the direction the class doc gives: a relation dropped from
+     * an arm leaves the arm reachable where it is not and its answer in the span where it need not
+     * be, which costs precision, while one invented would be unsound.
+     */
+    private static void standing(Terms terms, List<Choice.ArgumentRelation> relations,
+                                 Denotations at, List<NumericConstraint> out) {
+        for (Choice.ArgumentRelation one : relations) {
+            LinearForm<FactSubject> left = terms.affineOf(one.left(), at);
+            LinearForm<FactSubject> right = terms.affineOf(one.right(), at);
+            if (left != null && right != null) {
+                out.add(new NumericConstraint(left.minus(right), one.rel()));
+            }
+        }
     }
 
     /**

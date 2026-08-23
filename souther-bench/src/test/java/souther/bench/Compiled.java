@@ -9,6 +9,7 @@ import java.lang.classfile.instruction.FieldInstruction;
 import java.lang.classfile.instruction.InvokeDynamicInstruction;
 import java.lang.classfile.instruction.InvokeInstruction;
 import java.lang.classfile.instruction.NewObjectInstruction;
+import java.lang.classfile.instruction.TypeCheckInstruction;
 import java.lang.constant.DirectMethodHandleDesc;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -60,7 +61,24 @@ final class Compiled {
          * class does is this type's to know, and a rule that needs a way of reaching something asks
          * for it here rather than being written over the nearest vocabulary to hand.
          */
-        READS
+        READS,
+
+        /**
+         * A type asked of a value with {@code instanceof}, which is how a class decides for itself
+         * what something is.
+         *
+         * <p>Here because a rule that a sum is read by switching over it had nothing to look at
+         * otherwise. An exhaustive {@code switch} over a sealed type is one {@code invokedynamic}
+         * and stops when the sum grows; the same reader written as an {@code instanceof} compiles
+         * unchanged and answers about the arms it knew — silently, and in whichever direction the
+         * author's {@code else} went. The two are the same question in the source and different
+         * instructions here, which is what makes the difference checkable at all.
+         *
+         * <p>{@code instanceof} and not a cast. A cast is something javac writes for itself wherever
+         * a generic is read, so a rule counting those would be about the compiler's output rather
+         * than about anything anybody wrote.
+         */
+        ASKS
     }
 
     /**
@@ -110,6 +128,10 @@ final class Compiled {
                         case NewObjectInstruction made -> found.add(new Site(from, name, descriptor,
                                 How.MAKES, named(made.className().asInternalName()), "<init>",
                                 false));
+                        case TypeCheckInstruction asked
+                                when asked.opcode() == Opcode.INSTANCEOF ->
+                                found.add(new Site(from, name, descriptor, How.ASKS,
+                                        named(asked.type().asInternalName()), "instanceof", false));
                         case FieldInstruction field -> found.add(new Site(from, name, descriptor,
                                 How.READS, named(field.owner().asInternalName()),
                                 field.name().stringValue(),

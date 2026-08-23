@@ -127,9 +127,10 @@ sealed interface Derivation {
      * relations a condition wrote but guarantees about a place, and they are read where places are
      * seeded rather than here.
      *
-     * <p>The operations the library defines by cases ({@code DischargeRules.CHOOSES}) are choices
-     * with no producer here yet (#974). Which values a choice is one of does have an owner
-     * ({@link Choice}), so a kind of choice is found by every reader at once or by none.
+     * <p>An operation the library defines by cases is one of these as much as an {@code if} is:
+     * {@code Int.min(a, b)} is {@code a} or it is {@code b}, and what chose is a relation between the
+     * two. Which values a choice is one of has one owner ({@link Choice}), so such a call reaches
+     * this and every other reader at once rather than the one that happened to read the table.
      *
      * @param arms what stands in each arm, and what reading its context may reach. Every arm or
      *             none: an arm the walk could not read leaves the choice with no recipe at all,

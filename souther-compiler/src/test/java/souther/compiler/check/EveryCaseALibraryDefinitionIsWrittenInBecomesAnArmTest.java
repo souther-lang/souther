@@ -1,0 +1,111 @@
+package souther.compiler.check;
+
+import souther.compiler.core.Core;
+import souther.compiler.diag.SourcePos;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.BindingOwner;
+import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * Every case an operation of the library is defined in comes out of {@link Choice} as an arm, with
+ * the argument that case answers and every relation it is reached under.
+ *
+ * <p>Row by row and not operation by operation. What a reader downstream needs of a case is the
+ * value and the conditions together: the value alone says {@code Int.clamp(lo, hi, n)} may answer
+ * {@code hi}, and only the conditions say when — so an implementation that moved every answer across
+ * and dropped one relation would leave a choice whose arms are all reachable, bounded by a span over
+ * values it cannot take. Counting arms would pass that; this does not.
+ *
+ * <p>Held against the table rather than against a copy of it written out here. What is under test is
+ * the reading, not the library: a second copy of the cases in this file would be the drift the
+ * reading was moved into one place to stop, and it would go stale the day {@code clamp} is defined
+ * differently while proving nothing about whether anyone noticed.
+ *
+ * <p>Every operation the table has, so the day one is added it is read here without being named.
+ */
+class EveryCaseALibraryDefinitionIsWrittenInBecomesAnArmTest {
+
+    private static final SourcePos POS = new SourcePos(1, 1);
+
+    private static final BindingOwner OWNER = new BindingOwner.OfValue("demo", "call");
+
+    @Test
+    void everyRowOfTheTableIsAnArmAnsweringItsArgumentUnderAllOfItsRelations() {
+        assertTrue(DischargeRules.choosingOperations().size() >= 6,
+                "the table has the operations the library defines by cases, and reading none of"
+                        + " them is not a pass");
+        for (ValueName operation : DischargeRules.choosingOperations()) {
+            Core.PreservedCall call = callTo(operation);
+            DischargeRules.Choices defined = DischargeRules.chosenBy(call);
+            Choice choice = Choice.of(call);
+
+            assertNotNull(choice, operation + " is defined in cases and answers no choice");
+            assertEquals(Choice.Kind.THE_ARGUMENTS, choice.kind(),
+                    operation + " is decided by how its arguments stand");
+            assertEquals(defined.cases().size(), choice.arms().size(),
+                    operation + " has an arm per case it is defined in");
+
+            for (int i = 0; i < defined.cases().size(); i++) {
+                DischargeRules.Choice row = defined.cases().get(i);
+                Choice.Arm arm = choice.arms().get(i);
+                String where = operation + " case " + (i + 1);
+
+                assertSame(row.answers().of(call), arm.answers(),
+                        where + " answers the argument the case answers, as the value itself");
+                assertTrue(arm.decidedBy() instanceof Choice.Decides.ByArgumentRelations,
+                        where + " is decided by how the arguments stand");
+                List<Choice.ArgumentRelation> stated =
+                        ((Choice.Decides.ByArgumentRelations) arm.decidedBy()).relations();
+                assertEquals(expected(row, call), stated,
+                        where + " is reached under every relation the case names, and under no"
+                                + " other. An answer moved across without its conditions is an arm"
+                                + " reachable wherever the call stands");
+            }
+        }
+    }
+
+    /** A call to an operation the library does not define by cases is not one of these. The
+     * arithmetic answers a value that is neither of its operands, and reading it as a choice would
+     * bound it by a span over them. */
+    @Test
+    void anOperationDefinedInNoCasesIsNoChoice() {
+        assertNull(Choice.of(callTo(new ValueName.Stdlib("Int", "add"))),
+                "what `a + b` answers is not `a` and not `b`");
+    }
+
+    /** The relations the row names, written in the values this call was given. */
+    private static List<Choice.ArgumentRelation> expected(DischargeRules.Choice row,
+                                                          Core.PreservedCall call) {
+        List<Choice.ArgumentRelation> out = new ArrayList<>(row.given().size());
+        for (DischargeRules.ArgumentsStand stands : row.given()) {
+            out.add(new Choice.ArgumentRelation(stands.left().of(call), stands.rel(),
+                    stands.right().of(call)));
+        }
+        return out;
+    }
+
+    /** A call to {@code operation} whose arguments are told apart by what stands at each position,
+     * so that a rule naming the wrong one is a different answer rather than the same one. */
+    private static Core.PreservedCall callTo(ValueName operation) {
+        Prelude.PreludeEntry entry = Prelude.entry(((ValueName.Stdlib) operation).qualified());
+        assertNotNull(entry, operation + " is not declared by the library");
+        List<Type> params = entry.signature().params();
+        List<Core> args = new ArrayList<>(params.size());
+        for (int i = 0; i < params.size(); i++) {
+            args.add(new Core.Read("arg" + i, new BindingId(OWNER, i), params.get(i), POS));
+        }
+        return new Core.PreservedCall(operation, args, entry.signature().result(), POS);
+    }
+}
