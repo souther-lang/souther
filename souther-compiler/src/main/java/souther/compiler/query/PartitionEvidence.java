@@ -223,6 +223,28 @@ public record PartitionEvidence(Measurement<List<AxisCoverage>> partitioned,
         return List.copyOf(out);
     }
 
+    /**
+     * What every measure of this behavior's positions went without, all of them.
+     *
+     * <p>Asked here rather than assembled by whoever wants it. There are six measures under this —
+     * the two derivations, each position, each point of each border, and the combinations — and a
+     * reader listing them is a reader who has to be told when a seventh arrives. The report listed
+     * them, so a measure added here would have been a measure the report left out of every whole
+     * above it, silently (issue #953).
+     */
+    public WeakeningSet weakening() {
+        WeakeningSet out = partitioned.weakening()
+                .union(bounded.weakening())
+                .union(pairs.counted().weakening());
+        for (AxisCoverage axis : axes()) {
+            out = out.union(axis.reached().weakening());
+        }
+        for (BorderAssessment.Point point : BorderAssessment.pointsOf(boundaries())) {
+            out = out.union(point.item().weakening());
+        }
+        return out;
+    }
+
     /** The positions, for a reader that wants them and not what the measure made of itself. Empty
      *  where the measure has none to show, which its own answer says the reason for. */
     public List<AxisCoverage> axes() {

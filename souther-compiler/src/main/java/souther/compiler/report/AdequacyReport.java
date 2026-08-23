@@ -168,38 +168,28 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     /**
      * What a behavior's measures went without, all of them.
      *
-     * <p><b>Asked of every measure and of nothing else.</b> Each of them carries what weakened it,
-     * so this is a union and not a list of things to remember — a position dropped past the axis
-     * limit reaches it through the measure that lost by it, a space too many to walk through the
-     * combinations, a source that could not be evaluated through every measure over its rows. This
-     * used to fold the measures into a boolean and then read the module's own list of what could not
-     * be read <em>as well</em>, which was one fact arriving twice: once in a measure's answer and
-     * once behind its back (issue #953).
+     * <p><b>Asked of the three it has, and each of those answers for its own.</b> This used to name
+     * every measure under them — the two derivations, each position, each point of each border, the
+     * combinations — which is a list somebody has to remember to add to. It is the same shape as the
+     * schema check that named two objects and missed eight, and as issue #953 itself: an answer
+     * assembled by whoever wanted it rather than held by whoever has it.
      *
      * <p>A measure nobody asked for is not a degradation, and neither is one a behavior has nothing
-     * to answer. Neither of those weakens anything, so neither is here — which is the measurement's
-     * own answer rather than a question put to the constant's name.
+     * to answer. Neither weakens anything, so neither is here — which is the measurement's own
+     * answer rather than a question put to the constant's name.
      */
     private static WeakeningSet wentWithout(Adequacy.SignatureEvidence signature,
                                             PartitionEvidence partition,
                                             Adequacy.BranchEvidence branch) {
         WeakeningSet out = WeakeningSet.none();
         if (signature != null) {
-            out = out.union(signature.counted().weakening());
+            out = out.union(signature.weakening());
+        }
+        if (partition != null) {
+            out = out.union(partition.weakening());
         }
         if (branch != null) {
             out = out.union(branch.measured().weakening());
-        }
-        if (partition != null) {
-            out = out.union(partition.partitioned().weakening());
-            out = out.union(partition.bounded().weakening());
-            for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
-                out = out.union(axis.reached().weakening());
-            }
-            for (BorderAssessment.Point point : BorderAssessment.pointsOf(partition.boundaries())) {
-                out = out.union(point.item().weakening());
-            }
-            out = out.union(partition.pairs().counted().weakening());
         }
         return out;
     }

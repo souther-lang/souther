@@ -150,7 +150,7 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
                 "no part of any behavior went without anything the rest did not, so dropping any"
                         + " one of them from the union would leave this saying nothing");
 
-        assertEquals(List.of(), lost, "a fact a part went without that the whole above it dropped");
+        assertEquals(List.of(), lost, "a whole and its parts disagreeing about what was gone without");
     }
 
     /** How many of {@code parts} hold a fact none of the others do. */
@@ -170,12 +170,25 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
         return carrying;
     }
 
-    /** Everything {@code parts} went without, held against what {@code whole} carries. */
+    /**
+     * What {@code whole} carries and what {@code parts} went without, held to being the same.
+     *
+     * <p>Both ways round, because the rule is a union and nothing else. Short of what its parts went
+     * without, a whole has dropped a fact somebody is owed; over it, a whole has a fact none of its
+     * parts has — which is the shape the report was in when it read the module's own list of what
+     * could not be read and made weakenings out of it beside asking the measures. One of those is
+     * the defect this issue is about and the other is how it hid.
+     */
     private static void holds(List<String> lost, String what, WeakeningSet whole,
                               WeakeningSet parts) {
         for (Weakening each : parts.causes()) {
             if (!whole.causes().contains(each)) {
-                lost.add(what + " does not carry " + each);
+                lost.add(what + " does not carry " + each + ", which one of its parts went without");
+            }
+        }
+        for (Weakening each : whole.causes()) {
+            if (!parts.causes().contains(each)) {
+                lost.add(what + " carries " + each + ", which none of its parts went without");
             }
         }
     }

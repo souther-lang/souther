@@ -276,6 +276,7 @@ public final class Adequacy {
         /** What the rows came to: the union of what its parts went without, and nothing else. An
          *  aggregate with a fact of its own would be a fact its parts do not have, and a reader of
          *  one of them would be right about a measure the whole contradicts. */
+        // (the union is below; `weakening()` hands it on so nothing above lists the parts again)
         public static SignatureEvidence of(OutputCaseEvidence output,
                                            List<InputCaseEvidence> inputs) {
             WeakeningSet by = output.cases().weakening();
@@ -285,6 +286,11 @@ public final class Adequacy {
             return new SignatureEvidence(output, inputs, by.isEmpty()
                     ? new Measurement.Complete<>(new Counted())
                     : new Measurement.Partial<>(new Counted(), by));
+        }
+
+        /** What every measure of this signature went without. The one place its parts are listed. */
+        public WeakeningSet weakening() {
+            return counted.weakening();
         }
 
         public SignatureEvidence {
@@ -2132,6 +2138,36 @@ public final class Adequacy {
     public record Finding(String behavior, WeakeningSet weakenedBy, Citation at, About about) {
 
         /**
+         * A finding one measurement established, carrying what <em>that</em> measurement went
+         * without.
+         *
+         * <p>The measurement rather than the set, because the set is what a caller gets wrong. Every
+         * finding used to be handed a {@code WeakeningSet} worked out somewhere above it, and the
+         * one place that produced several from one method handed them all the same one — the
+         * signature's, which is the union of its output's and every input's. A case the output was
+         * counted for in full then read as undecided because an input had a row nobody could
+         * classify, and a build stopped refusing a gap it had established (spec §e1913).
+         *
+         * <p>Asked for the measurement, a caller has to hand over the one it is looking at, which is
+         * the one that found this. There is no argument left to pass the wrong thing in.
+         */
+        public static Finding by(String behavior, Measurement<?> found, Citation at, About about) {
+            return new Finding(behavior, found.weakening(), at, about);
+        }
+
+        /**
+         * Something the report says that no measurement established.
+         *
+         * <p>A rule this compiler could not read, a position nothing divides, a question nobody
+         * answered: each is worth telling an author and none of them is a measure coming to an
+         * answer. Nothing weakened them because nothing measured them, and a build's answer to one
+         * is its criterion's alone — every kind that reaches here is one no criterion refuses.
+         */
+        public static Finding noticed(String behavior, Citation at, About about) {
+            return new Finding(behavior, WeakeningSet.none(), at, about);
+        }
+
+        /**
          * What a build does about a finding, which is what neither surface used to say.
          *
          * <p>Three answers and not two, because the question is decided by two facts. Collapsing the
@@ -2275,10 +2311,9 @@ public final class Adequacy {
             if (signature == null || signature.counted().made().isEmpty()) {
                 return;
             }
-            WeakeningSet status = signature.counted().weakening();
             OutputCaseEvidence output = signature.output();
             for (TypeSymbol missing : output.unspecified()) {
-                out.add(new Finding(behavior.name(), status, Citation.of(behavior.pos()),
+                out.add(Finding.by(behavior.name(), output.cases(), Citation.of(behavior.pos()),
                         new About.ACaseNoRowExpects(missing)));
             }
             // Where the behavior answered for no row, every case is unverified and naming each of
@@ -2296,7 +2331,8 @@ public final class Adequacy {
             if (output.cases().made().map(OutputCaseEvidence.Cases::answeredRows).orElse(0) > 0) {
                 for (TypeSymbol missing : output.unverified()) {
                     if (!output.unspecified().contains(missing)) {
-                        out.add(new Finding(behavior.name(), status, Citation.of(behavior.pos()),
+                        out.add(Finding.by(behavior.name(), output.cases(),
+                                Citation.of(behavior.pos()),
                                 new About.ACaseNothingWasSeenToProduce(missing)));
                     }
                 }
@@ -2305,7 +2341,10 @@ public final class Adequacy {
             // own answer now, so a finding is not handed a number worked out beside the list.
             for (InputCaseEvidence input : signature.inputs()) {
                 for (TypeSymbol missing : input.unspecified()) {
-                    out.add(new Finding(behavior.name(), status, Citation.of(behavior.pos()),
+                    // This input's own measurement. One position whose rows could not be classified
+                    // says nothing about the position beside it, and a finding handed the signature's
+                    // union would report both as undecided over one of them.
+                    out.add(Finding.by(behavior.name(), input.cases(), Citation.of(behavior.pos()),
                             new About.ACaseNoRowAppliesItTo(input, missing)));
                 }
             }
@@ -2327,7 +2366,7 @@ public final class Adequacy {
                     continue;
                 }
                 for (PartitionEvidence.AxisClass missing : axis.uncovered()) {
-                    out.add(new Finding(behavior.name(), axis.reached().weakening(),
+                    out.add(Finding.by(behavior.name(), axis.reached(),
                             Citation.of(behavior.pos()), new About.AClassNoRowIsIn(missing)));
                 }
             }
@@ -2349,14 +2388,14 @@ public final class Adequacy {
                 // for; the axis, the value, the rule and the role used to be copied out here, and
                 // a reader then matched the copy back against the assessments to find the one it
                 // came from.
-                out.add(new Finding(behavior.name(), WeakeningSet.none(),
+                out.add(Finding.by(behavior.name(), point.item().weakeningSource(),
                         Citation.of(behavior.pos()), new About.APointOfABorder(point)));
             }
             // What the model divides this position no way at all, which is the classes question and
             // is answered only for a position that has none.
             for (souther.compiler.partition.UndividedPosition position : partition.notDerivable()) {
                 if (position.isAbsent()) {
-                    out.add(new Finding(behavior.name(), WeakeningSet.none(),
+                    out.add(Finding.noticed(behavior.name(),
                             Citation.of(behavior.pos()),
                             new About.APositionNoLineDivides(position)));
                 }
@@ -2366,7 +2405,7 @@ public final class Adequacy {
             // list above.
             for (PartitionEvidence.NotRead each : partition.notRead()) {
                 // Not measured, because nothing here established anything either way about it.
-                out.add(new Finding(behavior.name(), WeakeningSet.none(),
+                out.add(Finding.noticed(behavior.name(),
                         Citation.of(behavior.pos()),
                         switch (each) {
                             case PartitionEvidence.NotRead.ARule rule ->
@@ -2379,7 +2418,7 @@ public final class Adequacy {
             // rule is answerable for it and nothing went unreached. Said whatever the axes made of
             // the position, since what it qualifies is the classes and not their absence.
             for (souther.compiler.inputs.PositionValuesNotSeparated each : partition.notSeparated()) {
-                out.add(new Finding(behavior.name(), WeakeningSet.none(),
+                out.add(Finding.noticed(behavior.name(),
                         Citation.of(behavior.pos()),
                         new About.APositionReadWiderThanItsRules(each)));
             }
@@ -2394,7 +2433,7 @@ public final class Adequacy {
                 // nothing was seen rather than because everything was accounted for.
                 if (axis.read().reach()
                         == PartitionEvidence.AxisCoverage.Reach.SOME_OUT_OF_SIGHT) {
-                    out.add(new Finding(behavior.name(), WeakeningSet.none(),
+                    out.add(Finding.noticed(behavior.name(),
                             Citation.of(behavior.pos()),
                             new About.APositionWhoseRulesWereNotReached(axis)));
                 }
@@ -2408,12 +2447,12 @@ public final class Adequacy {
                 // on whole. Which of the names it carries a reader is shown, and what words the
                 // question is put in, are the reader's — and both used to be settled here, one of
                 // them only to be overruled by every surface that printed it.
-                out.add(new Finding(behavior.name(), WeakeningSet.none(),
+                out.add(Finding.noticed(behavior.name(),
                         Citation.of(behavior.pos()),
                         new About.AQuestionNothingAnswered(each)));
             }
             for (souther.compiler.partition.Partitions.OmittedAxis dropped : partition.omitted()) {
-                out.add(new Finding(behavior.name(), WeakeningSet.none(),
+                out.add(Finding.noticed(behavior.name(),
                         Citation.of(behavior.pos()),
                         new About.APositionPastTheAxisLimit(dropped)));
             }
@@ -2437,7 +2476,7 @@ public final class Adequacy {
                 // which is written in one language, and a diagnostic, which is written in the
                 // reader's — and the two readings ask the same arm rather than one of them being
                 // handed the other's answer.
-                out.add(new Finding(behavior.name(), branch.measured().weakening(), arm.at(),
+                out.add(Finding.by(behavior.name(), branch.measured(), arm.at(),
                         new About.AnArmNoRowGoesThrough(arm)));
             }
         }

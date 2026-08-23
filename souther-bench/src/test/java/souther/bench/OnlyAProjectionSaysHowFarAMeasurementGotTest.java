@@ -154,6 +154,43 @@ class OnlyAProjectionSaysHowFarAMeasurementGotTest {
     }
 
     /**
+     * A finding is made from a measurement, and from nothing else.
+     *
+     * <p>What a finding carries decides whether a build may refuse over it, so handing one the wrong
+     * account is a build going quiet about work somebody is owed. It used to take a
+     * {@code WeakeningSet} beside the subject, and one method that produced several findings worked
+     * one out at the top and gave it to all of them — the signature's, which is the union of its
+     * output's and every input's, so a case the output was counted for in full read as undecided
+     * over an input's unreadable row.
+     *
+     * <p>The factories take the measurement instead, which leaves no argument to pass the wrong
+     * thing in: a caller hands over the one it is looking at. This holds the other half — that the
+     * canonical constructor, which a public record cannot hide, is not how anybody makes one.
+     */
+    @Test
+    void aFindingIsMadeFromTheMeasurementThatFoundIt() throws IOException {
+        String finding = "souther.compiler.query.Adequacy$Finding";
+        Set<String> makers = new LinkedHashSet<>();
+        for (Compiled.Site site : Compiled.sites()) {
+            if (site.makesA(finding)) {
+                makers.add(site.at());
+            }
+        }
+        assertEquals(Set.of(
+                        "souther.compiler.query.Adequacy$Finding#by(Ljava/lang/String;"
+                                + "Lsouther/compiler/query/Measurement;"
+                                + "Lsouther/compiler/diag/Citation;"
+                                + "Lsouther/compiler/query/About;)"
+                                + "Lsouther/compiler/query/Adequacy$Finding;",
+                        "souther.compiler.query.Adequacy$Finding#noticed(Ljava/lang/String;"
+                                + "Lsouther/compiler/diag/Citation;"
+                                + "Lsouther/compiler/query/About;)"
+                                + "Lsouther/compiler/query/Adequacy$Finding;"),
+                makers,
+                "what makes a finding rather than asking the measurement that found it");
+    }
+
+    /**
      * A measurement made in part, or one that could not be finished, cannot be built empty.
      *
      * <p>The one invariant left that a constructor still runs, and the only one worth running: a
