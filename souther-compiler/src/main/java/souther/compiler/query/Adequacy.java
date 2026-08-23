@@ -89,6 +89,10 @@ public final class Adequacy {
          * is not reading what the rows already established, so it is not what this level promises
          * (issue #955).
          *
+         * <p>About measuring, and not about a person asking for rows. What {@code souther examples
+         * --generate} composes is asked for by the request rather than by the level, and it builds
+         * whatever answering that request takes.
+         *
          * <p>What a level that does not build gets is the rules' own answer: a point inside what
          * every rule reaching it leaves is writable because the rules say so, and a point only a
          * value could settle stays unknown — reported, and counted against nobody, which is the
@@ -1195,11 +1199,11 @@ public final class Adequacy {
          * Why there is nothing here for the arm measure to be about, and no row would give it
          * something.
          *
-         * <p>Three ways to owe no arm, said apart because an author reads them differently: a
-         * behavior this module does not implement, one implemented without a fork, and one whose
-         * every fork the rules already prove nothing reaches. All three are the model's answer
-         * rather than a run's, so none of them waits on the instrumentation — which is what lets
-         * this be asked before the level is (issue #955).
+         * <p>Two answers over three ways to owe no arm: a behavior this module does not implement,
+         * one implemented without a fork, and one whose every fork the rules already prove nothing
+         * reaches. The last two are one answer, for the reason {@link #NO_ARM_OBLIGATIONS} gives.
+         * All of them are the model's answer rather than a run's, so none waits on the
+         * instrumentation — which is what lets this be asked before the level is (issue #955).
          */
         public enum NoArms implements souther.compiler.observe.NotApplicableReason {
             /** A {@code >->} composition or a behavior with no {@code let}. Its arms, where it has

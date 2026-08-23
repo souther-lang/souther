@@ -533,6 +533,34 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
                 "a dropped axis the border measure was not measuring");
     }
 
+    /**
+     * A reading that did not run out leaves the classes it never found, and the bar that asks for
+     * them says so.
+     *
+     * <p>Two answers make a class gap: which positions there are to cover, and what the rows reached
+     * of each. Read off the positions alone, a reading that produced none looks exactly like a
+     * behavior with nothing to cover — so a build held to the bar that refuses over a class no row
+     * is in was satisfied by the classes nobody had derived yet. The border measure beside it was
+     * made in full and says nothing about this one (issue #968).
+     *
+     * <p>And the bars that ask nothing of the classes are not held open by it, which is the other
+     * half of the same rule.
+     */
+    @Test
+    void aPartitionReadingThatDidNotRunOutHoldsTheClassesBarOpen() {
+        BorderAssessment met = AReportOfOneBorder.assessed(
+                AReportOfOneBorder.aBorderAtTheEdgeOfItsDomain(), AReportOfOneBorder::hit);
+        PartitionEvidence readingStopped = partition(AReportOfOneBorder.measured(met));
+
+        assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED,
+                AReportOfOneBorder.verdictOf(readingStopped, Adequacy.AdequacyBar.CLASSES),
+                "the classes this could not derive are classes nobody has covered");
+        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
+                AReportOfOneBorder.verdictOf(readingStopped,
+                        Adequacy.AdequacyBar.RELIABLE_DOMAIN),
+                "and a bar that asks nothing of the classes reads only the lines");
+    }
+
     private static Partitions.OmittedAxis dropped(String behavior, String path,
                                                   boolean carriedAnObligation) {
         return new Partitions.OmittedAxis(new AxisId(behavior, path), carriedAnObligation);

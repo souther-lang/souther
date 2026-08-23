@@ -426,7 +426,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // the `classes` bar refuses over and no other does. A bar that asks nothing about
                 // the classes is not held open by one nobody read, and is not satisfied by one that
                 // was.
+                //
+                // The derivation as well as the positions it produced, the way the lines are asked
+                // for above. Which positions there are to cover is the first half of the answer: a
+                // reading that did not run out produced the axes it reached and no others, so
+                // walking those alone leaves a position nobody could derive looking exactly like a
+                // position with nothing to cover — and a bar that refuses over a class no row is in
+                // was satisfied by the classes nobody had found yet. A behavior the reading proved
+                // divides nothing answers {@code NotApplicable} and is dropped below, so this holds
+                // nothing open that was never going to be measured.
                 if (refusesAny(Adequacy.Kind.AXIS_CLASS_UNCOVERED)) {
+                    add(measures, behavior.partition().partitioned());
                     behavior.partition().axes().forEach(axis -> add(measures, axis.reached()));
                 }
                 // And of a border's four points, the ones the bar asks for.
