@@ -146,7 +146,7 @@ class GeneratorTest {
                         List.of("request.kind=Overseas"),
                         List.of("request.urgent=true"),
                         List.of("request.urgent=false")),
-                filled.rows().stream().map(Generator.GeneratedRow::classes).toList());
+                filled.rows().stream().map(row -> row.purpose().labels()).toList());
     }
 
     /** Several positions of one parameter are one value. {@code request.kind} and {@code request.urgent}
@@ -174,7 +174,7 @@ class GeneratorTest {
                         Generator.CandidateCheck.ANY);
 
         assertEquals(List.of(List.of("request.kind=Overseas"), List.of("request.urgent=false")),
-                filled.rows().stream().map(Generator.GeneratedRow::classes).toList(),
+                filled.rows().stream().map(row -> row.purpose().labels()).toList(),
                 "the two classes that row is in are not asked for again");
     }
 
@@ -187,8 +187,8 @@ class GeneratorTest {
                 List.of(), Generator.CandidateCheck.ANY);
 
         assertEquals(texts(once), texts(again));
-        assertEquals(once.rows().stream().map(Generator.GeneratedRow::classes).toList(),
-                again.rows().stream().map(Generator.GeneratedRow::classes).toList());
+        assertEquals(once.rows().stream().map(row -> row.purpose().labels()).toList(),
+                again.rows().stream().map(row -> row.purpose().labels()).toList());
     }
 
     // --- what a candidate says and what it does not ----------------------------------------------
@@ -396,6 +396,6 @@ class GeneratorTest {
 
         assertEquals(List.of("1", "9"), texts(filled));
         assertEquals(List.of(List.of("a=low"), List.of("a=high")),
-                filled.rows().stream().map(Generator.GeneratedRow::classes).toList());
+                filled.rows().stream().map(row -> row.purpose().labels()).toList());
     }
 }

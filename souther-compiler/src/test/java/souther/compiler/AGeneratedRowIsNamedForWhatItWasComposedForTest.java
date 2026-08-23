@@ -131,9 +131,23 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
         List<String> offered = names(block);
 
         assertEquals(7, rows(block),
-                "a row for each of the three classes, and four at the points of the border:\n"
-                        + block);
-        assertEquals(3, offered.size(), "the three composed for a class are named: " + offered);
+                "a row for each class owed one, two of them meeting in one row, and four at the"
+                        + " points of the border:\n" + block);
+
+        // Every class owed a row is said, and each of them once. Two of them come out as one row —
+        // the class at the bottom of the range and the first tier hold the same values — and that
+        // row is offered under neither name. Naming it for whichever of the two arrived first is
+        // a name that says the row is about one thing while it answers two, and joining them into
+        // `a x b` reads as one thing owed at two positions at once. So it is unnamed and what it
+        // fills is said over it, once per class.
+        List<String> said = new ArrayList<>(offered);
+        block.lines().filter(line -> line.contains("fills "))
+                .map(line -> line.substring(line.indexOf("fills ") + "fills ".length()))
+                .forEach(said::add);
+        assertEquals(List.of("request.cost=0 <= x <= 100", "request.cost=100 < x",
+                        "request.tier=Gold", "request.tier=Silver"),
+                said.stream().sorted().toList(), block);
+
         Set<String> distinct = new LinkedHashSet<>(offered);
         assertEquals(offered.size(), distinct.size(),
                 "a name says which row it is, so no two rows share one: " + offered);

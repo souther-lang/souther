@@ -1820,22 +1820,64 @@ public final class Adequacy {
          */
         private static GenerationOutcome atClass(PartitionEvidence.AxisClass missing,
                                                  Generator.GenerationResult composed) {
-            Generator.ClassAttempt attempt =
-                    composed.attemptAt(missing.axis().at(), missing.name());
-            return switch (attempt) {
+            return atClass(missing.axis().at(), missing.name(),
+                    missing.name() + " at " + missing.axis().path(), composed);
+        }
+
+        /**
+         * The same, for a finding that names its class some other way.
+         *
+         * <p>One reader of what a search made, whatever the finding was about. A case of an input
+         * and a class of a position are two findings about one class, and answering them from two
+         * readings of one search is two answers that agree until either moves.
+         *
+         * @param said how the finding's own words name this class, for the one thing this has to
+         *             say in them: that nothing here reached it
+         */
+        private static GenerationOutcome atClass(souther.compiler.partition.AxisId at,
+                                                 String classId, String said,
+                                                 Generator.GenerationResult composed) {
+            return switch (composed.attemptAt(at, classId)) {
                 case Generator.ClassAttempt.Built built ->
                         new GenerationOutcome.Generated(List.of(built.row()));
                 case Generator.ClassAttempt.Unresolved none ->
                         new GenerationOutcome.CannotGenerate(none.why());
-                // The search did not reach this class, which takes a run that stopped: something
-                // it had to build against was not there, or it ran out of room. Those are said in
-                // their own words beside the rows, and answering here with a reason of this one's
-                // would be the same stop under a second spelling.
+                // The search did not reach this class, which takes a run that stopped. Which stop
+                // it was, is what the run recorded — asked before anything is read off the absence,
+                // because a search with nothing to put a candidate through reached no class at all
+                // and a reason taken from that emptiness would name the one thing that did not
+                // happen.
                 case null -> new GenerationOutcome.CannotGenerate(
-                        new Generator.UnresolvedCombination(
-                                List.of(missing.name() + " at " + missing.axis().path()),
-                                Generator.UnresolvedCombination.Reason.SEARCH_LIMIT));
+                        new Generator.UnresolvedCombination(List.of(said), whyItStopped(composed)));
             };
+        }
+
+        /**
+         * Why a search reached no class, in the words the run recorded.
+         *
+         * <p>The reasons that say there was nothing to search with, and the search limit otherwise.
+         * The rest — rows nothing ran, combinations held back over rows already written — are about
+         * a search that happened and are said in their own words beside the rows; answering with
+         * one of them here would be the same fact under a second spelling.
+         */
+        private static Generator.UnresolvedCombination.Reason whyItStopped(
+                Generator.GenerationResult composed) {
+            for (souther.compiler.partition.GenerationReason why : composed.reasons()) {
+                switch (why) {
+                    case souther.compiler.partition.GenerationReason.NothingToBuildAgainst _ -> {
+                        return Generator.UnresolvedCombination.Reason.NOTHING_TO_BUILD_AGAINST;
+                    }
+                    case souther.compiler.partition.GenerationReason.LinkageFailed _ -> {
+                        return Generator.UnresolvedCombination.Reason.LINKAGE_FAILED;
+                    }
+                    case souther.compiler.partition.GenerationReason.PositionWithheld _,
+                            souther.compiler.partition.GenerationReason.SearchLimit _,
+                            souther.compiler.partition.GenerationReason.RowsNotConfirmed _,
+                            souther.compiler.partition.GenerationReason.CombinationsWithheld _,
+                            souther.compiler.partition.GenerationReason.RowsNotRead _ -> { }
+                }
+            }
+            return Generator.UnresolvedCombination.Reason.SEARCH_LIMIT;
         }
 
         /**
@@ -1898,15 +1940,19 @@ public final class Adequacy {
         /**
          * What the axes can do about a case of an input no row applies the behavior to.
          *
-         * <p>The strategy that would reach it divides the position into classes and writes a row in
-         * each, so it applies exactly where an axis was derived at the position and holds this case
-         * among its classes. Where none was, nothing takes the gap — and that is read off the axes
-         * rather than off an empty row list, which would be the same as calling a search that found
+         * <p>A case of a position is one of the classes that position divides into, so the row that
+         * answers this finding is the row composed for that class — asked for by the position's own
+         * name and the class's own id, exactly as {@link #atClass} asks. The rows the search
+         * produced used to be matched back by the words in their names, which is a spelling two
+         * parameters of one type share.
+         *
+         * <p>Where the position has no axis, nothing takes the finding. Read off the axes rather
+         * than off an empty row list, which would be the same as calling a search that found
          * nothing a fact about the model.
          */
         private static GenerationOutcome atCase(InputCaseEvidence input, TypeSymbol case_,
                                                 PartitionEvidence partition,
-                                                Generator.GenerationResult pairs,
+                                                Generator.GenerationResult composed,
                                                 Hir.SpecBehavior spec) {
             String missing = case_.name();
             int at = input.at();
@@ -1919,45 +1965,8 @@ public final class Adequacy {
                 return new GenerationOutcome.NotSupported(
                         GenerationOutcome.NotSupported.Reason.NO_AXIS_AT_THIS_POSITION);
             }
-            String label = parameter + "=" + missing;
-            List<Generator.GeneratedRow> written = pairs.rows().stream()
-                    .filter(row -> row.classes().contains(label)).toList();
-            if (!written.isEmpty()) {
-                return new GenerationOutcome.Generated(written);
-            }
-            // Asked before the row list is read, because a search with nothing to put a candidate
-            // through wrote nothing at every class, and a reason taken from the empty result it left
-            // would name the one thing that did not happen. Which of the two it was is carried as
-            // the search recorded it.
-            for (souther.compiler.partition.GenerationReason why : pairs.reasons()) {
-                Generator.UnresolvedCombination.Reason said = switch (why) {
-                    case souther.compiler.partition.GenerationReason.NothingToBuildAgainst _ ->
-                            Generator.UnresolvedCombination.Reason.NOTHING_TO_BUILD_AGAINST;
-                    case souther.compiler.partition.GenerationReason.LinkageFailed _ ->
-                            Generator.UnresolvedCombination.Reason.LINKAGE_FAILED;
-                    // Reasons about this search rather than about there being nothing to search
-                    // with. They are said in their own words elsewhere and answer nothing here.
-                    case souther.compiler.partition.GenerationReason.PositionWithheld _,
-                            souther.compiler.partition.GenerationReason.SearchLimit _,
-                            souther.compiler.partition.GenerationReason.RowsNotConfirmed _,
-                            souther.compiler.partition.GenerationReason.CombinationsWithheld _,
-                            souther.compiler.partition.GenerationReason.RowsNotRead _ -> null;
-                };
-                if (said != null) {
-                    return new GenerationOutcome.CannotGenerate(
-                            new Generator.UnresolvedCombination(List.of(label), said));
-                }
-            }
-            return pairs.unresolved().stream()
-                    .filter(left -> left.classes().contains(label))
-                    .<GenerationOutcome>map(GenerationOutcome.CannotGenerate::new)
-                    .findFirst()
-                    // The axis was derived, so a strategy takes this class; it wrote neither a row
-                    // nor a reason. What that leaves is a gap nothing here can account for, and the
-                    // one thing not to do is name a cause from the shape of the emptiness.
-                    .orElseGet(() -> new GenerationOutcome.CannotGenerate(
-                            new Generator.UnresolvedCombination(List.of(label),
-                                    Generator.UnresolvedCombination.Reason.NO_REASON_RECORDED)));
+            return atClass(new souther.compiler.partition.AxisId(spec.name(), parameter), missing,
+                    parameter + "=" + missing, composed);
         }
 
         /**

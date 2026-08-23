@@ -780,7 +780,7 @@ class CompileExampleGenerateTest {
         assertEquals(List.of("Cond { ...none, f = C }", "Cond { ...none, g = G2 }"),
                 inputs(filled));
         assertEquals(List.of(List.of("c.f=C"), List.of("c.g=G2")),
-                filled.rows().stream().map(Generator.GeneratedRow::classes).toList(),
+                filled.rows().stream().map(row -> row.purpose().labels()).toList(),
                 "each named for the one class it moves");
     }
 
@@ -1002,7 +1002,7 @@ class CompileExampleGenerateTest {
         Adequacy.Filling filling = generated(correlated).get("submit");
 
         Generator.GeneratedRow atTheEdge = filling.boundaries().rows().stream()
-                .filter(row -> row.classes().contains("bill = 0")).findFirst().orElse(null);
+                .filter(row -> row.purpose().labels().contains("bill = 0")).findFirst().orElse(null);
         assertNotNull(atTheEdge, "the edge on `bill` is a row somebody can write: "
                 + filling.boundaries().unresolved());
         assertEquals("Paired { n = Count(1), xs = [0] }",

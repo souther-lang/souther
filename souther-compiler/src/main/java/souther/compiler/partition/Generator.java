@@ -109,21 +109,95 @@ public final class Generator {
     }
 
     /**
-     * One row's worth of input, and which classes it was written to sit in.
+     * One row's worth of input, and what it was composed for.
      *
-     * @param classes one {@code path=class} per divided position, in the order the axes were ordered
+     * <p>The purpose and not the classes it turned out to sit in. Those are two questions — which
+     * row this is, and what this run of the generator is handing it — and the second moves with
+     * the rest of the model while the first does not. Held as the second, a row composed for one
+     * class was named for every position it happened to hold, and an edit somewhere else in the
+     * model renamed a row nothing about had changed (issue #967).
+     *
+     * <p>What a candidate turned out to sit in is not here at all, which is the point: a reader
+     * that had it would be free to use it as evidence of coverage, and a row this run offers is a
+     * question rather than evidence of anything.
+     *
+     * @param purpose what the row was composed for
      * @param inputs  one value per parameter, in the order the behavior takes them
      */
-    public record GeneratedRow(List<String> classes, List<FixtureTemplate> inputs) {
+    public record GeneratedRow(Purpose purpose, List<FixtureTemplate> inputs) {
 
         public GeneratedRow {
-            classes = List.copyOf(classes);
             inputs = List.copyOf(inputs);
         }
 
         /** What the row is about, in the form a row's description is written in. */
         public String description() {
-            return String.join(" x ", classes);
+            return String.join(" x ", purpose.labels());
+        }
+    }
+
+    /**
+     * What a row was composed for.
+     *
+     * <p>In this package's own words and not the report's. A finding is what a report is written
+     * from and lives a layer above; what a search here is asked for is a class of a position, a
+     * combination the body decides together, or a point of a border — and a reader upstream joins
+     * those to its findings by identity ({@link GenerationResult#attemptAt}).
+     */
+    public sealed interface Purpose {
+
+        /** What a report writes this row as being about, one label per thing it was composed for. */
+        List<String> labels();
+
+        /** One class of one position: the row a class no row is in is owed. */
+        record ForAClass(AxisId at, String classId, String label) implements Purpose {
+
+            @Override
+            public List<String> labels() {
+                return List.of(label);
+            }
+        }
+
+        /** A combination the body settles together, which is as many positions as it reads. */
+        record ForACombination(List<String> labels) implements Purpose {
+
+            public ForACombination {
+                labels = List.copyOf(labels);
+            }
+        }
+
+        /**
+         * One point of one border: the row an edge nothing sits on is owed.
+         *
+         * <p>What it was composed for, which is not the same as what a reader may be shown. A
+         * border's points coincide — a row at the bottom of two ranges is at both — so what a block
+         * offers such a row under is the renderer's to decide, and this says what the search was
+         * asked for.
+         */
+        record ForAPoint(String label) implements Purpose {
+
+            @Override
+            public List<String> labels() {
+                return List.of(label);
+            }
+        }
+
+        /**
+         * A row nothing here can name from one thing.
+         *
+         * <p>A border's points coincide — each probe fills the positions its own edge does not name
+         * from the bottom of their domains, so two minimum edges compose one row — and which of
+         * them is offered is what changes when something else is written. A row named for whichever
+         * happened to be offered would be renamed by an edit that did not touch it, so it is
+         * written without a name, which the language allows: an unnamed row cannot be addressed
+         * from outside, and that is the state of a row nobody has named yet.
+         */
+        record Unstated() implements Purpose {
+
+            @Override
+            public List<String> labels() {
+                return List.of();
+            }
         }
     }
 
@@ -616,7 +690,8 @@ public final class Generator {
             // holds a value because a row has to, and what those values turn out to settle is a
             // fact about this run rather than what the row is: a name carrying them would move
             // when something elsewhere in the model did.
-            GeneratedRow named = new GeneratedRow(List.of(label(axis, at[1])),
+            GeneratedRow named = new GeneratedRow(
+                    new Purpose.ForAClass(axis.id(), classId, label(axis, at[1])),
                     against(subject, axis, at[1], baselines, check, built.row().inputs()));
             rows.add(named);
             attempts.add(new ClassAttempt.Built(axis.id(), classId, named));
@@ -885,7 +960,8 @@ public final class Generator {
             }
             inputs.add(tried.value());
         }
-        return new BoundaryAttempt.Built(new GeneratedRow(List.of(label), inputs));
+        return new BoundaryAttempt.Built(
+                new GeneratedRow(new Purpose.ForAPoint(label), inputs));
     }
 
     /**
@@ -1206,7 +1282,8 @@ public final class Generator {
             // read. What the pair search filled the rest of the row with is what this row turns out
             // to settle beside that, and a name carrying it would move when nothing about the row
             // had.
-            GeneratedRow named = new GeneratedRow(labels(axes, cell, at), last.row().inputs());
+            GeneratedRow named = new GeneratedRow(
+                    new Purpose.ForACombination(labels(axes, cell, at)), last.row().inputs());
             switch (trial.run(named.inputs())) {
                 // Nothing can say where it went, so nothing certifies it and nothing refutes it.
                 // Offered as it was before anything ran, and said to be. Both of the ways that
@@ -1365,7 +1442,7 @@ public final class Generator {
         // whether it is a class, a combination the body decides together, or an edge. Named here
         // from the assignment, every row said every position it happened to hold — which is what
         // put three classes in the name of a row composed for one (issue #967).
-        return Attempt.of(new GeneratedRow(List.of(), inputs));
+        return Attempt.of(new GeneratedRow(new Purpose.Unstated(), inputs));
     }
 
     /**

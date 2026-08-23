@@ -149,26 +149,54 @@ public final class GeneratedRows {
     private static final String PLACEHOLDER = "unanswered__";
 
     /**
-     * One row as it will be written, and everything it stands on.
+     * One row as it will be written, and everything it was composed for.
      *
-     * <p>A candidate is composed once per obligation, and the positions an obligation does not name
-     * are filled without reference to the others, so two obligations can be answered by one row. What
-     * is offered is the row: a reader is handed one piece of work rather than the same values twice.
-     * What that one row settles is a fact about this run and is not what it is named for
-     * ({@link #offered}).
+     * <p>A candidate is composed once per thing it is owed for, and the positions that thing does
+     * not name hold whatever the row has to hold — so two of them can come out as one row. What is
+     * offered is the row: a reader is handed one piece of work rather than the same values twice.
      *
-     * @param inputs the row's values, in the form they are written in
-     * @param name   what the row is offered under, or null where nothing here can name it
+     * <p><b>Every purpose, and not the first.</b> Two purposes converging on one row is a fact
+     * about this run, and dropping one of them keeps a name that says the row is about one thing
+     * while it answers two — which is what a name for the first arrival was. Joining them into one
+     * name is the other way of being wrong: {@code "a x b"} reads as one thing owed at two
+     * positions at once, which is the shape this whole block was written against.
+     *
+     * <p>So one purpose is a name and several are a note apiece over a row with none. The language
+     * lets a row be written without a name and an author names it when they answer it; what it is
+     * for is said in words above it, once per thing.
+     *
+     * @param inputs   the row's values, in the form they are written in
+     * @param purposes what it was composed for, in the order the things were taken
      */
-    private record Offered(String inputs, String name) {
+    private record Offered(String inputs, List<String> purposes) {
 
-        /** The row as it is written: named where this has a name for it, and not otherwise. A row
-         * nobody can name from one thing is written without a name, which the language allows and
-         * which says what is true — the author names it when they answer it. */
+        Offered {
+            purposes = List.copyOf(purposes);
+        }
+
+        /** The same, and one more thing it turned out to answer. Kept in order and without
+         *  repeats: two purposes with one name are one thing said twice. */
+        Offered and(String purpose) {
+            if (purpose == null || purposes.contains(purpose)) {
+                return this;
+            }
+            List<String> both = new ArrayList<>(purposes);
+            both.add(purpose);
+            return new Offered(inputs, both);
+        }
+
+        /** The row as it is written: named where one thing names it, and not otherwise. What a
+         *  row with several is for is said over it ({@link #blocks}) rather than in it — the
+         *  formatter parses what it is handed, and prose is not a row. */
         String written() {
-            return name == null
-                    ? "    | (" + inputs + ") -> " + PLACEHOLDER
-                    : "    | \"" + name + "\" : (" + inputs + ") -> " + PLACEHOLDER;
+            return purposes.size() == 1
+                    ? "    | \"" + purposes.get(0) + "\" : (" + inputs + ") -> " + PLACEHOLDER
+                    : "    | (" + inputs + ") -> " + PLACEHOLDER;
+        }
+
+        /** What to say over the row, which is nothing where its name already says it. */
+        List<String> saidOver() {
+            return purposes.size() == 1 ? List.of() : purposes;
         }
     }
 
@@ -215,11 +243,16 @@ public final class GeneratedRows {
                     byBehavior.computeIfAbsent(behavior.getKey(), _ -> new LinkedHashMap<>());
             for (Generator.GeneratedRow row : behavior.getValue().cells()) {
                 String inputs = String.join(", ", textsOf(row.inputs()));
-                here.putIfAbsent(inputs, new Offered(inputs, row.description()));
+                here.merge(inputs, new Offered(inputs, List.of(row.description())),
+                        (had, _) -> had.and(row.description()));
             }
+            // A row composed for an edge is offered without one. The points of a border coincide —
+            // each probe fills the positions its own edge does not name from the bottom of their
+            // domains, so two minimum edges compose one row — and which of them is offered is
+            // exactly what changes when something else is written.
             for (Generator.GeneratedRow row : behavior.getValue().lines()) {
                 String inputs = String.join(", ", textsOf(row.inputs()));
-                here.putIfAbsent(inputs, new Offered(inputs, null));
+                here.putIfAbsent(inputs, new Offered(inputs, List.of()));
             }
         }
         Map<String, List<Offered>> out = new LinkedHashMap<>();
@@ -255,9 +288,41 @@ public final class GeneratedRows {
         }
         // The header was there to make the rows parseable on their own. Where they are pasted is the
         // author's choice — the module's own file or an attached one — and only one of those wants it.
-        return formatted.replaceFirst("^examples for \\S+\\R+", "")
-                .replace(PLACEHOLDER, UNANSWERED);
+        return fills(formatted.replaceFirst("^examples for \\S+\\R+", "")
+                .replace(PLACEHOLDER, UNANSWERED), offered);
     }
+
+    /**
+     * What each row with more than one thing to its name is for, said over it.
+     *
+     * <p>Put in after the formatter has run, for the reason the {@code ensures} headings are: what
+     * {@link #blocks} hands the formatter is source, and a line of prose is not a row. Written into
+     * the source instead, the formatter would refuse the whole block and it would go out in
+     * whatever shape it happened to be built in.
+     *
+     * <p>Matched by position rather than by reading the line. The rows go in in one order and come
+     * out in it, and a row the formatter wrapped is still one row — its continuations are indented
+     * past the {@code |} that starts it, so what starts a row is what a row starts with.
+     */
+    private static String fills(String rows, Map<String, List<Offered>> offered) {
+        List<Offered> inOrder = new ArrayList<>();
+        offered.values().forEach(inOrder::addAll);
+        StringBuilder out = new StringBuilder();
+        int at = 0;
+        for (String line : rows.lines().toList()) {
+            if (line.startsWith(ROW) && at < inOrder.size()) {
+                for (String each : inOrder.get(at++).saidOver()) {
+                    out.append("fills ").append(each).append(System.lineSeparator());
+                }
+            }
+            out.append(line).append(System.lineSeparator());
+        }
+        return out.toString();
+    }
+
+    /** How a row starts, which is how one is told from the lines a wrapped one continues on: those
+     *  are indented past it. */
+    private static final String ROW = "    | ";
 
     /** What the heading over a behavior's clauses says. A source-level fact and not a reading of one:
      * these are the words the author put in the declaration, quoted here whether or not the checker
