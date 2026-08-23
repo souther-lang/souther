@@ -64,11 +64,12 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
      * the greatest. Beside those, what a construction was built from says what it kept
      * ({@link #transferred}).
      *
-     * <p>The name a container was given is followed once, here, and every reading below is of what
-     * it was given. A name is not a third kind of container: {@code List.sum(ys)} where {@code ys}
-     * was bound to {@code List.map(f, xs)} is the same question as the one written in a line, and a
-     * reading that followed the name for the elements written out and not for what the construction
-     * kept would answer the two differently — which is the shape of what this class was written to
+     * <p>Where the container's value is written is asked of {@link Terms#given}, and every reading
+     * below is of what comes back — the expression and the environment together. A name is not a
+     * third kind of container and neither is a binding: {@code List.sum(ys)} where {@code ys} was
+     * bound to {@code List.map(f, xs)}, and the same call with a helper the discharge tree expanded
+     * into a binding, are the question written in one line. A reader that followed one of those and
+     * not the other would answer them differently, which is the shape this class was written to
      * stop, seen inside it.
      */
     static UniversalElementFacts of(Core written, Denotations at, Terms terms, Symbols symbols,
@@ -76,12 +77,13 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
         if (written == null) {
             return NONE;
         }
-        Core container = terms.listedOut(written, at);
+        Terms.Given given = terms.given(written, at);
+        Core container = given.value();
         Map<String, Bounds> held = new LinkedHashMap<>();
         Type element = Terms.elementType(container.type());
         guaranteed(element, symbols, policy).forEach((path, bounds) -> holds(held, path, bounds));
         writtenOut(container, element, held);
-        transferred(container, at, terms, symbols, policy, held);
+        transferred(container, given.at(), terms, symbols, policy, held);
         return held.isEmpty() ? NONE : new UniversalElementFacts(held);
     }
 
@@ -277,9 +279,18 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
      * <p>Recursive rather than a case list, because a field of a construction is a value like any
      * other: {@code Row { inner = x.inner }} is a projection under a field, and nothing here has to
      * know that combination for it to be read.
+     *
+     * <p>Where the value is written is asked of {@link Terms#given} first, so none of the three is
+     * about how it was named. A closure calling a helper is a binding once the discharge tree has
+     * expanded it, and a reader that dispatched on the shapes it had thought of would answer that
+     * one with nothing — which is how this class had already answered a container given a name, and
+     * a closure answering a record.
      */
-    private static Map<String, Bounds> answeredBy(Core e, Denotations reading, Terms terms,
+    private static Map<String, Bounds> answeredBy(Core written, Denotations at, Terms terms,
                                                   FactSubject root, UniversalElementFacts kept) {
+        Terms.Given given = terms.given(written, at);
+        Core e = given.value();
+        Denotations reading = given.at();
         Map<String, Bounds> answered = new LinkedHashMap<>();
         FactSubject subject = terms.subjectOf(e, reading);
         kept.byPath().forEach((path, bounds) -> {
@@ -299,9 +310,9 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
         // range asserted about an atom whose spacing was never recorded is one the domain refuses.
         LinearForm<FactSubject> form = terms.affineOf(e, reading);
         if (form != null) {
-            NumericDomain<FactSubject> given = DerivedNumericFacts.refine(
+            NumericDomain<FactSubject> read = DerivedNumericFacts.refine(
                     assuming(kept.at(root, terms), terms), terms, form.coefs().keySet());
-            holds(answered, FieldDomains.THE_VALUE, given.isBottom() ? null : given.boundsOf(form));
+            holds(answered, FieldDomains.THE_VALUE, read.isBottom() ? null : read.boundsOf(form));
         }
         return answered;
     }

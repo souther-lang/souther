@@ -191,6 +191,56 @@ class WhatHoldsOfEveryElementIsReadOfTheContainerItWalksTest {
     }
 
     /**
+     * A helper the discharge tree expanded is the value it answers.
+     *
+     * <p>The tree this reads keeps the library's own operations standing and expands a module's
+     * helpers into bindings, so {@code x -> innerOf(x)} is {@code let $0 = x in $0.inner} by the
+     * time it is read. Which is a way of writing the same value, as a name given to a container is
+     * — and every reader that answered that question for itself answered it for the shapes its
+     * author had met. So where a value is written is asked in one place ({@code Terms.given}), and
+     * what is left to a reader is what is genuinely about the value.
+     *
+     * <p>What stays outside is a record answered by a branch: two arms are two values, and what
+     * holds of both is a question this does not ask yet. It answers nothing there rather than
+     * answering from one arm.
+     */
+    @Test
+    void aHelperTheTreeExpandedIsTheValueItAnswers() {
+        String helper = """
+                module demo
+
+                data Inner =
+                    { amount: Int
+                    }
+
+                data Outer =
+                    { inner: Inner
+                    }
+                    invariant nonNeg = inner.amount >= 0
+
+                data Money = Int
+                    invariant nonNeg = value >= 0
+
+                let innerOf (x: Outer): Inner = x.inner
+                let lowered (x: Outer): Inner = Inner { amount = x.inner.amount - 1 }
+
+                behavior walkIt : (xs: List<Outer>) -> Money
+                    constructs Money%s
+                let walkIt (xs) = Money(%s)
+                """;
+        assertFalse(owedIn(helper.formatted("",
+                        "List.fold((acc, y) -> acc + y.amount, 0, List.map(x -> x.inner, xs))")),
+                "the closure reads a place of the element");
+        assertFalse(owedIn(helper.formatted("",
+                        "List.fold((acc, y) -> acc + y.amount, 0, List.map(x -> innerOf(x), xs))")),
+                "and the same place read through a helper, which the tree expanded into a binding");
+        assertTrue(owedIn(helper.formatted(", Inner",
+                        "List.fold((acc, y) -> acc + y.amount, 0, List.map(x -> lowered(x), xs))")),
+                "and a helper that lowers what it was handed hands on what it answered, not what it"
+                        + " was given");
+    }
+
+    /**
      * An element that is one of two things is bounded by both.
      *
      * <p>{@code Map.updateIfPresent} answers the map it was given with one value replaced, and its

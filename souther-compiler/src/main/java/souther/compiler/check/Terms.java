@@ -610,17 +610,38 @@ final class Terms {
         if (container == null) {
             return null;
         }
-        return listedOut(container, at) instanceof Core.ListLit list
+        return given(container, at).value() instanceof Core.ListLit list
                 ? BigDecimal.valueOf(list.elements().size()) : null;
     }
 
-    /** The list {@code e} is, written where it is or written where the name it is was given one. */
-    Core listedOut(Core e, Denotations at) {
-        if (!(e instanceof Core.Read r)) {
-            return e;
+    /** An expression a value is written at, and the environment that expression is read in — which
+     * travel together, since following a name into a binding is what makes them differ. */
+    record Given(Core value, Denotations at) {}
+
+    /**
+     * The expression {@code e}'s value is written at, and where it is read.
+     *
+     * <p>A name is not a way of building a value, and neither is a binding. {@code xs} given
+     * {@code List.map(f, ys)} is that call, and a helper the discharge tree expanded is
+     * {@code let $0 = ys in List.map(f, $0)} and is that call too — so a reader asking what a value
+     * is asks here, and what comes back is the expression that built it beside the environment its
+     * names mean something in.
+     *
+     * <p>One peeler and not one per reader. Every reader of a value meets the same two ways of
+     * re-naming one, and each that answered for itself answered for the shapes its author had met:
+     * a container read through its name and not through a binding, a closure's answer read through
+     * neither. What is left to the reader is what is genuinely about the value — the fields a
+     * construction is built from, the arithmetic a number is — and never how it was written down.
+     */
+    Given given(Core e, Denotations at) {
+        if (e instanceof Core.Read r) {
+            Core given = at.valueOf(r.binding());
+            return given == null || given == e ? new Given(e, at) : given(given, at);
         }
-        Core given = at.valueOf(r.binding());
-        return given == null || given == e ? e : listedOut(given, at);
+        if (e instanceof Core.LetIn li) {
+            return given(li.body(), inside(li, at));
+        }
+        return new Given(e, at);
     }
 
     static <A> LinearForm<A> negate(LinearForm<A> f) {
@@ -1449,8 +1470,12 @@ final class Terms {
         }
         FactSubject atom = sizeKeyOf(size, counted);
         if (atom != null) {
+            // The rules are about how the container was built, so they are read of the expression
+            // that built it — and in the environment that expression's own names mean something in,
+            // which is not the one the name was read in where a binding stands between them.
+            Given built = given(container, at);
             carrying(atom, IntrinsicNumericFacts.ofSize(size,
-                    DischargeRules.sizeSource(listedOut(container, at)), atom, at, this));
+                    DischargeRules.sizeSource(built.value()), atom, built.at(), this));
         }
         return atom;
     }
