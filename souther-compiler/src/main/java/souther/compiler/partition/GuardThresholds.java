@@ -219,20 +219,19 @@ public final class GuardThresholds {
             List<TermPath> named = new ArrayList<>();
             mentioned(binary.left(), reads, symbols, named);
             mentioned(binary.right(), reads, symbols, named);
-            BlockReason.AboutARule why = why(binary, reads, symbols);
+            final BlockReason.AboutARule why = why(binary, reads, symbols);
             // The rule the author wrote, read off the source. Which comparison it is is the
             // behavior and the construct the source wrote; where a reader is sent is where it is
             // written. Neither comes from the plan: a comparison in a fork both of whose arms can
             // record nothing is numbered nowhere, and a model states its rules regardless.
             RuleRef.Comparison rule = new RuleRef.Comparison(behavior, binary.origin());
             souther.compiler.check.RuleCitation cited = citationOf(binary, plan.comparisons());
-            // A comparison naming no position of the input, whose terms came from one. An operation
-            // made the value it compares out of what stands there, so the rule is about that
-            // position's values and this cannot say what it says about them — which is not the same
-            // as a body that wrote no rule, and used to read as one.
+            // A comparison naming no position of the input, whose terms came from one. Where the
+            // rule is filed and nothing else: what it says is the reading's answer, and deciding it
+            // here made the same fact about one comparison come out one way for an element and
+            // another for a number — which is not a difference between the two rules.
             if (named.isEmpty()) {
                 cameFrom(binary, reads, symbols, named);
-                why = new BlockReason.RuleAboutADerivedValue();
             }
             for (TermPath each : named) {
                 // One per position the comparison names, and told from its neighbours by the rule as
