@@ -132,7 +132,7 @@ public final class Analyzer {
     /** Whether anything is being measured, which is what decides if an offer can exist where there
      * is no diagnostic to fix. */
     public boolean measuring() {
-        return measure.level().reports();
+        return measure.level().readsRows();
     }
 
     /** What this editor measures from now on. A change starts the workspace compile again, because
@@ -476,7 +476,7 @@ public final class Analyzer {
      * uncovered — which is worse than saying nothing, being wrong rather than absent.
      */
     public List<CodeLens> codeLenses(String uri, ModuleGraph graph) {
-        if (!measure.level().reports()) {
+        if (!measure.level().readsRows()) {
             return List.of();
         }
         Compilation compilation = compileOf(graph);
@@ -687,7 +687,7 @@ public final class Analyzer {
      */
     private List<CodeAction> rowsToWrite(String uri, String text, Range requested,
                                          ModuleGraph graph) {
-        if (!measure.level().reports()) {
+        if (!measure.level().readsRows()) {
             return List.of();
         }
         Compilation compilation = compileOf(graph);

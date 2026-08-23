@@ -54,7 +54,8 @@ public final class Adequacy {
      * measure's silence means is a second answer to a question the measure already answered.
      */
     public enum Level {
-        /** Nothing is measured and nothing is said. */
+        /** Nothing is read of the rows and nothing is derived from the rules. Every measure that
+         *  would have says so, which is not the same as saying nothing. */
         OFF,
         /** What the rows already ran established, and what the rules say without running anything.
          *  Nothing is instrumented and no row runs a second time. */
@@ -76,24 +77,35 @@ public final class Adequacy {
             return this == ALL;
         }
 
-        public boolean reports() {
+        /**
+         * Whether the rows this compilation already ran are read, and what the rules say derived
+         * from them.
+         *
+         * <p>Named for the work, as the one above it is. It was {@code reports}, which invited the
+         * reading this issue is about: a caller that took "this level does not report" for "this
+         * evidence is not wanted" was deciding what a measure's answer meant from the level again,
+         * one dial down (issue #955).
+         */
+        public boolean readsRows() {
             return this != OFF;
         }
     }
 
     /**
-     * What a build is held to among the measures it asked for.
+     * What a build is held to.
      *
      * <p>Beside {@link Level} and not a rung of it. A level says how much work to do — what separates
      * {@code WITNESS} from {@code ALL} is a second set of classes and a second run of every row — and
-     * this says which of what was measured a build refuses over. The two are different questions, and
-     * a fourth level would have been the first one that answered this one instead (issue #937).
+     * this says which gaps a build refuses over. The two are different questions, and a fourth level
+     * would have been the first one that answered this one instead (issue #937).
      *
-     * <p>Among what was measured, and that is the whole of it. A measure the build did not ask for is
-     * outside the question rather than one that failed, so pairing this with a level that measures
-     * less is not a contradiction: it asks what the criterion makes of the evidence there is. What a
+     * <p>Whichever the level, and that is the whole of it. This names the kinds of gap; whether the
+     * measure that finds one was made is the measurement's own answer, and a measure a build did not
+     * ask for is one that was not made rather than one that is outside the question. So pairing this
+     * with a level that measures less is not a contradiction and is not a discount either: what such
+     * a build gets is a verdict that says so, which is what {@code undetermined} is for. What a
      * criterion cannot do is name evidence a verdict then ignores — {@link #requires} and
-     * {@link #refuses} answer for the same criterion, within whatever the level measured.
+     * {@link #refuses} answer for the same criterion.
      *
      * <p>The two the syllabus defines. Simplified domain coverage asks for a row on each line a rule
      * draws and a row one step over it; reliable domain coverage adds a row well inside and a row
@@ -244,6 +256,20 @@ public final class Adequacy {
      * are owed is the criterion's answer (issue #937).
      */
     public record Asked(Level level, boolean warn, AdequacyBar held) {
+
+        /**
+         * Nothing measured is nothing to be warned about.
+         *
+         * <p>Held here rather than defended against wherever the warnings are made. `--adequacy
+         * off` asks to be warned — the word names a level and the flag beside it is a build's
+         * default — and that request contradicts itself: what a warning says is what a measure
+         * found, and at this level no measure was made. Read as written, whoever emits them had to
+         * ask the level whether to believe the request, which is this issue's shape arriving in the
+         * one place it had not been taken out of (issue #955).
+         */
+        public Asked {
+            warn = warn && level.readsRows();
+        }
 
         public static final Asked NOTHING =
                 new Asked(Level.OFF, false, AdequacyBar.SIMPLIFIED_DOMAIN);
@@ -813,7 +839,7 @@ public final class Adequacy {
             // Whether anything was asked of the rows at all. Read here rather than at whoever wants
             // the answer: what the level decides is what work to do, and the work this measure does
             // is reading every row of the module (issue #955).
-            boolean asked = levelOf(db).reports();
+            boolean asked = levelOf(db).readsRows();
             Map<String, Observed> byTarget = asked ? rowsOf(db, name) : Map.of();
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What each body can answer with, so that a case only an unreachable arm produces is not
@@ -886,7 +912,7 @@ public final class Adequacy {
                                     : checked.decisions(),
                             checked == null ? souther.compiler.coverage.SuppliedRules.NONE : checked.supplied());
             Level level = levelOf(db);
-            Map<String, Observed> byTarget = level.reports() ? rowsOf(db, name) : Map.of();
+            Map<String, Observed> byTarget = level.readsRows() ? rowsOf(db, name) : Map.of();
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What the guards above each place leave, asked once for the module and read by
             // every measure below — the same reason the reading of the input is.
@@ -974,7 +1000,7 @@ public final class Adequacy {
             // been evaluated, which only the instrumented classes say. And whether anything was
             // measured against the rows at all, which is what `off` answers.
             Level level = levelOf(db);
-            Map<String, Observed> byTarget = level.reports() ? rowsOf(db, name) : Map.of();
+            Map<String, Observed> byTarget = level.readsRows() ? rowsOf(db, name) : Map.of();
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What the guards above each place leave, asked once for the module and read by
             // every measure below — the same reason the reading of the input is.
@@ -983,7 +1009,7 @@ public final class Adequacy {
             Symbols symbols = scope.value();
             // Nothing is built where nothing was asked: a point nobody measured is not one a row is
             // owed at yet, so there is nothing for a candidate to be evidence of.
-            FixtureReader.Construction building = level.reports()
+            FixtureReader.Construction building = level.readsRows()
                     ? constructing(db, name, prepared.value().forExamples(), symbols) : null;
             // And what each behavior states about its answer, which draws lines of its own.
             Map<String, souther.compiler.check.StatedContract> declared =
@@ -1165,11 +1191,15 @@ public final class Adequacy {
              * and a fork under something that aborts is registered with no site at all — so an
              * empty list says this behavior owes no arm, and saying it has no fork would be this
              * measure claiming something it did not read.
+             *
+             * <p>One answer and not two. A fork whose ways the rules settle was going to be the
+             * second — "every arm proven unreachable" — and no model reaches it: a fork a row gets
+             * to has a way the row takes, so something stays owed, and a fork nothing gets to has
+             * no site to be owed at. A state nothing produces is a word in a document no compiler
+             * writes and a branch no test can reach, so the two are the one answer the obligations
+             * give.
              */
-            NO_ARM_OBLIGATIONS,
-            /** The body forks, and the model's own rules prove no row arrives at either way of any
-             *  of them. Nothing is owed and no row anybody writes would light one. */
-            EVERY_ARM_PROVEN_UNREACHABLE
+            NO_ARM_OBLIGATIONS
         }
 
         /** The rows ran without instrumentation, so what they went through went with it. The one
@@ -1442,7 +1472,7 @@ public final class Adequacy {
             souther.compiler.query.Bodies.Elaborated checked =
                     db.ask(new Bodies.Checked(name)).value();
             Set<String> withBodies = checked == null ? Set.of() : checked.behaviorBodies().keySet();
-            Map<String, Observed> byTarget = levelOf(db).reports() ? rowsOf(db, name) : Map.of();
+            Map<String, Observed> byTarget = levelOf(db).readsRows() ? rowsOf(db, name) : Map.of();
             Set<Integer> lit = new LinkedHashSet<>();
             for (Observed observed : byTarget.values()) {
                 for (RowOutcome row : observed.rows()) {
@@ -1499,12 +1529,11 @@ public final class Adequacy {
             if (!withBodies.contains(behavior)) {
                 return BranchEvidence.noArms(BranchEvidence.NoArms.NO_BODY);
             }
-            if (arms.isEmpty()) {
-                return BranchEvidence.noArms(BranchEvidence.NoArms.NO_ARM_OBLIGATIONS);
-            }
+            // What is owed, and not what was numbered. An arm the rules prove nothing arrives at is
+            // instrumented and is not owed, so a behavior whose every numbered arm is one of those
+            // owes as little as a behavior that forks nowhere.
             if (BranchEvidence.owed(arms, arrives).isEmpty()) {
-                return BranchEvidence.noArms(
-                        BranchEvidence.NoArms.EVERY_ARM_PROVEN_UNREACHABLE);
+                return BranchEvidence.noArms(BranchEvidence.NoArms.NO_ARM_OBLIGATIONS);
             }
             if (!instrumented) {
                 return BranchEvidence.notAsked(BranchEvidence.NotAsked.NOT_ASKED);
@@ -2990,8 +3019,10 @@ public final class Adequacy {
         @Override
         public Answer<Boolean> compute(Db db) {
             Asked asked = askedOf(db);
-            Level level = asked.level();
-            if (!asked.warn() || !level.reports()) {
+            // What the build asked to be told, and nothing about how much was measured. A finding
+            // is what a measure found, so a level that made none produces none and there is
+            // nothing here to hold back (issue #955).
+            if (!asked.warn()) {
                 return Answer.of(true);
             }
             Answer<Map<String, List<Finding>>> found = db.ask(new Findings(name));

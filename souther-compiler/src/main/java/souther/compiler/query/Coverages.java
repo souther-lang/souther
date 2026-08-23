@@ -151,7 +151,7 @@ final class Coverages {
                 continue;   // said by `undivided`, which also says which kind of nothing it is
             }
             if (axis.derivable()) {
-                axes.add(coverageOf(axis, readings, level.reports()));
+                axes.add(coverageOf(axis, readings, level.readsRows()));
                 divided.add(axis);
             }
         }
@@ -187,7 +187,7 @@ final class Coverages {
         return new PartitionEvidence(
                 PartitionDerivation.of(axes, partitioning.partitionClosure()),
                 BoundaryDerivation.of(boundaries, partitioning.borderClosure()),
-                pairsOf(behavior.name(), divided, readings, level.reports()),
+                pairsOf(behavior.name(), divided, readings, level.readsRows()),
                 partitioning.undivided(), partitioning.unread(), partitioning.blocked(),
                 partitioning.notSeparated(), List.copyOf(standing),
                 partitioning.omitted(),
@@ -1130,7 +1130,7 @@ final class Coverages {
      *  is about a run that did not happen. */
     private static Measurement<ItemAssessment.Coverage> whyNothingWasAsked(
             souther.compiler.query.Adequacy.Level level) {
-        return level.reports() ? null
+        return level.readsRows() ? null
                 : new Measurement.NotMeasured<>(ItemAssessment.Coverage.NotAsked.NOT_ASKED);
     }
 

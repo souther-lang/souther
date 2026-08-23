@@ -356,6 +356,52 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
     }
 
     /**
+     * A measure a bar asks nothing of decides nothing about the verdict, either way.
+     *
+     * <p>The same model, the same measurement, two bars. `ONE_CLASS_OF_TWO` has one measure that can
+     * find anything — what the rows reach of its one position — and only the `classes` bar refuses
+     * over what that finds. So under the default bar the verdict is the same whether that measure
+     * came to an answer or not, and under `classes` it is the answer.
+     *
+     * <p>Held because the two questions are easy to run together. Read as "everything that was
+     * measured", a build held to a bar that asks nothing of the classes was undetermined for a
+     * position nobody had classified — a doubt no row it is asked for would settle — and the same
+     * list made a model satisfied on the strength of a measure the build is not held to.
+     */
+    @Test
+    void aMeasureTheBarAsksNothingOfDecidesNothing() {
+        AdequacyReport byDefault = reportOf(ONE_CLASS_OF_TWO, Adequacy.Level.ALL);
+        AdequacyReport unmeasured = reportOf(ONE_CLASS_OF_TWO, Adequacy.Level.OFF);
+
+        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, byDefault.adequacy(),
+                byDefault.human(SourceNameResolver.identity()));
+        assertEquals(byDefault.adequacy(), unmeasured.adequacy(),
+                "the default bar refuses nothing this model can be measured for, so measuring it"
+                        + " changes no verdict: " + unmeasured.human(SourceNameResolver.identity()));
+    }
+
+    /**
+     * A body that forks nowhere is adequate at both levels, and the verdict says so.
+     *
+     * <p>The measure is inapplicable rather than unmeasured, and the difference is the whole of what
+     * a verdict does with it: counted as unmeasured, every implemented behavior without a fork in it
+     * would hold its model open at {@code witness} for a measurement that would find nothing however
+     * it was made. Asked of the verdict and not of the evidence, because the evidence is what
+     * {@code AMeasureWithNoNumberSaysWhyTest} holds and this is what a build reads.
+     */
+    @Test
+    void aBodyThatForksNowhereIsAdequateAtBothLevels() {
+        for (Adequacy.Level level : List.of(Adequacy.Level.WITNESS, Adequacy.Level.ALL)) {
+            AdequacyReport report = reportOf(A_BODY_THAT_FORKS_NOWHERE, level);
+
+            String human = report.human(SourceNameResolver.identity());
+            assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, report.adequacy(),
+                    "at " + level + ": " + human);
+            assertTrue(human.contains("branch      not applicable (this body owes no arm)"), human);
+        }
+    }
+
+    /**
      * A model with an arm nobody measured is not adequate; it is undetermined.
      *
      * <p>Every case of the signature is covered and every line the rules draw without the arms is
@@ -643,6 +689,27 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
                 | "over"   : (Amount(101)) -> Refused
                 | "zero"   : (Amount(0)) -> Refused
                 | "under"  : (Amount(5)) -> Refused
+            """;
+
+    /** An implemented body that forks nowhere, with every measure it does owe covered: one row on
+     *  the invariant's line and one inside it. */
+    private static final String A_BODY_THAT_FORKS_NOWHERE = """
+            module example.flat
+
+            data Amount = Int
+                invariant value >= 0 && value <= 10
+
+            data Ok = { n: Amount }
+
+            behavior keep : (a: Amount) -> Ok
+                constructs Ok
+
+            let keep (a) = Ok { n = a }
+
+            example keep
+                | "on"  : (Amount(0)) -> Ok { n = Amount(0) }
+                | "in"  : (Amount(5)) -> Ok { n = Amount(5) }
+                | "top" : (Amount(10)) -> Ok { n = Amount(10) }
             """;
 
     private static AdequacyReport reportOf(String source, Adequacy.Level level) {
