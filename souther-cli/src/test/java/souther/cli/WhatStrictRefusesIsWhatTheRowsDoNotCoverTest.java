@@ -413,7 +413,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
 
     /** This one asks nothing about the criterion, so it is held to the one a build asks for by
      *  default; {@link AReportOfOneBorder} is where the report itself is built. */
-    private static PartitionEvidence partition(souther.compiler.query.BoundaryDerivation border,
+    private static PartitionEvidence partition(souther.compiler.query.Measurement<List<BorderAssessment>> border,
                                                Partitions.OmittedAxis... omitted) {
         return AReportOfOneBorder.partition(border, omitted);
     }

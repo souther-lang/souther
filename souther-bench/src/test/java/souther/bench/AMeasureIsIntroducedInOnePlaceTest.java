@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * One method introduces a measure's answer, and nothing else makes a case of one.
  *
- * <p>{@code PartitionDerivation.of} and {@code BoundaryDerivation.of} are the rule: what a measure
+ * <p>Every measure's {@code of} is the rule: what a measure
  * came to follows from what it found and whether its own reading ran out, and those two facts
  * arrive together or not at all. A caller writing {@code new Complete(entries)} decides it from the
  * entries alone, which is the reconstruction the type exists to stop — and is what every reader did
@@ -36,31 +36,60 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class AMeasureIsIntroducedInOnePlaceTest {
 
-    private static final String PARTITION = "souther.compiler.query.PartitionDerivation";
-    private static final String BOUNDARY = "souther.compiler.query.BoundaryDerivation";
+    private static final String MEASUREMENT = "souther.compiler.query.Measurement";
 
     /**
-     * Every method that makes a case of a measure, and how many it makes.
+     * Every method that makes a state of a measurement, and how many it makes.
      *
-     * <p>{@code of} is the introduction rule and makes its four: an absence, a measure made in
-     * full, one made in part, and one whose reading did not run out. {@code PartitionEvidence}
-     * makes the two {@code NoSubject}s of a {@code >->} composition in its static initialiser,
-     * which is the one case claiming nothing about a reading and so owing no proof.
+     * <p>One entry per measure's introduction rule, and nothing else. Each of the nine measures has
+     * one method that decides between the states from what it found and what its reading came to —
+     * {@code of} where there is a choice to make, and a named factory for each answer a caller can
+     * ask for outright ({@code none}, {@code noRows}, {@code noSubject}, {@code truncated}).
+     * A caller writing {@code new Complete(...)} would decide it from the entries alone, which is
+     * the reconstruction the type exists to stop.
+     *
+     * <p><b>By the method, with its parameters.</b> Counted per class, a helper beside one would
+     * keep the class's total where it was and answer for nothing; counted per name, an overload
+     * would be admitted without anybody deciding it should be.
+     *
+     * <p>{@code PairSpace}'s static initialiser makes the one space that is measured in full and
+     * holds nothing — a behavior with no pair of positions — and {@code ItemAssessment} makes the
+     * answer a point nobody is owed a row at has. Both are answers about the model rather than
+     * readings of it, which is why neither goes through a reading.
      */
-    private static final Map<String, Integer> INTRODUCED_BY = new LinkedHashMap<>(Map.of(
-            PARTITION + "#of(Ljava/util/List;"
-                    + "Lsouther/compiler/partition/MeasureClosure$OfThePartition;)"
-                    + "Lsouther/compiler/query/PartitionDerivation;", 4,
-            BOUNDARY + "#of(Ljava/util/List;"
-                    + "Lsouther/compiler/partition/MeasureClosure$OfTheBorder;)"
-                    + "Lsouther/compiler/query/BoundaryDerivation;", 4,
-            "souther.compiler.query.PartitionEvidence#<clinit>()V", 2));
+    private static final Map<String, Integer> INTRODUCED_BY = new LinkedHashMap<>(
+            Map.ofEntries(
+            Map.entry("souther.compiler.query.Coverages#pairsOf(Ljava/lang/String;Ljava/util/List;Lsouther/compiler/query/Coverages$Readings;)Lsouther/compiler/query/PartitionEvidence$PairSpace;", 2),
+            Map.entry("souther.compiler.query.Coverages#coverageOf(Lsouther/compiler/partition/Axis;Lsouther/compiler/query/Coverages$Readings;)Lsouther/compiler/query/PartitionEvidence$AxisCoverage;", 2),
+            Map.entry("souther.compiler.query.Coverages#verdictOf(Lsouther/compiler/query/Coverages$Met;ZLsouther/compiler/partition/Border;Lsouther/compiler/query/Adequacy$Observed;)Lsouther/compiler/query/Measurement;", 3),
+            Map.entry("souther.compiler.query.Coverages#whyNoGuardLine(Lsouther/compiler/query/Adequacy$Observed;Z)Lsouther/compiler/query/Measurement;", 2),
+            Map.entry("souther.compiler.query.Coverages#whyNoInvariantLine(Ljava/util/List;Z)Lsouther/compiler/query/Measurement;", 1),
+            Map.entry("souther.compiler.query.PartitionDerivation#noSubject()Lsouther/compiler/query/Measurement;", 1),
+            Map.entry("souther.compiler.query.PartitionDerivation#of(Ljava/util/List;Lsouther/compiler/partition/MeasureClosure$OfThePartition;)Lsouther/compiler/query/Measurement;", 4),
+            Map.entry("souther.compiler.query.OutputCaseEvidence#none()Lsouther/compiler/query/OutputCaseEvidence;", 1),
+            Map.entry("souther.compiler.query.OutputCaseEvidence#of(Ljava/lang/String;Ljava/util/Set;Lsouther/compiler/query/OutputCaseEvidence$Cases;ZLsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/OutputCaseEvidence;", 3),
+            Map.entry("souther.compiler.query.InputCaseEvidence#none(I)Lsouther/compiler/query/InputCaseEvidence;", 1),
+            Map.entry("souther.compiler.query.InputCaseEvidence#of(Ljava/lang/String;ILjava/util/Set;Ljava/util/Set;Lsouther/compiler/query/InputCaseEvidence$Cases;ZLsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/InputCaseEvidence;", 3),
+            Map.entry("souther.compiler.query.BoundaryDerivation#noSubject()Lsouther/compiler/query/Measurement;", 1),
+            Map.entry("souther.compiler.query.BoundaryDerivation#of(Ljava/util/List;Lsouther/compiler/partition/MeasureClosure$OfTheBorder;)Lsouther/compiler/query/Measurement;", 4),
+            Map.entry("souther.compiler.query.Adequacy$SignatureEvidence#notASum(Lsouther/compiler/query/OutputCaseEvidence;Ljava/util/List;)Lsouther/compiler/query/Adequacy$SignatureEvidence;", 1),
+            Map.entry("souther.compiler.query.Adequacy$SignatureEvidence#noRows(Lsouther/compiler/query/OutputCaseEvidence;Ljava/util/List;)Lsouther/compiler/query/Adequacy$SignatureEvidence;", 1),
+            Map.entry("souther.compiler.query.Adequacy$SignatureEvidence#of(Lsouther/compiler/query/OutputCaseEvidence;Ljava/util/List;)Lsouther/compiler/query/Adequacy$SignatureEvidence;", 2),
+            Map.entry("souther.compiler.query.PartitionEvidence$AxisCoverage#noRows(Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Lsouther/compiler/query/PartitionEvidence$AxisCoverage$Reading;)Lsouther/compiler/query/PartitionEvidence$AxisCoverage;", 1),
+            Map.entry("souther.compiler.query.PartitionEvidence$PairSpace#noRows(I)Lsouther/compiler/query/PartitionEvidence$PairSpace;", 1),
+            Map.entry("souther.compiler.query.PartitionEvidence$PairSpace#truncated(Ljava/lang/String;JI)Lsouther/compiler/query/PartitionEvidence$PairSpace;", 1),
+            Map.entry("souther.compiler.query.PartitionEvidence$PairSpace#<clinit>()V", 1),
+            Map.entry("souther.compiler.query.Adequacy$BranchEvidence#noBody()Lsouther/compiler/query/Adequacy$BranchEvidence;", 1),
+            Map.entry("souther.compiler.query.Adequacy$BranchEvidence#notAsked(Lsouther/compiler/query/Adequacy$BranchEvidence$NotAsked;)Lsouther/compiler/query/Adequacy$BranchEvidence;", 1),
+            Map.entry("souther.compiler.query.Adequacy$BranchEvidence#unreadable(Lsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/Adequacy$BranchEvidence;", 1),
+            Map.entry("souther.compiler.query.Adequacy$BranchEvidence#measured(Ljava/lang/String;Ljava/util/List;Ljava/util/Set;Lsouther/compiler/check/PathReachability$Answers$AsRun;Lsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/Adequacy$BranchEvidence;", 2),
+            Map.entry("souther.compiler.query.ItemAssessment#weakeningSource()Lsouther/compiler/query/Measurement;", 1)));
 
     @Test
     void nothingButTheIntroductionRuleMakesACaseOfAMeasure() throws Exception {
-        List<String> cases = casesOf(PARTITION, BOUNDARY);
+        List<String> cases = casesOf(MEASUREMENT);
 
-        assertEquals(10, cases.size(), () -> "the cases of the two measures: " + cases);
+        assertEquals(5, cases.size(), () -> "the states of a measurement: " + cases);
 
         Map<String, Integer> made = new LinkedHashMap<>();
         for (Compiled.Site site : Compiled.sites()) {
@@ -70,7 +99,7 @@ class AMeasureIsIntroducedInOnePlaceTest {
                 }
             }
         }
-        assertEquals(INTRODUCED_BY, made, "what makes a case of a measure rather than asking `of`");
+        assertEquals(INTRODUCED_BY, made, () -> "what makes a state of a measurement: " + made);
     }
 
     /**

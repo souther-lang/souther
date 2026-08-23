@@ -1,5 +1,6 @@
 package souther.compiler.report;
 
+import souther.compiler.report.AdequacyReport;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 

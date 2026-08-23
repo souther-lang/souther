@@ -1,5 +1,6 @@
 package souther.compiler.coverage;
 
+import souther.compiler.report.AdequacyReport;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.MeasurementStatus;
@@ -53,8 +54,8 @@ class ARuleChosenWhileItRunsIsNeverACompleteMeasureTest {
                 .ask(new Adequacy.BranchCoverage(MODULE)).value().get("tally");
         assertNotNull(tally, "the model under test compiles");
 
-        assertNotEquals(MeasurementStatus.COMPLETE, tally.status(),
-                () -> "one call site, and a rule chosen while it runs: " + tally.status()
+        assertNotEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(tally.measured()),
+                () -> "one call site, and a rule chosen while it runs: " + AdequacyReport.statusOf(tally.measured())
                         + " over " + tally.all().size() + " arm(s)");
     }
 }

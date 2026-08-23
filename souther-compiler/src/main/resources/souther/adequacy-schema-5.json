@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://souther-lang.org/schema/adequacy-4.json",
+  "$id": "https://souther-lang.org/schema/adequacy-5.json",
   "title": "Souther adequacy report",
   "description": "How well a model's `example`s cover it. Emitted by `souther examples --format json`. A reader keys on `schemaVersion`: a change that removes or renames anything here raises it, and something added since does not — a key added since is optional, and a word added to an enumerated field is one no earlier document carried, so a document written before either existed is still a document of this version. That is one direction: every object here is closed, so an older copy of this schema refuses a document carrying a key added since. A reader that has to accept newer documents wants the newer schema, not a higher number.",
   "type": "object",
@@ -9,12 +9,13 @@
   "properties": {
     "schemaVersion": {
       "type": "integer",
-      "const": 4
+      "const": 5
     },
     "compilerVersion": {
       "type": "string",
       "description": "The compiler that produced the report, or `unreleased` when it ran from class files."
     },
+    "weakening": { "$ref": "#/$defs/weakening" },
     "status": {
       "$ref": "#/$defs/status",
       "description": "The weakest status among the modules. `partial` means something could not be read, so an absent number is not evidence of a gap."
@@ -34,6 +35,20 @@
     }
   },
   "$defs": {
+    "weakening": {
+      "type": "array",
+      "minItems": 1,
+      "description": "What left this measurement weaker than its numbers look, one word per fact. Present exactly where something did, and absent where nothing did. This is what makes four status words carry five states: `unavailable` with a `reason` of `not measured` and no `weakening` is a measurement nobody asked for, and the same with a `weakening` is one that was asked for, started, and could not be finished. Beside a `partial` it says which reading fell short, which a reader used to have to find somewhere else on the page or not at all.",
+      "items": {
+        "enum": ["value_unreadable", "value_truncated", "row_undecided", "answerer_not_established",
+                 "linkage_failed", "observation_absent", "instrumentation_absent",
+                 "probe_mapping_lost",
+                 "output_cases_unreadable", "input_cases_unreadable", "row_did_not_finish",
+                 "border_value_unreadable", "rule_unread", "position_not_read",
+                 "question_unanswered", "rules_not_reached", "axis_omitted",
+                 "pair_space_truncated", "proof_contradicted", "arms_unsettled"]
+      }
+    },
     "notReadReason": {
       "description": "Why a reading is short of the rules. `unsupported_syntax` is a rule that was read and could not be used — an expression the terms do not name; `rules_not_read_at_all` is a position whose rules the reading never arrived at — no rule is named because none was seen — with which limit stopped the walk neither recorded nor promised; `unsupported_domain` is a comparison against values no line can be drawn on; `unsupported_partition_shape` is a comparison relating two positions rather than dividing one; `competing_coordinates` is two rules of one position, each read and each about a different coordinate of it — its own order and a count taken of it — with the position's own type having chosen neither, so nothing here can say which one it is measured at; `depth_limit` is the walk stopping before it reached the position; `type_unresolved` is a type at the position that could not be worked out; `unsupported_traversal` is values held inside something the walk does not reach into; `rule_about_a_derived_value` is a rule read and placed, written about a value an operation made from what stands at the position — where the values came from is known and what the rule says about the values here is not. Every one of them is a fact about the compiler and none is a fact about the model.",
       "enum": ["unsupported_syntax", "rules_not_read_at_all", "unsupported_domain", "unsupported_partition_shape", "competing_coordinates", "depth_limit", "type_unresolved", "unsupported_traversal", "rule_about_a_derived_value"]
@@ -74,6 +89,7 @@
       "properties": {
         "module": { "type": "string" },
         "status": { "$ref": "#/$defs/status" },
+        "weakening": { "$ref": "#/$defs/weakening" },
         "incompleteness": {
           "type": "array",
           "items": { "$ref": "#/$defs/incompleteness" }
@@ -105,6 +121,7 @@
           "description": "How many of those rows are recorded rather than evaluated."
         },
         "status": { "$ref": "#/$defs/status" },
+        "weakening": { "$ref": "#/$defs/weakening" },
         "signature": { "$ref": "#/$defs/signature" },
         "partition": { "$ref": "#/$defs/partition" },
         "branch": { "$ref": "#/$defs/branch" },
@@ -165,10 +182,11 @@
     "branch": {
       "type": "object",
       "description": "Which arms of the behavior's body the rows go through. Branch-arm coverage, not path coverage: going through both arms of two nested conditions says nothing about their combinations.",
-      "required": ["status", "arms", "covered", "unreached"],
+      "required": ["status"],
       "additionalProperties": false,
       "properties": {
         "status": { "$ref": "#/$defs/status" },
+        "weakening": { "$ref": "#/$defs/weakening" },
         "reason": {
           "description": "Why there is no number, present exactly where `status` is `unavailable`. `no_body` is a behavior that has no arms to measure at all — a `>->` composition or one with no `let` — rather than arms nothing measured; `not_asked` is a build that did not ask for them; `unreadable` is a run whose instrumentation could not be tied back to the body; `no_rows` is a behavior no row names.",
           "enum": ["no_body", "not_asked", "unreadable", "no_rows"]
@@ -216,6 +234,7 @@
           "additionalProperties": false,
           "properties": {
             "status": { "$ref": "#/$defs/status" },
+            "weakening": { "$ref": "#/$defs/weakening" },
             "reason": {
               "description": "Why there is no measure, present exactly where `status` is `unavailable`. `the_reading_did_not_run_out` is a reading that produced no position and was short of something it answers for, so the model is not thereby known to divide none; `nothing_is_divided` is a reading that answered everything it answers for and found no position the model divides, which no row would change; `no_subject` is a behavior with no positions of its own, a `>->` composition, which is measured at its stages. `no_axis_derived` is what the first was called while it also stood for the second, and is retired rather than gone.",
               "enum": ["the_reading_did_not_run_out", "nothing_is_divided", "no_subject", "no_axis_derived"]
@@ -229,6 +248,7 @@
           "additionalProperties": false,
           "properties": {
             "status": { "$ref": "#/$defs/status" },
+            "weakening": { "$ref": "#/$defs/weakening" },
             "reason": {
               "description": "Why there is no measure, present exactly where `status` is `unavailable`. `the_reading_did_not_run_out` is a reading that produced no line and was short of something it answers for, so the model is not thereby known to draw none; `no_rule_draws_a_line` is a reading that answered everything it answers for and found no rule drawing a line, which no row would change since a row cannot make a line; `no_subject` is a behavior with no positions of its own. `no_lines_derived` is what the first was called while it also stood for the second, and is retired rather than gone.",
               "enum": ["the_reading_did_not_run_out", "no_rule_draws_a_line", "no_subject", "no_lines_derived"]
@@ -239,7 +259,7 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["axis", "path", "classes", "covered", "unclassifiedRows", "status"],
+            "required": ["axis", "path", "classes", "status"],
             "additionalProperties": false,
             "properties": {
               "axis": { "type": "string" },
@@ -300,6 +320,7 @@
               },
               "unclassifiedRows": { "type": "integer", "minimum": 0 },
               "status": { "$ref": "#/$defs/status" },
+              "weakening": { "$ref": "#/$defs/weakening" },
               "reason": {
                 "description": "Why there is no number, present exactly where `status` is `unavailable`. A behavior no row names was not measured here, so the classes nothing sits in are not classes nothing reaches.",
                 "enum": ["no_rows"]
@@ -357,6 +378,7 @@
                       "description": "Whether some row could be at this point. False where a rule reaching the value this position sits in was not read in full — a pattern, a disequality, a strict bound on a decimal — so the point is where the reading stopped rather than where the model does. Such a point is reported and not counted, and no build is refused over it."
                     },
                     "status": { "$ref": "#/$defs/status" },
+                    "weakening": { "$ref": "#/$defs/weakening" },
                     "reason": {
                       "description": "Why there is no answer, present exactly where `status` is `unavailable`. `arms_not_asked` and `arms_unreadable` belong to a line a fork of a body drew, which is met by getting the comparison to produce a value rather than by writing the value — and that holds of all four of its points. An invariant's line is met by writing the value and is never waiting on the instrumentation. `no_arm_witnesses_it` was a guard's line whose comparison sat inside a condition whose arms did not separate the rows that reached it from the rows that did not — the second operand of an `&&` on the side where it is false. No compiler writes it any more: the comparison carries a site of its own and is observed where it runs. It is here because reports of this version were written carrying it, and a version says what its documents may carry rather than what is emitted today.",
                       "enum": ["arms_not_asked", "arms_unreadable", "no_rows", "no_arm_witnesses_it"]
@@ -370,7 +392,7 @@
         "pairs": {
           "type": "object",
           "description": "Two-class combinations across two positions. Counts rather than a ratio: a combination no row reaches has not been shown unreachable, only untried, so the denominator is not known.",
-          "required": ["total", "covered", "witnessedFeasible", "provenInfeasible", "unknown", "truncated", "status"],
+          "required": ["total", "status"],
           "additionalProperties": false,
           "properties": {
             "total": { "type": "integer", "minimum": 0 },
@@ -386,6 +408,7 @@
               "description": "Combinations shown impossible. A candidate that failed to build is not one of these — another value of the same two classes may build."
             },
             "unknown": { "type": "integer", "minimum": 0 },
+            "weakening": { "$ref": "#/$defs/weakening" },
             "status": {
             "$ref": "#/$defs/status",
             "description": "`partial` where some rows were not read at all: a combination none of the rows seen reaches has not been left untried by anybody."
@@ -393,8 +416,7 @@
           "reason": {
             "description": "Why there are no numbers, present exactly where `status` is `unavailable`. How large the space is says nothing about a behavior no row names.",
             "enum": ["no_rows"]
-          },
-          "truncated": { "type": "boolean" }
+          }
           }
         },
         "unanswered": {
@@ -482,13 +504,14 @@
       "additionalProperties": false,
       "properties": {
         "status": { "$ref": "#/$defs/status" },
+        "weakening": { "$ref": "#/$defs/weakening" },
         "reason": {
           "description": "Why there is no number, present exactly where `status` is `unavailable`. `no_rows` is a behavior no row names; `not_a_sum` is a signature with no sum anywhere in it, which no row could give a case to cover.",
           "enum": ["no_rows", "not_a_sum"]
         },
         "output": {
           "type": "object",
-          "required": ["declared", "specified", "observed", "verified", "unclassifiedRows"],
+          "required": ["declared", "status"],
           "additionalProperties": false,
           "properties": {
             "declared": { "$ref": "#/$defs/caseNames" },
@@ -508,7 +531,13 @@
               "type": "integer",
               "minimum": 0,
               "description": "Rows whose case could not be read. Above zero, a missing case is undecided rather than missing."
-            }
+            },
+            "status": {
+              "$ref": "#/$defs/status",
+              "description": "Whether the rows were counted here at all. `unavailable` where the position is not a sum, and where no row names the behavior — in both, the sets below are absent rather than empty, since a set nobody filled and a set nothing reached read alike."
+            },
+            "reason": { "enum": ["not_a_sum", "no_rows"] },
+            "weakening": { "$ref": "#/$defs/weakening" }
           }
         },
         "inputs": {
@@ -516,7 +545,7 @@
           "description": "One entry per parameter, in order. A parameter that is not a sum has nothing to cover and reports empty sets.",
           "items": {
             "type": "object",
-            "required": ["declared", "specified", "executed", "verified", "unclassifiedRows"],
+            "required": ["declared", "status"],
             "additionalProperties": false,
             "properties": {
               "declared": { "$ref": "#/$defs/caseNames" },
@@ -530,7 +559,13 @@
                 "$ref": "#/$defs/caseNames",
                 "description": "Cases the position's own rules refuse. Declared and not coverable: no value of one can be constructed, so they are counted out of what the rows are held to."
               },
-              "unclassifiedRows": { "type": "integer", "minimum": 0 }
+              "unclassifiedRows": { "type": "integer", "minimum": 0 },
+              "status": {
+                "$ref": "#/$defs/status",
+                "description": "Whether the rows were counted here at all. `unavailable` where the position is not a sum, and where no row names the behavior — in both, the sets below are absent rather than empty, since a set nobody filled and a set nothing reached read alike."
+              },
+              "reason": { "enum": ["not_a_sum", "no_rows"] },
+              "weakening": { "$ref": "#/$defs/weakening" }
             }
           }
         }

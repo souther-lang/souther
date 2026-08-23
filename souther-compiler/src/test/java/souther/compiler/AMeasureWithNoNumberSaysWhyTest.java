@@ -9,6 +9,9 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.ItemAssessment;
+import souther.compiler.query.Measurement;
+import souther.compiler.query.Weakening;
+import souther.compiler.query.WeakeningSet;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 
@@ -227,7 +230,7 @@ class AMeasureWithNoNumberSaysWhyTest {
         assertEquals(2, partition.axes().size(), "the model divides two positions here");
         for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
             assertEquals(2, axis.classes().size(), axis.path());
-            assertEquals(PartitionEvidence.AxisCoverage.Reason.NO_ROWS, axis.reason(), axis.path());
+            assertEquals(PartitionEvidence.AxisCoverage.NoRows.NO_ROWS, axis.reached().why(), axis.path());
         }
         assertEquals(List.of(), findings("sift", Adequacy.Kind.AXIS_CLASS_UNCOVERED),
                 "nothing was established, so nothing was found");
@@ -245,8 +248,8 @@ class AMeasureWithNoNumberSaysWhyTest {
     void thePairsOfABehaviorNoRowNamesAreNotCountedEither() {
         PartitionEvidence.PairSpace pairs = partitions().get("sift").pairs();
         assertEquals(4, pairs.total(), "two positions of two classes each");
-        assertEquals(MeasurementStatus.NOT_MEASURED, pairs.status());
-        assertEquals(PartitionEvidence.PairSpace.Reason.NO_ROWS, pairs.reason());
+        assertEquals(MeasurementStatus.NOT_MEASURED, AdequacyReport.statusOf(pairs.counted()));
+        assertEquals(PartitionEvidence.PairSpace.NoRows.NO_ROWS, pairs.counted().why());
         assertFalse(behaviorBlock(human(), "sift").contains("pairs"),
                 "untried is what nobody tried, and nobody was asked");
     }
@@ -255,8 +258,8 @@ class AMeasureWithNoNumberSaysWhyTest {
     @Test
     void aCompositionSaysItsArmsDoNotApply() {
         Adequacy.BranchEvidence branch = branches().get("both");
-        assertEquals(MeasurementStatus.NOT_APPLICABLE, branch.status());
-        assertEquals(Adequacy.BranchEvidence.Reason.NO_BODY, branch.reason());
+        assertEquals(MeasurementStatus.NOT_APPLICABLE, AdequacyReport.statusOf(branch.measured()));
+        assertEquals(Adequacy.BranchEvidence.NoBody.NO_BODY, branch.measured().why());
         assertFalse(branch.applicable(), "nothing here is owed a branch measure");
     }
 
@@ -265,7 +268,7 @@ class AMeasureWithNoNumberSaysWhyTest {
     @Test
     void anInjectedBehaviorSaysTheSame() {
         Adequacy.BranchEvidence branch = branches().get("baseRate");
-        assertEquals(Adequacy.BranchEvidence.Reason.NO_BODY, branch.reason());
+        assertEquals(Adequacy.BranchEvidence.NoBody.NO_BODY, branch.measured().why());
     }
 
     /** A body with arms, that no row names, is a measure that was not made rather than one that does
@@ -273,7 +276,7 @@ class AMeasureWithNoNumberSaysWhyTest {
     @Test
     void aBodyNoRowNamesIsUnmeasuredAndNotInapplicable() {
         Adequacy.BranchEvidence branch = branches().get("rated");
-        assertEquals(Adequacy.BranchEvidence.Reason.NO_ROWS, branch.reason());
+        assertEquals(Adequacy.BranchEvidence.NotAsked.NO_ROWS, branch.measured().why());
         assertTrue(branch.applicable(), "there are arms here; nothing asked about them");
     }
 
@@ -288,7 +291,8 @@ class AMeasureWithNoNumberSaysWhyTest {
      */
     @Test
     void aMeasureThatDoesNotApplyIsNotTheSameStatusAsOneNobodyMade() {
-        assertNotEquals(branches().get("rated").status(), branches().get("both").status(),
+        assertNotEquals(branches().get("rated").measured().why(),
+                branches().get("both").measured().why(),
                 "a body no row names and a composition with no arms are not one answer");
     }
 
@@ -301,7 +305,7 @@ class AMeasureWithNoNumberSaysWhyTest {
                         .filter(p -> p.owed() != null).toList();
         assertFalse(lines.isEmpty(), "the invariant draws two");
         for (BorderAssessment.Point line : lines) {
-            assertEquals(ItemAssessment.Coverage.Reason.NO_ROWS, line.item().whyNotMeasured(),
+            assertEquals(ItemAssessment.Coverage.NotAsked.NO_ROWS, line.item().weakeningSource().why(),
                     line.border().rule().named() + " at " + line.asked());
         }
     }
@@ -380,9 +384,9 @@ class AMeasureWithNoNumberSaysWhyTest {
 
         Adequacy.BranchEvidence branch = compilation.db()
                 .ask(new Adequacy.BranchCoverage("example.unseen")).value().get("elsewhere");
-        assertNotEquals(Adequacy.BranchEvidence.Reason.NO_ROWS, branch.reason(),
+        assertNotEquals(Adequacy.BranchEvidence.NotAsked.NO_ROWS, branch.measured().why(),
                 "the rows this is waiting on may be the ones that went unread");
-        assertEquals(MeasurementStatus.PARTIAL, branch.status(),
+        assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(branch.measured()),
                 "there are arms, and which of them were reached is undecided");
 
         PartitionEvidence partition = compilation.db()
@@ -392,9 +396,9 @@ class AMeasureWithNoNumberSaysWhyTest {
             if (line.owed() == null) {
                 continue;   // nothing was measured there and nothing was waiting on a row
             }
-            assertNotEquals(ItemAssessment.Coverage.Reason.NO_ROWS, line.item().whyNotMeasured(),
+            assertNotEquals(ItemAssessment.Coverage.NotAsked.NO_ROWS, line.item().weakeningSource().why(),
                     line.border().rule().named() + " at " + line.asked());
-            assertEquals(MeasurementStatus.PARTIAL, line.item().status(),
+            assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(line.item().weakeningSource()),
                     line.border().rule().named() + " at " + line.asked());
         }
     }
@@ -404,30 +408,52 @@ class AMeasureWithNoNumberSaysWhyTest {
     void aBehaviorWhoseRowsWereReadIsUnaffectedByTheSourceThatWasNot() {
         Adequacy.BranchEvidence branch = unseen().db()
                 .ask(new Adequacy.BranchCoverage("example.unseen")).value().get("take");
-        assertNull(branch.reason(), "this one was measured");
+        assertNull(branch.measured().why(), "this one was measured");
     }
 
     /**
-     * A measure that answers with a number, or with which of the two kinds of no-number it is.
+     * A measure answers with a number, or with why it has none — and either way with what it went
+     * without.
      *
-     * <p>There is no fifth state and no way to build one: the reason a measure gives says which kind
-     * it is, and a measure with a number has no reason to give. Held over every measure of the model
-     * rather than over the ones a test remembered, so that a measure added later is in it.
+     * <p>Five states and no way to build a sixth. It used to be a status and a reason held beside
+     * each other, checked where the value was built because either could be written without the
+     * other; the arms carry what they need and there is nothing left to check. What this holds is
+     * that the arms mean what they say, over every measure the model produces rather than over the
+     * ones a test remembered.
      */
     @Test
-    void everyMeasureAnswersWithANumberOrWithWhichKindOfNoNumber() {
+    void everyMeasureAnswersWithANumberOrWithWhyItHasNone() {
         List<Object[]> measures = allMeasures();
         assertTrue(measures.size() > 20, "the model produces every kind: " + measures.size());
         for (Object[] measure : measures) {
-            MeasurementStatus status = (MeasurementStatus) measure[1];
-            souther.compiler.observe.MeasureReason reason =
-                    (souther.compiler.observe.MeasureReason) measure[2];
-            if (status.counted()) {
-                assertNull(reason, measure[0] + " has a number and says why it has none");
-            } else {
-                assertNotNull(reason, measure[0] + " has no number and does not say why");
-                assertEquals(status, reason.status(),
-                        measure[0] + " is one kind of no-number and its reason is the other");
+            Measurement<?> made = (Measurement<?>) measure[1];
+            String what = (String) measure[0];
+            switch (made) {
+                case Measurement.Complete<?> it -> {
+                    assertNull(it.why(), what + " has a number and says why it has none");
+                    assertTrue(it.weakening().isEmpty(),
+                            what + " was made in full and went without something");
+                }
+                case Measurement.Partial<?> it -> {
+                    assertNull(it.why(), what + " has a number and says why it has none");
+                    assertFalse(it.weakening().isEmpty(),
+                            what + " was made in part and does not say what by");
+                }
+                case Measurement.NotApplicable<?> it -> {
+                    assertNotNull(it.why(), what + " has no number and does not say why");
+                    assertTrue(it.weakening().isEmpty(),
+                            what + " has nothing to be about and went without something");
+                }
+                case Measurement.NotMeasured<?> it -> {
+                    assertNotNull(it.why(), what + " has no number and does not say why");
+                    assertTrue(it.weakening().isEmpty(),
+                            what + " was never started and went without something");
+                }
+                case Measurement.FailedToMeasure<?> it -> {
+                    assertNotNull(it.why(), what + " has no number and does not say why");
+                    assertFalse(it.weakening().isEmpty(),
+                            what + " could not be finished and does not say what it went without");
+                }
             }
         }
     }
@@ -447,9 +473,9 @@ class AMeasureWithNoNumberSaysWhyTest {
                 report.human(SourceNameResolver.identity()));
 
         List<Object[]> measures = allMeasures();
-        assertTrue(measures.stream().anyMatch(m -> m[1] == MeasurementStatus.NOT_APPLICABLE),
+        assertTrue(measures.stream().anyMatch(m -> m[1] instanceof Measurement.NotApplicable<?>),
                 "the model holds an inapplicable measure");
-        assertTrue(measures.stream().anyMatch(m -> m[1] == MeasurementStatus.NOT_MEASURED),
+        assertTrue(measures.stream().anyMatch(m -> m[1] instanceof Measurement.NotMeasured<?>),
                 "and one nobody made");
 
         // Every behavior of the model whose signature does not apply still reads `satisfied` where
@@ -460,95 +486,103 @@ class AMeasureWithNoNumberSaysWhyTest {
         assertTrue(classify.contains("branch      0/0"), classify);
     }
 
-    /** Every measure the model produces, as (what it is, its status, its reason). */
+    /** Every measure the model produces, as (what it is, what it came to). */
     private static List<Object[]> allMeasures() {
         List<Object[]> measures = new ArrayList<>();
         for (Map.Entry<String, Adequacy.BranchEvidence> each : branches().entrySet()) {
             measures.add(new Object[] {"branch " + each.getKey(),
-                    each.getValue().status(), each.getValue().reason()});
+                    each.getValue().measured()});
         }
         for (Map.Entry<String, Adequacy.SignatureEvidence> each : signatures().entrySet()) {
-            measures.add(new Object[] {"signature " + each.getKey(),
-                    each.getValue().status(), each.getValue().reason()});
-            measures.add(new Object[] {"out " + each.getKey(),
-                    each.getValue().output().status(), each.getValue().output().reason()});
+            measures.add(new Object[] {"signature " + each.getKey(), each.getValue().counted()});
+            measures.add(new Object[] {"out " + each.getKey(), each.getValue().output().cases()});
             each.getValue().inputs().forEach(in -> measures.add(
-                    new Object[] {"in " + each.getKey(), in.status(), in.reason()}));
+                    new Object[] {"in " + each.getKey(), in.cases()}));
         }
         for (Map.Entry<String, PartitionEvidence> each : partitions().entrySet()) {
             PartitionEvidence partition = each.getValue();
             measures.add(new Object[] {"partition " + each.getKey(),
-                    partition.partitioned().status(), partition.partitioned().reason()});
+                    partition.partitioned()});
             measures.add(new Object[] {"boundary " + each.getKey(),
-                    partition.bounded().status(), partition.bounded().reason()});
+                    partition.bounded()});
             measures.add(new Object[] {"pairs " + each.getKey(),
-                    partition.pairs().status(), partition.pairs().reason()});
+                    partition.pairs().counted()});
             partition.axes().forEach(a -> measures.add(
-                    new Object[] {"axis " + each.getKey(), a.status(), a.reason()}));
+                    new Object[] {"axis " + each.getKey(), a.reached()}));
             BorderAssessment.pointsOf(partition.boundaries()).stream()
                     .filter(p -> p.owed() != null)
                     .forEach(p -> measures.add(new Object[] {"line " + each.getKey(),
-                            p.item().status(), p.item().whyNotMeasured()}));
+                            p.item().weakeningSource()}));
         }
         return measures;
     }
 
     /**
-     * Held where the value is built, so that no measure can be assembled without it.
+     * What is left to check, now that the type says the rest.
      *
-     * <p>The two measures whose evidence is a list keep it by shape now rather than by check: an
-     * answer that has entries is an arm that carries them and an answer that has none is an arm
-     * with nowhere to put any, so a status paired with the wrong list is not a value anybody can
-     * write. What is left to assert of them is the one pairing the arms could still get wrong —
-     * an arm that promises entries and holds none.
+     * <p>Most of what this used to assert is gone because it cannot be written. A status paired with
+     * the wrong reason, a measure with a number and a reason beside it, a measure with no number and
+     * none — each was a value somebody could build and a constructor had to refuse. The five arms
+     * carry what they need and nothing else, so there is no such value to refuse.
+     *
+     * <p>Two things are still a caller's to get wrong, and both are about a measurement that says it
+     * is weaker than complete. Saying so and carrying nothing is the whole of issue #953 in one
+     * value, and it stays refused where it is built.
      */
     @Test
-    void aMeasureCannotBeBuiltWithoutKeepingThatContract() {
-        assertThrows(IllegalStateException.class,
-                () -> new souther.compiler.query.PartitionDerivation.Complete(List.of()));
-        assertThrows(IllegalStateException.class,
-                () -> new souther.compiler.query.PartitionDerivation.Partial(List.of()));
-        assertThrows(IllegalStateException.class,
-                () -> new souther.compiler.query.BoundaryDerivation.Complete(List.of()));
-        assertThrows(IllegalStateException.class,
-                () -> new souther.compiler.query.BoundaryDerivation.Partial(List.of()));
-        // And a space this could not walk to the end of, called measured in full. The flag and
-        // the status are one answer, and while the two could disagree a reader that noticed
-        // stopped trusting the status and decided it again — which is a second authority over one
-        // measure.
-        assertThrows(IllegalArgumentException.class, () -> new PartitionEvidence.PairSpace(
-                9, 0, 0, 0, 9, true, MeasurementStatus.COMPLETE, null));
-        // And an absence that nothing proved. The proof is the argument, so this is the whole of
-        // what "the model divides nothing anywhere" costs to say.
-        assertThrows(NullPointerException.class,
-                () -> new souther.compiler.query.PartitionDerivation.Absent(null));
-        assertThrows(NullPointerException.class,
-                () -> new souther.compiler.query.BoundaryDerivation.Absent(null));
-        assertThrows(IllegalArgumentException.class, () -> new Adequacy.BranchEvidence(
-                List.of(), java.util.Set.of(), java.util.Set.of(),
-                MeasurementStatus.NOT_MEASURED, MeasurementStatus.NOT_MEASURED, null));
-        assertThrows(IllegalArgumentException.class, () -> new Adequacy.BranchEvidence(
-                List.of(), java.util.Set.of(), java.util.Set.of(),
-                MeasurementStatus.COMPLETE, MeasurementStatus.COMPLETE,
-                Adequacy.BranchEvidence.Reason.NO_BODY));
-        assertThrows(IllegalArgumentException.class, () -> new PartitionEvidence.AxisCoverage(
-                "a", "a", List.of(), java.util.Set.of(), 0, MeasurementStatus.NOT_MEASURED, null,
-                PartitionEvidence.AxisCoverage.ANSWERED));
-        // And a position handed over with no account of what was read about its values. The classes
-        // beside it mean one thing on a reading that ran to the end and another on one that did
-        // not, so a coverage that does not say which is a set of classes nobody can read.
-        assertThrows(IllegalArgumentException.class, () -> new PartitionEvidence.AxisCoverage(
-                "a", "a", List.of(), java.util.Set.of(), 0, MeasurementStatus.COMPLETE, null,
-                null));
+    void aMeasurementWeakerThanCompleteSaysWhatMadeItSo() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new Measurement.Partial<>("something", WeakeningSet.none()));
+        assertThrows(IllegalArgumentException.class,
+                () -> new Measurement.Partial<>("something", null));
+        assertThrows(IllegalArgumentException.class,
+                () -> new Measurement.FailedToMeasure<>(
+                        Adequacy.BranchEvidence.Unreadable.UNREADABLE, WeakeningSet.none()));
+        assertThrows(IllegalArgumentException.class,
+                () -> new Measurement.FailedToMeasure<>(
+                        Adequacy.BranchEvidence.Unreadable.UNREADABLE, null));
 
-        // The kinds are held against each other and not only for presence. A measure carrying a
-        // reason of the other kind is the confusion the two words were split to prevent: it says its
-        // arms do not apply and asks somebody to go and measure them, and a report reading either
-        // half of it is right about one and wrong about the other.
-        assertThrows(IllegalArgumentException.class, () -> new Adequacy.BranchEvidence(
-                List.of(), java.util.Set.of(), java.util.Set.of(),
-                MeasurementStatus.NOT_MEASURED, MeasurementStatus.NOT_MEASURED,
-                Adequacy.BranchEvidence.Reason.NO_BODY));
+        // And an absence that nothing proved. The proof is the argument, so this is the whole of
+        // what "the model divides nothing anywhere" costs to say — moved onto the reason when the
+        // arms became a measurement's, and not dropped.
+        assertThrows(NullPointerException.class,
+                () -> new souther.compiler.query.PartitionDerivation.NothingIsDivided(null));
+        assertThrows(NullPointerException.class,
+                () -> new souther.compiler.query.BoundaryDerivation.NoRuleDrawsALine(null));
+
+        // A measure with no number holds no number, rather than holding zeroes that read as one.
+        assertThrows(NullPointerException.class, () -> new Measurement.NotMeasured<>(null));
+        assertThrows(NullPointerException.class, () -> new Measurement.NotApplicable<>(null));
+        assertThrows(NullPointerException.class, () -> new Measurement.Complete<>(null));
+    }
+
+    /**
+     * A weakening set is a set: what a parent went without does not depend on how many paths a fact
+     * reached it by, nor on the order the readers found things in.
+     *
+     * <p>Held because this is the whole of the arithmetic. Every level above a measure is the union
+     * of what its parts went without, and a union that counted paths would report one rule this
+     * compiler could not read once per position it bears on.
+     */
+    @Test
+    void whatAMeasurementWentWithoutIsASetAndUnionsLikeOne() {
+        Weakening a = new Weakening.ProofContradicted("take", 1);
+        Weakening b = new Weakening.ArmsUnsettled(
+                new souther.compiler.types.CoverageOrigin("m", 0, 0,
+                        souther.compiler.types.CoverageConstruct.IF));
+        Weakening c = new Weakening.OutputCasesUnreadable("take");
+
+        assertEquals(WeakeningSet.of(a), WeakeningSet.of(a).union(WeakeningSet.none()));
+        assertEquals(WeakeningSet.of(a), WeakeningSet.none().union(WeakeningSet.of(a)));
+        assertEquals(WeakeningSet.of(a), WeakeningSet.of(a).union(WeakeningSet.of(a)));
+        assertEquals(WeakeningSet.of(a, b), WeakeningSet.of(b, a),
+                "two sets holding the same facts are one value whatever order they were found in");
+        assertEquals(WeakeningSet.of(a).union(WeakeningSet.of(b)),
+                WeakeningSet.of(b).union(WeakeningSet.of(a)));
+        assertEquals(WeakeningSet.of(a).union(WeakeningSet.of(b)).union(WeakeningSet.of(c)),
+                WeakeningSet.of(a).union(WeakeningSet.of(b).union(WeakeningSet.of(c))));
+        assertEquals(WeakeningSet.of(a, b).hashCode(), WeakeningSet.of(b, a).hashCode(),
+                "equal sets hash alike, or a Db answer never equals its own recomputation");
     }
 
     private static String behaviorBlock(String human, String behavior) {

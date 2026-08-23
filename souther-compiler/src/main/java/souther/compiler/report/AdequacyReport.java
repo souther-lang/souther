@@ -12,9 +12,12 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.check.Prepared;
 import souther.compiler.observe.Incompleteness;
-import souther.compiler.observe.InputCaseEvidence;
+import souther.compiler.query.InputCaseEvidence;
+import souther.compiler.query.Measurement;
+import souther.compiler.query.Weakening;
+import souther.compiler.query.WeakeningSet;
 import souther.compiler.observe.MeasurementStatus;
-import souther.compiler.observe.OutputCaseEvidence;
+import souther.compiler.query.OutputCaseEvidence;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
@@ -58,14 +61,25 @@ import java.util.Set;
  * modules, so filtering the report leaves it alone.
  */
 public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy.Asked asked,
-                             MeasurementStatus status, List<ModuleReport> modules) {
+                             WeakeningSet weakenedBy, List<ModuleReport> modules) {
+
+    /**
+     * How far the whole measurement got, in the report's own word.
+     *
+     * <p>Derived and not held. A level with no measure of its own is complete exactly when nothing
+     * beneath it went without anything, so a word kept beside the union would be a second thing to
+     * keep true — which is what this report used to have at all three levels.
+     */
+    public MeasurementStatus status() {
+        return ReportMeasurement.statusOf(weakenedBy);
+    }
 
     /** How much was measured, which decides which measures have a number to show. */
     public Adequacy.Level askedLevel() {
         return asked.level();
     }
 
-    public static final int SCHEMA_VERSION = 4;
+    public static final int SCHEMA_VERSION = 5;
 
     /**
      * Whether the rows meet what the asked measures require of them.
@@ -83,11 +97,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         UNDETERMINED
     }
 
-    public record ModuleReport(String module, SourceId declaredIn, MeasurementStatus status,
+    public record ModuleReport(String module, SourceId declaredIn, WeakeningSet weakenedBy,
                                List<Incompleteness> incompleteness, List<BehaviorReport> behaviors) {
         public ModuleReport {
             incompleteness = List.copyOf(incompleteness);
             behaviors = List.copyOf(behaviors);
+        }
+
+        /** How far this module's measurement got. Derived, for the reason
+         *  {@link AdequacyReport#status()} gives. */
+        public MeasurementStatus status() {
+            return ReportMeasurement.statusOf(weakenedBy);
         }
     }
 
@@ -104,7 +124,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     public record BehaviorReport(String name, BehaviorImplementation implementation,
                                  int rows, int pending,
-                                 MeasurementStatus status,
+                                 WeakeningSet weakenedBy,
                                  Adequacy.SignatureEvidence signature,
                                  PartitionEvidence partition,
                                  ClaimAnnotations claimed,
@@ -112,6 +132,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                                  List<Adequacy.Finding> findings) {
         public BehaviorReport {
             findings = List.copyOf(findings);
+        }
+
+        /** How far this behavior's measurement got. Derived, for the reason
+         *  {@link AdequacyReport#status()} gives. */
+        public MeasurementStatus status() {
+            return ReportMeasurement.statusOf(weakenedBy);
         }
 
         /** The findings of one kind, in the order the measure produced them. */
@@ -124,7 +150,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * otherwise there is nothing to read and every behavior looks unexampled. */
     public static AdequacyReport of(Compilation compilation) {
         List<ModuleReport> modules = new ArrayList<>();
-        MeasurementStatus overall = MeasurementStatus.COMPLETE;
+        WeakeningSet overall = WeakeningSet.none();
         for (String name : compilation.modules()) {
             Prepared module = compilation.module(name);
             if (module == null) {
@@ -132,7 +158,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             }
             ModuleReport report = moduleReport(compilation, name, module);
             modules.add(report);
-            overall = overall.and(report.status());
+            overall = overall.union(report.weakenedBy());
         }
         Adequacy.Asked asked = compilation.db().ask(new Adequacy.Requested()).value();
         return new AdequacyReport(SCHEMA_VERSION, ModuleMetadata.compilerVersion(),
@@ -140,54 +166,32 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
-     * What a behavior's own measures make of it.
+     * What a behavior's measures went without, all of them.
      *
-     * <p>A measure that could not read what it needed is one this has to say so about — a report
-     * opening with {@code complete} over a measure of its own reading {@code partial} is the
-     * contradiction this field exists to prevent, and it is one this used to write: the two measures
-     * that answer for their own reading were the two it did not ask.
-     *
-     * <p><b>Asked of every measure and of nothing else.</b> Each of them answers whether it was made
-     * in full, and each carries a reason where it has no number that says which kind of no-number it
-     * is. So this is a fold and not a list of things to remember — a position dropped past the axis
-     * limit reaches it through the measure that lost by it, and a space too many to walk through the
-     * status of the combinations, and reading either of those here as well was one fact arriving
-     * twice: once in a measure's answer and once behind its back.
+     * <p><b>Asked of the three it has, and each of those answers for its own.</b> This used to name
+     * every measure under them — the two derivations, each position, each point of each border, the
+     * combinations — which is a list somebody has to remember to add to. It is the same shape as the
+     * schema check that named two objects and missed eight, and as issue #953 itself: an answer
+     * assembled by whoever wanted it rather than held by whoever has it.
      *
      * <p>A measure nobody asked for is not a degradation, and neither is one a behavior has nothing
-     * to answer. Which of those a no-number is, is the reason's own answer
-     * ({@link souther.compiler.observe.MeasureReason#somethingWasUnreadable}) and never the
-     * constant's name.
+     * to answer. Neither weakens anything, so neither is here — which is the measurement's own
+     * answer rather than a question put to the constant's name.
      */
-    private static MeasurementStatus statusOf(Adequacy.SignatureEvidence signature,
-                                              PartitionEvidence partition,
-                                              Adequacy.BranchEvidence branch) {
-        boolean partial = signature != null && fellShort(signature.status(), signature.reason());
-        partial |= branch != null && fellShort(branch.status(), branch.reason());
-        if (partition != null) {
-            // The two that answer for the reading of the model's rules, which is what this field is
-            // about and what it did not ask.
-            partial |= fellShort(partition.partitioned().status(),
-                    partition.partitioned().reason());
-            partial |= fellShort(partition.bounded().status(), partition.bounded().reason());
-            partial |= partition.axes().stream()
-                    .anyMatch(a -> fellShort(a.status(), a.reason()));
-            partial |= BorderAssessment.pointsOf(partition.boundaries()).stream()
-                    .anyMatch(p -> fellShort(p.item().status(), p.item().whyNotMeasured()));
-            // The combinations, whose status already carries the one fact this used to read
-            // separately: a space too many to walk is measured in part, and saying so twice left
-            // the flag and the status free to disagree.
-            partial |= fellShort(partition.pairs().status(), partition.pairs().reason());
+    private static WeakeningSet wentWithout(Adequacy.SignatureEvidence signature,
+                                            PartitionEvidence partition,
+                                            Adequacy.BranchEvidence branch) {
+        WeakeningSet out = WeakeningSet.none();
+        if (signature != null) {
+            out = out.union(signature.weakening());
         }
-        return partial ? MeasurementStatus.PARTIAL : MeasurementStatus.COMPLETE;
-    }
-
-    /** Whether one measure was not made in full: it read part of what it needed, or it read none of
-     *  it and says that is why. */
-    private static boolean fellShort(MeasurementStatus status,
-                                     souther.compiler.observe.MeasureReason reason) {
-        return status == MeasurementStatus.PARTIAL
-                || (reason != null && reason.somethingWasUnreadable());
+        if (partition != null) {
+            out = out.union(partition.weakening());
+        }
+        if (branch != null) {
+            out = out.union(branch.measured().weakening());
+        }
+        return out;
     }
 
     private static ModuleReport moduleReport(Compilation compilation, String name, Prepared module) {
@@ -252,10 +256,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     .filter(r -> r.disposition() == souther.compiler.observe.Disposition.PENDING)
                     .count();
             // Anything larger than a behavior holds this one: a source that could not be evaluated is
-            // missing rows for whatever it wrote, and a module whose classes could not be instrumented
-            // is missing arms for all of them. The scope says which, so nothing here has to guess.
-            boolean unreadable = incompleteness.stream()
-                    .anyMatch(i -> i.countsAgainst(behavior.name()));
             Adequacy.SignatureEvidence signature =
                     signatures == null ? null : signatures.get(behavior.name());
             PartitionEvidence partition = partitions == null ? null
@@ -267,7 +267,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             behaviors.add(new BehaviorReport(behavior.name(),
                     module.implementationOf(behavior),
                     rows.size(), pending,
-                    unreadable ? MeasurementStatus.PARTIAL : statusOf(signature, partition, branch),
+                    wentWithout(signature, partition, branch),
                     signature, partition,
                     claims == null ? ClaimAnnotations.NONE
                             : claims.getOrDefault(behavior.name(), ClaimAnnotations.NONE),
@@ -275,12 +275,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     findings == null ? List.of()
                             : findings.getOrDefault(behavior.name(), List.of())));
         }
-        MeasurementStatus status = incompleteness.isEmpty()
-                ? MeasurementStatus.COMPLETE : MeasurementStatus.PARTIAL;
+        // The union of its behaviors, and nothing of its own. What a module could not read reaches
+        // it through the measures that lost by it — a source none of whose rows were seen counts
+        // against every behavior the module has, and every measure counted over those rows says so.
+        // Read a second time from the module's own list, this report was giving a raw fact its
+        // meaning as a weakening, which is a measure's answer and not a renderer's (issue #953).
+        WeakeningSet weakenedBy = WeakeningSet.none();
         for (BehaviorReport behavior : behaviors) {
-            status = status.and(behavior.status());
+            weakenedBy = weakenedBy.union(behavior.weakenedBy());
         }
-        return new ModuleReport(name, compilation.sourceIdOf(name), status, incompleteness,
+        return new ModuleReport(name, compilation.sourceIdOf(name), weakenedBy, incompleteness,
                 behaviors);
     }
 
@@ -288,7 +292,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * nothing leaves an empty report rather than the whole one. */
     public AdequacyReport only(String module, String behavior) {
         List<ModuleReport> kept = new ArrayList<>();
-        MeasurementStatus overall = MeasurementStatus.COMPLETE;
+        WeakeningSet overall = WeakeningSet.none();
         for (ModuleReport m : modules) {
             if (module != null && !module.equals(m.module())) {
                 continue;
@@ -307,13 +311,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     : m.incompleteness().stream()
                             .filter(gap -> gap.behavior().map(shown::contains).orElse(true))
                             .toList();
-            MeasurementStatus status = gaps.isEmpty()
-                    ? MeasurementStatus.COMPLETE : MeasurementStatus.PARTIAL;
+            WeakeningSet weakenedBy = WeakeningSet.none();
             for (BehaviorReport shownBehavior : behaviors) {
-                status = status.and(shownBehavior.status());
+                weakenedBy = weakenedBy.union(shownBehavior.weakenedBy());
             }
-            kept.add(new ModuleReport(m.module(), m.declaredIn(), status, gaps, behaviors));
-            overall = overall.and(status);
+            kept.add(new ModuleReport(m.module(), m.declaredIn(), weakenedBy, gaps, behaviors));
+            overall = overall.union(weakenedBy);
         }
         return new AdequacyReport(schemaVersion, compilerVersion, asked, overall,
                 List.copyOf(kept));
@@ -351,7 +354,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * not the same answer, and {@code allMatch} over no measures is true.
      */
     public AdequacyStatus adequacy() {
-        List<MeasurementStatus> required = requiredMeasures();
+        List<Measurement<?>> required = requiredMeasures();
         if (required.isEmpty()) {
             return AdequacyStatus.UNDETERMINED;
         }
@@ -359,7 +362,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             return AdequacyStatus.NOT_SATISFIED;
         }
         boolean unread = modules.stream().anyMatch(m -> !m.incompleteness().isEmpty());
-        return !unread && required.stream().allMatch(m -> m == MeasurementStatus.COMPLETE)
+        // Every asked measure came to an answer nothing weakened. A measurement made in part is
+        // one whose gaps may not be gaps, and one that could not be finished came to no answer at
+        // all — neither settles a criterion.
+        return !unread && required.stream().allMatch(
+                m -> m instanceof Measurement.Complete<?>)
                 ? AdequacyStatus.SATISFIED : AdequacyStatus.UNDETERMINED;
     }
 
@@ -376,17 +383,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * made and found nothing, so a report reading them back would call the first adequate and the
      * second covered.
      */
-    private List<MeasurementStatus> requiredMeasures() {
-        List<MeasurementStatus> measures = new ArrayList<>();
+    private List<Measurement<?>> requiredMeasures() {
+        List<Measurement<?>> measures = new ArrayList<>();
         for (ModuleReport module : modules) {
             for (BehaviorReport behavior : module.behaviors()) {
                 if (askedLevel().reports() && behavior.signature() != null) {
-                    add(measures, behavior.signature().status());
+                    add(measures, behavior.signature().counted());
                 }
                 if (!askedLevel().measuresArms()) {
                     continue;
                 }
-                add(measures, behavior.branch() == null ? null : behavior.branch().status());
+                add(measures, behavior.branch() == null ? null : behavior.branch().measured());
                 if (behavior.partition() == null) {
                     continue;
                 }
@@ -400,7 +407,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // division — an `Int` a rule floors and nothing cuts — is an ordinary shape whose
                 // boundary measure is made in full. Holding the verdict open for it would say a
                 // model was unmeasured on the strength of the one measure that was.
-                add(measures, behavior.partition().bounded().status());
+                add(measures, behavior.partition().bounded());
                 // And of a border's four points, the ones the criterion asks for. A measure that
                 // refuses nothing cannot leave a verdict undetermined for want of an answer — read
                 // the other way, a row whose value could not be read at a point no build is held to
@@ -413,7 +420,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // questions.
                 BorderAssessment.pointsOf(behavior.partition().boundaries()).stream()
                         .filter(p -> asked.criterion().requires(p.role()))
-                        .forEach(p -> add(measures, p.item().status()));
+                        .forEach(p -> add(measures, measurementOf(p.item())));
                 // A dropped axis is not asked after here. What it was carrying went with it and no
                 // question stands for it, which is a fact about the measure's reading — so it
                 // leaves the measure's own answer short of complete, and reading it back off the
@@ -432,10 +439,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * counted and is exactly what stops a verdict of satisfied: it is the case where a gap could have
      * been found and nobody looked.
      */
-    private void add(List<MeasurementStatus> measures, MeasurementStatus status) {
-        if (status != null && status != MeasurementStatus.NOT_APPLICABLE) {
-            measures.add(status);
+    private void add(List<Measurement<?>> measures, Measurement<?> measurement) {
+        if (measurement != null && !(measurement instanceof Measurement.NotApplicable<?>)) {
+            measures.add(measurement);
         }
+    }
+
+    /** One border point's own measurement, asked of the point. Written out here as well, the answer
+     *  a point nobody is owed a row at gets would be this report deciding it. */
+    private static Measurement<?> measurementOf(ItemAssessment item) {
+        return item.weakeningSource();
     }
 
     // --- rendering --------------------------------------------------------------------------------
@@ -458,7 +471,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (ModuleReport module : modules) {
             out.append(String.format("%s measurement: %s%n",
                     DisplayColumns.padRight(module.module(), 56),
-                    module.status().name().toLowerCase(java.util.Locale.ROOT)));
+                    wire(ReportMeasurement.statusOf(module.weakenedBy()))));
             for (BehaviorReport behavior : module.behaviors()) {
                 counted.merge(behavior.implementation(), 1, Integer::sum);
                 out.append(String.format("  %s %s rows %-4d pending %d%n",
@@ -527,26 +540,29 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         if (signature == null) {
             return;
         }
-        if (!signature.status().counted()) {
+        ReportMeasurement<Adequacy.SignatureEvidence.Counted> counted =
+                ReportMeasurement.of(signature.counted());
+        if (!counted.counted()) {
             // A measure with no number says why, the way the arms do. Leaving the line out instead
             // put two behaviors side by side in one report, one measured on four lines and one on
             // three, with nothing saying the fourth did not apply — and hid the fact worth reading,
             // which is that a behavior answering a bare primitive gets less scrutiny than one
             // answering a sum.
-            out.append(String.format("    signature   %s%n", switch (signature.reason()) {
-                case NOT_A_SUM -> "not applicable (this behavior's output is not a sum)";
-                case NO_ROWS -> "not measured (no row names this behavior)";
-            }));
+            out.append(String.format("    signature   %s%n",
+                    counted.reason() instanceof Adequacy.SignatureEvidence.NotASum
+                            ? "not applicable (this behavior's output is not a sum)"
+                            : "not measured (no row names this behavior)"));
             return;
         }
-        boolean decided = signature.status() == MeasurementStatus.COMPLETE;
+        boolean decided = counted.inFull();
         OutputCaseEvidence output = signature.output();
-        if (!output.declared().isEmpty()) {
+        if (!output.declared().isEmpty() && output.cases().made().isPresent()) {
+            OutputCaseEvidence.Cases cases = output.cases().made().orElseThrow();
             out.append(String.format("    signature   out specified %d/%d  observed %d/%d "
                             + " verified %d/%d%s%n",
-                    output.specified().size(), output.declared().size(),
-                    output.observed().size(), output.declared().size(),
-                    output.verified().size(), output.declared().size(),
+                    cases.specified().size(), output.declared().size(),
+                    cases.observed().size(), output.declared().size(),
+                    cases.verified().size(), output.declared().size(),
                     decided ? "" : "   (partial)"));
             for (Adequacy.Finding f : behavior.findings()) {
                 if (f.about() instanceof About.ACaseNoRowExpects(var missing)) {
@@ -569,7 +585,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // for is one the compiler refuses a row for, so leaving it in the denominator would ask
             // for work that cannot be done and hold the model one case short for ever.
             out.append(String.format("                in #%d specified %d/%d%s%n", input.at() + 1,
-                    input.specified().size(), input.coverable().size(),
+                    input.cases().made().map(it -> it.specified().size()).orElse(0),
+                    input.coverable().size(),
                     input.excluded().isEmpty() ? ""
                             : "   excluded " + input.excluded().size()));
             for (Adequacy.Finding f : behavior.findings()) {
@@ -611,7 +628,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * finding and the word in the margin as a footnote.
      */
     private String noRow(Adequacy.Finding finding) {
-        return finding.status() == MeasurementStatus.COMPLETE
+        return finding.weakenedBy().isEmpty()
                 ? "no row " : "undecided whether a row ";
     }
 
@@ -655,20 +672,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 && partition.notDerivable().isEmpty() && behavior.claimed().all().isEmpty())) {
             return;
         }
-        if (!partition.partitioned().status().counted()) {
+        ReportMeasurement<List<PartitionEvidence.AxisCoverage>> partitioned =
+                ReportMeasurement.of(partition.partitioned());
+        if (!partitioned.counted()) {
             // A measure with no number says why, rather than showing a nought that reads as a
             // measurement. `axes 0   single-axis 0/0` was the same three characters a behavior gets
             // when every position it has was measured and every class covered.
             out.append(String.format("    partition   %s%n",
-                    whyNoPartition(partition.partitioned().reason())));
+                    whyNoPartition(partitioned.reason())));
         } else {
             // Counted over the positions that were measured. A position nothing was measured at
             // contributes no classes to the denominator: nought out of two reads as two gaps, and a
             // measure that was never made found none.
             List<PartitionEvidence.AxisCoverage> measuredAxes = partition.axes().stream()
-                    .filter(a -> a.status().counted()).toList();
+                    .filter(a -> a.reached().made().isPresent()).toList();
             int classes = measuredAxes.stream().mapToInt(a -> a.classes().size()).sum();
-            int covered = measuredAxes.stream().mapToInt(a -> a.covered().size()).sum();
+            int covered = measuredAxes.stream()
+                    .mapToInt(a -> a.reached().made().orElseThrow().covered().size()).sum();
             // Over the positions this line counts and no others. A claim about a position past the
             // axis limit is said further down, under its own name — counted here it would be a
             // number taken out of a denominator that never held it.
@@ -678,9 +698,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             out.append(String.format("    partition   axes %d   equivalence partitions %d/%d%s%s%s%n",
                     partition.axes().size(), covered, classes,
                     excluded == 0 ? "" : "   excluded " + excluded,
-                    notes(partition.axes(), a -> !a.status().counted(),
-                            a -> whyNoAxis(a.reason())),
-                    inFull(partition.partitioned().status())));
+                    notes(partition.axes(), a -> a.reached().made().isEmpty(),
+                            a -> whyNoAxis(ReportMeasurement.of(a.reached()).reason())),
+                    inFull(partitioned.status())));
             // The position as well as the class. A class name alone is the same words about two
             // positions of one behavior whose types divide into classes named after the same cases,
             // and a reader told one of them cannot say which position to write the row at. Which
@@ -689,8 +709,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             for (Adequacy.Finding f : behavior.findings()) {
                 if (f.about() instanceof About.AClassNoRowIsIn(var missing)) {
                     out.append(String.format("      %s %s `%s` at %s%n", mark(f),
-                            f.status() == MeasurementStatus.PARTIAL
-                                    ? "undecided whether a row is in" : "no row is in",
+                            f.weakenedBy().isEmpty()
+                                    ? "no row is in" : "undecided whether a row is in",
                             missing.name(), missing.axis().path()));
                 }
             }
@@ -733,7 +753,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // Under the same condition as before and not a new one: these counts used to be the tail of
         // the partition line, which is written in the arm this tests for. Moving them out of that
         // arm is what makes the condition something to spell rather than something to inherit.
-        if (partition.partitioned().status().counted()) {
+        if (partitioned.counted()) {
             String combinations = combinations(partition.pairs());
             if (!combinations.isEmpty()) {
                 out.append(String.format("    combination %s%n", combinations));
@@ -752,34 +772,40 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 BorderAssessment.pointsOf(partition.boundaries()).stream()
                         .filter(p -> p.item() instanceof ItemAssessment.Owed).toList();
         List<BorderAssessment.Point> measured = points.stream()
-                .filter(p -> !(owed(p).coverage() instanceof ItemAssessment.Coverage.NotMeasured))
+                .filter(p -> owed(p).coverage().made().isPresent())
                 .filter(p -> owed(p).writability().known()).toList();
         List<BorderAssessment.Point> unpromised = points.stream()
                 .filter(p -> !owed(p).writability().known()).toList();
-        long met = measured.stream().filter(p -> owed(p).coverage().hit()).count();
+        long met = measured.stream()
+                .filter(p -> ItemAssessment.Coverage.hit(owed(p).coverage())).count();
+        // A point read from rows some of which could not be read. What was not found there is
+        // undecided rather than absent, which is the measurement's answer and no longer a third
+        // case of the verdict beside it.
         long undecided = measured.stream()
-                .filter(p -> owed(p).coverage() instanceof ItemAssessment.Coverage.Undecided)
+                .filter(p -> owed(p).coverage() instanceof Measurement.Partial<?>)
                 .count();
         // The points the model's own rules discharged. Said rather than left out of the numbers: a
         // reader working to a coverage criterion counts four items per border, and a border showing
         // two of them with nothing beside it reads as this compiler being short of the other two.
         long excluded = partition.boundaries().stream()
                 .mapToLong(b -> b.excluded().size()).sum();
-        if (!partition.bounded().status().counted()) {
+        ReportMeasurement<List<BorderAssessment>> bounded =
+                ReportMeasurement.of(partition.bounded());
+        if (!bounded.counted()) {
             // `0/0` said the rows were at every line there was. What it meant was that nobody found
             // a line to be at, which a model whose bounds sit one type away from the position the
             // behavior takes has, and which is the shape of every behavior that validates raw input.
             out.append(String.format("    border      %s%n",
-                    whyNoBoundary(partition.bounded().reason())));
+                    whyNoBoundary(bounded.reason())));
         } else {
             out.append(String.format("    border      borders %d   coverage items %d/%d%s%s%s%s%n",
                     partition.boundaries().size(), met, measured.size(),
                     excluded == 0 ? "" : "   excluded " + excluded,
                     notes(points,
-                            p -> owed(p).coverage() instanceof ItemAssessment.Coverage.NotMeasured,
+                            p -> owed(p).coverage().made().isEmpty(),
                             p -> whyNoBoundaryItem(owed(p).coverage())),
                     undecided == 0 ? "" : "   (" + undecided + " undecided: a value was not read)",
-                    inFull(partition.bounded().status())));
+                    inFull(bounded.status())));
         }
         // A border the model drew that nothing here answered for, said whether or not one came of
         // it. It is exactly where none did that the question stands, so this cannot be written by
@@ -989,19 +1015,26 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         if (branch == null) {
             return;
         }
-        if (!branch.status().counted()) {
+        ReportMeasurement<Adequacy.BranchEvidence.Arms> measured =
+                ReportMeasurement.of(branch.measured());
+        if (!measured.counted()) {
             // The measure's own answer, translated. Nothing here works out why from the row count or
             // the kind of behavior: those correlate with the reason and are not it, and the line an
             // author reads is the one place that difference shows.
-            String said = switch (branch.reason()) {
-                case NO_BODY -> "not applicable (this behavior has no body)";
-                case UNREADABLE -> "not measured (the arms could not be read)";
-                case NO_ROWS -> "not measured (no row names this behavior)";
-                // The one measure a report says nothing about, because it is not a measure of this
-                // report: what was asked for is an input to the whole run, and a line repeating it
-                // against every behavior says one fact as many times as the module has behaviors.
-                // Every other way of having no number is about this behavior and is said here.
-                case NOT_ASKED -> null;
+            String said = switch (measured.reason()) {
+                case Adequacy.BranchEvidence.NoBody _ ->
+                        "not applicable (this behavior has no body)";
+                case Adequacy.BranchEvidence.Unreadable _ ->
+                        "not measured (the arms could not be read)";
+                case Adequacy.BranchEvidence.NotAsked it ->
+                        // The one measure a report says nothing about, because it is not a measure
+                        // of this report: what was asked for is an input to the whole run, and a
+                        // line repeating it against every behavior says one fact as many times as
+                        // the module has behaviors. Every other way of having no number is about
+                        // this behavior and is said here.
+                        it == Adequacy.BranchEvidence.NotAsked.NO_ROWS
+                                ? "not measured (no row names this behavior)" : null;
+                default -> null;
             };
             if (said != null) {
                 out.append(String.format("    branch      %s%n", said));
@@ -1013,7 +1046,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // falls for that and for a fork whose rule could not be worked out as well. Read as one, a
         // build whose rows all ran was told a row was not read, and every arm it certainly does not
         // reach went unsaid.
-        boolean observed = branch.observation() == MeasurementStatus.COMPLETE;
+        boolean observed = branch.armsWereReadInFull();
         out.append(String.format("    branch      %d/%d%s%n", branch.coveredObligations(),
                 branch.obligations(), observed ? "" : "   (undecided: a row was not read)"));
         // The position alone where the arm is in the module's own source, which the section this is
@@ -1052,21 +1085,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * be five impossibilities.
      */
     private static String combinations(PartitionEvidence.PairSpace pairs) {
-        if (pairs == null || pairs.total() == 0
-                || !pairs.status().counted()) {
+        if (pairs == null || pairs.total() == 0 || pairs.counted().made().isEmpty()) {
             return "";
         }
-        if (pairs.truncated()) {
+        // A space too large to walk says so, and says it from what weakened the measurement rather
+        // than from a flag kept beside it that had to be held in step.
+        if (pairs.counted().weakening().causes().stream()
+                .anyMatch(Weakening.PairSpaceTruncated.class::isInstance)) {
             return String.format("pairs %d, too many to enumerate", pairs.total());
         }
-        if (pairs.decided() && pairs.status() == MeasurementStatus.COMPLETE) {
-            return String.format("pairs %d/%d", pairs.covered(), pairs.total());
+        PartitionEvidence.PairSpace.PairCounts counts = pairs.counted().made().orElseThrow();
+        boolean whole = pairs.counted() instanceof Measurement.Complete<?>;
+        if (pairs.decided()) {
+            return String.format("pairs %d/%d", counts.covered(), pairs.total());
         }
-        // Untried where every row was read, undecided where some were not: a combination an unread row
-        // may sit in has not been left untried by anybody.
+        // Untried where every row was read, undecided where some were not: a combination an unread
+        // row may sit in has not been left untried by anybody.
         return String.format("pairs %d reached / %d known reachable, %d %s",
-                pairs.covered(), pairs.witnessedFeasible(), pairs.unknown(),
-                pairs.status() == MeasurementStatus.COMPLETE ? "untried" : "undecided");
+                counts.covered(), counts.witnessedFeasible(), counts.unknown(),
+                whole ? "untried" : "undecided");
     }
 
     /**
@@ -1090,10 +1127,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return out.toString();
     }
 
-    private static String whyNoAxis(PartitionEvidence.AxisCoverage.Reason reason) {
-        return switch (reason) {
-            case NO_ROWS -> "no row names this behavior";
-        };
+    private static String whyNoAxis(souther.compiler.observe.MeasureReason reason) {
+        return reason instanceof PartitionEvidence.AxisCoverage.NoRows
+                ? "no row names this behavior" : reason.name();
     }
 
     /**
@@ -1117,23 +1153,27 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * position and draw no line; a sentence saying the model has none would read as contradicting
      * the rule beside it.
      */
-    private static String whyNoPartition(souther.compiler.query.PartitionDerivation.Reason reason) {
+    private static String whyNoPartition(souther.compiler.observe.MeasureReason reason) {
         return switch (reason) {
-            case THE_READING_DID_NOT_RUN_OUT ->
+            case souther.compiler.query.PartitionDerivation.TheReadingDidNotRunOut _ ->
                     "not measured (no partition axis was derived at any position)";
-            case NOTHING_IS_DIVIDED ->
+            case souther.compiler.query.PartitionDerivation.NothingIsDivided _ ->
                     "not applicable (the rules of this behavior divide no position)";
-            case NO_SUBJECT -> "not applicable (this behavior is measured at its stages)";
+            case souther.compiler.query.PartitionDerivation.NoSubject _ ->
+                    "not applicable (this behavior is measured at its stages)";
+            default -> reason.name();
         };
     }
 
-    private static String whyNoBoundary(souther.compiler.query.BoundaryDerivation.Reason reason) {
+    private static String whyNoBoundary(souther.compiler.observe.MeasureReason reason) {
         return switch (reason) {
-            case THE_READING_DID_NOT_RUN_OUT ->
+            case souther.compiler.query.BoundaryDerivation.TheReadingDidNotRunOut _ ->
                     "not measured (no line was derived at any position)";
-            case NO_RULE_DRAWS_A_LINE ->
+            case souther.compiler.query.BoundaryDerivation.NoRuleDrawsALine _ ->
                     "not applicable (the rules of this behavior draw no line)";
-            case NO_SUBJECT -> "not applicable (this behavior is measured at its stages)";
+            case souther.compiler.query.BoundaryDerivation.NoSubject _ ->
+                    "not applicable (this behavior is measured at its stages)";
+            default -> reason.name();
         };
     }
 
@@ -1232,18 +1272,32 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         };
     }
 
-    private static String whyNoBoundaryItem(ItemAssessment.Coverage coverage) {
-        if (!(coverage instanceof ItemAssessment.Coverage.NotMeasured absent)) {
+    private static String whyNoBoundaryItem(Measurement<ItemAssessment.Coverage> coverage) {
+        souther.compiler.observe.MeasureReason why = ReportMeasurement.of(coverage).reason();
+        if (why == null) {
             return "";
         }
-        return switch (absent.reason()) {
-            case ARMS_NOT_ASKED -> "the arms were not asked for";
-            case ARMS_UNREADABLE -> "the arms could not be measured";
-            case NO_ROWS -> "no row names this behavior";
+        return switch (why) {
+            case ItemAssessment.Coverage.NotAsked it ->
+                    it == ItemAssessment.Coverage.NotAsked.ARMS_NOT_ASKED
+                            ? "the arms were not asked for" : "no row names this behavior";
+            case ItemAssessment.Coverage.CouldNotAsk _ -> "the arms could not be measured";
+            default -> why.name();
         };
     }
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    /**
+     * One measurement in the word a document uses.
+     *
+     * <p>Public because it is the projection, and the projection is the only thing that turns five
+     * states into four words. A caller outside this package that wants the word asks here; one that
+     * wants the state asks the measurement, which is what the five arms are for.
+     */
+    public static MeasurementStatus statusOf(Measurement<?> measurement) {
+        return ReportMeasurement.of(measurement).status();
+    }
 
     /**
      * How this report spells an enumerated value on the wire.
@@ -1256,6 +1310,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     public static String word(Enum<?> value) {
         return value.name().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /** The same of a word held as a constant, which is what a reason that costs a proof to say has
+     *  instead of an enum name. */
+    public static String word(String constant) {
+        return constant.toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /** The same of a reason, which is not always an enum: one that costs a proof to say carries it,
+     *  and a record is what holds a proof. The word is the reason's own either way. */
+    public static String word(souther.compiler.observe.MeasureReason reason) {
+        return reason.name().toLowerCase(java.util.Locale.ROOT);
     }
 
     /**
@@ -1431,13 +1497,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         ObjectNode root = JSON.createObjectNode();
         root.put("schemaVersion", schemaVersion);
         root.put("compilerVersion", compilerVersion);
-        root.put("status", wire(status));
+        root.put("status", wire(status()));
+        weakening(root, weakenedBy);
         root.put("adequacy", word(adequacy()));
         ArrayNode modulesOut = root.putArray("modules");
         for (ModuleReport module : modules) {
             ObjectNode m = modulesOut.addObject();
             m.put("module", module.module());
             m.put("status", wire(module.status()));
+            weakening(m, module.weakenedBy());
             ArrayNode gaps = m.putArray("incompleteness");
             for (Incompleteness gap : module.incompleteness()) {
                 ObjectNode g = gaps.addObject();
@@ -1458,6 +1526,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 b.put("rows", behavior.rows());
                 b.put("pending", behavior.pending());
                 b.put("status", wire(behavior.status()));
+                weakening(b, behavior.weakenedBy());
                 signature(b, behavior.signature());
                 partition(b, behavior.partition(), behavior.claimed(), sources);
                 branch(b, behavior.branch(), sources);
@@ -1541,22 +1610,32 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             return;
         }
         ObjectNode out = behavior.putObject("signature");
-        measured(out, signature.status(), signature.reason());
+        measured(out, signature.counted());
         ObjectNode output = out.putObject("output");
+        // What the type declares is the model's and is written whether or not anybody wrote a row.
+        // What the rows reached is the measurement's, and where there is none there is nothing to
+        // write — four empty arrays and a zero used to say the same as a behavior every case of
+        // which went uncovered.
         names(output.putArray("declared"), signature.output().declared());
-        names(output.putArray("specified"), signature.output().specified());
-        names(output.putArray("observed"), signature.output().observed());
-        names(output.putArray("verified"), signature.output().verified());
-        output.put("unclassifiedRows", signature.output().unclassifiedRows());
+        measured(output, signature.output().cases());
+        signature.output().cases().made().ifPresent(cases -> {
+            names(output.putArray("specified"), cases.specified());
+            names(output.putArray("observed"), cases.observed());
+            names(output.putArray("verified"), cases.verified());
+            output.put("unclassifiedRows", cases.unclassifiedRows());
+        });
         ArrayNode inputs = out.putArray("inputs");
         for (InputCaseEvidence input : signature.inputs()) {
             ObjectNode in = inputs.addObject();
             names(in.putArray("declared"), input.declared());
-            names(in.putArray("specified"), input.specified());
-            names(in.putArray("executed"), input.executed());
-            names(in.putArray("verified"), input.verified());
             names(in.putArray("excluded"), input.excluded());
-            in.put("unclassifiedRows", input.unclassifiedRows());
+            measured(in, input.cases());
+            input.cases().made().ifPresent(cases -> {
+                names(in.putArray("specified"), cases.specified());
+                names(in.putArray("executed"), cases.executed());
+                names(in.putArray("verified"), cases.verified());
+                in.put("unclassifiedRows", cases.unclassifiedRows());
+            });
         }
     }
 
@@ -1572,9 +1651,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // this says which. `branch` has carried its own status from the first version; these two are
         // the same measure-level fact in the one place that had nowhere to put it.
         measured(out.putObject("axesMeasure"),
-                partition.partitioned().status(), partition.partitioned().reason());
+                partition.partitioned());
         measured(out.putObject("boundariesMeasure"),
-                partition.bounded().status(), partition.bounded().reason());
+                partition.bounded());
         ArrayNode axes = out.putArray("axes");
         for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
             ObjectNode a = axes.addObject();
@@ -1594,7 +1673,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 read.put("rulesNotReached", true);
             }
             axis.classes().forEach(a.putArray("classes")::add);
-            axis.covered().stream().sorted().forEach(a.putArray("covered")::add);
+            // Only where there is a measurement. A position nothing was measured at used to write
+            // an empty `covered` and a zero count, which reads exactly like one where every class
+            // went unreached — the `status` beside them said which and nothing made a reader look.
+            axis.reached().made().ifPresent(reached ->
+                    reached.covered().stream().sorted().forEach(a.putArray("covered")::add));
             ArrayNode excluded = a.putArray("excluded");
             ArrayNode unproven = a.putArray("unprovenClaims");
             for (ClaimAnnotations.Said said : claimed.at(axis.path())) {
@@ -1605,8 +1688,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     e.put("why", word(said.why()));
                 }
             }
-            a.put("unclassifiedRows", axis.unclassifiedRows());
-            measured(a, axis.status(), axis.reason());
+            axis.reached().made().ifPresent(
+                    reached -> a.put("unclassifiedRows", reached.unclassifiedRows()));
+            measured(a, axis.reached());
         }
         // The questions the model raised that nothing answered, beside the measures rather than
         // inside one. Every measure here is a reader of them, and a position no axis came back for
@@ -1703,21 +1787,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                         // witness of a side as though it were the side.
                         i.put("relation", point.border().operator(point.role()));
                         i.put("against", point.border().against(point.role()));
-                        i.put("hit", owed.coverage().hit());
+                        i.put("hit", ItemAssessment.Coverage.hit(owed.coverage()));
                         i.put("knownWritable", owed.writability().known());
-                        measured(i, owed.status(), owed.whyNotMeasured());
+                        measured(i, owed.coverage());
                     }
                 }
             }
         }
         ObjectNode pairs = out.putObject("pairs");
+        // The size of the space is the model's and is written whether or not anybody counted. The
+        // counts are the measurement's and are written only where one was made; `truncated` is gone
+        // from here entirely, since a space too large to walk says so under `weakening`.
         pairs.put("total", partition.pairs().total());
-        pairs.put("covered", partition.pairs().covered());
-        pairs.put("witnessedFeasible", partition.pairs().witnessedFeasible());
-        pairs.put("provenInfeasible", partition.pairs().provenInfeasible());
-        pairs.put("unknown", partition.pairs().unknown());
-        pairs.put("truncated", partition.pairs().truncated());
-        measured(pairs, partition.pairs().status(), partition.pairs().reason());
+        partition.pairs().counted().made().ifPresent(counts -> {
+            pairs.put("covered", counts.covered());
+            pairs.put("witnessedFeasible", counts.witnessedFeasible());
+            pairs.put("provenInfeasible", counts.provenInfeasible());
+            pairs.put("unknown", counts.unknown());
+        });
+        measured(pairs, partition.pairs().counted());
         // Both arrays either way. An absent one and an empty one read the same to a person and not
         // to a reader that checks whether the field is there, and this document's shape is what the
         // schema is written against.
@@ -1761,7 +1849,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             return;
         }
         ObjectNode out = behavior.putObject("branch");
-        measured(out, branch.status(), branch.reason());
+        measured(out, branch.measured());
         out.put("arms", branch.obligations());
         out.put("covered", branch.coveredObligations());
         // Arms counted as one that nothing can show are one, which qualifies the two numbers above.
@@ -1779,7 +1867,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // of `unreached` where they are collected, and says nothing about the arms beside it.
         ArrayNode unreached = out.putArray("unreached");
         List<souther.compiler.coverage.CoverageSites.Site> named =
-                branch.observation() == MeasurementStatus.COMPLETE ? branch.unreached() : List.of();
+                branch.armsWereReadInFull() ? branch.unreached() : List.of();
         for (souther.compiler.coverage.CoverageSites.Site arm : named) {
             ObjectNode a = unreached.addObject();
             a.put("label", ArmVocabulary.label(arm));
@@ -1932,18 +2020,88 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
-     * What a measure managed, and where it managed nothing, why.
+     * What a measure managed, where it managed nothing why, and what it went without.
      *
-     * <p>Two fields and not one. {@code status} says whether there is a number; {@code reason} says
-     * why there is not, and is absent where there is. A reader that only knows {@code status} reads
-     * exactly what it read before, and one that wants to tell a measure nobody asked for from a
-     * measure that failed no longer has to work it out from the numbers beside it.
+     * <p>Three fields and not one. {@code status} says whether there is a number; {@code reason}
+     * says why there is not, and is absent where there is; {@code weakening} says what left the
+     * measurement weaker than it looks, and is absent where nothing did.
+     *
+     * <p><b>The third is what makes the projection lossless.</b> Four words stand for five states,
+     * and {@code unavailable} covers both a measurement nobody asked for and one that was started
+     * and could not be finished. A document carrying a weakening beside {@code not measured} is
+     * saying the second — which is not a not-measured with more explanation, and is what a reader of
+     * this document could not get at all while the difference lived in a boolean on the reason
+     * (issue #953).
      */
-    private static void measured(ObjectNode of, MeasurementStatus status, Enum<?> reason) {
-        of.put("status", wire(status));
-        if (reason != null) {
-            of.put("reason", word(reason));
+    private static void measured(ObjectNode of, Measurement<?> measurement) {
+        ReportMeasurement<?> said = ReportMeasurement.of(measurement);
+        of.put("status", wire(said.status()));
+        if (said.reason() != null) {
+            of.put("reason", word(said.reason()));
         }
+        weakening(of, said.weakenedBy());
+    }
+
+    /**
+     * What a measurement went without, where it went without anything.
+     *
+     * <p>Written under one key at every level that has one, so a consumer reads the same shape of a
+     * measure and of a module.
+     *
+     * <p><b>The kinds, once each.</b> Two rules this compiler could not read are two facts and one
+     * word, and the word is all this field carries — which rule, which position, which row is named
+     * where the document already names that thing. Written per fact the array would say
+     * {@code rule_unread} five times and leave a reader counting repetitions of a word that
+     * identifies nothing.
+     */
+    private static void weakening(ObjectNode of, WeakeningSet weakenedBy) {
+        if (weakenedBy.isEmpty()) {
+            return;
+        }
+        Set<String> words = new LinkedHashSet<>();
+        for (Weakening each : weakenedBy.causes()) {
+            words.add(each instanceof Weakening.ObservationIncomplete gap
+                    ? word(gap.cause().code()) : word(wordFor(each)));
+        }
+        ArrayNode out = of.putArray("weakening");
+        words.forEach(out::add);
+    }
+
+    /**
+     * One weakening, as a word a consumer can count and match against the next run.
+     *
+     * <p>A {@code switch} with no {@code default}: an arm added is a compile error here rather than
+     * a fact that quietly stops being said. What each arm is about is written where the document
+     * already names that thing — a rule, a position, a row — so this says which kind it is and does
+     * not restate the subject.
+     */
+    public static WeakeningWord wordFor(Weakening weakening) {
+        return switch (weakening) {
+            // Its own vocabulary, which is the observation codes. Asking this to spell it a second
+            // way would be a second set of words for one fact.
+            case Weakening.ObservationIncomplete _ ->
+                    throw new IllegalArgumentException("an observation writes its own code");
+            case Weakening.OutputCasesUnreadable _ -> WeakeningWord.OUTPUT_CASES_UNREADABLE;
+            case Weakening.InputCasesUnreadable _ -> WeakeningWord.INPUT_CASES_UNREADABLE;
+            case Weakening.RowDidNotFinish _ -> WeakeningWord.ROW_DID_NOT_FINISH;
+            case Weakening.BorderValueUnreadable _ -> WeakeningWord.BORDER_VALUE_UNREADABLE;
+            case Weakening.ModelReadingIncomplete it -> switch (it.cause()) {
+                case souther.compiler.partition.ClosureGap.RuleUnread _ ->
+                        WeakeningWord.RULE_UNREAD;
+                case souther.compiler.partition.ClosureGap.PositionNotReachedInto _ ->
+                        WeakeningWord.POSITION_NOT_READ;
+                case souther.compiler.partition.ClosureGap.QuestionUnanswered _,
+                     souther.compiler.partition.ClosureGap.ComparisonUnanswered _ ->
+                        WeakeningWord.QUESTION_UNANSWERED;
+                case souther.compiler.partition.ClosureGap.RulesNotReached _ ->
+                        WeakeningWord.RULES_NOT_REACHED;
+                case souther.compiler.partition.ClosureGap.AxisOmitted _ ->
+                        WeakeningWord.AXIS_OMITTED;
+            };
+            case Weakening.PairSpaceTruncated _ -> WeakeningWord.PAIR_SPACE_TRUNCATED;
+            case Weakening.ProofContradicted _ -> WeakeningWord.PROOF_CONTRADICTED;
+            case Weakening.ArmsUnsettled _ -> WeakeningWord.ARMS_UNSETTLED;
+        };
     }
 
     /**

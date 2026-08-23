@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.query.ItemAssessment;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
@@ -243,7 +244,7 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
                         .findFirst().orElseThrow(() -> new AssertionError(
                                 "the row was offered for " + point + ", which this line has no"
                                         + " point of: " + after.keySet()));
-                assertTrue(line.owedAt(role).coverage().hit(),
+                assertTrue(ItemAssessment.Coverage.hit(line.owedAt(role).coverage()),
                         () -> "a row offered for `" + point + "` of `guard a " + op + " b` does not"
                                 + " cover it: " + offered.getValue());
             }
@@ -281,7 +282,7 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
         assertNotNull(line, bordersOf(model).keySet().toString());
         return java.util.stream.Stream.of(PointRole.values())
                 .filter(role -> line.owedAt(role) != null)
-                .filter(role -> !line.owedAt(role).coverage().hit())
+                .filter(role -> !ItemAssessment.Coverage.hit(line.owedAt(role).coverage()))
                 .map(line::label)
                 .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
     }
@@ -352,8 +353,8 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
         // Well under and well over, which is what the two points away from the border ask for. A
         // row one step under the line is the ON point rather than the IN point, and a test written
         // with one would be asserting about the point beside the one it names.
-        assertTrue(line.owedAt(PointRole.IN).coverage().hit(), "a row is well under the line");
-        assertTrue(line.owedAt(PointRole.OUT).coverage().hit(), "and one is well over it");
+        assertTrue(ItemAssessment.Coverage.hit(line.owedAt(PointRole.IN).coverage()), "a row is well under the line");
+        assertTrue(ItemAssessment.Coverage.hit(line.owedAt(PointRole.OUT).coverage()), "and one is well over it");
         for (PointRole role : List.of(PointRole.IN, PointRole.OUT)) {
             assertEquals(souther.compiler.query.ItemAssessment.Attempt.Reason
                             .A_ROW_IS_ALREADY_THERE,

@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.query.Measurement;
+import souther.compiler.query.ItemAssessment;
 import souther.compiler.examples.Deadline;
 import org.junit.jupiter.api.Test;
 
@@ -201,7 +203,7 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
 
             Adequacy.SignatureEvidence signature = compilation.db()
                     .ask(new Adequacy.Witnesses(module)).value().get("take");
-            if (signature.status() == MeasurementStatus.COMPLETE) {
+            if (signature.counted() instanceof Measurement.Complete<?>) {
                 if (!signature.output().unspecified().isEmpty()) {
                     wrong.add("signature output: " + signature.output().unspecified());
                 }
@@ -212,26 +214,26 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
             PartitionEvidence partition = compilation.db()
                     .ask(new Adequacy.Coverage(module)).value().get("take");
             for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
-                if (axis.status() == MeasurementStatus.COMPLETE && !axis.uncovered().isEmpty()) {
+                if (axis.reached() instanceof Measurement.Complete<?> && !axis.uncovered().isEmpty()) {
                     wrong.add("axis " + axis.path() + ": " + axis.uncovered());
                 }
             }
             for (BorderAssessment.Point point
                     : BorderAssessment.pointsOf(partition.boundaries())) {
                 if (point.owed() != null
-                        && point.item().status() == MeasurementStatus.COMPLETE
-                        && !point.owed().coverage().hit()) {
+                        && point.item().weakeningSource() instanceof Measurement.Complete<?>
+                        && !ItemAssessment.Coverage.hit(point.owed().coverage())) {
                     wrong.add("boundary " + point.border().axis() + " " + point.asked());
                 }
             }
-            if (partition.pairs().status() == MeasurementStatus.COMPLETE
-                    && partition.pairs().unknown() > 0) {
-                wrong.add("pairs: " + partition.pairs().unknown() + " untried");
+            if (partition.pairs().counted() instanceof Measurement.Complete<?>
+                    && partition.pairs().counts().unknown() > 0) {
+                wrong.add("pairs: " + partition.pairs().counts().unknown() + " untried");
             }
 
             Adequacy.BranchEvidence branch = compilation.db()
                     .ask(new Adequacy.BranchCoverage(module)).value().get("take");
-            if (branch.status() == MeasurementStatus.COMPLETE && !branch.unreached().isEmpty()) {
+            if (branch.measured() instanceof Measurement.Complete<?> && !branch.unreached().isEmpty()) {
                 wrong.add("branch: " + branch.unreached().size() + " unreached");
             }
 
@@ -315,9 +317,9 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
         assertTrue(partition.axes().stream().anyMatch(a -> !a.uncovered().isEmpty()),
                 "a class nothing is in");
         assertTrue(BorderAssessment.pointsOf(partition.boundaries()).stream()
-                        .anyMatch(p -> p.owed() != null && !p.owed().coverage().hit()),
+                        .anyMatch(p -> p.owed() != null && !ItemAssessment.Coverage.hit(p.owed().coverage())),
                 "a boundary nothing is at");
-        assertTrue(partition.pairs().unknown() > 0, "a combination nothing reaches");
+        assertTrue(partition.pairs().counts().unknown() > 0, "a combination nothing reaches");
         assertFalse(compilation.db().ask(new Adequacy.BranchCoverage(module)).value()
                 .get("take").unreached().isEmpty(), "an arm nothing goes through");
         assertFalse(GeneratedRows.of(module,

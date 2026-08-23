@@ -276,7 +276,7 @@ class WhichFindingsABuildRefusesOverIsWrittenDownTest {
         for (Adequacy.Criterion criterion : Adequacy.Criterion.values()) {
             for (Adequacy.Finding f : report().findings()) {
                 assertEquals(f.disposition(criterion) == Adequacy.Finding.Disposition.REFUSED,
-                        f.isAdequacyGap(criterion), f.kind() + " at " + f.status());
+                        f.isAdequacyGap(criterion), f.kind() + " at " + f.weakenedBy());
             }
         }
     }

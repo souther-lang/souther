@@ -5,6 +5,7 @@ import java.lang.classfile.ClassFile;
 import java.lang.classfile.ClassModel;
 import java.lang.classfile.CodeModel;
 import java.lang.classfile.Opcode;
+import java.lang.classfile.instruction.FieldInstruction;
 import java.lang.classfile.instruction.InvokeDynamicInstruction;
 import java.lang.classfile.instruction.InvokeInstruction;
 import java.lang.classfile.instruction.NewObjectInstruction;
@@ -37,7 +38,8 @@ final class Compiled {
 
     private Compiled() {}
 
-    /** How a class reaches something: it makes one, it calls one, or it names one for later. */
+    /** How a class reaches something: it makes one, it calls one, it names one for later, or it
+     *  reads one. */
     enum How {
 
         /** A {@code new}. */
@@ -47,7 +49,18 @@ final class Compiled {
         CALLS,
 
         /** A method or constructor named as a reference, which runs somewhere else. */
-        REFERS
+        REFERS,
+
+        /**
+         * A field read or written, which is how a class reaches a constant.
+         *
+         * <p>Here because a rule about who may read an {@code enum} had nothing to look at without
+         * it: {@code status == Some.CONSTANT} is a {@code getstatic} and none of the three above, so
+         * a check written over calls alone met no reader at all and passed by seeing nothing. What a
+         * class does is this type's to know, and a rule that needs a way of reaching something asks
+         * for it here rather than being written over the nearest vocabulary to hand.
+         */
+        READS
     }
 
     /**
@@ -97,6 +110,11 @@ final class Compiled {
                         case NewObjectInstruction made -> found.add(new Site(from, name, descriptor,
                                 How.MAKES, named(made.className().asInternalName()), "<init>",
                                 false));
+                        case FieldInstruction field -> found.add(new Site(from, name, descriptor,
+                                How.READS, named(field.owner().asInternalName()),
+                                field.name().stringValue(),
+                                field.opcode() == Opcode.GETSTATIC
+                                        || field.opcode() == Opcode.PUTSTATIC));
                         case InvokeDynamicInstruction reference -> {
                             for (var argument : reference.bootstrapArgs()) {
                                 if (argument instanceof DirectMethodHandleDesc handle) {

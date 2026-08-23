@@ -1,10 +1,11 @@
 package souther.compiler;
 
+import souther.compiler.report.AdequacyReport;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.observe.InputCaseEvidence;
+import souther.compiler.query.InputCaseEvidence;
 import souther.compiler.observe.MeasurementStatus;
-import souther.compiler.observe.OutputCaseEvidence;
+import souther.compiler.query.OutputCaseEvidence;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
@@ -67,7 +68,7 @@ class SignatureCoverageReadsAPositionThroughItsNamesTest {
                 """, "wrapped");
 
         assertEquals(List.of("Approved", "Rejected"), names(wrapped.declared()));
-        assertEquals(MeasurementStatus.COMPLETE, wrapped.status());
+        assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(wrapped.cases()));
     }
 
     /** The same position, read at the case a row wrote there. */
@@ -78,7 +79,7 @@ class SignatureCoverageReadsAPositionThroughItsNamesTest {
                     | (DecisionN(Approved { id = 1 })) -> Ok
                 """, "wrapped");
 
-        assertEquals(List.of("Approved"), names(wrapped.specified()));
+        assertEquals(List.of("Approved"), names(wrapped.seen().specified()));
         assertEquals(List.of("Rejected"), names(wrapped.unspecified()));
     }
 
@@ -90,7 +91,7 @@ class SignatureCoverageReadsAPositionThroughItsNamesTest {
                     | (DecisionN(Rejected { why = "no" })) -> Ok
                 """, "wrapped");
 
-        assertEquals(List.of("Rejected"), names(wrapped.specified()));
+        assertEquals(List.of("Rejected"), names(wrapped.seen().specified()));
         assertEquals(List.of("Approved"), names(wrapped.unspecified()));
     }
 
@@ -106,9 +107,9 @@ class SignatureCoverageReadsAPositionThroughItsNamesTest {
                     | (DecisionN(Rejected { why = "no" })) -> Ok
                 """, "wrapped");
 
-        assertTrue(wrapped.declared().containsAll(wrapped.specified()),
-                "what a row supplied is one of the cases the position has: " + wrapped.specified());
-        assertEquals(List.of("Approved", "Rejected"), names(wrapped.specified()));
+        assertTrue(wrapped.declared().containsAll(wrapped.seen().specified()),
+                "what a row supplied is one of the cases the position has: " + wrapped.seen().specified());
+        assertEquals(List.of("Approved", "Rejected"), names(wrapped.seen().specified()));
         assertEquals(List.of(), names(wrapped.unspecified()));
     }
 
@@ -121,7 +122,7 @@ class SignatureCoverageReadsAPositionThroughItsNamesTest {
                 """, "twice");
 
         assertEquals(List.of("Approved", "Rejected"), names(twice.declared()));
-        assertEquals(List.of("Approved"), names(twice.specified()));
+        assertEquals(List.of("Approved"), names(twice.seen().specified()));
     }
 
     /**
@@ -141,8 +142,8 @@ class SignatureCoverageReadsAPositionThroughItsNamesTest {
 
         assertEquals(List.of(), errors(rows));
         Adequacy.SignatureEvidence makes = signatures(rows).get("makes");
-        assertEquals(MeasurementStatus.NOT_APPLICABLE, makes.output().status());
-        assertEquals(OutputCaseEvidence.Reason.NOT_A_SUM, makes.output().reason());
+        assertEquals(MeasurementStatus.NOT_APPLICABLE, AdequacyReport.statusOf(makes.output().cases()));
+        assertEquals(OutputCaseEvidence.NotASum.NOT_A_SUM, makes.output().cases().why());
     }
 
     /**
@@ -159,8 +160,8 @@ class SignatureCoverageReadsAPositionThroughItsNamesTest {
                     | (OtherN(Approved { id = 1 })) -> Ok
                 """, "wrapped");
 
-        assertFalse(names(wrapped.specified()).contains("Approved"),
-                "a name the position does not write is not read through: " + wrapped.specified());
+        assertFalse(names(wrapped.seen().specified()).contains("Approved"),
+                "a name the position does not write is not read through: " + wrapped.seen().specified());
         assertEquals(List.of("Approved", "Rejected"), names(wrapped.unspecified()));
     }
 
@@ -173,7 +174,7 @@ class SignatureCoverageReadsAPositionThroughItsNamesTest {
                 """, "bare");
 
         assertEquals(List.of("Approved", "Rejected"), names(bare.declared()));
-        assertEquals(List.of("Approved"), names(bare.specified()));
+        assertEquals(List.of("Approved"), names(bare.seen().specified()));
     }
 
     private static InputCaseEvidence input(String rows, String behavior) {

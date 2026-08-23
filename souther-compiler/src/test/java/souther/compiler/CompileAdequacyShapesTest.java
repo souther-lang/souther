@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.query.Measurement;
+import souther.compiler.report.AdequacyReport;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.MeasurementStatus;
@@ -117,12 +119,12 @@ class CompileAdequacyShapesTest {
 
         Adequacy.BranchEvidence branch = compilation.db()
                 .ask(new Adequacy.BranchCoverage(compilation.modules().get(0))).value().get("check");
-        assertEquals(MeasurementStatus.COMPLETE, branch.status(),
+        assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(branch.measured()),
                 "the behavior's own arms are countable whatever its helpers look like");
         assertEquals(2, branch.all().size(), "the guard's two arms, and none of the helper's");
 
         assertTrue(BorderAssessment.pointsOf(partition(compilation, "check").boundaries()).stream()
-                        .anyMatch(p -> p.item().status() == MeasurementStatus.COMPLETE),
+                        .anyMatch(p -> p.item().weakeningSource() instanceof Measurement.Complete<?>),
                 "and the guard's boundary is decided rather than unavailable");
     }
 
@@ -167,7 +169,7 @@ class CompileAdequacyShapesTest {
 
         Adequacy.BranchEvidence branch = compilation.db()
                 .ask(new Adequacy.BranchCoverage("example.rule")).value().get("count");
-        assertEquals(MeasurementStatus.COMPLETE, branch.status(),
+        assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(branch.measured()),
                 "the invariant's own fork is not this behavior's, and does not stop it being counted");
         assertEquals(2, branch.all().size(), "the guard's two arms, and none of the invariant's");
         assertEquals(1, branch.covered().size());
@@ -201,8 +203,8 @@ class CompileAdequacyShapesTest {
                 """), "pick");
 
         assertEquals(12, evidence.pairs().total(), "three positions of two classes");
-        assertEquals(3, evidence.pairs().covered(), "one row sits in three of the pairs");
-        assertEquals(9, evidence.pairs().unknown());
+        assertEquals(3, evidence.pairs().counts().covered(), "one row sits in three of the pairs");
+        assertEquals(9, evidence.pairs().counts().unknown());
     }
 
     /**

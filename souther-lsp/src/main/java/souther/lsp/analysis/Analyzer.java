@@ -561,8 +561,9 @@ public final class Analyzer {
         Adequacy.SignatureEvidence signature =
                 adequacy.signatures() == null ? null : adequacy.signatures().get(behavior);
         if (signature != null && !signature.output().declared().isEmpty()) {
-            parts.add("out " + signature.output().specified().size() + "/"
-                    + signature.output().declared().size());
+            signature.output().cases().made().ifPresent(cases ->
+                    parts.add("out " + cases.specified().size() + "/"
+                            + signature.output().declared().size()));
         }
         souther.compiler.query.PartitionEvidence partition =
                 adequacy.partitions() == null ? null : adequacy.partitions().get(behavior);
@@ -576,7 +577,8 @@ public final class Analyzer {
                             .filter(Analyzer::settled).toList();
             long met = settled.stream()
                     .filter(item -> item instanceof souther.compiler.query.ItemAssessment.Owed owed
-                            && owed.coverage().hit())
+                            && souther.compiler.query.ItemAssessment.Coverage.hit(
+                                    owed.coverage()))
                     .count();
             if (!settled.isEmpty()) {
                 parts.add("boundary " + met + "/" + settled.size());
@@ -584,8 +586,10 @@ public final class Analyzer {
         }
         Adequacy.BranchEvidence branch =
                 adequacy.branches() == null ? null : adequacy.branches().get(behavior);
+        // The measure was made and made in full. A count shown beside a measurement made in part
+        // reads as settled, which is the one thing an editor's one line has no room to qualify.
         if (branch != null
-                && branch.status() == souther.compiler.observe.MeasurementStatus.COMPLETE) {
+                && branch.measured() instanceof souther.compiler.query.Measurement.Complete<?>) {
             parts.add("branch " + branch.coveredObligations() + "/" + branch.obligations());
         }
         return String.join(" · ", parts);
@@ -604,10 +608,12 @@ public final class Analyzer {
      * a lens that counted it would put the model's own answer into a ratio of what the rows reach.
      */
     private static boolean settled(souther.compiler.query.ItemAssessment item) {
+        // The measurement was made and made in full, which is the whole of what this asks. It used
+        // to list the two verdicts that count as settled and leave out the two that do not; a
+        // verdict is now what was seen and how far it can be trusted is the measurement's, so this
+        // is one question again.
         return item instanceof souther.compiler.query.ItemAssessment.Owed owed
-                && (owed.coverage() instanceof souther.compiler.query.ItemAssessment.Coverage.Hit
-                        || owed.coverage()
-                                instanceof souther.compiler.query.ItemAssessment.Coverage.Missed);
+                && owed.coverage() instanceof souther.compiler.query.Measurement.Complete<?>;
     }
 
     /** The caret at one position, as a range of no width. */

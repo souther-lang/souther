@@ -1,7 +1,6 @@
 package souther.compiler.query;
 
 import souther.compiler.observe.Incompleteness;
-import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.partition.Partitions;
 
 import java.util.List;
@@ -24,13 +23,27 @@ import java.util.Set;
  * @param omitted      positions dropped for being past the axis limit, with what dropping each
  *                     one cost — a position that was carrying a boundary leaves the rows there
  *                     unmeasured rather than covered
+ * <p><b>Why these are still here, beside the measures that went without them.</b> #953 moved every
+ * fact that costs a measure something into what weakened that measure, and the obvious next step is
+ * to drop the lists and project them back out. Two of them cannot be: {@code unread} holds rules
+ * that were set aside and left neither measure short — a comparison relating two positions is read,
+ * says what it says, and divides nothing ({@code BlockReason.AboutARule.leavesShort}) — so the
+ * weakening is a strictly smaller set than what a reader is owed, and a projection would drop
+ * exactly those rules from the report.
+ *
+ * <p>The other two, {@code unanswered} and {@code omitted}, look as though they would project: every
+ * unanswered question goes to the measure that answers it and every dropped axis costs the partition
+ * measure always. They are kept anyway, because that is a reading of the code and not a measurement
+ * of it, and the rule this normalization follows is to drop only what something shows is covered.
+ *
  * @param whyUnclassified why the rows counted in {@link AxisCoverage#unclassifiedRows} could not be
  *                     placed. The count is the measurement and this is what it came out of, which
  *                     is why they are two things and not one wider count. Not a report's list of
  *                     reasons: these are what classification observed, and joining them to
  *                     everything else a module could not read happens where that list is built
  */
-public record PartitionEvidence(PartitionDerivation partitioned, BoundaryDerivation bounded,
+public record PartitionEvidence(Measurement<List<AxisCoverage>> partitioned,
+                                Measurement<List<BorderAssessment>> bounded,
                                 PairSpace pairs,
                                 List<souther.compiler.partition.UndividedPosition> notDerivable,
                                 List<souther.compiler.inputs.UnreadRule> unread,
@@ -50,7 +63,7 @@ public record PartitionEvidence(PartitionDerivation partitioned, BoundaryDerivat
      * in it open for a measurement that was never anybody's to make.
      */
     public static final PartitionEvidence NONE = new PartitionEvidence(
-            new PartitionDerivation.NoSubject(), new BoundaryDerivation.NoSubject(),
+            PartitionDerivation.noSubject(), BoundaryDerivation.noSubject(),
             PairSpace.NONE, List.of(), List.of(), List.of(), List.of(),
             List.of(), List.of(), List.of());
 
@@ -210,14 +223,37 @@ public record PartitionEvidence(PartitionDerivation partitioned, BoundaryDerivat
         return List.copyOf(out);
     }
 
-    /** The positions, for a reader that wants them and not what the measure made of itself. */
+    /**
+     * What every measure of this behavior's positions went without, all of them.
+     *
+     * <p>Asked here rather than assembled by whoever wants it. There are six measures under this —
+     * the two derivations, each position, each point of each border, and the combinations — and a
+     * reader listing them is a reader who has to be told when a seventh arrives. The report listed
+     * them, so a measure added here would have been a measure the report left out of every whole
+     * above it, silently (issue #953).
+     */
+    public WeakeningSet weakening() {
+        WeakeningSet out = partitioned.weakening()
+                .union(bounded.weakening())
+                .union(pairs.counted().weakening());
+        for (AxisCoverage axis : axes()) {
+            out = out.union(axis.reached().weakening());
+        }
+        for (BorderAssessment.Point point : BorderAssessment.pointsOf(boundaries())) {
+            out = out.union(point.item().weakening());
+        }
+        return out;
+    }
+
+    /** The positions, for a reader that wants them and not what the measure made of itself. Empty
+     *  where the measure has none to show, which its own answer says the reason for. */
     public List<AxisCoverage> axes() {
-        return partitioned.at();
+        return PartitionDerivation.at(partitioned);
     }
 
     /** The lines, likewise. */
     public List<BorderAssessment> boundaries() {
-        return bounded.at();
+        return BoundaryDerivation.at(bounded);
     }
 
     /**
@@ -228,86 +264,100 @@ public record PartitionEvidence(PartitionDerivation partitioned, BoundaryDerivat
      * been shown impossible; nothing has tried to build one. Calling those unreachable would flatter
      * the coverage, and calling them missing would send the author after rows that may not exist.
      *
-     * <p>{@link #provenInfeasible} is what a search settled: a combination whose values were tried and
-     * refused for a reason that is about the combination, or one ruled out by a constraint. Nothing
-     * fills it until something builds candidates, and a candidate that failed to build is not it —
-     * another value of the same two classes may well have built.
+     * <p>{@code total} is outside the measurement because it is a fact about the model: the product
+     * of what a row can be written at is that whether or not anybody counted. What was counted is
+     * inside, and a space nobody counted has no counts at all — it used to have four zeroes, which
+     * read exactly like a space where nothing was reached.
      *
-     * @param truncated whether the space was too large to enumerate, so these numbers describe part
-     *                  of it
-     * @param status    {@code PARTIAL} where the rows these were counted from are not all the rows
-     *                  there were, or not all of them could be placed. Reached is still reached; what
-     *                  is not reached is then undecided rather than untried
+     * <p>The other thing that used to sit out here was {@code truncated}, a boolean that had to be
+     * kept in step with a status beside it (#951 added the check that did it). A space too large to
+     * walk is now said once, as what weakened the measurement.
      */
-    public record PairSpace(int total, int covered, int witnessedFeasible, int provenInfeasible,
-                            int unknown, boolean truncated, MeasurementStatus status, Reason reason) {
+    public record PairSpace(int total, Measurement<PairCounts> counted) {
+
+        /**
+         * What the rows reached of the space, where anybody counted.
+         *
+         * <p>{@code provenInfeasible} is what a search settled: a combination whose values were
+         * tried and refused for a reason that is about the combination, or one ruled out by a
+         * constraint. Nothing fills it until something builds candidates, and a candidate that
+         * failed to build is not it — another value of the same two classes may well have built.
+         */
+        public record PairCounts(int covered, int witnessedFeasible, int provenInfeasible,
+                                 int unknown) {}
 
         /** Why the combinations have no numbers. */
-        public enum Reason implements souther.compiler.observe.MeasureReason {
+        public enum NoRows implements souther.compiler.observe.NotMeasuredReason {
             /** No row names this behavior, so nothing sits anywhere. */
-            NO_ROWS(MeasurementStatus.NOT_MEASURED);
-
-            private final MeasurementStatus status;
-
-            Reason(MeasurementStatus status) {
-                this.status = status;
-            }
-
-            @Override
-            public MeasurementStatus status() {
-                return status;
-            }
-
-            /** No row was written, which is a measurement nobody asked for and not one that failed. */
-            @Override
-            public boolean somethingWasUnreadable() {
-                return false;
-            }
+            NO_ROWS
         }
 
         public static final PairSpace NONE =
-                new PairSpace(0, 0, 0, 0, 0, false, MeasurementStatus.COMPLETE, null);
+                new PairSpace(0, new Measurement.Complete<>(new PairCounts(0, 0, 0, 0)));
 
-        public static PairSpace unavailable(int total, Reason reason) {
-            return new PairSpace(total, 0, 0, 0, total, false, reason.status(), reason);
+        /** A space nobody counted. It keeps its size, which the model settles, and has no counts. */
+        public static PairSpace noRows(int total) {
+            return new PairSpace(total, new Measurement.NotMeasured<>(NoRows.NO_ROWS));
         }
 
-        public PairSpace {
-            Unavailable.check(status, reason);
-            // A space too large to walk is a measure whose numbers describe part of it, which is
-            // what `PARTIAL` says and is not a second thing to say beside it. Left representable,
-            // the two could disagree — and a reader that then trusted neither read the flag and
-            // decided the status again, which is how a measure comes to have two authorities.
-            if (truncated && status != MeasurementStatus.PARTIAL) {
-                throw new IllegalArgumentException(
-                        "a space this could not walk to the end of is measured in part, not "
-                                + status);
-            }
+        /** A space too large to walk to the end of. What it is measured in part by is the fact that
+         *  stopped it, said once. */
+        public static PairSpace truncated(String behavior, long size, int limit) {
+            int total = (int) Math.min(size, Integer.MAX_VALUE);
+            return new PairSpace(total, new Measurement.Partial<>(
+                    new PairCounts(0, 0, 0, total),
+                    WeakeningSet.of(new Weakening.PairSpaceTruncated(behavior, size, limit))));
         }
 
-        /** Whether a single ratio would say anything. With unknowns in the denominator it would not. */
+        /**
+         * The numbers, where a measurement was made.
+         *
+         * <p>Throws where none was. A measure with no number has none, and an accessor that answered
+         * zero would be the thing this type was introduced to remove — a reader would get an answer
+         * and no sign that nobody measured it.
+         */
+        public PairCounts counts() {
+            return counted.made().orElseThrow(() -> new IllegalStateException(
+                    "a pair space nobody counted was read for its counts"));
+        }
+
+        /** Whether a single ratio would say anything. With unknowns in the denominator it would not,
+         *  and a measurement that is not complete has them whether or not they were counted. */
         public boolean decided() {
-            return unknown == 0 && !truncated;
+            return counted instanceof Measurement.Complete<PairCounts> whole
+                    && whole.value().unknown() == 0;
         }
     }
-
-
 
     /**
      * How much of one position's partition the rows reach.
      *
-     * @param classes          the classes a row can be written at, which is what the model divides
-     *                         the position into: a case its rules refuse is not one of them. Nothing
-     *                         a body declares narrows this — what it declared is said beside these
-     *                         numbers ({@link ClaimAnnotations}) and never into them
-     * @param excluded         the classes the rules rule out and a body's claim named, so that a report says what it took
-     *                         out rather than showing a position with fewer classes than the type has
-     * @param unclassifiedRows rows whose value at this position could not be read. Above zero, an
-     *                         unreached class is undecided rather than unreached.
+     * @param classes the classes a row can be written at, which is what the model divides the
+     *                position into: a case its rules refuse is not one of them. Outside the
+     *                measurement, because it is what the model says and is so whether or not
+     *                anybody counted. Nothing a body declares narrows it — what it declared is said
+     *                beside these numbers ({@link ClaimAnnotations}) and never into them
+     * @param reached what the rows reached of them, where anybody counted. A position nothing was
+     *                measured at used to carry an empty {@code covered} and a zero count beside a
+     *                status saying so, which reads exactly like a position every class of which
+     *                went unreached
      */
-    public record AxisCoverage(String axis, String path, List<String> classes, Set<String> covered,
-                               int unclassifiedRows, MeasurementStatus status, Reason reason,
-                               Reading read) {
+    public record AxisCoverage(String axis, String path, List<String> classes, Reading read,
+                               Measurement<Reached> reached) {
+
+        /**
+         * What the rows reached at one position.
+         *
+         * @param unclassifiedRows rows whose value at this position could not be read. Above zero,
+         *                         an unreached class is undecided rather than unreached — and what
+         *                         made them unreadable is what the measurement is weakened by
+         */
+        public record Reached(Set<String> covered, int unclassifiedRows) {
+
+            public Reached {
+                covered = Set.copyOf(covered);
+            }
+        }
 
         /**
          * Which of this position's rules nothing accounted for.
@@ -364,44 +414,38 @@ public record PartitionEvidence(PartitionDerivation partitioned, BoundaryDerivat
         public static final Reading ANSWERED = new Reading(Reach.EVERY_RULE, true);
 
         /** Why a position has no coverage numbers. */
-        public enum Reason implements souther.compiler.observe.MeasureReason {
-            /** No row names this behavior. An absence of evidence is not a set of gaps, so the classes
-             *  nothing sits in are not classes nothing reaches. */
-            NO_ROWS(MeasurementStatus.NOT_MEASURED);
-
-            private final MeasurementStatus status;
-
-            Reason(MeasurementStatus status) {
-                this.status = status;
-            }
-
-            @Override
-            public MeasurementStatus status() {
-                return status;
-            }
-
-            /** No row was written, which is a measurement nobody asked for and not one that failed. */
-            @Override
-            public boolean somethingWasUnreadable() {
-                return false;
-            }
+        public enum NoRows implements souther.compiler.observe.NotMeasuredReason {
+            /** No row names this behavior. An absence of evidence is not a set of gaps, so the
+             *  classes nothing sits in are not classes nothing reaches. */
+            NO_ROWS
         }
 
         /** Which classes there are is a fact about the model, and no row has to exist for it to be
          *  so — which is why a position nothing was measured at still names them. */
-        public static AxisCoverage unavailable(String axis, String path, List<String> classes,
-                                               Reason reason, Reading read) {
-            return new AxisCoverage(axis, path, classes, Set.of(), 0, reason.status(), reason, read);
+        public static AxisCoverage noRows(String axis, String path, List<String> classes,
+                                          Reading read) {
+            return new AxisCoverage(axis, path, classes, read,
+                    new Measurement.NotMeasured<>(NoRows.NO_ROWS));
         }
 
         public AxisCoverage {
             classes = List.copyOf(classes);
-            covered = Set.copyOf(covered);
             if (read == null) {
                 throw new IllegalArgumentException(
                         "a position with no account of what was read about its values: " + path);
             }
-            Unavailable.check(status, reason);
+        }
+
+        /**
+         * The numbers, where a measurement was made.
+         *
+         * <p>Throws where none was. A measure with no number has none, and an accessor that answered
+         * zero would be the thing this type was introduced to remove — a reader would get an answer
+         * and no sign that nobody measured it.
+         */
+        public Reached rows() {
+            return reached.made().orElseThrow(() -> new IllegalStateException(
+                    "a position nobody measured was read for what the rows reached: " + path));
         }
 
         /**
@@ -418,8 +462,13 @@ public record PartitionEvidence(PartitionDerivation partitioned, BoundaryDerivat
          * measure writing a report's sentence.
          */
         public List<AxisClass> uncovered() {
-            return classes.stream().filter(c -> !covered.contains(c))
-                    .map(c -> new AxisClass(this, c)).toList();
+            // Empty where nothing was measured here. An absence of evidence is not a set of gaps:
+            // the classes nothing sits in are not classes nothing reaches, and the measurement
+            // beside this says which of the two a reader is looking at.
+            return reached.made()
+                    .map(it -> classes.stream().filter(c -> !it.covered().contains(c))
+                            .map(c -> new AxisClass(this, c)).toList())
+                    .orElseGet(List::of);
         }
     }
 

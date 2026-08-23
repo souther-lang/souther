@@ -1,8 +1,8 @@
 package souther.compiler.coverage;
 
+import souther.compiler.query.WeakeningSet;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.types.CoverageConstruct;
 import souther.compiler.types.CoverageOrigin;
@@ -41,9 +41,9 @@ class AnUnsettledDecisionIsUncertainHoweverManyPlacesItHasTest {
 
     /** Two arms of one fork, neither of them reached. */
     private static Adequacy.BranchEvidence over(DecidedBy decided) {
-        return new Adequacy.BranchEvidence(List.of(arm(0, decided), arm(1, decided)),
-                Set.of(), Set.of(),
-                MeasurementStatus.COMPLETE, MeasurementStatus.COMPLETE, null);
+        return Adequacy.BranchEvidence.measured("b",
+                List.of(arm(0, decided), arm(1, decided)), Set.of(),
+                souther.compiler.query.Adequacy.NOTHING_PROVEN, WeakeningSet.none());
     }
 
     /** One place whose rule nothing settled is a fork this cannot say how many rules it stands for. */

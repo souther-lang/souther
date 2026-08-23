@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourceNameResolver;
-import souther.compiler.observe.InputCaseEvidence;
+import souther.compiler.query.InputCaseEvidence;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;

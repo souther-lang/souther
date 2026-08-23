@@ -79,8 +79,8 @@ class AnInPointLiesInsideThePartitionItsBorderBoundsTest {
                     | (11) -> Mid { n = 11 }
                     | (30) -> High { n = 30 }""", "10");
 
-        assertInstanceOf(ItemAssessment.Coverage.Missed.class,
-                border.owedAt(PointRole.IN).coverage(),
+        assertInstanceOf(ItemAssessment.Coverage.NoHit.class,
+border.owedAt(PointRole.IN).coverage().made().orElseThrow(),
                 "eleven is the ON point and thirty is in the partition after next");
     }
 
@@ -99,7 +99,7 @@ class AnInPointLiesInsideThePartitionItsBorderBoundsTest {
                     | (30) -> High { n = 30 }""", "10");
 
         assertInstanceOf(ItemAssessment.Coverage.Hit.class,
-                border.owedAt(PointRole.IN).coverage());
+border.owedAt(PointRole.IN).coverage().made().orElseThrow());
     }
 
     /**
@@ -255,8 +255,8 @@ class AnInPointLiesInsideThePartitionItsBorderBoundsTest {
         // A tenth is below two tenths, which is a partition further out. Read without the line at
         // two tenths, the run below the third reached the end of the order and a tenth answered
         // for a point that lies between the two lines.
-        assertInstanceOf(ItemAssessment.Coverage.Missed.class,
-                borderNamed(all, "3 * n = 1").owedAt(PointRole.OUT).coverage(),
+        assertInstanceOf(ItemAssessment.Coverage.NoHit.class,
+borderNamed(all, "3 * n = 1").owedAt(PointRole.OUT).coverage().made().orElseThrow(),
                 "and a row two partitions out is not at it");
     }
 
@@ -272,7 +272,7 @@ class AnInPointLiesInsideThePartitionItsBorderBoundsTest {
                     | (5) -> Low { n = 5 }
                     | (30) -> High { n = 30 }""", "20");
 
-        assertEquals(ItemAssessment.Coverage.Missed.class,
-                border.owedAt(PointRole.OUT).coverage().getClass());
+        assertEquals(ItemAssessment.Coverage.NoHit.class,
+                border.owedAt(PointRole.OUT).coverage().made().orElseThrow().getClass());
     }
 }

@@ -1,11 +1,13 @@
 {
-  "schemaVersion" : 4,
+  "schemaVersion" : 5,
   "compilerVersion" : "<version>",
   "status" : "partial",
+  "weakening" : [ "rule_unread", "rules_not_reached" ],
   "adequacy" : "not_satisfied",
   "modules" : [ {
     "module" : "conformance.catalog",
     "status" : "partial",
+    "weakening" : [ "rule_unread" ],
     "incompleteness" : [ ],
     "behaviors" : [ {
       "name" : "discount",
@@ -13,10 +15,12 @@
       "rows" : 4,
       "pending" : 0,
       "status" : "partial",
+      "weakening" : [ "rule_unread" ],
       "signature" : {
         "status" : "complete",
         "output" : {
           "declared" : [ "Discounted", "TooCheap" ],
+          "status" : "complete",
           "specified" : [ "Discounted", "TooCheap" ],
           "observed" : [ "Discounted", "TooCheap" ],
           "verified" : [ "Discounted", "TooCheap" ],
@@ -24,26 +28,24 @@
         },
         "inputs" : [ {
           "declared" : [ ],
-          "specified" : [ ],
-          "executed" : [ ],
-          "verified" : [ ],
           "excluded" : [ ],
-          "unclassifiedRows" : 0
+          "status" : "unavailable",
+          "reason" : "not_a_sum"
         }, {
           "declared" : [ ],
-          "specified" : [ ],
-          "executed" : [ ],
-          "verified" : [ ],
           "excluded" : [ ],
-          "unclassifiedRows" : 0
+          "status" : "unavailable",
+          "reason" : "not_a_sum"
         } ]
       },
       "partition" : {
         "axesMeasure" : {
-          "status" : "partial"
+          "status" : "partial",
+          "weakening" : [ "rule_unread" ]
         },
         "boundariesMeasure" : {
-          "status" : "partial"
+          "status" : "partial",
+          "weakening" : [ "rule_unread" ]
         },
         "axes" : [ {
           "axis" : "discount/item.note",
@@ -144,7 +146,6 @@
           "witnessedFeasible" : 0,
           "provenInfeasible" : 0,
           "unknown" : 0,
-          "truncated" : false,
           "status" : "complete"
         },
         "notDerivable" : [ ],
@@ -209,6 +210,7 @@
   }, {
     "module" : "conformance.shipping",
     "status" : "partial",
+    "weakening" : [ "rules_not_reached", "rule_unread" ],
     "incompleteness" : [ ],
     "behaviors" : [ {
       "name" : "台帳へ書く",
@@ -216,10 +218,12 @@
       "rows" : 6,
       "pending" : 6,
       "status" : "partial",
+      "weakening" : [ "rules_not_reached" ],
       "signature" : {
         "status" : "complete",
         "output" : {
           "declared" : [ "出荷済み", "書けなかった" ],
+          "status" : "complete",
           "specified" : [ "出荷済み", "書けなかった" ],
           "observed" : [ ],
           "verified" : [ ],
@@ -227,19 +231,19 @@
         },
         "inputs" : [ {
           "declared" : [ ],
-          "specified" : [ ],
-          "executed" : [ ],
-          "verified" : [ ],
           "excluded" : [ ],
-          "unclassifiedRows" : 0
+          "status" : "unavailable",
+          "reason" : "not_a_sum"
         } ]
       },
       "partition" : {
         "axesMeasure" : {
-          "status" : "partial"
+          "status" : "partial",
+          "weakening" : [ "rules_not_reached" ]
         },
         "boundariesMeasure" : {
-          "status" : "partial"
+          "status" : "partial",
+          "weakening" : [ "rules_not_reached" ]
         },
         "axes" : [ {
           "axis" : "台帳へ書く/指示.区分",
@@ -340,7 +344,6 @@
           "witnessedFeasible" : 0,
           "provenInfeasible" : 0,
           "unknown" : 0,
-          "truncated" : false,
           "status" : "complete"
         },
         "notDerivable" : [ "指示.受付日", "指示.締切", "指示.集荷時刻", "指示.記録時刻" ],
@@ -391,10 +394,12 @@
       "rows" : 10,
       "pending" : 0,
       "status" : "partial",
+      "weakening" : [ "rule_unread", "rules_not_reached" ],
       "signature" : {
         "status" : "complete",
         "output" : {
           "declared" : [ "出荷済み", "書けなかった", "重量超過" ],
+          "status" : "complete",
           "specified" : [ "出荷済み", "書けなかった", "重量超過" ],
           "observed" : [ "出荷済み", "書けなかった", "重量超過" ],
           "verified" : [ "出荷済み", "書けなかった", "重量超過" ],
@@ -402,19 +407,19 @@
         },
         "inputs" : [ {
           "declared" : [ ],
-          "specified" : [ ],
-          "executed" : [ ],
-          "verified" : [ ],
           "excluded" : [ ],
-          "unclassifiedRows" : 0
+          "status" : "unavailable",
+          "reason" : "not_a_sum"
         } ]
       },
       "partition" : {
         "axesMeasure" : {
-          "status" : "partial"
+          "status" : "partial",
+          "weakening" : [ "rule_unread", "rules_not_reached" ]
         },
         "boundariesMeasure" : {
-          "status" : "partial"
+          "status" : "partial",
+          "weakening" : [ "rule_unread", "rules_not_reached" ]
         },
         "axes" : [ {
           "axis" : "出荷する/指示.重量",
@@ -561,7 +566,6 @@
           "witnessedFeasible" : 4,
           "provenInfeasible" : 0,
           "unknown" : 2,
-          "truncated" : false,
           "status" : "complete"
         },
         "notDerivable" : [ "指示.記録時刻" ],

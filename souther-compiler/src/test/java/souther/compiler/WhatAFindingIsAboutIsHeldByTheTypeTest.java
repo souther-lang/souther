@@ -2,9 +2,8 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.observe.InputCaseEvidence;
-import souther.compiler.observe.MeasurementStatus;
-import souther.compiler.observe.OutputCaseEvidence;
+import souther.compiler.query.InputCaseEvidence;
+import souther.compiler.query.OutputCaseEvidence;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.PartitionEvidence;
@@ -99,7 +98,6 @@ class WhatAFindingIsAboutIsHeldByTheTypeTest {
     }
 
     private static Adequacy.SignatureEvidence signature(List<InputCaseEvidence> inputs) {
-        return new Adequacy.SignatureEvidence(OutputCaseEvidence.none(), inputs,
-                MeasurementStatus.COMPLETE, null);
+        return Adequacy.SignatureEvidence.of(OutputCaseEvidence.none(), inputs);
     }
 }

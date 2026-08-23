@@ -1,6 +1,5 @@
 package souther.compiler.query;
 
-import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.NotOwedReason;
@@ -29,8 +28,8 @@ public sealed interface ItemAssessment {
     record NotOwed(NotOwedReason reason) implements ItemAssessment {}
 
     /** A row is owed, and this is what became of it. */
-    record Owed(Criterion criterion, Coverage coverage, Writability writability, Attempt attempt)
-            implements ItemAssessment {}
+    record Owed(Criterion criterion, Measurement<Coverage> coverage, Writability writability,
+                Attempt attempt) implements ItemAssessment {}
 
     /**
      * Whether a row is at this point, and whether that could be told.
@@ -46,48 +45,40 @@ public sealed interface ItemAssessment {
          * Found is found: a row settles this whatever else went unread. */
         record Hit() implements Coverage {}
 
-        /** Every row that bears on this position was read, and none is at the point. */
-        record Missed() implements Coverage {}
+        /**
+         * No row that could be read is at the point.
+         *
+         * <p>Named for what was seen and not for what is so. It was {@code Missed}, which meant
+         * "every row that bears on this position was read, and none is at the point" — a claim about
+         * the reading as well as about the rows, made by the value itself. Beside it sat
+         * {@code Undecided} for the case where the reading was not whole, and the two were one
+         * question asked twice: what was found, and how far the finding can be trusted.
+         *
+         * <p>Now the second is the measurement's. {@code Complete(NoHit)} is what {@code Missed}
+         * claimed and {@code Partial(NoHit, ...)} is what {@code Undecided} said, and neither the
+         * name nor a reader has to carry the difference.
+         */
+        record NoHit() implements Coverage {}
 
-        /** Some row's value here could not be read, or some row was never seen. What is not found is
-         * then undecided rather than absent. */
-        record Undecided() implements Coverage {}
-
-        /** The question was not put. */
-        record NotMeasured(Reason reason) implements Coverage {}
-
-        /** Why a point has no answer. */
-        enum Reason implements souther.compiler.observe.MeasureReason {
+        /** Why the question was not put. */
+        enum NotAsked implements souther.compiler.observe.NotMeasuredReason {
             /** The build did not ask for the arms, and a line a fork drew is met by reaching the
              *  comparison rather than by writing the value. Never a reason for an invariant's line,
              *  which needs no arms. */
-            ARMS_NOT_ASKED(MeasurementStatus.NOT_MEASURED),
-            /** The rows ran without instrumentation, so no row can be shown to have reached the
-             *  comparison. Never a reason for an invariant's line. */
-            ARMS_UNREADABLE(MeasurementStatus.NOT_MEASURED),
+            ARMS_NOT_ASKED,
             /** No row names this behavior. */
-            NO_ROWS(MeasurementStatus.NOT_MEASURED);
-
-            private final MeasurementStatus status;
-
-            Reason(MeasurementStatus status) {
-                this.status = status;
-            }
-
-            @Override
-            public MeasurementStatus status() {
-                return status;
-            }
-
-            /** The run that would have answered went without its instrumentation. The other two are a measurement nobody asked for. */
-            @Override
-            public boolean somethingWasUnreadable() {
-                return this == ARMS_UNREADABLE;
-            }
+            NO_ROWS
         }
 
-        default boolean hit() {
-            return this instanceof Hit;
+        /** Why the question was put and could not be answered. */
+        enum CouldNotAsk implements souther.compiler.observe.FailureReason {
+            /** The rows ran without instrumentation, so no row can be shown to have reached the
+             *  comparison. Never a reason for an invariant's line. */
+            ARMS_UNREADABLE
+        }
+
+        static boolean hit(Measurement<Coverage> coverage) {
+            return coverage.made().orElse(null) instanceof Hit;
         }
     }
 
@@ -214,6 +205,13 @@ public sealed interface ItemAssessment {
         }
     }
 
+    /** This point's own measurement of whether a row is at it, or a settled nothing where no row is
+     *  owed here at all. */
+    default Measurement<Coverage> weakeningSource() {
+        return this instanceof Owed owed ? owed.coverage()
+                : new Measurement.Complete<>(new Coverage.NoHit());
+    }
+
     /**
      * How far the coverage half got, as the one word every measure is totalled under.
      *
@@ -225,27 +223,14 @@ public sealed interface ItemAssessment {
      * answered it. Read as unmeasured, every bound in a corpus would hold its behavior open for a
      * measurement nobody was ever going to make.
      */
-    default MeasurementStatus status() {
+    default WeakeningSet weakening() {
         return switch (this) {
-            case NotOwed _ -> MeasurementStatus.COMPLETE;
-            case Owed owed -> switch (owed.coverage()) {
-                case Coverage.NotMeasured absent -> absent.reason().status();
-                case Coverage.Undecided _ -> MeasurementStatus.PARTIAL;
-                case Coverage.Hit _, Coverage.Missed _ -> MeasurementStatus.COMPLETE;
-            };
+            // A point nobody is owed a row at went without nothing: the question was put to the
+            // model and the model answered it. Counted as unmeasured, every bound in a corpus would
+            // hold its behavior open for a measurement nobody was ever going to make.
+            case NotOwed _ -> WeakeningSet.none();
+            case Owed owed -> owed.coverage().weakening();
         };
-    }
-
-    /**
-     * Why the coverage half has no answer, or null where it has one.
-     *
-     * <p>Beside {@link #status()} and derived like it. Every measure that comes back without a number
-     * is asked why, in the same words, and a point that could say {@code UNAVAILABLE} without saying
-     * what stopped it would be the one measure a reader has to guess about.
-     */
-    default Coverage.Reason whyNotMeasured() {
-        return this instanceof Owed owed && owed.coverage() instanceof Coverage.NotMeasured absent
-                ? absent.reason() : null;
     }
 
     /** Whether a row is owed here at all, and so whether the three answers beside it exist. */
@@ -259,10 +244,14 @@ public sealed interface ItemAssessment {
      *
      * <p>The two halves are asked of the two answers rather than of one flattened state. A missed
      * point nothing promises is writable is not a gap — the point is where the reading stopped rather
-     * than where the model does — and a point nobody measured is not one either.
+     * than where the model does — and a point nobody measured is not one either. Neither is one
+     * missed by rows some of which could not be read: that is a measurement made in part, and what
+     * it did not find is undecided rather than absent.
      */
     default boolean isUnmetGap() {
-        return this instanceof Owed owed && owed.coverage() instanceof Coverage.Missed
+        return this instanceof Owed owed
+                && owed.coverage() instanceof Measurement.Complete<Coverage> whole
+                && whole.value() instanceof Coverage.NoHit
                 && owed.writability().known();
     }
 }
