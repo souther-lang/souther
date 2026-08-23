@@ -124,9 +124,20 @@ public final class MatchElaborator {
             // What the arm's own alternatives say about each other, before what they say about the
             // arms before them. An alternative that adds nothing is a mistake inside this arm, and
             // reporting it as this arm overlapping another one would name the wrong two lines.
+            CasePartition.Duplicate twice = CasePartition.namedTwiceIn(alternatives);
+            if (twice != null) {
+                throw CompileException.of(Diagnostic.at(c.pos())
+                        .say(new MatchMessage.ThisArmNamesOneCaseTwice(
+                                c.caseTypes().get(twice.again()).written()))
+                        .build());
+            }
             CasePartition.Redundant redundant = CasePartition.redundantIn(alternatives);
             if (redundant != null) {
-                throw redundantAlternative(c, redundant);
+                throw CompileException.of(Diagnostic.at(c.pos())
+                        .say(new MatchMessage.AnAlternativeAddsNothingToThisArm(
+                                c.caseTypes().get(redundant.adds()).written(),
+                                c.caseTypes().get(redundant.already()).written()))
+                        .build());
             }
             CasePartition.Overlap overlap = partition.take(answersFor, armIndex);
             if (overlap != null) {
@@ -329,24 +340,6 @@ public final class MatchElaborator {
         throw CompileException.of(Diagnostic.at(c.pos())
                 .say(new MatchMessage.TheBranchesDisagree(Type.show(branchType), Type.show(bt)))
                 .diff(Type.show(bt, branchType), Type.show(branchType, bt)).build());
-    }
-
-    /**
-     * An alternative of an arm that answers for nothing another of its alternatives did not.
-     *
-     * <p>Two messages under one rule. A name written twice is one mistake and a name covered by
-     * another is a different one — the first is a slip, the second is usually the case the author
-     * meant not being the case they named — and telling an author which of the two they made is the
-     * whole use of the report.
-     */
-    private static CompileException redundantAlternative(Hir.Case c, CasePartition.Redundant of) {
-        String adds = c.caseTypes().get(of.adds()).written();
-        String already = c.caseTypes().get(of.already()).written();
-        return CompileException.of(Diagnostic.at(c.pos())
-                .say(adds.equals(already)
-                        ? new MatchMessage.ThisArmNamesOneCaseTwice(adds)
-                        : new MatchMessage.AnAlternativeAddsNothingToThisArm(adds, already))
-                .build());
     }
 
     /** A non-exhaustive-match error (E1201) listing every missing case. The legacy message names the

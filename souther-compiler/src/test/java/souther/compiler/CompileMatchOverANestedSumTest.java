@@ -311,4 +311,26 @@ class CompileMatchOverANestedSumTest {
                 "the later of two that answer alike is the one that adds nothing");
     }
 
+
+    /**
+     * A case named twice is reported as that even where a covering alternative stands between them.
+     *
+     * <p>The two findings are asked as two questions and the more particular one is asked first.
+     * Found in one walk, which of them an author is told would follow from whichever pair the walk
+     * reached — here {@code Station} inside {@code OnceKind} comes before the second
+     * {@code Station} — and the arm would be reported as covering something while never mentioning
+     * that a name is in it twice.
+     */
+    @Test
+    void aCaseNamedTwiceIsReportedAsThatEvenBesideACoveringAlternative() {
+        CompileException refused = assertThrows(CompileException.class, () -> Compiler.compile(feeOf("""
+                        | Station | OnceKind | Station -> 1
+                        | Renkei -> 2
+                """)));
+        assertEquals("E1209", refused.diagnostic().code());
+        assertEquals("ThisArmNamesOneCaseTwice[caseName=Station]",
+                refused.diagnostic().said().toString(),
+                "the slip is what is said, not the covering that also holds");
+    }
+
 }

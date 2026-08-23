@@ -70,6 +70,34 @@ final class CasePartition {
     record Overlap(TypeSymbol value, int earlier, int here) {}
 
     /**
+     * An alternative naming a case an earlier alternative of the same arm already named.
+     *
+     * <p>Null where each names a different case. Asked apart from {@link #redundantIn} and before
+     * it, because the two are different findings and the more specific one is the one worth saying:
+     * a name written twice is a slip, and a name covered by another is usually the case the author
+     * meant not being the case they named. Folded into one walk, which of the two an author is told
+     * would follow from whichever pair the walk reached first — so
+     * {@code | Station | OnceKind | Station} would report the covering and never mention that
+     * {@code Station} is there twice.
+     *
+     * <p>By case and not by spelling. Two alternatives are the same one when they name one type;
+     * what each was written as is how it is reported and not what it is.
+     */
+    static Duplicate namedTwiceIn(List<ResolvedCase> alternatives) {
+        Map<TypeSymbol, Integer> first = new LinkedHashMap<>();
+        for (int here = 0; here < alternatives.size(); here++) {
+            Integer before = first.putIfAbsent(alternatives.get(here).name(), here);
+            if (before != null) {
+                return new Duplicate(here, before);
+            }
+        }
+        return null;
+    }
+
+    /** An alternative naming a case already named, and where it was named first. */
+    record Duplicate(int again, int first) {}
+
+    /**
      * An alternative of one arm that answers for nothing the arm did not already answer for.
      *
      * <p>Null where each alternative adds something. What makes one redundant is inclusion and not
@@ -81,6 +109,10 @@ final class CasePartition {
      * <p>Where two alternatives answer for exactly the same values, the later one is the redundant
      * one: the arm reads left to right, and the first is where the reader learns what it answers
      * for.
+     *
+     * <p>An alternative naming a case another named is one of those, and is {@link #namedTwiceIn}'s
+     * to report. This is asked after it, so what comes back here is always a pair of different
+     * cases.
      */
     static Redundant redundantIn(List<ResolvedCase> alternatives) {
         for (int here = 0; here < alternatives.size(); here++) {

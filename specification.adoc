@@ -5143,7 +5143,7 @@ This branch produces Int. The preceding branches produce Blue | Red.
 `Station` adds nothing to this arm: `OnceKind` already answers for every value it does.
 ----
 
-Reported at the arm (<<an-arms-alternatives-each-add-what-it-answers-for>>). The same name written twice reads `This arm names `Station` twice, and the second says nothing the first did not.`
+Reported at the arm (<<an-arms-alternatives-each-add-what-it-answers-for>>). A case named twice is reported as that and not as one covering the other, since it is the more particular of the two: `This arm names `Station` twice, and the second says nothing the first did not.`
 
 [#e1301]
 === Use of null
