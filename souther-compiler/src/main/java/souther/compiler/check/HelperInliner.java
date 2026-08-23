@@ -1,5 +1,9 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.Combinator;
+
+import souther.compiler.semantics.ArgumentRef;
+
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.StructuralCost;
 import souther.compiler.ast.WrittenName;
@@ -460,8 +464,8 @@ public final class HelperInliner {
         if (which == null) {
             return null;
         }
-        int parameter = which.positionIn(expansion.callee());
-        Combinators.Combinator handed = Combinators.of(expansion.callee());
+        int parameter = CallArguments.positionIn(which, expansion.callee());
+        Combinator handed = Combinators.of(expansion.callee());
         int at = parameter - (handed != null && handed.closureArg() < parameter ? 1 : 0);
         return at < 0 || at >= expansion.bound().size() ? null
                 : expansion.bound().get(at).binder().id();

@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.Combinator;
+
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.types.Type;
@@ -37,12 +39,6 @@ import java.util.Set;
  * never asks, because {@link Preserved} is built from declarations and a sugar has none.
  */
 final class Combinators {
-
-    /** A combinator's closure, the parameter its element arrives on, and the container it comes
-     * from — all as argument positions of the call. Read by the rules that resolve a call
-     * ({@link #handedTo}, {@link ArgumentRef}) and by nothing else: a position is only
-     * meaningful beside the call it is a position in. */
-    record Combinator(int closureArg, int elementParam, int containerArg) {}
 
     /** What {@code operation} hands its closure, or null where it hands one nothing a container
      * holds — including where it applies no closure at all, and where the name applied is not a

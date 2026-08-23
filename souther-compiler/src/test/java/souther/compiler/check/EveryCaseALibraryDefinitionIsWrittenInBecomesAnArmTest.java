@@ -63,7 +63,7 @@ class EveryCaseALibraryDefinitionIsWrittenInBecomesAnArmTest {
                 Choice.Arm arm = choice.arms().get(i);
                 String where = operation + " case " + (i + 1);
 
-                assertSame(row.answers().of(call), arm.answers(),
+                assertSame(CallArguments.of(row.answers(), call), arm.answers(),
                         where + " answers the argument the case answers, as the value itself");
                 assertTrue(arm.decidedBy() instanceof Choice.Decides.ByArgumentRelations,
                         where + " is decided by how the arguments stand");
@@ -91,8 +91,8 @@ class EveryCaseALibraryDefinitionIsWrittenInBecomesAnArmTest {
                                                           Core.PreservedCall call) {
         List<Choice.ArgumentRelation> out = new ArrayList<>(row.given().size());
         for (DischargeRules.ArgumentsStand stands : row.given()) {
-            out.add(new Choice.ArgumentRelation(stands.left().of(call), stands.rel(),
-                    stands.right().of(call)));
+            out.add(new Choice.ArgumentRelation(CallArguments.of(stands.left(), call), stands.rel(),
+                    CallArguments.of(stands.right(), call)));
         }
         return out;
     }

@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.ArgumentRef;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.ElementLineage.OutputLineage;

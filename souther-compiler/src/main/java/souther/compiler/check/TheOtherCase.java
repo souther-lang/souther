@@ -37,7 +37,7 @@ final class TheOtherCase {
             return null;
         }
         Core argument = Terms.argsOf(called)
-                .get(result.unless().argument().positionIn(Terms.operationOf(called)));
+                .get(CallArguments.positionIn(result.unless().argument(), Terms.operationOf(called)));
         return new Core.Binary(result.unless().op(), argument,
                 numberOf(result.unless().than(), argument.type(), argument.pos()),
                 CoverageOrigin.unwritten(), Type.BOOL, argument.pos());

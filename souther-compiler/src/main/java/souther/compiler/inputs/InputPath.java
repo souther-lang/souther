@@ -1,5 +1,7 @@
 package souther.compiler.inputs;
 
+import souther.compiler.semantics.ArgumentRef;
+
 import souther.compiler.check.Location;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
@@ -144,9 +146,9 @@ public final class InputPath {
         if (!(e instanceof Core.Call call) || !(call.fn() instanceof Core.Reached reached)) {
             return null;
         }
-        souther.compiler.check.ArgumentRef holds =
+        ArgumentRef holds =
                 souther.compiler.check.ElementLineage.holdsTheElementsOf(reached.denotes());
-        int argument = holds == null ? -1 : holds.positionIn(reached.denotes());
+        int argument = holds == null ? -1 : souther.compiler.check.CallArguments.positionIn(holds, reached.denotes());
         return argument < 0 || argument >= call.args().size() ? null
                 : containerPath(call.args().get(argument), roots, bound, elements, symbols,
                         callsStand, through + 1, made);

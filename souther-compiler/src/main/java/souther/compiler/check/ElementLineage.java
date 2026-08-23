@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.ArgumentRef;
+
 import java.util.List;
 
 /**

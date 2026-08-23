@@ -185,10 +185,10 @@ record Choice(Kind kind, List<Arm> arms) {
         for (DischargeRules.Choice one : defined.cases()) {
             List<ArgumentRelation> relations = new ArrayList<>(one.given().size());
             for (DischargeRules.ArgumentsStand stands : one.given()) {
-                relations.add(new ArgumentRelation(stands.left().of(call), stands.rel(),
-                        stands.right().of(call)));
+                relations.add(new ArgumentRelation(CallArguments.of(stands.left(), call), stands.rel(),
+                        CallArguments.of(stands.right(), call)));
             }
-            arms.add(new Arm(one.answers().of(call), new Decides.ByArgumentRelations(relations)));
+            arms.add(new Arm(CallArguments.of(one.answers(), call), new Decides.ByArgumentRelations(relations)));
         }
         return new Choice(Kind.THE_ARGUMENTS, arms);
     }

@@ -111,7 +111,7 @@ final class IntrinsicNumericFacts {
                 : DischargeRules.boundsOn(call, arg -> constantOf(arg, at, terms))) {
             LinearForm<FactSubject> against = bound.against() == null
                     ? LinearForm.constant(bound.offset())
-                    : addTo(terms.affineOf(bound.against().of(call), at), bound.offset());
+                    : addTo(terms.affineOf(CallArguments.of(bound.against(), call), at), bound.offset());
             if (against != null) {
                 out.add(new NumericConstraint(LinearForm.atom(atom).minus(against), bound.rel()));
             }
@@ -144,10 +144,10 @@ final class IntrinsicNumericFacts {
         }
         DischargeRules.Shift shift = DischargeRules.shiftBy(moved);
         if (shift == null || !shift.measure().equals(call.operation())
-                || !sameValue(shift.of().of(moved), call.args().get(0), at, terms)) {
+                || !sameValue(CallArguments.of(shift.of(), moved), call.args().get(0), at, terms)) {
             return;
         }
-        LinearForm<FactSubject> amount = terms.affineOf(shift.amount().of(moved), at);
+        LinearForm<FactSubject> amount = terms.affineOf(CallArguments.of(shift.amount(), moved), at);
         if (amount != null) {
             out.add(new NumericConstraint(
                     LinearForm.atom(atom).minus(amount.times(shift.per())), Rel.EQ));

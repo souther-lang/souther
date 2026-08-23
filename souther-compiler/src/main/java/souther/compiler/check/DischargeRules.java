@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.ArgumentRef;
+
 import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.NumericDomain;
@@ -328,7 +330,7 @@ final class DischargeRules {
     record Carrying(Core.PreservedCall stated, ArgumentRef at, Set<Shape> through) {
 
         Core container() {
-            return at.of(stated);
+            return CallArguments.of(at, stated);
         }
 
         /** {@code call} — a call to the same operation — with the container it reads replaced. */
@@ -337,7 +339,7 @@ final class DischargeRules {
                 throw new IllegalStateException("a rule read for " + stated.operation()
                         + " was asked to rewrite a call to " + call.operation());
             }
-            return at.replacedIn(call, container);
+            return CallArguments.replacedIn(at, call, container);
         }
     }
 
@@ -352,7 +354,7 @@ final class DischargeRules {
 
         /** The call this was read for, stated over {@code value} instead. */
         Core.PreservedCall over(Core value) {
-            return at.replacedIn(stated, value);
+            return CallArguments.replacedIn(at, stated, value);
         }
     }
 
@@ -438,7 +440,7 @@ final class DischargeRules {
             @Override
             public boolean holdsAt(Core.PreservedCall call,
                                    java.util.function.Function<Core, BigDecimal> folded) {
-                BigDecimal at = folded.apply(argument.of(call));
+                BigDecimal at = folded.apply(CallArguments.of(argument, call));
                 return at != null && at.signum() > 0;
             }
         }
@@ -1202,7 +1204,7 @@ final class DischargeRules {
             return null;
         }
         ArgumentRef reads = Bound.FORMS.get(call.operation());
-        return reads == null ? null : reads.of(call);
+        return reads == null ? null : CallArguments.of(reads, call);
     }
 
     /** Those of them the building table has, by name, for the test that holds each to a construction
@@ -1433,7 +1435,7 @@ final class DischargeRules {
             }
             List<Type> params = entry.signature().params();
             ArgumentRef at = reads.apply(rule);
-            int position = at.positionIn(operation);
+            int position = CallArguments.positionIn(at, operation);
             if (position < 0 || position >= params.size()) {
                 throw new IllegalStateException(library.qualified() + " takes " + params.size()
                         + " argument(s), and the rule about " + what + " reads argument "
@@ -1444,7 +1446,7 @@ final class DischargeRules {
                         + library.qualified() + " is not " + what);
             }
             if (at instanceof ArgumentRef.At && derived != null && Combinators.of(operation) != null
-                    && derived.positionIn(operation) == position) {
+                    && CallArguments.positionIn(derived, operation) == position) {
                 throw new IllegalStateException("the rule about " + what + " for "
                         + library.qualified()
                         + " writes the argument its signature already answers — say which part it is"
@@ -1490,7 +1492,7 @@ final class DischargeRules {
         if (built == null || built.outputs().size() != 1 || built.lineage().source() == null) {
             return null;
         }
-        return new Kept(built.from().of(call), built.lineage());
+        return new Kept(CallArguments.of(built.from(), call), built.lineage());
     }
 
     /** A construction's source container and the lineage of the elements it answers. */
@@ -1501,7 +1503,7 @@ final class DischargeRules {
     static Source builtFrom(Core.PreservedCall call) {
         Built built = Bound.BUILDINGS.get(call.operation());
         return built == null ? null
-                : new Source(built.from().of(call), built.shape(), built.size());
+                : new Source(CallArguments.of(built.from(), call), built.shape(), built.size());
     }
 
     /**
@@ -1526,7 +1528,7 @@ final class DischargeRules {
         }
         List<Core> containers = new ArrayList<>(reads.size());
         for (ArgumentRef one : reads) {
-            containers.add(one.of(call));
+            containers.add(CallArguments.of(one, call));
         }
         return containers;
     }
@@ -1545,7 +1547,7 @@ final class DischargeRules {
         if (reads == null) {
             return null;
         }
-        Core.Block projection = Terms.blockOf(reads.of(call), at);
+        Core.Block projection = Terms.blockOf(CallArguments.of(reads, call), at);
         return projection == null ? null : new Projection(call, reads, projection);
     }
 
