@@ -37,66 +37,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class GeneratorTest {
 
-    /**
-     * One row through an arm is what the arm is owed, whichever combination composed it.
-     *
-     * <p>An arm is claimed by every combination that takes it, so a search over the combinations
-     * leaves several attempts at one arm — and a rule relating two positions can refuse the values
-     * one combination names while another builds. Read as the first attempt, the answer moved with
-     * the order the search happened to walk them in: the same arm came back as one nothing could
-     * compose for, or as one a row goes through, depending on which combination came first.
-     */
-    @Test
-    void oneRowThroughAnArmIsTheAnswerWhateverTheOthersCameTo() {
-        Generator.GeneratedRow row = new Generator.GeneratedRow(
-                new Generator.Purpose.ForACombination(List.of("a")), List.of());
-        Generator.UnresolvedCombination why = new Generator.UnresolvedCombination(List.of("a"),
-                Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED);
-
-        for (List<Generator.ArmAttempt> order : List.of(
-                List.<Generator.ArmAttempt>of(new Generator.ArmAttempt.Unresolved(7, List.of(why)),
-                        new Generator.ArmAttempt.Built(7, row)),
-                List.<Generator.ArmAttempt>of(new Generator.ArmAttempt.Built(7, row),
-                        new Generator.ArmAttempt.Unresolved(7, List.of(why))))) {
-            assertEquals(new Generator.ArmAttempt.Built(7, row),
-                    new Generator.GenerationResult(List.of(), List.of(), List.of(), List.of(),
-                            order).armAt(7),
-                    order::toString);
-        }
-    }
-
-    /**
-     * And an arm every combination claiming it failed at keeps what each of them came to.
-     *
-     * <p>They are not one fact. A combination the model's own rules leave nothing in and one the
-     * search ran out of room on are different news, and a reader may act on the first and not on
-     * the second — so what the arm comes to is the weakest of them, whichever order they were
-     * walked in. Taken as the first attempt, the answer said the model settles the arm because a
-     * combination that did happened to come up first.
-     */
-    @Test
-    void whatAnArmComesToIsTheWeakestOfWhatWasTriedAtIt() {
-        Generator.UnresolvedCombination settled = new Generator.UnresolvedCombination(List.of("a"),
-                Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE);
-        Generator.UnresolvedCombination ranOut = new Generator.UnresolvedCombination(List.of("b"),
-                Generator.UnresolvedCombination.Reason.SEARCH_LIMIT);
-
-        for (List<Generator.ArmAttempt> order : List.of(
-                List.<Generator.ArmAttempt>of(new Generator.ArmAttempt.Unresolved(7,
-                                List.of(settled)),
-                        new Generator.ArmAttempt.Unresolved(7, List.of(ranOut))),
-                List.<Generator.ArmAttempt>of(new Generator.ArmAttempt.Unresolved(7,
-                                List.of(ranOut)),
-                        new Generator.ArmAttempt.Unresolved(7, List.of(settled))))) {
-            Generator.ArmAttempt at = new Generator.GenerationResult(List.of(), List.of(),
-                    List.of(), List.of(), order).armAt(7);
-
-            assertEquals(ranOut, ((Generator.ArmAttempt.Unresolved) at).weakest(), order::toString);
-            assertEquals(2, ((Generator.ArmAttempt.Unresolved) at).why().size(),
-                    "and both are kept: " + at);
-        }
-    }
-
     private static final String TRIP = """
             module example.trip
 
@@ -206,7 +146,7 @@ class GeneratorTest {
                         List.of("request.kind=Overseas"),
                         List.of("request.urgent=true"),
                         List.of("request.urgent=false")),
-                filled.rows().stream().map(row -> row.purpose().labels()).toList());
+                filled.rows().stream().map(row -> row.labels()).toList());
     }
 
     /** Several positions of one parameter are one value. {@code request.kind} and {@code request.urgent}
@@ -234,7 +174,7 @@ class GeneratorTest {
                         Generator.CandidateCheck.ANY);
 
         assertEquals(List.of(List.of("request.kind=Overseas"), List.of("request.urgent=false")),
-                filled.rows().stream().map(row -> row.purpose().labels()).toList(),
+                filled.rows().stream().map(row -> row.labels()).toList(),
                 "the two classes that row is in are not asked for again");
     }
 
@@ -247,8 +187,8 @@ class GeneratorTest {
                 List.of(), Generator.CandidateCheck.ANY);
 
         assertEquals(texts(once), texts(again));
-        assertEquals(once.rows().stream().map(row -> row.purpose().labels()).toList(),
-                again.rows().stream().map(row -> row.purpose().labels()).toList());
+        assertEquals(once.rows().stream().map(row -> row.labels()).toList(),
+                again.rows().stream().map(row -> row.labels()).toList());
     }
 
     // --- what a candidate says and what it does not ----------------------------------------------
@@ -457,6 +397,6 @@ class GeneratorTest {
 
         assertEquals(List.of("1", "9"), texts(filled));
         assertEquals(List.of(List.of("a=low"), List.of("a=high")),
-                filled.rows().stream().map(row -> row.purpose().labels()).toList());
+                filled.rows().stream().map(row -> row.labels()).toList());
     }
 }

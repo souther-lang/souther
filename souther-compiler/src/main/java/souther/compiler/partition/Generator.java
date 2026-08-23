@@ -120,18 +120,34 @@ public final class Generator {
      * that had it would be free to use it as evidence of coverage, and a row this run offers is a
      * question rather than evidence of anything.
      *
-     * @param purpose what the row was composed for
-     * @param inputs  one value per parameter, in the order the behavior takes them
+     * <p><b>As many purposes as it answers.</b> One candidate can be what two obligations were
+     * waiting for — two arms of the body taken by the one path through it — and each of them is
+     * answered by it. Held as one purpose, the two were written as a single composite thing with a
+     * name made by joining theirs, which reads as an obligation that was never raised; held as
+     * none but the first, the second went unanswered beside a row that answered it.
+     *
+     * @param purposes what the row was composed for, in the order the things were taken
+     * @param inputs   one value per parameter, in the order the behavior takes them
      */
-    public record GeneratedRow(Purpose purpose, List<FixtureTemplate> inputs) {
+    public record GeneratedRow(List<Purpose> purposes, List<FixtureTemplate> inputs) {
 
         public GeneratedRow {
+            purposes = List.copyOf(purposes);
             inputs = List.copyOf(inputs);
+            if (purposes.isEmpty()) {
+                throw new IllegalArgumentException("a row is composed for something");
+            }
         }
 
-        /** What the row is about, in the form a row's description is written in. */
-        public String description() {
-            return String.join(" x ", purpose.labels());
+        /** One row composed for one thing, which is what most of the searches here compose. */
+        public GeneratedRow(Purpose purpose, List<FixtureTemplate> inputs) {
+            this(List.of(purpose), inputs);
+        }
+
+        /** What the row is about, where this package has a name for it. An arm is named by the
+         *  report and not here, so a row composed for one contributes nothing. */
+        public List<String> labels() {
+            return purposes.stream().flatMap(purpose -> purpose.labels().stream()).toList();
         }
     }
 
@@ -157,11 +173,24 @@ public final class Generator {
             }
         }
 
-        /** A combination the body settles together, which is as many positions as it reads. */
-        record ForACombination(List<String> labels) implements Purpose {
+        /**
+         * One arm of the body: the row an arm nothing reaches is owed.
+         *
+         * <p>The arm and not the combination a witness for it was found at. A combination is where
+         * the search looked; what a reader is owed a row for is the arm, and the two came apart as
+         * soon as one combination was allowed to answer two arms — written as the combination, that
+         * row named a thing nobody asked about and hid the two things that were asked.
+         *
+         * <p>By the probe alone, which is the arm's identity everywhere. What an arm is called is
+         * the report's word ({@code ArmVocabulary}) and is not something this package spells: a
+         * name made here would be a second vocabulary for one thing, free to drift from the one the
+         * finding is written in.
+         */
+        record ForAnArm(int probe) implements Purpose {
 
-            public ForACombination {
-                labels = List.copyOf(labels);
+            @Override
+            public List<String> labels() {
+                return List.of();
             }
         }
 
@@ -395,34 +424,24 @@ public final class Generator {
          * What composing a row that takes {@code probe} came to, or null where no combination this
          * run took claims it.
          *
-         * <p><b>A fold and not a lookup.</b> One arm is claimed by every combination that takes it,
-         * so the attempts are many and the answer is one: a row through the arm is what the arm is
-         * owed, and one that exists is the answer whatever the combinations beside it came to. Read
-         * as the first entry, an arm two combinations claim came back as one nothing could compose
-         * for whenever the one that failed was walked first — an answer that moved with the order
-         * the search happened to take.
+         * <p>One entry per arm the run was asked about, made where the search ends and read here.
+         * A row through the arm is what it is owed and is the answer whatever the combinations
+         * beside it came to; where there is none, what every one of them came to is carried, the
+         * search's budget and the model's own refusal being different news.
          *
-         * <p>Null is an answer and not a failure: an arm no combination of the body's own decisions
-         * reaches is an arm nothing here composes an input for, which is a different piece of news
-         * from one a search tried and could not reach.
+         * <p>Null is an answer and not a failure, and it is one thing: no combination of the body's
+         * own decisions claims this arm, so nothing here composes an input for it. An arm the
+         * search stopped short of says so in its own entry — read off an absent one, that arm was
+         * reported as one the body cannot reach, which is a fact about the model told on the
+         * strength of a limit (issue #967).
          */
         public ArmAttempt armAt(int probe) {
-            List<UnresolvedCombination> none = new ArrayList<>();
             for (ArmAttempt each : arms) {
-                if (each.probe() != probe) {
-                    continue;
-                }
-                switch (each) {
-                    // One row through it is what the arm is owed, whatever the rest came to.
-                    case ArmAttempt.Built built -> {
-                        return built;
-                    }
-                    // And every one of the rest where there is no row, because they are not one
-                    // fact: what a reader may act on is what all of them agreed to.
-                    case ArmAttempt.Unresolved why -> none.addAll(why.why());
+                if (each.probe() == probe) {
+                    return each;
                 }
             }
-            return none.isEmpty() ? null : new ArmAttempt.Unresolved(probe, none);
+            return null;
         }
 
         /**
@@ -492,23 +511,6 @@ public final class Generator {
                     throw new IllegalArgumentException(
                             "an arm nothing was tried at is one no combination claims");
                 }
-            }
-
-            /**
-             * The weakest of what was tried, which is what a reader may act on.
-             *
-             * <p>An arm is unreachable only where every combination claiming it says the model
-             * leaves nothing there; one that merely ran out of search says nothing about the
-             * others. So a reason a reader may act on survives only if every attempt agreed on it
-             * (ADR-0091), and the first that does not is what this comes to.
-             */
-            public UnresolvedCombination weakest() {
-                for (UnresolvedCombination each : why) {
-                    if (!each.reason().provesInfeasible()) {
-                        return each;
-                    }
-                }
-                return why.get(0);
             }
         }
     }
@@ -875,15 +877,24 @@ public final class Generator {
         // combinations that would be composed either way — so a budget the combinations spent
         // first left a class the report names with nothing offered for it and a search limit
         // beside it, over rows nobody is owed.
+        // Every class on the list gets an entry, including the ones the limit stopped the search
+        // before. What was not tried is a fact of this run and is written down here — read off the
+        // count of a reason at the end, it arrived at a reader as a fact about the model instead:
+        // a class nothing looked at answered "no reason recorded", and an arm answered "nothing
+        // reaches it" (issue #967).
         int classesLeft = 0;
         for (int i = 0; i < owed.size(); i++) {
             int[] at = owed.get(i);
             if (rows.size() >= MAX_ROWS) {
                 classesLeft = owed.size() - i;
-                for (int left = i; left < owed.size(); left++) {
-                    unresolved.add(new UnresolvedCombination(
-                            List.of(label(axes.get(owed.get(left)[0]), owed.get(left)[1])),
-                            UnresolvedCombination.Reason.SEARCH_LIMIT));
+                for (int cut = i; cut < owed.size(); cut++) {
+                    Axis axis = axes.get(owed.get(cut)[0]);
+                    UnresolvedCombination why = new UnresolvedCombination(
+                            List.of(label(axis, owed.get(cut)[1])),
+                            UnresolvedCombination.Reason.SEARCH_LIMIT);
+                    attempts.add(new ClassAttempt.Unresolved(axis.id(),
+                            axis.classes().get(owed.get(cut)[1]).id(), why));
+                    unresolved.add(why);
                 }
                 break;
             }
@@ -901,12 +912,17 @@ public final class Generator {
         // name. So a combination claiming no arm on the list is not searched, and one is dropped
         // from the list as soon as a row goes through it.
         Set<Integer> left = new LinkedHashSet<>(armsOwed);
+        Map<Integer, GeneratedRow> built = new LinkedHashMap<>();
+        Map<Integer, List<UnresolvedCombination>> failed = new LinkedHashMap<>();
+        // Arms a combination was still to be searched at when the limit came. Collected by walking
+        // the rest of the cells and composing nothing, which costs a claim lookup each and is the
+        // only way to tell an arm the search ran out on from one no combination claims — the two
+        // are one silence, and a reader told the second where the first happened is told the model
+        // settles something it does not.
+        Set<Integer> cutOff = new LinkedHashSet<>();
         boolean unconfirmed = false;
         for (InteractionCells.Group group : InteractionCells.of(groups, axes)) {
-            for (int index = 0; index < group.size() && rows.size() < MAX_ROWS; index++) {
-                if (left.isEmpty()) {
-                    break;
-                }
+            for (int index = 0; index < group.size() && !left.isEmpty(); index++) {
                 CellSelection selection = group.at(index);
                 if (selection == null) {
                     // The factors this choice takes leave a position nothing, so it is not a
@@ -918,22 +934,26 @@ public final class Generator {
                 if (takes.isEmpty()) {
                     continue;   // no arm on the list is looked for here
                 }
-                switch (witnessFor(subject, axes, selection, check, trial)) {
+                if (rows.size() >= MAX_ROWS) {
+                    cutOff.addAll(takes);
+                    continue;
+                }
+                switch (witnessFor(subject, axes, selection, check, trial, takes)) {
                     case Witness.None none -> {
                         UnresolvedCombination why = new UnresolvedCombination(
                                 none.classes(), none.reason(), none.detail(), none.said());
                         unresolved.add(why);
-                        takes.forEach(probe ->
-                                arms.add(new ArmAttempt.Unresolved(probe, List.of(why))));
+                        takes.forEach(probe -> failed
+                                .computeIfAbsent(probe, _ -> new ArrayList<>()).add(why));
                     }
                     case Witness.Certified found -> {
                         rows.add(found.row());
-                        takes.forEach(probe -> arms.add(new ArmAttempt.Built(probe, found.row())));
+                        takes.forEach(probe -> built.put(probe, found.row()));
                         takes.forEach(left::remove);
                     }
                     case Witness.Unconfirmed offer -> {
                         rows.add(offer.row());
-                        takes.forEach(probe -> arms.add(new ArmAttempt.Built(probe, offer.row())));
+                        takes.forEach(probe -> built.put(probe, offer.row()));
                         takes.forEach(left::remove);
                         // Nothing watched it, so what it is offered for is what the reading says
                         // and not what anything saw. Said once for the behavior: it is one fact
@@ -943,12 +963,35 @@ public final class Generator {
                 }
             }
         }
+        // One entry per arm the run was asked about, in the order it was asked. An arm the limit
+        // cut off carries that beside whatever was tried before it: a combination the model refuses
+        // says nothing about the ones nobody got to, and an arm answered by the first alone was
+        // reported as settled by the model on the strength of a search that stopped.
+        for (int probe : armsOwed) {
+            GeneratedRow row = built.get(probe);
+            List<UnresolvedCombination> why = new ArrayList<>(
+                    failed.getOrDefault(probe, List.of()));
+            if (row != null) {
+                arms.add(new ArmAttempt.Built(probe, row));
+            } else if (cutOff.contains(probe)) {
+                why.add(new UnresolvedCombination(List.of(),
+                        UnresolvedCombination.Reason.SEARCH_LIMIT));
+                arms.add(new ArmAttempt.Unresolved(probe, why));
+            } else if (!why.isEmpty()) {
+                arms.add(new ArmAttempt.Unresolved(probe, why));
+            }
+            // And an arm with neither is one no combination claims, which is the one thing an
+            // absent entry may mean.
+        }
         // Said once, at the end, and about both searches. One that ran out on the classes stopped
         // whether or not the arms had anything left to do, and two limits reported apart would be
         // read as two searches.
-        if (classesLeft + left.size() > 0) {
+        // Counted off what the limit actually stopped. An arm still on the list because every
+        // combination claiming it was refused is not one the limit cut off, and counting it here
+        // told a reader to raise a limit that would change nothing.
+        if (classesLeft + cutOff.size() > 0) {
             reasons.add(new GenerationReason.SearchLimit(axes.get(0).id().behavior(),
-                    classesLeft + left.size()));
+                    classesLeft + cutOff.size()));
         }
         if (unconfirmed) {
             reasons.add(new GenerationReason.RowsNotConfirmed(axes.get(0).id().behavior()));
@@ -1087,7 +1130,10 @@ public final class Generator {
      * value it is written against is what this is minimising, so every baseline is tried at the
      * target alone before any is tried with a supporting field moved. Within one distance the
      * origins keep the order they were gathered in, which puts a value the author's own rows name
-     * before one the module merely states.
+     * before one the module merely states — the whole of one origin's moves at that distance
+     * before the next origin's. Ordered with the supporting sets outside the origins, provenance
+     * decided only which origin won a given set of supporting positions, and a later origin that
+     * happened to repair on an earlier set beat an earlier origin that repaired on a later one.
      *
      * <p><b>And the classes last, whatever their distance.</b> A composed row is not a nearer
      * baseline: its distance is measured from values the search itself named, so it is zero by
@@ -1104,11 +1150,11 @@ public final class Generator {
             stand.add(stands(subject, axes, baseline, check));
         }
         for (int moved = 0; moved < axes.size() && out.size() < MOST_REPAIRS; moved++) {
-            for (int[] supporting : supportingSets(axes, at, moved)) {
-                for (int origin = 0; origin < stated.size() && out.size() < MOST_REPAIRS; origin++) {
-                    if (stand.get(origin) == null) {
-                        continue;   // nothing built this origin's values, so nothing measures it
-                    }
+            for (int origin = 0; origin < stated.size() && out.size() < MOST_REPAIRS; origin++) {
+                if (stand.get(origin) == null) {
+                    continue;   // nothing built this origin's values, so nothing measures it
+                }
+                for (int[] supporting : supportingSets(axes, at, moved)) {
                     for (int[] where
                             : assignmentsOver(axes, stand.get(origin), at, cls, supporting)) {
                         if (out.size() >= MOST_REPAIRS) {
@@ -1746,7 +1792,8 @@ public final class Generator {
      * combination is wrong — the assignments were this search's, and so was the number of them.
      */
     private static Witness witnessFor(Subject subject, List<Axis> axes,
-                                      CellSelection selection, CandidateCheck check, Trial trial) {
+                                      CellSelection selection, CandidateCheck check, Trial trial,
+                                      List<Integer> takes) {
         InteractionCells.Cell cell = selection.cell();
         List<int[]> tried = new ArrayList<>();
         Attempt last = null;
@@ -1763,12 +1810,12 @@ public final class Generator {
             if (last.row() == null) {
                 continue;   // nothing composed here; another assignment may compose
             }
-            // Named for the combination it was composed for, which is the positions the decisions
-            // read. What the pair search filled the rest of the row with is what this row turns out
-            // to settle beside that, and a name carrying it would move when nothing about the row
-            // had.
+            // Composed for the arms it was looked for, and not for the combination it was found
+            // at. The combination is where the search went; the arms are what somebody is owed a
+            // row at. One row answering two of them is two answers and not one composite thing.
             GeneratedRow named = new GeneratedRow(
-                    new Purpose.ForACombination(labels(axes, cell, at)), last.row().inputs());
+                    takes.stream().map(Purpose.ForAnArm::new).map(Purpose.class::cast).toList(),
+                    last.row().inputs());
             switch (trial.run(named.inputs())) {
                 // Nothing can say where it went, so nothing certifies it and nothing refutes it.
                 // Offered as it was before anything ran, and said to be. Both of the ways that

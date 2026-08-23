@@ -44,8 +44,14 @@ public sealed interface GenerationReason {
         }
     }
 
-    /** The search ended before it had covered everything, with this many combinations left. */
-    record SearchLimit(String behavior, int combinations) implements GenerationReason {}
+    /**
+     * The search ended before it had walked the whole plan, with this many things left on it.
+     *
+     * <p>Classes and arms, which is what a plan is made of. A combination is where a witness for an
+     * arm is looked for and is not a thing the plan holds, so a count of them was a number about a
+     * space nobody is owed anything in — and the number handed here was never that anyway.
+     */
+    record SearchLimit(String behavior, int owed) implements GenerationReason {}
 
     /**
      * The module's classes were not there to put a candidate through.

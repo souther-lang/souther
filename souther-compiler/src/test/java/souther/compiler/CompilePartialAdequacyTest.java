@@ -265,7 +265,7 @@ class CompilePartialAdequacyTest {
             assertEquals(souther.compiler.partition.Generator.UnresolvedCombination.Reason
                             .THE_POSITION_WAS_WITHHELD,
                     ((souther.compiler.partition.GenerationOutcome.CannotGenerate) each.outcome())
-                            .why().reason(),
+                            .why().get(0).reason(),
                     each.finding()::toString);
         }
     }

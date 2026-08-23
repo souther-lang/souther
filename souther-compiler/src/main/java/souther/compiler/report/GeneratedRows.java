@@ -93,7 +93,8 @@ public final class GeneratedRows {
         for (Map.Entry<String, Adequacy.Filling> behavior : generated.entrySet()) {
             asked.add(Map.entry(behavior.getKey(),
                     new Composed(behavior.getValue().composed().rows(),
-                            boundaries ? behavior.getValue().boundaries().rows() : List.of())));
+                            boundaries ? behavior.getValue().boundaries().rows() : List.of(),
+                            armNames(behavior.getValue()))));
         }
         // Written once and then read three times — printed, counted, and asked whether there is
         // anything to answer. Counting the candidates instead gives a number about work a reader
@@ -200,9 +201,58 @@ public final class GeneratedRows {
         }
     }
 
-    /** What one behavior's rows were composed for: the cells of its partition, and the lines a rule
-     * draws. Kept apart because a row's name comes from what it was composed for. */
-    private record Composed(List<Generator.GeneratedRow> cells, List<Generator.GeneratedRow> lines) {}
+    /**
+     * What one behavior's rows were composed for: the classes and arms of it, and the lines a rule
+     * draws. Kept apart because a row's name comes from what it was composed for.
+     *
+     * @param armNames what each arm of the body is called, by the probe the plan gave it. The
+     *                 generator composes a row for an arm by that number and spells no name for it:
+     *                 what an arm is called is this layer's word, and a second spelling made where
+     *                 the search runs would be free to drift from the one the finding is written in
+     */
+    private record Composed(List<Generator.GeneratedRow> cells, List<Generator.GeneratedRow> lines,
+                            Map<Integer, String> armNames) {}
+
+    /**
+     * What each arm of one behavior is called, by the probe the plan gave it.
+     *
+     * <p>Read off the findings the generation answers, which is where an arm's name is already
+     * written. An arm the search composed a row for is one a finding named, the plan being made of
+     * them, so there is a name here for every arm a row is offered at.
+     */
+    private static Map<Integer, String> armNames(Adequacy.Filling filling) {
+        Map<Integer, String> out = new LinkedHashMap<>();
+        for (Adequacy.GenerationDisposition each : filling.generation()) {
+            if (each.finding().about() instanceof About.AnArmNoRowGoesThrough(var arm)) {
+                out.put(arm.index(), ArmVocabulary.label(arm));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * What a row is offered under, one name per thing it was composed for.
+     *
+     * <p>Every one of them and not a name made by joining them. A row that answers two arms answers
+     * two things, and `a x b` spelt over the pair reads as an obligation nobody raised — the same
+     * fault as naming a row for everything it turns out to settle, arriving from the other side.
+     */
+    private static List<String> named(Generator.GeneratedRow row, Map<Integer, String> arms) {
+        List<String> out = new ArrayList<>();
+        for (Generator.Purpose purpose : row.purposes()) {
+            if (purpose instanceof Generator.Purpose.ForAnArm(int probe)) {
+                // Left unnamed where nothing named the arm, which is the state of a row nobody has
+                // named yet and is what the language writes for one. A name invented here would be
+                // a second vocabulary for an arm.
+                if (arms.containsKey(probe)) {
+                    out.add(arms.get(probe));
+                }
+            } else {
+                out.addAll(purpose.labels());
+            }
+        }
+        return out;
+    }
 
     /**
      * The candidates as rows, one per row rather than one per obligation.
@@ -243,8 +293,11 @@ public final class GeneratedRows {
                     byBehavior.computeIfAbsent(behavior.getKey(), _ -> new LinkedHashMap<>());
             for (Generator.GeneratedRow row : behavior.getValue().cells()) {
                 String inputs = String.join(", ", textsOf(row.inputs()));
-                here.merge(inputs, new Offered(inputs, List.of(row.description())),
-                        (had, _) -> had.and(row.description()));
+                Offered offered = here.computeIfAbsent(inputs, _ -> new Offered(inputs, List.of()));
+                for (String purpose : named(row, behavior.getValue().armNames())) {
+                    offered = offered.and(purpose);
+                }
+                here.put(inputs, offered);
             }
             // A row composed for an edge is offered without one. The points of a border coincide —
             // each probe fills the positions its own edge does not name from the bottom of their
@@ -403,9 +456,12 @@ public final class GeneratedRows {
         for (Adequacy.GenerationDisposition each : shown(filling, boundaries)) {
             switch (each.outcome()) {
                 case GenerationOutcome.Generated _ -> { }
-                case GenerationOutcome.CannotGenerate cannot -> say(out, said,
-                        String.format("// no row for `%s` in `%s`: %s%n", cannot.why().subject(),
-                                behavior, saidOf(cannot.why())));
+                // Each of what was tried, because they are not one fact: a combination the model
+                // refuses and one the search stopped at are different news, and a line carrying
+                // whichever came first carried the order the cells were walked in.
+                case GenerationOutcome.CannotGenerate cannot -> cannot.why().forEach(why ->
+                        say(out, said, String.format("// no row for `%s` in `%s`: %s%n",
+                                why.subject(), behavior, saidOf(why))));
                 // Told apart from the one above it in its own words. A strategy that tried and
                 // composed nothing and a finding nothing takes are different pieces of news: the
                 // first says a row may still be writable by hand, the second says no run of this
@@ -434,8 +490,8 @@ public final class GeneratedRows {
                         withheld.axis());
                 case GenerationReason.SearchLimit limit -> String.format(
                         "// generation stopped for `%s`: %d %s past the row limit%n",
-                        limit.behavior(), limit.combinations(),
-                        limit.combinations() == 1 ? "combination" : "combinations");
+                        limit.behavior(), limit.owed(),
+                        limit.owed() == 1 ? "class or arm" : "classes and arms");
                 case GenerationReason.NothingToBuildAgainst none -> String.format(
                         "// generation stopped for `%s`: there was nothing to build a candidate"
                                 + " against%n", none.behavior());

@@ -42,8 +42,28 @@ public sealed interface GenerationOutcome {
      *
      * <p>Never a claim that nothing can be written. What the attempt established is carried whole, and
      * saying more than it is the thing this type exists to prevent.
+     *
+     * <p><b>All of what was tried, and not the weakest of it.</b> An arm is looked for at every
+     * combination claiming it, and those come to different things — one the model refuses, one the
+     * search stopped at, one whose candidates were all rejected. Only the first of those says
+     * anything about the arm itself, and none of the others orders against the rest: picking one to
+     * carry meant picking by the order the search happened to walk, so the answer moved when the
+     * cells were reordered and nothing about the model had changed.
      */
-    record CannotGenerate(Generator.UnresolvedCombination why) implements GenerationOutcome {}
+    record CannotGenerate(List<Generator.UnresolvedCombination> why) implements GenerationOutcome {
+
+        public CannotGenerate {
+            why = List.copyOf(why);
+            if (why.isEmpty()) {
+                throw new IllegalArgumentException("nothing came of something that was tried");
+            }
+        }
+
+        /** One attempt, which is what a search asked about one thing at one place comes to. */
+        public CannotGenerate(Generator.UnresolvedCombination why) {
+            this(List.of(why));
+        }
+    }
 
     /**
      * Nothing here answers a finding row synthesis is not about.

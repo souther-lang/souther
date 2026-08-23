@@ -1838,11 +1838,12 @@ public final class Adequacy {
             return switch (composed.armAt(arm.index())) {
                 case Generator.ArmAttempt.Built built ->
                         new GenerationOutcome.Generated(List.of(built.row()));
-                // The weakest of what every combination claiming it came to. One that stopped at
-                // the search's budget says nothing about the others, so a reason a reader may act
-                // on survives only where they all agreed on it.
+                // What every combination claiming it came to, all of it. They are not one fact and
+                // they do not order against each other: one the model refuses says the arm may be
+                // unreachable, one the search stopped at says nothing at all, and a reader handed
+                // whichever came first was handed the walk order of the cells.
                 case Generator.ArmAttempt.Unresolved none ->
-                        new GenerationOutcome.CannotGenerate(none.weakest());
+                        new GenerationOutcome.CannotGenerate(none.why());
                 case null -> new GenerationOutcome.NotSupported(
                         GenerationOutcome.NotSupported.Reason.NO_COMBINATION_REACHES_THIS_ARM);
             };

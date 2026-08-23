@@ -85,11 +85,11 @@ class ARowOfferedForACombinationIsRunWhereAnythingCanRunItTest {
 
         assertFalse(filling.composed().rows().isEmpty(), "the classes are still offered");
         assertEquals(List.of(), filling.composed().rows().stream()
-                        .map(souther.compiler.partition.Generator.GeneratedRow::purpose)
-                        .filter(souther.compiler.partition.Generator.Purpose.ForACombination.class
+                        .flatMap(row -> row.purposes().stream())
+                        .filter(souther.compiler.partition.Generator.Purpose.ForAnArm.class
                                 ::isInstance)
                         .toList(),
-                "and no row is composed for a combination, no arm being owed one");
+                "and no row is composed for an arm, none being owed one");
         assertEquals(List.of(), unconfirmed(filling),
                 "so there is nothing to say went unrun");
     }
@@ -139,8 +139,8 @@ class ARowOfferedForACombinationIsRunWhereAnythingCanRunItTest {
 
         assertFalse(filling.composed().rows().isEmpty(), "the classes are still offered");
         assertEquals(List.of(), filling.composed().rows().stream()
-                        .map(souther.compiler.partition.Generator.GeneratedRow::purpose)
-                        .filter(souther.compiler.partition.Generator.Purpose.ForACombination.class
+                        .flatMap(row -> row.purposes().stream())
+                        .filter(souther.compiler.partition.Generator.Purpose.ForAnArm.class
                                 ::isInstance)
                         .toList(),
                 "and none for a combination: nothing applied the rows, so no arm is established"
@@ -190,9 +190,9 @@ class ARowOfferedForACombinationIsRunWhereAnythingCanRunItTest {
         }
     }
 
-    private static List<String> offeredBy(Adequacy.Level level) {
+    private static List<List<String>> offeredBy(Adequacy.Level level) {
         return generationOf(WRITTEN, "shippingFee", level).composed().rows().stream()
-                .map(souther.compiler.partition.Generator.GeneratedRow::description).toList();
+                .map(souther.compiler.partition.Generator.GeneratedRow::labels).toList();
     }
 
     private static List<GenerationReason> unconfirmed(Adequacy.Filling filling) {

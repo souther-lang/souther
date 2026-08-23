@@ -780,7 +780,7 @@ class CompileExampleGenerateTest {
         assertEquals(List.of("Cond { ...none, f = C }", "Cond { ...none, g = G2 }"),
                 inputs(filled));
         assertEquals(List.of(List.of("c.f=C"), List.of("c.g=G2")),
-                filled.rows().stream().map(row -> row.purpose().labels()).toList(),
+                filled.rows().stream().map(row -> row.labels()).toList(),
                 "each named for the one class it moves");
     }
 
@@ -922,7 +922,7 @@ class CompileExampleGenerateTest {
         assertEquals(List.of(List.of("request.hi=0 <= x <= 60"), List.of("request.hi=60 < x"),
                         List.of("request.lo=0 <= x <= 50"), List.of("request.lo=50 < x")),
                 generated(CORRELATED).get("submit").composed().rows().stream()
-                        .map(row -> row.purpose().labels()).toList());
+                        .map(row -> row.labels()).toList());
     }
 
     private static String inputsOf(Generator.GeneratedRow row) {
@@ -1122,7 +1122,7 @@ class CompileExampleGenerateTest {
         Adequacy.Filling filling = generated(correlated).get("submit");
 
         Generator.GeneratedRow atTheEdge = filling.boundaries().rows().stream()
-                .filter(row -> row.purpose().labels().contains("bill = 0")).findFirst().orElse(null);
+                .filter(row -> row.labels().contains("bill = 0")).findFirst().orElse(null);
         assertNotNull(atTheEdge, "the edge on `bill` is a row somebody can write: "
                 + filling.boundaries().unresolved());
         assertEquals("Paired { n = Count(1), xs = [0] }",
