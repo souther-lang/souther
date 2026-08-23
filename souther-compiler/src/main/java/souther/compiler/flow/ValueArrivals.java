@@ -1,6 +1,5 @@
 package souther.compiler.flow;
 
-import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 
