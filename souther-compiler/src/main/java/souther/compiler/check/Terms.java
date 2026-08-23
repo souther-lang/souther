@@ -771,18 +771,49 @@ final class Terms {
      * here would be this reader answering it a second way.
      */
     Denotations choosing(Choice.Decides decidedBy, Denotations at) {
+        return chose(decidedBy, at).at();
+    }
+
+    /**
+     * Where a reading stands once an arm is chosen, and the value that arm opened.
+     *
+     * <p>Both halves from one reader. Which value an arm opens and where the reading then stands are
+     * one answer about one node, and a second method working the first out for itself would be a
+     * second account of a node that has an owner — the thing the sum
+     * ({@link Choice.Decides}) is a sum for. So this is the only reader here that names the ways of
+     * deciding, and what wants either half asks it.
+     *
+     * @param opened the value the arm brought into being, or null where it brought none: a
+     *               condition names values that stand whatever arm is chosen, a departure was taken
+     *               where nothing was built, and an operation whose arms are chosen by how its
+     *               arguments stand relates arguments that were already there
+     */
+    record Chose(Denotations at, Core.Read opened) {}
+
+    /** The same question {@link #choosing} answers, with what it opened said beside it. */
+    Chose chose(Choice.Decides decidedBy, Denotations at) {
         return switch (decidedBy) {
             // A condition binds nothing. What it settles is read where the arm is read.
-            case Choice.Decides.ACondition ignored -> at;
+            case Choice.Decides.ACondition ignored -> new Chose(at, null);
             // A departure is taken where nothing was built, so it has nothing to enter.
-            case Choice.Decides.ItDeparted ignored -> at;
-            case Choice.Decides.ACase(Core.Case arm, Core scrutinee) -> opening(arm, scrutinee, at);
-            case Choice.Decides.ItWasBuilt(Core.IfConstructed ic) ->
-                    entering(read(ic.binder(), ic.construct().type(), ic.pos()), at);
+            case Choice.Decides.ItDeparted ignored -> new Chose(at, null);
+            case Choice.Decides.ACase(Core.Case arm, Core scrutinee) ->
+                    new Chose(opening(arm, scrutinee, at), openedByArm(arm));
+            case Choice.Decides.ItWasBuilt(Core.IfConstructed ic) -> {
+                Core.Read root = read(ic.binder(), ic.construct().type(), ic.pos());
+                yield new Chose(entering(root, at), root);
+            }
             // An operation defined by cases answers a value the call was already given, written
             // where the call is. It introduces no name, so there is nothing to enter.
-            case Choice.Decides.ByArgumentRelations ignored -> at;
+            case Choice.Decides.ByArgumentRelations ignored -> new Chose(at, null);
         };
+    }
+
+    /** What a {@code match} arm binds, or null where it binds nothing — which is the same condition
+     * {@link #opening} leaves the reading where it found it under. */
+    private static Core.Read openedByArm(Core.Case arm) {
+        return arm.binder() == null || arm.bindType() == null
+                ? null : read(arm.binder(), arm.bindType(), arm.pos());
     }
 
     /**
@@ -933,12 +964,12 @@ final class Terms {
         }
         List<Derivation.Chosen.Arm> arms = new ArrayList<>();
         for (Choice.Arm arm : choice.arms()) {
-            Denotations inside = choosing(arm.decidedBy(), at);
-            LinearForm<FactSubject> form = affineOf(arm.answers(), inside);
+            Terms.Chose chose = chose(arm.decidedBy(), at);
+            LinearForm<FactSubject> form = affineOf(arm.answers(), chose.at());
             if (form == null) {
                 return null;
             }
-            arms.add(new Derivation.Chosen.Arm(form, settledBy(arm.decidedBy(), at, inside)));
+            arms.add(new Derivation.Chosen.Arm(form, settledBy(arm.decidedBy(), at, chose)));
         }
         return new Derivation.Chosen(arms);
     }
@@ -952,10 +983,10 @@ final class Terms {
      * is the same statement wherever it was read, so they stand together beside the arm.
      */
     private List<NumericConstraint> settledBy(Choice.Decides decidedBy, Denotations outside,
-                                              Denotations inside) {
+                                              Chose chose) {
         List<NumericConstraint> out =
                 new ArrayList<>(Conditions.settledBy(this, decidedBy, outside));
-        out.addAll(guaranteedBy(decidedBy, inside));
+        out.addAll(guaranteedBy(chose.opened(), chose.at()));
         return out;
     }
 
@@ -971,22 +1002,15 @@ final class Terms {
      * <p>Under the arm and not beside it. The value only exists because that arm was chosen, so what
      * it guarantees is stated of that arm and of no other.
      *
-     * <p>A condition settles nothing here, and a departure settles nothing at all: nothing was
-     * built, so there is no value for a type to guarantee anything of.
+     * <p>Nothing for an arm that opened no value, which is {@link #chose}'s answer and not this
+     * method's: asking the node a second time here would be a second account of it.
      *
      * <p>Only the relations. A clause states what it states, and what a recipe can record beside an
      * arm is a relation ({@link NumericConstraint}); a fact about a value is settled where facts
      * are, and leaving it out costs precision where taking it in as something else would not be
      * sound.
      */
-    private List<NumericConstraint> guaranteedBy(Choice.Decides decidedBy, Denotations inside) {
-        Core.Read root = switch (decidedBy) {
-            case Choice.Decides.ACase it -> read(it.arm().binder(), it.arm().bindType(),
-                    it.arm().pos());
-            case Choice.Decides.ItWasBuilt it -> read(it.attempt().binder(),
-                    it.attempt().construct().type(), it.attempt().pos());
-            case Choice.Decides.ACondition _, Choice.Decides.ItDeparted _ -> null;
-        };
+    private List<NumericConstraint> guaranteedBy(Core.Read root, Denotations inside) {
         if (root == null) {
             return List.of();
         }
