@@ -3,6 +3,7 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.diag.msg.MessageValues;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
@@ -62,6 +63,32 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
         assertEquals(List.of("Station", "Hospital", "Clinic"), shown(leavesOf("Both")));
     }
 
+    /**
+     * The same where what two cases reach is a sum rather than a leaf.
+     *
+     * <p>Held apart from the leaf-level one because the descent stops differently: the second
+     * reach of {@code N} is not descended at all, where the second reach of a leaf is descended
+     * and discarded. What the two must agree on is that the leaves under it are contributed once,
+     * where {@code N} was first reached.
+     */
+    @Test
+    void aNestedSumReachedThroughTwoCasesContributesItsLeavesOnce() {
+        Hir.Module shared = resolved("""
+                module m
+
+                data R
+                data T
+                data P
+                data Q
+                data N   = R | T
+                data A   = N | P
+                data B   = N | Q
+                data Top = A | B
+                """);
+        assertEquals(List.of("R", "T", "P", "Q"),
+                shown(LeafSpace.leavesOf(Type.ref(named(shared, "Top")), TypeChecker.symbols(shared))));
+    }
+
     @Test
     void aTypeThatIsNoSumIsTheOneLeafItIs() {
         assertEquals(List.of("Station"), shown(leavesOf("Station")));
@@ -107,8 +134,31 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
 
     @Test
     void aLeafSetAnswersForATypeThatIsNoSum() {
-        assertEquals(Set.of("Station"),
-                Set.copyOf(shown(List.copyOf(TypeOps.leafCases(Type.ref(named("Station")), symbols)))));
+        assertEquals(List.of("Station"),
+                shown(List.copyOf(TypeOps.leafCases(Type.ref(named("Station")), symbols))));
+    }
+
+    /**
+     * Where the one answer that changed is seen from outside.
+     *
+     * <p>{@code sumCases} named a leaf once per path that reached it, and the cases without the
+     * field are listed from what it answered, so a reader of a diamond was told about one case
+     * twice. This is the only reader of that list, which is what makes the change to it this
+     * small.
+     */
+    @Test
+    void aCaseReachedTwiceIsNamedOnceInWhatHasNoSuchField() {
+        souther.compiler.diag.CompileException refused = org.junit.jupiter.api.Assertions
+                .assertThrows(souther.compiler.diag.CompileException.class,
+                        () -> souther.compiler.Compiler.compile(MODULE + """
+
+                                let f (b: Both) : Int = b.x
+                                """));
+        assertEquals("E1321", refused.diagnostic().code());
+        assertEquals(List.of("Station, Hospital, Clinic"),
+                refused.diagnostic().notes().stream()
+                        .map(n -> String.valueOf(MessageValues.of(n.said()).get("cases")))
+                        .toList());
     }
 
     @Test
