@@ -638,8 +638,6 @@ final class PathEngine {
                 given.put(field, new Core.FieldAccess(root, name, type, root.pos()));
             }
         });
-        Known out = k;
-        List<Quantified> quantified = new ArrayList<>();
         Clauses.StatedClauses stated = reach.withoutClauses().test(ref.name())
                 ? Clauses.StatedClauses.NONE_ASKED_FOR : clauses.statedAt(ref.name(), data, given);
         // A clause of a declaration under here that states nothing this can read is gone before any
@@ -649,25 +647,27 @@ final class PathEngine {
         if (gathering != null && !stated.everyClauseStated()) {
             gathering.missed(path, InvariantChecker.Borne.BY_EVERY_VALUE);
         }
+        List<TypeGuarantee> guarantees = new ArrayList<>();
         for (Clauses.Stated one : stated.clauses()) {
             // Where this clause becomes a rule of the model something can be attributed to. What is
             // read off it below belongs to this rule, and the identity is settled here so that no
             // reader of the reading has to decide which of the rules of the model it is holding.
-            RuleRef.Invariant origin = new RuleRef.Invariant(one.clause().ref());
+            RuleRef.Invariant rule = new RuleRef.Invariant(one.clause().ref());
             // Read before it is handed over, so that what is recorded is this reading's own answer
             // about this clause rather than a guess made from its shape somewhere else.
             Predicates.Owed owed = gathering == null
                     ? predicates.assumed(one.expr(), at, false)
                     : predicates.assumed(one.expr(), at, false,
-                            (part, said) -> gathering.constrained(origin, part,
+                            (part, said) -> gathering.constrained(rule, part,
                                     InvariantChecker.partRead(said)));
-            if (gathering != null) {
-                gathering.gathered(origin, one.expr(), Predicates.subjectsIn(owed));
-            }
+            List<Quantified> quantified = new ArrayList<>();
             predicates.quantifiedBy(one.expr(), at, true, quantified);
-            out = predicates.assume(owed, out, Known.Held.OF_THE_VALUE);
+            guarantees.add(new TypeGuarantee(rule, one.expr(), owed, quantified));
         }
-        out = out.and(quantified);
+        Known out = k;
+        for (TypeGuarantee guarantee : guarantees) {
+            out = taking(guarantee, out, gathering);
+        }
         if (data.newtype()) {
             // A newtype's `.value` is the same location as the newtype, so what its base guarantees is
             // guaranteed of this very atom: `data Outer = Inner` carries Inner's invariant.
@@ -689,6 +689,26 @@ final class PathEngine {
         }
         onPath.remove(ref.name());
         return out;
+    }
+
+    /**
+     * {@code k} with what {@code guarantee} says taken as holding of the value it was read at.
+     *
+     * <p>The one step that turns an answer about a declaration into knowledge on this path, kept
+     * apart from the reading that produced it. What a type guarantees is the same wherever it is
+     * read; that it is held {@link Known.Held#OF_THE_VALUE} rather than of the path is this reader's
+     * account of it, and the reader settling a choice has no use for it.
+     *
+     * <p>{@code gathering} is told here for the same reason: what was gathered is a fact about this
+     * measurement and not about the model.
+     */
+    private Known taking(TypeGuarantee guarantee, Known k, InvariantChecker.Gathering gathering) {
+        if (gathering != null) {
+            gathering.gathered(guarantee.rule(), guarantee.clause(),
+                    Predicates.subjectsIn(guarantee.owed()));
+        }
+        return predicates.assume(guarantee.owed(), k, Known.Held.OF_THE_VALUE)
+                .and(guarantee.quantified());
     }
 
     /**
