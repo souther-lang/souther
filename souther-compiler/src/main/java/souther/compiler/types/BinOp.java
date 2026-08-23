@@ -32,19 +32,32 @@ public enum BinOp {
     }
 
     /**
-     * Whether this stops as soon as its answer is settled, so that its right operand runs on some
-     * runs and not others (spec §a-condition-stops-when-its-answer-is-settled).
+     * Which way the left operand has to come out for the right one to run, or null where both
+     * always run (spec §a-condition-stops-when-its-answer-is-settled).
      *
      * <p>Here for the reason {@link #compares} is here. Which operands run is part of what the
-     * operator means, and every reader that has to know it was spelling the membership out again —
-     * a reading of what arrives, a reading of what an expression evaluates, a reading of what a row
-     * interacts with. Three spellings of one set are three sets an operator added later can land in
+     * operator means, and every reader that has to know it was spelling it out again — a reading of
+     * what arrives, a reading of what an expression evaluates, a reading of what a row interacts
+     * with. Three spellings of one rule are three rules an operator added later can land in
      * differently.
+     *
+     * <p>The polarity and not the membership, because the membership follows from it and the
+     * polarity does not follow from anything. Read as "which operators stop early", every reader
+     * still had to work out which way, and every one of them wrote {@code == AND} — which is right
+     * while {@code ||} is the only other one and reads {@code ||}'s answer for a third.
      */
-    public boolean stopsWhenItsAnswerIsSettled() {
+    public Boolean rightRunsWhenLeftIs() {
         return switch (this) {
-            case AND, OR -> true;
-            case EQ, NE, LT, LE, GT, GE, ADD, SUB, MUL, DIV, CONCAT -> false;
+            case AND -> Boolean.TRUE;
+            case OR -> Boolean.FALSE;
+            case EQ, NE, LT, LE, GT, GE, ADD, SUB, MUL, DIV, CONCAT -> null;
         };
+    }
+
+    /** Whether this stops as soon as its answer is settled, so that its right operand runs on some
+     * runs and not others. What decides it is {@link #rightRunsWhenLeftIs}: an operator that names
+     * a way for its right to run is one that has runs where it does not. */
+    public boolean stopsWhenItsAnswerIsSettled() {
+        return rightRunsWhenLeftIs() != null;
     }
 }

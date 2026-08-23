@@ -220,31 +220,102 @@ class AConstructionAfterAnEvaluationThatAnswersNothingIsNotJudgedTest {
     @Test
     void anOperandAShortCircuitDoesNotAlwaysEvaluateIsABranch() {
         assertEquals(List.of("E2010"), reported(shortCircuiting(
-                "x < 0 && a * a > 0", "if flag then Nothing else Negative(x)")),
+                "x < 0 && a * a > 0", "if flag then Nothing else Negative(x)",
+                "    guard x >= 0 else Nothing\n")),
                 "the product that overflows runs only where the left came out true, which is"
                         + " nowhere here — so it stops nothing and the construction is judged");
         assertEquals(List.of(), reported(shortCircuiting(
-                "x < 0 && Negative(x).value < 0", "if flag then Nothing else Nothing")),
+                "x < 0 && Negative(x).value < 0", "if flag then Nothing else Nothing",
+                "    guard x >= 0 else Nothing\n")),
                 "and a construction on that side is built on no run, so it is not judged");
         assertEquals(List.of("E2010"), reported(shortCircuiting(
-                "Negative(x).value < 0 && x < 0", "if flag then Nothing else Nothing")),
+                "Negative(x).value < 0 && x < 0", "if flag then Nothing else Nothing",
+                "    guard x >= 0 else Nothing\n")),
                 "the very same construction on the side that always runs is judged, which is what"
                         + " says the row above is about where it stands and not about what it is");
     }
 
-    /** A behavior that binds {@code condition} and answers {@code body}, under guards that hold
-     * {@code a} where every product of it overflows and {@code x} at or above nought. */
-    private static String shortCircuiting(String condition, String body) {
+    /** A behavior that binds {@code condition} and answers {@code body}, under a guard that holds
+     * {@code a} where every product of it overflows and whatever else {@code more} guards. */
+    private static String shortCircuiting(String condition, String body, String more) {
+        return DECLARATIONS + """
+                behavior f : (a: Int, x: Int) -> Negative | Nothing
+                    constructs Negative
+                let f (a, x) = {
+                    guard a >= 5000000000 else Nothing
+                %s    let flag = %s
+                    %s
+                }
+                """.formatted(more, condition, body);
+    }
+
+    /**
+     * What a short-circuiting operator leaves is what its two ways leave, and a way that reaches
+     * nothing is not one of them.
+     *
+     * <p>The rows above hold the side that does not run. These hold the other half: the operator is
+     * a fork with two ways on — the runs that evaluated the right operand, and the runs the left
+     * already answered for — and a run leaves it down one of them. So an operand that always runs
+     * and always aborts leaves no way at all, and one that aborts on the side it runs leaves only
+     * the side it does not.
+     *
+     * <p>The second is what says this carries more than a flag. Where the right operand is the only
+     * way that closes, every run that reaches what comes after came the other way, and it comes
+     * carrying what that way settled — {@code x < 0} here, which discharges the construction that
+     * would otherwise be owed its clause.
+     */
+    @Test
+    void whatAShortCircuitLeavesIsWhatItsWaysLeave() {
+        assertEquals(List.of(), reported(shortCircuiting(
+                "x >= 0 && a * a > 0", "Negative(x)", "    guard x >= 0 else Nothing\n")),
+                "the right operand runs on every run that gets here and aborts on every one of"
+                        + " them, so there is no way on");
+        assertEquals(List.of("E2010"), reported(shortCircuiting(
+                "x >= 0 && a > 0", "Negative(x)", "    guard x >= 0 else Nothing\n")),
+                "and the same shape with nothing that aborts leaves both ways, so the construction"
+                        + " is judged — which is what says the row above is about the abort");
+        assertEquals(List.of(), reported(shortCircuiting(
+                "x >= 0 && a * a > 0", "Negative(x)", "")),
+                "the only way on is the one the left answered for, so what it settled — `x < 0` —"
+                        + " holds where the construction stands, and discharges it");
+        assertEquals(List.of("E2011"), reported(shortCircuiting(
+                "x >= 0 && a > 0", "Negative(x)", "")),
+                "and with both ways left there is nothing to carry, so the clause stands owed");
+        assertEquals(List.of(), reported(shortCircuiting(
+                "x < 0 || a * a > 0", "Negative(x)", "")),
+                "an `||` says the same thing the other way round, and the polarity is the"
+                        + " operator's to give");
+    }
+
+    /**
+     * A closure a combinator applies is read where it runs, which is after every argument has
+     * answered.
+     *
+     * <p>{@code List.map} takes the function before the container, so the body used to be read while
+     * the argument list was still being walked — before the container was evaluated, and on runs
+     * the container's own evaluation stops. A container that aborts means the operation is never
+     * entered and the closure never applied.
+     */
+    @Test
+    void aClosureACombinatorAppliesIsReadAfterEveryArgumentHasAnswered() {
+        assertEquals(List.of(), reported(mapping("[a * a]")),
+                "the container aborts, so the operation is not entered and the body never runs");
+        assertEquals(List.of("E2010"), reported(mapping("[a]")),
+                "and over a container that answers, the same body is read and the value refused");
+    }
+
+    /** A behavior that maps a closure building a {@code Negative} over {@code container}. */
+    private static String mapping(String container) {
         return DECLARATIONS + """
                 behavior f : (a: Int, x: Int) -> Negative | Nothing
                     constructs Negative
                 let f (a, x) = {
                     guard a >= 5000000000 else Nothing
                     guard x >= 0 else Nothing
-                    let flag = %s
-                    %s
+                    let ys = List.map(y -> Negative(x), %s)
+                    Nothing
                 }
-                """.formatted(condition, body);
+                """.formatted(container);
     }
 
     /**

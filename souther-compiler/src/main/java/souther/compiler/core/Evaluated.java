@@ -1,7 +1,5 @@
 package souther.compiler.core;
 
-import souther.compiler.types.BinOp;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -90,8 +88,8 @@ public final class Evaluated {
                             // reading around what is missing.
                             ? always(binary.left())
                             : List.of(new Step.Always(binary.left()),
-                                    new Step.OnlyWhere(binary.left(), binary.op() == BinOp.AND,
-                                            binary.right()));
+                                    new Step.OnlyWhere(binary.left(),
+                                            binary.op().rightRunsWhenLeftIs(), binary.right()));
             case Core.Binary binary -> always(binary.left(), binary.right());
             // The callee's own body is not read; its arguments are evaluated before it is reached.
             case Core.Call call -> always(call.args());

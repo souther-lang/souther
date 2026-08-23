@@ -387,7 +387,7 @@ public final class ValueArrivals<P> {
      */
     private Paths<P> through(Core.Binary binary, Naming<P> naming,
                              Map<BindingId, Bound<P>> bound) {
-        Truth goesOn = binary.op() == BinOp.AND ? Truth.TRUE : Truth.FALSE;
+        Truth goesOn = Truth.of(binary.op().rightRunsWhenLeftIs());
         Paths<P> left = settle(binary.left(), naming, bound);
         Paths<P> right = settle(binary.right(), naming, bound);
         if (left instanceof Paths.Beyond) {

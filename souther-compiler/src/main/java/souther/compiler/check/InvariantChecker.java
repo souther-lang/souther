@@ -1504,19 +1504,49 @@ public final class InvariantChecker {
      * evaluates the expression that answers them now ({@link PathEngine#answeredHere}), which is
      * the order they hold in.
      *
-     * <p>What comes out of the region does not come back. An arm, a binding's body, a closure's body
-     * and a rebuilt tree are each read with something further settled, and what they settle is
-     * theirs; a caller of this is somewhere none of it holds. So this answers nothing, where
-     * {@link #walk} inside one region answers what a continuation there may take.
+     * <p>What the region left, which is not the same as what holds outside it. An arm is read under
+     * the condition that chose it and a binding's body under what the binding holds, and a caller
+     * standing outside is somewhere none of that is true — so what a caller may take from this is
+     * whether anything leaves at all, and the rest only where it can say that this region is the
+     * whole of the way on ({@link #carriedOnFrom}).
      *
      * <p>Nothing reaches what this was handed, so there is nothing under it to be about. Asked here
      * and again in the walk, because the walk is itself where the conditions can come to contradict.
      */
-    private void entering(Core e, Known given, Denotations at, ContextMultiplicity copies) {
+    private Known entering(Core e, Known given, Denotations at, ContextMultiplicity copies) {
         if (given.reachesNothing()) {
-            return;
+            return given;
         }
-        walk(e, given, at, copies);
+        return walk(e, given, at, copies);
+    }
+
+    /**
+     * What a fork leaves a continuation: what stood before it, what each way out of it left, and
+     * where the ways were read.
+     *
+     * <p>A way that reaches nothing is not a way out. Where none is left, no run leaves the fork and
+     * the continuation is reached by nothing — which is the fork's completion and is a different
+     * thing from any of its arms' facts.
+     *
+     * <p>Where exactly one is left, what that way settled holds of the continuation. Not a branch
+     * fact escaping its branch: a continuation reached through one way and through no other is
+     * reached under what that way settled, and calling it a branch fact there would be reading the
+     * fork as though it still had two.
+     *
+     * <p>And only where that way was read where the continuation stands. An arm reads its binding
+     * under denotations the continuation is outside of, and what is stated there names a place a
+     * caller cannot see; what survives such a way is that something did, and no more.
+     *
+     * <p>Where more than one is left, what stood before the fork. Two states have no join here —
+     * making one is a different thing to build — and what stood before them is what they still
+     * agree on.
+     */
+    private static Known carriedOnFrom(Known before, Denotations at, List<Entered> ways) {
+        List<Entered> left = ways.stream().filter(w -> !w.known().reachesNothing()).toList();
+        if (left.isEmpty()) {
+            return before.reachingNothing();
+        }
+        return left.size() == 1 && left.getFirst().at() == at ? left.getFirst().known() : before;
     }
 
     /**
@@ -1619,11 +1649,12 @@ public final class InvariantChecker {
             }
             case Core.If iff -> {
                 Known out = walk(iff.cond(), k, at, copies);
-                entering(iff.then(), predicates.assumeCond(iff.cond(), out, at, true).known(), at,
-                        copies);
-                entering(iff.els(), predicates.assumeCond(iff.cond(), out, at, false).known(), at,
-                        copies);
-                yield out;
+                Known held = entering(iff.then(),
+                        predicates.assumeCond(iff.cond(), out, at, true).known(), at, copies);
+                Known otherwise = entering(iff.els(),
+                        predicates.assumeCond(iff.cond(), out, at, false).known(), at, copies);
+                yield carriedOnFrom(out, at,
+                        List.of(new Entered(held, at), new Entered(otherwise, at)));
             }
             case Core.IfConstructed ic -> {
                 // The attempt's own construction cannot abort — a failing invariant is the else
@@ -1645,12 +1676,14 @@ public final class InvariantChecker {
                 // expression it cannot name denotes nothing, and inheriting that would drop the one
                 // thing reaching this branch established.
                 Entered in = engine.enteringBuilt(ic, out, at);
-                entering(ic.then(), in.known(), in.at(), copies);
+                List<Entered> ways = new ArrayList<>();
+                ways.add(new Entered(entering(ic.then(), in.known(), in.at(), copies), in.at()));
                 // Each departure stands where the invariant did not hold, and nothing was built
                 // there, so none of them is seeded with anything the attempt would have guaranteed.
                 Known departing = out;
-                ic.els().forEach(arm -> entering(arm.body(), departing, at, copies));
-                yield out;
+                ic.els().forEach(arm ->
+                        ways.add(new Entered(entering(arm.body(), departing, at, copies), at)));
+                yield carriedOnFrom(out, at, ways);
             }
             case Core.LetIn li -> {
                 // A closure is read where it is applied: what its parameter holds is decided there,
@@ -1663,6 +1696,7 @@ public final class InvariantChecker {
             }
             case Core.Match m -> {
                 Known out = walk(m.scrutinee(), k, at, copies);
+                List<Entered> ways = new ArrayList<>();
                 for (Core.Case c : m.cases()) {
                     // A sum has no fields of its own, so the scrutinee is not a location any clause
                     // could have named — the case's value names only itself. What the arm binds is a
@@ -1672,9 +1706,9 @@ public final class InvariantChecker {
                     // decided by which behavior answered and which case this arm opened, and the
                     // first of those is a question about what is being matched.
                     Entered in = engine.enteringArm(c, m.scrutinee(), out, at);
-                    entering(c.body(), in.known(), in.at(), copies);
+                    ways.add(new Entered(entering(c.body(), in.known(), in.at(), copies), in.at()));
                 }
-                yield out;
+                yield carriedOnFrom(out, at, ways);
             }
             case Core.PreservedCall call -> walkCall(call, k, at, copies);
             // A closure the reading stopped at, reached as a value like any other. What its body
@@ -1730,52 +1764,76 @@ public final class InvariantChecker {
         for (Evaluated.Step step : Evaluated.inOrder(e)) {
             switch (step) {
                 case Evaluated.Step.Always(Core each) -> out = walk(each, out, at, copies);
-                case Evaluated.Step.OnlyWhere(Core asked, boolean comesOut, Core each) ->
-                        entering(each, predicates.assumeCond(asked, out, at, comesOut).known(), at,
-                                copies);
+                case Evaluated.Step.OnlyWhere(Core asked, boolean comesOut, Core each) -> {
+                    // Two ways on, and the operator is the fork between them: the runs that
+                    // evaluated this step, and the runs the left already answered for. A run leaves
+                    // the operator down one of them, so what it leaves is what they leave.
+                    Known taken = entering(each,
+                            predicates.assumeCond(asked, out, at, comesOut).known(), at, copies);
+                    Known skipped = predicates.assumeCond(asked, out, at, !comesOut).known();
+                    out = carriedOnFrom(out, at,
+                            List.of(new Entered(taken, at), new Entered(skipped, at)));
+                }
             }
         }
         return out;
     }
 
-    /** Walks a call the representation kept standing, entering a combinator closure's parameters as
+    /**
+     * Walks a call the representation kept standing, entering a combinator closure's parameters as
      * the locations the application introduces — the element at the container's element type, and
      * every other at what the closure was typed with — so a construction inside the closure is
      * analyzed rather than left opaque. A closure is where its parameters are values, which is here
-     * and not where the block is written. */
+     * and not where the block is written.
+     *
+     * <p><b>Every argument first, and the closure's body after all of them.</b> Evaluating a closure
+     * position makes the function; the body runs inside the operation, which is entered once every
+     * argument has answered. {@code List.map} takes the function before the container, so a body
+     * read as the argument list was walked was read before the container was evaluated — under a
+     * state missing what the container answered, and on runs the container's own evaluation stops
+     * before the operation is ever entered. The first is the backward reading this walk was
+     * straightened to end; the second is a construction judged after an abort, which is what all of
+     * this is about. Both come of reading the body where the closure is written rather than where it
+     * runs.
+     */
     private Known walkCall(Core.PreservedCall call, Known k, Denotations at,
                            ContextMultiplicity copies) {
         Handed handed = Combinators.handedTo(call, at);
         // The arguments run in the order they are written, each over what the ones before it left.
+        // A closure position evaluates nothing: it makes a function.
         Known out = k;
         for (Core arg : call.args()) {
             // The closure is asked by identity: a call may write one expression twice, and only the
             // argument the operation applies is the one an element arrives in.
             if (handed == null || arg != handed.closure()) {
                 out = walk(arg, out, at, copies);
-                continue;
             }
-            Core container = handed.container();
-            Type elem = Terms.elementType(container.type());
-            // The container is read where the call is written, so what is known of its elements
-            // is looked up before the closure's parameter stands for anything.
-            List<Quantified> relations = predicates.elementRelations(container, out, at);
-            Core.Read element = Terms.read(handed.element(), elem, handed.step().pos());
-            // an element of a container is not a location the body can otherwise name
-            Entered in = enter(element, out, at);   // the element carries its type's invariant
-            // What a fold hands its step beside the element is a value of the type it was seeded
-            // with, built through that type's checked constructor like any other — so it carries
-            // that type's invariant, and the accumulator is not the one binding that has to give
-            // its newtype up to be reasoned about.
-            in = enterOthers(handed, in);
-            Known k2 = in.known();
-            for (Quantified q : relations) {
-                k2 = predicates.instantiate(q, element, k2, in.at());
-            }
-            // The closure is made here and run inside the operation, so what its body settles is
-            // not left standing for the argument beside it.
-            entering(handed.step().body(), k2, in.at(), copies);
         }
+        if (handed == null || out.reachesNothing()) {
+            // Nothing leaves the arguments, so the operation is never entered and the closure is
+            // never applied.
+            return out;
+        }
+        Core container = handed.container();
+        Type elem = Terms.elementType(container.type());
+        // The container is read under what every argument answered, which is what holds where the
+        // operation is entered.
+        List<Quantified> relations = predicates.elementRelations(container, out, at);
+        Core.Read element = Terms.read(handed.element(), elem, handed.step().pos());
+        // an element of a container is not a location the body can otherwise name
+        Entered in = enter(element, out, at);   // the element carries its type's invariant
+        // What a fold hands its step beside the element is a value of the type it was seeded
+        // with, built through that type's checked constructor like any other — so it carries
+        // that type's invariant, and the accumulator is not the one binding that has to give
+        // its newtype up to be reasoned about.
+        in = enterOthers(handed, in);
+        Known k2 = in.known();
+        for (Quantified q : relations) {
+            k2 = predicates.instantiate(q, element, k2, in.at());
+        }
+        // A region of its own, and what it leaves stays in it: the body runs once per element, on
+        // no element where the container is empty, and what it settles is not what the call answers.
+        entering(handed.step().body(), k2, in.at(), copies);
         return out;
     }
 

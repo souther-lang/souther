@@ -235,7 +235,7 @@ public final class Interactions {
                 // Over the bound the walk does not go in either. There is no arm here to fall back
                 // on — what leads to the right of one of these is the left having come out a way,
                 // and nothing records a value coming out a way.
-                if (reading.waysTo(binary.left(), binary.op() == BinOp.AND)
+                if (reading.waysTo(binary.left(), binary.op().rightRunsWhenLeftIs())
                         instanceof Ways.Known<Outcome> through) {
                     List<List<Decision>> ways = heldTo(reaches, holdsOf(through.paths()));
                     if (ways.size() <= MOST_WAYS_IN) {
