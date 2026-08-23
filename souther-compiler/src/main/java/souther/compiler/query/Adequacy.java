@@ -54,8 +54,10 @@ public final class Adequacy {
      * measure's silence means is a second answer to a question the measure already answered.
      */
     public enum Level {
-        /** Nothing is read of the rows and nothing is derived from the rules. Every measure that
-         *  would have says so, which is not the same as saying nothing. */
+        /** No measurement is made of the rows. What the model itself says is derived as ever — the
+         *  cases a signature has, the classes a position divides into, the lines its rules draw —
+         *  and every measure that would have read the rows against them says nobody asked, which is
+         *  not the same as saying nothing. */
         OFF,
         /** What the rows already ran established, and what the rules say without running anything.
          *  Nothing is instrumented and no row runs a second time. */

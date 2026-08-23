@@ -236,7 +236,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
         compilation.answerEverything();
 
         String block = souther.compiler.report.GeneratedRows.of(
-                compilation, "example.repro", "boundedByADate", true, SourceNameResolver.identity());
+                compilation, "example.repro", "boundedByADate", true, SourceNameResolver.identity()).text();
 
         assertTrue(block.contains("Cutoff(Date(\"2026-01-01\"))"), block);
     }
@@ -255,7 +255,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
         compilation.answerEverything();
 
         String block = souther.compiler.report.GeneratedRows.of(
-                compilation, "example.repro", "byDateTime", true, SourceNameResolver.identity());
+                compilation, "example.repro", "byDateTime", true, SourceNameResolver.identity()).text();
 
         assertTrue(block.contains("DateTime(\"2026-01-01T00:00:00\")"), block);
         assertFalse(block.contains("refused at construction"), block);

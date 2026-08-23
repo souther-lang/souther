@@ -38,6 +38,30 @@ public final class GeneratedRows {
     private static final String UNANSWERED = "<?>";
 
     /**
+     * A block, and how much of it is rows.
+     *
+     * <p>Two answers because callers ask two different things of this. What to print is the text; a
+     * block of notes and no rows is worth printing, and {@code souther examples --generate} prints
+     * it. Whether there is a row to write is {@link #rows}, and it is the generator's answer rather
+     * than something read off the text: an editor offering "write the rows this does not cover"
+     * asked whether the block was blank, and a block that holds only the reason nothing was composed
+     * is not blank — so the action appeared, a person took it, and what it wrote into their source
+     * was a comment (issue #955).
+     *
+     * @param rows how many rows the block offers, which is what a caller that is about to change
+     *             somebody's source has to ask
+     */
+    public record Block(String text, int rows) {
+
+        public Block {
+            java.util.Objects.requireNonNull(text, "a block is of something, even if it is empty");
+            if (rows < 0) {
+                throw new IllegalArgumentException("a block offering fewer than no rows: " + rows);
+            }
+        }
+    }
+
+    /**
      * The block for a finished compile, for the modules and behaviors the caller asked about.
      *
      * <p>Asked here and not with the rest of a compile's questions, because filling the combinations
@@ -49,9 +73,10 @@ public final class GeneratedRows {
      * this block asks for it: a note here is read in the same terminal, and a source id is an
      * identity rather than a name.
      */
-    public static String of(Compilation compilation, String module, String behavior,
-                            boolean boundaries, SourceNameResolver names) {
+    public static Block of(Compilation compilation, String module, String behavior,
+                           boolean boundaries, SourceNameResolver names) {
         StringBuilder out = new StringBuilder();
+        int rows = 0;
         for (String name : compilation.modules()) {
             if (module != null && !module.equals(name)) {
                 continue;
@@ -68,10 +93,12 @@ public final class GeneratedRows {
                 }
                 filling = only;
             }
-            out.append(of(name, filling, WrittenEnsures.of(compilation.db(), name),
-                    boundaries, names));
+            Block one = of(name, filling, WrittenEnsures.of(compilation.db(), name),
+                    boundaries, names);
+            out.append(one.text());
+            rows += one.rows();
         }
-        return out.toString();
+        return new Block(out.toString(), rows);
     }
 
     /**
@@ -86,9 +113,9 @@ public final class GeneratedRows {
      * @param boundaries whether to add the rows that sit on an edge nothing has been written at
      * @param names      what the caller calls its sources, for the notes that name one
      */
-    public static String of(String module, Map<String, Adequacy.Filling> generated,
-                            Map<String, List<String>> ensures,
-                            boolean boundaries, SourceNameResolver names) {
+    public static Block of(String module, Map<String, Adequacy.Filling> generated,
+                           Map<String, List<String>> ensures,
+                           boolean boundaries, SourceNameResolver names) {
         List<Map.Entry<String, Composed>> asked = new ArrayList<>();
         for (Map.Entry<String, Adequacy.Filling> behavior : generated.entrySet()) {
             asked.add(Map.entry(behavior.getKey(),
@@ -115,7 +142,9 @@ public final class GeneratedRows {
         for (Map.Entry<String, Adequacy.Filling> behavior : generated.entrySet()) {
             notes(out, behavior.getKey(), behavior.getValue(), boundaries, names);
         }
-        return out.toString();
+        // The count leaves with the text. It was worked out here and thrown away, and the one
+        // caller that needed it read the text instead.
+        return new Block(out.toString(), rows);
     }
 
     /**

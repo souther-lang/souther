@@ -75,7 +75,7 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
                 .ask(new Adequacy.Generated(compilation.modules().get(0))).value();
         assertNotNull(filling, "the model under test compiles");
         return GeneratedRows.of(compilation.modules().get(0), filling, Map.of(), boundaries,
-                SourceNameResolver.identity());
+                SourceNameResolver.identity()).text();
     }
 
     /** Two minimum edges of one behavior, which compose one row between them. */

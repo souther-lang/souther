@@ -158,7 +158,7 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
                         example cmp
                             | "same" : ("b", "b") -> No { why = 0 }
                         """),
-                "example.strings", "cmp", true, souther.compiler.diag.SourceNameResolver.identity());
+                "example.strings", "cmp", true, souther.compiler.diag.SourceNameResolver.identity()).text();
 
         assertFalse(rows.contains("cmp(\"\", \"\")"),
                 "a pair standing equal is the line itself and is at neither side of it:\n" + rows);
@@ -365,7 +365,7 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
 
         // And the block an author reads says nothing about them, because nothing is owed there.
         String block = souther.compiler.report.GeneratedRows.of(
-                compiled(BOTH_SIDES), "example.owed", "cmp", true, SourceNameResolver.identity());
+                compiled(BOTH_SIDES), "example.owed", "cmp", true, SourceNameResolver.identity()).text();
         assertFalse(block.contains("p.a < p.b"), block);
         assertFalse(block.contains("p.a > p.b"), block);
     }

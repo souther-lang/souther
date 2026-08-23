@@ -141,7 +141,7 @@ at.coverage().made().orElseThrow());
         compilation.answerEverything();
 
         String block = souther.compiler.report.GeneratedRows.of(
-                compilation, "example.proven", "place", true, SourceNameResolver.identity());
+                compilation, "example.proven", "place", true, SourceNameResolver.identity()).text();
 
         assertTrue(block.contains("no row for `amount = 0` in `place`"), block);
         assertTrue(block.contains("every value tried was refused"), block);
@@ -427,7 +427,7 @@ at.coverage().made().orElseThrow());
             compilation.measure(Adequacy.Asked.fullReport());
             compilation.answerEverything();
             String block = souther.compiler.report.GeneratedRows.of(
-                    compilation, "example.temporal", each[0], true, SourceNameResolver.identity());
+                    compilation, "example.temporal", each[0], true, SourceNameResolver.identity()).text();
 
             assertTrue(block.contains("no row for `" + each[1] + "`"), block);
             assertTrue(block.contains("does not make the combination impossible"), block);

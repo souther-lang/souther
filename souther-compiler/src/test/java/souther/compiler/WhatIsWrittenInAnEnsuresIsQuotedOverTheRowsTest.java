@@ -51,7 +51,7 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
 
     private static String block(String source) {
         return GeneratedRows.of(compiled(source), null, null, true,
-                SourceNameResolver.identity());
+                SourceNameResolver.identity()).text();
     }
 
     private static Compilation compiled(String source) {
@@ -193,7 +193,7 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
                 "the checker could not read this behavior's clause");
 
         String block = GeneratedRows.of(compilation, null, null, true,
-                SourceNameResolver.identity());
+                SourceNameResolver.identity()).text();
         assertTrue(block.contains("""
                 // `ensures` written for `wrong`:
                 //     ensures nope = Other -> n.value > 0
@@ -249,7 +249,7 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
         String block = GeneratedRows.of("example.todo",
                 Map.of("findTodo", Adequacy.Filling.NONE),
                 Map.of("findTodo", List.of("ensures asked = NotFound -> id.value > 0")),
-                true, SourceNameResolver.identity());
+                true, SourceNameResolver.identity()).text();
 
         assertEquals("", block);
     }
