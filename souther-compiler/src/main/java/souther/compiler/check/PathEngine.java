@@ -236,22 +236,15 @@ final class PathEngine {
      */
     private Entered whatTakingThisCaseSays(Core.Case arm, Core scrutinee, Entered in) {
         Core called = terms.originating(scrutinee, in.at(), new HashSet<>());
-        DischargeRules.NumericResult result = called == null ? null
-                : DischargeRules.numericResult(Terms.operationOf(called));
-        if (result == null || result.unless() == null
-                || !(result.at() instanceof DischargeRules.Answered.InTheCaseCarrying(
-                        Type answersIn))) {
+        Core condition = TheOtherCase.conditionAt(called);
+        Type answersIn = TheOtherCase.theCaseItAnswersIn(called);
+        if (condition == null || answersIn == null) {
             return in;
         }
         Boolean answered = whetherItAnswered(arm, answersIn);
         if (answered == null) {
             return in;
         }
-        Core args = Terms.argsOf(called)
-                .get(result.unless().argument().positionIn(Terms.operationOf(called)));
-        Core condition = new Core.Binary(result.unless().op(), args,
-                numberOf(result.unless().than(), args.type(), args.pos()),
-                souther.compiler.types.CoverageOrigin.unwritten(), Type.BOOL, args.pos());
         return new Entered(assuming(condition, in.known(), in.at(), !answered).known(), in.at());
     }
 
@@ -270,13 +263,6 @@ final class PathEngine {
         return itsCase == another ? null : itsCase;
     }
 
-    /** {@code n} written at the type the argument is, so that the condition compares two values of
-     * one type as a source-written one would. */
-    private static Core numberOf(long n, Type type, souther.compiler.diag.SourcePos pos) {
-        return type == Type.DECIMAL
-                ? new Core.Decimal(java.math.BigDecimal.valueOf(n), type, pos)
-                : new Core.Int(n, type, pos);
-    }
 
     /**
      * The arm's binding entered as the value it opens, and seeded.

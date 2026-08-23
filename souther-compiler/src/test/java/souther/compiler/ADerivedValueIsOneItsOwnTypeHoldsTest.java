@@ -22,10 +22,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * reading <em>refused</em> a construction over a value no program ever builds — an error, on a path
  * nothing reaches.
  *
- * <p>What it comes to instead is a value nothing is known of, and a construction over one is owed
- * its clause. That the path has no execution is a stronger thing, and it is not this procedure's to
- * say: whether an operation aborts at all is settled by the divisor's own type or by a
- * {@code require} (spec §invariant-discharge-arithmetic).
+ * <p>What it comes to is that the divide answers nothing here, so nothing carries on from it and the
+ * arms below it are entered by no run. Neither construction is judged, and which of them the author
+ * wrote does not decide it — the arm reached over the quotient and the arm reached over anything
+ * else are one arm, and a check that refused the first and owed the second was answering a question
+ * about reachability with a reading of the values (#980).
  *
  * <p>Read of the carrier and not of a declaration. A value of a newtype has satisfied that
  * newtype's invariant, and whether a construction does is the question being asked — so the range
@@ -41,13 +42,13 @@ class ADerivedValueIsOneItsOwnTypeHoldsTest {
     }
 
     /**
-     * The one pair whose quotient no {@code Int} holds. The value is one nothing is known of, so the
-     * construction is owed its clause — where a reading that worked the quotient out to a positive
-     * number refused it for being positive.
+     * The one pair whose quotient no {@code Int} holds. Nothing comes back from the divide, so
+     * neither arm is entered and there is nothing under them to report — where a reading that worked
+     * the quotient out to a positive number refused the construction for being positive.
      */
     @Test
     void aQuotientNoIntHoldsLeavesTheArmWithNoValue() {
-        assertEquals(List.of("E2011"), reported("""
+        assertEquals(List.of(), reported("""
                 module demo
 
                 data Negative = Int
@@ -77,7 +78,7 @@ class ADerivedValueIsOneItsOwnTypeHoldsTest {
      */
     @Test
     void aQuotientRunningOffOneEndOnlyLeavesNoValueEither() {
-        assertEquals(List.of("E2011"), reported("""
+        assertEquals(List.of(), reported("""
                 module demo
 
                 data Negative = Int
@@ -97,10 +98,11 @@ class ADerivedValueIsOneItsOwnTypeHoldsTest {
     }
 
     /**
-     * The control: the very same construction over a dividend one greater, whose quotient is a
-     * number an {@code Int} holds and is positive. A negative it is not, so the values refuse the
-     * construction, which is an error and not a warning — and it is the very refutation the row
-     * above must not reach, over a value that does exist.
+     * The control, and silence is not what the two above are read off. The very same construction
+     * over a dividend one greater has a quotient an {@code Int} holds, so the divide answers, the
+     * arm is entered, and the value is judged: it is positive where the invariant wants a negative,
+     * which is an error. What the rows above must not reach is that refutation, and this is the
+     * evidence they could have — the rule runs, and it is what the divide answers that stops it.
      */
     @Test
     void aQuotientThatDoesFitIsJudgedOnItsValue() {

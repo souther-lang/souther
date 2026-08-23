@@ -145,7 +145,27 @@ final class DerivedNumericFacts {
      * under two domains is evaluated twice and rightly so, and what may not happen is the same
      * recipe evaluated twice for one of them.
      */
-    static List<List<FactSubject>> WATCHING;
+    static List<Reading> WATCHING;
+
+    /**
+     * What a reading was asked for, and the recipes it evaluated answering it.
+     *
+     * <p>The question is beside the atoms because two questions are asked of these recipes and each
+     * has its own thing to hold. What a construction's reading evaluates is what its clauses reach,
+     * and it must not grow with arithmetic the construction is not about. What an evaluation's own
+     * reading evaluates is that evaluation's recipe, and there is one of those per operation the
+     * walk reaches — so the two counts move with different things, and a list that ran them together
+     * could not say either.
+     */
+    record Reading(Question asked, List<FactSubject> evaluated) {}
+
+    /** Why a reading was made. */
+    enum Question {
+        /** What the clauses of one construction reach ({@link #refine}). */
+        WHAT_A_CONSTRUCTION_IS_JUDGED_AGAINST,
+        /** Whether one operation answers a value ({@link #saysOf}). */
+        WHETHER_AN_OPERATION_ANSWERS
+    }
 
     /**
      * {@code base} with what follows about the arithmetic outside the affine fragment that this
@@ -174,7 +194,7 @@ final class DerivedNumericFacts {
      * which is the interval reasoning that tightens under its own answers that this declines to be.
      */
     static NumericDomain<FactSubject> refine(NumericDomain<FactSubject> base, Terms terms, Set<FactSubject> asked) {
-        Memo derived = new Memo();
+        Memo derived = new Memo(Question.WHAT_A_CONSTRUCTION_IS_JUDGED_AGAINST);
         if ((!terms.derivations().isEmpty() || !terms.reductions().isEmpty()) && !base.isBottom()) {
             for (FactSubject atom : roots(terms, base, asked)) {
                 derive(atom, base, terms, derived, new LinkedHashSet<>(), ContextMultiplicity.ofOneReading());
@@ -186,6 +206,30 @@ final class DerivedNumericFacts {
             out = taking(out, said, terms);
         }
         return out;
+    }
+
+    /**
+     * What the recipe recorded for {@code atom} says about it, under {@code base} alone.
+     *
+     * <p>One atom, where {@link #refine} answers a domain over everything a question reaches. The
+     * caller is asking about the operation that computed this value and about nothing else, and a
+     * domain would answer that by not mentioning it: what a recipe found and what it could not say
+     * both leave the domain as it was. It is the {@link Says} that is wanted, so it is the
+     * {@link Says} that comes back.
+     *
+     * <p>A reading of its own, with a memo of its own, because it is against a domain of its own —
+     * the walk's, where it stands. What the memo makes true is a claim about one reading, so this
+     * is watched as one.
+     */
+    static Says saysOf(FactSubject atom, NumericDomain<FactSubject> base, Terms terms) {
+        if (!recorded(terms, atom) || base.isBottom()) {
+            return Says.NOTHING;
+        }
+        Memo memo = new Memo(Question.WHETHER_AN_OPERATION_ANSWERS);
+        Says said = derive(atom, base, terms, memo, new LinkedHashSet<>(),
+                ContextMultiplicity.ofOneReading());
+        memo.watched();
+        return said;
     }
 
     /** Whether {@code atom} was recorded as anything this can derive from — arithmetic outside the
@@ -230,7 +274,13 @@ final class DerivedNumericFacts {
      */
     private static final class Memo {
 
+        private final Question asked;
+
         private final Map<FactSubject, Says> answered = new LinkedHashMap<>();
+
+        Memo(Question asked) {
+            this.asked = asked;
+        }
 
         /** Null wherever no test is reading, which is every compilation but a test's. Kept as
          * whether-to-record rather than as a list nobody reads, for the reason
@@ -246,7 +296,7 @@ final class DerivedNumericFacts {
 
         void watched() {
             if (evaluated != null) {
-                WATCHING.add(List.copyOf(evaluated));
+                WATCHING.add(new Reading(asked, List.copyOf(evaluated)));
             }
         }
     }
@@ -296,7 +346,7 @@ final class DerivedNumericFacts {
             // shared is `deriving`, which is what says an atom was built out of itself, and that is
             // true of a recipe whatever domain it is read in.
             return between(atom, InductiveBounds.provenOf(walk, base, terms, (form, domain) -> {
-                Memo memo = new Memo();
+                Memo memo = new Memo(done.asked);
                 Bounds answer = boundsOf(form, domain, terms, memo, deriving, copies);
                 // A reading, and watched as one. What the walk reads is where a step's own recipes
                 // are evaluated, so a reading that could not be seen here was the one place the
@@ -359,7 +409,7 @@ final class DerivedNumericFacts {
             if (under.isBottom()) {
                 continue;
             }
-            out = spanned(out, readingAnArm(arm, under, terms, deriving, inAnArm));
+            out = spanned(out, readingAnArm(arm, under, terms, done.asked, deriving, inAnArm));
         }
         if (out != null) {
             return out;
@@ -422,9 +472,9 @@ final class DerivedNumericFacts {
      * {@code deriving} is shared, since an atom built out of itself is built out of itself whatever
      * domain it is read in. */
     private static Bounds readingAnArm(Derivation.Chosen.Arm arm, NumericDomain<FactSubject> under,
-                                       Terms terms, Set<FactSubject> deriving,
+                                       Terms terms, Question asked, Set<FactSubject> deriving,
                                        ContextMultiplicity copies) {
-        Memo memo = new Memo();
+        Memo memo = new Memo(asked);
         Bounds answered = boundsOf(arm.answer(), under, terms, memo, deriving, copies);
         memo.watched();
         return answered;

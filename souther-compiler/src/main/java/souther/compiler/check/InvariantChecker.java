@@ -199,6 +199,8 @@ public final class InvariantChecker {
     private final Terms terms;
     /** What a clause owes and what a guard settles. */
     private final Predicates predicates;
+    /** Whether an evaluation can answer, which is what decides that a continuation is reached. */
+    private final PathCompletion completion;
     private final List<CompileException> errors = new ArrayList<>();
     private final List<Diagnostic> warnings = new ArrayList<>();
 
@@ -219,6 +221,7 @@ public final class InvariantChecker {
         this.clauses = engine.clauses();
         this.terms = engine.terms();
         this.predicates = engine.predicates();
+        this.completion = new PathCompletion(this.terms, this.predicates);
     }
 
     /**
@@ -1597,14 +1600,22 @@ public final class InvariantChecker {
             // nothing an arm left is true of a continuation standing after the split.
             return k;
         }
-        return engine.answeredHere(e, switch (e) {
+        Known evaluated = switch (e) {
             case Core.Construct made -> {
                 // The fields are what a construction evaluates, and it is built once they have all
                 // answered — so it is judged after them and under what they left, and not before
                 // them under what stood outside.
                 Known out = evaluating(made, k, at, copies);
-                judge(made, out, at, false);
-                yield out;
+                if (out.reachesNothing()) {
+                    yield out;
+                }
+                // A construction the value fails wherever it is built is one that aborts, so what
+                // is written after it is written after nothing — the same shape as an operation
+                // that answers no value, and taken in through the same door.
+                yield carriedOn(out, refused(judge(made, out, at, false))
+                        ? new Completion.CannotComplete(
+                                new Completion.NoCompletionProof.RefutedConstruction(made))
+                        : Completion.MAY);
             }
             case Core.If iff -> {
                 Known out = walk(iff.cond(), k, at, copies);
@@ -1620,6 +1631,12 @@ public final class InvariantChecker {
                 // possible one. Its field values are walked on their own so a construction nested
                 // inside an argument is still an ordinary, aborting one.
                 Known out = evaluating(ic.construct(), k, at, copies);
+                if (out.reachesNothing()) {
+                    yield out;
+                }
+                // An attempt is the one construction a failing invariant does not abort: the
+                // departure is taken and the run carries on, so what this comes out as says nothing
+                // about whether anything is reached.
                 judge(ic.construct(), out, at, true);
                 // Reaching `then` is the construction having held, so the binding carries the type's
                 // invariant exactly as an input of that type does — which is a location, and not the
@@ -1668,7 +1685,30 @@ public final class InvariantChecker {
                 yield k;
             }
             default -> evaluating(e, k, at, copies);
-        }, at);
+        };
+        if (evaluated.reachesNothing()) {
+            return evaluated;
+        }
+        // Between the values this was computed from and what it answers, which is the one point the
+        // question can be asked at: the operands have answered and this has not, so nothing here
+        // assumes the very answer whose existence is being asked about. What comes back is about
+        // the transition and is given to the continuation alone — this evaluation was walked, and a
+        // construction standing among the values it was waiting on was judged on the way.
+        Known carried = carriedOn(evaluated, completion.of(e, evaluated, at));
+        return carried.reachesNothing() ? carried : engine.answeredHere(e, carried, at);
+    }
+
+    /**
+     * {@code known} as a continuation of the evaluation {@code done} is about.
+     *
+     * <p>The one place a completion becomes a state, and the reason there is one: what shows that an
+     * evaluation answers nothing differs — a primitive's arithmetic here, a construction the values
+     * refuse there, and whatever comes to show it next — and what follows from it does not. The
+     * proof is not read. What to tell an author about an evaluation no run leaves is a question
+     * about diagnostics, and answering it here would tie a reporting policy to the mechanism.
+     */
+    private static Known carriedOn(Known known, Completion done) {
+        return done instanceof Completion.CannotComplete ? known.reachingNothing() : known;
     }
 
     /** What {@code e} evaluates, walked in the order it runs, each step handed what the one before
@@ -1757,10 +1797,21 @@ public final class InvariantChecker {
      * there is nothing to recognise here: a construction was settled where the tree was built, and
      * what it builds and what each of its fields is given came with it.
      */
-    private void judge(Core.Construct made, Known k, Denotations at, boolean attempted) {
-        if (symbols.declarations().declaration(made.typeName().key()) instanceof Hir.Data type) {
-            report(made, type, made.pos(), attempted, verdictOf(made, type, k, at));
+    private Judgment judge(Core.Construct made, Known k, Denotations at, boolean attempted) {
+        if (!(symbols.declarations().declaration(made.typeName().key()) instanceof Hir.Data type)) {
+            return null;
         }
+        Judgment judged = verdictOf(made, type, k, at);
+        report(made, type, made.pos(), attempted, judged);
+        return judged;
+    }
+
+    /** Whether the value a construction builds is one its invariant rejects wherever it is built,
+     * which is the construction aborting. Asked of the judgment the check already made rather than
+     * worked out again: one construction, one verdict. */
+    private static boolean refused(Judgment judged) {
+        return judged != null && (judged.verdict() == Verdict.REFUTED_ALONE
+                || judged.verdict() == Verdict.REFUTED_NOT_ALONE);
     }
 
     /**
