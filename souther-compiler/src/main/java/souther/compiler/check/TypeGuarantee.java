@@ -29,11 +29,19 @@ import java.util.List;
  *                  states, and a reader wanting only the numbers can ask {@link Predicates.Owed}
  *                  for them
  * @param quantified what the clause states of every element of a container it names
+ * @param parts      what each part of the clause came to as it was read. A conjunction is read a
+ *                   conjunct at a time, and what each conjunct came to is the reading's own answer
+ *                   about that conjunct — kept here because asking it again afterwards is a second
+ *                   reader, and the two agree only until somebody changes one of them
  */
 record TypeGuarantee(RuleRef.Invariant rule, Core clause, Predicates.Owed owed,
-                     List<Quantified> quantified) {
+                     List<Quantified> quantified, List<Part> parts) {
 
     TypeGuarantee {
         quantified = List.copyOf(quantified);
+        parts = List.copyOf(parts);
     }
+
+    /** What one part of a clause came to, beside the part it was read from. */
+    record Part(Core part, Predicates.Owed owed) {}
 }
