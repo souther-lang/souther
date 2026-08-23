@@ -6,6 +6,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
 
@@ -253,67 +254,41 @@ public final class Deriver {
     // --- sum derivation ---
 
     private static Hir.SumData deriveSum(Hir.SumData s, Symbols symbols) {
-        List<Hir.Name> leaves = leafCases(s, symbols);
+        // What a value of the sum can be, with nested sums descended to their leaves —
+        // `費用負担区分 = 自社負担 | 先方負担` where `自社負担 = 立替 | 仮払い | 会社カード` dispatches over
+        // 立替 / 仮払い / 会社カード / 先方負担 (spec §sum-data, §sum-discrimination). The descent is
+        // AtomSpace's and not written again here: an atom is one per TypeSymbol, which is what a
+        // variant is about, and asking it in the written name's terms answered a leaf two of the
+        // cases reach once per case (#990).
+        List<TypeSymbol> atoms = TypeOps.leafCases(s, symbols);
         Optional<Hir.Discriminate> decoder = s.decoder().isPresent()
                 ? s.decoder()
-                : Optional.of(new Hir.Discriminate("type", tagVariants(s, leaves), s.pos()));
+                : Optional.of(new Hir.Discriminate("type", tagVariants(s, atoms), s.pos()));
         Optional<Hir.SumEncoder> encoder = s.encoder().isPresent()
                 ? s.encoder()
-                : Optional.of(new Hir.SumEncoder("type", encVariants(s, leaves), s.pos()));
+                : Optional.of(new Hir.SumEncoder("type", encVariants(s, atoms), s.pos()));
         return new Hir.SumData(s.written(), s.declares(), s.cases(), decoder, encoder, s.pos());
     }
 
     /**
-     * The cases a derived codec dispatches over, with nested sums folded to their leaves —
-     * `費用負担区分 = 自社負担 | 先方負担` where `自社負担 = 立替 | 仮払い | 会社カード` dispatches over
-     * 立替 / 仮払い / 会社カード / 先方負担 (spec §sum-data, §sum-discrimination).
+     * The variant an atom is dispatched to, on either side.
      *
-     * <p>Folding is what makes a nested sum round-trip. Tagging the direct case instead would put
-     * two levels on one `"type"` key: the outer encoder wrote {@code {type: 自社負担}}, losing
-     * which leaf it was, and the inner decoder then rejected that same tag.
+     * <p>The tag and the case are read off the one atom, so the two cannot name different types.
+     * The name is written here rather than carried from the declaration: a leaf two of the sum's
+     * cases reach is written twice, and neither occurrence is the one a variant is about.
      */
-    private static List<Hir.Name> leafCases(Hir.SumData s, Symbols symbols) {
-        List<Hir.Name> leaves = new ArrayList<>();
-        collectLeafCases(s, symbols, leaves);
-        return leaves;
-    }
-
-    private static void collectLeafCases(Hir.SumData s, Symbols symbols, List<Hir.Name> out) {
-        collectLeafCases(s, symbols, out, new java.util.HashSet<>());
-    }
-
-    private static void collectLeafCases(Hir.SumData s, Symbols symbols, List<Hir.Name> out,
-                                         java.util.Set<String> visiting) {
-        if (!visiting.add(s.name())) {
-            return;   // a sum that reaches itself; DataChecker reports it, this only has to terminate
-        }
-        for (Hir.Name caseName : s.cases()) {
-            // A case naming nothing is no sum to descend into and no leaf to derive a codec for; it
-            // is reported where it is written.
-            if (caseName.answered() == null) {
-                continue;
-            }
-            if (symbols.declarations().declaration(caseName.answered().type().key())
-                    instanceof Hir.SumData nested) {
-                collectLeafCases(nested, symbols, out, visiting);
-            } else if (!out.contains(caseName)) {
-                out.add(caseName);
-            }
-        }
-    }
-
-    private static List<Hir.Variant> tagVariants(Hir.SumData s, List<Hir.Name> cases) {
+    private static List<Hir.Variant> tagVariants(Hir.SumData s, List<TypeSymbol> atoms) {
         List<Hir.Variant> variants = new ArrayList<>();
-        for (Hir.Name caseName : cases) {
-            variants.add(new Hir.Variant(caseName.answered().type().name(), caseName, s.pos()));
+        for (TypeSymbol atom : atoms) {
+            variants.add(new Hir.Variant(atom.name(), Hir.Name.resolved(atom, s.pos()), s.pos()));
         }
         return variants;
     }
 
-    private static List<Hir.EncVariant> encVariants(Hir.SumData s, List<Hir.Name> cases) {
+    private static List<Hir.EncVariant> encVariants(Hir.SumData s, List<TypeSymbol> atoms) {
         List<Hir.EncVariant> variants = new ArrayList<>();
-        for (Hir.Name caseName : cases) {
-            variants.add(new Hir.EncVariant(caseName, caseName.answered().type().name(), s.pos()));
+        for (TypeSymbol atom : atoms) {
+            variants.add(new Hir.EncVariant(Hir.Name.resolved(atom, s.pos()), atom.name(), s.pos()));
         }
         return variants;
     }
