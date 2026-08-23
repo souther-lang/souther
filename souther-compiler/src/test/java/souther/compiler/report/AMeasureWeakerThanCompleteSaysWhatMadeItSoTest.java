@@ -161,19 +161,19 @@ class AMeasureWeakerThanCompleteSaysWhatMadeItSoTest {
      * What a build refuses over is what a measure established, and nothing else.
      *
      * <p>A finding carries what weakened the measurement that produced it, and the three-way answer
-     * is read off that: a kind the criterion refuses, from a measurement nothing weakened, is a gap;
+     * is read off that: a kind the bar refuses, from a measurement nothing weakened, is a gap;
      * the same kind from a measurement that went without something is undecided. Held over every
      * finding of the model, since this used to be worked out from a status word and is now the
      * finding's own.
      */
     @Test
     void whatABuildRefusesOverIsWhatNothingWeakened() {
-        Adequacy.Criterion criterion = report().asked().criterion();
+        Adequacy.StrictPolicy held = report().asked().held();
         List<Adequacy.Finding> findings = report().findings();
         assertFalse(findings.isEmpty(), "the model produces findings");
         for (Adequacy.Finding each : findings) {
-            Adequacy.Finding.Disposition said = each.disposition(criterion);
-            if (!criterion.refuses(each.kind())) {
+            Adequacy.Finding.Disposition said = each.disposition(held);
+            if (!held.refuses(each.kind())) {
                 assertEquals(Adequacy.Finding.Disposition.REPORTED, said, each::toString);
                 continue;
             }

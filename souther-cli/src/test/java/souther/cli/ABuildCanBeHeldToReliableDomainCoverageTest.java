@@ -105,10 +105,10 @@ class ABuildCanBeHeldToReliableDomainCoverageTest {
                                         : AReportOfOneBorder.undecided())));
 
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
-                AReportOfOneBorder.verdictOf(measured, Adequacy.Criterion.SIMPLIFIED_DOMAIN),
+                AReportOfOneBorder.verdictOf(measured, Adequacy.StrictPolicy.SIMPLIFIED_DOMAIN),
                 "the points it asks for came to an answer");
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED,
-                AReportOfOneBorder.verdictOf(measured, Adequacy.Criterion.RELIABLE_DOMAIN),
+                AReportOfOneBorder.verdictOf(measured, Adequacy.StrictPolicy.RELIABLE_DOMAIN),
                 "two of the points it asks for did not");
     }
 

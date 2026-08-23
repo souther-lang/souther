@@ -74,7 +74,7 @@ class EveryGapTheBuildRefusesGetsAnAnswerTest {
                 // Asked of the compilation, which is what was measured. Named here instead — even by
                 // spelling the same call the fixture above makes — and the two lists this compares
                 // are answers to two questions that agree until one of them moves.
-                .filter(f -> f.isAdequacyGap(askedOf(compilation).criterion())).toList();
+                .filter(f -> f.isAdequacyGap(askedOf(compilation).held())).toList();
     }
 
     /** What the compilation under test asked for, from the compilation. */

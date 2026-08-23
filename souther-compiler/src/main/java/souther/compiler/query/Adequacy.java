@@ -133,6 +133,76 @@ public final class Adequacy {
     }
 
     /**
+     * What a build is held to: a domain-coverage criterion, and whatever else it refuses over
+     * beside it.
+     *
+     * <p>Two fields and not a third rung on {@link Criterion}, because the two are independent.
+     * How strongly a border's points are asked for is one question — the syllabus defines the two
+     * answers to it — and whether a class no row is in is a row somebody owes is another. Written
+     * as one ordered enum, a build that wanted the second would have been made to take the
+     * strongest answer to the first, and the coupling would have been in the type rather than in
+     * anything anyone decided.
+     *
+     * <p>Which is not licence for a policy per caller. What a build may be held to is the presets
+     * below, and a caller names one of them; the record is open so that a preset can be written
+     * without a new rung, not so that a bar can be assembled at a call site.
+     *
+     * @param domain      which of the syllabus's two the border points are asked for under
+     * @param alsoRefuses the kinds this refuses over beside the ones {@code domain} already does.
+     *                    Never a kind {@code domain} refuses over already — that would be one
+     *                    answer written in two places, free to disagree once either moved
+     */
+    public record StrictPolicy(Criterion domain, Set<Kind> alsoRefuses) {
+
+        /** A row against each line, and nothing beside what every criterion refuses over. */
+        public static final StrictPolicy SIMPLIFIED_DOMAIN =
+                new StrictPolicy(Criterion.SIMPLIFIED_DOMAIN, Set.of());
+
+        /** Those, and the points away from the line. */
+        public static final StrictPolicy RELIABLE_DOMAIN =
+                new StrictPolicy(Criterion.RELIABLE_DOMAIN, Set.of());
+
+        /**
+         * Every bar a build may be held to.
+         *
+         * <p>Here so that what has to be true of all of them can be asked of each. A kind some bar
+         * refuses over and nobody gave a code to is a gap a report prints and a build is never told
+         * about, and that is checked by walking this — so a bar added and left out of this list
+         * takes its kinds out of the check with it.
+         */
+        public static final List<StrictPolicy> PRESETS =
+                List.of(SIMPLIFIED_DOMAIN, RELIABLE_DOMAIN);
+
+        public StrictPolicy {
+            alsoRefuses = Set.copyOf(alsoRefuses);
+            for (Kind kind : alsoRefuses) {
+                if (domain.refuses(kind)) {
+                    throw new IllegalArgumentException(
+                            "a kind the criterion already refuses over is not something beside it: "
+                                    + kind);
+                }
+            }
+        }
+
+        /** Whether a build held to this refuses over {@code kind}. */
+        public boolean refuses(Kind kind) {
+            return domain.refuses(kind) || alsoRefuses.contains(kind);
+        }
+
+        /**
+         * Whether a build held to this is owed a row at {@code role}.
+         *
+         * <p>The criterion's answer, handed on. Never read off {@link #refuses}: a role is not a
+         * kind, and what this adds beside the criterion is kinds — so a policy that worked the
+         * roles out from the kinds it refuses over would be the two consequences of a criterion
+         * derived from each other rather than said once, which is issue #937.
+         */
+        public boolean requires(PointRole role) {
+            return domain.requires(role);
+        }
+    }
+
+    /**
      * What a build asked for: how much to measure, whether to be told it as warnings, and what it is
      * held to.
      *
@@ -143,19 +213,19 @@ public final class Adequacy {
      * the points away from a line are measured whenever the ones against it are, and whether they
      * are owed is the criterion's answer (issue #937).
      */
-    public record Asked(Level level, boolean warn, Criterion criterion) {
+    public record Asked(Level level, boolean warn, StrictPolicy held) {
 
         public static final Asked NOTHING =
-                new Asked(Level.OFF, false, Criterion.SIMPLIFIED_DOMAIN);
+                new Asked(Level.OFF, false, StrictPolicy.SIMPLIFIED_DOMAIN);
 
-        /** Measured and said, held to the criterion a build asks for by default. */
+        /** Measured and said, held to what a build asks for by default. */
         public static Asked warningsAt(Level level) {
-            return warningsAt(level, Criterion.SIMPLIFIED_DOMAIN);
+            return warningsAt(level, StrictPolicy.SIMPLIFIED_DOMAIN);
         }
 
-        /** Measured and said, held to {@code criterion}. */
-        public static Asked warningsAt(Level level, Criterion criterion) {
-            return new Asked(level, true, criterion);
+        /** Measured and said, held to {@code held}. */
+        public static Asked warningsAt(Level level, StrictPolicy held) {
+            return new Asked(level, true, held);
         }
 
         /**
@@ -189,12 +259,12 @@ public final class Adequacy {
          * as it is on the command line.
          */
         public static Asked reportOnly(Level level) {
-            return new Asked(level, false, Criterion.RELIABLE_DOMAIN);
+            return new Asked(level, false, StrictPolicy.RELIABLE_DOMAIN);
         }
 
         /** Whether a build that asked for this refuses over {@code kind}. */
         public boolean refuses(Kind kind) {
-            return criterion.refuses(kind);
+            return held.refuses(kind);
         }
     }
 
@@ -1642,7 +1712,7 @@ public final class Adequacy {
                                     .LinkageFailed(spec.name())));
                 }
                 out.put(spec.name(), new Filling(pairs, offered(spec.name(), edges),
-                        dispositions(askedOf(db).criterion(), findings == null ? List.of()
+                        dispositions(askedOf(db).held(), findings == null ? List.of()
                                         : findings.getOrDefault(spec.name(), List.of()),
                                 edges, partitions == null ? null : partitions.get(spec.name()),
                                 pairs, spec)));
@@ -1664,14 +1734,14 @@ public final class Adequacy {
          * never by what a search came back with. The kinds are listed one at a time so that a kind
          * added later does not compile until somebody has said which of the three it is.
          */
-        private static List<GapDisposition> dispositions(Criterion criterion, List<Finding> findings,
+        private static List<GapDisposition> dispositions(StrictPolicy held, List<Finding> findings,
                                                       List<BorderAssessment> edges,
                                                       PartitionEvidence partition,
                                                       Generator.GenerationResult pairs,
                                                       Hir.SpecBehavior spec) {
             List<GapDisposition> out = new ArrayList<>();
             for (Finding gap : findings) {
-                if (!gap.isAdequacyGap(criterion)) {
+                if (!gap.isAdequacyGap(held)) {
                     continue;
                 }
                 out.add(new GapDisposition(gap, switch (gap.about()) {
@@ -2240,8 +2310,8 @@ public final class Adequacy {
          * the kinds a second time, so what a report marks and what a build refuses over cannot come
          * apart.
          */
-        public Disposition disposition(Criterion criterion) {
-            if (!criterion.refuses(kind())) {
+        public Disposition disposition(StrictPolicy held) {
+            if (!held.refuses(kind())) {
                 return Disposition.REPORTED;
             }
             // What the measurement that found this went without, and not a word for how far it
@@ -2250,9 +2320,9 @@ public final class Adequacy {
             return weakenedBy.isEmpty() ? Disposition.REFUSED : Disposition.UNDECIDED;
         }
 
-        /** Whether a build held to {@code criterion} is entitled to refuse over this. */
-        public boolean isAdequacyGap(Criterion criterion) {
-            return disposition(criterion) == Disposition.REFUSED;
+        /** Whether a build held to {@code held} is entitled to refuse over this. */
+        public boolean isAdequacyGap(StrictPolicy held) {
+            return disposition(held) == Disposition.REFUSED;
         }
 
         public Optional<DiagnosticCode> code() {
@@ -2531,7 +2601,7 @@ public final class Adequacy {
             List<Report> reports = new ArrayList<>();
             for (List<Finding> ofBehavior : found.value().values()) {
                 for (Finding finding : ofBehavior) {
-                    if (finding.isAdequacyGap(asked.criterion())) {
+                    if (finding.isAdequacyGap(asked.held())) {
                         reports.add(warning(finding));
                     }
                 }
@@ -2545,7 +2615,7 @@ public final class Adequacy {
          * <p>The message keys are written out per kind rather than derived from the code's name, so
          * that a scan for the keys this names finds them — a key built by concatenation is one nothing
          * can see is used. Which findings get here is
-         * {@link Finding#isAdequacyGap(Criterion)}'s answer and not this method's.
+         * {@link Finding#isAdequacyGap(StrictPolicy)}'s answer and not this method's.
          */
         private static Report warning(Finding finding) {
             About said = finding.about();

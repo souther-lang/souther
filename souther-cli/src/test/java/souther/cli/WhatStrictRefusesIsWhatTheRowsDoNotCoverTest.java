@@ -270,18 +270,22 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
     }
 
     /**
-     * Every kind some criterion refuses over has something to refuse it under.
+     * Every kind some bar refuses over has something to refuse it under.
      *
-     * <p>What a criterion asks for and what a kind carries are written out separately so that neither
-     * is read off the other. A kind some build can be held to and nobody gave a code to would be a
-     * gap a report prints and a build is never told about.
+     * <p>What a bar asks for and what a kind carries are written out separately so that neither is
+     * read off the other. A kind some build can be held to and nobody gave a code to would be a gap
+     * a report prints and a build is never told about.
+     *
+     * <p>Over the bars and not over the criteria. Which kinds a build refuses over is the policy's
+     * answer and a criterion is only part of one, so a policy that refuses over a kind beside its
+     * criterion's would have taken that kind out of this check by being asked the wrong question.
      */
     @Test
-    void everyKindACriterionRefusesOverHasADiagnosticCode() {
-        for (Adequacy.Criterion criterion : Adequacy.Criterion.values()) {
+    void everyKindABarRefusesOverHasADiagnosticCode() {
+        for (Adequacy.StrictPolicy held : Adequacy.StrictPolicy.PRESETS) {
             for (Adequacy.Kind kind : Adequacy.Kind.values()) {
-                if (criterion.refuses(kind)) {
-                    assertTrue(kind.code().isPresent(), criterion + " refuses over " + kind);
+                if (held.refuses(kind)) {
+                    assertTrue(kind.code().isPresent(), held + " refuses over " + kind);
                 }
             }
         }
@@ -297,15 +301,15 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
      * the command.
      */
     @Test
-    void everyKindACriterionRefusesOverIsToldAsAWarning() {
-        for (Adequacy.Criterion criterion : Adequacy.Criterion.values()) {
+    void everyKindABarRefusesOverIsToldAsAWarning() {
+        for (Adequacy.StrictPolicy held : Adequacy.StrictPolicy.PRESETS) {
             for (Adequacy.Kind kind : Adequacy.Kind.values()) {
-                if (!criterion.refuses(kind)) {
+                if (!held.refuses(kind)) {
                     continue;
                 }
                 assertEquals(souther.compiler.diag.Severity.WARNING,
                         kind.code().orElseThrow().severity(),
-                        criterion + " refuses over " + kind + ", so its code is one a build is"
+                        held + " refuses over " + kind + ", so its code is one a build is"
                                 + " warned about rather than one a compile fails on");
             }
         }
@@ -419,7 +423,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
     }
 
     private static AdequacyReport.AdequacyStatus verdictOf(PartitionEvidence partition) {
-        return AReportOfOneBorder.verdictOf(partition, Adequacy.Criterion.SIMPLIFIED_DOMAIN);
+        return AReportOfOneBorder.verdictOf(partition, Adequacy.StrictPolicy.SIMPLIFIED_DOMAIN);
     }
 
     /** Two covered stages and the composition of them, which carries rows of its own. */

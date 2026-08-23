@@ -340,7 +340,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     /** The findings a build is entitled to refuse: an asked measure came to an answer and the answer
      *  was that something the rows are asked for is not there. */
     public List<Adequacy.Finding> adequacyGaps() {
-        return findings().stream().filter(f -> f.isAdequacyGap(asked.criterion())).toList();
+        return findings().stream().filter(f -> f.isAdequacyGap(asked.held())).toList();
     }
 
     /**
@@ -419,7 +419,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // how much of the measurement was made and what a build is held to are two
                 // questions.
                 BorderAssessment.pointsOf(behavior.partition().boundaries()).stream()
-                        .filter(p -> asked.criterion().requires(p.role()))
+                        .filter(p -> asked.held().requires(p.role()))
                         .forEach(p -> add(measures, measurementOf(p.item())));
                 // A dropped axis is not asked after here. What it was carrying went with it and no
                 // question stands for it, which is a fact about the measure's reading — so it
@@ -617,7 +617,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * a kind changed sides.
      */
     private String mark(Adequacy.Finding finding) {
-        return finding.isAdequacyGap(asked.criterion()) ? "!" : "·";
+        return finding.isAdequacyGap(asked.held()) ? "!" : "·";
     }
 
     /**
@@ -1906,7 +1906,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (Adequacy.Finding finding : of.findings()) {
             ObjectNode f = out.addObject();
             f.put("kind", word(finding.kind()));
-            f.put("disposition", word(finding.disposition(asked.criterion())));
+            f.put("disposition", word(finding.disposition(asked.held())));
             f.put("subject", subject(finding, sources));
             // Which rule this is about, where the finding is about one. The words in `subject` are
             // how a reader finds it, and two rules an author named alike have the same words — so a

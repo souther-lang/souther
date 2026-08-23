@@ -486,7 +486,7 @@ public final class Main {
             case "witness" -> Adequacy.Asked.warningsAt(Adequacy.Level.WITNESS);
             case "all" -> Adequacy.Asked.warningsAt(Adequacy.Level.ALL);
             case "reliable-domain" -> Adequacy.Asked.warningsAt(Adequacy.Level.ALL,
-                    Adequacy.Criterion.RELIABLE_DOMAIN);
+                    Adequacy.StrictPolicy.RELIABLE_DOMAIN);
             default -> null;
         };
     }
