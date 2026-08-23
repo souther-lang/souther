@@ -1,16 +1,11 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
-import souther.compiler.numeric.Count;
-import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.Bounds;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeSymbol;
 
-import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,10 +21,19 @@ import java.util.Set;
  * it arrives on, rather than a range for "the element" — and every parameter but the accumulator is
  * read, so a key is read the day a step is written over one.
  *
- * <p>What a value of a type guarantees is not decided here. {@link InvariantChecker#seedFields} is
- * what decides it, and this projects that answer onto the places the walk names — the same
- * projection {@link FieldDomains} makes of the same reading. Read here instead, only a numeric
- * newtype's own rules would have been found: a record's own invariant bounds its fields, and
+ * <p>What holds of an element is not decided here either. {@link UniversalElementFacts} answers that
+ * of the container the walk is over, by the path under an element each bound is about, and this
+ * instantiates those paths at the place the element arrives — so a fold over a list and an
+ * accumulation over the same list are bounded by one reading, and a fold reads what a
+ * {@code List.map} upstream of it kept without having met the closure that built it. What a
+ * parameter that is not an element guarantees is the same reading asked of that parameter's own
+ * type: a key a {@code Map.fold} hands its step is bounded by its declaration and by nothing about
+ * what the container holds.
+ *
+ * <p>Neither is what a value of a type guarantees. {@link InvariantChecker#seedFields} is what
+ * decides it, and both readings above project that one answer — the same projection
+ * {@link FieldDomains} makes of the same reading. Decided here instead, only a numeric newtype's own
+ * rules would have been found: a record's own invariant bounds its fields, and
  * {@code data Line = { amount: Int } invariant amount >= 0} says nothing about any type
  * {@code DeclaredBounds} would have been asked about. That fact is one the walk into a combinator's
  * closure already has ({@link InvariantChecker#walkCall} enters the element and seeds it), so
@@ -61,23 +65,30 @@ record StepInputFacts(Map<FactSubject, Bounds> at, Map<FactSubject, Granularity>
      * What holds of everything {@code r}'s step is handed besides its accumulator, where each of
      * those parameters is entered in {@code inside} as the place it is.
      *
-     * <p>Two sources, and they are two different kinds of fact. What a value's type guarantees holds
-     * of every value of that type, so it holds of whichever one the walk is at. What a container
-     * written out holds is read off the line it is written on: three elements written there are the
-     * only three there are, and every one of them lies between the least and the greatest.
+     * <p>The element is asked of the container and every other parameter of its own type. Which
+     * parameter is which is what the reduction already says, and reading the element's bounds off
+     * its type here as well would be the second answer this class exists not to have: what the
+     * container's elements are is a question about the container, and the type of what it holds is
+     * one of the things {@link UniversalElementFacts} reads to answer it.
      */
     static StepInputFacts of(Reductions.Reducing r, Denotations inside, Terms terms,
                              Symbols symbols, ReadingPolicy policy,
                              Set<FactSubject> namedByTheStep) {
         Gathering gathering = new Gathering(terms, namedByTheStep);
         List<Core.Binder> params = r.step().params();
+        UniversalElementFacts elements =
+                UniversalElementFacts.of(r.container(), inside, terms, symbols, policy);
         for (int i = 0; i < params.size(); i++) {
-            if (params.get(i) == r.accumulator()) {
+            Core.Binder param = params.get(i);
+            if (param == r.accumulator()) {
                 continue;
             }
-            guaranteed(params.get(i), handedAt(r, i), inside, terms, symbols, policy, gathering);
+            if (param == r.element()) {
+                elements.at(inside.subject(param.binding()), terms).forEach(gathering::holds);
+                continue;
+            }
+            guaranteed(param, handedAt(r, i), inside, terms, symbols, policy, gathering);
         }
-        writtenOut(r, inside, terms, gathering);
         return gathering.gathered();
     }
 
@@ -100,67 +111,19 @@ record StepInputFacts(Map<FactSubject, Bounds> at, Map<FactSubject, Granularity>
     /**
      * What a value of {@code param}'s type guarantees, projected onto the places under the parameter.
      *
-     * <p>{@link InvariantChecker#seedFields} answers by path — {@code ""} for the value itself,
-     * {@code "amount"} for a field, {@code "a.b"} for a field of one — and the walk names those same
-     * places under whatever subject the parameter was entered as. So the projection is the path read
-     * off one and put back on the other, and nothing here reads a declaration.
+     * <p>The reading answers by path — {@code ""} for the value itself, {@code "amount"} for a
+     * field, {@code "a.b"} for a field of one — and the walk names those same places under whatever
+     * subject the parameter was entered as. So the projection is the path read off one and put back
+     * on the other, and nothing here reads a declaration.
      */
     private static void guaranteed(Core.Binder param, Type handed, Denotations inside, Terms terms,
                                    Symbols symbols, ReadingPolicy policy, Gathering gathering) {
         FactSubject root = inside.subject(param.binding());
-        if (root == null || !(handed instanceof Type.Ref ref)
-                || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data)) {
+        if (root == null) {
             return;
         }
-        InvariantChecker.Seeded seeded = seededOf(ref.name(), data, symbols, policy);
-        if (seeded == null) {
-            return;
-        }
-        seeded.atoms().forEach((path, atom) ->
-                gathering.holds(terms.under(root, path), seeded.numbers().boundsOf(atom)));
-    }
-
-    /** The reading of {@code named}, or null where it fell over. A reading that fell over is one
-     * this says nothing from, which leaves the walk unbounded rather than bounded by half of what a
-     * declaration says. */
-    private static InvariantChecker.Seeded seededOf(TypeSymbol named, Hir.Data data,
-                                                    Symbols symbols, ReadingPolicy policy) {
-        InvariantChecker.Seeded seeded = InvariantChecker.seedFields(named, data, symbols, policy);
-        return seeded.everyClauseRead() && !seeded.constraints().isBottom() ? seeded : null;
-    }
-
-    /**
-     * The element of a container written out, bounded by the elements written there.
-     *
-     * <p>Only where every one of them is a number this folds. A container written with a computed
-     * element says nothing here — the least of what is written is not the least of what is held once
-     * one of them is decided at run time — and saying nothing is what leaves the walk unbounded
-     * rather than wrongly bounded.
-     *
-     * <p>A container written out with nothing in it says nothing either, and that is a narrowing
-     * this does not reach past: what it would establish is that the step never runs, which is a fact
-     * about how many elements there are and not about what any of them is.
-     */
-    private static void writtenOut(Reductions.Reducing r, Denotations inside, Terms terms,
-                                   Gathering gathering) {
-        Type element = Terms.elementType(r.container().type());
-        if (element == null || !(terms.listedOut(r.container(), inside) instanceof Core.ListLit list)
-                || list.elements().isEmpty()) {
-            return;
-        }
-        BigDecimal low = null;
-        BigDecimal high = null;
-        for (Core each : list.elements()) {
-            BigDecimal written = Terms.constantNumber(each);
-            if (written == null) {
-                return;
-            }
-            low = low == null || written.compareTo(low) < 0 ? written : low;
-            high = high == null || written.compareTo(high) > 0 ? written : high;
-        }
-        gathering.holds(
-                terms.positionOf(Terms.read(r.element(), element, r.step().pos()), inside).atom(),
-                new Bounds(Endpoint.inclusive(Count.of(low)), Endpoint.inclusive(Count.of(high))));
+        UniversalElementFacts.guaranteed(handed, symbols, policy).forEach(
+                (path, bounds) -> gathering.holds(terms.under(root, path), bounds));
     }
 
     /** {@code domain} with all of this taken as holding. Handed a domain rather than answering with
