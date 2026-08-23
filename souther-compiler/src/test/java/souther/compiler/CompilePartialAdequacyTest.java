@@ -369,7 +369,10 @@ class CompilePartialAdequacyTest {
                 behavior cancel : (request: Draft) -> Gone
                     constructs Gone
 
-                let cancel (request) = Gone { why = "x" }
+                let cancel (request) = {
+                    guard request.n > 0 else Gone { why = "none" }
+                    Gone { why = "x" }
+                }
 
                 example submit
                     | (Draft { n = 1 }) -> Ok { n = 1 }
@@ -380,8 +383,11 @@ class CompilePartialAdequacyTest {
         AdequacyReport whole = AdequacyReport.of(compilation);
 
         assertEquals(MeasurementStatus.PARTIAL, whole.status(), "`cancel` did not finish");
-        assertEquals(List.of("cancel"), whole.modules().get(0).incompleteness().stream()
-                .map(souther.compiler.observe.Incompleteness::subject).toList());
+        // Both of them `cancel`'s: the row that did not finish, and the position of its guard whose
+        // value that row was the only one to write.
+        assertEquals(List.of("cancel", "cancel/request.n"),
+                whole.modules().get(0).incompleteness().stream()
+                        .map(souther.compiler.observe.Incompleteness::subject).toList());
 
         AdequacyReport one = whole.only(null, "submit");
         assertEquals(MeasurementStatus.COMPLETE, one.status());

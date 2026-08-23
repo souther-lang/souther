@@ -188,8 +188,9 @@
         "status": { "$ref": "#/$defs/status" },
         "weakening": { "$ref": "#/$defs/weakening" },
         "reason": {
-          "description": "Why there is no number, present exactly where `status` is `unavailable`. `no_body` is a behavior that has no arms to measure at all — a `>->` composition or one with no `let` — rather than arms nothing measured; `not_asked` is a build that did not ask for them; `unreadable` is a run whose instrumentation could not be tied back to the body; `no_rows` is a behavior no row names.",
-          "enum": ["no_body", "not_asked", "unreadable", "no_rows"]
+          "description": "Why there is no number, present exactly where `status` is `unavailable`. The first three are a behavior with no arm to measure at all rather than arms nothing measured, and no row would give it one: `no_body` is a `>->` composition or a behavior with no `let`, `no_arm_obligations` is a body that forks nowhere a row can be in or out of, and `every_arm_proven_unreachable` is a body whose forks the model's own rules prove no row arrives at. `not_asked` is a build that did not ask for the arms; `unreadable` is a run whose instrumentation could not be tied back to the body; `no_rows` is a behavior no row names.",
+          "enum": ["no_body", "no_arm_obligations", "every_arm_proven_unreachable", "not_asked",
+                   "unreadable", "no_rows"]
         },
         "arms": { "type": "integer", "minimum": 0 },
         "covered": { "type": "integer", "minimum": 0 },

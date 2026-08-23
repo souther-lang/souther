@@ -402,12 +402,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // behavior whose every bound sits one type away from the position it takes came out
                 // adequate on the strength of a measurement nobody made.
                 //
-                // The lines only. What the positions are divided into is reported and is not what a
-                // build is held to: its gaps arrive as findings, and a position with a bound and no
-                // division — an `Int` a rule floors and nothing cuts — is an ordinary shape whose
-                // boundary measure is made in full. Holding the verdict open for it would say a
-                // model was unmeasured on the strength of the one measure that was.
+                // The derivation of the lines, and not the derivation of the positions. A position
+                // with a bound and no division — an `Int` a rule floors and nothing cuts — is an
+                // ordinary shape whose boundary measure is made in full, and holding the verdict
+                // open for it would say a model was unmeasured on the strength of the one measure
+                // that was.
                 add(measures, behavior.partition().bounded());
+                // What the rows reach of each position, which is a measure that can find a gap: a
+                // class no row is in is what the `classes` bar refuses over. Counted whatever bar
+                // this build asked for, because this is not the question of what it refuses over —
+                // it is the question of what was measured, and a model whose only measurement is
+                // this one has been measured. Left out, such a model rested its verdict on a
+                // branch measure of a body with no arms, and reported `undetermined` the moment
+                // that measure stopped pretending to be one (issue #955).
+                behavior.partition().axes().forEach(axis -> add(measures, axis.reached()));
                 // And of a border's four points, the ones the criterion asks for. A measure that
                 // refuses nothing cannot leave a verdict undetermined for want of an answer — read
                 // the other way, a row whose value could not be read at a point no build is held to
@@ -1022,8 +1030,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // the kind of behavior: those correlate with the reason and are not it, and the line an
             // author reads is the one place that difference shows.
             String said = switch (measured.reason()) {
-                case Adequacy.BranchEvidence.NoBody _ ->
-                        "not applicable (this behavior has no body)";
+                // Each way of owing no arm in its own words. One switch and not a word per measure,
+                // so a reason added later stops here and is decided about.
+                case Adequacy.BranchEvidence.NoArms it -> switch (it) {
+                    case NO_BODY -> "not applicable (this behavior has no body)";
+                    case NO_ARM_OBLIGATIONS -> "not applicable (this body owes no arm)";
+                    case EVERY_ARM_PROVEN_UNREACHABLE ->
+                            "not applicable (no row arrives at any arm of this body)";
+                };
                 case Adequacy.BranchEvidence.Unreadable _ ->
                         "not measured (the arms could not be read)";
                 case Adequacy.BranchEvidence.NotAsked it ->

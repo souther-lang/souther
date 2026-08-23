@@ -79,7 +79,7 @@ class AMeasureIsIntroducedInOnePlaceTest {
             Map.entry("souther.compiler.query.PartitionEvidence$PairSpace#noRows(I)Lsouther/compiler/query/PartitionEvidence$PairSpace;", 1),
             Map.entry("souther.compiler.query.PartitionEvidence$PairSpace#truncated(Ljava/lang/String;JI)Lsouther/compiler/query/PartitionEvidence$PairSpace;", 1),
             Map.entry("souther.compiler.query.PartitionEvidence$PairSpace#<clinit>()V", 1),
-            Map.entry("souther.compiler.query.Adequacy$BranchEvidence#noBody()Lsouther/compiler/query/Adequacy$BranchEvidence;", 1),
+            Map.entry("souther.compiler.query.Adequacy$BranchEvidence#noArms(Lsouther/compiler/query/Adequacy$BranchEvidence$NoArms;)Lsouther/compiler/query/Adequacy$BranchEvidence;", 1),
             Map.entry("souther.compiler.query.Adequacy$BranchEvidence#notAsked(Lsouther/compiler/query/Adequacy$BranchEvidence$NotAsked;)Lsouther/compiler/query/Adequacy$BranchEvidence;", 1),
             Map.entry("souther.compiler.query.Adequacy$BranchEvidence#unreadable(Lsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/Adequacy$BranchEvidence;", 1),
             Map.entry("souther.compiler.query.Adequacy$BranchEvidence#measured(Ljava/lang/String;Ljava/util/List;Ljava/util/Set;Lsouther/compiler/check/PathReachability$Answers$AsRun;Lsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/Adequacy$BranchEvidence;", 2),

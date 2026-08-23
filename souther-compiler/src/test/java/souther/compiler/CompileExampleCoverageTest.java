@@ -317,7 +317,10 @@ class CompileExampleCoverageTest {
 
         assertEquals(MeasurementStatus.NOT_MEASURED, AdequacyReport.statusOf(branch(indirect, "classify").measured()),
                 "nobody wrote a row about `classify`");
-        assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(branch(indirect, "submit").measured()));
+        // And the row's own behavior forks nowhere, so it owes no arm rather than owing none of the
+        // arms it ran through. What the row reached belongs to the behavior whose arm it is.
+        assertEquals(MeasurementStatus.NOT_APPLICABLE,
+                AdequacyReport.statusOf(branch(indirect, "submit").measured()));
     }
 
     /** A behavior with no `let` has no arms to go through, which is not the same as arms nothing

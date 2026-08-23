@@ -1124,10 +1124,33 @@ public final class Adequacy {
             NO_ROWS
         }
 
-        /** A {@code >->} composition or a behavior with no {@code let}. It has no arms of its own,
-         *  so the measure does not apply rather than failing. */
-        public enum NoBody implements souther.compiler.observe.NotApplicableReason {
-            NO_BODY
+        /**
+         * Why there is nothing here for the arm measure to be about, and no row would give it
+         * something.
+         *
+         * <p>Three ways to owe no arm, said apart because an author reads them differently: a
+         * behavior this module does not implement, one implemented without a fork, and one whose
+         * every fork the rules already prove nothing reaches. All three are the model's answer
+         * rather than a run's, so none of them waits on the instrumentation — which is what lets
+         * this be asked before the level is (issue #955).
+         */
+        public enum NoArms implements souther.compiler.observe.NotApplicableReason {
+            /** A {@code >->} composition or a behavior with no {@code let}. Its arms, where it has
+             *  any, are its stages' and are measured there. */
+            NO_BODY,
+            /**
+             * The body is here and owes no arm.
+             *
+             * <p>Named for the obligations and not for the forks. {@link
+             * souther.compiler.coverage.CoverageSites} numbers the arms a row can be in or out of,
+             * and a fork under something that aborts is registered with no site at all — so an
+             * empty list says this behavior owes no arm, and saying it has no fork would be this
+             * measure claiming something it did not read.
+             */
+            NO_ARM_OBLIGATIONS,
+            /** The body forks, and the model's own rules prove no row arrives at either way of any
+             *  of them. Nothing is owed and no row anybody writes would light one. */
+            EVERY_ARM_PROVEN_UNREACHABLE
         }
 
         /** The rows ran without instrumentation, so what they went through went with it. The one
@@ -1136,8 +1159,8 @@ public final class Adequacy {
             UNREADABLE
         }
 
-        public static BranchEvidence noBody() {
-            return new BranchEvidence(new Measurement.NotApplicable<>(NoBody.NO_BODY));
+        public static BranchEvidence noArms(NoArms reason) {
+            return new BranchEvidence(new Measurement.NotApplicable<>(reason));
         }
 
         public static BranchEvidence notAsked(NotAsked reason) {
@@ -1147,6 +1170,21 @@ public final class Adequacy {
         public static BranchEvidence unreadable(WeakeningSet by) {
             return new BranchEvidence(
                     new Measurement.FailedToMeasure<>(Unreadable.UNREADABLE, by));
+        }
+
+        /**
+         * The arms of {@code all} a row can still be asked for.
+         *
+         * <p>Which arms a behavior owes, said once. It is asked before the level is — an empty
+         * answer is a behavior with nothing here to measure, whatever any build asked for — and
+         * again where the numbers are made, and a second derivation beside this one would be two
+         * denominators free to disagree about one body.
+         */
+        public static List<souther.compiler.coverage.CoverageSites.Site> owed(
+                List<souther.compiler.coverage.CoverageSites.Site> all,
+                souther.compiler.check.PathReachability.Answers.AsRun reachable) {
+            return all.stream()
+                    .filter(site -> !reachable.answers().nothingArrivesAt(site.index())).toList();
         }
 
         /**
@@ -1170,8 +1208,7 @@ public final class Adequacy {
                                               Set<Integer> covered,
                                               souther.compiler.check.PathReachability.Answers.AsRun reachable,
                                               WeakeningSet rows) {
-            List<souther.compiler.coverage.CoverageSites.Site> owed = all.stream()
-                    .filter(site -> !reachable.answers().nothingArrivesAt(site.index())).toList();
+            List<souther.compiler.coverage.CoverageSites.Site> owed = owed(all, reachable);
             Set<Integer> counted = new LinkedHashSet<>(covered);
             counted.retainAll(owed.stream()
                     .map(souther.compiler.coverage.CoverageSites.Site::index).toList());
@@ -1375,15 +1412,14 @@ public final class Adequacy {
             if (!prepared.present()) {
                 return Answer.absent();
             }
-            boolean measured = levelOf(db).runsInstrumentedRows();
-            souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.Plan.NONE;
-            if (measured) {
-                plan = Output.Evaluated.planOf(db, name);
-            }
-            // A behavior with no `let` has no arms, which is not the same as a body whose arms nothing
-            // reaches. The bodies say which is which; the arm count cannot, since a body with no fork
-            // in it also has none.
+            boolean instrumented = levelOf(db).runsInstrumentedRows();
+            // Asked whatever the level is. The plan is read off the checked bodies and nothing in it
+            // waits on a run, so taking `Plan.NONE` where the build did not ask for the instrumented
+            // classes bought nothing and left a body that owes no arm looking like a body nobody
+            // measured (issue #955).
+            souther.compiler.coverage.CoverageSites.Plan plan = Output.Evaluated.planOf(db, name);
+            // Which behaviors this module implements at all. Read here because a behavior with no
+            // body of its own owes no arm of its own, whatever its stages owe.
             souther.compiler.query.Bodies.Elaborated checked =
                     db.ask(new Bodies.Checked(name)).value();
             Set<String> withBodies = checked == null ? Set.of() : checked.behaviorBodies().keySet();
@@ -1405,8 +1441,11 @@ public final class Adequacy {
                 List<souther.compiler.coverage.CoverageSites.Site> arms =
                         plan.arms(behavior.name());
                 Observed observed = byTarget.getOrDefault(behavior.name(), Observed.NONE);
-                BranchEvidence absent =
-                        whyNoArms(behavior.name(), withBodies, measured, observed);
+                souther.compiler.check.PathReachability.Answers.AsRun arrives =
+                        reachable == null ? NOTHING_PROVEN
+                                : reachable.getOrDefault(behavior.name(), NOTHING_PROVEN);
+                BranchEvidence absent = whyNoArms(behavior.name(), withBodies, arms, arrives,
+                        instrumented, observed);
                 if (absent != null) {
                     out.put(behavior.name(), absent);
                     continue;
@@ -1415,9 +1454,7 @@ public final class Adequacy {
                 covered.retainAll(arms.stream()
                         .map(souther.compiler.coverage.CoverageSites.Site::index).toList());
                 out.put(behavior.name(), BranchEvidence.measured(behavior.name(), arms, covered,
-                        reachable == null ? NOTHING_PROVEN
-                                : reachable.getOrDefault(behavior.name(), NOTHING_PROVEN),
-                        rowsBehind(observed)));
+                        arrives, rowsBehind(observed)));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -1428,15 +1465,29 @@ public final class Adequacy {
          *
          * <p>One gate per condition, in the order the work happens in, so that what a caller reads back
          * is the thing that stopped it rather than whichever condition an expression happened to test
-         * first. The bodies say which behaviors have arms; the arm count cannot, since a body with no
-         * fork in it also has none.
+         * first.
+         *
+         * <p>Whether anything is owed here comes before what the build asked for, and it is read off
+         * the model. A behavior that owes no arm owes none at every level, and answering
+         * {@code NOT_ASKED} for it would hold a verdict open for a measurement that would find
+         * nothing however it was made — which is the defect the applicability answer exists to
+         * prevent, one size down from the {@code >->} composition it was written for (issue #955).
          */
         private static BranchEvidence whyNoArms(String behavior, Set<String> withBodies,
-                                                boolean measured, Observed observed) {
+                List<souther.compiler.coverage.CoverageSites.Site> arms,
+                souther.compiler.check.PathReachability.Answers.AsRun arrives,
+                boolean instrumented, Observed observed) {
             if (!withBodies.contains(behavior)) {
-                return BranchEvidence.noBody();
+                return BranchEvidence.noArms(BranchEvidence.NoArms.NO_BODY);
             }
-            if (!measured) {
+            if (arms.isEmpty()) {
+                return BranchEvidence.noArms(BranchEvidence.NoArms.NO_ARM_OBLIGATIONS);
+            }
+            if (BranchEvidence.owed(arms, arrives).isEmpty()) {
+                return BranchEvidence.noArms(
+                        BranchEvidence.NoArms.EVERY_ARM_PROVEN_UNREACHABLE);
+            }
+            if (!instrumented) {
                 return BranchEvidence.notAsked(BranchEvidence.NotAsked.NOT_ASKED);
             }
             if (observed.armsUnseen()) {

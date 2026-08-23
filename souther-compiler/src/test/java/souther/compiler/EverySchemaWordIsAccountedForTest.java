@@ -159,7 +159,7 @@ class EverySchemaWordIsAccountedForTest {
             // the constants.
             new Vocabulary("status", List.of("$defs", "status"), STATUS_WORDS),
             new Vocabulary("branch.reason", List.of("$defs", "branch", "properties", "reason"),
-                    Adequacy.BranchEvidence.NoBody.class, Adequacy.BranchEvidence.NotAsked.class,
+                    Adequacy.BranchEvidence.NoArms.class, Adequacy.BranchEvidence.NotAsked.class,
                     Adequacy.BranchEvidence.Unreadable.class),
             new Vocabulary("findings[].kind",
                     List.of("$defs", "findings", "items", "properties", "kind"),
