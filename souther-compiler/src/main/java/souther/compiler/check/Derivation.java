@@ -23,24 +23,94 @@ import java.util.List;
 sealed interface Derivation {
 
     /**
-     * The forms this was computed from, in the order the operation takes them.
+     * The forms this recipe is read from.
      *
-     * <p>Here so that a reader asking what a recipe is built out of asks the recipe. Which values a
-     * recipe reaches, and whether two readings computed a value the same way, are questions about
-     * every recipe there is — answered by switching on the kind, each is a place a recipe added
-     * later is silently left out of, and one of them going quiet is a fact never derived rather than
-     * a compile error.
+     * <p>Answered by the recipe and not worked out from its shape. What a recipe is read from is not
+     * the same question as what it is arithmetic over, and the two look alike only while every
+     * recipe is arithmetic: a product's operands are both, and a choice's arms are read from without
+     * being arithmetic over anything, and what chose between them would be read from without even
+     * standing in the answer. A reader that decided the question by looking at which components
+     * happen to be forms would be answering a semantic question by a naming convention, and would
+     * miss the first one that arrives inside something else.
+     *
+     * <p>What it is for is {@link Terms#reached}, which is what says which places a form is about.
+     * {@link StepInputFacts} keeps only the places a step names, so a form a recipe is read from and
+     * that walk does not reach leaves those places unbounded — and nothing else says so.
+     *
+     * <p>Abstract, so that a recipe added later is asked this before it compiles.
      */
-    List<LinearForm<FactSubject>> operands();
+    List<LinearForm<FactSubject>> formsRead();
 
-    /** Every value the operator's divisor can take, or null where the recipe divides by nothing. */
+    /**
+     * Every value the operator's divisor can take, or null where the recipe divides by nothing.
+     *
+     * <p>The one part of a recipe that is not a form, and here for the reason {@link #formsRead} is:
+     * whether two readings computed a value the same way is a question about every recipe there is,
+     * and asked by switching on the kind it is a place a recipe added later is silently left out of.
+     * Answered by the recipe, so that the reader comparing two of them has every part of both.
+     */
     NumericDomain.Bounds divisorExtent();
 
     record Product(LinearForm<FactSubject> left, LinearForm<FactSubject> right) implements Derivation {
 
         @Override
-        public List<LinearForm<FactSubject>> operands() {
+        public List<LinearForm<FactSubject>> formsRead() {
             return List.of(left, right);
+        }
+
+        @Override
+        public NumericDomain.Bounds divisorExtent() {
+            return null;
+        }
+    }
+
+    /**
+     * A value that is one of several: an {@code if}, a {@code match}, and anything else that answers
+     * one of the values standing in it.
+     *
+     * <p>Not arithmetic, and here beside the arithmetic for the reason this interface gives: what is
+     * recorded is how a value was computed, and being one of several is a way of computing one. The
+     * affine walk already names such a node — a choice is one value, and a rule written about it is
+     * about the thing that stands there — and until this arm existed nothing was filed under that
+     * name, so the value came out with no range whatever its arms answered.
+     *
+     * <p>What is recorded is the arms, and what choosing one settles is not here yet. What settles
+     * it holds exactly where that arm is the answer, so an arm read under it says more than the arm
+     * alone: {@code if a + x < 100 then a + x else 100} lies below a hundred only by its condition,
+     * and a {@code match} arm's body reading what the arm bound reads a value only that arm has.
+     * Reading either needs the account of what an arm settles that {@link PathEngine} keeps, which
+     * is a thing to have once and not twice. Until that account is somewhere both readers can ask,
+     * the range is the arms together — sound, and wider than the value's own range, so the fragment
+     * this recognises is narrower than what a source can express (#973).
+     *
+     * <p>The operations the library defines by cases ({@code DischargeRules.CHOOSES}) are choices
+     * with no producer here yet (#974). Which values a choice is one of does have an owner
+     * ({@link Choice}), so a kind of choice is found by every reader at once or by none.
+     *
+     * <p>All of that is this recipe unfinished and not this recipe's limit. What a choice is — a
+     * value that is one of several — is what is settled here; how finely each arm is read, and which
+     * operations produce one, are the parts still to connect.
+     *
+     * @param arms what stands in each arm, as a form each. Every arm or none: an arm the walk could
+     *             not read leaves the choice with no recipe at all, since a range that left one of
+     *             them out would be a range the value can be outside of. Never none of them — one of
+     *             several is what this is, so a producer handing over an empty list has disagreed
+     *             with that rather than described a value, and a reader taking it for a range with
+     *             no ends would hide the disagreement as a loss of precision.
+     */
+    record Chosen(List<LinearForm<FactSubject>> arms) implements Derivation {
+
+        public Chosen {
+            arms = List.copyOf(arms);
+            if (arms.isEmpty()) {
+                throw new IllegalArgumentException("a value that is one of several was recorded with"
+                        + " none to be one of");
+            }
+        }
+
+        @Override
+        public List<LinearForm<FactSubject>> formsRead() {
+            return arms;
         }
 
         @Override
@@ -68,7 +138,7 @@ sealed interface Derivation {
                               NumericDomain.Bounds divisorExtent) implements Derivation {
 
         @Override
-        public List<LinearForm<FactSubject>> operands() {
+        public List<LinearForm<FactSubject>> formsRead() {
             return List.of(numerator, divisor);
         }
     }
@@ -88,7 +158,7 @@ sealed interface Derivation {
                                NumericDomain.Bounds divisorExtent) implements Derivation {
 
         @Override
-        public List<LinearForm<FactSubject>> operands() {
+        public List<LinearForm<FactSubject>> formsRead() {
             return List.of(numerator, divisor);
         }
     }
@@ -113,7 +183,7 @@ sealed interface Derivation {
             implements Derivation {
 
         @Override
-        public List<LinearForm<FactSubject>> operands() {
+        public List<LinearForm<FactSubject>> formsRead() {
             return List.of(numerator, divisor, scale);
         }
     }
