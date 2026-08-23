@@ -132,12 +132,10 @@ public final class InteractionCells {
      * a combination a written row already sits in costs no row, so a caller that stopped enumerating
      * at the budget would leave the ones past that point untried while the budget still held.
      *
-     * @param reach     what the path to the meeting leaves open, which every combination is under
-     * @param byFactor  what each outcome of each factor leaves open, one list per factor
-     * @param mostCells what the walk over the choices is held to, carried here because {@link #size}
-     *                  is asked of the group after the compilation that set it is out of reach
+     * @param reach    what the path to the meeting leaves open, which every combination is under
+     * @param byFactor what each outcome of each factor leaves open, one list per factor
      */
-    public record Group(Placed reach, List<List<Placed>> byFactor, int mostCells) {
+    public record Group(Placed reach, List<List<Placed>> byFactor) {
 
         public Group {
             byFactor = List.copyOf(byFactor);
@@ -149,16 +147,18 @@ public final class InteractionCells {
          * <p>Not how many combinations the group has: two factors reading one position have choices
          * that leave it nothing, and no row is written at those. This is the space the choices are
          * counted off, and {@link #at} says which of them are cells.
+         *
+         * <p>The product itself, with nothing to saturate at. A group exists only where {@link #of}
+         * found the product within what the compilation allows, so the number fits an {@code int}
+         * by having been checked before this was built — and a limit carried in here to be reached
+         * would be the budget living on in a value the budget already admitted.
          */
         public int size() {
-            long size = 1;
+            int size = 1;
             for (List<Placed> factor : byFactor) {
                 size *= factor.size();
-                if (size >= mostCells) {
-                    return mostCells;
-                }
             }
-            return (int) size;
+            return size;
         }
 
         /**
@@ -250,11 +250,11 @@ public final class InteractionCells {
             // Past the limit, and said so rather than dropped. What this costs is the combinations
             // of one group going untried; what saying nothing cost is an arm among them reading as
             // one the body never reaches.
-            if (productOf(placed, budget.cellsPerGroup()) >= budget.cellsPerGroup()) {
+            if (productOf(placed, budget.cellsPerGroup()) > budget.cellsPerGroup()) {
                 held.add(new NotOffered(claimsOf(reach, placed)));
                 continue;
             }
-            Group built = new Group(reach, placed, budget.cellsPerGroup());
+            Group built = new Group(reach, placed);
             if (built.left(0) > 0) {
                 out.add(built);
             }
@@ -276,13 +276,20 @@ public final class InteractionCells {
         return List.copyOf(out);
     }
 
-    /** How far the product runs, stopping where it is past anything that would be offered. */
+    /**
+     * How far the product runs, stopping once it is past anything that would be offered.
+     *
+     * <p>Stopped rather than run to the end, because a body of enough factors multiplies past what a
+     * {@code long} holds and the answer this is asked for is only whether the limit was passed. One
+     * over the limit is as good an answer as the true product for that, and is the largest number
+     * this ever returns.
+     */
     private static long productOf(List<List<Placed>> placed, int mostCells) {
         long size = 1;
         for (List<Placed> factor : placed) {
             size *= factor.size();
-            if (size >= mostCells) {
-                return mostCells;
+            if (size > mostCells) {
+                return mostCells + 1L;
             }
         }
         return size;

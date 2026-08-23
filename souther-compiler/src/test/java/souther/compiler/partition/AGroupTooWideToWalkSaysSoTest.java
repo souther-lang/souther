@@ -45,15 +45,20 @@ class AGroupTooWideToWalkSaysSoTest {
      *
      * <p>Each parameter is matched by its own helper and every result is added into one {@code Fee},
      * so the thirteen meet at one operator and the group's choices are two to the thirteenth. The
-     * offer stops at four thousand and ninety-six and stops <em>at</em> it, so twelve decisions are
-     * already the limit and eleven is the last width that is offered — which is what {@link #ELEVEN}
-     * is.
+     * standard budget is a capacity of four thousand and ninety-six, so twelve decisions are exactly
+     * it and are offered, and the thirteenth is the first width that is not.
      */
     private static final String THIRTEEN = model(13);
 
-    /** The widest model still offered, which is eleven. Without it, a group not offered would be as
-     *  good an account of a model this cannot read at all. */
-    private static final String ELEVEN = model(11);
+    /** The widest model still offered under the standard budget: twelve decisions are four thousand
+     *  and ninety-six choices, which is the capacity exactly. Without it, a group not offered would
+     *  be as good an account of a model this cannot read at all. */
+    private static final String TWELVE = model(12);
+
+    /** Two decisions, which is four choices — small enough that a budget written here can be put
+     *  either side of it exactly. Two to the thirteenth is where the default falls, and a default
+     *  can only be reached at a power of two; a budget the caller names can be reached anywhere. */
+    private static final String TWO = model(2);
 
     private static String model(int decisions) {
         StringBuilder params = new StringBuilder();
@@ -118,7 +123,7 @@ class AGroupTooWideToWalkSaysSoTest {
     /** And one decision fewer is offered, so the answer above is the limit's and not the model's. */
     @Test
     void andUnderTheLimitTheGroupIsOffered() {
-        Model model = Model.of(ELEVEN);
+        Model model = Model.of(TWELVE);
         InteractionCells.Offered offered =
                 InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation());
 
@@ -126,6 +131,41 @@ class AGroupTooWideToWalkSaysSoTest {
                 "nothing is held back");
         assertFalse(offered.groups().isEmpty(),
                 "and the group is there to be walked");
+    }
+
+    /**
+     * A group of exactly the budget is offered, and one choice more is not.
+     *
+     * <p>The point on the line, which the pair either side of it does not establish. Twelve
+     * decisions and thirteen are four thousand and ninety-six choices and eight thousand and
+     * one hundred and ninety-two, so the default can say which side of the limit a model falls on
+     * and never what happens at it — a default is reached only at a power of two, and the boundary
+     * is a single number.
+     *
+     * <p>Written by naming the budget instead, which is what having one as an input is for. Four
+     * choices against a capacity of four is the group being offered <em>at</em> the limit, and the
+     * same four against three is the first thing past it. Read the other way round, this is the
+     * assertion that {@code cellsPerGroup} is a capacity and not a cutoff: under a cutoff the first
+     * of these two would be held back.
+     */
+    @Test
+    void aGroupOfExactlyTheBudgetIsOffered() {
+        Model model = Model.of(TWO);
+        assertEquals(4, InteractionCells.of(model.groups(), model.subject().axes(),
+                        atMost(4)).groups().get(0).size(),
+                "two decisions of two outcomes are four choices");
+
+        assertEquals(List.of(), InteractionCells.of(model.groups(), model.subject().axes(),
+                        atMost(4)).notOffered(),
+                "a group of exactly the budget is offered");
+        assertEquals(1, InteractionCells.of(model.groups(), model.subject().axes(),
+                        atMost(3)).notOffered().size(),
+                "and one choice past it is not");
+    }
+
+
+    private static AdequacyPolicy.OfTheGeneration atMost(int cells) {
+        return new AdequacyPolicy.OfTheGeneration(Budgets.generation().rows(), cells);
     }
 
     /**
@@ -138,12 +178,12 @@ class AGroupTooWideToWalkSaysSoTest {
     @Test
     void theArmsBehindItAreStillArmsTheCombinationsTake() {
         Model wide = Model.of(THIRTEEN);
-        Model narrow = Model.of(ELEVEN);
+        Model narrow = Model.of(TWELVE);
 
         Set<Integer> fromWide =
-                Generator.everyArmTheCombinationsTake(wide.subject(), wide.groups(), Budgets.generation());
+                Generator.everyArmACombinationMayTake(wide.subject(), wide.groups(), Budgets.generation());
         Set<Integer> fromNarrow =
-                Generator.everyArmTheCombinationsTake(narrow.subject(), narrow.groups(), Budgets.generation());
+                Generator.everyArmACombinationMayTake(narrow.subject(), narrow.groups(), Budgets.generation());
 
         assertFalse(fromWide.isEmpty(),
                 "the arms behind the group the limit held back are still named");

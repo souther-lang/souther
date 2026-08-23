@@ -58,11 +58,20 @@ public record AdequacyPolicy(OfTheMeasures measures, OfTheGeneration generation)
      *                     something a person reads and pastes, and what the search did not reach is
      *                     written down rather than left absent
      * @param cellsPerGroup how many ways of choosing an outcome from each factor a group may have
-     *                     and still be offered. It bounds the walk over a group's choices, which
-     *                     goes on past the ones already answered and the ones nothing could be
-     *                     built for — and a group whose choices run to the billions would have that
-     *                     walk stand between the author and every other group. A group past it is
-     *                     named as one nothing was offered for
+     *                     and still be offered, which it may have exactly. It bounds the walk over a
+     *                     group's choices, which goes on past the ones already answered and the ones
+     *                     nothing could be built for — and a group whose choices run to the billions
+     *                     would have that walk stand between the author and every other group. A
+     *                     group past it is named as one nothing was offered for.
+     *
+     *                     <p>A capacity, like the two beside it: a pair space of {@code n} is walked
+     *                     at {@code n} and a generation of {@code n} rows writes the {@code n}th.
+     *                     This was an exclusive cutoff while it was a private constant, where
+     *                     nothing had to say which it was; as a component with a name it is one or
+     *                     the other, and a policy whose three numbers do not mean the same thing is
+     *                     a policy a caller has to read the implementation of. At one, the smallest
+     *                     group there is — a single choice — is offered, which is what a limit of
+     *                     one should admit
      */
     public record OfTheGeneration(int rows, int cellsPerGroup) {
 

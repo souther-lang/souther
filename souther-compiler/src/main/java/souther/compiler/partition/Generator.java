@@ -776,18 +776,31 @@ public final class Generator {
                                         Trial trial, AdequacyPolicy.OfTheGeneration budget) {
         return fill(subject, existing, check, groups, trial, List.of(),
                 everyClassNoRowSitsIn(subject, existing),
-                everyArmTheCombinationsTake(subject, groups, budget), budget);
+                everyArmACombinationMayTake(subject, groups, budget), budget);
     }
 
     /**
-     * Every arm the body's combinations take.
+     * Every arm a combination of the body may take, which is at least every arm one does take.
      *
      * <p><b>Not what a build asks for.</b> Which arms are owed a row is what measuring them
      * established, and a build hands that in. This is for a caller with no measurement beside it —
      * a test standing the search up on its own — and it says so by being a list the caller passes
      * rather than one the search makes for itself.
+     *
+     * <p><b>And <em>may</em> rather than <em>does</em>, which the name carries because the answer
+     * cannot.</b> An offered group is walked, so what it contributes is exact: a choice whose
+     * factors leave a position nothing is not a combination and is not counted. A group the budget
+     * held back is not walked, and what it contributes is the union over the way in and every
+     * outcome of every factor — which includes arms no single combination of it claims, since two
+     * factors that disagree about a position have choices no row sits in.
+     *
+     * <p>That direction is the safe one and the other is not. An arm left out is an arm nothing
+     * asks for, and an arm nothing asks for is reported as one no combination claims — which says
+     * the body settles something it does not. An arm asked for and not found is answered
+     * {@link UnresolvedCombination.Reason#THE_GROUP_WAS_NOT_OFFERED}, which is true of it however
+     * many combinations of the held-back group would have claimed it.
      */
-    public static Set<Integer> everyArmTheCombinationsTake(
+    public static Set<Integer> everyArmACombinationMayTake(
             Subject subject, List<souther.compiler.interaction.Interaction> groups,
             AdequacyPolicy.OfTheGeneration budget) {
         Set<Integer> out = new LinkedHashSet<>();

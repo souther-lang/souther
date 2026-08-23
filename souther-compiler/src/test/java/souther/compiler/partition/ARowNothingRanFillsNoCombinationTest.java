@@ -102,7 +102,7 @@ class ARowNothingRanFillsNoCombinationTest {
         assertFalse(first.claims().isEmpty(), "which a run can be held to");
 
         Set<Integer> every =
-                Generator.everyArmTheCombinationsTake(model.subject(), model.groups(), Budgets.generation());
+                Generator.everyArmACombinationMayTake(model.subject(), model.groups(), Budgets.generation());
         assertTrue(offeredFor(model, every).containsAll(claimedBy(first)),
                 "asked about the arms this combination takes, a row is composed for each of them");
         assertEquals(Set.of(), offeredFor(model, Set.of()),
@@ -152,7 +152,7 @@ class ARowNothingRanFillsNoCombinationTest {
     void anArmKeepsWhatEveryCombinationClaimingItCameTo() {
         Model model = Model.of(SHIPPING, "shippingFee");
         Set<Integer> every =
-                Generator.everyArmTheCombinationsTake(model.subject(), model.groups(), Budgets.generation());
+                Generator.everyArmACombinationMayTake(model.subject(), model.groups(), Budgets.generation());
         Generator.GenerationResult filled = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.refusing((_, _) -> java.util.Optional.of("no")),
                 model.groups(), Generator.Trial.NOTHING_RUNS, List.of(), Set.of(), every, Budgets.generation());
@@ -178,7 +178,7 @@ class ARowNothingRanFillsNoCombinationTest {
     void oneRowThroughAnArmIsTheAnswerWhateverTheOthersCameTo() {
         Model model = Model.of(SHIPPING, "shippingFee");
         Set<Integer> every =
-                Generator.everyArmTheCombinationsTake(model.subject(), model.groups(), Budgets.generation());
+                Generator.everyArmACombinationMayTake(model.subject(), model.groups(), Budgets.generation());
         // Refuses the first case of the first position, so the combinations naming it fail and the
         // ones beside them build. Every arm of the second decision is claimed by both.
         Generator.GenerationResult filled = Generator.fill(model.subject(), List.of(),
@@ -249,7 +249,7 @@ class ARowNothingRanFillsNoCombinationTest {
     void anArmTheLimitCutOffSaysSoRatherThanReadingAsUnreachable() {
         Model model = Model.of(wide(), "submit");
         Set<Integer> every =
-                Generator.everyArmTheCombinationsTake(model.subject(), model.groups(), Budgets.generation());
+                Generator.everyArmACombinationMayTake(model.subject(), model.groups(), Budgets.generation());
         assertFalse(every.isEmpty(), "the body has arms");
 
         Generator.GenerationResult filled = Generator.fill(model.subject(), List.of(),

@@ -4,7 +4,9 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.partition.AdequacyPolicy;
 import souther.compiler.partition.Budgets;
+import souther.compiler.partition.GenerationReason;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -82,6 +84,30 @@ class ABudgetIsTheCompilationsToSetTest {
                 () -> new AdequacyPolicy.OfTheGeneration(200, 0), "no cells");
     }
 
+    /**
+     * A cell budget the compilation sets reaches the generation, which is the other half of rule 4.
+     *
+     * <p>The measures' half is above and would hold on its own while the generation's wiring was
+     * cut. The two travel by different routes — one through {@code Adequacy.Coverage} and one
+     * through {@code Adequacy.Generated} and {@code rowsFor} — so a test of the first says nothing
+     * about the second, and the generation's budget reaching the search was, until this, held by
+     * nothing at all.
+     *
+     * <p>Held through the query and not by handing a budget to {@code Generator}. What is being
+     * tested is the handing over: a search given a budget directly would answer the same whether or
+     * not {@code Front.Adequacy} were still wired to it.
+     */
+    @Test
+    void aCellBudgetTheCompilationSetsReachesTheGeneration() {
+        assertTrue(offeredUnder(Budgets.generation().cellsPerGroup()).isEmpty(),
+                "at the standard budget the group is walked and nothing is held back");
+
+        List<GenerationReason.GroupsNotOffered> held = offeredUnder(1);
+        assertEquals(1, held.size(),
+                () -> "and at a budget of one it is not: " + held);
+        assertEquals(1, held.get(0).groups(), "one group went unwalked");
+    }
+
     /** And the standard one is a policy, so the three numbers are read from one place. */
     @Test
     void theStandardBudgetIsWhatACompilationSets() {
@@ -89,6 +115,61 @@ class ABudgetIsTheCompilationsToSetTest {
         assertTrue(Budgets.generation().rows() > 0);
         assertTrue(Budgets.generation().cellsPerGroup() > 0);
     }
+
+    /** What the generation said about groups it did not offer, over a model of two decisions
+     *  meeting on one value, compiled under a budget of {@code cells} choices per group. */
+    private static List<GenerationReason.GroupsNotOffered> offeredUnder(int cells) {
+        Compilation compilation = Compilation.ofSource(TWO_DECISIONS, "Main")
+                .withAdequacyPolicy(new AdequacyPolicy(
+                        Budgets.measures(),
+                        new AdequacyPolicy.OfTheGeneration(Budgets.generation().rows(), cells)));
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        Map<String, Adequacy.Filling> filling = compilation.db()
+                .ask(new Adequacy.Generated("example.two")).value();
+        assertNotNull(filling, "the module was asked for rows");
+        Adequacy.Filling shipping = filling.get("shippingFee");
+        assertNotNull(shipping, "the behavior was asked for rows");
+        return shipping.composed().reasons().stream()
+                .filter(GenerationReason.GroupsNotOffered.class::isInstance)
+                .map(GenerationReason.GroupsNotOffered.class::cast).toList();
+    }
+
+    /** Two decisions consumed into one value, which is four ways of settling it. Both are matched
+     *  on, so no threshold is needed to divide anything. */
+    private static final String TWO_DECISIONS = """
+            module example.two
+
+            data Premium
+            data Standard
+            data Membership = Premium | Standard
+
+            data Express
+            data Regular
+            data Delivery = Express | Regular
+
+            data Fee = Int
+                invariant value >= 0
+
+            behavior shippingFee : (member: Membership, delivery: Delivery) -> Fee
+                constructs Fee
+
+            let baseFee (tier: Membership): Int =
+                match tier with
+                    | Premium  -> 0
+                    | Standard -> 500
+
+            let expressFee (speed: Delivery): Int =
+                match speed with
+                    | Express -> 500
+                    | Regular -> 0
+
+            let shippingFee (member, delivery) =
+                Fee(baseFee(member) + expressFee(delivery))
+
+            example shippingFee
+                | "one" : (Premium, Express) -> Fee(500)
+            """;
 
     private static PartitionEvidence evidenceFor(String source, int pairSpace) {
         Compilation compilation = Compilation.ofSource(source, "Main")
