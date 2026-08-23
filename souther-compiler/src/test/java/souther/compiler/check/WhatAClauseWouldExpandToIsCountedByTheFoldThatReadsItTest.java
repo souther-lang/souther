@@ -163,10 +163,16 @@ class WhatAClauseWouldExpandToIsCountedByTheFoldThatReadsItTest {
      * <p>A reading holds at least one alternative, so a limit below one is one no reading is under.
      * Left to whoever writes it, a resource bound that admits everything is the absence of one and
      * says nothing about itself.
+     *
+     * <p>A count of places is refused below nought and not below one: a scale of nought is the whole
+     * numbers, which is a grid a reading may be held to laying out and nothing else, and below it is
+     * not a count of places at all.
      */
     @Test
     void aLimitThatBoundsNothingIsRefused() {
-        assertThrows(IllegalArgumentException.class, () -> new ReadingPolicy(0));
-        assertThrows(IllegalArgumentException.class, () -> new ReadingPolicy(-1));
+        assertThrows(IllegalArgumentException.class, () -> new ReadingPolicy(0, 2));
+        assertThrows(IllegalArgumentException.class, () -> new ReadingPolicy(-1, 2));
+        assertThrows(IllegalArgumentException.class, () -> new ReadingPolicy(64, -1));
+        assertEquals(0, new ReadingPolicy(64, 0).scalePlacesLimit());
     }
 }

@@ -92,7 +92,7 @@ public final class Intervals {
      * rules admit.
      *
      * @param divisor a range holding at least one value and none of them zero. Both are the caller's
-     *                to establish ({@code DerivedBounds}), and neither could be answered here as a
+     *                to establish ({@code DerivedNumericFacts}), and neither could be answered here as a
      *                range: a range with nothing in it is not a divisor whose sign and magnitude
      *                could be read, and what a range admitting zero leaves depends on how its values
      *                are spaced, which is not something a range says. Over the whole numbers a
@@ -103,6 +103,44 @@ public final class Intervals {
      */
     public static NumericDomain.Bounds truncatingQuotient(NumericDomain.Bounds dividend,
                                                           NumericDomain.Bounds divisor) {
+        Ratio[] corners = corners(dividend, divisor, 0, RoundingMode.DOWN);
+        return new NumericDomain.Bounds(hull(corners, -1), hull(corners, 1));
+    }
+
+    /**
+     * What a divide rounded to {@code scale} places lies between, whichever way it rounds there.
+     *
+     * <p>The mode is not read, and not for want of a rule about each. A value rounded to a scale
+     * lands on one of the two points of that scale's grid the exact quotient lies between, and every
+     * mode the library has picks one of those two — so the pair is what holds all seven of them, and
+     * a rule per mode would be seven statements of one fact that a caller cannot predict from
+     * without reading which mode is written. Which of the two it is is part of which value this is
+     * and is not part of where it lies.
+     *
+     * <p>Quantised outward at the grid rather than widened by a step. The two are not the same at
+     * zero: a quotient at or above nought floors to a grid point at or above nought, while the same
+     * range moved a step down starts below it — so a construction owing {@code value >= 0} over a
+     * non-negative quotient would come out owed for the width of one step of a scale nobody was
+     * asking about.
+     *
+     * <p>{@code /} over {@code Decimal} is not this: it rounds to a significant-digit precision the
+     * run time sets rather than to a scale the domain chose (spec §stdlib-decimal), and where an end
+     * lands under that is not something this states.
+     *
+     * @param scale how many places the answer is rounded to, which the caller has read as a number.
+     * @param divisor as {@link #truncatingQuotient} requires it.
+     */
+    public static NumericDomain.Bounds roundedQuotient(NumericDomain.Bounds dividend,
+                                                       NumericDomain.Bounds divisor, int scale) {
+        return new NumericDomain.Bounds(
+                hull(corners(dividend, divisor, scale, RoundingMode.FLOOR), -1),
+                hull(corners(dividend, divisor, scale, RoundingMode.CEILING), 1));
+    }
+
+    /** The four corners of the box a dividend range and a divisor range make, each divided at
+     * {@code scale} and rounded {@code towards}. */
+    private static Ratio[] corners(NumericDomain.Bounds dividend, NumericDomain.Bounds divisor,
+                                   int scale, RoundingMode towards) {
         if (!divisor.holdsAValue()) {
             throw new IllegalArgumentException("a range holding no value is not a divisor to read");
         }
@@ -114,11 +152,10 @@ public final class Intervals {
         End belowY = End.below(divisor.min());
         End aboveY = End.above(divisor.max());
         int sign = signOf(divisor);
-        Ratio[] corners = {
-            belowX.over(belowY, sign), belowX.over(aboveY, sign),
-            aboveX.over(belowY, sign), aboveX.over(aboveY, sign),
+        return new Ratio[] {
+            belowX.over(belowY, sign, scale, towards), belowX.over(aboveY, sign, scale, towards),
+            aboveX.over(belowY, sign, scale, towards), aboveX.over(aboveY, sign, scale, towards),
         };
-        return new NumericDomain.Bounds(hull(corners, -1), hull(corners, 1));
     }
 
     /**
@@ -219,8 +256,17 @@ public final class Intervals {
          * is not something a range says, so their ratio is no number. Every other pair has one: a
          * divisor past every value sends any dividend to zero; a divisor as near zero as its range
          * allows sends any dividend but zero past every value; and zero divided by anything is zero.
+         *
+         * <p>A divisor past every value gives zero whichever way the divide is rounded. What such a
+         * pair stands for is the quotients approaching zero from one side, and the grid point they
+         * are rounded outward to on the side they approach from is zero itself — so the corner is
+         * zero for the reading that takes the least and for the one that takes the most, and asking
+         * which way it rounds would sharpen an end that is a limit rather than a value.
+         *
+         * @param scale   how many places the corner is divided to.
+         * @param towards which way it is rounded there, which is outward for the side being read.
          */
-        Ratio over(End divisor, int sign) {
+        Ratio over(End divisor, int sign, int scale, RoundingMode towards) {
             if (beyond != 0 && divisor.beyond != 0) {
                 return null;
             }
@@ -236,7 +282,7 @@ public final class Intervals {
             if (beyond != 0) {
                 return new Ratio(null, beyond * divisor.at.signum());
             }
-            return new Ratio(Count.of(at.at().divide(divisor.at.at(), 0, RoundingMode.DOWN)), 0);
+            return new Ratio(Count.of(at.at().divide(divisor.at.at(), scale, towards)), 0);
         }
     }
 

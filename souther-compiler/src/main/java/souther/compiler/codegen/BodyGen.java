@@ -1472,8 +1472,20 @@ final class BodyGen {
             return ((ReachName.OfLibrary) reached.name()).target().name();
         }
 
-        /** {@code divide}/{@code remainder} on Int: a zero divisor takes the DivisionByZero case,
-         * otherwise the quotient/remainder is boxed (spec §stdlib-int). */
+        /**
+         * {@code divide}/{@code remainder} on Int: a zero divisor takes the DivisionByZero case,
+         * otherwise the quotient/remainder is boxed (spec §stdlib-int).
+         *
+         * <p>The quotient is the operator's own. {@code Int.divide} answers a case where {@code /}
+         * aborts on a zero divisor and answers the same number everywhere else, which is what the
+         * check reads it as — so the one pair no {@code Int} holds a quotient of has to abort here
+         * as it does there. A raw {@code ldiv} stood here and wrapped {@code Long.MIN_VALUE / -1}
+         * back to {@code Long.MIN_VALUE}, which is the overflow §stdlib-int says aborts, answered as
+         * a quotient.
+         *
+         * <p>The remainder is a raw {@code lrem}: it is exact for every pair, {@code MIN_VALUE}
+         * against {@code -1} included, so there is no overflow for it to abort on.
+         */
         private void intDivide(Core.Call call, boolean divide) {
             genExpr(call.args().get(0));
             int aSlot = slot(Type.INT);
@@ -1490,7 +1502,7 @@ final class BodyGen {
             code.lload(aSlot);
             code.lload(bSlot);
             if (divide) {
-                code.ldiv();
+                code.invokestatic(CD_IntMath, "divideExact", MTD_intExact);
             } else {
                 code.lrem();
             }

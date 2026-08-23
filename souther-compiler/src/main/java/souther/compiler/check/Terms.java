@@ -59,6 +59,18 @@ final class Terms {
      * atom's name is made: the key and the kind of number behind it are decided in one step, and
      * anywhere else would be a second place that has to agree about which is which. */
     private final Map<FactSubject, Granularity> atomKinds = new HashMap<>();
+
+    /**
+     * Every value each atom's own kind of number can take, for the atoms named at an expression.
+     *
+     * <p>Beside the spacing and for the reason the spacing is here: both are what an atom's type
+     * says of it, and the type is known where the atom is named. What it is for is arithmetic: a
+     * form is composed over numbers of any size, so what a recipe derives can be a number the value
+     * never is — {@code Long.MIN_VALUE / -1} works out to one past the whole-number range, and the
+     * operation that would have answered it aborts (spec §stdlib-int). Held against the atom rather
+     * than in each recipe, so that a recipe added later is held to it without being asked.
+     */
+    private final Map<FactSubject, NumericDomain.Bounds> atomExtents = new HashMap<>();
     /**
      * The terms this reading has built, each held under the one instance standing for it.
      *
@@ -146,6 +158,11 @@ final class Terms {
         return out;
     }
 
+    /** What this reading may spend, which the compilation set and nothing here makes. */
+    ReadingPolicy policy() {
+        return policy;
+    }
+
     Terms(Symbols symbols, ReadingPolicy policy) {
         this(symbols, Of.THE_DISCHARGE_TREE, policy);
     }
@@ -189,23 +206,8 @@ final class Terms {
      * itself. Reading it as the operator is what puts it on the one path the operator already has,
      * rather than on a second path that would have to be kept saying the same thing. */
     static Core asOperator(Core e) {
-        // Asked of the operation the call resolved to and not of the representation it is in. A
-        // body that runs holds `Int.add` as a call to a library name and the tree a declaration's
-        // rules are read in holds it standing, and the arithmetic is the same arithmetic — read in
-        // one representation and not the other, a rule the check enforced was one the measure
-        // reported as unread. `NumericMeasures` already asks about a size call this way.
-        ValueName operation = switch (e) {
-            case Core.Call call when call.fn() instanceof Core.Reached reached
-                    && reached.name() instanceof souther.compiler.types.ReachName.OfLibrary library ->
-                    library.target();
-            case Core.PreservedCall preserved -> preserved.operation();
-            case null, default -> null;
-        };
-        List<Core> args = switch (e) {
-            case Core.Call call -> call.args();
-            case Core.PreservedCall preserved -> preserved.args();
-            case null, default -> List.of();
-        };
+        ValueName operation = operationOf(e);
+        List<Core> args = argsOf(e);
         if (operation == null || args.size() != 2) {
             return e;
         }
@@ -213,6 +215,34 @@ final class Terms {
         // Not a comparison any source wrote: a call read as the operator it stands for.
         return op == null ? e : new Core.Binary(op, args.get(0), args.get(1),
                 CoverageOrigin.unwritten(), e.type(), e.pos());
+    }
+
+    /**
+     * The library operation {@code e} calls, or null where it calls none.
+     *
+     * <p>Asked of the operation the call resolved to and not of the representation it is in. A body
+     * that runs holds {@code Int.add} as a call to a library name and the tree a declaration's rules
+     * are read in holds it standing, and the arithmetic is the same arithmetic — read in one
+     * representation and not the other, a rule the check enforced was one the measure reported as
+     * unread. {@link NumericMeasures} already asks about a size call this way.
+     */
+    static ValueName operationOf(Core e) {
+        return switch (e) {
+            case Core.Call call when call.fn() instanceof Core.Reached reached
+                    && reached.name() instanceof souther.compiler.types.ReachName.OfLibrary library ->
+                    library.target();
+            case Core.PreservedCall preserved -> preserved.operation();
+            case null, default -> null;
+        };
+    }
+
+    /** What {@code e} hands over, where it is a call, and nothing where it is not. */
+    static List<Core> argsOf(Core e) {
+        return switch (e) {
+            case Core.Call call -> call.args();
+            case Core.PreservedCall preserved -> preserved.args();
+            case null, default -> List.of();
+        };
     }
 
     /**
@@ -311,7 +341,8 @@ final class Terms {
         FactSubject about = subjectOf(li.value(), at);
         return at.binding(li.binder().binding(), li.value(),
                 about != null ? about : placeSubject(li.binder().binding()),
-                locationOf(li.value(), at), bodyKey(li.value(), at));
+                locationOf(li.value(), at), bodyKey(li.value(), at),
+                numericMeaningOf(li.value(), at));
     }
 
     /** What {@code e} folds to where every part of it is written out, or {@code null} where any part
@@ -502,9 +533,23 @@ final class Terms {
     private FactSubject atomOfIdentity(FactSubject identity, Core e, Denotations at) {
         FactSubject atom = named(identity, granularityOf(e.type()));
         if (atom != null) {
+            atomExtents.putIfAbsent(atom, extentOf(affineScalarBase(e.type())));
             recording(atom, e, at);
         }
         return atom;
+    }
+
+    /**
+     * Every value {@code atom} can be, or null where nothing said.
+     *
+     * <p>What the kind of number holds and not what a declaration narrows it to. A value of a
+     * newtype has satisfied that newtype's invariant, and a construction being checked is the
+     * question of whether it does — so reading the declared range here would answer the question
+     * with itself. What is read is the carrier under it, which is the machine's range and is true of
+     * every value that exists at all.
+     */
+    NumericDomain.Bounds extentOf(FactSubject atom) {
+        return atomExtents.get(atom);
     }
 
 
@@ -522,18 +567,23 @@ final class Terms {
      * expression knows — which is why the walk that reads the operands is not handed one.
      */
     private void recording(FactSubject atom, Core e, Denotations at) {
-        if (asOperator(e) instanceof Core.PreservedCall call) {
+        // What was computed first, and the representation only where nothing was. Asked the other
+        // way round, a value the table states arithmetic for reached the walk reader because the
+        // reading had kept its call standing — so which of the two answered turned on how the tree
+        // was written, which is what a meaning read once exists to stop deciding.
+        NumericMeaning meaning = numericMeaningOf(e, at);
+        Derivation made;
+        if (meaning != null) {
+            made = recipeFor(meaning, at);
+        } else if (asOperator(e) instanceof Core.PreservedCall call) {
             recordingWalk(atom, call, e, at);
             return;
+        } else {
+            // What is left is a value that is one of several. Asked last because being one of
+            // several is what a value is where nothing else says what it was computed from — a
+            // choice between two quotients is a choice, and each of its arms is a quotient.
+            made = chosen(Choice.of(asOperator(e)), at);
         }
-        Derivation made = switch (asOperator(e)) {
-            case Core.Binary b -> switch (b.op()) {
-                case MUL -> product(b, at);
-                case DIV -> quotient(b, at);
-                default -> null;
-            };
-            case null, default -> chosen(Choice.of(asOperator(e)), at);
-        };
         if (made == null) {
             return;
         }
@@ -604,6 +654,39 @@ final class Terms {
     }
 
     /**
+     * The recipe {@code meaning} is, or null where the numeric fragment derives nothing in it.
+     *
+     * <p>Two questions and not one. What was computed is {@link NumericMeaning} and is the
+     * operation's own semantics; what of it this can prove in is a recipe, and it is less — a
+     * meaning with no recipe is arithmetic this reads and derives nothing from, which is what
+     * {@code /} over {@code Decimal} has always been.
+     */
+    private Derivation recipeFor(NumericMeaning meaning, Denotations at) {
+        if (meaning == null) {
+            return null;
+        }
+        return switch (meaning) {
+            case NumericMeaning.Operator(BinOp op, Core left, Core right) ->
+                    op == BinOp.MUL ? product(left, right, at) : null;
+            case NumericMeaning.TruncatingQuotient(Core dividend, Core divisor) ->
+                    divided(dividend, divisor, at, Derivation.TruncatingQuotient::new);
+            case NumericMeaning.TruncatingRemainder(Core dividend, Core divisor) ->
+                    divided(dividend, divisor, at, Derivation.TruncatingRemainder::new);
+            case NumericMeaning.RoundedQuotient(Core dividend, Core divisor, Core scale, Core _) ->
+                    rounded(dividend, divisor, scale, at);
+        };
+    }
+
+    /** The product of {@code left} and {@code right}, or null where either factor is a value nothing
+     * can be said of. A factor that is a written constant is not this: that product is a scalar
+     * multiply and the fragment carries it ({@link #scale}). */
+    private Derivation product(Core left, Core right, Denotations at) {
+        LinearForm<FactSubject> over = affineOf(left, at);
+        LinearForm<FactSubject> by = affineOf(right, at);
+        return over == null || by == null ? null : new Derivation.Product(over, by);
+    }
+
+    /**
      * The recipe {@code choice} is, or null where it is no choice or an arm of it is one this cannot
      * read.
      *
@@ -636,42 +719,51 @@ final class Terms {
         return new Derivation.Chosen(forms);
     }
 
-    /** The product {@code b} is, or null where either factor is a value nothing can be said of. A
-     * factor that is a written constant is not this: that product is a scalar multiply and the
-     * fragment carries it ({@link #scale}). */
-    private Derivation product(Core.Binary b, Denotations at) {
-        LinearForm<FactSubject> left = affineOf(b.left(), at);
-        LinearForm<FactSubject> right = affineOf(b.right(), at);
-        return left == null || right == null ? null : new Derivation.Product(left, right);
-    }
-
     /**
      * The quotient {@code b} is, or null where there is no rule about it.
      *
-     * <p>Only over whole numbers. {@code /} on {@code Int} truncates toward zero, which is a step
-     * nothing about the operands changes; on {@code Decimal} it rounds to a precision the run time
-     * sets (spec §stdlib-decimal), and what that rounding does to an end is not something this
-     * reads. That choice is the operator's and not the path's, which is why it is made here
-     * ({@link Derivation}).
+     * <p>Only over whole numbers, which is what having a {@link NumericMeaning.TruncatingQuotient}
+     * at all says: {@code /} on {@code Int} truncates toward zero, and on {@code Decimal} it rounds
+     * to a precision the run time sets (spec §stdlib-decimal), which is other arithmetic and not a
+     * quotient this reads. That choice is the operation's and not the path's.
      *
      * <p>The divisor is a form, as the factors of a product are. Whether the path holds it away from
      * zero, and whether it is the kind of value the operator's divisor could be at all, are asked
-     * where the recipe is read ({@link DerivedBounds}): the first because the answer is the path's
+     * where the recipe is read ({@link DerivedNumericFacts}): the first because the answer is the path's
      * and one expression is read under more than one, and the second because it is a question about
      * a range and no range is known here. Held as a written number, this had to refuse every divisor
      * with a coefficient in it, and a day count guarded above zero went unread.
      */
-    private Derivation quotient(Core.Binary b, Denotations at) {
-        if (granularityOf(b.type()) != Granularity.DISCRETE) {
-            return null;
-        }
-        LinearForm<FactSubject> numerator = affineOf(b.left(), at);
-        LinearForm<FactSubject> divisor = affineOf(b.right(), at);
-        NumericDomain.Bounds extent = extentOf(b.right().type());
+    private Derivation divided(Core over, Core by, Denotations at, Divided made) {
+        LinearForm<FactSubject> numerator = affineOf(over, at);
+        LinearForm<FactSubject> divisor = affineOf(by, at);
+        NumericDomain.Bounds extent = extentOf(by.type());
         if (numerator == null || divisor == null || extent == null) {
             return null;
         }
-        return new Derivation.Quotient(numerator, divisor, extent);
+        return made.of(numerator, divisor, extent);
+    }
+
+    /** The recipe a divide rounded to a scale is, or null where the fragment derives nothing in it.
+     * The scale is a form, as the divisor is: whether it comes to one number is what a reading
+     * proves of it, and one expression is read under more than one reading. */
+    private Derivation rounded(Core over, Core by, Core places, Denotations at) {
+        LinearForm<FactSubject> numerator = affineOf(over, at);
+        LinearForm<FactSubject> divisor = affineOf(by, at);
+        NumericDomain.Bounds extent = extentOf(by.type());
+        if (numerator == null || divisor == null || extent == null) {
+            return null;
+        }
+        LinearForm<FactSubject> scale = affineOf(places, at);
+        return scale == null ? null
+                : new Derivation.RoundedQuotient(numerator, divisor, extent, scale);
+    }
+
+    /** Which of the two answers of one division a recipe is about. Both are read off the same three
+     * parts, so what tells them apart is which recipe is made and nothing else. */
+    private interface Divided {
+        Derivation of(LinearForm<FactSubject> numerator, LinearForm<FactSubject> divisor,
+                      NumericDomain.Bounds divisorExtent);
     }
 
     /**
@@ -703,35 +795,29 @@ final class Terms {
      * <p>Asked of the numbers and not of how they are written: a coefficient of {@code 0.10} and one
      * of {@code 0.1} are one number, and a record's own equality says they are two. What this is for
      * is catching the check naming two values alike, and a difference in scale is not that.
+     *
+     * <p>Asked of the recipe and not of its kind. Every part of a recipe is either one of the forms
+     * it is read from or the extent of its divisor, so a recipe added later is compared by what it
+     * answers rather than by a case somebody remembered to write — and a case nobody wrote would
+     * take two readings for one, which is the disagreement this exists to catch going the wrong way.
+     *
+     * <p>In order, which matters for the one recipe whose forms are not interchangeable: an arm
+     * answers where the condition beside it does, so a choice reordered is a different recipe and
+     * not this one read twice.
      */
     private static boolean sameDerivation(Derivation a, Derivation b) {
-        return switch (a) {
-            case Derivation.Product one -> b instanceof Derivation.Product other
-                    && sameForm(one.left(), other.left())
-                    && sameForm(one.right(), other.right());
-            case Derivation.Quotient one -> b instanceof Derivation.Quotient other
-                    && sameForm(one.numerator(), other.numerator())
-                    && sameForm(one.divisor(), other.divisor())
-                    && sameExtent(one.divisorExtent(), other.divisorExtent());
-            case Derivation.Chosen one -> b instanceof Derivation.Chosen other
-                    && sameArms(one.arms(), other.arms());
-        };
-    }
-
-    /** Whether two readings found the same arms in the same order. An arm answers where the
-     * condition beside it does, so a choice reordered is a different recipe and not this one read
-     * twice. */
-    private static boolean sameArms(List<LinearForm<FactSubject>> a,
-                                    List<LinearForm<FactSubject>> b) {
-        if (a.size() != b.size()) {
+        if (a.getClass() != b.getClass() || a.formsRead().size() != b.formsRead().size()) {
             return false;
         }
-        for (int i = 0; i < a.size(); i++) {
-            if (!sameForm(a.get(i), b.get(i))) {
+        for (int i = 0; i < a.formsRead().size(); i++) {
+            if (!sameForm(a.formsRead().get(i), b.formsRead().get(i))) {
                 return false;
             }
         }
-        return true;
+        if (a.divisorExtent() == null || b.divisorExtent() == null) {
+            return a.divisorExtent() == b.divisorExtent();
+        }
+        return sameExtent(a.divisorExtent(), b.divisorExtent());
     }
 
     /** Whether two extents run between the same places. Asked on the order and not of the record's
@@ -936,6 +1022,112 @@ final class Terms {
      */
     FactSubject subjectOf(Core e, Denotations at) {
         return FactSubject.of(identityOf(e, at));
+    }
+
+    /**
+     * Which arithmetic the value at {@code e} is, or null where it is arithmetic this does not read.
+     *
+     * <p>One reading of that question, whatever surface the value arrived on. An expression written
+     * as an operator, a call to the library's function form of one, and a name an arm bound to the
+     * number a library operation answered as a case all reach the same meaning, so a term, an atom
+     * and a recipe are built off one answer rather than off three readings of three shapes (#959).
+     *
+     * <p>An arm's binding is answered from the environment, which is where a binder's meaning is
+     * (ADR-0106): the arm decided which case it opened and wrote what that case carries down, and
+     * this reads it rather than working the match out again from here.
+     */
+    NumericMeaning numericMeaningOf(Core e, Denotations at) {
+        if (e instanceof Core.Read read) {
+            return at.numericOf(read.binding());
+        }
+        // The table, of a call, whatever the row says it computes. Asked through `asOperator`
+        // instead, this read the rows that are operators and no others — so a row the library was
+        // answered for was a row this could not see, which is the silence the table exists to
+        // remove. `asOperator` still writes a call as the operator it stands for, which is what
+        // names the value; what it computes is answered here.
+        DischargeRules.NumericResult result =
+                DischargeRules.numericResult(operationOf(e));
+        if (result != null && result.at() instanceof DischargeRules.Answered.Directly) {
+            return computedBy(result, argsOf(e), e.type());
+        }
+        if (e instanceof Core.Binary b && isArith(b.op())) {
+            return theOneOf(new NumericMeaning.Operator(b.op(), b.left(), b.right()), b.type());
+        }
+        return null;
+    }
+
+    /**
+     * The number {@code result} says a call handing over {@code args} computes, where it answers it
+     * as a value of {@code answered}.
+     *
+     * <p>The one place a row is turned into a meaning. Which arithmetic a row states does not depend
+     * on where the operation answers it — a row is a pair of those two answers and every pair of
+     * them is writable — so a reader that made the meaning itself would be a reader that had to be
+     * told about the next pair. Both the call read where it stands and the arm that opens a case
+     * come through here, which is what keeps one value from being two meanings depending on which
+     * of the two reached it.
+     */
+    NumericMeaning computedBy(DischargeRules.NumericResult result, List<Core> args, Type answered) {
+        return theOneOf(result.computes().of(args), answered);
+    }
+
+    /** {@code meaning}, as the arithmetic it is where the language writes that arithmetic two ways.
+     * A divide of whole numbers is a truncating quotient however it was spelled, so the operator and
+     * the value case of {@code Int.divide} are one meaning and one recipe; over {@code Decimal} the
+     * operator rounds at a precision the run time sets, which is arithmetic of its own. */
+    private NumericMeaning theOneOf(NumericMeaning meaning, Type answered) {
+        if (meaning instanceof NumericMeaning.Operator(BinOp op, Core left, Core right)
+                && op == BinOp.DIV && granularityOf(answered) == Granularity.DISCRETE) {
+            return new NumericMeaning.TruncatingQuotient(left, right);
+        }
+        return meaning;
+    }
+
+    /**
+     * What the value {@code meaning} computes is about, where a case of {@code scrutinee} opened it.
+     *
+     * <p>Named by the arithmetic where the language writes that arithmetic another way, and by the
+     * case otherwise. A truncating quotient is the first: {@code a / b} is a spelling of the very
+     * value the {@code Int} case of {@code Int.divide(a, b)} carries, so the two are one term and a
+     * guard about either is about both — which is the whole of what naming a value says. An
+     * operation whose value case carries what an operator computes is the same, whichever operator
+     * it is: where the operation answers a sum as one case of a union, that case carries the very
+     * value {@code a + b} is. A remainder and a quotient rounded to a scale are the other: no
+     * operator writes them, so what they are is the value that case opens out of that call, and
+     * naming them by the call itself would file the union and the number it carries under one key.
+     */
+    FactSubject subjectOpenedAs(NumericMeaning meaning, Type carried, Core scrutinee,
+                                Denotations at) {
+        Term key = openedKey(meaning, carried, scrutinee, at);
+        return key == null ? null : FactSubject.of(key);
+    }
+
+    /** The arithmetic written as an operator, as an identity. */
+    private Term written(BinOp op, Core left, Core right, Denotations at) {
+        Term over = identityOf(left, at);
+        Term by = identityOf(right, at);
+        return over == null || by == null ? null : interned.operator(op, over, by);
+    }
+
+    /**
+     * What the value one case opens is filed under, as a term.
+     *
+     * <p>Built with an atom of its own where the grammar runs out, as every identity is: what is
+     * wanted is which value a fact is about, and a value the symbolic reader cannot read is still
+     * one value. The symbolic reading of an arm's binding is the place it is, and is not this
+     * ({@link PathEngine}).
+     */
+    private Term openedKey(NumericMeaning meaning, Type carried, Core scrutinee, Denotations at) {
+        return switch (meaning) {
+            case NumericMeaning.TruncatingQuotient(Core dividend, Core divisor) ->
+                    written(BinOp.DIV, dividend, divisor, at);
+            case NumericMeaning.Operator(BinOp op, Core left, Core right) ->
+                    written(op, left, right, at);
+            case NumericMeaning.TruncatingRemainder _, NumericMeaning.RoundedQuotient _ -> {
+                Term of = identityOf(scrutinee, at);
+                yield of == null ? null : interned.opened(of, carried);
+            }
+        };
     }
 
     /**

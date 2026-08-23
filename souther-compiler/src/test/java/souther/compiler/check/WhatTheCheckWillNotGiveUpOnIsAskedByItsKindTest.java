@@ -92,8 +92,8 @@ class WhatTheCheckWillNotGiveUpOnIsAskedByItsKindTest {
         Denotations at = Denotations.none().location(a, AsPlaces.of(a), AsPlaces.term(a));
         FactSubject atom = terms.atomOf(new Core.Read("a", a, Type.INT, POS), at);
 
-        assertThrows(DerivedBounds.AnAtomComputedFromItself.class,
+        assertThrows(DerivedNumericFacts.AnAtomComputedFromItself.class,
                 () -> InvariantChecker.gaveUp("a test",
-                        new DerivedBounds.AnAtomComputedFromItself(atom)));
+                        new DerivedNumericFacts.AnAtomComputedFromItself(atom)));
     }
 }

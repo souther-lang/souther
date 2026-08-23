@@ -117,8 +117,8 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
         Core.Binder a = CoreBinders.of(binders.binder("a", POS));
         Core.Binder b = CoreBinders.of(binders.binder("b", POS));
         Denotations at = Denotations.none()
-                .binding(a.binding(), read(b), engine.terms().placeSubject(a.binding()), null, null)
-                .binding(b.binding(), read(a), engine.terms().placeSubject(b.binding()), null, null);
+                .binding(a.binding(), read(b), engine.terms().placeSubject(a.binding()), null, null, null)
+                .binding(b.binding(), read(a), engine.terms().placeSubject(b.binding()), null, null, null);
 
         assertNull(engine.terms().writtenValue(read(a), at));
     }

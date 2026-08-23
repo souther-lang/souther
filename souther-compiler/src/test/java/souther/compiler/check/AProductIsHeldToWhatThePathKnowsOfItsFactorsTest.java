@@ -91,7 +91,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         assertTrue(guarded.boundsOf(atom).saysNothing(),
                 "nothing was said about the product itself");
 
-        NumericDomain<FactSubject> derived = DerivedBounds.refine(guarded, terms, Set.of(atom));
+        NumericDomain<FactSubject> derived = DerivedNumericFacts.refine(guarded, terms, Set.of(atom));
 
         assertEquals(Endpoint.inclusive(Count.of(0)), derived.boundsOf(atom).min());
         assertNull(derived.boundsOf(atom).max(), "nothing bounds either factor above");
@@ -116,7 +116,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
                 arithmetic(BinOp.MUL, read("a", a), read("b", b)), at);
         FactSubject atom = product.coefs().keySet().iterator().next();
 
-        NumericDomain<FactSubject> derived = DerivedBounds.refine(NumericDomain.top(), terms, Set.of(atom));
+        NumericDomain<FactSubject> derived = DerivedNumericFacts.refine(NumericDomain.top(), terms, Set.of(atom));
 
         assertTrue(derived.boundsOf(atom).saysNothing());
     }
@@ -143,7 +143,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         FactSubject atom = form.coefs().keySet().iterator().next();
         NumericDomain<FactSubject> guarded = atOrAboveZero(terms, FactSubject.of(terms.bodyKey(read("x", x), at)));
 
-        NumericDomain<FactSubject> derived = DerivedBounds.refine(guarded, terms, Set.of(atom));
+        NumericDomain<FactSubject> derived = DerivedNumericFacts.refine(guarded, terms, Set.of(atom));
 
         assertEquals(Endpoint.inclusive(Count.of(0)), derived.boundsOf(atom).min());
     }
@@ -175,7 +175,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
                 .assume(LinearForm.atom(factorB).minus(num(1000)), Rel.LE,
                         terms.kindsOf(LinearForm.atom(factorB)));
 
-        NumericDomain<FactSubject> derived = DerivedBounds.refine(guarded, terms, Set.of(atom));
+        NumericDomain<FactSubject> derived = DerivedNumericFacts.refine(guarded, terms, Set.of(atom));
 
         assertEquals(Endpoint.inclusive(Count.of(0)), derived.boundsOf(atom).min());
         assertEquals(Endpoint.inclusive(Count.of(100)), derived.boundsOf(atom).max(),

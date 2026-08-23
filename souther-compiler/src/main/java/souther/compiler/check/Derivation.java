@@ -13,7 +13,7 @@ import java.util.List;
  * values whatever the guards did — and a fact that depends on which reading is asking belongs to the
  * reading and not to this. So a recipe states what was computed and what the operator is, and
  * everything about where the operands lie is applied where the recipe is read
- * ({@link DerivedBounds}).
+ * ({@link DerivedNumericFacts}).
  *
  * <p>That is not a rule against choosing here. Which operators have a recipe at all is a question
  * about the operator and not about the path — {@code /} on {@code Decimal} rounds at a precision the
@@ -41,11 +41,26 @@ sealed interface Derivation {
      */
     List<LinearForm<FactSubject>> formsRead();
 
+    /**
+     * Every value the operator's divisor can take, or null where the recipe divides by nothing.
+     *
+     * <p>The one part of a recipe that is not a form, and here for the reason {@link #formsRead} is:
+     * whether two readings computed a value the same way is a question about every recipe there is,
+     * and asked by switching on the kind it is a place a recipe added later is silently left out of.
+     * Answered by the recipe, so that the reader comparing two of them has every part of both.
+     */
+    NumericDomain.Bounds divisorExtent();
+
     record Product(LinearForm<FactSubject> left, LinearForm<FactSubject> right) implements Derivation {
 
         @Override
         public List<LinearForm<FactSubject>> formsRead() {
             return List.of(left, right);
+        }
+
+        @Override
+        public NumericDomain.Bounds divisorExtent() {
+            return null;
         }
     }
 
@@ -97,6 +112,11 @@ sealed interface Derivation {
         public List<LinearForm<FactSubject>> formsRead() {
             return arms;
         }
+
+        @Override
+        public NumericDomain.Bounds divisorExtent() {
+            return null;
+        }
     }
 
     /**
@@ -114,14 +134,57 @@ sealed interface Derivation {
      *                      operator has. Read where the recipe is read, and not a fact about any
      *                      path.
      */
-    record Quotient(LinearForm<FactSubject> numerator, LinearForm<FactSubject> divisor,
-                    NumericDomain.Bounds divisorExtent) implements Derivation {
+    record TruncatingQuotient(LinearForm<FactSubject> numerator, LinearForm<FactSubject> divisor,
+                              NumericDomain.Bounds divisorExtent) implements Derivation {
 
-        /** The extent is not among them: it is what the operator's divisor can be at all, which is a
-         * range and names no place. */
         @Override
         public List<LinearForm<FactSubject>> formsRead() {
             return List.of(numerator, divisor);
+        }
+    }
+
+    /**
+     * What that divide leaves of what it divided.
+     *
+     * <p>The same three parts and for the same reasons, because it is the same division: what is
+     * known of a remainder is decided by the sign of what was divided and by how big the divisor is,
+     * and both are read where the recipe is read. Held as its own recipe and not as the arithmetic
+     * {@code numerator - divisor * quotient} it satisfies: that identity is a fact about the two
+     * answers of one division and not a way of computing either, and writing it as one would make
+     * what a remainder is depend on {@code /} answering at all — which for one pair of {@code Int}s
+     * it does not (spec §stdlib-int).
+     */
+    record TruncatingRemainder(LinearForm<FactSubject> numerator, LinearForm<FactSubject> divisor,
+                               NumericDomain.Bounds divisorExtent) implements Derivation {
+
+        @Override
+        public List<LinearForm<FactSubject>> formsRead() {
+            return List.of(numerator, divisor);
+        }
+    }
+
+    /**
+     * A divide rounded to a scale the call states (spec §stdlib-decimal).
+     *
+     * <p>{@code scale} is a form, as the divisor is, and for the same reason: whether it comes to
+     * one number is what a reading proves of it, and one expression is read under more than one
+     * reading. Held as a written number, this asked the question where the recipe was recorded, so a
+     * scale a rule of the model settles — a parameter whose type admits one value, a name a guard
+     * equates to two — was a scale no reading could recover. What is stated where a reading has no
+     * one number for it is the half that does not need one.
+     *
+     * <p>The mode is not here at all. Every mode the library has lands the answer on one of the two
+     * grid points the exact quotient lies between, so what a range can say is the same for all seven
+     * of them ({@link souther.compiler.numeric.Intervals#roundedQuotient}). Which one it is is part
+     * of which value this is — {@link NumericMeaning} keeps it — and not part of where it lies.
+     */
+    record RoundedQuotient(LinearForm<FactSubject> numerator, LinearForm<FactSubject> divisor,
+                           NumericDomain.Bounds divisorExtent, LinearForm<FactSubject> scale)
+            implements Derivation {
+
+        @Override
+        public List<LinearForm<FactSubject>> formsRead() {
+            return List.of(numerator, divisor, scale);
         }
     }
 }

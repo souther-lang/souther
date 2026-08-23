@@ -68,15 +68,15 @@ class ARecipeIsEvaluatedOnceForTheReadingThatAsksItTest {
     }
 
     /** How many recipes were evaluated while compiling {@code module}, over every reading there was.
-     * {@link DerivedBounds#WATCHING} records an atom once per evaluation, so a memo that stopped
+     * {@link DerivedNumericFacts#WATCHING} records an atom once per evaluation, so a memo that stopped
      * holding shows here and a memo that held does not. */
     private static int recipesEvaluated(String module) {
         List<List<FactSubject>> watching = new ArrayList<>();
-        DerivedBounds.WATCHING = watching;
+        DerivedNumericFacts.WATCHING = watching;
         try {
             Compiler.compileWithWarnings(module);
         } finally {
-            DerivedBounds.WATCHING = null;
+            DerivedNumericFacts.WATCHING = null;
         }
         return watching.stream().mapToInt(List::size).sum();
     }

@@ -48,11 +48,11 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
     /** The recipes each reading of the module evaluated, by the name each atom renders as. */
     private static List<Set<String>> derivedWhileCompiling(String module) {
         List<List<FactSubject>> watching = new ArrayList<>();
-        DerivedBounds.WATCHING = watching;
+        DerivedNumericFacts.WATCHING = watching;
         try {
             Compiler.compileWithWarnings(module);
         } finally {
-            DerivedBounds.WATCHING = null;
+            DerivedNumericFacts.WATCHING = null;
         }
         return watching.stream()
                 .map(one -> one.stream().map(FactSubject::rendered)
