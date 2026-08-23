@@ -1,8 +1,8 @@
 package souther.compiler.check;
 
-import souther.compiler.semantics.Combinator;
-
 import souther.compiler.semantics.ArgumentRef;
+import souther.compiler.semantics.Combinator;
+import souther.compiler.semantics.ElementLineage;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.StructuralCost;

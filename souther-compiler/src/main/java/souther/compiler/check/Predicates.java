@@ -4,7 +4,7 @@ import souther.compiler.types.BinOp;
 import souther.compiler.check.Combinators.Handed;
 import souther.compiler.check.DischargeRules.Carrying;
 import souther.compiler.check.DischargeRules.Projection;
-import souther.compiler.check.DischargeRules.Shape;
+import souther.compiler.semantics.ElementShape;
 import souther.compiler.check.DischargeRules.Source;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
@@ -50,7 +50,7 @@ final class Predicates {
      * those stated of a container it was built from that travel every construction in between. */
     List<Quantified> elementRelations(Core container, Known k, Denotations at) {
         List<Quantified> found = new ArrayList<>();
-        Set<Shape> crossed = EnumSet.noneOf(Shape.class);
+        Set<ElementShape> crossed = EnumSet.noneOf(ElementShape.class);
         Core source = container;
         while (true) {
             FactSubject key = terms.subjectOf(source, at);
@@ -1141,7 +1141,7 @@ final class Predicates {
             return stated;
         }
         Projection projection = DischargeRules.projectionOf(stated, at);
-        if (built.shape() != Shape.MAPS || projection == null) {
+        if (built.shape() != ElementShape.MAPS || projection == null) {
             return null;
         }
         // Where the mapping's closure is written is already stated once, by the table that says which

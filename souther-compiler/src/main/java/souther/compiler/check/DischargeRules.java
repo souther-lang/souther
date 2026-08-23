@@ -1,5 +1,10 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.BuiltFrom;
+import souther.compiler.semantics.Cardinality;
+import souther.compiler.semantics.ElementLineage;
+import souther.compiler.semantics.ElementShape;
+
 import souther.compiler.semantics.ArgumentRef;
 
 import souther.compiler.types.BinOp;
@@ -59,42 +64,6 @@ final class DischargeRules {
      * does not state there. */
     private static final Set<ValueName> SIZE_CALLS = NumericMeasures.calls();
 
-    /**
-     * What a construction of a container keeps of the elements of the container it was built from.
-     *
-     * <ul>
-     * <li>{@code PERMUTES} — the same elements in another order. Everything survives.
-     * <li>{@code SUBSET} — some of the same elements. Nothing new is there, so a property of every
-     *     element survives.
-     * <li>{@code MAPS} — one new element for each. Nothing is known of what they are.
-     * <li>{@code COLLAPSES} — at most one new element for each. Neither the elements nor what a
-     *     closure that answers about them said.
-     * </ul>
-     *
-     * <p>How many there are is {@link Cardinality} and is stated beside this, not read off it. The
-     * two agree for every construction here — the same elements in another order is as many, some of
-     * them is no more — and that agreement is what made one enum look like enough. It ends at a
-     * construction given two containers: {@code List.append(a, b)} holds neither {@code a}'s elements
-     * alone nor {@code b}'s, and its size is still no less than either. A statement about the count
-     * that has to be spelled as a statement about the elements cannot be made there.
-     */
-    enum Shape {
-        PERMUTES, SUBSET, MAPS, COLLAPSES
-    }
-
-    /**
-     * How the size of a construction's result relates to the size of the container it was built from.
-     *
-     * <ul>
-     * <li>{@code SAME} — exactly as many. Not stated as a fact: both are one atom, since
-     *     {@link #sizeSource} answers the size of the result with the size of its source.
-     * <li>{@code AT_MOST} — no more, and possibly fewer.
-     * </ul>
-     */
-    enum Cardinality {
-        SAME, AT_MOST
-    }
-
     /** The argument the signature already says the elements come from, where the operation takes a
      * closure at all — so a rule about such an operation writes no position of its own. */
     private static final ArgumentRef CONTAINER = new ArgumentRef.TheContainer();
@@ -108,164 +77,14 @@ final class DischargeRules {
         return new ArgumentRef.At(position);
     }
 
-    /**
-     * Where a container's elements came from, and how many of them the result has.
-     *
-     * <p>The lineage is what is declared; {@link #shape} is read off it. The two are not the same
-     * statement and the shape is the coarser — {@code List.filterMap} and {@code Set.map} are one
-     * shape and two lineages — so declaring the shape and deriving the lineage would be deriving
-     * what was thrown away. Written this way round, a reader that wants where an element came from
-     * asks {@link ElementLineage} and a reader that wants whether a property survives asks here,
-     * and neither is recovering the other's answer.
-     */
-    record Built(List<ElementLineage.OutputLineage> outputs, Cardinality size) {
-
-        Built {
-            outputs = List.copyOf(outputs);
-            if (outputs.isEmpty()) {
-                throw new IllegalArgumentException("a construction answers somewhere");
-            }
-        }
-
-        /** The one place its elements stand, for a rule about an operation that answers one run of
-         *  them. */
-        Built(ElementLineage lineage, Cardinality size) {
-            this(List.of(new ElementLineage.OutputLineage(
-                    ElementLineage.ResultPath.elements(), lineage)), size);
-        }
-
-        /** Where its elements came from, where they all came from one place. */
-        ElementLineage lineage() {
-            if (outputs.size() != 1) {
-                throw new IllegalStateException(
-                        "a construction answering more than one run of elements was asked for one"
-                                + " lineage: " + outputs);
-            }
-            return outputs.get(0).origin();
-        }
-
-        /** Which argument it was built from, where one argument is what it was built from. */
-        ArgumentRef from() {
-            ElementLineage.Source source = lineage().source();
-            if (source == null) {
-                throw new IllegalStateException(
-                        "a construction whose elements come from more than one place was asked which"
-                                + " one: " + outputs);
-            }
-            return source.argument();
-        }
-
-        /**
-         * What the building keeps of the elements it was built from, in the words the discharge
-         * check is written in.
-         *
-         * <p>A projection and the one place it happens. What survives a construction is decided by
-         * whether the elements are the source's own and by whether there are as many of them, and
-         * both of those are stated above — so the four words are a reading of the pair rather than
-         * a fifth thing to keep in step with it.
-         */
-        Shape shape() {
-            return wordFor(lineage(), size == Cardinality.SAME);
-        }
-
-        /**
-         * The word for one lineage, given whether the result has as many elements as its source.
-         *
-         * <p>Elements that are each one of several things are each of them read, and the word is the
-         * one they all read where they read one — otherwise the word for elements nothing was kept
-         * of, which licenses nothing and so is true of a run holding some of each.
-         * {@code Map.updateIfPresent} is that: every value is the argument's own or what the closure
-         * made of it, so neither {@code PERMUTES} nor {@code MAPS} is true of the run, and what a
-         * reader of the four words may assume of it is nothing.
-         */
-        private Shape wordFor(ElementLineage lineage, boolean asMany) {
-            return switch (lineage) {
-                case ElementLineage.SameAs _ -> asMany ? Shape.PERMUTES : Shape.SUBSET;
-                case ElementLineage.ClosureResult _ -> asMany ? Shape.MAPS : Shape.COLLAPSES;
-                // What the closure answered holds it, so what was stated of the source says nothing
-                // of it, and there may be any number of them. No word of the four is about that,
-                // and the nearest is the one for elements nothing was kept of.
-                case ElementLineage.InsideClosureResult _ -> Shape.COLLAPSES;
-                case ElementLineage.OneOf one -> {
-                    if (one.source() == null) {
-                        throw new IllegalStateException(
-                                "a construction whose elements come from more than one place has no"
-                                        + " single source for a shape to be about: " + outputs);
-                    }
-                    Shape word = null;
-                    for (ElementLineage alternative : one.alternatives()) {
-                        Shape read = wordFor(alternative, asMany);
-                        word = word == null || word == read ? read : Shape.COLLAPSES;
-                    }
-                    yield word;
-                }
-            };
-        }
-    }
 
     /** The container {@code call} built its result from, and what the building kept of it. */
-    record Source(Core container, Shape shape, Cardinality size) {}
-
-    private static final Map<ValueName, Built> BUILT_FROM = Map.ofEntries(
-            Map.entry(op("List", "reverse"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(at(0), 1)), Cardinality.SAME)),
-            Map.entry(op("List", "sort"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(at(0), 1)), Cardinality.SAME)),
-            Map.entry(op("List", "sortBy"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(CONTAINER, 1)), Cardinality.SAME)),
-            Map.entry(op("List", "map"), new Built(new ElementLineage.ClosureResult(
-                    new ElementLineage.Source(CONTAINER, 1)), Cardinality.SAME)),
-            Map.entry(op("List", "mapIndexed"), new Built(new ElementLineage.ClosureResult(
-                    new ElementLineage.Source(CONTAINER, 1)), Cardinality.SAME)),
-            Map.entry(op("Map", "mapValues"), new Built(new ElementLineage.ClosureResult(
-                    new ElementLineage.Source(CONTAINER, 1)), Cardinality.SAME)),
-            Map.entry(op("List", "filter"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(CONTAINER, 1)), Cardinality.AT_MOST)),
-            Map.entry(op("List", "distinct"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(at(0), 1)), Cardinality.AT_MOST)),
-            Map.entry(op("List", "take"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(at(1), 1)), Cardinality.AT_MOST)),
-            Map.entry(op("List", "drop"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(at(1), 1)), Cardinality.AT_MOST)),
-            Map.entry(op("Set", "filter"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(CONTAINER, 1)), Cardinality.AT_MOST)),
-            Map.entry(op("Map", "filterEntries"),
-                    new Built(new ElementLineage.SameAs(
-                            new ElementLineage.Source(CONTAINER, 1)), Cardinality.AT_MOST)),
-            Map.entry(op("List", "distinctBy"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(CONTAINER, 1)), Cardinality.AT_MOST)),
-            Map.entry(op("Map", "remove"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(at(1), 1)), Cardinality.AT_MOST)),
-            Map.entry(op("Set", "remove"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(at(1), 1)), Cardinality.AT_MOST)),
-            Map.entry(op("Map", "intersection"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(at(0), 1)), Cardinality.AT_MOST)),
-            Map.entry(op("Map", "difference"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(at(0), 1)), Cardinality.AT_MOST)),
-            Map.entry(op("Set", "intersection"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(at(0), 1)), Cardinality.AT_MOST)),
-            Map.entry(op("Set", "difference"), new Built(new ElementLineage.SameAs(
-                    new ElementLineage.Source(at(0), 1)), Cardinality.AT_MOST)),
-            // Every value in the answer came from the map it was given: the one under the key is
-            // what the closure made of it, and every other is the value that was there. Read as a
-            // closure result alone, what is true of one value would be said of all of them.
-            Map.entry(op("Map", "updateIfPresent"), new Built(new ElementLineage.OneOf(List.of(
-                    new ElementLineage.SameAs(new ElementLineage.Source(CONTAINER, 1)),
-                    new ElementLineage.ClosureResult(new ElementLineage.Source(CONTAINER, 1)))),
-                    Cardinality.SAME)),
-            // Inside what the closure answered, which is an optional here and a list in a
-            // `flatMap`. One lineage for the two, told apart by what the closure's own signature
-            // says it answers with.
-            Map.entry(op("List", "filterMap"),
-                    new Built(new ElementLineage.InsideClosureResult(
-                            new ElementLineage.Source(CONTAINER, 1)), Cardinality.AT_MOST)),
-            Map.entry(op("Set", "map"), new Built(new ElementLineage.ClosureResult(
-                    new ElementLineage.Source(CONTAINER, 1)), Cardinality.AT_MOST)));
+    record Source(Core container, ElementShape shape, Cardinality size) {}
 
     /**
      * The containers a construction's result is never smaller than.
      *
-     * <p>Written on its own and not as a {@link Shape}, because none of these establishes an element
+     * <p>Written on its own and not as a {@link ElementShape}, because none of these establishes an element
      * relation to a single source that a shape states. It is not that they keep nothing:
      * {@code List.append(a, b)} keeps every element of both, and holds neither {@code a}'s alone nor
      * {@code b}'s, so neither of the two is what it was built from; an insert puts in an element or
@@ -316,18 +135,18 @@ final class DischargeRules {
     /** Where a predicate reads its container, and which shapes of construction carry it there.
      * {@code List.all} holds of any sublist of a list it holds of; {@code List.contains} does not, and
      * neither survives a mapping — what a mapped element is, the mapping alone does not say. */
-    record Carried(ArgumentRef container, Set<Shape> through) {}
+    record Carried(ArgumentRef container, Set<ElementShape> through) {}
 
     private static final Map<ValueName, Carried> CARRIED = Map.of(
-            op("List", "all"), new Carried(CONTAINER, Set.of(Shape.PERMUTES, Shape.SUBSET)),
-            op("List", "allDistinctBy"), new Carried(CONTAINER, Set.of(Shape.PERMUTES, Shape.SUBSET)),
-            op("List", "any"), new Carried(CONTAINER, Set.of(Shape.PERMUTES)),
-            op("List", "contains"), new Carried(at(1), Set.of(Shape.PERMUTES)),
-            op("Set", "contains"), new Carried(at(1), Set.of(Shape.PERMUTES)),
-            op("Map", "containsKey"), new Carried(at(1), Set.of(Shape.PERMUTES)));
+            op("List", "all"), new Carried(CONTAINER, Set.of(ElementShape.PERMUTES, ElementShape.SUBSET)),
+            op("List", "allDistinctBy"), new Carried(CONTAINER, Set.of(ElementShape.PERMUTES, ElementShape.SUBSET)),
+            op("List", "any"), new Carried(CONTAINER, Set.of(ElementShape.PERMUTES)),
+            op("List", "contains"), new Carried(at(1), Set.of(ElementShape.PERMUTES)),
+            op("Set", "contains"), new Carried(at(1), Set.of(ElementShape.PERMUTES)),
+            op("Map", "containsKey"), new Carried(at(1), Set.of(ElementShape.PERMUTES)));
 
     /** Where a predicate reads its container at a call, and how far its statement travels. */
-    record Carrying(Core.PreservedCall stated, ArgumentRef at, Set<Shape> through) {
+    record Carrying(Core.PreservedCall stated, ArgumentRef at, Set<ElementShape> through) {
 
         Core container() {
             return CallArguments.of(at, stated);
@@ -830,7 +649,7 @@ final class DischargeRules {
     /** The operations each table has a rule for. What is asked of them is {@link Question}'s to
      * settle; these are so it can hold a rule to being one an operation is asked for. */
     static Set<ValueName> builtOperations() {
-        return Bound.BUILDINGS.keySet();
+        return Bound.buildsItsResultFrom();
     }
 
     static Set<ValueName> carryingOperations() {
@@ -849,7 +668,8 @@ final class DischargeRules {
      */
     static Set<String> constructionKinds() {
         Set<String> kinds = new LinkedHashSet<>();
-        Bound.BUILDINGS.forEach((operation, built) -> {
+        Bound.buildsItsResultFrom().forEach(operation -> {
+            BuiltFrom built = Bound.buildsItsResultFrom(operation);
             Prelude.PreludeEntry entry = operation instanceof ValueName.Stdlib library
                     ? Prelude.entry(library.qualified()) : null;
             String kind = entry == null ? null : kindOf(entry.signature().result());
@@ -1032,9 +852,13 @@ final class DischargeRules {
      */
     private static final class Bound {
 
-        private static final Map<ValueName, Built> BUILDINGS =
-                bind(BUILT_FROM, Built::from, CONTAINER, Question::holdsElements,
-                        "the container something is built from");
+        private static Set<ValueName> buildsItsResultFrom() {
+            return souther.compiler.semantics.OperationFacts.buildsItsResultFrom();
+        }
+
+        private static BuiltFrom buildsItsResultFrom(ValueName operation) {
+            return souther.compiler.semantics.OperationFacts.buildsItsResultFrom(operation);
+        }
         private static final Map<ValueName, Carried> CARRIERS =
                 bind(CARRIED, Carried::container, CONTAINER, Question::holdsElements,
                         "the container a predicate reads");
@@ -1302,26 +1126,6 @@ final class DischargeRules {
         }
     }
 
-    /** What {@link ElementLineage#derivesItsElementsFrom} answers with, read off the table here. */
-    static ArgumentRef derivesItsElementsFrom(ValueName operation) {
-        Built built = Bound.BUILDINGS.get(operation);
-        if (built == null || built.outputs().size() != 1) {
-            return null;
-        }
-        ElementLineage lineage = built.lineage();
-        return (lineage instanceof ElementLineage.ClosureResult
-                || lineage instanceof ElementLineage.InsideClosureResult)
-                && lineage.source().elements() == 1 ? lineage.source().argument() : null;
-    }
-
-    /** What {@link ElementLineage#holdsTheElementsOf} answers with, read off the table here. */
-    static ArgumentRef holdsTheElementsOf(ValueName operation) {
-        Built built = Bound.BUILDINGS.get(operation);
-        return built != null && built.outputs().size() == 1
-                && built.lineage() instanceof ElementLineage.SameAs same
-                && same.source().elements() == 1
-                ? same.source().argument() : null;
-    }
 
     /**
      * The container {@code call} built its result from, and where each element of what it answers
@@ -1334,7 +1138,7 @@ final class DischargeRules {
      * there: without one container there is nothing to ask the question of.
      */
     static Kept keptFrom(Core.PreservedCall call) {
-        Built built = Bound.BUILDINGS.get(call.operation());
+        BuiltFrom built = Bound.buildsItsResultFrom(call.operation());
         if (built == null || built.outputs().size() != 1 || built.lineage().source() == null) {
             return null;
         }
@@ -1347,7 +1151,7 @@ final class DischargeRules {
     /** The container {@code call} built its result from, or null where the check has no rule about
      * what the operation keeps. */
     static Source builtFrom(Core.PreservedCall call) {
-        Built built = Bound.BUILDINGS.get(call.operation());
+        BuiltFrom built = Bound.buildsItsResultFrom(call.operation());
         return built == null ? null
                 : new Source(CallArguments.of(built.from(), call), built.shape(), built.size());
     }

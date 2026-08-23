@@ -89,7 +89,7 @@ final class IntrinsicNumericFacts {
     /** How a size is stated of the two, or null where there is nothing to state: a construction of
      * the same size answers both with one atom ({@link DischargeRules#sizeSource}), so a relation
      * between them would say a name stands to itself. */
-    private static Rel relationOf(DischargeRules.Cardinality size) {
+    private static Rel relationOf(souther.compiler.semantics.Cardinality size) {
         return switch (size) {
             case AT_MOST -> Rel.LE;
             case SAME -> null;

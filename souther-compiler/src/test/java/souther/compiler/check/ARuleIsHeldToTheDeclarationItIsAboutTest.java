@@ -1,11 +1,12 @@
 package souther.compiler.check;
 
 import souther.compiler.semantics.ArgumentRef;
+import souther.compiler.semantics.ElementLineage;
 
-import souther.compiler.check.DischargeRules.Built;
-import souther.compiler.check.DischargeRules.Cardinality;
+import souther.compiler.semantics.BuiltFrom;
+import souther.compiler.semantics.Cardinality;
 import souther.compiler.check.DischargeRules.Carried;
-import souther.compiler.check.DischargeRules.Shape;
+import souther.compiler.semantics.ElementShape;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -39,16 +40,16 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
 
     private static void bindCarried(String operation, ArgumentRef container) {
         DischargeRules.bind(
-                Map.of(op(operation), new Carried(container, Set.of(Shape.PERMUTES))),
+                Map.of(op(operation), new Carried(container, Set.of(ElementShape.PERMUTES))),
                 Carried::container, new ArgumentRef.TheContainer(), Question::holdsElements,
                 "the container a predicate reads");
     }
 
     private static void bindBuilt(String operation, ArgumentRef from) {
-        DischargeRules.bind(
-                Map.of(op(operation), new Built(new ElementLineage.SameAs(
-                        new ElementLineage.Source(from, 1)), Cardinality.AT_MOST)),
-                Built::from, new ArgumentRef.TheContainer(), Question::holdsElements,
+        DischargeRules.holdToTheDeclaration(op(operation),
+                new BuiltFrom(new ElementLineage.SameAs(new ElementLineage.Source(from, 1)),
+                        Cardinality.AT_MOST).from(),
+                new ArgumentRef.TheContainer(), Question::holdsElements,
                 "the container something is built from");
     }
 

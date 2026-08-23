@@ -60,6 +60,12 @@ final class OperationFactBinder {
                         shifts);
                 case OperationFact.BoundsItsResult bounded ->
                         DischargeRules.holdBound(each.operation(), bounded.bound());
+                case OperationFact.BuildsItsResultFrom builds ->
+                        DischargeRules.holdToTheDeclaration(each.operation(),
+                                builds.built().from(),
+                                new souther.compiler.semantics.ArgumentRef.TheContainer(),
+                                Question::holdsElements,
+                                "the container something is built from");
             }
             visited.add(each);
         }

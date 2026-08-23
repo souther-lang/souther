@@ -86,4 +86,15 @@ public sealed interface OperationFact {
             java.util.Objects.requireNonNull(bound, "this one states a bound");
         }
     }
+
+    /**
+     * The operation builds a container out of another, and this says where its elements came from
+     * and how many of them there are.
+     */
+    record BuildsItsResultFrom(BuiltFrom built) implements OperationFact {
+
+        public BuildsItsResultFrom {
+            java.util.Objects.requireNonNull(built, "this one says what it was built from");
+        }
+    }
 }

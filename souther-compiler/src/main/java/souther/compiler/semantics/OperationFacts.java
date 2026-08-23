@@ -43,6 +43,10 @@ public final class OperationFacts {
         return new ArgumentRef.At(position);
     }
 
+    /** The argument the signature already says the elements come from, where the operation takes a
+     *  closure at all — so a fact about such an operation writes no position of its own. */
+    private static final ArgumentRef CONTAINER = new ArgumentRef.TheContainer();
+
     /**
      * Everything declared here.
      *
@@ -93,7 +97,56 @@ public final class OperationFacts {
                             PositiveOrder.FIRST_ARGUMENT_GREATER)),
             about("Date", "daysBetween",
                     new OperationFact.StatesTheOrderOfItsArguments(
-                            PositiveOrder.SECOND_ARGUMENT_GREATER)));
+                            PositiveOrder.SECOND_ARGUMENT_GREATER)),
+
+            // Where a construction's elements came from, and how many of them it answers.
+            about("List", "reverse", keeps(at(0), Cardinality.SAME)),
+            about("List", "sort", keeps(at(0), Cardinality.SAME)),
+            about("List", "sortBy", keeps(CONTAINER, Cardinality.SAME)),
+            about("List", "map", maps(CONTAINER, Cardinality.SAME)),
+            about("List", "mapIndexed", maps(CONTAINER, Cardinality.SAME)),
+            about("Map", "mapValues", maps(CONTAINER, Cardinality.SAME)),
+            about("List", "filter", keeps(CONTAINER, Cardinality.AT_MOST)),
+            about("List", "distinct", keeps(at(0), Cardinality.AT_MOST)),
+            about("List", "take", keeps(at(1), Cardinality.AT_MOST)),
+            about("List", "drop", keeps(at(1), Cardinality.AT_MOST)),
+            about("Set", "filter", keeps(CONTAINER, Cardinality.AT_MOST)),
+            about("Map", "filterEntries", keeps(CONTAINER, Cardinality.AT_MOST)),
+            about("List", "distinctBy", keeps(CONTAINER, Cardinality.AT_MOST)),
+            about("Map", "remove", keeps(at(1), Cardinality.AT_MOST)),
+            about("Set", "remove", keeps(at(1), Cardinality.AT_MOST)),
+            about("Map", "intersection", keeps(at(0), Cardinality.AT_MOST)),
+            about("Map", "difference", keeps(at(0), Cardinality.AT_MOST)),
+            about("Set", "intersection", keeps(at(0), Cardinality.AT_MOST)),
+            about("Set", "difference", keeps(at(0), Cardinality.AT_MOST)),
+            // Every value in the answer came from the map it was given: the one under the key is
+            // what the closure made of it, and every other is the value that was there. Read as a
+            // closure result alone, what is true of one value would be said of all of them.
+            about("Map", "updateIfPresent", new OperationFact.BuildsItsResultFrom(new BuiltFrom(
+                    new ElementLineage.OneOf(List.of(
+                            new ElementLineage.SameAs(new ElementLineage.Source(CONTAINER, 1)),
+                            new ElementLineage.ClosureResult(
+                                    new ElementLineage.Source(CONTAINER, 1)))),
+                    Cardinality.SAME))),
+            // Inside what the closure answered, which is an optional here and a list in a
+            // `flatMap`. One lineage for the two, told apart by what the closure's own signature
+            // says it answers with.
+            about("List", "filterMap", new OperationFact.BuildsItsResultFrom(new BuiltFrom(
+                    new ElementLineage.InsideClosureResult(
+                            new ElementLineage.Source(CONTAINER, 1)), Cardinality.AT_MOST))),
+            about("Set", "map", maps(CONTAINER, Cardinality.AT_MOST)));
+
+    /** The answer holds the very elements {@code source} held. */
+    private static OperationFact keeps(ArgumentRef source, Cardinality size) {
+        return new OperationFact.BuildsItsResultFrom(new BuiltFrom(
+                new ElementLineage.SameAs(new ElementLineage.Source(source, 1)), size));
+    }
+
+    /** The answer holds what a closure made of each of {@code source}'s elements. */
+    private static OperationFact maps(ArgumentRef source, Cardinality size) {
+        return new OperationFact.BuildsItsResultFrom(new BuiltFrom(
+                new ElementLineage.ClosureResult(new ElementLineage.Source(source, 1)), size));
+    }
 
     private static OperationFact bounded(Rel rel, long n) {
         return bounded(rel, null, n, new ResultBound.Provided.Always());
@@ -170,6 +223,16 @@ public final class OperationFacts {
         return Index.BOUNDS.keySet();
     }
 
+    /** What {@code operation} builds its result from, or null where it builds none. */
+    public static BuiltFrom buildsItsResultFrom(ValueName operation) {
+        return Index.BUILDINGS.get(operation);
+    }
+
+    /** The operations that build a container out of another. */
+    public static java.util.Set<ValueName> buildsItsResultFrom() {
+        return Index.BUILDINGS.keySet();
+    }
+
     /** The indexes, read off the declarations on the first ask. */
     private static final class Index {
 
@@ -183,6 +246,10 @@ public final class OperationFacts {
 
         private static final Map<ValueName, OperationFact.ShiftsBy> SHIFTS =
                 index(OperationFact.ShiftsBy.class, java.util.function.Function.identity());
+
+        private static final Map<ValueName, BuiltFrom> BUILDINGS =
+                index(OperationFact.BuildsItsResultFrom.class,
+                        OperationFact.BuildsItsResultFrom::built);
 
         /** Gathered rather than indexed one to one: an operation states as many bounds as it
          *  states, and each is a fact of its own. */

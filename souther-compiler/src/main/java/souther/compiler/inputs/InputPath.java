@@ -147,7 +147,7 @@ public final class InputPath {
             return null;
         }
         ArgumentRef holds =
-                souther.compiler.check.ElementLineage.holdsTheElementsOf(reached.denotes());
+                souther.compiler.semantics.ElementLineage.holdsTheElementsOf(reached.denotes());
         int argument = holds == null ? -1 : souther.compiler.check.CallArguments.positionIn(holds, reached.denotes());
         return argument < 0 || argument >= call.args().size() ? null
                 : containerPath(call.args().get(argument), roots, bound, elements, symbols,
