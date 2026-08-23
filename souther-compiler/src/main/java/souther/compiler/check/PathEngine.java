@@ -392,7 +392,7 @@ final class PathEngine {
                     continue;
                 }
                 Core here = Clauses.substituted(conjunct.stated().orNull(), given);
-                out = predicates.assume(predicates.obligations(here, out, in.at(), false), out,
+                out = predicates.assume(predicates.assumed(here, in.at(), false), out,
                         Known.Held.OF_THE_VALUE);
             }
         }
@@ -657,8 +657,8 @@ final class PathEngine {
             // Read before it is handed over, so that what is recorded is this reading's own answer
             // about this clause rather than a guess made from its shape somewhere else.
             Predicates.Owed owed = gathering == null
-                    ? predicates.obligations(one.expr(), out, at, false)
-                    : predicates.obligations(one.expr(), out, at, false,
+                    ? predicates.assumed(one.expr(), at, false)
+                    : predicates.assumed(one.expr(), at, false,
                             (part, said) -> gathering.constrained(origin, part,
                                     InvariantChecker.partRead(said)));
             if (gathering != null) {

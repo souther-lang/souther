@@ -342,7 +342,7 @@ public final class InvariantChecker {
         }
         try {
             return CapabilityResult.of(
-                    predicates.obligations(it.value(), Known.top(), locations, false));
+                    predicates.assumed(it.value(), locations, false));
         } catch (RuntimeException why) {
             // Fail-open, as the walk is — and said as a stop rather than as a conclusion, because
             // what the clause is outside of is what this did not find out.
@@ -564,7 +564,7 @@ public final class InvariantChecker {
                 // decide for itself which of the rules that draw a line it was looking at.
                 RuleRef.Invariant origin = new RuleRef.Invariant(Clause.Ref.of(declared));
                 written.add(new Written(origin, stated));
-                Predicates.Owed owed = c.predicates.obligations(stated, k, at, false,
+                Predicates.Owed owed = c.predicates.assumed(stated, at, false,
                         (part, said) -> gathering.constrained(origin, part, partRead(said)));
                 // And the reading that builds the numeric constraints, said by what it produced.
                 // `value * 2 >= 4` is beyond the two readings below and is taken in here about the
