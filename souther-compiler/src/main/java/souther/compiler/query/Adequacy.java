@@ -78,6 +78,25 @@ public final class Adequacy {
         }
 
         /**
+         * Whether values are composed and put through the module's own decoders.
+         *
+         * <p>Its own question and not the one above it, though today they answer alike. What a
+         * candidate settles is whether a row can be written at a point the rows missed, and finding
+         * out costs a decoder run per point — 380 of them and sixteen seconds on the corpus this
+         * was measured on, against a second of everything else a build at {@code witness} does. That
+         * is not reading what the rows already established, so it is not what this level promises
+         * (issue #955).
+         *
+         * <p>What a level that does not build gets is the rules' own answer: a point inside what
+         * every rule reaching it leaves is writable because the rules say so, and a point only a
+         * value could settle stays unknown — reported, and counted against nobody, which is the
+         * account the specification already gives an edge nothing has settled.
+         */
+        public boolean buildsValues() {
+            return this == ALL;
+        }
+
+        /**
          * Whether the rows this compilation already ran are read, and what the rules say derived
          * from them.
          *
@@ -1007,9 +1026,10 @@ public final class Adequacy {
             Map<String, souther.compiler.check.PathReachability.Answers> arrives =
                     db.ask(new PathReached(name)).value();
             Symbols symbols = scope.value();
-            // Nothing is built where nothing was asked: a point nobody measured is not one a row is
-            // owed at yet, so there is nothing for a candidate to be evidence of.
-            FixtureReader.Construction building = level.readsRows()
+            // Nothing is built where the level does not build: a candidate costs a decoder run for
+            // each point it settles, and what a point nothing was built at comes to is the rules'
+            // own answer about it.
+            FixtureReader.Construction building = level.buildsValues()
                     ? constructing(db, name, prepared.value().forExamples(), symbols) : null;
             // And what each behavior states about its answer, which draws lines of its own.
             Map<String, souther.compiler.check.StatedContract> declared =
@@ -2030,6 +2050,9 @@ public final class Adequacy {
                     case souther.compiler.partition.GenerationReason.NothingToBuildAgainst _ -> {
                         return Generator.UnresolvedCombination.Reason.NOTHING_TO_BUILD_AGAINST;
                     }
+                    case souther.compiler.partition.GenerationReason.NoValuesWereAskedFor _ -> {
+                        return Generator.UnresolvedCombination.Reason.NO_VALUES_WERE_ASKED_FOR;
+                    }
                     case souther.compiler.partition.GenerationReason.LinkageFailed _ -> {
                         return Generator.UnresolvedCombination.Reason.LINKAGE_FAILED;
                     }
@@ -2100,6 +2123,12 @@ public final class Adequacy {
                             new Generator.UnresolvedCombination(List.of(subject),
                                     Generator.UnresolvedCombination.Reason
                                             .NOTHING_TO_BUILD_AGAINST));
+                    // A gap the rules proved a row can be written at, and this build composed no
+                    // value to write. What it is short of is the row, and it says which.
+                    case VALUES_NOT_ASKED_FOR -> new GenerationOutcome.CannotGenerate(
+                            new Generator.UnresolvedCombination(List.of(subject),
+                                    Generator.UnresolvedCombination.Reason
+                                            .NO_VALUES_WERE_ASKED_FOR));
                     case A_ROW_IS_ALREADY_THERE, NOT_MEASURED ->
                             throw new IllegalStateException("the assessment at " + subject
                                     + " says " + absent.reason() + ", which is not a gap: "
@@ -2191,6 +2220,13 @@ public final class Adequacy {
                             case NO_CLASSES -> stopped.add(
                                     new souther.compiler.partition.GenerationReason
                                             .NothingToBuildAgainst(behavior));
+                            // And a level that composes no value offers no row at a boundary. Said
+                            // once for the behavior, the way the one above it is: what a reader
+                            // needs is that the block is short and why, not the same sentence per
+                            // point.
+                            case VALUES_NOT_ASKED_FOR -> stopped.add(
+                                    new souther.compiler.partition.GenerationReason
+                                            .NoValuesWereAskedFor(behavior));
                             case A_ROW_IS_ALREADY_THERE, NOT_MEASURED -> { }
                         }
                     }

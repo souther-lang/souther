@@ -536,7 +536,8 @@ final class Coverages {
         LevelRealizer realizer = new LevelRealizer();
         for (Border each : Partitions.bordersOf(axis, where.symbols(), within)) {
             out.merge(BoundaryLine.of(each),
-                    assessed(each, shapeOf(each, where, knownWritable, probe, realizer,
+                    assessed(each, shapeOf(each, where, knownWritable, probe,
+                                    whenThereIsNoProbe(level), realizer,
                                     regionFor(each, rules, reaching)),
                             observed, level),
                     Coverages::whicheverSawMore);
@@ -645,6 +646,7 @@ final class Coverages {
      */
     private static OneShapeOfBorder shapeOf(Border border, BehaviorInputs where,
                                             boolean knownWritable, Probe probe,
+                                            ItemAssessment.Attempt.Reason whenThereIsNoProbe,
                                             LevelRealizer realizer,
                                             souther.compiler.partition.RegionForARow within) {
         BorderQuantity quantity = border.cut().of();
@@ -659,9 +661,11 @@ final class Coverages {
 
             @Override
             public ItemAssessment.Attempt search(Criterion criterion, String label) {
+                // Which of the two nothings this is, said where the difference is known. A build
+                // that asked for no values and a run with nothing to build against both arrive here
+                // with no probe, and they license different sentences.
                 if (probe == null) {
-                    return new ItemAssessment.Attempt.NotAttempted(
-                            ItemAssessment.Attempt.Reason.NO_CLASSES);
+                    return new ItemAssessment.Attempt.NotAttempted(whenThereIsNoProbe);
                 }
                 // Where a row would have to stand is asked of the quantity, and finding one there of
                 // the realizer. What it composes is a candidate and no part of the item: another row
@@ -1008,7 +1012,8 @@ final class Coverages {
         LevelRealizer realizer = new LevelRealizer();
         for (Border each : partitioning.between()) {
             out.merge(BoundaryLine.of(each),
-                    assessed(each, shapeOf(each, where, false, probe, realizer,
+                    assessed(each, shapeOf(each, where, false, probe, whenThereIsNoProbe(level),
+                                    realizer,
                                     regionFor(each, partitioning.quantities(),
                                             partitioning.reaching())), observed,
                             level),
@@ -1123,6 +1128,15 @@ final class Coverages {
                     ItemAssessment.Coverage.CouldNotAsk.ARMS_UNREADABLE, WeakeningSet.ofAll(by));
         }
         return whyNoInvariantLine(observed, level);
+    }
+
+    /** Why nothing was built, where nothing was: the level not asking for values comes before this
+     *  run having nothing to build against, because a build that asked for none never looked for
+     *  the classes. */
+    private static ItemAssessment.Attempt.Reason whenThereIsNoProbe(
+            souther.compiler.query.Adequacy.Level level) {
+        return level.buildsValues() ? ItemAssessment.Attempt.Reason.NO_CLASSES
+                : ItemAssessment.Attempt.Reason.VALUES_NOT_ASKED_FOR;
     }
 
     /** What every line of every kind says where the build asked for no measurement: the rules drew

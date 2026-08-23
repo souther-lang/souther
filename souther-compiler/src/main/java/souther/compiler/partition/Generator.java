@@ -308,6 +308,9 @@ public final class Generator {
             THE_RULES_LEAVE_NOTHING_THERE,
             /** The module's classes were not there to build a candidate against. */
             NOTHING_TO_BUILD_AGAINST,
+            /** The build asked for no values to be composed, so nothing was tried here. What such a
+             *  point is owed is whatever it was owed; what is missing is a row to offer for it. */
+            NO_VALUES_WERE_ASKED_FOR,
             /**
              * The position was held back, so no class of it was searched for.
              *
@@ -374,7 +377,8 @@ public final class Generator {
                     // Every one of these is this compiler falling short, and none of them is the
                     // model saying anything: another value of the same classes may well build.
                     case NOTHING_COMPOSES_ONE, ALL_CANDIDATES_REJECTED, SEARCH_LIMIT,
-                         NOTHING_TO_BUILD_AGAINST, LINKAGE_FAILED, NO_CERTIFIED_WITNESS,
+                         NOTHING_TO_BUILD_AGAINST, NO_VALUES_WERE_ASKED_FOR, LINKAGE_FAILED,
+                         NO_CERTIFIED_WITNESS,
                          THE_POSITION_WAS_WITHHELD, THE_ROWS_WERE_NOT_READ,
                          NO_REASON_RECORDED -> false;
                 };

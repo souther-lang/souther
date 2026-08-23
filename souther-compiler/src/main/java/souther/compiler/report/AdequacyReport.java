@@ -1308,6 +1308,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case THE_RULES_LEAVE_NOTHING_THERE ->
                     "the rules leave no value at " + at;
             case NOTHING_TO_BUILD_AGAINST -> "there was nothing to build a candidate against";
+            case NO_VALUES_WERE_ASKED_FOR ->
+                    "this build composed no values, so no row was written for " + at;
             case LINKAGE_FAILED -> "the generated classes would not link";
             case NO_CERTIFIED_WITNESS ->
                     "no row composed for " + at + " was seen reaching it, which does not make the"

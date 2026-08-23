@@ -178,7 +178,11 @@ public sealed interface ItemAssessment {
             /** The point was not measured against the rows, so no row here is owed to anybody yet. */
             NOT_MEASURED,
             /** The module's classes were not there to build against. */
-            NO_CLASSES
+            NO_CLASSES,
+            /** The build asked for no values to be composed. Told apart from the one above because
+             *  they license different sentences: one is this run having nothing to build against,
+             *  the other is nobody having asked it to build. */
+            VALUES_NOT_ASKED_FOR
             // The decoders being out of reach was one of these and is not. It is found by running a
             // candidate, and a candidate is something a search of the region already produced — so
             // it is a search that came to nothing, which is `Unresolved`, and it says so in the
