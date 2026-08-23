@@ -52,7 +52,12 @@ package souther.compiler.check;
 record ContextMultiplicity(int factor, int compoundingLimit) {
 
     /**
-     * How far the splits down one path may compound before the rest is left to the run-time check.
+     * How far the splits down one path may compound before a further copy per arm is refused.
+     *
+     * <p>What is past it is a refinement and not a reading. Where a reader leaves a value once it
+     * stops copying is that reader's own answer — the walk over a region has {@link
+     * Derivation.Chosen} bounding a value by the range its arms span, whether or not the split over
+     * it was opened — and not something this decides for it.
      *
      * <p>Sixteen, which is what a sum of eight cases costs with one conditional inside an arm.
      * Below that, opening a {@code match} spends enough that a conditional written in a value
