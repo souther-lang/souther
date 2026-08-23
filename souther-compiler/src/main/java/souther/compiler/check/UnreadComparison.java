@@ -51,9 +51,28 @@ public final class UnreadComparison {
             }
         }
 
-        /** The arithmetic read no form here, which is every carrier whose values do not count and
-         *  every form outside the fragment. */
-        record NotRead<K>() implements Quantity<K> {}
+        /**
+         * The arithmetic read no form here, and what it was looking at when it stopped.
+         *
+         * <p>The expression, because the walk that stopped is the only thing that knows which one it
+         * was. Told only that there was no form, a reader had to work the difficulty out from the
+         * shape of the whole comparison, and the shape it reached for first was whichever side held
+         * an operation — so a rule over an operation this reads perfectly well was blamed for a form
+         * it could not read beside it, and would go on being blamed as more operations became
+         * readable.
+         *
+         * @param stoppedAt what the expression with no rule here is made of, never absent: where
+         *                  nothing in particular stopped the reading it is the comparison itself
+         */
+        record NotRead<K>(ValueOrigin<K> stoppedAt) implements Quantity<K> {
+
+            public NotRead {
+                if (stoppedAt == null) {
+                    throw new IllegalArgumentException(
+                            "a reading that read no form stopped somewhere");
+                }
+            }
+        }
     }
 
     /**
@@ -99,19 +118,28 @@ public final class UnreadComparison {
         if (quantity instanceof Quantity.Over<K> over && over.positions().size() > 1) {
             return new BlockReason.ComparisonBetweenPositions();
         }
-        return whatTheSidesSay(left, right, ordered);
-    }
-
-    /** The same, read off what each side is made of. */
-    private static <K> BlockReason.AboutARule whatTheSidesSay(ValueOrigin<K> left,
-                                                              ValueOrigin<K> right,
-                                                              Predicate<K> ordered) {
         Set<K> named = new LinkedHashSet<>(left.positions());
         named.addAll(right.positions());
         if (!left.positions().isEmpty() && !right.positions().isEmpty() && named.size() > 1) {
             return new BlockReason.ComparisonBetweenPositions();
         }
-        return whatThisSideSays(speakingSide(left, right), ordered);
+        // The carrier, asked before anything about the reading. Whether a line can be drawn on what
+        // a position holds is settled by the position, and no reader of any form would change it —
+        // so `s < Won` over a type with one value says that, wherever the arithmetic stopped.
+        ValueOrigin<K> side = speakingSide(left, right);
+        if (side instanceof ValueOrigin.IsAPosition<K> one && !ordered.test(one.at())) {
+            return new BlockReason.UnreadComparisonDomain();
+        }
+        // Then what the reading stopped at, where it stopped. Which expression that was is the
+        // walk's answer and not something recovered from the sides: `String.length(s) > n * n`
+        // stops at the product, and read off the sides it came back as a rule about the length — an
+        // operation this reads, named for the one it does not.
+        if (quantity instanceof Quantity.NotRead<K> notRead) {
+            return whatThisSideSays(notRead.stoppedAt(), ordered);
+        }
+        // A form was read and still divides no position. What is left to say is about the side the
+        // threshold would have been read off.
+        return whatThisSideSays(side, ordered);
     }
 
     /**

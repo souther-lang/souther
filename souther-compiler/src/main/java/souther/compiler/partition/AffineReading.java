@@ -84,7 +84,33 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
 
     /** {@code e} as an affine form over the behavior's positions, or null where it is not one. */
     static LinearForm<NumericTerm> affine(Core e, InputReads reads, Symbols symbols) {
-        return AffineForms.of(e, reads, new AffineForms.Reading<NumericTerm, InputReads>() {
+        return AffineForms.of(e, reads, reading(symbols));
+    }
+
+    /**
+     * Where reading {@code comparison} as a form stopped, or null where nothing stopped it.
+     *
+     * <p>Off the walk that stopped, which is the only thing that knows. What the difficulty was is
+     * a fact about one expression, and a reader handed nothing back had only the shape of the whole
+     * comparison to work it out from — so an operation this reads perfectly well was named for a
+     * form it could not read beside it.
+     *
+     * <p>The left first where both stop, which is the side a threshold would be read off.
+     */
+    static Core stoppedAt(Core.Binary comparison, InputReads reads, Symbols symbols) {
+        for (Core side : java.util.List.of(comparison.left(), comparison.right())) {
+            if (AffineForms.outcome(side, reads, reading(symbols))
+                    instanceof AffineForms.Outcome.StoppedAt<NumericTerm> stopped) {
+                return stopped.node();
+            }
+        }
+        return null;
+    }
+
+    /** What this reader answers about its own environment, which is what tells its atoms from
+     *  another reader's. */
+    private static AffineForms.Reading<NumericTerm, InputReads> reading(Symbols symbols) {
+        return new AffineForms.Reading<NumericTerm, InputReads>() {
 
             @Override
             public LinearForm<NumericTerm> leafOf(Core node, InputReads at) {
@@ -119,7 +145,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
                 return at.pathOf(fa.target(), symbols) == null
                         && !Location.isStep(fa.target().type(), fa.field(), symbols);
             }
-        });
+        };
     }
 
     /** The one position this cuts where it cuts one with a coefficient of one, or null. A form

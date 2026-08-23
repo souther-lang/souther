@@ -431,6 +431,20 @@ final class Terms {
     }
 
     /**
+     * Where reading {@code raw} as a form stopped, or null where nothing stopped it.
+     *
+     * <p>Beside the above and asking what it discards. Which expression had no rule here is a fact
+     * about that expression, and a caller handed nothing back had to reconstruct it from the shape
+     * of what it asked about — which is a second account of this walk, written by whoever needed
+     * one.
+     */
+    Core stoppedIn(Core raw, Denotations at) {
+        return AffineForms.outcome(raw, at, affineReading)
+                instanceof AffineForms.Outcome.StoppedAt<FactSubject> stopped
+                ? stopped.node() : null;
+    }
+
+    /**
      * What this reader answers about its own environment, which is the whole of what is its own
      * about the walk.
      *
@@ -579,7 +593,7 @@ final class Terms {
      * {@link AffineForms}'s: this once did the reading itself, and a caller that can answer with a
      * form is a caller that can keep an account of the arithmetic beside the one walk that has one.
      */
-    private AffineForms.ReadThrough<Denotations> readThrough(Core.Read read, Denotations at) {
+    AffineForms.ReadThrough<Denotations> readThrough(Core.Read read, Denotations at) {
         if (!computesAsWhatItWasGiven(read.binding(), at)
                 || affineScalarBase(read.type()) == null) {
             return null;

@@ -302,9 +302,27 @@ public final class GuardThresholds {
      * says anything about a position at all. Sharing a reader between the two turns an expression
      * the derivation does not model into a position nothing compares: {@code p.x + 1 < 10} named no
      * position, and came back as one the model divides no way two tokens from a comparison about it.
+     *
+     * <p>What an expression is made of here, and what stood at each position it named.
+     *
+     * <p>The type comes back with the walk because the walk is where it is known. Whether a line can
+     * be drawn on a position is asked of what the comparison compares — a position declared as one
+     * case of an enumeration is ordered by its sum and carries none of the sum's places — and looked
+     * up afterwards from the reading of the inputs it was the declaration's answer instead, which is
+     * a different question about the same name.
      */
+    record Names(ValueOrigin<TermPath> origin, java.util.Map<TermPath, Type> met) {}
+
+    /** What {@code e} is made of, for a caller that has no use for the types. */
     static ValueOrigin<TermPath> originOf(Core e, InputReads reads, Symbols symbols) {
-        return ValueOrigin.of(e, reads, new ValueOrigin.Reading<TermPath, InputReads>() {
+        return namesIn(e, reads, symbols).origin();
+    }
+
+    /** The same, with what stood at each position the walk met. */
+    static Names namesIn(Core e, InputReads reads, Symbols symbols) {
+        java.util.Map<TermPath, Type> met = new java.util.LinkedHashMap<>();
+        return new Names(ValueOrigin.of(e, reads,
+                new ValueOrigin.Reading<TermPath, InputReads>() {
 
             /**
              * A name is what the reading of the input says it is, and there are four answers rather
@@ -314,6 +332,14 @@ public final class GuardThresholds {
              */
             @Override
             public TermPath positionOf(Core here, InputReads at) {
+                TermPath found = pathOf(here, at);
+                if (found != null) {
+                    met.putIfAbsent(found, here.type());
+                }
+                return found;
+            }
+
+            private TermPath pathOf(Core here, InputReads at) {
                 if (here instanceof Core.Read read) {
                     return at.meaningOf(read, symbols) instanceof ReadMeaning.Position position
                             ? position.path() : null;
@@ -346,7 +372,7 @@ public final class GuardThresholds {
             public InputReads inside(Core.LetIn li, InputReads at) {
                 return at.and(li.binder(), li.value());
             }
-        });
+        }), met);
     }
 
     /**
@@ -359,26 +385,13 @@ public final class GuardThresholds {
      */
     static BlockReason.AboutARule why(Core.Binary comparison, InputReads reads,
                            Symbols symbols) {
-        return UnreadComparison.why(originOf(comparison.left(), reads, symbols),
-                originOf(comparison.right(), reads, symbols),
-                quantityOf(comparison, reads, symbols),
-                at -> orderableAt(at, reads, symbols));
-    }
-
-    /**
-     * Whether a line can be drawn on what the position at {@code path} carries.
-     *
-     * <p>Off the reading that found the position, which is what holds its declared type. Asked of
-     * the expression the comparison was written with instead, the answer was the same wherever the
-     * side was the position and came from a second account of where a value is read.
-     */
-    private static boolean orderableAt(TermPath path, InputReads reads, Symbols symbols) {
-        for (souther.compiler.inputs.Position each : reads.read().positions()) {
-            if (each.term().path().equals(path)) {
-                return orderable(each.type(), symbols);
-            }
-        }
-        return false;
+        Names left = namesIn(comparison.left(), reads, symbols);
+        Names right = namesIn(comparison.right(), reads, symbols);
+        java.util.Map<TermPath, Type> met = new java.util.LinkedHashMap<>(left.met());
+        right.met().forEach(met::putIfAbsent);
+        return UnreadComparison.why(left.origin(), right.origin(),
+                quantityOf(comparison, reads, symbols, met),
+                at -> met.containsKey(at) && orderable(met.get(at), symbols));
     }
 
     /**
@@ -391,10 +404,16 @@ public final class GuardThresholds {
      */
     private static UnreadComparison.Quantity<TermPath> quantityOf(Core.Binary comparison,
                                                                   InputReads reads,
-                                                                  Symbols symbols) {
+                                                                  Symbols symbols,
+                                                                  java.util.Map<TermPath, Type> met) {
         AffineReading read = AffineReading.of(comparison, reads, symbols);
         if (read == null) {
-            return new UnreadComparison.Quantity.NotRead<>();
+            // What the arithmetic was looking at when it stopped, or the comparison itself where it
+            // read both sides and they stated nothing about any position.
+            Core stopped = AffineReading.stoppedAt(comparison, reads, symbols);
+            Names here = namesIn(stopped == null ? comparison : stopped, reads, symbols);
+            here.met().forEach(met::putIfAbsent);
+            return new UnreadComparison.Quantity.NotRead<>(here.origin());
         }
         java.util.Set<TermPath> over = new java.util.LinkedHashSet<>();
         for (NumericTerm atom : read.form().coefs().keySet()) {

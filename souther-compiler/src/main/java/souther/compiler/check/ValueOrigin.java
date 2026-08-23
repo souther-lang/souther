@@ -208,17 +208,24 @@ public sealed interface ValueOrigin<K> {
         if (operation != null) {
             return new Applied<>(operation, partsOf(Terms.argsOf(e), at, reading, following));
         }
-        if (e instanceof Core.Int || e instanceof Core.Decimal || e instanceof Core.Str
-                || e instanceof Core.Bool) {
+        if (writtenOut(e)) {
             return new Written<>();
+        }
+        // What a {@code let} is made of is its body, read in the binding. The initializer is not a
+        // part of the value: {@code let $x = a in 0} is zero, and reading both made a helper that
+        // ignores its argument into an expression about the argument. It is reached where the body
+        // reads the name, which is what {@link Reading#readThrough} answers — the same way the
+        // arithmetic next door reaches it, so the two cannot come to different values for one
+        // expression.
+        if (e instanceof Core.LetIn li) {
+            return of(li.body(), reading.inside(li, at), reading, following);
         }
         List<Core> children = new ArrayList<>();
         Core.forEachChild(e, children::add);
         if (children.isEmpty()) {
             return leafOf(e, at, reading);
         }
-        E inside = e instanceof Core.LetIn li ? reading.inside(li, at) : at;
-        return new Composed<>(partsOf(children, inside, reading, following));
+        return new Composed<>(partsOf(children, at, reading, following));
     }
 
     private static <K, E> List<ValueOrigin<K>> partsOf(List<Core> of, E at, Reading<K, E> reading,
@@ -228,6 +235,20 @@ public sealed interface ValueOrigin<K> {
             out.add(of(each, at, reading, following));
         }
         return out;
+    }
+
+    /**
+     * Whether {@code e} is a value written where it stands.
+     *
+     * <p>Every one of them and not the four with a number or a string in them. A temporal is a
+     * literal by {@link Core}'s own account, and a data with no fields is a value written where a
+     * value goes; left out, each was a node this could say nothing about — which reads the same as
+     * a value it could not reach, and they are not the same thing.
+     */
+    private static boolean writtenOut(Core e) {
+        return e instanceof Core.Int || e instanceof Core.Decimal || e instanceof Core.Str
+                || e instanceof Core.Bool || e instanceof Core.Temporal
+                || e instanceof Core.UnitValue;
     }
 
     /** What a node nothing composes comes to: where its value came from, or nothing said. */

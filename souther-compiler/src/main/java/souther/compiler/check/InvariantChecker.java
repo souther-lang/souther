@@ -1373,15 +1373,21 @@ public final class InvariantChecker {
                 return null;
             }
 
+            /**
+             * What a name denotes, and the environment a {@code let}'s body is read in, both off
+             * {@link Terms} — which is where a binding is entered for every reader that goes inside
+             * one. Answered here instead, this would be a third account of what a name means beside
+             * the two that already agree.
+             */
             @Override
             public AffineForms.ReadThrough<Denotations> readThrough(Core.Read name,
                                                                     Denotations where) {
-                return null;
+                return terms.readThrough(name, where);
             }
 
             @Override
             public Denotations inside(Core.LetIn li, Denotations where) {
-                return where;
+                return terms.inside(li, where);
             }
         });
         return new Places(origin, met);
@@ -1439,7 +1445,7 @@ public final class InvariantChecker {
         NumericDomain.LinearForm<FactSubject> left = terms.affineOf(comparison.left(), at);
         NumericDomain.LinearForm<FactSubject> right = terms.affineOf(comparison.right(), at);
         if (left == null || right == null) {
-            return new UnreadComparison.Quantity.NotRead<>();
+            return notRead(comparison, at, byName);
         }
         java.util.Set<String> over = new LinkedHashSet<>();
         for (FactSubject atom : left.minus(right).coefs().keySet()) {
@@ -1449,11 +1455,27 @@ public final class InvariantChecker {
                 // positions would come back as one and this reader would describe the rule
                 // differently from the one that reads the same shape in a body — which is the thing
                 // sharing the rule was meant to stop.
-                return new UnreadComparison.Quantity.NotRead<>();
+                return notRead(comparison, at, byName);
             }
             over.add(here.path());
         }
         return new UnreadComparison.Quantity.Over<>(over);
+    }
+
+    /**
+     * That no form was read here, and what the reading was looking at when it stopped.
+     *
+     * <p>Off the walk that stopped. A clause whose one side is arithmetic this reads and whose other
+     * is not is stopped by the second, and read off the sides instead the first was named for it.
+     */
+    private UnreadComparison.Quantity<String> notRead(Core.Binary comparison, Denotations at,
+                                                      Map<FactSubject, Coordinate> byName) {
+        Core stopped = terms.stoppedIn(comparison.left(), at);
+        if (stopped == null) {
+            stopped = terms.stoppedIn(comparison.right(), at);
+        }
+        return new UnreadComparison.Quantity.NotRead<>(
+                placesIn(stopped == null ? comparison : stopped, at, byName).origin());
     }
 
     /**

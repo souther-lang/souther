@@ -93,6 +93,85 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
                 whyAt(measured, "b"));
     }
 
+    /**
+     * An operation this reads perfectly well, beside a form it does not. What is missing is the
+     * form, and the operation is not what an author would change.
+     *
+     * <p>Read off the sides, the answer was about the length: whichever side held an operation was
+     * the one blamed, so an operation became more likely to be named for its neighbour the more of
+     * them this learned to read.
+     */
+    @Test
+    void anOperationThisReadsIsNotBlamedForTheFormBesideIt() {
+        assertEquals(List.of(UndividedPosition.Reason.UNSUPPORTED_SYNTAX),
+                whyAt(guard("s: String", "String.length(s) > Int.multiply(String.length(s),"
+                        + " String.length(s))"), "s"));
+    }
+
+    /**
+     * And the operation is named where it is what stopped the reading, over the same position and
+     * the same shape of comparison. The pair is the whole of the argument: one word for both would
+     * be a rule about which side an operation was written on.
+     */
+    @Test
+    void anOperationThisDoesNotReadIsNamed() {
+        assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
+                whyAt(guard("a: Date", "Date.daysBetween(a, a) > 10"), "a"));
+    }
+
+    /**
+     * A helper is a binding round the expression it became, and what the expression is made of is
+     * its body. An argument the body never reads is no part of the value.
+     *
+     * <p>Read as both, {@code ignored(a, b)} was an expression about {@code a}: the rule came back
+     * as one relating two positions, and a reader was sent to a position the value does not depend
+     * on. What reaches an argument is the body reading its name, which is the same way the
+     * arithmetic beside this reaches one.
+     */
+    @Test
+    void anArgumentAHelperDoesNotReadIsNoPartOfWhatItAnswers() {
+        String model = """
+                module demo
+
+                data Ok
+                data No
+
+                let second (x: Int, y: Int): Int = Int.multiply(y, y)
+
+                behavior f : (a: Int, b: Int) -> Ok | No
+                let f (a, b) = {
+                    guard second(a, b) > 10 else No
+                    Ok
+                }
+                """;
+
+        assertEquals(List.of(), whyAt(measured(model), "a"));
+        assertEquals(List.of(UndividedPosition.Reason.UNSUPPORTED_SYNTAX),
+                whyAt(measured(model), "b"));
+    }
+
+    /** And a name over an expression answers what the expression answers. */
+    @Test
+    void namingAnExpressionDoesNotChangeWhatItIsMadeOf() {
+        String named = """
+                module demo
+
+                data Ok
+                data No
+
+                let squared (x: Int): Int = Int.multiply(x, x)
+
+                behavior f : (a: Int) -> Ok | No
+                let f (a) = {
+                    guard squared(a) > 10 else No
+                    Ok
+                }
+                """;
+
+        assertEquals(whyAt(guard("a: Int", "Int.multiply(a, a) > 10"), "a"),
+                whyAt(measured(named), "a"));
+    }
+
     private static PartitionEvidence guard(String parameters, String condition) {
         String model = """
                 module demo
@@ -107,6 +186,10 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
                 }
                 """.formatted(parameters,
                 parameters.replaceAll(":\\s*[A-Za-z<>]+", ""), condition);
+        return measured(model);
+    }
+
+    private static PartitionEvidence measured(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
