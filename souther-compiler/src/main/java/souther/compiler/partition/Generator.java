@@ -26,7 +26,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.TreeSet;
 
 /**
  * Rows that would fill the combinations nothing has written yet.
