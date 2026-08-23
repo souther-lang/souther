@@ -417,7 +417,7 @@ public final class DataChecker {
         sum.decoder().ifPresent(disc -> {
             // a derived codec dispatches over the leaves, so a nested sum's cases count too (§sum-data,
             // §sum-discrimination)
-            Set<TypeSymbol> dispatchable = TypeOps.leafCases(Type.ref(sum.declares()), symbols);
+            List<TypeSymbol> dispatchable = AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols);
             for (Hir.Variant v : disc.variants()) {
                 Hir.Def caseDef = symbols.declarations().declaration(names(v.caseType()).key());
                 if (!dispatchable.contains(names(v.caseType()))) {
@@ -449,7 +449,7 @@ public final class DataChecker {
                                 .hint(new DataMessage.TheTagAndTheFieldWantOneKey(enc.key())).say(new DataMessage.ACaseDeclaresTheDiscriminatorField(carrying.name(), enc.key(), sum.name())).build());
             }
             Set<TypeSymbol> covered = new HashSet<>();
-            Set<TypeSymbol> encodable = TypeOps.leafCases(Type.ref(sum.declares()), symbols);
+            List<TypeSymbol> encodable = AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols);
             for (Hir.EncVariant v : enc.variants()) {
                 if (!encodable.contains(names(v.caseType()))) {
                     throw CompileException.of(Diagnostic.at(v.pos())

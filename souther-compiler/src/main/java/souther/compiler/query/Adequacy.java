@@ -10,6 +10,7 @@ import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.Citation;
 import souther.compiler.examples.FixtureReader;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
@@ -3221,7 +3222,9 @@ public final class Adequacy {
     /** What a sum divides into, and nothing for a type that is not one. The one thing the two
      *  measures above share; what tells them apart is which type each hands it. */
     private static Set<TypeSymbol> casesOfSum(Type t, Symbols symbols) {
-        return TypeOps.isSumType(t, symbols) ? TypeOps.leafCases(t, symbols) : Set.of();
+        return TypeOps.isSumType(t, symbols)
+                ? new LinkedHashSet<>(AtomSpace.subjectAtoms(t, symbols))
+                : Set.of();
     }
 
     /**

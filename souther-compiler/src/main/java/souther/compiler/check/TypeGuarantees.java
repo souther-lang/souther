@@ -151,7 +151,7 @@ final class TypeGuarantees {
                 // sum of them is a type nothing is written under — which is what makes an
                 // enumeration a position this still speaks for.
                 case Hir.UnitData _ -> false;
-                case Hir.SumData sum -> TypeOps.leafCases(sum, symbols).stream()
+                case Hir.SumData sum -> AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols).stream()
                         .anyMatch(each -> anyRuleUnder(Type.ref(each), seen));
                 case Hir.Data data -> !clauses.declared(ref.name(), data).isEmpty()
                         || TypeOps.fieldTypes(data, symbols).values().stream()

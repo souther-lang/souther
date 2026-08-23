@@ -374,18 +374,17 @@ public final class TypeOps {
                 || (t instanceof Type.Ref r && symbols.declarations().declaration(r.name().key()) instanceof Hir.SumData);
     }
 
-    /** The cases of {@code t} when it is a sum — a declared {@code data S = A | B} or the union a
-     * branch widened to — with a case that is itself a sum folded to its own cases. Null when
-     * {@code t} is not a sum at all, which is the answer this has that {@link AtomSpace} does not:
-     * a reader here is asking whether there are cases to read, and a type that is its own one leaf
-     * is not that. */
-    static List<TypeSymbol> sumCases(Type t, Symbols symbols) {
-        return isSumType(t, symbols) ? AtomSpace.subjectAtoms(t, symbols) : null;
-    }
-
-    /** A sum's cases: what each name it lists denotes. A name that denotes nothing lists no case —
-     * it is reported where it is written, and a reader counting the cases counts what is there. */
-    public static List<TypeSymbol> caseNames(Hir.SumData sum) {
+    /**
+     * A sum's cases: what each name it lists denotes. A name that denotes nothing lists no case —
+     * it is reported where it is written, and a reader counting the cases counts what is there.
+     *
+     * <p>One layer, which is what a descent over the cases would be built out of: hold this and the
+     * declarations, and a transitive closure is a loop away. There is one such closure and it is
+     * {@link AtomSpace}. Package-private for that reason and not by accident of who happens to call
+     * it — every reader of a case list is in this package, so nothing outside it can write a second
+     * closure at all, and that much is javac's to say rather than a test's.
+     */
+    static List<TypeSymbol> caseNames(Hir.SumData sum) {
         List<TypeSymbol> names = new ArrayList<>();
         for (Hir.Name c : sum.cases()) {
             if (c.answered() instanceof Hir.Name.Denoting named) {
@@ -595,8 +594,8 @@ public final class TypeOps {
             }
             return true;
         }
-        Set<TypeSymbol> fa = leafCases(from, symbols);
-        Set<TypeSymbol> ta = leafCases(to, symbols);
+        List<TypeSymbol> fa = AtomSpace.subjectAtoms(from, symbols);
+        List<TypeSymbol> ta = AtomSpace.subjectAtoms(to, symbols);
         return !fa.isEmpty() && !ta.isEmpty() && ta.containsAll(fa);
     }
 
@@ -872,7 +871,7 @@ public final class TypeOps {
      */
     static TypeSymbol[] ambiguousMembers(Type out, Symbols symbols) {
         Map<String, TypeSymbol> byName = new LinkedHashMap<>();
-        for (TypeSymbol member : leafCases(out, symbols)) {
+        for (TypeSymbol member : AtomSpace.subjectAtoms(out, symbols)) {
             TypeSymbol seen = byName.put(member.name(), member);
             if (seen != null && !seen.equals(member)) {
                 return new TypeSymbol[] {seen, member};
@@ -888,7 +887,7 @@ public final class TypeOps {
      * nested sum contributes its cases rather than itself.
      */
     static TypeSymbol memberCarryingField(Type out, String key, Symbols symbols) {
-        for (TypeSymbol member : leafCases(out, symbols)) {
+        for (TypeSymbol member : AtomSpace.subjectAtoms(out, symbols)) {
             if (declaresField(member, key, symbols)) {
                 return member;
             }
@@ -904,20 +903,21 @@ public final class TypeOps {
     }
 
     /**
-     * The cases a position of this type can be, when it can be more than one thing: the leaf cases of
+     * The cases a position of this type can be, when it can be more than one thing: the atoms of
      * a union or of a named sum, and nothing otherwise.
      *
      * <p>What a row's expected arm is held against, and what an adequacy report counts as declared. The
      * two have to agree — a report that read a wider set than the rows are checked against would name a
      * case no row is allowed to write — so the rule is here rather than stated twice.
+     *
+     * <p>An admission and not a second descent: what a type is made of is {@link AtomSpace}'s, and
+     * what is left here is which types this reader will take an answer about. A primitive output
+     * names one atom like any other type, and is not a case list.
      */
     public static Set<TypeSymbol> outputCases(Type t, Symbols symbols) {
-        return t instanceof Type.Union || t instanceof Type.Ref ? leafCases(t, symbols) : Set.of();
-    }
-
-    /** The set of leaf (non-sum) case names a data-like type covers, flattening nested sums. */
-    public static Set<TypeSymbol> leafCases(Type t, Symbols symbols) {
-        return new LinkedHashSet<>(AtomSpace.subjectAtoms(t, symbols));
+        return t instanceof Type.Union || t instanceof Type.Ref
+                ? new LinkedHashSet<>(AtomSpace.subjectAtoms(t, symbols))
+                : Set.of();
     }
 
     /**
@@ -1115,7 +1115,7 @@ public final class TypeOps {
      * ADR-0012 declines. Empty when the cases share no spread, so the read stays the error it is.
      */
     public static Map<String, Type> commonSpreadFields(Hir.SumData sum, Symbols symbols) {
-        return commonSpreadFields(leafCases(sum, symbols), symbols);
+        return commonSpreadFields(AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols), symbols);
     }
 
     /** As {@link #commonSpreadFields(Hir.SumData, Symbols)}, for cases already flattened to leaves. */
@@ -1325,7 +1325,7 @@ public final class TypeOps {
     }
 
     public static boolean isUnitOnlySum(Hir.SumData sum, Symbols symbols) {
-        List<TypeSymbol> leaves = leafCases(sum, symbols);
+        List<TypeSymbol> leaves = AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols);
         if (leaves.isEmpty()) {
             return false;
         }
@@ -1335,11 +1335,6 @@ public final class TypeOps {
             }
         }
         return true;
-    }
-
-    /** A sum's leaf cases in declaration order, nested sums flattened where they are written. */
-    public static List<TypeSymbol> leafCases(Hir.SumData sum, Symbols symbols) {
-        return AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols);
     }
 
     /** The key of the first {@code Map} inside {@code t} that cannot cross the boundary, or null when
@@ -1398,7 +1393,7 @@ public final class TypeOps {
         }
         return t instanceof Type.Ref ref && (ref.name().equals(enumeration)
                 || (symbols.declarations().declaration(enumeration.key()) instanceof Hir.SumData sum
-                    && leafCases(sum, symbols).contains(ref.name())));
+                    && AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols).contains(ref.name())));
     }
 
     /**
@@ -1454,7 +1449,7 @@ public final class TypeOps {
         Set<TypeSymbol> owners = new LinkedHashSet<>();
         for (Hir.Def def : symbols.declarations().declaredIn(ref.name().module()).values()) {
             if (def instanceof Hir.SumData s && isUnitOnlySum(s, symbols)
-                    && leafCases(s, symbols).contains(ref.name())) {
+                    && AtomSpace.subjectAtoms(Type.ref(s.declares()), symbols).contains(ref.name())) {
                 owners.add(s.declares());
             }
         }

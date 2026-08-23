@@ -10,24 +10,35 @@ import souther.compiler.query.Names;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What a value of a type can be, when a case of it is itself a sum.
  *
  * <p>Four readers used to descend a sum's cases themselves — two in {@link TypeOps}, one keyed on
- * the declaration rather than the type, and one in the derivation keyed on the written name. Three
- * of them are held here against {@link AtomSpace}, which is the descent, and the fourth follows
- * (#990). What each reader is handed differs and the descent no longer does: a sum asked about
- * through its declaration is asked about as its type. What each of them answers <em>about</em> a type it was handed is its own and is held here
- * too: a reader asking {@code sumCases} is asking whether there are cases to read at all, and a
- * type that is its own one leaf is not that.
+ * the declaration rather than the type, and one in the derivation keyed on the written name. All
+ * four are gone: {@link AtomSpace} is the descent, and every reader asks it. What each of them was
+ * handed differed and the descent no longer does — a sum asked about through its declaration is
+ * asked about as its type.
+ *
+ * <p>What a reader answers <em>about</em> a type it was handed stayed with the reader, which is
+ * where it belongs: a field read asks whether there are cases to read at all, and a type that is
+ * its own one leaf is not that. Held here at what it produces rather than at the call it makes.
  */
 class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
 
@@ -133,23 +144,37 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
     @Test
     void aSumsOwnDeclarationAnswersWithTheSameLeaves() {
         Hir.SumData both = (Hir.SumData) declaration("Both");
-        assertEquals(shown(leavesOf("Both")), shown(TypeOps.leafCases(both, symbols)));
+        assertEquals(shown(leavesOf("Both")),
+                shown(AtomSpace.subjectAtoms(Type.ref(both.declares()), symbols)));
     }
 
     // --- what each reader answers about a type that is no sum ------------------------------------
 
+    /**
+     * A field read on a type that is no sum is not told to open its cases.
+     *
+     * <p>The one answer {@code TypeOps.sumCases} carried that the descent does not: it said null
+     * where a type is its own single leaf, and the field read turned that into which of two things
+     * the author is told. The descent answers {@code [Station]} there — a leaf is what it is — so
+     * the reader asks whether the type is a sum itself, and this is where that is held.
+     */
     @Test
-    void askingForACasesToReadIsNotAnsweredByATypeThatIsItsOwnLeaf() {
-        assertNull(TypeOps.sumCases(Type.ref(named("Station")), symbols),
+    void aFieldReadOnATypeThatIsNoSumIsNotToldToOpenIt() {
+        souther.compiler.diag.CompileException refused = org.junit.jupiter.api.Assertions
+                .assertThrows(souther.compiler.diag.CompileException.class,
+                        () -> souther.compiler.Compiler.compile(MODULE + """
+
+                                let f (s: Station) : Int = s.x
+                                """));
+        org.junit.jupiter.api.Assertions.assertInstanceOf(
+                souther.compiler.diag.msg.DeclarationMessage.CannotReadAFieldOnThisValue.class,
+                refused.diagnostic().said(),
                 "a data with no cases has none to read, which is not the same as having itself");
-        assertEquals(List.of("Station", "Hospital", "Renkei"),
-                shown(TypeOps.sumCases(Type.ref(named("VisitKind")), symbols)));
     }
 
     @Test
     void aLeafSetAnswersForATypeThatIsNoSum() {
-        assertEquals(List.of("Station"),
-                shown(List.copyOf(TypeOps.leafCases(Type.ref(named("Station")), symbols))));
+        assertEquals(List.of("Station"), shown(AtomSpace.subjectAtoms(Type.ref(named("Station")), symbols)));
     }
 
     /**
@@ -192,7 +217,166 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
                 "a primitive output is not a case list, whatever leaf its name would be");
     }
 
+
+    // --- who can build a case closure at all -----------------------------------------------------
+
+    /**
+     * A sum's own case list is read at four call sites, all of them in the package that declares it.
+     *
+     * <p>What a second closure would be built out of is one layer of a sum plus the declarations:
+     * hold both and a loop away is a descent. The declarations are everywhere, so the layer is the
+     * part that can be held down, and {@code TypeOps.caseNames} is package-private for that reason.
+     * That is where most of this rule lives — no code outside {@code check} can write a second
+     * closure at all, and javac says so rather than a scan guessing at spellings.
+     *
+     * <p>What is left for a scan is the package itself, and it counts <em>calls</em> rather than
+     * files. A file already reading one layer is where a second reading is cheapest to add, so a
+     * check that stops at the file name would see nothing: the reader most likely to grow a descent
+     * is one of the four already listed.
+     *
+     * <p>Called out by file and not by line. A line number moves whenever anything above it is
+     * edited, and a tripwire that goes red on an unrelated edit is one that gets deleted. The name
+     * repeated is what a second call site in an existing reader shows up as.
+     *
+     * <p>Three of the four are not the descent and read one layer on purpose: a {@code match} is
+     * decided over the cases the sum declared and not over what they reach (spec
+     * §an-or-pattern-binds-the-sum-and-opens-nothing), which is #966 itself. When that changes they
+     * ask {@link AtomSpace} and this list gets shorter, never longer.
+     *
+     * <p><b>What this does not see.</b> A descent written around a call that is already here. Both
+     * halves are about who can reach the material — the visibility bounds who may, and this bounds
+     * how many do — and neither reads what a caller does with what it got.
+     */
+    @Test
+    void aSumsOwnCaseListIsReadAtFourCallSitesInTheOnePackageThatCanReadIt() throws IOException {
+        List<Path> sources = sourcesOfTheCheckPackage();
+        assertTrue(sources.size() > 100,
+                () -> "the scan found only " + sources.size() + " sources, which is not the package");
+
+        List<String> calls = new ArrayList<>();
+        for (Path source : sources) {
+            String code = code(source);
+            assertFalse(code.contains("static souther.compiler.check.TypeOps.caseNames"),
+                    () -> source.getFileName() + " imports the case list under a bare name, "
+                            + "which is a call site this counts by the spelling it is written in");
+            int here = count(QUALIFIED, code);
+            if (source.getFileName().toString().equals(DECLARES_IT)) {
+                // Its own calls are written without the class name, and the declaration is not one.
+                here += count(UNQUALIFIED, code) - count(DECLARATION, code);
+            }
+            for (int each = 0; each < here; each++) {
+                calls.add(source.getFileName().toString());
+            }
+        }
+        assertEquals(List.of("AtomSpace.java", "CaseSpace.java", "MatchElaborator.java", "TypeOps.java"),
+                calls,
+                "a reader holding one layer of a sum can descend it; these hold it");
+    }
+
+    /** The file that declares the case list, whose own calls to it carry no class name. */
+    private static final String DECLARES_IT = "TypeOps.java";
+
+    private static final Pattern QUALIFIED = Pattern.compile("TypeOps\\.caseNames\\s*\\(");
+
+    /** A call written without the class name — {@code caseNamesOf} is a different reader and is not
+     *  one, which is why the name is closed with its own parenthesis. */
+    private static final Pattern UNQUALIFIED = Pattern.compile("(?<![\\w.])caseNames\\s*\\(");
+
+    /** The declaration, which {@link #UNQUALIFIED} matches and which is no call. */
+    private static final Pattern DECLARATION = Pattern.compile("caseNames\\s*\\(\\s*Hir\\.SumData");
+
+    private static int count(Pattern pattern, String code) {
+        int found = 0;
+        Matcher at = pattern.matcher(code);
+        while (at.find()) {
+            found++;
+        }
+        return found;
+    }
+
+    private static List<Path> sourcesOfTheCheckPackage() throws IOException {
+        List<Path> sources = new ArrayList<>();
+        for (Path each : mainSources()) {
+            if (each.getParent().getFileName().toString().equals("check")) {
+                sources.add(each);
+            }
+        }
+        return sources;
+    }
+
+    private static String code(Path source) throws IOException {
+        return withoutComments(Files.readString(source, StandardCharsets.UTF_8));
+    }
+
+    /**
+     * The source with its comments taken out.
+     *
+     * <p>So that a javadoc naming the rule does not read as a breach of it. Lexical and small: it
+     * follows string and character literals so a {@code //} inside one is not a comment, and keeps
+     * what is inside them, so the worst it can do is leave a comment standing.
+     */
+    private static String withoutComments(String source) {
+        StringBuilder out = new StringBuilder(source.length());
+        int at = 0;
+        while (at < source.length()) {
+            char here = source.charAt(at);
+            char next = at + 1 < source.length() ? source.charAt(at + 1) : '\0';
+            if (here == '/' && next == '/') {
+                while (at < source.length() && source.charAt(at) != '\n') {
+                    at++;
+                }
+            } else if (here == '/' && next == '*') {
+                at += 2;
+                while (at + 1 < source.length()
+                        && !(source.charAt(at) == '*' && source.charAt(at + 1) == '/')) {
+                    at++;
+                }
+                at = Math.min(source.length(), at + 2);
+            } else if (here == '"' || here == '\'') {
+                out.append(here);
+                at++;
+                while (at < source.length() && source.charAt(at) != here) {
+                    if (source.charAt(at) == '\\' && at + 1 < source.length()) {
+                        out.append(source.charAt(at));
+                        at++;
+                    }
+                    out.append(source.charAt(at));
+                    at++;
+                }
+                if (at < source.length()) {
+                    out.append(source.charAt(at));
+                    at++;
+                }
+            } else {
+                out.append(here);
+                at++;
+            }
+        }
+        return out.toString();
+    }
+
+    private static List<Path> mainSources() throws IOException {
+        Path module = Path.of("").toAbsolutePath();
+        Path repo = Files.isDirectory(module.resolve(Path.of("src", "main", "java")))
+                ? module.getParent() : module;
+        List<Path> sources = new ArrayList<>();
+        try (Stream<Path> modules = Files.list(repo)) {
+            for (Path candidate : modules.toList()) {
+                Path root = candidate.resolve(Path.of("src", "main", "java"));
+                if (!Files.isDirectory(root)) {
+                    continue;
+                }
+                try (Stream<Path> walk = Files.walk(root)) {
+                    walk.filter(each -> each.toString().endsWith(".java")).forEach(sources::add);
+                }
+            }
+        }
+        sources.sort(Path::compareTo);
+        return sources;
+    }
+
     // --- helpers ---------------------------------------------------------------------------------
+
 
     private List<TypeSymbol> leavesOf(String type) {
         return AtomSpace.subjectAtoms(Type.ref(named(type)), symbols);

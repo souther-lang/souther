@@ -230,8 +230,8 @@ public final class PipelineSigs {
             if (TypeOps.restsOnAnUnresolvedName(pipe.declaredOut())) {
                 throw new Unanswerable(pipe.declaredOut().pos());
             }
-            Set<TypeSymbol> inferred = TypeOps.leafCases(out, symbols);
-            Set<TypeSymbol> declared = TypeOps.leafCases(declaredOut, symbols);
+            Set<TypeSymbol> inferred = new LinkedHashSet<>(AtomSpace.subjectAtoms(out, symbols));
+            Set<TypeSymbol> declared = new LinkedHashSet<>(AtomSpace.subjectAtoms(declaredOut, symbols));
             if (!inferred.equals(declared)) {
                 throw CompileException.of(Diagnostic.at(pipe.pos())
 
@@ -273,7 +273,7 @@ public final class PipelineSigs {
     /** The main-line leaf cases {@code g} accepts — the ones the backend routes into it (spec §type-routing). */
     private static List<TypeSymbol> mainlineCases(Type mainline, Sig g, Symbols symbols) {
         List<TypeSymbol> accepted = new ArrayList<>();
-        for (TypeSymbol caseName : TypeOps.leafCases(mainline, symbols)) {
+        for (TypeSymbol caseName : AtomSpace.subjectAtoms(mainline, symbols)) {
             if (TypeOps.assignable(Type.ref(caseName), g.in(), symbols)) {
                 accepted.add(caseName);
             }
@@ -305,7 +305,7 @@ public final class PipelineSigs {
             Set<TypeSymbol> passed = new LinkedHashSet<>();
             // route over the leaf cases: a named sum output splits into its members, so a stage that
             // accepts one of them consumes it while the rest retire (spec §sum-data, §type-routing)
-            for (TypeSymbol caseName : TypeOps.leafCases(mainline, symbols)) {
+            for (TypeSymbol caseName : AtomSpace.subjectAtoms(mainline, symbols)) {
                 if (TypeOps.assignable(Type.ref(caseName), in, symbols)) {
                     consumed.add(caseName);
                 } else {

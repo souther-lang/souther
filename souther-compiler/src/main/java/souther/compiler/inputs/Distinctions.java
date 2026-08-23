@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.AtomSpace;
 import souther.compiler.check.Shape;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
@@ -79,7 +80,7 @@ public final class Distinctions {
      *  which is the order a report names them in. */
     private static List<Case> casesOf(Type sum, Symbols symbols) {
         List<Case> out = new ArrayList<>();
-        for (TypeSymbol leaf : TypeOps.leafCases(sum, symbols)) {
+        for (TypeSymbol leaf : AtomSpace.subjectAtoms(sum, symbols)) {
             out.add(new Case.SumCase(leaf, oneValue(leaf, symbols)));
         }
         return List.copyOf(out);

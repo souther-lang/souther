@@ -53,12 +53,12 @@ final class ValueUniverse {
         // have values that can be written out. Both go to `TypeOps` for what an enumeration is, so
         // this is one reading of that and not two.
         if (!(base instanceof Type.Ref ref)
-                || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.SumData sum)
+                || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.SumData _)
                 || !TypeOps.isUnitOnlySum(base, symbols)) {
             return null;
         }
         List<Value> values = new ArrayList<>();
-        TypeOps.leafCases(sum, symbols).forEach(each -> values.add(Value.of(each)));
+        AtomSpace.subjectAtoms(base, symbols).forEach(each -> values.add(Value.of(each)));
         return values.isEmpty() ? null : List.copyOf(values);
     }
 }

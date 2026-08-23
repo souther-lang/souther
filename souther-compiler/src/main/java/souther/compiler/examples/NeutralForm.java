@@ -2,6 +2,7 @@ package souther.compiler.examples;
 
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.AtomSpace;
 import souther.compiler.check.FixtureEvidence;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
@@ -356,7 +357,7 @@ final class NeutralForm {
             // whatever this module declares under that spelling, and the type the value stands at
             // may be one another module published — the reason the overload above takes a resolved
             // name rather than one spelled at the call.
-            for (TypeSymbol caseName : TypeOps.leafCases(from, symbols)) {
+            for (TypeSymbol caseName : AtomSpace.subjectAtoms(from, symbols)) {
                 if (!caseName.name().equals(written)
                         || symbols.declarations().declaration(caseName.key()) instanceof Hir.Data) {
                     continue;

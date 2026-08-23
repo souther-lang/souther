@@ -1,5 +1,6 @@
 package souther.compiler.derive;
 
+import souther.compiler.check.AtomSpace;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Hir;
@@ -260,7 +261,7 @@ public final class Deriver {
         // AtomSpace's and not written again here: an atom is one per TypeSymbol, which is what a
         // variant is about, and asking it in the written name's terms answered a leaf two of the
         // cases reach once per case (#990).
-        List<TypeSymbol> atoms = TypeOps.leafCases(s, symbols);
+        List<TypeSymbol> atoms = AtomSpace.subjectAtoms(Type.ref(s.declares()), symbols);
         Optional<Hir.Discriminate> decoder = s.decoder().isPresent()
                 ? s.decoder()
                 : Optional.of(new Hir.Discriminate("type", tagVariants(s, atoms), s.pos()));

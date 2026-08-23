@@ -2,6 +2,7 @@ package souther.compiler.codegen;
 
 import souther.compiler.query.Bodies;
 
+import souther.compiler.check.AtomSpace;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -1046,7 +1047,7 @@ public final class Backend {
             if (sig == null || !(sig.outputType() instanceof Type.Union)) {
                 continue;
             }
-            List<TypeSymbol> members = new ArrayList<>(TypeOps.leafCases(sig.outputType(), symbols));
+            List<TypeSymbol> members = new ArrayList<>(AtomSpace.subjectAtoms(sig.outputType(), symbols));
             Collections.sort(members);
             results.put(new GeneratedClass.BehaviorResult(module.name(), bd.name()), members);
         }
