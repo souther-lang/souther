@@ -422,16 +422,35 @@ public final class Generator {
     /**
      * A value the module already states that a row's positions can be composed against.
      *
-     * <p>A name and nothing else. What the value <em>is</em> is the module's to say, and a row
-     * naming it is a row an author writes today — the reading that builds a fixture expands the
-     * name where the row is read, so nothing here has to hold the value or agree with it.
+     * <p>A name per position and nothing else. What each value <em>is</em> is the module's to say,
+     * and a row naming it is a row an author writes today — the reading that builds a fixture
+     * expands the name where the row is read, so nothing here has to hold the value or agree with
+     * it.
      *
      * <p>Why a row wants one: where the gap is a class at one position, the row a reader of a table
      * recognises is that class against values the model already puts beside it. Composed from the
      * classes alone, every position of the row holds whatever the search happened to name there,
      * and a reader has to work out which of the differences the answer turned on (issue #967).
+     *
+     * <p><b>All the positions at once.</b> A behavior of several parameters written against one
+     * value apiece, chosen for each on its own, is a row whose positions the model never says
+     * anything about together — while a row the author already wrote names a set of values that go
+     * together. So an origin is the whole tuple, and the search walks the tuples.
      */
-    public record Baseline(String module, String name) {}
+    public record Baseline(Map<String, Named> at) {
+
+        public Baseline {
+            at = Map.copyOf(at);
+        }
+
+        /** Whether this names a value at any position at all. */
+        public boolean isEmpty() {
+            return at.isEmpty();
+        }
+
+        /** A value the module states, by the name a row writes it under. */
+        public record Named(String module, String name) {}
+    }
 
     /**
      * What composing a row for one class of one position came to.
@@ -630,7 +649,7 @@ public final class Generator {
                                         CandidateCheck check,
                                         List<souther.compiler.interaction.Interaction> groups,
                                         Trial trial) {
-        return fill(subject, existing, check, groups, trial, Map.of());
+        return fill(subject, existing, check, groups, trial, List.of());
     }
 
     /**
@@ -645,7 +664,7 @@ public final class Generator {
     public static GenerationResult fill(Subject subject, List<ObservedRow> existing,
                                         CandidateCheck check,
                                         List<souther.compiler.interaction.Interaction> groups,
-                                        Trial trial, Map<String, Baseline> baselines) {
+                                        Trial trial, List<Baseline> baselines) {
         List<Axis> ordered = ordered(subject);
         // A position where some row's value could not be read is a position nothing is known about.
         // A row generated for a class there may be a row that is already written, and telling an
@@ -826,24 +845,30 @@ public final class Generator {
      * ({@link Purpose.ForAClass}).
      */
     private static ClassAttempt rowFor(Subject subject, List<Axis> axes, int at, int cls,
-                                       Map<String, Baseline> baselines, CandidateCheck check) {
+                                       List<Baseline> baselines, CandidateCheck check) {
         Axis axis = axes.get(at);
         String classId = axis.classes().get(cls).id();
         String label = label(axis, cls);
         Attempt last = null;
-        // The value the model states first and the classes after, each walked outward from the
-        // target alone. A row composed from the classes moves every position away from what the
-        // model says, so it is further from what a reader recognises than a baseline row with a
-        // supporting move — which is why the origins are the outer loop and the distance the inner.
-        for (boolean fromBaseline : new boolean[] {true, false}) {
-            if (fromBaseline && baselines.isEmpty()) {
-                continue;
-            }
+        // The values the model states first, in the order they were gathered, and the classes after
+        // — each walked outward from the target alone. A row composed from the classes moves every
+        // position away from what the model says, so it is further from what a reader recognises
+        // than a baseline row with a supporting move; and one baseline is nearer than another only
+        // in how far the row has to move from it, which is what the distance below measures. So the
+        // origins are the outer loop and the distance the inner.
+        //
+        // Every baseline the module states rather than the one this compiler picked. Narrowed to
+        // the only value of a type, a module that states a second one lost the spread from every
+        // row of every behavior taking it — a change somewhere else in the file, answering a
+        // question nobody asked it.
+        List<Baseline> origins = new ArrayList<>(baselines);
+        origins.add(new Baseline(Map.of()));   // the classes, which name nothing
+        for (Baseline baseline : origins) {
             // Where the origin's own values already stand, which is what a move is measured from.
             // Measured from the composition either way, a class the baseline is already in looked
             // like no move at all and was never tried as one — so a row the baseline needed one
             // supporting field for fell through to being composed from the classes.
-            int[] from = fromBaseline ? stands(subject, axes, baselines, check) : composes(axes);
+            int[] from = baseline.isEmpty() ? composes(axes) : stands(subject, axes, baseline, check);
             if (from == null) {
                 continue;
             }
@@ -854,9 +879,9 @@ public final class Generator {
                         if (++tried > MOST_REPAIRS) {
                             break;
                         }
-                        Map<String, FixtureTemplate> given = fromBaseline
-                                ? against(subject, axes, from, at, where, baselines) : Map.of();
-                        if (fromBaseline && given.isEmpty()) {
+                        Map<String, FixtureTemplate> given = baseline.isEmpty() ? Map.of()
+                                : against(subject, axes, from, at, where, baseline);
+                        if (!baseline.isEmpty() && given.isEmpty()) {
                             continue;   // nothing here can be written against the model's value
                         }
                         Attempt made = build(subject, axes, where, check, given);
@@ -941,19 +966,19 @@ public final class Generator {
      * <p>Nothing where no runtime built the values: a distance measured from a baseline nothing
      * looked at would be measured from a guess, and the composition is the origin this run has.
      */
-    private static int[] stands(Subject subject, List<Axis> axes, Map<String, Baseline> baselines,
+    private static int[] stands(Subject subject, List<Axis> axes, Baseline baseline,
                                 CandidateCheck check) {
         List<souther.compiler.observe.ObservedValue> observed = new ArrayList<>();
         for (String parameter : subject.parameters()) {
-            Baseline baseline = baselines.get(parameter);
-            if (baseline == null) {
-                // Not a value this run has, and not one it needs: the axes under it are read off
-                // the composition below.
+            Baseline.Named named = baseline.at().get(parameter);
+            if (named == null) {
+                // Not a value this origin names, and not one it needs: the axes under it are read
+                // off the composition below.
                 observed.add(new souther.compiler.observe.ObservedValue.Unknown("no baseline"));
                 continue;
             }
             if (!(check.build(observed.size(),
-                    FixtureTemplate.named(baseline.module(), baseline.name()))
+                    FixtureTemplate.named(named.module(), named.name()))
                             instanceof CandidateCheck.Built.Value(var value))) {
                 return null;
             }
@@ -1052,15 +1077,15 @@ public final class Generator {
      */
     private static Map<String, FixtureTemplate> against(Subject subject, List<Axis> axes,
                                                         int[] from, int target, int[] where,
-                                                        Map<String, Baseline> baselines) {
+                                                        Baseline baseline) {
         Map<String, FixtureTemplate> out = new LinkedHashMap<>();
         for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
             String parameter = subject.parameters().get(p);
-            Baseline baseline = baselines.get(parameter);
-            if (baseline == null) {
+            Baseline.Named at = baseline.at().get(parameter);
+            if (at == null) {
                 continue;
             }
-            FixtureTemplate named = FixtureTemplate.named(baseline.module(), baseline.name());
+            FixtureTemplate named = FixtureTemplate.named(at.module(), at.name());
             FixtureTemplate written = movedUnder(axes, from, parameter, target, where).isEmpty()
                     ? named
                     : withFieldsMoved(subject, p, axes, from, parameter, target, where, named);

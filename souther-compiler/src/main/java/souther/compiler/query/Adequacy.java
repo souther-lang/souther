@@ -1723,7 +1723,8 @@ public final class Adequacy {
                 try {
                     composed = rowsFor(spec, sig, symbols, db.ask(new Front.Reading()).value(),
                             baselines(name, spec, sig,
-                                    db.ask(new Bodies.ModuleDefinitions(name)).value(), symbols),
+                                    db.ask(new Bodies.ModuleDefinitions(name)).value(),
+                                    prepared.value(), symbols),
                             bodies.get(spec.name()),
                             elementsOf.getOrDefault(spec.name(),
                                     souther.compiler.check.ElementBindings.NONE), plan,
@@ -2086,19 +2087,69 @@ public final class Adequacy {
          * same reading a written row naming it goes through — so nothing here holds a copy of it to
          * disagree with.
          */
-        private static Map<String, Generator.Baseline> baselines(
+        private static List<Generator.Baseline> baselines(
                 String module, Hir.SpecBehavior spec, Sig sig, Map<String, Hir.FnDef> values,
-                Symbols symbols) {
+                souther.compiler.check.Prepared prepared, Symbols symbols) {
+            List<Generator.Baseline> out = new ArrayList<>();
+            // What the author has already written, first and whole. A row of theirs names a set of
+            // values that go together, which is more than this can say of one value chosen per
+            // position on its own — and it is the set they reached for, which is what makes a row
+            // written against it read as one column moved.
+            for (souther.compiler.check.Prepared.Rows block : prepared.examples()) {
+                if (!block.target().equals(spec.name())) {
+                    continue;
+                }
+                for (Hir.ExampleRow row : block.read().rows()) {
+                    Generator.Baseline named = namesIn(module, spec, row.inputs());
+                    if (!named.isEmpty() && !out.contains(named)) {
+                        out.add(named);
+                    }
+                }
+            }
+            // Then every value the module states of a parameter's own type, in the order it states
+            // them, one origin per turn. Narrowed to the only value of a type, a module that states
+            // a second one lost the spread from every row of every behavior taking it.
+            out.addAll(named(module, spec, sig, values, symbols));
+            return List.copyOf(out);
+        }
+
+        /** The parameters a row names a module-level value at, which is the only thing a spread can
+         *  be written over: a row writing the value out has no name for this to reach it by. */
+        private static Generator.Baseline namesIn(String module, Hir.SpecBehavior spec,
+                                                  List<Hir.Expr> inputs) {
+            Map<String, Generator.Baseline.Named> at = new LinkedHashMap<>();
+            for (int p = 0; p < inputs.size() && p < spec.params().size(); p++) {
+                if (inputs.get(p) instanceof Hir.Var written
+                        && written.answered() instanceof Hir.Var.Denoting denoting
+                        && denoting.denotes() instanceof souther.compiler.types.ValueName.Helper helper) {
+                    at.put(spec.params().get(p).name(),
+                            new Generator.Baseline.Named(helper.module(), written.name()));
+                }
+            }
+            return new Generator.Baseline(at);
+        }
+
+        /**
+         * The values the module states of each parameter's type, as one origin per turn.
+         *
+         * <p>Taken across the parameters rather than multiplied through them. A behavior of two
+         * parameters with three values apiece has nine tuples and no reason to prefer any of them,
+         * and walking nine origins for every class of every position is a search this run is not
+         * paying for. The n-th of each is one tuple, and the values run out where the shortest list
+         * does — which is deterministic and says what it is.
+         */
+        private static List<Generator.Baseline> named(String module, Hir.SpecBehavior spec, Sig sig,
+                                                      Map<String, Hir.FnDef> values,
+                                                      Symbols symbols) {
             if (values == null) {
-                return Map.of();
+                return List.of();
             }
             // What a value is declared to be, asked of the one walk that answers it. A second
             // reading of a definition's type here would be a second answer about what a row may
             // name, differing from the reading that builds the row at whatever either forgot.
             souther.compiler.check.FixtureEvidence evidence =
                     new souther.compiler.check.FixtureEvidence(symbols, values);
-            Map<TypeSymbol, String> only = new LinkedHashMap<>();
-            Set<TypeSymbol> several = new LinkedHashSet<>();
+            Map<TypeSymbol, List<String>> stated = new LinkedHashMap<>();
             for (Map.Entry<String, Hir.FnDef> each : values.entrySet()) {
                 if (!each.getValue().params().isEmpty()
                         || !(each.getValue().body() instanceof Hir.FnBody.Written written)
@@ -2106,29 +2157,42 @@ public final class Adequacy {
                                 instanceof souther.compiler.types.Type.Ref(TypeSymbol of))) {
                     continue;
                 }
-                if (only.put(of, each.getKey()) != null) {
-                    several.add(of);
-                }
+                stated.computeIfAbsent(of, _ -> new ArrayList<>()).add(each.getKey());
             }
-            Map<String, Generator.Baseline> out = new LinkedHashMap<>();
             List<Hir.Param> takes = spec.params();
+            int most = 0;
             for (int p = 0; p < takes.size() && p < sig.inputTypes().size(); p++) {
-                if (!(sig.inputTypes().get(p) instanceof souther.compiler.types.Type.Ref(
-                        TypeSymbol of))) {
-                    continue;
-                }
-                String named = only.get(of);
-                if (named != null && !several.contains(of)) {
-                    out.put(takes.get(p).name(), new Generator.Baseline(module, named));
+                if (sig.inputTypes().get(p) instanceof souther.compiler.types.Type.Ref(
+                        TypeSymbol of)) {
+                    most = Math.max(most, stated.getOrDefault(of, List.of()).size());
                 }
             }
-            return Map.copyOf(out);
+            List<Generator.Baseline> out = new ArrayList<>();
+            for (int turn = 0; turn < most; turn++) {
+                Map<String, Generator.Baseline.Named> at = new LinkedHashMap<>();
+                for (int p = 0; p < takes.size() && p < sig.inputTypes().size(); p++) {
+                    if (!(sig.inputTypes().get(p) instanceof souther.compiler.types.Type.Ref(
+                            TypeSymbol of))) {
+                        continue;
+                    }
+                    List<String> here = stated.getOrDefault(of, List.of());
+                    if (turn < here.size()) {
+                        at.put(takes.get(p).name(),
+                                new Generator.Baseline.Named(module, here.get(turn)));
+                    }
+                }
+                Generator.Baseline origin = new Generator.Baseline(at);
+                if (!origin.isEmpty() && !out.contains(origin)) {
+                    out.add(origin);
+                }
+            }
+            return out;
         }
 
         private static Generator.GenerationResult rowsFor(
                 Hir.SpecBehavior spec, Sig sig, Symbols symbols,
                 souther.compiler.check.ReadingPolicy policy,
-                Map<String, Generator.Baseline> baselines, souther.compiler.core.Core body,
+                List<Generator.Baseline> baselines, souther.compiler.core.Core body,
                 souther.compiler.check.ElementBindings elements,
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
                 FixtureReader.Construction building, InputDomain domain,

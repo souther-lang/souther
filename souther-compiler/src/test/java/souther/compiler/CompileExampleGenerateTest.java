@@ -864,6 +864,58 @@ class CompileExampleGenerateTest {
                 "every class is written for, which composing them could not do");
     }
 
+    /**
+     * A second value of the same type is another origin, not the end of them.
+     *
+     * <p>Which of an author's values is the ordinary one is not this compiler's to decide, and it
+     * used to answer that by refusing to use either — so a module that stated a second value lost
+     * the spread from every row of every behavior taking that type. A change somewhere else in the
+     * file, answering a question nobody asked it.
+     *
+     * <p>What decides which is used is how far the row has to move from it, which is the search's
+     * question and not a rule about the names.
+     */
+    @Test
+    void aSecondValueOfOneTypeIsAnotherOriginRatherThanNone() {
+        String twice = CORRELATED.replace("let mid = Request { lo = Amount(60), hi = Amount(70) }",
+                """
+                        let mid = Request { lo = Amount(60), hi = Amount(70) }
+                        let wide = Request { lo = Amount(0), hi = Amount(200) }""");
+
+        assertTrue(generated(twice).get("submit").composed().rows().stream()
+                        .allMatch(row -> inputsOf(row).contains("...")),
+                "every row is still written against a value the model states: "
+                        + generated(twice).get("submit").composed().rows().stream()
+                                .map(CompileExampleGenerateTest::inputsOf).toList());
+    }
+
+    /**
+     * The value a row already names comes before the ones only the module states.
+     *
+     * <p>A row of the author's is what they reached for at this behavior, and it names its
+     * positions together — which is more than this can say of one value chosen per position on its
+     * own. So it is the first origin, and the rows offered beside it are written against the same
+     * value the row beside them is.
+     */
+    @Test
+    void theValueARowAlreadyNamesIsTheFirstOrigin() {
+        String written = CORRELATED.replace("let mid = Request { lo = Amount(60), hi = Amount(70) }",
+                """
+                        let mid = Request { lo = Amount(60), hi = Amount(70) }
+                        let wide = Request { lo = Amount(0), hi = Amount(200) }""")
+                + """
+
+                        example submit
+                            | "a wide one" : (wide) -> Accepted { at = "now" }
+                        """;
+
+        List<String> rows = generated(written).get("submit").composed().rows().stream()
+                .map(CompileExampleGenerateTest::inputsOf).toList();
+        assertFalse(rows.isEmpty(), "there are classes the written row is not in");
+        assertTrue(rows.stream().allMatch(row -> row.contains("...wide")),
+                "written against the value the author's own row names: " + rows);
+    }
+
     /** Each named for the one class it is about, whatever it took to write one. */
     @Test
     void aFieldMovedToMakeARowBuildableIsNoPartOfWhatItIsFor() {
