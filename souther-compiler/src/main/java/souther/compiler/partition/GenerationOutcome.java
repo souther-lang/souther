@@ -110,10 +110,12 @@ public sealed interface GenerationOutcome {
          */
         public enum Reason {
 
-            /** Nothing composes an input for the sake of the path it would take through a body. */
-            NO_STRATEGY_FOR_AN_ARM(
-                    "rows here are composed for the classes a position divides into and for"
-                            + " boundaries, and nothing composes one for the sake of an arm"),
+            /** No combination of the body's own decisions takes this arm, so nothing composed for
+             *  one composes an input that goes through it. */
+            NO_COMBINATION_REACHES_THIS_ARM(
+                    "rows here are composed for the classes a position divides into, for the"
+                            + " combinations this body settles together and for boundaries, and no"
+                            + " combination of them takes this arm"),
 
             /** Nothing searches for an input by the output it produces. */
             NO_STRATEGY_FOR_AN_OUTPUT_CASE(

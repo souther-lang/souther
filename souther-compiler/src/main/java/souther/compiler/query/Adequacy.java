@@ -1789,8 +1789,7 @@ public final class Adequacy {
                     case About.ACaseNoRowAppliesItTo(var input, var missing) ->
                             atCase(input, missing, partition, composed, spec);
                     case About.AClassNoRowIsIn(var missing) -> atClass(missing, composed);
-                    case About.AnArmNoRowGoesThrough _ -> new GenerationOutcome.NotSupported(
-                            GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_ARM);
+                    case About.AnArmNoRowGoesThrough(var arm) -> atArm(arm, composed);
                     case About.ACaseNoRowExpects _ -> new GenerationOutcome.NotSupported(
                             GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE);
                     // What the rows were seen doing rather than what they owe.
@@ -1813,6 +1812,33 @@ public final class Adequacy {
                 }));
             }
             return out;
+        }
+
+        /**
+         * The arm's own attempt, read off what the search for the combinations made.
+         *
+         * <p>A combination of the body's own decisions is a way through each of the forks it reads,
+         * so a row composed for one takes an arm of each — and the row that answers a finding about
+         * one of them is found by that arm's own number. The two searches used to be two worlds:
+         * the combinations composed rows before any finding was consulted, while the finding about
+         * an arm was told nothing composes an input for one. Both were true and they were about the
+         * same rows.
+         *
+         * <p>Nothing composed for it where no combination claims it. Which is the honest answer and
+         * not a shortfall of this run: an arm no combination of the body reaches is one nothing
+         * here is asked to compose an input for, and a row for it is still a row somebody can write
+         * by hand.
+         */
+        private static GenerationOutcome atArm(souther.compiler.coverage.CoverageSites.Site arm,
+                                               Generator.GenerationResult composed) {
+            return switch (composed.armAt(arm.index())) {
+                case Generator.ArmAttempt.Built built ->
+                        new GenerationOutcome.Generated(List.of(built.row()));
+                case Generator.ArmAttempt.Unresolved none ->
+                        new GenerationOutcome.CannotGenerate(none.why());
+                case null -> new GenerationOutcome.NotSupported(
+                        GenerationOutcome.NotSupported.Reason.NO_COMBINATION_REACHES_THIS_ARM);
+            };
         }
 
         /**

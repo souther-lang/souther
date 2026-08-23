@@ -153,6 +153,57 @@ class EveryFindingHasAGenerationDispositionTest {
                 "a strategy applies to a boundary and it composed a row: " + answered);
     }
 
+    /** A body whose decisions read two positions together, so the combinations reach its arms. */
+    private static final String SHIPPING = """
+            module example.shipping
+
+            data Membership = Premium | Standard
+            data Delivery = Express | Regular
+
+            data Fee = Int
+                invariant value >= 0
+
+            behavior shippingFee : (member: Membership, delivery: Delivery) -> Fee
+                constructs Fee
+
+            let baseFee (tier: Membership): Int =
+                match tier with
+                    | Premium -> 0
+                    | Standard -> 500
+
+            let expressFee (speed: Delivery): Int =
+                match speed with
+                    | Express -> 500
+                    | Regular -> 0
+
+            let shippingFee (member, delivery) =
+                Fee(baseFee(member) + expressFee(delivery))
+
+            example shippingFee
+                | "a premium express parcel" : (Premium, Express) -> Fee(500)
+            """;
+
+    /**
+     * An arm a combination of the body's own decisions takes is answered with the row that takes it.
+     *
+     * <p>Two searches used to be two worlds: the combinations composed rows before any finding was
+     * consulted, and the finding about an arm was told nothing composes an input for one. Both were
+     * true and they were about the same rows — a combination is a way through each of the forks it
+     * reads, so a row composed for one takes an arm of each.
+     */
+    @Test
+    void anArmACombinationTakesIsAnsweredWithTheRowThatTakesIt() {
+        Compilation compilation = compiled(SHIPPING);
+        List<Adequacy.GenerationDisposition> arms =
+                filling(compilation, "example.shipping", "shippingFee").generation().stream()
+                        .filter(d -> d.finding().kind() == Adequacy.Kind.ARM_UNREACHED).toList();
+
+        assertFalse(arms.isEmpty(), "no row is written, so every arm is unreached");
+        assertTrue(arms.stream().allMatch(
+                        d -> d.outcome() instanceof GenerationOutcome.Generated),
+                "each is answered with the row composed for a combination that takes it: " + arms);
+    }
+
     @Test
     void anArmNoStrategyReachesIsNotSupportedRatherThanUnanswered() {
         Compilation compilation = compiled(POLICY);
@@ -331,9 +382,10 @@ class EveryFindingHasAGenerationDispositionTest {
      */
     @Test
     void eachReasonSaysWhatIsMissingHereRatherThanWhatCannotExist() {
-        assertEquals("rows here are composed for the classes a position divides into and for"
-                        + " boundaries, and nothing composes one for the sake of an arm",
-                GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_ARM.said());
+        assertEquals("rows here are composed for the classes a position divides into, for the"
+                        + " combinations this body settles together and for boundaries, and no"
+                        + " combination of them takes this arm",
+                GenerationOutcome.NotSupported.Reason.NO_COMBINATION_REACHES_THIS_ARM.said());
         assertEquals("rows here are composed from what the input positions divide into, and nothing"
                         + " searches for one by the case it would answer with",
                 GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE.said());

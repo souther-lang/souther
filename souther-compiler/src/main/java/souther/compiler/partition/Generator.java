@@ -372,14 +372,15 @@ public final class Generator {
     }
 
     public record GenerationResult(List<GeneratedRow> rows, List<UnresolvedCombination> unresolved,
-                                   List<GenerationReason> reasons, List<ClassAttempt> classes) {
+                                   List<GenerationReason> reasons, List<ClassAttempt> classes,
+                                   List<ArmAttempt> arms) {
 
         public static final GenerationResult NONE =
-                new GenerationResult(List.of(), List.of(), List.of(), List.of());
+                new GenerationResult(List.of(), List.of(), List.of(), List.of(), List.of());
 
         public GenerationResult(List<GeneratedRow> rows, List<UnresolvedCombination> unresolved,
                                 List<GenerationReason> reasons) {
-            this(rows, unresolved, reasons, List.of());
+            this(rows, unresolved, reasons, List.of(), List.of());
         }
 
         public GenerationResult {
@@ -387,6 +388,24 @@ public final class Generator {
             unresolved = List.copyOf(unresolved);
             reasons = List.copyOf(reasons);
             classes = List.copyOf(classes);
+            arms = List.copyOf(arms);
+        }
+
+        /**
+         * What composing a row that takes {@code probe} came to, or null where no combination this
+         * run took claims it.
+         *
+         * <p>Null is an answer and not a failure: an arm no combination of the body's own decisions
+         * reaches is an arm nothing here composes an input for, which is a different piece of news
+         * from one a search tried and could not reach.
+         */
+        public ArmAttempt armAt(int probe) {
+            for (ArmAttempt each : arms) {
+                if (each.probe() == probe) {
+                    return each;
+                }
+            }
+            return null;
         }
 
         /**
@@ -417,6 +436,31 @@ public final class Generator {
         public boolean isEmpty() {
             return rows.isEmpty() && unresolved.isEmpty() && reasons.isEmpty();
         }
+    }
+
+    /**
+     * What composing a row for one of the body's combinations came to, at one arm that row claims.
+     *
+     * <p>Per arm and keyed by the arm, because an arm is what a finding is about while a
+     * combination is what a search is asked for. One row claims several arms — a combination is
+     * what the body settles together, and taking it is taking a way through each of the forks it
+     * reads — so the row that answers a finding about one of them is found by that arm's own
+     * number and not by reading the combination's name.
+     *
+     * <p>The number the plan gave the arm ({@code ControlPointId.ArmOccurrence#probe}), which is
+     * the number the site carries ({@code CoverageSites.Site#index}). One identity, so a finding
+     * and the attempt made for it are two readings of one arm.
+     */
+    public sealed interface ArmAttempt {
+
+        /** Which arm, by the number the plan gave it. */
+        int probe();
+
+        /** A row composed for a combination that takes this arm. */
+        record Built(int probe, GeneratedRow row) implements ArmAttempt {}
+
+        /** No row came of the combination that would have taken it, and why. */
+        record Unresolved(int probe, UnresolvedCombination why) implements ArmAttempt {}
     }
 
     /**
@@ -697,6 +741,7 @@ public final class Generator {
 
         List<GeneratedRow> rows = new ArrayList<>();
         List<ClassAttempt> attempts = new ArrayList<>();
+        List<ArmAttempt> arms = new ArrayList<>();
         List<UnresolvedCombination> unresolved = new ArrayList<>();
         List<GenerationReason> reasons = new ArrayList<>(undecided);
         // What the author wrote, and only that. Settled here for the same reason the classes
@@ -748,11 +793,22 @@ public final class Generator {
                     continue;
                 }
                 switch (witnessFor(subject, axes, selection, check, trial)) {
-                    case Witness.None none -> unresolved.add(new UnresolvedCombination(
-                            none.classes(), none.reason(), none.detail(), none.said()));
-                    case Witness.Certified found -> rows.add(found.row());
+                    case Witness.None none -> {
+                        UnresolvedCombination why = new UnresolvedCombination(
+                                none.classes(), none.reason(), none.detail(), none.said());
+                        unresolved.add(why);
+                        claimed(selection).forEach(
+                                probe -> arms.add(new ArmAttempt.Unresolved(probe, why)));
+                    }
+                    case Witness.Certified found -> {
+                        rows.add(found.row());
+                        claimed(selection).forEach(
+                                probe -> arms.add(new ArmAttempt.Built(probe, found.row())));
+                    }
                     case Witness.Unconfirmed offer -> {
                         rows.add(offer.row());
+                        claimed(selection).forEach(
+                                probe -> arms.add(new ArmAttempt.Built(probe, offer.row())));
                         // Nothing watched it, so what it is offered for is what the reading says
                         // and not what anything saw. Said once for the behavior: it is one fact
                         // about this generation.
@@ -798,7 +854,25 @@ public final class Generator {
             reasons.add(new GenerationReason.CombinationsWithheld(axes.get(0).id().behavior(),
                     withheld));
         }
-        return new GenerationResult(rows, unresolved, reasons, attempts);
+        return new GenerationResult(rows, unresolved, reasons, attempts, arms);
+    }
+
+    /**
+     * Which arms a combination claims a run through, by the numbers the plan gave them.
+     *
+     * <p>Only the arms. A combination's claims are what a run through it would be recorded at, and
+     * a comparison is one of those — it is a place a run passes and not a way through a fork, so
+     * nothing about an arm is owed for it.
+     */
+    private static List<Integer> claimed(CellSelection selection) {
+        List<Integer> out = new ArrayList<>();
+        for (souther.compiler.coverage.ControlClaim claim : selection.claims()) {
+            if (claim.at() instanceof souther.compiler.coverage.ControlPointId.ArmOccurrence arm
+                    && arm.probe().isPresent()) {
+                out.add(arm.probe().getAsInt());
+            }
+        }
+        return out;
     }
 
     /**
