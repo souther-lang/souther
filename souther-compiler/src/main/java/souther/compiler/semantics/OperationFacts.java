@@ -1,7 +1,9 @@
 package souther.compiler.semantics;
 
+import souther.compiler.numeric.NumericDomain.Rel;
 import souther.compiler.types.ValueName;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,7 +51,77 @@ public final class OperationFacts {
      * meant to make remembering unnecessary.
      */
     private static final List<Declared> DECLARED = List.of(
-            about("Decimal", "fromInt", new OperationFact.AnswersItsArgument(at(0))));
+            about("Decimal", "fromInt", new OperationFact.AnswersItsArgument(at(0))),
+
+            // What holds of a result wherever the call is written. Each is a fact about the
+            // operation, so it is stated at every call and not only where something was guarded:
+            // `Int.abs(x)` is not negative whatever `x` is.
+            //
+            // `Int.floorMod` states both its ends only where the divisor reads as a constant above
+            // zero, and neither of them otherwise. The result takes the sign of the divisor —
+            // `floorMod(1, -3)` is `-2` — so a divisor that could be negative puts it the other
+            // side of zero, and the lower end is as much the divisor's to decide as the upper one.
+            // Its `0` is not a case at all: the operation aborts.
+            //
+            // `Decimal.toInt` is within one of what it rounds, whichever mode it is handed. What a
+            // single mode does more narrowly — `HALF_UP` rounds to within a half — is a second
+            // statement and is not made here, since the mode is an argument nothing reads.
+            about("Int", "abs", bounded(Rel.GE, 0)),
+            about("Decimal", "abs", bounded(Rel.GE, 0)),
+            about("Int", "floorMod", bounded(Rel.GE, 0, aboveZero(at(1)))),
+            about("Int", "floorMod", bounded(Rel.LT, at(1), 0, aboveZero(at(1)))),
+            about("Decimal", "toInt", bounded(Rel.GT, at(1), -1, always())),
+            about("Decimal", "toInt", bounded(Rel.LT, at(1), 1, always())),
+
+            // The operations that move a value by an amount, each stated through the measure that
+            // counts two such values apart. Every one of them works on a local value, where a day
+            // is a day and an hour is sixty minutes, so what each states is exact rather than
+            // usually true.
+            about("Date", "addDays", shifts("Date", "daysBetween", at(1), at(0), 1)),
+            about("DateTime", "addMinutes", shifts("DateTime", "minutesBetween", at(1), at(0), 1)),
+            about("DateTime", "addHours", shifts("DateTime", "minutesBetween", at(1), at(0), 60)),
+            about("DateTime", "addDays", shifts("DateTime", "minutesBetween", at(1), at(0), 1440)),
+
+            // The operations answering the order of their two arguments as the sign of a number.
+            // The direction is not the same for all of them: `compare(a, b)` is positive where `a`
+            // is the greater, and `daysBetween(from, to)` counts forward from its first argument.
+            about("Int", "compare",
+                    new OperationFact.StatesTheOrderOfItsArguments(
+                            PositiveOrder.FIRST_ARGUMENT_GREATER)),
+            about("Decimal", "compare",
+                    new OperationFact.StatesTheOrderOfItsArguments(
+                            PositiveOrder.FIRST_ARGUMENT_GREATER)),
+            about("Date", "daysBetween",
+                    new OperationFact.StatesTheOrderOfItsArguments(
+                            PositiveOrder.SECOND_ARGUMENT_GREATER)));
+
+    private static OperationFact bounded(Rel rel, long n) {
+        return bounded(rel, null, n, new ResultBound.Provided.Always());
+    }
+
+    private static OperationFact bounded(Rel rel, long n, ResultBound.Provided provided) {
+        return bounded(rel, null, n, provided);
+    }
+
+    private static OperationFact bounded(Rel rel, ArgumentRef against, long offset,
+                                         ResultBound.Provided provided) {
+        return new OperationFact.BoundsItsResult(
+                new ResultBound(against, java.math.BigDecimal.valueOf(offset), rel, provided));
+    }
+
+    private static ResultBound.Provided always() {
+        return new ResultBound.Provided.Always();
+    }
+
+    private static ResultBound.Provided aboveZero(ArgumentRef argument) {
+        return new ResultBound.Provided.ConstantAboveZero(argument);
+    }
+
+    private static OperationFact shifts(String module, String measure, ArgumentRef of,
+                                        ArgumentRef amount, long per) {
+        return new OperationFact.ShiftsBy(new ValueName.Stdlib(module, measure), of, amount,
+                java.math.BigDecimal.valueOf(per));
+    }
 
     /** Every fact declared, for whatever holds them to the library's declarations. */
     public static List<Declared> declarations() {
@@ -67,12 +139,66 @@ public final class OperationFacts {
         return Index.ANSWERS_ITS_ARGUMENT.keySet();
     }
 
+    /** Which of {@code operation}'s two arguments a positive answer names as the greater, or null
+     *  where the sign of what it answers is not their order. */
+    public static PositiveOrder statesTheOrderOfItsArguments(ValueName operation) {
+        return Index.ORDERS.get(operation);
+    }
+
+    /** The operations whose answer states the order of their arguments. */
+    public static java.util.Set<ValueName> statesTheOrderOfItsArguments() {
+        return Index.ORDERS.keySet();
+    }
+
+    /** How {@code operation} moves the value it is given, or null where it moves none. */
+    public static OperationFact.ShiftsBy shiftsBy(ValueName operation) {
+        return Index.SHIFTS.get(operation);
+    }
+
+    /** The operations that move a value by an amount. */
+    public static java.util.Set<ValueName> shiftsBy() {
+        return Index.SHIFTS.keySet();
+    }
+
+    /** What holds of the number {@code operation} answers, wherever it is called. */
+    public static List<ResultBound> boundsOnTheResult(ValueName operation) {
+        return Index.BOUNDS.getOrDefault(operation, List.of());
+    }
+
+    /** The operations something holds of the result of. */
+    public static java.util.Set<ValueName> boundsOnTheResult() {
+        return Index.BOUNDS.keySet();
+    }
+
     /** The indexes, read off the declarations on the first ask. */
     private static final class Index {
 
         private static final Map<ValueName, ArgumentRef> ANSWERS_ITS_ARGUMENT =
                 index(OperationFact.AnswersItsArgument.class,
                         OperationFact.AnswersItsArgument::argument);
+
+        private static final Map<ValueName, PositiveOrder> ORDERS =
+                index(OperationFact.StatesTheOrderOfItsArguments.class,
+                        OperationFact.StatesTheOrderOfItsArguments::order);
+
+        private static final Map<ValueName, OperationFact.ShiftsBy> SHIFTS =
+                index(OperationFact.ShiftsBy.class, java.util.function.Function.identity());
+
+        /** Gathered rather than indexed one to one: an operation states as many bounds as it
+         *  states, and each is a fact of its own. */
+        private static final Map<ValueName, List<ResultBound>> BOUNDS = bounds();
+
+        private static Map<ValueName, List<ResultBound>> bounds() {
+            Map<ValueName, List<ResultBound>> out = new LinkedHashMap<>();
+            for (Declared each : DECLARED) {
+                if (each.fact() instanceof OperationFact.BoundsItsResult bounded) {
+                    out.computeIfAbsent(each.operation(), operation -> new ArrayList<>())
+                            .add(bounded.bound());
+                }
+            }
+            out.replaceAll((operation, held) -> List.copyOf(held));
+            return Map.copyOf(out);
+        }
 
         private static <F extends OperationFact, V> Map<ValueName, V> index(
                 Class<F> kind, java.util.function.Function<F, V> read) {

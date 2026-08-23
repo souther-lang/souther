@@ -48,6 +48,18 @@ final class OperationFactBinder {
                         DischargeRules.holdToTheDeclaration(each.operation(), answers.argument(),
                                 null, Question::isANumber,
                                 "the argument whose number the result is");
+                // Both arguments, because which is the greater and which the lesser are one
+                // statement and a signature could disagree with either half.
+                case OperationFact.StatesTheOrderOfItsArguments states -> {
+                    DischargeRules.holdToTheDeclaration(each.operation(), states.order().greater(),
+                            null, type -> true, "the argument a positive answer names as greater");
+                    DischargeRules.holdToTheDeclaration(each.operation(), states.order().lesser(),
+                            null, type -> true, "the argument a positive answer names as lesser");
+                }
+                case OperationFact.ShiftsBy shifts -> DischargeRules.holdShift(each.operation(),
+                        shifts);
+                case OperationFact.BoundsItsResult bounded ->
+                        DischargeRules.holdBound(each.operation(), bounded.bound());
             }
             visited.add(each);
         }

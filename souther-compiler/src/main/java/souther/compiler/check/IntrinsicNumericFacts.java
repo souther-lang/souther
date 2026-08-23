@@ -107,7 +107,7 @@ final class IntrinsicNumericFacts {
     static List<NumericConstraint> ofCall(Core.PreservedCall call, FactSubject atom, Denotations at,
                                           Terms terms) {
         List<NumericConstraint> out = new ArrayList<>();
-        for (DischargeRules.ResultBound bound
+        for (souther.compiler.semantics.ResultBound bound
                 : DischargeRules.boundsOn(call, arg -> constantOf(arg, at, terms))) {
             LinearForm<FactSubject> against = bound.against() == null
                     ? LinearForm.constant(bound.offset())
@@ -142,7 +142,7 @@ final class IntrinsicNumericFacts {
                 instanceof Core.PreservedCall moved)) {
             return;
         }
-        DischargeRules.Shift shift = DischargeRules.shiftBy(moved);
+        souther.compiler.semantics.OperationFact.ShiftsBy shift = DischargeRules.shiftBy(moved);
         if (shift == null || !shift.measure().equals(call.operation())
                 || !sameValue(CallArguments.of(shift.of(), moved), call.args().get(0), at, terms)) {
             return;

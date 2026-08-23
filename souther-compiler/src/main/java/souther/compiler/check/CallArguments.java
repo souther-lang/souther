@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.core.Core;
 import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.Combinator;
+import souther.compiler.semantics.ResultBound;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -51,6 +52,25 @@ public final class CallArguments {
             case ArgumentRef.At at -> at.position();
             case ArgumentRef.TheContainer _ -> handing(operation, "the container").containerArg();
             case ArgumentRef.TheClosure _ -> handing(operation, "the closure").closureArg();
+        };
+    }
+
+    /**
+     * Whether {@code call} meets the condition a fact about its operation was stated under.
+     *
+     * <p>The condition says which argument has to read a certain way; whether it does is read here,
+     * where the call and what its values were read as both are. What a value reads as is the
+     * caller's answer — a name given a constant is that constant — so it is handed in rather than
+     * taken off the syntax at the call.
+     */
+    public static boolean holds(ResultBound.Provided provided, Core.PreservedCall call,
+                                java.util.function.Function<Core, java.math.BigDecimal> folded) {
+        return switch (provided) {
+            case ResultBound.Provided.Always _ -> true;
+            case ResultBound.Provided.ConstantAboveZero above -> {
+                java.math.BigDecimal at = folded.apply(of(above.argument(), call));
+                yield at != null && at.signum() > 0;
+            }
         };
     }
 

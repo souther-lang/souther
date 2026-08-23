@@ -406,108 +406,6 @@ final class DischargeRules {
     static final Set<ValueName> NOT_A_SIZE = Set.of();
 
     /**
-     * What has to hold of the arguments before a bound on the result does.
-     *
-     * <p>Of the arguments and of nothing else. A condition the path establishes is what the arguments
-     * are known to be at one call, and a rule resting on one would hold where a guard was written and
-     * not where the operation was — which is a statement about the program rather than about the
-     * operation.
-     */
-    sealed interface Provided {
-
-        /** Whether {@code call} is one this rule holds at. */
-        boolean holdsAt(Core.PreservedCall call, java.util.function.Function<Core, BigDecimal> folded);
-
-        /** Nothing: the bound is what the operation does, whatever it is given. */
-        record Always() implements Provided {
-            @Override
-            public boolean holdsAt(Core.PreservedCall call,
-                                   java.util.function.Function<Core, BigDecimal> folded) {
-                return true;
-            }
-        }
-
-        /**
-         * An argument that reads as a constant above zero.
-         *
-         * <p>Constant, and not written as one. What a name was given is what the name is, here as
-         * everywhere else the check reads a value ({@link Terms#affineOf}), so {@code floorMod(x, k)}
-         * under {@code let k = 100} is the same call as {@code floorMod(x, 100)} — one spelling of a
-         * value the check has already read. Requiring the digits at the call would make a rule the
-         * author cannot predict from what the value is, only from where it was written.
-         */
-        record ConstantAboveZero(ArgumentRef argument) implements Provided {
-            @Override
-            public boolean holdsAt(Core.PreservedCall call,
-                                   java.util.function.Function<Core, BigDecimal> folded) {
-                BigDecimal at = folded.apply(CallArguments.of(argument, call));
-                return at != null && at.signum() > 0;
-            }
-        }
-    }
-
-    /**
-     * One bound an operation's result has, as the domain holds bounds: the result against a constant,
-     * or the result against one argument and a constant.
-     *
-     * <p>The shape is the domain's ({@link NumericDomain}) and is what a row may say. A rule of
-     * another shape — a result between two arguments, a result no greater than a sum — is one the
-     * domain would take in and derive nothing from, so it is not writable here rather than written
-     * and silently dropped.
-     *
-     * @param against  the argument the result is bounded against, or null where the bound is a
-     *                 constant one
-     * @param offset   added to that argument, or the constant itself where there is no argument
-     * @param rel      how the result stands to it
-     * @param provided what has to hold of the arguments for this to be the operation's answer
-     */
-    record ResultBound(ArgumentRef against, BigDecimal offset, Rel rel, Provided provided) {}
-
-    /** {@code result rel n}. */
-    private static ResultBound resultIs(Rel rel, long n) {
-        return new ResultBound(null, BigDecimal.valueOf(n), rel, new Provided.Always());
-    }
-
-    /** The same, where the operation answers that only under a condition on its arguments. */
-    private static ResultBound resultIs(Rel rel, long n, Provided provided) {
-        return new ResultBound(null, BigDecimal.valueOf(n), rel, provided);
-    }
-
-    /** {@code result rel argument + offset}. */
-    private static ResultBound resultIs(Rel rel, ArgumentRef argument, long offset, Provided provided) {
-        return new ResultBound(argument, BigDecimal.valueOf(offset), rel, provided);
-    }
-
-    /**
-     * What holds of an operation's result wherever the call is written.
-     *
-     * <p>Each row is a fact about the operation, so it is stated at every call and not only where
-     * something was guarded: {@code Int.abs(x)} is not negative whatever {@code x} is. That is the
-     * same kind of statement {@link Predicates#sizeFacts} already makes of every size call it walks
-     * past, and it is read the same way — asserted into the domain where a clause is read and where a
-     * condition is assumed alike.
-     *
-     * <p>{@code Int.floorMod} states both its ends only where the divisor reads as a constant above
-     * zero, and neither of them otherwise. The result takes the sign of the divisor — {@code
-     * floorMod(1, -3)} is {@code -2} — so a divisor that could be negative puts it the other side of
-     * zero, and the lower end is as much the divisor's to decide as the upper one. A divisor the
-     * check cannot read bounds it nowhere. Its {@code 0} is not a case at all: the operation aborts.
-     *
-     * <p>{@code Decimal.toInt} is within one of what it rounds, whichever mode it is handed. What a
-     * single mode does more narrowly — {@code HALF_UP} rounds to within a half — is a second rule and
-     * is not stated here, since the mode is an argument this reads nothing of.
-     */
-    private static final Map<ValueName, List<ResultBound>> BOUNDS_ON_THE_RESULT = Map.of(
-            op("Int", "abs"), List.of(resultIs(Rel.GE, 0)),
-            op("Decimal", "abs"), List.of(resultIs(Rel.GE, 0)),
-            op("Int", "floorMod"), List.of(
-                    resultIs(Rel.GE, 0, new Provided.ConstantAboveZero(at(1))),
-                    resultIs(Rel.LT, at(1), 0, new Provided.ConstantAboveZero(at(1)))),
-            op("Decimal", "toInt"), List.of(
-                    resultIs(Rel.GT, at(1), -1, new Provided.Always()),
-                    resultIs(Rel.LT, at(1), 1, new Provided.Always())));
-
-    /**
      * The operations answering a number this bounds nothing of, in two groups.
      *
      * <p>Their result is not bounded by their arguments at all. The arithmetic and its function forms
@@ -533,44 +431,6 @@ final class DischargeRules {
             op("Int", "min"), op("Int", "max"), op("Int", "clamp"),
             op("Decimal", "min"), op("Decimal", "max"), op("Decimal", "clamp"),
             op("Decimal", "fromInt"), op("Decimal", "round"));
-
-    /**
-     * How far an operation moved the value it was given, stated through the measure that counts two
-     * such values apart: {@code measure(of, result) == per · amount}.
-     *
-     * <p>The statement a shift makes is not a bound on what it answers — a date is not a number — so
-     * it is written in the one language the check has about such values, which is the number a
-     * measure answers of two of them. That number is what an invariant over a pair of dates is
-     * written in as well, so the rule and the clause meet without either being rewritten.
-     *
-     * @param measure the library's operation counting the two apart, in the order {@code (of, result)}
-     * @param of      the argument the result was shifted from
-     * @param amount  the argument saying by how much
-     * @param per     how many of what the measure counts one of {@code amount} is
-     */
-    record Shift(ValueName.Stdlib measure, ArgumentRef of, ArgumentRef amount, BigDecimal per) {}
-
-    private static Shift shifts(String module, String measure, ArgumentRef of, ArgumentRef amount, long per) {
-        return new Shift(new ValueName.Stdlib(module, measure), of, amount,
-                BigDecimal.valueOf(per));
-    }
-
-    /**
-     * The operations that move a value by an amount, each with what it did stated through a measure.
-     *
-     * <p>Every one of them works on a local value, where a day is a day and an hour is sixty
-     * minutes ({@code Temporals}), so what each states is exact rather than usually true.
-     *
-     * <p>{@code Date.addMonths} and {@code Date.addYears} are not here and are not oversights: months
-     * and years hold different numbers of days, so neither states a count of the one measure a pair
-     * of dates has. What a path knows of such a shift — that a later month is not earlier — is
-     * something else, and follows from what is known of the arguments rather than from the operation.
-     */
-    private static final Map<ValueName, Shift> SHIFTS = Map.of(
-            op("Date", "addDays"), shifts("Date", "daysBetween", at(1), at(0), 1),
-            op("DateTime", "addMinutes"), shifts("DateTime", "minutesBetween", at(1), at(0), 1),
-            op("DateTime", "addHours"), shifts("DateTime", "minutesBetween", at(1), at(0), 60),
-            op("DateTime", "addDays"), shifts("DateTime", "minutesBetween", at(1), at(0), 1440));
 
     /** The operations that move a value by an amount the measures this has cannot count. A month and
      * a year are not a fixed number of days, so a date shifted by either stands at a distance no rule
@@ -947,54 +807,6 @@ final class DischargeRules {
             op("Int", "floorMod"), op("Int", "compare"),
             op("Decimal", "min"), op("Decimal", "max"), op("Decimal", "clamp"));
 
-    /**
-     * Which of the two arguments a positive answer names as the greater. That is the whole of what a
-     * row of {@link #ORDERS} says, and it is two cases, so it is written as a type with two — not as
-     * one of the language's operators, which would say the same thing in a type where most of the
-     * values say nothing and the ones that do have to be agreed on somewhere else.
-     *
-     * <p>Each case carries the two positions itself, since which argument is the lesser is settled by
-     * which is the greater and there is no reading where the two are chosen apart.
-     */
-    enum PositiveOrder {
-        FIRST_ARGUMENT_GREATER(0, 1),
-        SECOND_ARGUMENT_GREATER(1, 0);
-
-        private final int greater;
-        private final int lesser;
-
-        PositiveOrder(int greater, int lesser) {
-            this.greater = greater;
-            this.lesser = lesser;
-        }
-
-        /** The argument of {@code call} a positive answer names as the greater. */
-        Core greaterOf(Core.PreservedCall call) {
-            return call.args().get(greater);
-        }
-
-        /** The other one. */
-        Core lesserOf(Core.PreservedCall call) {
-            return call.args().get(lesser);
-        }
-    }
-
-    /**
-     * The operations answering the order of their two arguments as the sign of a number, and which
-     * argument a positive answer names as the greater. Zero states the equality, and a negative
-     * answer the relation the other way, so one row is the whole of what such an operation says.
-     *
-     * <p>Which relation a guard writing one states then follows from where the sign stands against
-     * zero and from nothing else, so the six relations and the two operand orders are one account
-     * rather than twelve rows ({@link Predicates#asOrderComparison}). The direction is not the same
-     * for all of them: {@code compare(a, b)} is positive where {@code a} is the greater, and
-     * {@code daysBetween(from, to)} counts forward from its first argument, so it is positive where
-     * the second one is.
-     */
-    private static final Map<ValueName, PositiveOrder> ORDERS = Map.of(
-            op("Int", "compare"), PositiveOrder.FIRST_ARGUMENT_GREATER,
-            op("Decimal", "compare"), PositiveOrder.FIRST_ARGUMENT_GREATER,
-            op("Date", "daysBetween"), PositiveOrder.SECOND_ARGUMENT_GREATER);
 
     /**
      * The operations answering a number from two values of one type whose sign is not their order.
@@ -1080,7 +892,7 @@ final class DischargeRules {
     }
 
     static Set<ValueName> orderings() {
-        return ORDERS.keySet();
+        return Bound.statesTheOrder();
     }
 
     static Set<ValueName> formOperations() {
@@ -1096,7 +908,7 @@ final class DischargeRules {
     }
 
     static Set<ValueName> boundedOperations() {
-        return Bound.BOUNDS.keySet();
+        return Bound.boundsOnTheResult();
     }
 
     static Set<ValueName> choosingOperations() {
@@ -1112,7 +924,7 @@ final class DischargeRules {
     }
 
     static Set<ValueName> shiftingOperations() {
-        return Bound.MEASURED.keySet();
+        return Bound.shiftsBy();
     }
 
     /** Those of them the shifting table has, by name, for the test that holds each to a construction
@@ -1125,15 +937,15 @@ final class DischargeRules {
 
     /** What {@code e} states through a measure, or null where it is not a shift this has a rule
      * about. */
-    static Shift shiftBy(Core e) {
-        return e instanceof Core.PreservedCall call ? Bound.MEASURED.get(call.operation()) : null;
+    static souther.compiler.semantics.OperationFact.ShiftsBy shiftBy(Core e) {
+        return e instanceof Core.PreservedCall call ? Bound.shiftsBy(call.operation()) : null;
     }
 
     /** Whether {@code operation} counts what two values stand apart by — the other side of the row a
      * shift is written in, read off that row rather than listed again. A measure named in a second
      * place is a measure the day somebody adds a shift and updates one of them. */
     static boolean isAMeasure(ValueName operation) {
-        return Bound.MEASURES.contains(operation);
+        return Bound.measures().contains(operation);
     }
 
     /** The cases {@code e} is defined in, or null where it is not a call to an operation that
@@ -1152,8 +964,9 @@ final class DischargeRules {
      */
     static List<String> boundedRows() {
         List<String> rows = new ArrayList<>();
-        Bound.BOUNDS.forEach((operation, bounds) ->
-                bounds.forEach(bound -> rows.add(operation.toString())));
+        for (ValueName operation : Bound.boundsOnTheResult()) {
+            Bound.boundsOnTheResult(operation).forEach(bound -> rows.add(operation.toString()));
+        }
         return rows;
     }
 
@@ -1165,15 +978,13 @@ final class DischargeRules {
      *                 caller because what a value is read as is the reading's answer and not a
      *                 property of the syntax at the call.
      */
-    static List<ResultBound> boundsOn(Core.PreservedCall call,
+    static List<souther.compiler.semantics.ResultBound> boundsOn(Core.PreservedCall call,
                                       Function<Core, BigDecimal> constant) {
-        List<ResultBound> rows = Bound.BOUNDS.get(call.operation());
-        if (rows == null) {
-            return List.of();
-        }
-        List<ResultBound> holding = new ArrayList<>(rows.size());
-        for (ResultBound row : rows) {
-            if (row.provided().holdsAt(call, constant)) {
+        List<souther.compiler.semantics.ResultBound> rows =
+                Bound.boundsOnTheResult(call.operation());
+        List<souther.compiler.semantics.ResultBound> holding = new ArrayList<>(rows.size());
+        for (souther.compiler.semantics.ResultBound row : rows) {
+            if (CallArguments.holds(row.provided(), call, constant)) {
                 holding.add(row);
             }
         }
@@ -1255,12 +1066,44 @@ final class DischargeRules {
         private static Set<ValueName> answersItsArgument() {
             return souther.compiler.semantics.OperationFacts.answersItsArgument();
         }
-        private static final Map<ValueName, List<ResultBound>> BOUNDS =
-                bindBounds(BOUNDS_ON_THE_RESULT);
+
+        private static Set<ValueName> statesTheOrder() {
+            return souther.compiler.semantics.OperationFacts.statesTheOrderOfItsArguments();
+        }
+
+        private static souther.compiler.semantics.PositiveOrder statesTheOrder(
+                ValueName operation) {
+            return souther.compiler.semantics.OperationFacts
+                    .statesTheOrderOfItsArguments(operation);
+        }
+
+        private static Set<ValueName> shiftsBy() {
+            return souther.compiler.semantics.OperationFacts.shiftsBy();
+        }
+
+        private static souther.compiler.semantics.OperationFact.ShiftsBy shiftsBy(
+                ValueName operation) {
+            return souther.compiler.semantics.OperationFacts.shiftsBy(operation);
+        }
+
+        /** The measures the shifts are stated through, read off those rather than listed again. A
+         *  measure named in a second place is a measure the day somebody adds a shift and updates
+         *  one of them. */
+        private static Set<ValueName> measures() {
+            Set<ValueName> out = new LinkedHashSet<>();
+            shiftsBy().forEach(operation -> out.add(shiftsBy(operation).measure()));
+            return out;
+        }
+
+        private static Set<ValueName> boundsOnTheResult() {
+            return souther.compiler.semantics.OperationFacts.boundsOnTheResult();
+        }
+
+        private static List<souther.compiler.semantics.ResultBound> boundsOnTheResult(
+                ValueName operation) {
+            return souther.compiler.semantics.OperationFacts.boundsOnTheResult(operation);
+        }
         private static final Map<ValueName, Choices> CHOICES = bindChoices(CHOOSES);
-        private static final Map<ValueName, Shift> MEASURED = bindShifts(SHIFTS);
-        private static final Set<ValueName> MEASURES = SHIFTS.values().stream()
-                .map(Shift::measure).collect(java.util.stream.Collectors.toUnmodifiableSet());
         private static final Map<ValueName, NumericResult> ARITHMETIC =
                 bindNumericResults(NUMERIC_RESULTS);
     }
@@ -1348,28 +1191,25 @@ final class DischargeRules {
      * operation answers. A rule pairing an operation with a measure of something else would state a
      * relation between two values that have none.
      */
-    private static Map<ValueName, Shift> bindShifts(Map<ValueName, Shift> rules) {
-        rules.forEach((operation, shift) -> {
-            bind(Map.of(operation, shift.amount()), Function.identity(), null, Question::isANumber,
-                    "the amount a shift moves by");
-            Prelude.PreludeEntry counts = Prelude.entry(shift.measure().qualified());
-            if (counts == null) {
-                throw new IllegalStateException("the rule about " + operation + " counts through "
-                        + shift.measure().qualified() + ", which the library does not declare");
-            }
-            Prelude.PreludeEntry shifted = Prelude.entry(((ValueName.Stdlib) operation).qualified());
-            List<Type> counted = counts.signature().params();
-            if (counted.size() != 2 || !Question.isANumber(counts.signature().result())
-                    || !counted.get(0).equals(shifted.signature().result())
-                    || !counted.get(1).equals(shifted.signature().result())) {
-                throw new IllegalStateException(shift.measure().qualified()
-                        + " does not count two of what " + operation + " answers apart as a number");
-            }
-            bind(Map.of(operation, shift.of()), Function.identity(), null,
-                    t -> t.equals(shifted.signature().result()),
-                    "the value a shift moves from");
-        });
-        return rules;
+    static void holdShift(ValueName operation, souther.compiler.semantics.OperationFact.ShiftsBy
+            shift) {
+        holdToTheDeclaration(operation, shift.amount(), null, Question::isANumber,
+                "the amount a shift moves by");
+        Prelude.PreludeEntry counts = Prelude.entry(shift.measure().qualified());
+        if (counts == null) {
+            throw new IllegalStateException("the rule about " + operation + " counts through "
+                    + shift.measure().qualified() + ", which the library does not declare");
+        }
+        Prelude.PreludeEntry shifted = Prelude.entry(((ValueName.Stdlib) operation).qualified());
+        List<Type> counted = counts.signature().params();
+        if (counted.size() != 2 || !Question.isANumber(counts.signature().result())
+                || !counted.get(0).equals(shifted.signature().result())
+                || !counted.get(1).equals(shifted.signature().result())) {
+            throw new IllegalStateException(shift.measure().qualified()
+                    + " does not count two of what " + operation + " answers apart as a number");
+        }
+        holdToTheDeclaration(operation, shift.of(), null,
+                t -> t.equals(shifted.signature().result()), "the value a shift moves from");
     }
 
     /** As {@link #bind}, for the arguments a case names: the one it answers, and the two sides of
@@ -1390,20 +1230,18 @@ final class DischargeRules {
 
     /** As {@link #bind}, for the arguments a bound names: the one the result is bounded against, and
      * the one a condition on the rule reads. Each is a separate claim about a separate argument. */
-    private static Map<ValueName, List<ResultBound>> bindBounds(
-            Map<ValueName, List<ResultBound>> rules) {
-        rules.forEach((operation, bounds) -> bounds.forEach(bound -> {
-            List<ArgumentRef> named = new ArrayList<>();
-            if (bound.against() != null) {
-                named.add(bound.against());
-            }
-            if (bound.provided() instanceof Provided.ConstantAboveZero constant) {
-                named.add(constant.argument());
-            }
-            named.forEach(one -> bind(Map.of(operation, one), Function.identity(), null,
-                    Question::isANumber, "an argument a bound on the result names"));
-        }));
-        return rules;
+    static void holdBound(ValueName operation, souther.compiler.semantics.ResultBound bound) {
+        List<ArgumentRef> named = new ArrayList<>();
+        if (bound.against() != null) {
+            named.add(bound.against());
+        }
+        if (bound.provided()
+                instanceof souther.compiler.semantics.ResultBound.Provided.ConstantAboveZero
+                constant) {
+            named.add(constant.argument());
+        }
+        named.forEach(one -> holdToTheDeclaration(operation, one, null, Question::isANumber,
+                "an argument a bound on the result names"));
     }
 
     /** As {@link #bind}, for a rule that names more than one argument: each is held to the
@@ -1592,13 +1430,13 @@ final class DischargeRules {
 
     /** Which argument a positive answer from {@code operation} names as the greater, or null where
      * its sign is not an order. */
-    static PositiveOrder orderStatedBy(ValueName operation) {
-        return ORDERS.get(operation);
+    static souther.compiler.semantics.PositiveOrder orderStatedBy(ValueName operation) {
+        return Bound.statesTheOrder(operation);
     }
 
     /** Whether {@code operation} answers the order of its two arguments as a sign. */
     static boolean decidesOrder(ValueName operation) {
-        return ORDERS.containsKey(operation);
+        return orderStatedBy(operation) != null;
     }
 
     /** Whether the check has a rule about what a call answers, rather than only about how to render

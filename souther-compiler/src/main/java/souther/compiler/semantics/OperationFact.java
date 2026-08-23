@@ -35,4 +35,55 @@ public sealed interface OperationFact {
             java.util.Objects.requireNonNull(argument, "this one names an argument");
         }
     }
+
+    /**
+     * The sign of what the operation answers states which of its two arguments is the greater.
+     *
+     * <p>Zero states the equality and a negative answer the relation the other way, so one of these
+     * is the whole of what such an operation says about the pair. Which relation a rule writing one
+     * states then follows from where the sign stands against zero and from nothing else.
+     *
+     * <p>The direction is not the same for all of them: {@code compare(a, b)} is positive where
+     * {@code a} is the greater, and {@code daysBetween(from, to)} counts forward from its first
+     * argument, so it is positive where the second one is.
+     */
+    record StatesTheOrderOfItsArguments(PositiveOrder order) implements OperationFact {
+
+        public StatesTheOrderOfItsArguments {
+            java.util.Objects.requireNonNull(order, "this one says which way round");
+        }
+    }
+
+    /**
+     * The operation answers the value at {@code of} moved by {@code amount}, and how far it moved is
+     * {@code per} of what {@code measure} counts.
+     *
+     * <p>What a shift states is not a bound on what it answers — a date is not a number — so it is
+     * written in the one language there is about such values, which is the number a measure answers
+     * of two of them. That number is what a rule over a pair of dates is written in as well, so the
+     * two meet without either being restated.
+     */
+    record ShiftsBy(souther.compiler.types.ValueName.Stdlib measure, ArgumentRef of,
+                    ArgumentRef amount, java.math.BigDecimal per) implements OperationFact {
+
+        public ShiftsBy {
+            java.util.Objects.requireNonNull(measure, "a shift is stated through a measure");
+            java.util.Objects.requireNonNull(of, "and moves something");
+            java.util.Objects.requireNonNull(amount, "by something");
+            java.util.Objects.requireNonNull(per, "at some rate");
+        }
+    }
+
+    /**
+     * Something that holds of the number the operation answers, wherever it is called.
+     *
+     * <p>One fact per bound rather than a list in one: an operation with two bounds carries two
+     * statements, and they are added and read one at a time.
+     */
+    record BoundsItsResult(ResultBound bound) implements OperationFact {
+
+        public BoundsItsResult {
+            java.util.Objects.requireNonNull(bound, "this one states a bound");
+        }
+    }
 }
