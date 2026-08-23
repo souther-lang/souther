@@ -126,6 +126,71 @@ class WhatHoldsOfEveryElementIsReadOfTheContainerItWalksTest {
     }
 
     /**
+     * What a closure answered is answered by the path under it, and not only where it ends at a
+     * number.
+     *
+     * <p>These facts are about places under an element — {@code ""}, {@code amount}, {@code a.b} —
+     * and the mapped case used to answer at the root or not at all. So a closure that answered a
+     * record answered nothing: {@code x -> x.inner} keeps everything that was said under
+     * {@code inner}, and {@code x -> Row { amount = ... }} keeps at {@code amount} whatever the
+     * field was made from, and neither of those is a number the whole of the answer is.
+     */
+    @Test
+    void whatAClosureAnsweredIsAnsweredByThePathUnderIt() {
+        String nested = """
+                module demo
+
+                data Inner =
+                    { amount: Int
+                    }
+
+                data Outer =
+                    { inner: Inner
+                    }
+                    invariant nonNeg = inner.amount >= 0
+
+                data Money = Int
+                    invariant nonNeg = value >= 0
+
+                behavior walkIt : (xs: List<Outer>) -> Money
+                    constructs Money
+                let walkIt (xs) = Money(%s)
+                """;
+        assertFalse(owedIn(nested.formatted(
+                        "List.fold((acc, x) -> acc + x.inner.amount, 0, xs)")),
+                "what the element guarantees under a field of a field");
+        assertFalse(owedIn(nested.formatted(
+                        "List.fold((acc, y) -> acc + y.amount, 0, List.map(x -> x.inner, xs))")),
+                "and the same, read under one field of what the map answered");
+
+        String built = """
+                module demo
+
+                data U = Int
+                    invariant nonNeg = value >= 0
+
+                data Row =
+                    { amount: Int
+                    }
+
+                data Money = Int
+                    invariant nonNeg = value >= 0
+
+                behavior walkIt : (us: List<U>) -> Money
+                    constructs Money, Row
+                let walkIt (us) = Money(%s)
+                """;
+        assertFalse(owedIn(built.formatted(
+                        "List.fold((acc, r) -> acc + r.amount, 0,"
+                                + " List.map(x -> Row { amount = x.value }, us))")),
+                "a field is what it was made from, and it was made from a place at or above nought");
+        assertTrue(owedIn(built.formatted(
+                        "List.fold((acc, r) -> acc + r.amount, 0,"
+                                + " List.map(x -> Row { amount = x.value - 1 }, us))")),
+                "and one less than that may be below nought, so the total may be");
+    }
+
+    /**
      * An element that is one of two things is bounded by both.
      *
      * <p>{@code Map.updateIfPresent} answers the map it was given with one value replaced, and its

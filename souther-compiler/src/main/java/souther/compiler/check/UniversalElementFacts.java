@@ -14,6 +14,7 @@ import souther.compiler.types.TypeSymbol;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -239,26 +240,13 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
     /**
      * What holds of what the closure answered, given what holds of every element it is applied to.
      *
-     * <p>Not a projection of the paths. A closure answers a value it computed — {@code x -> 0},
-     * {@code x -> x.value + 1}, {@code x -> x.value} — and what holds of that value is what the
-     * arithmetic makes of what holds of the element. So the element is entered somewhere nothing
-     * else names, what the closure answers is read as a form over that place, and the facts the
-     * source states are assumed of it: what the reading proves of the form holds of every element of
-     * the list answered, since it was proved of an element nothing but those facts is true of.
-     *
-     * <p>The reading is the one that reads recipes and what values carry
-     * ({@link DerivedNumericFacts#refine}), and not one assembled here. What a form is worth is two
-     * stages — everything the atoms it reaches carry, and then what follows about the arithmetic the
-     * affine fragment cannot hold — and a caller that asked a raw domain instead would get a second
-     * reader that knows neither: {@code x -> x.value * x.value} names an atom whose recipe says it
-     * is a product, and {@code x -> Int.abs(x)} names one the library says is never negative. Both
-     * are read where a fold's step is read, and a walk over what the closure built would have lost
-     * them — the same value readable or not by where the tree put it, which is what this class is
-     * for.
-     *
-     * <p>What is assumed into that reading is what every element satisfies and nothing else. Nothing
-     * of where the call stands goes in: a closure is applied to every element, so what is true where
-     * one of them was named is not true of what it answers.
+     * <p>By the path under what it answered, because that is what these facts are. A closure answers
+     * a value, and a value is not always a number: {@code x -> x.inner} answers a record, and what
+     * is known of it is what was known of that place of the element; {@code x -> Row { amount = ... }}
+     * answers one made here, and what is known of each field is what the field was made from. A
+     * reading that could only answer about a whole numeric value would keep the facts a mapping
+     * kept only where the mapping ended at a number — the same value provable or not by where the
+     * map was written, which is what this class is for.
      */
     private static Map<String, Bounds> throughTheClosure(Core.PreservedCall call, Core source,
                                                          Denotations at, Terms terms,
@@ -271,25 +259,89 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
         BindingId element = handed.element().binding();
         FactSubject root = terms.placeSubject(element);
         Denotations reading = at.location(element, root, terms.placeTerm(element));
-        // Read before anything is assumed: reading the closure is what names the places inside it,
-        // and a place with no name is one no range can be asserted about.
-        LinearForm<FactSubject> answered = terms.affineOf(handed.step().body(), reading);
-        if (answered == null) {
-            return Map.of();
+        return answeredBy(handed.step().body(), reading, terms, root, kept);
+    }
+
+    /**
+     * What holds of the value {@code e} answers, by the path under it, given {@code kept} of the
+     * element it was written over and {@code root} the place that element was entered at.
+     *
+     * <p>Three readings of one value and each may answer where the others do not. A value that is a
+     * place of the element carries what was said of that place — and of everything under it, with
+     * the place's own steps dropped, since {@code inner.amount} of the element is {@code amount} of
+     * what {@code x -> x.inner} answers. A value built here carries, at each field, whatever that
+     * field was built from, which is this question again. And a value that is a number is read by
+     * the reading that reads recipes and what values carry, at the path {@code ""} that a value
+     * itself is.
+     *
+     * <p>Recursive rather than a case list, because a field of a construction is a value like any
+     * other: {@code Row { inner = x.inner }} is a projection under a field, and nothing here has to
+     * know that combination for it to be read.
+     */
+    private static Map<String, Bounds> answeredBy(Core e, Denotations reading, Terms terms,
+                                                  FactSubject root, UniversalElementFacts kept) {
+        Map<String, Bounds> answered = new LinkedHashMap<>();
+        FactSubject subject = terms.subjectOf(e, reading);
+        kept.byPath().forEach((path, bounds) -> {
+            String under = beneath(subject, path, root, terms);
+            if (under != null) {
+                holds(answered, under, bounds);
+            }
+        });
+        if (e instanceof Core.Construct construct) {
+            for (Core.FieldValue field : construct.values()) {
+                answeredBy(field.value(), reading, terms, root, kept).forEach((path, bounds) ->
+                        holds(answered, path.isEmpty() ? field.field() : field.field() + "." + path,
+                                bounds));
+            }
         }
+        // Read after the places inside it are named, which reading it as a form is what does: a
+        // range asserted about an atom whose spacing was never recorded is one the domain refuses.
+        LinearForm<FactSubject> form = terms.affineOf(e, reading);
+        if (form != null) {
+            NumericDomain<FactSubject> given = DerivedNumericFacts.refine(
+                    assuming(kept.at(root, terms), terms), terms, form.coefs().keySet());
+            holds(answered, FieldDomains.THE_VALUE, given.isBottom() ? null : given.boundsOf(form));
+        }
+        return answered;
+    }
+
+    /**
+     * The path {@code path} names under the value at {@code subject}, or null where it names no
+     * place of it.
+     *
+     * <p>Asked of the subjects and not of the fields written. A newtype's carrier is read as
+     * {@code x.value} and is the value itself, so the path that names it is the empty one, and a
+     * reader counting the fields it saw would have gone looking for what holds of a place under a
+     * number. So the element's own paths are put back under the place it was entered at, one step
+     * at a time, and the algebra says which of them the closure answered — as it does everywhere
+     * else.
+     */
+    private static String beneath(FactSubject subject, String path, FactSubject root, Terms terms) {
+        if (subject == null) {
+            return null;
+        }
+        List<String> steps = StepInputFacts.stepsOf(path);
+        for (int taken = 0; taken <= steps.size(); taken++) {
+            if (subject.equals(terms.under(root, String.join(".", steps.subList(0, taken))))) {
+                return String.join(".", steps.subList(taken, steps.size()));
+            }
+        }
+        return null;
+    }
+
+    /** A domain with every one of {@code facts} taken as holding, for the reading to start from.
+     * A place whose spacing was never recorded is one no range can be asserted about, and is left
+     * out rather than asserted into a domain that would refuse it. */
+    private static NumericDomain<FactSubject> assuming(Map<FactSubject, Bounds> facts, Terms terms) {
         NumericDomain<FactSubject> given = NumericDomain.top();
-        for (Map.Entry<FactSubject, Bounds> one : kept.at(root, terms).entrySet()) {
-            Map<FactSubject, Granularity> spacing =
-                    terms.kindsOf(NumericDomain.LinearForm.atom(one.getKey()));
+        for (Map.Entry<FactSubject, Bounds> one : facts.entrySet()) {
+            Map<FactSubject, Granularity> spacing = terms.kindsOf(LinearForm.atom(one.getKey()));
             if (!spacing.isEmpty()) {
                 given = given.assuming(one.getKey(), one.getValue(), spacing);
             }
         }
-        NumericDomain<FactSubject> read =
-                DerivedNumericFacts.refine(given, terms, answered.coefs().keySet());
-        Bounds bounds = read.isBottom() ? null : read.boundsOf(answered);
-        return bounds == null || bounds.saysNothing() ? Map.of()
-                : Map.of(FieldDomains.THE_VALUE, bounds);
+        return given;
     }
 
     /** Records that everything at {@code path} lies between {@code bounds}. Two sources reaching one

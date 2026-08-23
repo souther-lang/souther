@@ -36,6 +36,11 @@ class AnAccumulationIsProvedByWhatProvesTheFoldThatSpellsItTest {
                 invariant nonNeg = value >= 0
             """;
 
+    private static boolean owedIn(String source) {
+        return Compiler.compileWithWarnings(source).warnings().stream()
+                .anyMatch(d -> d.severity() == Severity.WARNING && "E2011".equals(d.code()));
+    }
+
     private static boolean owed(String expression) {
         Compiler.Compiled compiled = Compiler.compileWithWarnings(TYPES + "\n" + """
                 behavior total : (xs: List<U>, ns: List<Int>, ones: List<AtLeastOne>) -> Money
@@ -88,6 +93,39 @@ class AnAccumulationIsProvedByWhatProvesTheFoldThatSpellsItTest {
         assertFalse(owed("List.fold((acc, x) -> acc * x.value, 1, ones)"),
                 "which is what the fold saying the same thing answers");
         assertFalse(owed("List.product([2, 3])"));
+    }
+
+    /**
+     * And the same over the other kind of number the domain carries.
+     *
+     * <p>What an accumulation starts from is a recipe read at the type the call answers (ADR-0082),
+     * so {@code List.sum} of decimals starts from a nought that is a {@code Decimal} — not from a
+     * literal written into a tree for its type to be inferred off again. The two places of the walk
+     * are named with that type's spacing for the same reason, so a range asserted about the
+     * accumulator is one the domain takes.
+     */
+    @Test
+    void anAccumulationOfDecimalsIsTheWalkItMeansAsAnAccumulationOfWholeNumbersIs() {
+        String decimals = """
+                module demo
+
+                data Rate = Decimal
+                    invariant nonNeg = value >= 0.0m
+
+                data Summed = Decimal
+                    invariant nonNeg = value >= 0.0m
+
+                behavior walkIt : (ds: List<Rate>) -> Summed
+                    constructs Summed
+                let walkIt (ds) = Summed(%s)
+                """;
+        assertFalse(owedIn(decimals.formatted("List.sum(List.map(x -> x.value, ds))")),
+                "a sum of decimals at or above nought is at or above nought");
+        assertFalse(owedIn(decimals.formatted(
+                        "List.fold((acc, x) -> acc + x.value, 0.0m, ds)")),
+                "which is what the fold saying the same thing answers");
+        assertFalse(owedIn(decimals.formatted("List.product(List.map(x -> x.value, ds))")),
+                "and a product of them, started at one, never leaves them");
     }
 
     /** And a product over elements nothing bounds is reported, as its fold is. */
