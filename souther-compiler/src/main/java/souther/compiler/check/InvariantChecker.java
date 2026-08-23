@@ -764,7 +764,7 @@ public final class InvariantChecker {
         }
         for (Map.Entry<String, Type> field : clauses.fieldsOf(data).entrySet()) {
             name(new Core.FieldAccess(inner, field.getKey(), field.getValue(), NOWHERE),
-                    PathEngine.under(path, field.getKey()), field.getValue(), at, symbols, depth + 1,
+                    GuaranteeWalk.under(path, field.getKey()), field.getValue(), at, symbols, depth + 1,
                     atoms, typeAt, held, keys);
         }
     }

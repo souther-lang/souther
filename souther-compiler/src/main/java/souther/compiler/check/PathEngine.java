@@ -65,6 +65,9 @@ final class PathEngine {
 
     /** The one reading of what a declaration guarantees. This walk is one of its consumers. */
     private final TypeGuarantees guarantees;
+
+    /** Getting to the positions that reading is asked about, which is nobody's semantics. */
+    private final GuaranteeWalk walk;
     /** What each behavior a body may call states about its answer, by the name it is called under. */
     private final Map<ValueName.Behavior, StatedContract> contracts;
 
@@ -99,6 +102,7 @@ final class PathEngine {
         this.terms = new Terms(symbols, reading, policy);
         this.predicates = new Predicates(terms);
         this.guarantees = new TypeGuarantees(symbols, clauses, predicates);
+        this.walk = new GuaranteeWalk(guarantees);
         this.contracts = Map.copyOf(contracts);
     }
 
@@ -591,79 +595,63 @@ final class PathEngine {
     Known seedAt(Core root, String path, Known k, Denotations at, int depth, int limit,
                  Set<TypeSymbol> onPath, InvariantChecker.Gathering gathering,
                  InvariantChecker.Reach reach) {
-        // Asked one at a time, because a stop says two things and only one of them is the same for
-        // all of these: whether the rules under it were read, and whether a construction could have
-        // got out of making the value they are about.
-        if (depth > limit) {
-            // A limit on how far a measurement is worth carrying, which is not a limit on the model:
-            // a rule four records down refuses the outermost construction exactly as one on its own
-            // fields does.
-            return declining(root.type(), path, gathering, k,
-                    InvariantChecker.Borne.BY_EVERY_VALUE);
+        Seeding seeding = new Seeding(k, gathering);
+        walk.from(root, path, at,
+                new GuaranteeWalk.Scope(limit - depth, reach.stopAt(), reach.withoutClauses()),
+                seeding);
+        return seeding.known;
+    }
+
+    /**
+     * The reading a seeding is: every guarantee taken as holding of the value it was read at, and
+     * every stop accounted for.
+     *
+     * <p>What a stop costs is this reader's question and not the walk's. Most of them stop where
+     * there was nothing to read, so what is asked is whether any rule stands under what is being
+     * left, and only then is anything said. A walk that reported every stop would have a record with
+     * one plain string field speaking for none of its positions.
+     */
+    private final class Seeding implements GuaranteeWalk.Reader {
+
+        private Known known;
+
+        private final InvariantChecker.Gathering gathering;
+
+        private Seeding(Known known, InvariantChecker.Gathering gathering) {
+            this.known = known;
+            this.gathering = gathering;
         }
-        if (!(root.type() instanceof Type.Ref ref)) {
-            // Nothing here is named, so there is nothing this walk could have been told to stop at
-            // and nothing to record as entered. What may be declared is the reading's question and
-            // is asked below.
-            return declining(root.type(), path, gathering, k,
-                    InvariantChecker.Borne.BY_SOME_VALUES);
+
+        @Override
+        public void guaranteed(String path, TypeGuarantee guarantee) {
+            known = taking(guarantee, known, gathering);
         }
-        // Asked of the name and before the reading, because being told to stop at a name is this
-        // walk's business and says nothing about what the declaration states. Supposed to hold
-        // values, so nothing written under it is read: what is under it is what would say it holds
-        // none, and reading it here is the supposing undone one step in.
-        if (reach.stopAt().test(ref.name())) {
-            // Left out because this reading was asked to leave it out, which is still a rule of a
-            // value every construction has to make.
-            return declining(root.type(), path, gathering, k,
-                    InvariantChecker.Borne.BY_EVERY_VALUE);
+
+        @Override
+        public void stopped(String path, Type type, GuaranteeWalk.Stop why) {
+            declining(type, path, gathering, borne(why));
         }
-        if (!(guarantees.at(root, at) instanceof TypeGuarantees.At.Declared here)) {
-            // No declaration of its own to read: a container or an optional, whose element is a
-            // value that need not be there, a type nothing is written under at all, or a choice
-            // between declarations. A construction picks one of a choice's cases, so a rule written
-            // on one of them refuses values of that case and not every value of this.
-            return declining(root.type(), path, gathering, k,
-                    InvariantChecker.Borne.BY_SOME_VALUES);
-        }
-        // Entered before anything under it is walked, so that the one name and the other stay
-        // paired: a stop taken after entering would leave the name on the path with nothing to take
-        // it off, and the next field of the same type would be passed over as one already read.
-        if (!onPath.add(here.name())) {
-            // Already met on the way down, so entering it again reads the rules that were read where
-            // it was met. A record holding one of its own kind stops here and nothing is short of
-            // anything for it.
-            return declining(root.type(), path, gathering, k,
-                    InvariantChecker.Borne.BY_SOME_VALUES);
-        }
-        Known out = k;
-        // What the declaration states is read whatever this walk was asked for; whether this walk
-        // takes it in is the walk's own answer. A reading told to leave a declaration's clauses out
-        // was not asked to lose any, so nothing is reported missing for them either.
-        if (!reach.withoutClauses().test(here.name())) {
-            // A clause of a declaration under here that states nothing the reading can use is gone
-            // before any reader sees it, and which position it was about goes with it. Said here
-            // because a reader answering for the clauses it was handed would otherwise answer for a
-            // rule it never saw.
-            if (gathering != null && !here.everyClauseStated()) {
+
+        @Override
+        public void lostAClause(String path) {
+            // Said whatever stands under the position, because the clause was read and lost rather
+            // than never reached: a reader answering for the clauses it was handed would otherwise
+            // answer for a rule it never saw.
+            if (gathering != null) {
                 gathering.missed(path, InvariantChecker.Borne.BY_EVERY_VALUE);
             }
-            for (TypeGuarantee guarantee : here.guarantees()) {
-                out = taking(guarantee, out, gathering);
-            }
         }
-        for (TypeGuarantees.At.Beneath under : here.beneath()) {
-            // A position wearing a name is at a path of its own; a newtype's value is the same
-            // position and keeps this one's.
-            String there = under.field().isEmpty() ? path : under(path, under.field());
-            out = under.value() == null
-                    ? declining(under.type(), there, gathering, out,
-                            InvariantChecker.Borne.BY_EVERY_VALUE)
-                    : seedAt(under.value(), there, out, at, depth + 1, limit, onPath, gathering,
-                            reach);
+
+        /** What a stop leaves unread: a rule of every value that stands there, or one of only some.
+         * A stop the reader asked for and a depth it could not afford both leave rules every
+         * construction has to make; the rest stop where no rule holds of every value anyway. */
+        private InvariantChecker.Borne borne(GuaranteeWalk.Stop why) {
+            return switch (why) {
+                case PAST_THE_DEPTH, ASKED_TO_STOP, NO_VALUE_THERE ->
+                        InvariantChecker.Borne.BY_EVERY_VALUE;
+                case NOTHING_DECLARED, ALREADY_ENTERED -> InvariantChecker.Borne.BY_SOME_VALUES;
+            };
         }
-        onPath.remove(here.name());
-        return out;
     }
 
     /**
@@ -691,26 +679,17 @@ final class PathEngine {
     }
 
     /**
-     * {@code k} as it stands, with the reading told where it is leaving rules unread.
+     * Tells the reading where it is leaving rules unread.
      *
-     * <p>Every way this walk stops short comes here: past the depth it reads to, at a value the
-     * caller supposed holds values, at a type it has no declaration for, and at a name already on
-     * the path. What a stop costs is not the same at each of them — most of them stop where there
-     * was nothing to read — so what is asked is whether any rule stands under what is being left,
-     * and only then is anything said. A walk that reported every stop would have a record with one
-     * plain string field speaking for none of its positions.
+     * <p>Every way the walk stops short comes here. Whether a stop costs anything is a question
+     * about the model — is any rule written under what is being left — and asking it of the walk's
+     * own reach would answer that whatever was not read had nothing in it.
      */
-    private Known declining(Type type, String path, InvariantChecker.Gathering gathering, Known k,
-                            InvariantChecker.Borne borne) {
+    private void declining(Type type, String path, InvariantChecker.Gathering gathering,
+                           InvariantChecker.Borne borne) {
         if (gathering != null && type != null && guarantees.anyRuleUnder(type)) {
             gathering.missed(path, borne);
         }
-        return k;
     }
 
-    /** A field of the value at {@code path}. The root of a newtype's own reading is the value it
-     * wraps, which is at no path of its own, so its fields are the first step there is. */
-    static String under(String path, String field) {
-        return path.isEmpty() ? field : path + "." + field;
-    }
 }
