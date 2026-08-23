@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * was given, and one it has to be able to decline: a value that could not be read leaves that axis
  * undecided, and only that axis.
  */
-class RowClassesTest {
+class InputClassificationsTest {
 
     private static final String MODEL = """
             module example.trip
@@ -108,7 +108,7 @@ class RowClassesTest {
                 """);
 
         Map<AxisId, Classification> classes =
-                RowClasses.of(read.rows().get(0), read.inputs(), read.axes());
+                InputClassifications.of(read.rows().get(0).inputs(), read.inputs(), read.axes());
 
         assertEquals(Classification.in("Domestic"), at(classes, "request.kind"));
         assertEquals(Classification.in("request.cost/0 <= x <= 100"),
@@ -124,7 +124,7 @@ class RowClassesTest {
                 """);
 
         Map<AxisId, Classification> classes =
-                RowClasses.of(read.rows().get(0), read.inputs(), read.axes());
+                InputClassifications.of(read.rows().get(0).inputs(), read.inputs(), read.axes());
 
         assertEquals(Classification.in("Overseas"), at(classes, "request.kind"));
         assertEquals(Classification.in("request.cost/100 < x"),
@@ -141,7 +141,7 @@ class RowClassesTest {
                 """);
 
         Map<AxisId, Classification> classes =
-                RowClasses.of(read.rows().get(0), read.inputs(), read.axes());
+                InputClassifications.of(read.rows().get(0).inputs(), read.inputs(), read.axes());
 
         assertTrue(classes.keySet().stream().noneMatch(a -> a.term().equals("request.memo")),
                 "a plain String is not divided, so there is no class to be in");
@@ -168,7 +168,7 @@ class RowClassesTest {
                 List.of(new ObservedValue.Constructed(request.type(), broken)), row.run());
 
         Map<AxisId, Classification> classes =
-                RowClasses.of(damaged, read.inputs(), read.axes());
+                InputClassifications.of(damaged.inputs(), read.inputs(), read.axes());
 
         assertEquals(Classification.in("Domestic"), at(classes, "request.kind"),
                 "the readable field still answers");
@@ -188,7 +188,7 @@ class RowClassesTest {
         assertEquals(List.of(), row.inputs(), "the fixture never built");
 
         Map<AxisId, Classification> classes =
-                RowClasses.of(row, read.inputs(), read.axes());
+                InputClassifications.of(row.inputs(), read.inputs(), read.axes());
 
         assertTrue(classes.values().stream().noneMatch(Classification::isClassified));
     }

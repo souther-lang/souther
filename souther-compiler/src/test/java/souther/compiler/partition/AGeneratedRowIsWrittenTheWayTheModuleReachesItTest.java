@@ -78,7 +78,7 @@ class AGeneratedRowIsWrittenTheWayTheModuleReachesItTest {
                 compiled(source).db().ask(new Adequacy.Generated("app")).value();
         Adequacy.Filling f = filling.get("f");
         return java.util.stream.Stream
-                .concat(f.boundaries().rows().stream(), f.pairs().rows().stream())
+                .concat(f.boundaries().rows().stream(), f.composed().rows().stream())
                 .map(r -> String.join(", ", r.inputs().stream().map(FixtureTemplate::text).toList()))
                 .distinct().toList();
     }
@@ -94,8 +94,7 @@ class AGeneratedRowIsWrittenTheWayTheModuleReachesItTest {
                         "Req { amount = Amount(500), kind = Domestic }",
                         "Req { amount = Amount(498), kind = Domestic }",
                         "Req { amount = Amount(501), kind = Domestic }",
-                        "Req { amount = Amount(499), kind = Overseas }",
-                        "Req { amount = Amount(500), kind = Overseas }"),
+                        "Req { amount = Amount(499), kind = Overseas }"),
                 rows);
     }
 
@@ -112,8 +111,7 @@ class AGeneratedRowIsWrittenTheWayTheModuleReachesItTest {
                         "Req { amount = up.Amount(500), kind = up.Domestic }",
                         "Req { amount = up.Amount(498), kind = up.Domestic }",
                         "Req { amount = up.Amount(501), kind = up.Domestic }",
-                        "Req { amount = up.Amount(499), kind = up.Overseas }",
-                        "Req { amount = up.Amount(500), kind = up.Overseas }"),
+                        "Req { amount = up.Amount(499), kind = up.Overseas }"),
                 rows);
     }
 
@@ -132,8 +130,7 @@ class AGeneratedRowIsWrittenTheWayTheModuleReachesItTest {
                         "Req { amount = up.Amount(500), kind = up.Domestic }",
                         "Req { amount = up.Amount(498), kind = up.Domestic }",
                         "Req { amount = up.Amount(501), kind = up.Domestic }",
-                        "Req { amount = up.Amount(499), kind = up.Overseas }",
-                        "Req { amount = up.Amount(500), kind = up.Overseas }"),
+                        "Req { amount = up.Amount(499), kind = up.Overseas }"),
                 rows);
     }
 
@@ -151,8 +148,7 @@ class AGeneratedRowIsWrittenTheWayTheModuleReachesItTest {
                         "Req { amount = lib.Amount(500), kind = Domestic }",
                         "Req { amount = lib.Amount(498), kind = Domestic }",
                         "Req { amount = lib.Amount(501), kind = Domestic }",
-                        "Req { amount = lib.Amount(499), kind = Overseas }",
-                        "Req { amount = lib.Amount(500), kind = Overseas }"),
+                        "Req { amount = lib.Amount(499), kind = Overseas }"),
                 rows);
         assertEquals(List.of("E1905"), addedByPasting(source,
                         rows.stream().filter(each -> each.contains("Amount(500)"))

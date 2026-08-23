@@ -64,7 +64,7 @@ class WhetherASizeCanBeBuiltIsAnsweredByWhatBuildsItTest {
     /** The row offered at {@code edge}, as the text an author is handed for its first input. */
     private static String rowAt(Generator.GenerationResult filled, String edge) {
         for (Generator.GeneratedRow row : filled.rows()) {
-            if (row.classes().contains(edge)) {
+            if (row.labels().contains(edge)) {
                 return row.inputs().get(0).text();
             }
         }
@@ -175,7 +175,7 @@ class WhetherASizeCanBeBuiltIsAnsweredByWhatBuildsItTest {
     /** The second input of the row offered at {@code edge}, or null where none was. */
     private static String sizeAt(Generator.GenerationResult filled, String edge) {
         for (Generator.GeneratedRow row : filled.rows()) {
-            if (row.classes().contains(edge)) {
+            if (row.labels().contains(edge)) {
                 return row.inputs().get(1).text();
             }
         }

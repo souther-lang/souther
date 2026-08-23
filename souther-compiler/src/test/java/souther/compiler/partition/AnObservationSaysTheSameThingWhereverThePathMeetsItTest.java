@@ -121,7 +121,7 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
     }
 
     private static Incompleteness.Code why(Read read, RowOutcome row) {
-        Map<AxisId, Classification> classes = RowClasses.of(row, read.inputs(), read.axes());
+        Map<AxisId, Classification> classes = InputClassifications.of(row.inputs(), read.inputs(), read.axes());
         Classification where = classes.entrySet().stream()
                 .filter(e -> e.getKey().term().equals(POSITION))
                 .map(Map.Entry::getValue).findFirst()
@@ -198,10 +198,11 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
 
         assertInstanceOf(ObservedValue.Truncated.class,
                 read.inputs().valueAt(givingInterval(read, intervalHolding(read,
-                        new ObservedValue.Truncated())), position(read)),
+                        new ObservedValue.Truncated())).inputs(), position(read)),
                 "the limit was reached at the position");
         assertInstanceOf(ObservedValue.Truncated.class,
-                read.inputs().valueAt(givingInterval(read, new ObservedValue.Truncated()), position(read)),
+                read.inputs().valueAt(
+                        givingInterval(read, new ObservedValue.Truncated()).inputs(), position(read)),
                 "the limit was reached one field above the position");
     }
 }

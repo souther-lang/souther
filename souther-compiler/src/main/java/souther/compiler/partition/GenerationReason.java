@@ -44,8 +44,14 @@ public sealed interface GenerationReason {
         }
     }
 
-    /** The search ended before it had covered everything, with this many combinations left. */
-    record SearchLimit(String behavior, int combinations) implements GenerationReason {}
+    /**
+     * The search ended before it had walked the whole plan, with this many things left on it.
+     *
+     * <p>Classes and arms, which is what a plan is made of. A combination is where a witness for an
+     * arm is looked for and is not a thing the plan holds, so a count of them was a number about a
+     * space nobody is owed anything in — and the number handed here was never that anyway.
+     */
+    record SearchLimit(String behavior, int owed) implements GenerationReason {}
 
     /**
      * The module's classes were not there to put a candidate through.
@@ -69,20 +75,6 @@ public sealed interface GenerationReason {
      * one is acting on a reading, and that is theirs to know.
      */
     record RowsNotConfirmed(String behavior) implements GenerationReason {}
-
-    /**
-     * Combinations no row was offered for, because a row already written may already fill them.
-     *
-     * <p>Which is not that it does. The row sits where one filling the combination would sit, and
-     * whether it takes the path the combination names is settled by running it — so where nothing
-     * could say, the row is given the benefit of it and no work is handed to an author who may have
-     * done it.
-     *
-     * <p>Said because the alternative is silence, and silence here reads as a combination covered.
-     * What an author has is a combination nothing established anything about, and the way to
-     * establish it is to measure.
-     */
-    record CombinationsWithheld(String behavior, int combinations) implements GenerationReason {}
 
     /**
      * The generated classes would not link, so the decoders could not be reached.

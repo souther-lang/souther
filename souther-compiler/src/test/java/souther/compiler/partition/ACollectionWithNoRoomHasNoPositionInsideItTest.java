@@ -58,11 +58,11 @@ class ACollectionWithNoRoomHasNoPositionInsideItTest {
     /** The rows the position beside it is owed are written, and nothing is left unresolved. */
     @Test
     void thePositionBesideItIsStillOfferedItsRows() {
-        assertEquals(List.of(), generated().pairs().unresolved(),
+        assertEquals(List.of(), generated().composed().unresolved(),
                 "no combination is one a row cannot be written for");
         assertEquals(List.of("Box { xs = Empty([]), flag = true }",
                         "Box { xs = Empty([]), flag = false }"),
-                generated().pairs().rows().stream()
+                generated().composed().rows().stream()
                         .map(row -> row.inputs().get(0).text()).toList());
     }
 }

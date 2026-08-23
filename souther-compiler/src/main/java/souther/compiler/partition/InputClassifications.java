@@ -4,7 +4,6 @@ import souther.compiler.inputs.Membership;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
-import souther.compiler.observe.RowOutcome;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -12,28 +11,35 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Which class each of a row's inputs fell in.
+ * Which class each of a behavior's inputs fell in.
  *
- * <p>A row writes values, not class names, so what it covers has to be read back out of what it was
- * given. The values are already the compiler's own ({@link ObservedValue}), so this is a walk down a
- * path and a question put to each class.
+ * <p>Values, not class names, so where they fall has to be read back out of them. The values are
+ * already the compiler's own ({@link ObservedValue}), so this is a walk down a path and a question
+ * put to each class.
  *
- * <p>A value that could not be read leaves <em>that axis</em> unclassified and nothing else. A row
- * carrying one enormous string still says which case its other inputs were, and a measure that gave
- * up on the whole row because of an unrelated field would report gaps the row had already filled.
+ * <p><b>A tuple of values and never a row.</b> A written {@code example} row has one; so does a
+ * value in scope that a generated row is composed against, and so does a candidate the generator
+ * has just built. All three are placed by this and by nothing else — a second placement written for
+ * one of them would be a second answer to where a value falls, and the two would agree until one
+ * moved. Whatever a caller has a tuple of values for, it hands that over ({@code row.inputs()} for
+ * a row) and gets back the same map every other caller gets.
+ *
+ * <p>A value that could not be read leaves <em>that axis</em> unclassified and nothing else. One
+ * enormous string still says which case the values beside it were, and a measure that gave up on
+ * the whole tuple because of an unrelated field would report gaps that were already filled.
  */
-public final class RowClasses {
+public final class InputClassifications {
 
     /** Where each axis's value fell, for the axes that have classes. An axis the model only bounds
      * has nothing to fall into and is left out. */
-    public static Map<AxisId, Classification> of(RowOutcome row, BehaviorInputs where,
+    public static Map<AxisId, Classification> of(List<ObservedValue> inputs, BehaviorInputs where,
                                                  List<Axis> axes) {
         Map<AxisId, Classification> out = new LinkedHashMap<>();
         for (Axis axis : axes) {
             if (!axis.derivable()) {
                 continue;
             }
-            out.put(axis.id(), classify(row, where, axis));
+            out.put(axis.id(), classify(inputs, where, axis));
         }
         return Map.copyOf(out);
     }
@@ -41,7 +47,7 @@ public final class RowClasses {
 
 
     /**
-     * Which class the row's value at {@code axis} fell in, or why none of them could say.
+     * Which class the value at {@code axis} fell in, or why none of them could say.
      *
      * <p>The classes answer for themselves, including about a value none of them could read. This
      * used to test the value's shape here first, which is the same question asked in a second place
@@ -50,20 +56,21 @@ public final class RowClasses {
      * a construction this saw nothing wrong with, and the reason came out as the one the last line
      * had to guess.
      */
-    private static Classification classify(RowOutcome row, BehaviorInputs where, Axis axis) {
-        List<BehaviorInputs.Occurrence> values = where.occurrencesAt(row, axis.path());
+    private static Classification classify(List<ObservedValue> inputs, BehaviorInputs where,
+                                           Axis axis) {
+        List<BehaviorInputs.Occurrence> values = where.occurrencesAt(inputs, axis.path());
         if (values == null) {
             return Classification.unreadable(Incompleteness.Code.VALUE_UNREADABLE,
                     axis.id().behavior(), axis.id().term());
         }
-        // Every value the row put here, the class it is in, and the element it came from. One value
-        // at most positions; as many as the row wrote at a position inside a sequence, where they
-        // need not fall together — and where one of them being unreadable leaves the classes the
-        // others reached standing, since each is a value of its own.
+        // Every value here, the class it is in, and the element it came from. One value at most
+        // positions; as many as were written at a position inside a sequence, where they need not
+        // fall together — and where one of them being unreadable leaves the classes the others
+        // reached standing, since each is a value of its own.
         List<Classification.At> in = new ArrayList<>();
         Incompleteness stopped = null;
         for (BehaviorInputs.Occurrence value : values) {
-            switch (classifyOne(row, where, axis, value.value())) {
+            switch (classifyOne(axis, value.value())) {
                 case Classification.Classified found -> found.classIds().forEach(id ->
                         in.add(new Classification.At(value.at(), id)));
                 case Classification.Unclassified why -> {
@@ -74,16 +81,15 @@ public final class RowClasses {
             }
         }
         // Both, and not one instead of the other. A value one class holds and a value beside it
-        // nothing could read are two facts about one row: the classes it covers stand, and the
+        // nothing could read are two facts about one tuple: the classes it covers stand, and the
         // measurement here is short of what the rest of the list says. Kept apart, either the
         // coverage is thrown away or the measure calls itself complete over a value nothing looked
-        // at. A row that wrote no element at all is neither — it was read, and is in no class.
+        // at. No element written at all is neither — it was read, and is in no class.
         return Classification.at(in, stopped);
     }
 
     /** Where one value at the position falls, or why no class could say. */
-    private static Classification classifyOne(RowOutcome row, BehaviorInputs where, Axis axis,
-                                              ObservedValue value) {
+    private static Classification classifyOne(Axis axis, ObservedValue value) {
         // Kept rather than returned on, and not acted on either. A class may read less of a value
         // than the one after it, so one saying it could not read says nothing about the rest —
         // including that the rest cannot hold it. An incompleteness is what is left once no class
@@ -118,11 +124,11 @@ public final class RowClasses {
         }
         // Every class read the value and none holds it, which `Axis` says cannot happen: its classes
         // are exhaustive over the position's values. So this is that contract broken rather than
-        // anything about the row, and saying the value could not be read would be reporting a
+        // anything about the value, and saying it could not be read would be reporting a
         // measurement failure for a defect in the partition.
         throw new IllegalStateException("no class of " + axis.id() + " holds a value it read: "
                 + value);
     }
 
-    private RowClasses() {}
+    private InputClassifications() {}
 }

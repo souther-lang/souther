@@ -294,7 +294,7 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
                 .ask(new Adequacy.Generated("example.owed")).value().get("cmp");
         assertNotNull(filling, "the model under test compiles");
         Map<String, String> out = new java.util.LinkedHashMap<>();
-        filling.boundaries().rows().forEach(row -> out.put(row.description(),
+        filling.boundaries().rows().forEach(row -> out.put(String.join(" x ", row.labels()),
                 row.inputs().stream().map(FixtureTemplate::text)
                         .collect(java.util.stream.Collectors.joining(", "))));
         assertFalse(out.isEmpty(), "the model under test is offered rows at its line");

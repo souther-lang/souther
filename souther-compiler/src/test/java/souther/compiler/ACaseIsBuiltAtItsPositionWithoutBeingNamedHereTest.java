@@ -72,7 +72,7 @@ class ACaseIsBuiltAtItsPositionWithoutBeingNamedHereTest {
         Map<String, Adequacy.Filling> all = compilation.db()
                 .ask(new Adequacy.Generated("consumer")).value();
         assertNotNull(all, "the model under test compiles");
-        return all.get("judge").pairs();
+        return all.get("judge").composed();
     }
 
     @Test

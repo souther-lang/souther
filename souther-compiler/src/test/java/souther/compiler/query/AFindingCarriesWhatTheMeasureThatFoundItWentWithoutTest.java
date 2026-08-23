@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * What a build refuses over is what <em>that</em> measure established, and not what the measure
  * beside it managed.
  *
- * <p>A finding's {@code weakenedBy} decides whether a build may refuse over it: a kind the criterion
+ * <p>A finding's {@code weakenedBy} decides whether a build may refuse over it: a kind the bar
  * refuses, from a measurement nothing weakened, is a gap; the same kind from one that went without
  * something is undecided. So handing a finding the wrong measurement's account is not a reporting
  * slip — it is a build no longer refusing a gap it established.
@@ -154,28 +154,28 @@ class AFindingCarriesWhatTheMeasureThatFoundItWentWithoutTest {
         Adequacy.Findings.signatureFindings("sort", somewhere(), signature, found);
         assertFalse(found.isEmpty(), "the producer says something about these cases");
 
-        Adequacy.Criterion criterion = Adequacy.Criterion.SIMPLIFIED_DOMAIN;
+        Adequacy.AdequacyBar held = Adequacy.AdequacyBar.SIMPLIFIED_DOMAIN;
         assertEquals(Adequacy.Finding.Disposition.REFUSED,
-                disposition(found, criterion, About.ACaseNoRowExpects.class, dropped),
+                disposition(found, held, About.ACaseNoRowExpects.class, dropped),
                 () -> "a gap the output's own measure established, read through the signature's: "
                         + found);
         assertEquals(Adequacy.Finding.Disposition.REFUSED,
-                inputGap(found, criterion, 1, large),
+                inputGap(found, held, 1, large),
                 () -> "one position's unreadable row deciding another position's gap: " + found);
         assertEquals(Adequacy.Finding.Disposition.UNDECIDED,
-                inputGap(found, criterion, 0, large),
+                inputGap(found, held, 0, large),
                 () -> "a gap from a measure that went without something: " + found);
     }
 
     /** What a build does about the one finding of {@code kind} about {@code missing}. */
     private static Adequacy.Finding.Disposition disposition(
-            List<Adequacy.Finding> found, Adequacy.Criterion criterion, Class<?> kind,
+            List<Adequacy.Finding> found, Adequacy.AdequacyBar held, Class<?> kind,
             TypeSymbol missing) {
         for (Adequacy.Finding each : found) {
             if (kind.isInstance(each.about())
                     && each.about() instanceof About.ACaseNoRowExpects(var what)
                     && what.equals(missing)) {
-                return each.disposition(criterion);
+                return each.disposition(held);
             }
         }
         throw new AssertionError("no finding of " + kind.getSimpleName() + " about " + missing
@@ -184,12 +184,12 @@ class AFindingCarriesWhatTheMeasureThatFoundItWentWithoutTest {
 
     /** And of the one about the case {@code missing} at input {@code at}. */
     private static Adequacy.Finding.Disposition inputGap(
-            List<Adequacy.Finding> found, Adequacy.Criterion criterion, int at,
+            List<Adequacy.Finding> found, Adequacy.AdequacyBar held, int at,
             TypeSymbol missing) {
         for (Adequacy.Finding each : found) {
             if (each.about() instanceof About.ACaseNoRowAppliesItTo(var input, var what)
                     && input.at() == at && what.equals(missing)) {
-                return each.disposition(criterion);
+                return each.disposition(held);
             }
         }
         throw new AssertionError("no finding about " + missing + " at input " + at

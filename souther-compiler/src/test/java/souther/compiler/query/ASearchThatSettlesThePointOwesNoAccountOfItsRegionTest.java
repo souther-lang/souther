@@ -109,7 +109,8 @@ class ASearchThatSettlesThePointOwesNoAccountOfItsRegionTest {
     @Test
     void anAnsweredPointAndAnUnmadeSearchOweNothing() {
         assertEquals(List.of(), new ItemAssessment.Attempt.Built(
-                new Generator.GeneratedRow(List.of("p.x = 11"), List.of()), region())
+                new Generator.GeneratedRow(
+                        new Generator.Purpose.ForAPoint("p.x = 11"), List.of()), region())
                 .unaccountedFor());
         assertEquals(List.of(), new ItemAssessment.Attempt.NotAttempted(
                 ItemAssessment.Attempt.Reason.NO_CLASSES).unaccountedFor());

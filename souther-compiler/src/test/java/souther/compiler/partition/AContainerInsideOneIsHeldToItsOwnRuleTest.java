@@ -62,7 +62,7 @@ class AContainerInsideOneIsHeldToItsOwnRuleTest {
     @Test
     void aRowOfferedForAnInnerCollectionMeetsThatCollectionsFloor() {
         assertEquals(List.of("[Inner([5, 5])]"),
-                offered("twice", ">= 2", "[ 1, 2 ]").pairs().rows().stream()
+                offered("twice", ">= 2", "[ 1, 2 ]").composed().rows().stream()
                         .map(row -> row.inputs().get(0).text()).toList(),
                 "the inner list holds the two its own rule asks for");
     }
@@ -72,10 +72,10 @@ class AContainerInsideOneIsHeldToItsOwnRuleTest {
     void aPositionInsideACollectionCappedAtNoneIsOfferedNothing() {
         Adequacy.Filling filling = offered("none", "<= 0", "[ ]");
 
-        assertEquals(List.of(), filling.pairs().rows().stream()
+        assertEquals(List.of(), filling.composed().rows().stream()
                         .map(row -> row.inputs().get(0).text()).toList(),
                 "no row is composed for a position nothing can stand at");
-        assertEquals(List.of(), filling.pairs().unresolved().stream()
+        assertEquals(List.of(), filling.composed().unresolved().stream()
                         .map(Object::toString).toList(),
                 "and no combination of it is left owed a row, whichever way the search fell short");
     }

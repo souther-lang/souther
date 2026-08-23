@@ -66,7 +66,7 @@ class AGeneratedFixtureSaysWhatItsNamesDenoteTest {
 
         List<Hir.Expr> nodes = new ArrayList<>();
         java.util.stream.Stream
-                .concat(filling.boundaries().rows().stream(), filling.pairs().rows().stream())
+                .concat(filling.boundaries().rows().stream(), filling.composed().rows().stream())
                 .forEach(row -> row.inputs().forEach(input -> collect(input.value(), nodes)));
         return nodes;
     }
