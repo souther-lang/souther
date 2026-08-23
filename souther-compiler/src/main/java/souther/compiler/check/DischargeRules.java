@@ -1475,6 +1475,27 @@ final class DischargeRules {
                 ? same.source().argument() : null;
     }
 
+    /**
+     * The container {@code call} built its result from, and where each element of what it answers
+     * came from — the lineage itself, for a reader that has an answer per alternative.
+     *
+     * <p>Beside {@link #builtFrom} and not instead of it. The four words are what a reader asking
+     * "does what I know survive this" wants, and they are a projection; a reader that can say
+     * something different about each of the things an element may be wants what the projection was
+     * read off. Null where the elements came from more than one place, as the projection is refused
+     * there: without one container there is nothing to ask the question of.
+     */
+    static Kept keptFrom(Core.PreservedCall call) {
+        Built built = Bound.BUILDINGS.get(call.operation());
+        if (built == null || built.outputs().size() != 1 || built.lineage().source() == null) {
+            return null;
+        }
+        return new Kept(built.from().of(call), built.lineage());
+    }
+
+    /** A construction's source container and the lineage of the elements it answers. */
+    record Kept(Core container, ElementLineage lineage) {}
+
     /** The container {@code call} built its result from, or null where the check has no rule about
      * what the operation keeps. */
     static Source builtFrom(Core.PreservedCall call) {

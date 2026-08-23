@@ -5,7 +5,10 @@ import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.Bounds;
+import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -166,78 +169,119 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
     /**
      * What a construction kept of the container it was built from.
      *
-     * <p>Four words and an answer for each of them ({@link DischargeRules.Shape}), because a word
-     * that fell through to the answer beside it is how a reading comes to say of an element
-     * something no element satisfies. The same elements in another order, or some of them, are
-     * elements a property of every element was already true of. A new element for each is the
-     * closure's answer, so what holds of it is read through the closure and not from the source.
+     * <p>Read off the lineage and not off the four words it projects to. The words answer whether
+     * what was known survives, which is one bit where this has an answer per alternative: what
+     * {@code Map.updateIfPresent} answers holds values the closure made and values that were already
+     * there, and a reader with one word for the run can only say the true thing about neither.
      *
-     * <p>{@code COLLAPSES} says nothing, and that is written down rather than left out. At most one
-     * new element for each is what {@code List.filterMap} answers, where an element is what a
-     * closure's answer held rather than the answer itself — so the projection the mapped case makes
-     * is not the one to make here, and until a reading of that is written the honest answer is that
-     * this keeps nothing.
+     * <p>An answer for each of the four lineages, because a case that fell through to the one beside
+     * it is how a reading comes to say of an element something no element satisfies. The same
+     * elements keep what was true of every one of them, however many of them there are — how many is
+     * {@link DischargeRules.Cardinality} and is a different algebra, so {@code Set.map} carries what
+     * its closure answered exactly as {@code List.map} does. An element inside what a closure
+     * answered is not what the closure answered, and nothing here reads into a list or an optional,
+     * so that one keeps nothing. One of several is what holds of every one of them, which is the
+     * span of what each keeps.
      */
     private static void transferred(Core container, Denotations at, Terms terms, Symbols symbols,
                                     ReadingPolicy policy, Map<String, Bounds> held) {
         if (!(container instanceof Core.PreservedCall call)) {
             return;
         }
-        DischargeRules.Source built = DischargeRules.builtFrom(call);
-        if (built == null || built.container() == null) {
+        DischargeRules.Kept kept = DischargeRules.keptFrom(call);
+        if (kept == null || kept.container() == null) {
             return;
         }
-        switch (built.shape()) {
-            case PERMUTES, SUBSET ->
-                    of(built.container(), at, terms, symbols, policy).byPath()
-                            .forEach((path, bounds) -> holds(held, path, bounds));
-            case MAPS -> throughTheClosure(call, built.container(), at, terms, symbols, policy, held);
-            case COLLAPSES -> { }
-        }
+        keptBy(kept.lineage(), call, kept.container(), at, terms, symbols, policy)
+                .forEach((path, bounds) -> holds(held, path, bounds));
+    }
+
+    /** What one lineage keeps of {@code source}, by the path under an element. */
+    private static Map<String, Bounds> keptBy(ElementLineage lineage, Core.PreservedCall call,
+                                              Core source, Denotations at, Terms terms,
+                                              Symbols symbols, ReadingPolicy policy) {
+        return switch (lineage) {
+            case ElementLineage.SameAs _ -> of(source, at, terms, symbols, policy).byPath();
+            case ElementLineage.ClosureResult _ ->
+                    throughTheClosure(call, source, at, terms, symbols, policy);
+            case ElementLineage.InsideClosureResult _ -> Map.of();
+            case ElementLineage.OneOf one -> {
+                Map<String, Bounds> both = null;
+                for (ElementLineage alternative : one.alternatives()) {
+                    Map<String, Bounds> keeps =
+                            keptBy(alternative, call, source, at, terms, symbols, policy);
+                    both = both == null ? keeps : spanning(both, keeps);
+                }
+                yield both == null ? Map.of() : both;
+            }
+        };
     }
 
     /**
-     * What holds of what the closure answered, where what it answers is a place of the element it
-     * was handed.
+     * What holds of an element that is one of two things: what holds of both.
      *
-     * <p>A closure that answers a place of its element — {@code x -> x.value}, {@code x -> x.amount}
-     * — hands on what was true there: what held of that place of every element of the source holds
-     * of every element of the list answered. A closure that computes anything else says nothing
-     * here. What it computes is arithmetic, and reading it would be this deciding what an expression
-     * is worth, which is a question with an owner ({@link DerivedNumericFacts}) and one that cannot
-     * be asked of a closure standing where no accumulator has been assumed.
-     *
-     * <p>Which place it answered is asked of the subjects and not of the fields written. The two are
-     * not the same question: a newtype's carrier is read as {@code x.value} and is the value itself,
-     * so the path that names it is the empty one, and a reader that counted the fields it saw would
-     * have gone looking for what holds of a place under a number. So the element is entered
-     * somewhere nothing else names, the closure's answer is asked which subject it is, and the paths
-     * the source states are put under that same root until one of them is that subject — the algebra
-     * deciding which two spellings are one place, as it does everywhere else.
+     * <p>A place either of them says nothing about is a place nothing is said about, and the ends
+     * are the outer ones of the two — an element the closure never saw is bounded by what the source
+     * guarantees, and one it made is bounded by what it answered, and every element is one of the
+     * two.
      */
-    private static void throughTheClosure(Core.PreservedCall call, Core source, Denotations at,
-                                          Terms terms, Symbols symbols, ReadingPolicy policy,
-                                          Map<String, Bounds> held) {
+    private static Map<String, Bounds> spanning(Map<String, Bounds> one, Map<String, Bounds> other) {
+        Map<String, Bounds> both = new LinkedHashMap<>();
+        one.forEach((path, bounds) -> {
+            Bounds there = other.get(path);
+            if (there != null) {
+                both.put(path, Bounds.spanning(bounds, there));
+            }
+        });
+        return both;
+    }
+
+    /**
+     * What holds of what the closure answered, given what holds of every element it is applied to.
+     *
+     * <p>Not a projection of the paths. A closure answers a value it computed — {@code x -> 0},
+     * {@code x -> x.value + 1}, {@code x -> x.value} — and what holds of that value is what the
+     * arithmetic makes of what holds of the element. So the element is entered somewhere nothing
+     * else names, what the closure answers is read as a form over that place, and the facts the
+     * source states are assumed of it: what the reading proves of the form holds of every element of
+     * the list answered, since it was proved of an element nothing but those facts is true of.
+     *
+     * <p>The reading is the one that owns the question ({@link NumericDomain}) and is asked on a
+     * domain of its own. Nothing of where the call stands is assumed into it: a closure is applied
+     * to every element, so what is true where the call was written is not true of what it answers,
+     * and a reader that assumed the surrounding facts would prove of every element what is true
+     * where one of them was named. What that leaves outside is arithmetic the affine fragment does
+     * not carry — a product of two places is an atom this domain holds nothing of — and outside is
+     * where it stays until a reader that carries recipes asks the question.
+     */
+    private static Map<String, Bounds> throughTheClosure(Core.PreservedCall call, Core source,
+                                                         Denotations at, Terms terms,
+                                                         Symbols symbols, ReadingPolicy policy) {
         Combinators.Handed handed = Combinators.handedTo(call, at);
         if (handed == null) {
-            return;
+            return Map.of();
         }
         UniversalElementFacts kept = of(source, at, terms, symbols, policy);
-        if (kept.saysNothing()) {
-            return;
-        }
         BindingId element = handed.element().binding();
         FactSubject root = terms.placeSubject(element);
         Denotations reading = at.location(element, root, terms.placeTerm(element));
-        FactSubject answered = terms.subjectOf(handed.step().body(), reading);
+        // Read before anything is assumed: reading the closure is what names the places inside it,
+        // and a place with no name is one no range can be asserted about.
+        LinearForm<FactSubject> answered = terms.affineOf(handed.step().body(), reading);
         if (answered == null) {
-            return;
+            return Map.of();
         }
-        kept.byPath().forEach((path, bounds) -> {
-            if (answered.equals(terms.under(root, path))) {
-                holds(held, FieldDomains.THE_VALUE, bounds);
+        NumericDomain<FactSubject> given = NumericDomain.top();
+        for (Map.Entry<FactSubject, Bounds> one : kept.at(root, terms).entrySet()) {
+            Map<FactSubject, Granularity> spacing =
+                    terms.kindsOf(NumericDomain.LinearForm.atom(one.getKey()));
+            if (!spacing.isEmpty()) {
+                given = given.assuming(one.getKey(), one.getValue(), spacing);
             }
-        });
+        }
+        Bounds bounds = given.isBottom() ? null : given.boundsOf(answered);
+        return bounds == null || bounds.saysNothing() ? Map.of()
+                : Map.of(FieldDomains.THE_VALUE, bounds);
     }
 
     /** Records that everything at {@code path} lies between {@code bounds}. Two sources reaching one

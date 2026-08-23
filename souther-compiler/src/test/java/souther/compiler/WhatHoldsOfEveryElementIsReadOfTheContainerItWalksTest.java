@@ -52,13 +52,16 @@ class WhatHoldsOfEveryElementIsReadOfTheContainerItWalksTest {
     }
 
     private static boolean owedIn(String body) {
-        Compiler.Compiled compiled = Compiler.compileWithWarnings(TYPES + "\n" + """
+        return owedInModule(body.startsWith("module ") ? body : TYPES + "\n" + """
                 behavior total : (xs: List<U>, ns: List<Int>) -> Money
                     constructs Money
 
                 %s
                 """.formatted(body));
-        return compiled.warnings().stream()
+    }
+
+    private static boolean owedInModule(String source) {
+        return Compiler.compileWithWarnings(source).warnings().stream()
                 .anyMatch(d -> d.severity() == Severity.WARNING && "E2011".equals(d.code()));
     }
 
@@ -81,13 +84,54 @@ class WhatHoldsOfEveryElementIsReadOfTheContainerItWalksTest {
                         + " same place of each of them");
     }
 
-    /** A closure that computes rather than reads answers something this says nothing of, and the
-     * walk is reported — which is what says the mapped case carries what a place guaranteed and not
-     * whatever the closure was written with. */
+    /**
+     * What a closure answered is read from what it was applied to.
+     *
+     * <p>Not a projection of the paths. A closure that reads a place hands on what was true there,
+     * and one that computes hands on what the arithmetic makes of it — {@code x -> 0} answers nought
+     * whatever it was handed, and one more than a number at or above nought is at or above one. Both
+     * are the same question asked of the reading that owns it, on a domain holding the facts every
+     * element satisfies and nothing else.
+     */
     @Test
-    void aClosureThatComputesItsAnswerCarriesNothing() {
+    void whatAClosureAnsweredIsReadFromWhatItWasAppliedTo() {
+        assertFalse(owed("List.fold((acc, x) -> acc + x, 0, List.map(x -> 0, xs))"),
+                "nought, whatever the element was");
+        assertFalse(owed("List.fold((acc, x) -> acc + x, 0, List.map(x -> x.value + 1, xs))"),
+                "one more than a number at or above nought");
         assertTrue(owed("List.fold((acc, x) -> acc + x, 0, List.map(x -> x.value - 1, xs))"),
-                "one less than a number at or above nought is a number this is told nothing about");
+                "and one less than one may be below nought, so the total may be");
+    }
+
+    /**
+     * An element that is one of two things is bounded by both.
+     *
+     * <p>{@code Map.updateIfPresent} answers the map it was given with one value replaced, and its
+     * rule used to say every value was the closure's answer. Read that way beside a closure that
+     * raises what it was handed, the values that were already there would be credited with what the
+     * closure promised and were never given to it. So the two are held apart here: the same closure
+     * through {@code Map.mapValues}, which does answer every value, proves the product; through
+     * {@code Map.updateIfPresent} it does not.
+     */
+    @Test
+    void anElementThatIsOneOfTwoThingsIsBoundedByBoth() {
+        String product = """
+                module demo
+
+                data U = Int
+                    invariant nonNeg = value >= 0
+
+                data AtLeastOne = Int
+                    invariant one = value >= 1
+
+                behavior total : (m: Map<String, U>) -> AtLeastOne
+                    constructs AtLeastOne, U
+                let total (m) = AtLeastOne(Map.fold((acc, k, v) -> acc * v.value, 1, %s))
+                """;
+        assertFalse(owedIn(product.formatted("Map.mapValues((k, v) -> U(v.value + 1), m)")),
+                "every value of a mapped map is what the closure answered, which is at or above one");
+        assertTrue(owedIn(product.formatted("Map.updateIfPresent(\"a\", v -> U(v.value + 1), m)")),
+                "a value the closure never saw is the one that was there, which may be nought");
     }
 
     /**
