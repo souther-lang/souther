@@ -15,18 +15,18 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * An answer is read once for each reading of its region that it stands in.
  *
- * <p>What a behavior's answer guarantees is read ahead of the walk, because a construction is judged
- * at its own step while the answers it is built from stand underneath it. How far ahead is where the
- * reading stops, and everything it covered is then walked over what it settled — so reading it again
- * from a descendant, or from an expression rebuilt around it, lands on the subjects it already holds.
- * It decides nothing, and it costs the depth of a body over again at every node of it (#826).
+ * <p>What a behavior's answer guarantees is taken in where the walk evaluates it, and the walk
+ * reaches every evaluation once — so nothing standing over an answer reads it again. Read again
+ * from a descendant, or from an expression rebuilt around it, it lands on the subjects it already
+ * holds: it decides nothing, and it costs the depth of a body over again at every node of it
+ * (#826).
  *
  * <p>Nothing else decides the count. Not how deep the answer stands, not how many stand beside it,
- * not whether a binding an expansion introduced or a branch of a conditional was put in above it.
- * What does decide it is how many readings of its region there are, and that is a conditional a value
- * is handed: opening one reads the expression once with each branch standing where it stood, so an
- * answer in a region standing under it is read by both — which is the same two that judge every
- * construction inside it and say what they found once ({@link InvariantChecker.Judgment#of}).
+ * not whether a binding an expansion introduced was put in above it. What does decide it is how many
+ * readings of its region there are, and that is a case split a value is handed: opening one reads
+ * the region once with each arm standing where the split stood, so an answer evaluated in that
+ * region is read by every one of them — which is the same readings that judge every construction
+ * there and say what they found once ({@link InvariantChecker.Judgment#of}).
  *
  * <p>Held as a count and not as a duration, and against a growing number of answers rather than at
  * one size: what is wrong with reading them again is that the work grows with what it is read over,
@@ -77,11 +77,26 @@ class AnAnswerIsSeededOnceWhereItStandsTest {
 
             """;
 
-    /** Somewhere an answer can stand. {@code $A} is where the answers go. */
-    private record Place(String what, String body) {}
+    /**
+     * Somewhere an answer can stand, and how many readings of its region there are. {@code $A} is
+     * where the answers go.
+     *
+     * <p>{@code readings} is what the count is held against, and it is one everywhere but where a
+     * case split a value is handed is opened before the answer is evaluated: opening one reads the
+     * region once with each arm standing where the split stood, and everything the region evaluates
+     * after it is evaluated in every one of those readings.
+     */
+    private record Place(String what, String body, int readings) {}
 
+    /** A place read once, which is every place a split is not opened around the answer. */
     private static Place read(String what, String body) {
-        return new Place(what, body);
+        return new Place(what, body, 1);
+    }
+
+    /** A place where a split is opened before the answer is evaluated, so the region holding it is
+     * read once per arm of that split. */
+    private static Place readPerArm(String what, int arms, String body) {
+        return new Place(what, body, arms);
     }
 
     /**
@@ -106,7 +121,12 @@ class AnAnswerIsSeededOnceWhereItStandsTest {
             read("in the condition a conditional is decided by",
                     "let run (a, t) = Box { p = Pair { l = if $A.value > 3 then Amount(1)"
                             + " else Amount(2), r = a }, q = a }\n"),
-            read("beside a conditional, in the region it is opened in",
+            // The answer is evaluated after the conditional beside it — `l` is the field declared
+            // first — so it is read inside each of the two readings the conditional is opened into
+            // and not once above them. Read once above them, what it guarantees would stand while
+            // the conditional's own branches are judged, which is a fact about a value those
+            // branches are evaluated before.
+            readPerArm("beside a conditional, in the region it is opened in", 2,
                     "let run (a, t) = Box { p = Pair { l = if a.value > 3 then Amount(1)"
                             + " else Amount(2), r = $A }, q = a }\n"),
             read("in a branch of that conditional",
@@ -142,11 +162,11 @@ class AnAnswerIsSeededOnceWhereItStandsTest {
                         , q = a
                         }
                     """),
-            // A `match` handed as a value is opened where it stands, so the arm is a reading of its
-            // own and the conditional beside it is opened inside that reading rather than around it.
-            // The answer is seeded once, where the arm was put in, and both readings of the
-            // conditional start from where that seeding already stands.
-            read("in an arm, beside a conditional the arm does not stand under", """
+            // A `match` handed as a value is opened where it stands, so the arm is a reading of
+            // its own — and the conditional written after it is opened inside that reading. The
+            // answer is evaluated before that conditional is reached in one of these and after it
+            // in the other, and is read once in each.
+            readPerArm("in an arm, beside a conditional the arm does not stand under", 2, """
                     let run (a, t) = Box
                         { p = match t with
                                 | Lo -> Pair { l = $A, r = a }
@@ -154,7 +174,10 @@ class AnAnswerIsSeededOnceWhereItStandsTest {
                         , q = if a.value > 3 then Amount(1) else Amount(2)
                         }
                     """),
-            read("in an arm, with a conditional written beside it in that arm", """
+            // The answer is the arm's second field and the conditional its first, so it is
+            // evaluated after the conditional and read once in each of the two readings that
+            // conditional is opened into.
+            readPerArm("in an arm, with a conditional written beside it in that arm", 2, """
                     let run (a, t) = Box
                         { p = match t with
                                 | Lo -> Pair { l = if a.value > 3 then Amount(1) else Amount(2)
@@ -176,13 +199,14 @@ class AnAnswerIsSeededOnceWhereItStandsTest {
         return List.copyOf(seeded);
     }
 
-    /** {@code answers} distinct answers were seeded over {@code source}, each of them once. */
-    private static void seeded(int answers, String source, String what) {
+    /** {@code answers} distinct answers were seeded over {@code source}, each of them once for
+     * each of the {@code readings} readings of the region it stands in. */
+    private static void seeded(int answers, int readings, String source, String what) {
         List<Core> seeded = seededIn(source);
         Map<Core, Boolean> distinct = new IdentityHashMap<>();
         seeded.forEach(answer -> distinct.put(answer, true));
         assertEquals(answers, distinct.size(), "answers seeded over " + what);
-        assertEquals(answers, seeded.size(),
+        assertEquals(answers * readings, seeded.size(),
                 "seedings of " + answers + " answers over " + what);
     }
 
@@ -198,7 +222,8 @@ class AnAnswerIsSeededOnceWhereItStandsTest {
     void anAnswerIsSeededOnceWhereverItStands() {
         for (Place place : PLACES) {
             for (int answers : List.of(1, 2, 4)) {
-                seeded(answers, DECLARATIONS + place.body().replace("$A", answers(answers)),
+                seeded(answers, place.readings(),
+                        DECLARATIONS + place.body().replace("$A", answers(answers)),
                         answers + " answers " + place.what());
             }
         }
@@ -231,7 +256,7 @@ class AnAnswerIsSeededOnceWhereItStandsTest {
 
                     let run (a) = Amount(%s.value + 1)
                     """.formatted(answers(depth));
-            seeded(depth, source, "a body of " + depth + " nested calls");
+            seeded(depth, 1, source, "a body of " + depth + " nested calls");
         }
     }
 }
