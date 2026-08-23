@@ -23,6 +23,19 @@ import java.util.Set;
  * @param omitted      positions dropped for being past the axis limit, with what dropping each
  *                     one cost — a position that was carrying a boundary leaves the rows there
  *                     unmeasured rather than covered
+ * <p><b>Why these are still here, beside the measures that went without them.</b> #953 moved every
+ * fact that costs a measure something into what weakened that measure, and the obvious next step is
+ * to drop the lists and project them back out. Two of them cannot be: {@code unread} holds rules
+ * that were set aside and left neither measure short — a comparison relating two positions is read,
+ * says what it says, and divides nothing ({@code BlockReason.AboutARule.leavesShort}) — so the
+ * weakening is a strictly smaller set than what a reader is owed, and a projection would drop
+ * exactly those rules from the report.
+ *
+ * <p>The other two, {@code unanswered} and {@code omitted}, look as though they would project: every
+ * unanswered question goes to the measure that answers it and every dropped axis costs the partition
+ * measure always. They are kept anyway, because that is a reading of the code and not a measurement
+ * of it, and the rule this normalization follows is to drop only what something shows is covered.
+ *
  * @param whyUnclassified why the rows counted in {@link AxisCoverage#unclassifiedRows} could not be
  *                     placed. The count is the measurement and this is what it came out of, which
  *                     is why they are two things and not one wider count. Not a report's list of
