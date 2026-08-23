@@ -397,6 +397,32 @@ final class Predicates {
             both.addAll(other.parts);
             return new Owed(List.copyOf(both), folded.and(other.folded));
         }
+
+        /**
+         * What this states, as relations.
+         *
+         * <p>Here beside {@link Predicates#assume} because both read what a clause came to, and a
+         * second place that knew the shape of a {@link Clause} would answer differently the day one
+         * gains a part.
+         *
+         * <p>What is known of a size holds of the value whatever established the clause it was read
+         * out of, which is why it stands beside what the clause itself states. A clause this reading
+         * could not state as a relation is not here, and neither is one it read as a fact:
+         * under-answering costs precision, and answering with something else would not be sound.
+         */
+        List<NumericConstraint> relations() {
+            List<NumericConstraint> out = new ArrayList<>();
+            for (Part each : parts) {
+                if (!(each instanceof Part.Carried carried)) {
+                    continue;
+                }
+                out.addAll(carried.clause().known());
+                if (carried.clause().numeric() != null) {
+                    out.add(carried.clause().numeric());
+                }
+            }
+            return List.copyOf(out);
+        }
     }
 
     /**

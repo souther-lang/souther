@@ -55,6 +55,18 @@ final class Terms {
     private final ReadingPolicy policy;
 
     private final Symbols symbols;
+    /**
+     * What a clause states, read through this very reading.
+     *
+     * <p>Here and not built by each caller, so that there is one of it. {@link Predicates} holds
+     * nothing but the reading it was given, so two of them would answer alike today — and the day
+     * one of them remembers something, two of them are two readers.
+     */
+    private final Predicates predicates;
+
+    /** What a type guarantees of a value, over the positions under it. */
+    private final GuaranteeWalk guarantees;
+
     private final Map<TypeSymbol, java.util.Optional<Type>> affineScalarBases = new HashMap<>();
     /** How the values of each atom this has named are spaced. Kept here because this is where an
      * atom's name is made: the key and the kind of number behind it are decided in one step, and
@@ -164,31 +176,40 @@ final class Terms {
         return policy;
     }
 
-    /** What a type guarantees of a value, or null where this reading was given no declarations to
-     * read. A recipe built from such a reading says what a condition states and no more. */
-    private final GuaranteeWalk guarantees;
+    /** What a clause states, read through this reading. */
+    Predicates predicates() {
+        return predicates;
+    }
 
-    /** A reading that names places and reads no declaration. What a type guarantees is not asked
-     * here, so nothing that needs it may be built from this one. */
+    /**
+     * A reading over the discharge tree, reading every declaration's clauses off the declaration.
+     *
+     * <p>Which is what a type another module declares is read by either way (spec
+     * §invariant-discharge-representation). A reading of the module being checked has its clauses in
+     * the representation the discharge rules are written at and passes them.
+     */
     Terms(Symbols symbols, ReadingPolicy policy) {
-        this(symbols, Of.THE_DISCHARGE_TREE, policy, null);
+        this(symbols, Of.THE_DISCHARGE_TREE, policy);
+    }
+
+    /** The same, over {@code reading}'s tree. */
+    Terms(Symbols symbols, Of reading, ReadingPolicy policy) {
+        this(symbols, reading, policy, new Clauses(symbols, Map.of()));
     }
 
     /**
      * A reading over {@code reading}'s tree, told where the declarations' invariants are.
      *
      * <p>{@code clauses} is what lets a recipe say what choosing an arm settles where the arm binds
-     * a value: the answer is what that value's type guarantees, and it is read through the one
-     * reading of a declaration there is ({@link TypeGuarantees}). Its own {@link Predicates} over
-     * this very reading, which is the same reader a seeding asks — {@link Predicates} holds nothing
-     * but the reading it was given, so two of them answer alike.
+     * a value: the answer is what that value's type guarantees, read through the one reading of a
+     * declaration there is ({@link TypeGuarantees}).
      */
     Terms(Symbols symbols, Of reading, ReadingPolicy policy, Clauses clauses) {
         this.symbols = symbols;
         this.reading = reading;
         this.policy = policy;
-        this.guarantees = clauses == null
-                ? null : new GuaranteeWalk(new TypeGuarantees(symbols, clauses, new Predicates(this)));
+        this.predicates = new Predicates(this);
+        this.guarantees = new GuaranteeWalk(new TypeGuarantees(symbols, clauses, predicates));
     }
 
     /**
@@ -897,15 +918,25 @@ final class Terms {
             if (form == null) {
                 return null;
             }
-            // Two sources and one question. What a condition states is read where the condition is
-            // written, which is outside the arm; what a type guarantees of what the arm bound is
-            // read where that name stands, which is inside it.
-            List<NumericConstraint> settles =
-                    new ArrayList<>(Conditions.settledBy(this, arm.decidedBy(), at));
-            settles.addAll(guaranteedBy(arm.decidedBy(), inside));
-            arms.add(new Derivation.Chosen.Arm(form, settles));
+            arms.add(new Derivation.Chosen.Arm(form, settledBy(arm.decidedBy(), at, inside)));
         }
         return new Derivation.Chosen(arms);
+    }
+
+    /**
+     * Everything choosing {@code decidedBy} settles, as relations.
+     *
+     * <p>Two sources and one question. What a condition states is read where the condition is
+     * written, which is {@code outside} the arm; what a type guarantees of what the arm bound is
+     * read where that name stands, which is {@code inside} it. Both are relations, and a relation
+     * is the same statement wherever it was read, so they stand together beside the arm.
+     */
+    private List<NumericConstraint> settledBy(Choice.Decides decidedBy, Denotations outside,
+                                              Denotations inside) {
+        List<NumericConstraint> out =
+                new ArrayList<>(Conditions.settledBy(this, decidedBy, outside));
+        out.addAll(guaranteedBy(decidedBy, inside));
+        return out;
     }
 
     /**
@@ -936,13 +967,13 @@ final class Terms {
                     it.attempt().construct().type(), it.attempt().pos());
             case Choice.Decides.ACondition _, Choice.Decides.ItDeparted _ -> null;
         };
-        if (guarantees == null || root == null) {
+        if (root == null) {
             return List.of();
         }
         List<NumericConstraint> out = new ArrayList<>();
         guarantees.from(root, FieldDomains.THE_VALUE, inside,
                 GuaranteeWalk.Scope.asFarAs(GuaranteeWalk.FIELDS_SEEDED),
-                (path, guarantee) -> out.addAll(guarantee.relations()));
+                (path, guarantee) -> out.addAll(guarantee.owed().relations()));
         return out;
     }
 

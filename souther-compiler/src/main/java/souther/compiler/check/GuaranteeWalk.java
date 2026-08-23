@@ -133,6 +133,14 @@ final class GuaranteeWalk {
             reader.stopped(path, root.type(), Stop.ASKED_TO_STOP);
             return;
         }
+        // Asked before the declaration is read, and of the type's own name, which is the name a
+        // reading here would answer with. A name already entered was read where it was met, so
+        // reading it again would be the same reading done twice — which costs, and which a reader
+        // that remembers what it was asked would see twice.
+        if (entered.contains(ref.name())) {
+            reader.stopped(path, root.type(), Stop.ALREADY_ENTERED);
+            return;
+        }
         if (!(guarantees.at(root, at) instanceof TypeGuarantees.At.Declared here)) {
             reader.stopped(path, root.type(), Stop.NOTHING_DECLARED);
             return;
@@ -140,10 +148,7 @@ final class GuaranteeWalk {
         // Entered before anything under it is walked, so that the one name and the other stay
         // paired: a stop taken after entering would leave the name on the path with nothing to take
         // it off, and the next field of the same type would be passed over as one already read.
-        if (!entered.add(here.name())) {
-            reader.stopped(path, root.type(), Stop.ALREADY_ENTERED);
-            return;
-        }
+        entered.add(here.name());
         // What the declaration states is read whatever this walk was asked for; whether this reader
         // hears it is the scope's answer. A reader told to leave a declaration's clauses out was not
         // asked to lose any, so nothing is reported lost for them either.

@@ -96,7 +96,7 @@ final class PathEngine {
         this.symbols = symbols;
         this.clauses = new Clauses(symbols, dischargeInvariants);
         this.terms = new Terms(symbols, reading, policy, clauses);
-        this.predicates = new Predicates(terms);
+        this.predicates = terms.predicates();
         this.guarantees = new TypeGuarantees(symbols, clauses, predicates);
         this.walk = new GuaranteeWalk(guarantees);
         this.contracts = Map.copyOf(contracts);
@@ -570,7 +570,7 @@ final class PathEngine {
      * only in direction.
      */
     Known seedAt(Core root, Known k, Denotations at, int depth) {
-        return seedAt(root, FieldDomains.THE_VALUE, k, at, depth, GuaranteeWalk.FIELDS_SEEDED, new HashSet<>(),
+        return seedAt(root, FieldDomains.THE_VALUE, k, at, depth, GuaranteeWalk.FIELDS_SEEDED,
                 null, InvariantChecker.Reach.EVERYTHING);
     }
 
@@ -583,10 +583,6 @@ final class PathEngine {
      * exactly as one on the top does. A projection that stopped at two and was then classified by a
      * walk that did not would call a bound complete that a rule below it moves.
      *
-     * <p>{@code onPath} is the types entered on the way here, so a record that holds another of its
-     * own kind stops rather than descending for ever. Kept per path and not for the whole walk: two
-     * fields of one type are two positions and both are seeded.
-     *
      * @param gathering told what this walk gathers, or null where nobody is collecting. A clause
      *                  governs a position from wherever it is written — the record the position is a
      *                  field of, and the declarations under that record it sits inside — and this
@@ -595,8 +591,7 @@ final class PathEngine {
      *                  second way.
      */
     Known seedAt(Core root, String path, Known k, Denotations at, int depth, int limit,
-                 Set<TypeSymbol> onPath, InvariantChecker.Gathering gathering,
-                 InvariantChecker.Reach reach) {
+                 InvariantChecker.Gathering gathering, InvariantChecker.Reach reach) {
         Seeding seeding = new Seeding(k, gathering);
         walk.from(root, path, at,
                 new GuaranteeWalk.Scope(limit - depth, reach.stopAt(), reach.withoutClauses()),

@@ -584,7 +584,7 @@ public final class InvariantChecker {
                     // rule the construction must satisfy is a rule wherever in the value it sits.
                     k = c.engine.seedAt(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
                             data.newtype() ? FieldDomains.THE_VALUE : field.getKey(),
-                            k, at, 1, Integer.MAX_VALUE, new HashSet<>(), gathering, reach);
+                            k, at, 1, Integer.MAX_VALUE, gathering, reach);
                 }
             }
             Map<String, FactSubject> atoms = new LinkedHashMap<>();

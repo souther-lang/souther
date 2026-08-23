@@ -41,7 +41,7 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
     private static final SourcePos POS = new SourcePos(1, 1);
 
     private static final String SOURCE = """
-            module demo exposing ( Money, Wrapped, Chain, Plain, keep )
+            module demo exposing ( Money, Wrapped, Chain, Bounded, Plain, keep )
 
             data NonNegInt = Int
                 invariant value >= 0
@@ -51,6 +51,9 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
             data Wrapped = Money
 
             data Chain = { here: NonNegInt, next: List<Chain> }
+
+            data Bounded = { cap: NonNegInt }
+                invariant cap.value <= 100
 
             data Plain = { label: String }
 
@@ -186,18 +189,25 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
         assertEquals(GuaranteeWalk.Stop.ASKED_TO_STOP, stoppedIn("Money", stopping).get("amount"));
     }
 
-    /** A declaration's own clauses may be left out while what is under it is still read. */
+    /**
+     * A declaration's own clauses may be left out while what is under it is still read.
+     *
+     * <p>Which is the whole difference between this and a name the reader stops at. {@code Bounded}
+     * writes a rule of its own and holds a field whose type writes another; leaving the first out
+     * leaves the second standing.
+     */
     @Test
     void aDeclarationsOwnClausesCanBeLeftOutWithoutLeavingWhatIsUnderIt() {
-        GuaranteeWalk.Scope without =
-                new GuaranteeWalk.Scope(4, _ -> false, named("NonNegInt")::equals);
+        assertEquals(List.of(FieldDomains.THE_VALUE, "cap"),
+                List.copyOf(guaranteedUnder("Bounded", GuaranteeWalk.Scope.asFarAs(2)).keySet()),
+                "both rules stand: Bounded's own, and NonNegInt's about the field");
 
-        assertTrue(guaranteedUnder("Money", without).isEmpty(),
-                "NonNegInt's clause is the one left out");
-        assertEquals(GuaranteeWalk.Stop.NOTHING_DECLARED, stoppedIn("Money", without).get("amount"),
-                "and the position was still entered and walked through — the stop under it is the"
-                        + " whole number a newtype wraps, which declares nothing, and not this"
-                        + " reader being told to go no further");
+        GuaranteeWalk.Scope without =
+                new GuaranteeWalk.Scope(2, _ -> false, named("Bounded")::equals);
+
+        assertEquals(List.of("cap"),
+                List.copyOf(guaranteedUnder("Bounded", without).keySet()),
+                "the one left out is Bounded's own, and the field's is read as it was");
     }
 
     /**
