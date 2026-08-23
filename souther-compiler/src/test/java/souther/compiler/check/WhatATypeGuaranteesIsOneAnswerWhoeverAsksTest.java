@@ -201,6 +201,52 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
     }
 
     /**
+     * Nothing a consumer holds may be handed to the reading.
+     *
+     * <p>The wall the rest of this rests on. Every test above says what the answer is; this one says
+     * the answer cannot come to depend on who asked. A {@link Known} the reading could read would
+     * let one caller's knowledge decide what a declaration says, a {@link InvariantChecker.Gathering}
+     * would put what is being measured inside what is meant, and a {@link PathEngine} would make the
+     * walk that seeds a path the owner of a question the recipe reader asks too.
+     *
+     * <p>Read off the signatures rather than promised in prose, because a parameter added in a hurry
+     * is added to a signature and not to a comment.
+     */
+    @Test
+    void theReadingIsHandedNothingAConsumerHolds() {
+        List<String> theirs =
+                List.of("Known", "Gathering", "PathEngine", "GuaranteeWalk", "Reach", "Borne");
+        List<String> found = new ArrayList<>();
+        for (Class<?> each : List.of(TypeGuarantees.class, TypeGuarantees.At.class,
+                TypeGuarantees.At.Declared.class, TypeGuarantees.At.Beneath.class,
+                TypeGuarantee.class, TypeGuarantee.Part.class)) {
+            for (java.lang.reflect.Field field : each.getDeclaredFields()) {
+                mentioning(theirs, each.getSimpleName() + "." + field.getName(),
+                        field.getType(), found);
+            }
+            for (java.lang.reflect.Method method : each.getDeclaredMethods()) {
+                String where = each.getSimpleName() + "." + method.getName();
+                mentioning(theirs, where, method.getReturnType(), found);
+                for (Class<?> taken : method.getParameterTypes()) {
+                    mentioning(theirs, where, taken, found);
+                }
+            }
+        }
+        assertEquals(List.of(), found,
+                "what a type guarantees is read from the declaration and the value, and from nothing"
+                        + " a consumer of the answer happens to be holding");
+    }
+
+    private static void mentioning(List<String> theirs, String where, Class<?> type,
+                                   List<String> found) {
+        for (String name : theirs) {
+            if (type.getSimpleName().equals(name)) {
+                found.add(where + " takes or answers a " + name);
+            }
+        }
+    }
+
+    /**
      * One reading and many readers.
      *
      * <p>The contract itself: two scopes are two walks, and where both of them looked they were told
