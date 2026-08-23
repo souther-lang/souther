@@ -1115,6 +1115,13 @@ final class DischargeRules {
         return e instanceof Core.PreservedCall call ? Bound.MEASURED.get(call.operation()) : null;
     }
 
+    /** Whether {@code operation} counts what two values stand apart by — the other side of the row a
+     * shift is written in, read off that row rather than listed again. A measure named in a second
+     * place is a measure the day somebody adds a shift and updates one of them. */
+    static boolean isAMeasure(ValueName operation) {
+        return Bound.MEASURES.contains(operation);
+    }
+
     /** The cases {@code e} is defined in, or null where it is not a call to an operation that
      * answers one of the values it was given. */
     static Choices chosenBy(Core e) {
@@ -1219,6 +1226,8 @@ final class DischargeRules {
                 bindBounds(BOUNDS_ON_THE_RESULT);
         private static final Map<ValueName, Choices> CHOICES = bindChoices(CHOOSES);
         private static final Map<ValueName, Shift> MEASURED = bindShifts(SHIFTS);
+        private static final Set<ValueName> MEASURES = SHIFTS.values().stream()
+                .map(Shift::measure).collect(java.util.stream.Collectors.toUnmodifiableSet());
         private static final Map<ValueName, NumericResult> ARITHMETIC =
                 bindNumericResults(NUMERIC_RESULTS);
     }
