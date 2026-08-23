@@ -11,6 +11,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Which values a generated row may be written against.
@@ -84,8 +85,57 @@ class AnOriginIsATupleTheModelStatesAndNotOneAssembledHereTest {
     // holds. Here the first builds, so the walk stops at it and never needs the second, which is
     // the ordering working rather than the second value being unused.
 
+    /**
+     * A row for a class is written against a value of the position it is about.
+     *
+     * <p>An origin that names some other position is one this row can still be written against, and
+     * it is not that value with one field moved — the position the row is about is composed from
+     * its classes like any other. So it comes after every origin that grounds that position, and
+     * measuring it in the same order put it first: what an origin says nothing about is filled from
+     * the classes before the distance is taken, so the filling sits at distance zero and the
+     * ungrounded origin arrived as a nearest one.
+     */
+    @Test
+    void aRowForAClassIsWrittenAgainstAValueOfThePositionItIsAbout() {
+        Map<AxisId, List<String>> byClass = generatedFor(TWO_OF_A_KIND);
+        List<String> row = null;
+        for (Map.Entry<AxisId, List<String>> each : byClass.entrySet()) {
+            if (each.getKey().term().startsWith("to")) {
+                row = each.getValue();
+                break;
+            }
+        }
+        assertNotNull(row, "a class of `to` is offered a row: " + byClass);
+
+        assertEquals(2, row.size(), "the behavior takes two positions: " + row);
+        assertTrue(row.get(1).contains("low") || row.get(1).contains("high"),
+                "and the row is written against a value the model states of `to`, not one it "
+                        + "states of `from`: " + row);
+    }
+
+    /** One row per class of a position, by the position and class it was composed for. */
+    private static Map<AxisId, List<String>> generatedFor(String source) {
+        Map<AxisId, List<String>> out = new java.util.LinkedHashMap<>();
+        for (Generator.GeneratedRow row : rowsOf(source)) {
+            for (Generator.Purpose purpose : row.purposes()) {
+                if (purpose instanceof Generator.Purpose.ForAClass about) {
+                    out.putIfAbsent(about.at(), row.inputs().stream()
+                            .map(FixtureTemplate::text).toList());
+                }
+            }
+        }
+        return out;
+    }
+
     /** What each offered row's inputs are written as, one entry per position. */
     private static List<List<String>> inputsOf(String source) {
+        return rowsOf(source).stream()
+                .map(row -> row.inputs().stream().map(FixtureTemplate::text).toList())
+                .toList();
+    }
+
+    /** The rows offered for the behavior under test. */
+    private static List<Generator.GeneratedRow> rowsOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -94,8 +144,6 @@ class AnOriginIsATupleTheModelStatesAndNotOneAssembledHereTest {
         assertNotNull(all, "the model under test compiles");
         Adequacy.Filling filling = all.get("between");
         assertNotNull(filling, "the behavior under test is generated for");
-        return filling.composed().rows().stream()
-                .map(row -> row.inputs().stream().map(FixtureTemplate::text).toList())
-                .toList();
+        return filling.composed().rows();
     }
 }

@@ -534,10 +534,19 @@ public final class Generator {
      * classes alone, every position of the row holds whatever the search happened to name there,
      * and a reader has to work out which of the differences the answer turned on (issue #967).
      *
-     * <p><b>All the positions at once.</b> A behavior of several parameters written against one
-     * value apiece, chosen for each on its own, is a row whose positions the model never says
-     * anything about together — while a row the author already wrote names a set of values that go
-     * together. So an origin is the whole tuple, and the search walks the tuples.
+     * <p><b>Only what the model states, which may be one position of several.</b> The map is
+     * partial and a position it does not name is one this origin makes no claim about: the search
+     * composes that position from its classes. A behavior of several parameters written against one
+     * value apiece, chosen for each on its own, would be a row whose positions the model never says
+     * anything about together — so a tuple is an origin only where an author wrote a row with one,
+     * which is a set of values they reached for together, and never one assembled from values the
+     * file declares one after the other.
+     *
+     * <p>Which positions an origin names is what makes it an origin for a class or not. A row for a
+     * class of {@code to} written against a value of {@code from} has its own position composed
+     * like any other, so it is not that value with one field moved — it is a row with a
+     * recognisable value somewhere else. Still worth offering, and not ahead of one that grounds
+     * the class it is for: see {@link #nearestFirst}.
      */
     public record Baseline(Map<String, Named> at) {
 
@@ -1144,7 +1153,19 @@ public final class Generator {
      * the check that stopped the innermost walk left the three around it turning, and the number
      * bounded nothing.
      *
-     * <p><b>Distance first, among the values the model states.</b> How far a row moves from the
+     * <p><b>Whether the origin states the class's own position, before anything else.</b> A row for
+     * a class of {@code to} written against a value of {@code from} has {@code to} composed from
+     * its classes like any other position — so it is not that value with one field moved, which is
+     * the thing this exists to offer. It is a row with a recognisable value somewhere else, worth
+     * offering after every origin that grounds the position and not among them.
+     *
+     * <p>Not a tie-break inside a distance. An origin that does not name the position is measured
+     * against a tuple partly of the search's own making — {@link #stands} fills what the origin
+     * says nothing about from the classes, and what is filled that way sits at distance zero by
+     * construction. So the ungrounded origin arrived as a nearest one and won, and the value the
+     * model states of the position the row is about went untried.
+     *
+     * <p><b>Then distance, among the values the model states.</b> How far a row moves from the
      * value it is written against is what this is minimising, so every baseline is tried at the
      * target alone before any is tried with a supporting field moved. Within one distance the
      * origins keep the order they were gathered in, which puts a value the author's own rows name
@@ -1171,20 +1192,29 @@ public final class Generator {
         // the one place the two can be told apart. Read off the length instead, a list that filled
         // the budget exactly and a space that had nothing more are the same list.
         boolean cutShort = false;
+        // The position the row is about, which is what an origin either states a value of or does
+        // not. Both kinds are walked and the grounding ones whole, at every distance, before any of
+        // the others.
+        String about = axes.get(at).path().head();
         walk:
-        for (int moved = 0; moved < axes.size(); moved++) {
-            for (int origin = 0; origin < stated.size(); origin++) {
-                if (stand.get(origin) == null) {
-                    continue;   // nothing built this origin's values, so nothing measures it
-                }
-                for (int[] supporting : supportingSets(axes, at, moved)) {
-                    for (int[] where
-                            : assignmentsOver(axes, stand.get(origin), at, cls, supporting)) {
-                        if (out.size() >= MOST_REPAIRS) {
-                            cutShort = true;
-                            break walk;
+        for (boolean grounding : new boolean[] {true, false}) {
+            for (int moved = 0; moved < axes.size(); moved++) {
+                for (int origin = 0; origin < stated.size(); origin++) {
+                    if (stand.get(origin) == null) {
+                        continue;   // nothing built this origin's values, so nothing measures it
+                    }
+                    if (stated.get(origin).at().containsKey(about) != grounding) {
+                        continue;
+                    }
+                    for (int[] supporting : supportingSets(axes, at, moved)) {
+                        for (int[] where
+                                : assignmentsOver(axes, stand.get(origin), at, cls, supporting)) {
+                            if (out.size() >= MOST_REPAIRS) {
+                                cutShort = true;
+                                break walk;
+                            }
+                            out.add(new Candidate(stated.get(origin), stand.get(origin), where));
                         }
-                        out.add(new Candidate(stated.get(origin), stand.get(origin), where));
                     }
                 }
             }

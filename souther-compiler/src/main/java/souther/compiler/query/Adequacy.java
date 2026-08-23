@@ -2108,15 +2108,17 @@ public final class Adequacy {
         }
 
         /**
-         * The value a row's positions are composed against at each parameter, where the module
-         * states one.
+         * The values a row's positions can be composed against, in the order the search should try
+         * them.
          *
-         * <p>A {@code let} of the parameter's own type, taken by name. Which one: the only one, and
-         * no one where the module states several — a row written against a value a reader would
-         * have to pick between says less than one written against the classes, and picking for them
-         * would be this compiler deciding which of an author's values is the ordinary one.
+         * <p>Two kinds, and the difference between them is what the model says. A row the author
+         * wrote naming a value at each position is a set of values they reached for together, and
+         * is an origin whole. A {@code let} of a parameter's own type is a value of that position
+         * and says nothing about any other, so it is an origin for that position alone — every one
+         * of them, since a second value is another value a reader recognises rather than a reason
+         * to fall back on the classes, and never two of them put together here.
          *
-         * <p>The name and nothing else. What the value is, is read where the row is read, by the
+         * <p>The names and nothing else. What each value is, is read where the row is read, by the
          * same reading a written row naming it goes through — so nothing here holds a copy of it to
          * disagree with.
          */
