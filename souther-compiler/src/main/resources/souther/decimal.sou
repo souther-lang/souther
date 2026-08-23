@@ -1,5 +1,6 @@
-// The Decimal stdlib. Declared here like every other core module (§intrinsics); the kernels live in
-// souther-runtime's DecimalMath (compare) and java.math.BigDecimal (add/subtract/multiply).
+// The Decimal stdlib. Declared here like every other core module (§intrinsics); every kernel lives
+// in souther-runtime's DecimalMath, which is the one place java.math.BigDecimal is asked to perform
+// a Decimal operation.
 //
 // The `+ - * /` operators stay compiler-integrated as syntax (they carry the closed-newtype rules),
 // but what they mean is these kernels: the backend emits a call to DecimalMath rather than to a
