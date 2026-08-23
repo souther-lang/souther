@@ -12,7 +12,6 @@ import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.CaseSelector;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -206,8 +205,8 @@ public final class BehaviorChecker {
                 // the reading is abandoned instead, as a `match` arm's is.
                 throw new Unanswerable(armCase.pos());
             }
-            CaseSelector selector = answer.selector(armCase.answered().type());
-            if (selector == null) {
+            ResolvedCase selected = answer.selector(armCase.answered().type());
+            if (selected == null) {
                 throw CompileException.of(Diagnostic.at(armCase.pos())
                         .say(new BehaviorMessage.AnEnsuresArmIsNotAnOutputCase(
                                 armCase.written(), behavior.name())).build());
@@ -220,11 +219,11 @@ public final class BehaviorChecker {
             //
             // Redundant and not ambiguous, so it is collapsed rather than refused. `Found -> p |
             // Found -> q` is another matter and is two rules: the arms differ, so the ids do.
-            if (!seen.add(selector.name())) {
+            if (!seen.add(selected.name())) {
                 continue;
             }
-            rules.add(new Rule(new Guard.Case(selector), value, arm.expr(),
-                    new RuleId(named, clause, ordinal, selector.name()), arm.pos()));
+            rules.add(new Rule(new Guard.Case(selected), value, arm.expr(),
+                    new RuleId(named, clause, ordinal, selected.name()), arm.pos()));
         }
         return rules;
     }

@@ -102,8 +102,8 @@ public final class MatchElaborator {
             List<CaseSelector> selected = new ArrayList<>();
             for (Hir.Name written : c.caseTypes()) {
                 TypeSymbol caseName = names(written);
-                CaseSelector selector = space.selector(caseName);
-                if (selector == null) {
+                ResolvedCase resolved = space.selector(caseName);
+                if (resolved == null) {
                     throw notCase(written, what, c, m, cases, ctx.symbols());
                 }
                 if (!covered.add(caseName)) {
@@ -111,7 +111,10 @@ public final class MatchElaborator {
                             .say(new MatchMessage.MatchedByMoreThanOneCase(written.written()))
                             .build());
                 }
-                selected.add(selector);
+                // What goes into the arm is the selector. An arm is emitted from what it tests
+                // and reads, which is all of a case that survives into `Core`; what it covers is
+                // this pass's to hold and is not carried past it.
+                selected.add(resolved.selector());
             }
             Core.ResolvedPattern pattern = selected.size() == 1
                     ? new Core.ResolvedPattern.Single(selected.get(0))
@@ -160,10 +163,11 @@ public final class MatchElaborator {
             Hir.Name arm = c.caseTypes().get(0);
             String caseType = arm.written();
             TypeSymbol armName = names(arm);
-            CaseSelector selector = space.selector(armName);
-            if (selector == null) {
+            ResolvedCase resolved = space.selector(armName);
+            if (resolved == null) {
                 throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.NotACaseOfAnOptional(caseType)).build());
             }
+            CaseSelector selector = resolved.selector();
             Type bind = selector.bound();
             if (c.unwrapAsserts() != null) {
                 // Only the carrier that holds something has something to open.

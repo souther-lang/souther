@@ -3,7 +3,6 @@ package souther.compiler.check;
 import souther.compiler.check.BehaviorContract.ContractParam;
 import souther.compiler.check.BehaviorContract.Guard;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.CaseSelector;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
@@ -106,14 +105,14 @@ public record ContractDischarge(List<RuleDischarge> rules,
     private static List<TypeSymbol> unstatedCases(StatedContract contract, Symbols symbols) {
         Set<TypeSymbol> stated = new LinkedHashSet<>();
         for (StatedContract.StatedRule rule : contract.rules()) {
-            if (rule.guard() instanceof Guard.Case(CaseSelector selector)) {
-                stated.add(selector.name());
+            if (rule.guard() instanceof Guard.Case(ResolvedCase selected)) {
+                stated.add(selected.name());
             }
         }
         List<TypeSymbol> unstated = new ArrayList<>();
-        for (CaseSelector selector : CaseSpace.of(contract.output(), symbols).selectors()) {
-            if (!stated.contains(selector.name())) {
-                unstated.add(selector.name());
+        for (ResolvedCase selected : CaseSpace.of(contract.output(), symbols).selectors()) {
+            if (!stated.contains(selected.name())) {
+                unstated.add(selected.name());
             }
         }
         return unstated;

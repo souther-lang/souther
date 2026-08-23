@@ -4,7 +4,6 @@ import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.CaseSelector;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -882,8 +881,8 @@ final class HelperParams {
             TypeSymbol arm = c.caseTypes().get(0).answered().type();
             // What the case refines the value to, asked of the subject's cases rather than worked
             // out from the subject's shape a second time.
-            CaseSelector selector = CaseSpace.of(scrutinee, symbols).selector(arm);
-            Type bound = selector == null ? null : selector.bound();
+            ResolvedCase selected = CaseSpace.of(scrutinee, symbols).selector(arm);
+            Type bound = selected == null ? null : selected.bound();
             return bound == null ? env : MatchElaborator.bound(env, c.binding(), bound);
         }
 
