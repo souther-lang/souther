@@ -93,6 +93,23 @@ record StepInputFacts(Map<FactSubject, Bounds> at, Map<FactSubject, Granularity>
     }
 
     /**
+     * The same for an accumulation, whose step is no block and whose element arrives at a place of
+     * the walk rather than at a parameter something was written with.
+     *
+     * <p>What holds of the element is the same question and the same answer — {@code elements} was
+     * read of the container either way — so the two consumers differ in where they instantiate it
+     * and in nothing else. There is no other parameter to read: an accumulation applies one step to
+     * the accumulator and an element, so a key or an index a reduction might be handed has nowhere
+     * to arrive.
+     */
+    static StepInputFacts ofTheElement(UniversalElementFacts elements, FactSubject element,
+                                       Terms terms, Set<FactSubject> namedByTheStep) {
+        Gathering gathering = new Gathering(terms, namedByTheStep);
+        elements.at(element, terms).forEach(gathering::holds);
+        return gathering.gathered();
+    }
+
+    /**
      * What the step's parameter at {@code i} is handed, as a type.
      *
      * <p>The same two answers {@link InvariantChecker#walkCall} enters a closure's parameters at:

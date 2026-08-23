@@ -768,6 +768,11 @@ final class Terms {
                 && Reductions.reducing(call, at) instanceof Reductions.Reducing walk) {
             recordingWalk(atom, walk, e, at);
             return;
+        } else if (asOperator(e) instanceof Core.PreservedCall accumulation
+                && Accumulations.accumulating(accumulation)
+                        instanceof Accumulations.Accumulating accumulating) {
+            recordingAccumulation(atom, accumulating, e, at);
+            return;
         } else {
             // What is left is a value that is one of several. Asked last because being one of
             // several is what a value is where nothing else says what it was computed from — a
@@ -844,6 +849,81 @@ final class Terms {
         InductiveBounds.Walk made = new InductiveBounds.Walk(seed, accumulator, step,
                 StepInputFacts.of(walk, inside, this, symbols, policy, reached(step)));
         computedBy(atom, new AtomKnowledge.Computation.Reduction(made));
+    }
+
+    /**
+     * Records the walk {@code atom} is the answer of, where the operation is handed no step and no
+     * seed and what it repeats is what it means ({@link Accumulations}).
+     *
+     * <p>The same walk, made of the same numbers. {@link InductiveBounds} is written against a seed,
+     * an accumulator, a step and what holds of what the step is handed, and asks for no tree and no
+     * operation's name — so an accumulation is one of its walks as soon as those four are made, and
+     * a total written {@code List.sum(ns)} is proved by what proves the fold that spells it out.
+     *
+     * <p>Nothing is expanded to get them. The accumulator and the element are places of this walk,
+     * as a reduction's parameters are, and the seed is the identity the operation starts from read
+     * at the type the call answers — not a literal written into a tree for the types to be inferred
+     * off again, which is the reading ADR-0082 has going the other way.
+     *
+     * <p>Both places are named with how their values are spaced, for the reason
+     * {@link #recordingWalk} names its accumulator: {@link InductiveBounds} asks the domain to
+     * assume a range for the accumulator, and a range asserted about an atom whose spacing was never
+     * recorded is one the domain refuses — which would be a walk of the right shape that settles
+     * nothing.
+     */
+    private void recordingAccumulation(FactSubject atom, Accumulations.Accumulating accumulating,
+                                       Core e, Denotations at) {
+        Granularity spacing = granularityOf(e.type());
+        FactSubject accumulator =
+                named(FactSubject.of(interned.handed(atom.identity(), 0)), spacing);
+        FactSubject element = named(FactSubject.of(interned.handed(atom.identity(), 1)), spacing);
+        LinearForm<FactSubject> seed = startedFrom(accumulating.what().identity());
+        LinearForm<FactSubject> step =
+                repeating(accumulating.what().combine(), accumulator, element, spacing);
+        if (seed == null || step == null) {
+            return;
+        }
+        UniversalElementFacts elements =
+                UniversalElementFacts.of(accumulating.container(), at, this, symbols, policy);
+        computedBy(atom, new AtomKnowledge.Computation.Reduction(new InductiveBounds.Walk(
+                seed, accumulator, step,
+                StepInputFacts.ofTheElement(elements, element, this, reached(step)))));
+    }
+
+    /** The value an accumulation starts from, as a number — or null where the domain carries no such
+     * value. The empty list a {@code List.concat} starts from is a value the library states and this
+     * reading has no number for, which is a fact about this reading. */
+    private LinearForm<FactSubject> startedFrom(Accumulations.Identity identity) {
+        return switch (identity) {
+            case ZERO -> LinearForm.constant(java.math.BigDecimal.ZERO);
+            case ONE -> LinearForm.constant(java.math.BigDecimal.ONE);
+            case EMPTY -> null;
+        };
+    }
+
+    /**
+     * The step an accumulation repeats, as a form over the two places it is applied to — or null
+     * where the domain carries no such arithmetic.
+     *
+     * <p>A product is not a form, so it is an atom that stands for one, recorded against the recipe
+     * that says what it is — the same recipe the naming makes of a product written in a fold's step,
+     * so what proves one proves the other. Under the induction hypothesis the two operands are both
+     * bounded and the recipe answers a range; read with nothing assumed of the accumulator it
+     * answers none, which is what leaves the unprovable candidates unproved.
+     */
+    private LinearForm<FactSubject> repeating(Accumulations.Combine combine, FactSubject accumulator,
+                                              FactSubject element, Granularity spacing) {
+        return switch (combine) {
+            case ADD -> LinearForm.atom(accumulator).plus(LinearForm.atom(element));
+            case MULTIPLY -> {
+                FactSubject product = named(FactSubject.of(interned.operator(
+                        BinOp.MUL, accumulator.identity(), element.identity())), spacing);
+                computedBy(product, new AtomKnowledge.Computation.Derived(new Derivation.Product(
+                        LinearForm.atom(accumulator), LinearForm.atom(element))));
+                yield LinearForm.atom(product);
+            }
+            case APPEND -> null;
+        };
     }
 
     /**

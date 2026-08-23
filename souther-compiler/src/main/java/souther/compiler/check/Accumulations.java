@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.core.Core;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.Collections;
@@ -52,6 +54,9 @@ final class Accumulations {
     /** An accumulation: what it starts from, and the step it repeats. */
     record Accumulation(Identity identity, Combine combine) {}
 
+    /** What a call accumulates, and the container it accumulates over. */
+    record Accumulating(Accumulation what, Core container) {}
+
     /**
      * The operations that accumulate, and what each is.
      *
@@ -88,6 +93,22 @@ final class Accumulations {
         return operation == null ? null : Derived.RULES.get(operation);
     }
 
+    /**
+     * What {@code call} accumulates and over what, or null where it accumulates nothing.
+     *
+     * <p>Which argument holds the elements is not written down. An accumulation answers a value of
+     * the type its container holds, so the argument that holds them is the one whose elements are of
+     * the type the operation answers — which the declaration already says, in the same way it says
+     * where a {@link Reductions reduction}'s seed is. A signature admitting two readings of it is
+     * refused where the rules are read rather than answered by half.
+     */
+    static Accumulating accumulating(Core.PreservedCall call) {
+        Accumulation what = of(call.operation());
+        Integer container = Derived.CONTAINERS.get(call.operation());
+        return what == null || container == null || container >= call.args().size() ? null
+                : new Accumulating(what, call.args().get(container));
+    }
+
     /** The operations there is a rule about, for the check that a rule answers a question its
      * operation is asked. */
     static Set<ValueName> answered() {
@@ -98,6 +119,7 @@ final class Accumulations {
      * every module compiled. */
     private static final class Derived {
         private static final Map<ValueName, Accumulation> RULES = read();
+        private static final Map<ValueName, Integer> CONTAINERS = containers();
     }
 
     /**
@@ -117,6 +139,42 @@ final class Accumulations {
             rules.put(operation, accumulation);
         });
         return Collections.unmodifiableMap(rules);
+    }
+
+    /**
+     * Which argument each accumulation holds its elements in, read off the declarations.
+     *
+     * <p>The half a signature answers, kept apart from the half it does not, as {@link Reductions}
+     * keeps them apart. An operation answering a value of the type one of its containers holds is
+     * the range {@link Question#ACCUMULATION} is drawn on, so a rule here has such an argument by
+     * construction; two of them would be a declaration that does not say which it walks, and is
+     * refused rather than guessed at.
+     */
+    private static Map<ValueName, Integer> containers() {
+        Map<ValueName, Integer> where = new LinkedHashMap<>();
+        Derived.RULES.keySet().forEach(operation -> {
+            Prelude.Signature signature = Prelude.entry(operation.toString()).signature();
+            int found = -1;
+            for (int i = 0; i < signature.params().size(); i++) {
+                Type param = signature.params().get(i);
+                if (!Question.holdsElements(param)
+                        || !signature.result().equals(Terms.elementType(param))) {
+                    continue;
+                }
+                if (found >= 0) {
+                    throw new IllegalStateException(operation + " is named an accumulation and takes"
+                            + " two containers of what it answers, so which one it walks is not read"
+                            + " off its signature");
+                }
+                found = i;
+            }
+            if (found < 0) {
+                throw new IllegalStateException(operation + " is named an accumulation and takes no"
+                        + " container of the type it answers");
+            }
+            where.put(operation, found);
+        });
+        return Collections.unmodifiableMap(where);
     }
 
     /** The operation {@code name} of the library module published as {@code alias}, written as the
