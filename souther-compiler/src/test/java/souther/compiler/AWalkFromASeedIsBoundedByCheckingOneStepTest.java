@@ -65,6 +65,24 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
                 { held: Holding
                 }
 
+            data Inner =
+                { amount: NonNegInt
+                }
+
+            data Middle =
+                { inner: Inner
+                }
+
+            data Deeper =
+                { mid: Middle
+                }
+
+            data DeepHolding = Deeper | Missing
+
+            data DeepBoxed =
+                { held: DeepHolding
+                }
+
             data Classed =
                 { kind: Kind
                 , amount: NonNegInt
@@ -748,6 +766,32 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
                     | Held as h -> sum + h.amount.value
                     | Empty -> sum, 0, xs))
                 """)), "and this one reads what a `match` arm bound, which is the same thing again");
+    }
+
+    /**
+     * What an arm bound guarantees is read wherever the rule is written under it.
+     *
+     * <p>The neighbour above reads a rule one position under what the arm bound, and a reading that
+     * stopped where a seeding stops would still have found it. This one is three under it, which is
+     * past what a walk over a body can afford — and the model says the same thing about both: a rule
+     * four records down refuses a value exactly as one on the top does.
+     *
+     * <p>Written down because the reading did borrow that number, and the borrowing was invisible
+     * from either side. The walk's own tests pass with a bound in place, since they say what a bound
+     * does; the recipe's tests pass, since a rule a position or two down is inside any of them. This
+     * is the case that fails the moment
+     * {@link souther.compiler.check.GuaranteeWalk.Scope#everyPosition} here becomes a number.
+     */
+    @Test
+    void whatAnArmBoundGuaranteesIsReadHoweverDeepTheRuleIsWritten() {
+        assertFalse(owed(compiled("""
+                behavior total : (xs: List<DeepBoxed>) -> Money
+                    constructs Money
+
+                let total (xs) = Money(List.fold((sum, x) -> match x.held with
+                    | Deeper as d -> sum + d.mid.inner.amount.value
+                    | Missing -> sum, 0, xs))
+                """)), "the rule is three positions under what the arm bound, and it is read");
     }
 
 }
