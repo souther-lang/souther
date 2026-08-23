@@ -17,10 +17,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * An invariant declared in one module and a construction written in another, compiled together.
  *
  * <p>The invariant is the rule the construction is judged against, and the report is about the
- * construction: E2010 says the value being built is one the invariant rejects, and E2011 that the
- * nothing known there establishes it. Neither says anything is wrong with the invariant, so the file it is
- * declared in gets no marker — the clause is pointed at because a reader needs to see what was not
- * met, which is a different thing from the problem being written there.
+ * construction: E2010 says the value being built is one the invariant rejects, and E2011 that
+ * nothing known there establishes it. Neither says anything is wrong with the invariant, so the
+ * file it is declared in gets no marker — the clause is pointed at because a reader needs to see
+ * what was not met, which is a different thing from the problem being written there.
  *
  * <p>Worth pinning because the library case is the one that shows what it costs to get wrong: an
  * error on a correct line of a file whose author has nothing to fix, once for every construction in

@@ -44,10 +44,20 @@ import java.util.stream.Stream;
  * {@code if} here). At every construction whose invariant it can carry, it asks whether what is known
  * there <em>discharges</em> it, or refutes it. A construction proven to violate its invariant on a
  * reachable path is a compile error (the path-sensitive generalization of the constant check
- * {@code Amount(-5)}); one it cannot prove is a warning (a possible abort — guard it, or reify the
- * relation into a type invariant). An invariant naming something it cannot name is left opaque (no
+ * {@code Amount(-5)}); one it cannot prove is a warning (a possible abort — see below for what an
+ * author answers it with). An invariant naming something it cannot name is left opaque (no
  * diagnostic; the run-time check stays), so every flagged construction is one whose clauses could be
  * read at the values it is being given.
+ *
+ * <p>What an author answers that warning with is one modelling question and not a list of moves:
+ * whether the inputs the construction fails for are inputs the behavior takes. Where they are, the
+ * failure is a business one and is written as a branch — by a guard, or by attempting the
+ * construction, which is the same answer with the invariant written once instead of twice
+ * (ADR-0070). Where they are not, the relation belongs to a data that owns it, and that data need
+ * not already exist: a relation between two parameters belongs to no input, so writing it means
+ * introducing the input that holds them both. Leaving the construction as written leaves the
+ * warning unanswered — the run-time check still stands there, as it stands under every
+ * construction, but standing is not an answer to what this check reported.
  *
  * <p>A violation is reported in the terms it was reached in, and no stronger: {@link Known} carries
  * beside itself the reading with nothing a condition on the path settled, and a clause that reading

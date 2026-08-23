@@ -72,7 +72,7 @@ public sealed interface InvariantMessage extends Message {
     record GuardItOrLetADataOwnTheRelation() implements InvariantMessage, Supporting {}
 
     /**
-     * A clause the guards did not establish, said at the clause.
+     * A clause nothing known there establishes, said at the clause.
      *
      * <p>What E2011 points at. It says no more than that, because the clauses it is written over are
      * the ones nothing here established: some of them the values may fail, and some of them are

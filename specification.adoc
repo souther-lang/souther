@@ -1878,7 +1878,11 @@ behavior withdraw : (req: WithdrawRequest) -> Money
 let withdraw (req) = req.balance - req.amount // discharged with no guard here
 ----
 
-So a possible-violation warning over the fields of one input data is a prompt to declare their relation as that data's invariant. When a value's validity is guaranteed *outside* the language — a Java-side or injected contract stronger than any type — there is no type to reify onto, and that construction keeps its run-time check.
+So a possible-violation warning over the fields of one input data is a prompt to declare their relation as that data's invariant.
+
+The prompt is the same where the values are separate parameters, and what it asks for is more. A relation between two parameters is a property of no one input, so there is no existing type to declare it on: writing it means introducing the data that holds both values and taking that as the input, as `+WithdrawRequest+` is here. `+(balance: Money, amount: Money)+` says the behavior accepts every pair of the two, which is what a signature says and is not qualified by anything written elsewhere; a behavior that accepts fewer pairs than that says so by taking a type that admits fewer. There is no clause on a behavior that narrows its own parameters — a relation that can really fail is a business branch (<<attempted-construction>>, <<guard>>), and one that cannot is what a data declares.
+
+When a value's validity is guaranteed *outside* the language — a Java-side or injected contract stronger than any type — there is no type to reify onto, and that construction keeps its run-time check.
 
 [#decoder]
 == Decoder
@@ -6442,9 +6446,11 @@ Which clauses a report is about is a third thing, and the message and the region
 
 A warning, and the one diagnostic in this chapter that says nothing about whether the model is wrong. E2010 is the check having proved the invariant false; this is the check having proved nothing either way, so what was always going to happen still happens — the invariant is tested when the value is built, and a violation aborts there (<<violation-destination>>). A model that does establish the invariant, by an argument the check cannot follow, is told this too, and is not thereby wrong.
 
-What to do about it is therefore a choice and not a repair. Guarding the construction puts the reason where the check can read it. Reifying the relation — declaring it as an `+invariant+` on an input's own data — moves it to that data's boundary, where it is tested once and assumed everywhere the value reaches afterwards (<<invariant-discharge>>). Leaving it is the third: the run-time test is the guarantee, and the warning says it is still the thing doing the work.
+What to do about it is therefore a modelling decision and not a mechanical repair, and it is the decision the hint states. Where the behavior admits inputs for which the construction can violate the invariant, that failure is a business one: guard the construction, which puts the reason where the check can read it, or attempt it, which lets the invariant itself decide the branch and writes the rule once. Where the behavior admits no such input, the relation is part of the data that owns those values — declared as an `+invariant+` on it, tested once at that data's boundary and assumed everywhere the value reaches afterwards (<<invariant-discharge>>) — and where no data holds them, writing the relation means introducing the one that does.
 
-An attempted construction raises no warning. What this reports is a possible abort, and an attempt takes its `+else+` value instead of aborting (<<attempted-construction>>).
+Leaving the construction as written leaves the warning unanswered. The run-time test still stands there, as it stands under every construction (<<violation-destination>>), and it is the safety net for a model bug rather than a third answer: nothing an author writes turns this warning into an accepted abort, and there is no notation for doing so.
+
+An attempted construction raises no warning, which is not that third answer either. What this reports is a possible abort, and an attempt takes its `+else+` value instead of aborting (<<attempted-construction>>) — the failure becomes a business branch the author names, which is the first answer written once rather than twice.
 
 [#e2012]
 === An attempted construction that cannot be read
