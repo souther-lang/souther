@@ -176,6 +176,27 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
         }
     }
 
+    /**
+     * What a container of this type hands one at a time, or null where it holds no such thing: a
+     * list's or set's element, a map's value, an option's payload, and a function's first parameter
+     * where what is held is the closure itself.
+     *
+     * <p>A fact about the type, so it is here. Held inside a reader, every other reader that had to
+     * say what a container holds either asked that one or answered for itself.
+     *
+     * <p>A map's key is the other parameter a closure is handed and is not what this answers.
+     */
+    static Type elementOf(Type t) {
+        return switch (t) {
+            case ListOf list -> list.element();
+            case SetOf set -> set.element();
+            case MapOf map -> map.value();
+            case OptionOf option -> option.element();
+            case FnOf fn when !fn.params().isEmpty() -> fn.params().get(0);
+            case null, default -> null;
+        };
+    }
+
     /** A homogeneous list of {@code element}. */
     record ListOf(Type element) implements Compound {}
 

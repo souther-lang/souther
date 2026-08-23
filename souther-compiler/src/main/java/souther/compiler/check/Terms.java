@@ -2647,22 +2647,7 @@ final class Terms {
      * other closure parameter and is not the one the table credits), an option's payload, and a
      * function's first parameter where what is held is the closure itself. */
     static Type elementType(Type t) {
-        if (t instanceof Type.ListOf list) {
-            return list.element();
-        }
-        if (t instanceof Type.SetOf set) {
-            return set.element();
-        }
-        if (t instanceof Type.MapOf map) {
-            return map.value();
-        }
-        if (t instanceof Type.OptionOf opt) {
-            return opt.element();
-        }
-        if (t instanceof Type.FnOf fn && !fn.params().isEmpty()) {
-            return fn.params().get(0);
-        }
-        return null;
+        return Type.elementOf(t);
     }
 
     /**
