@@ -1319,21 +1319,52 @@ public final class InvariantChecker {
     private List<Coordinate> coordinatesIn(Core e, Denotations at,
                                            Map<FactSubject, Coordinate> byName) {
         List<Coordinate> out = new ArrayList<>();
-        coordinates(e, at, byName, out);
+        // By the place and not by the whole of what a coordinate is. One place answers to more than
+        // one name, and two of its names carry the same rules; kept apart, a clause about one
+        // position would be filed twice.
+        for (Coordinate each : originOf(e, at, byName).positions()) {
+            if (out.stream().noneMatch(had -> had.path().equals(each.path()))) {
+                out.add(each);
+            }
+        }
         return out;
     }
 
-    private void coordinates(Core e, Denotations at, Map<FactSubject, Coordinate> byName,
-                             List<Coordinate> out) {
-        FactSubject named = nameOf(e, at);
-        Coordinate here = named == null ? null : byName.get(named);
-        if (here != null) {
-            if (out.stream().noneMatch(had -> had.path().equals(here.path()))) {
-                out.add(here);
+    /**
+     * What {@code e} is made of, in this reader's coordinates.
+     *
+     * <p>The walk is {@link ValueOrigin}'s, so a clause and a {@code guard}'s comparison of the same
+     * shape are taken apart the same way. What is this reader's own is the lookup: a clause names a
+     * coordinate of the value it is written about, where a body names a position of an input.
+     */
+    private ValueOrigin<Coordinate> originOf(Core e, Denotations at,
+                                             Map<FactSubject, Coordinate> byName) {
+        return ValueOrigin.of(e, at, new ValueOrigin.Reading<Coordinate, Denotations>() {
+
+            @Override
+            public Coordinate positionOf(Core here, Denotations where) {
+                FactSubject named = nameOf(here, where);
+                return named == null ? null : byName.get(named);
             }
-            return;   // a coordinate names itself, and nothing under it is a coordinate of its own
-        }
-        Core.forEachChild(e, child -> coordinates(child, at, byName, out));
+
+            /** A clause is written about the value in front of it, and there is no operation here
+             *  that hands one of its parts out under a name of its own. */
+            @Override
+            public Coordinate madeFrom(Core here, Denotations where) {
+                return null;
+            }
+
+            @Override
+            public AffineForms.ReadThrough<Denotations> readThrough(Core.Read read,
+                                                                    Denotations where) {
+                return null;
+            }
+
+            @Override
+            public Denotations inside(Core.LetIn li, Denotations where) {
+                return where;
+            }
+        });
     }
 
     /**
