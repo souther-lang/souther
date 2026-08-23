@@ -99,7 +99,7 @@ class AReductionsShapeIsReadOffItsDeclarationTest {
     @Test
     void aStepNothingIsKnownOfProposesTheSeedAndTheTwoDirections() {
         assertEquals(List.of(only(0), new Bounds(at(0), null), new Bounds(null, at(0))),
-                InvariantCandidates.from(only(0), new Bounds(null, null)));
+                InvariantCandidates.from(only(0), new Bounds(null, null), List.of()));
     }
 
     /** Where the step answers something bounded without the accumulator being assumed, the seed and
@@ -110,7 +110,23 @@ class AReductionsShapeIsReadOffItsDeclarationTest {
         assertEquals(
                 List.of(only(0), new Bounds(at(0), null), new Bounds(null, at(0)),
                         new Bounds(at(0), at(7))),
-                InvariantCandidates.from(only(0), only(7)));
+                InvariantCandidates.from(only(0), only(7), List.of()));
+    }
+
+    /**
+     * What the step is handed is proposed beside the seed as well, which is the range a product of
+     * elements at or above nought needs and no reading of the seed alone reaches.
+     *
+     * <p>Each input separately and no reading of which of them the step uses: a guess that follows
+     * neither of a {@code Map.fold}'s two is one check and is discarded.
+     */
+    @Test
+    void whatTheStepIsHandedIsProposedBesideTheSeed() {
+        assertEquals(
+                List.of(only(1), new Bounds(at(1), null), new Bounds(null, at(1)),
+                        new Bounds(at(0), null)),
+                InvariantCandidates.from(only(1), new Bounds(null, null),
+                        List.of(new Bounds(at(0), null))));
     }
 
     /** A seed nothing bounds proposes nothing to prove: every range made from it is the one with no
@@ -118,6 +134,6 @@ class AReductionsShapeIsReadOffItsDeclarationTest {
     @Test
     void aSeedNothingBoundsProposesNothing() {
         assertEquals(List.of(),
-                InvariantCandidates.from(new Bounds(null, null), new Bounds(null, null)));
+                InvariantCandidates.from(new Bounds(null, null), new Bounds(null, null), List.of()));
     }
 }
