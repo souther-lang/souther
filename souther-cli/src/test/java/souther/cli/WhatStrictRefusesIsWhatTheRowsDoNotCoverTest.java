@@ -356,6 +356,58 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
     }
 
     /**
+     * A model with an arm nobody measured is not adequate; it is undetermined.
+     *
+     * <p>Every case of the signature is covered and every line the rules draw without the arms is
+     * met, so a verdict reading the signature alone called this satisfied — on the same page as a
+     * border line saying eight of its points were not measured. What holds it open is the arm
+     * measure and the guard's line saying they were not made, which is what they say (issue #955).
+     */
+    @Test
+    void aModelWhoseArmsNobodyMeasuredIsNotCalledAdequate() {
+        AdequacyReport witness = reportOf(AN_ARM_AND_A_COVERED_SIGNATURE, Adequacy.Level.WITNESS);
+
+        assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, witness.adequacy(),
+                witness.human(SourceNameResolver.identity()));
+        assertEquals(List.of(), witness.adequacyGaps().stream()
+                        .filter(f -> f.kind() == Adequacy.Kind.ARM_UNREACHED).toList(),
+                "and not by naming a gap in a measure nobody made");
+        assertEquals(AdequacyReport.AdequacyStatus.NOT_SATISFIED,
+                reportOf(AN_ARM_AND_A_COVERED_SIGNATURE, Adequacy.Level.ALL).adequacy());
+    }
+
+    /**
+     * And a model that owes no arm is adequate at that level, not held open for the level's sake.
+     *
+     * <p>The other half of the one above, and the reason the answer is the measure's rather than the
+     * level's. Nothing here is implemented, so no body owes an arm and no fork draws a line; the one
+     * line the invariant draws has a row on it. Read off the level, every model would be
+     * undetermined at {@code witness} whatever it said — which is what a rule written against the
+     * kinds a model could owe came to.
+     */
+    @Test
+    void aModelThatOwesNoArmIsAdequateAtWitness() {
+        AdequacyReport witness = reportOf(ONLY_WAITING, Adequacy.Level.WITNESS);
+
+        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, witness.adequacy(),
+                witness.human(SourceNameResolver.identity()));
+    }
+
+    /** A line an invariant drew is measured wherever the rows ran, so a row missing at it is a gap
+     *  at {@code witness} and says the same thing there as at {@code all}. */
+    @Test
+    void aLineThatNeedsNoArmIsAGapAtEveryLevelThatRanTheRows() {
+        for (Adequacy.Level level : List.of(Adequacy.Level.WITNESS, Adequacy.Level.ALL)) {
+            AdequacyReport report = reportOf(WAITING_AND_UNCOVERED, level);
+            assertEquals(AdequacyReport.AdequacyStatus.NOT_SATISFIED, report.adequacy(),
+                    report.human(SourceNameResolver.identity()));
+            assertEquals(List.of(Adequacy.Kind.BOUNDARY_UNMET),
+                    report.adequacyGaps().stream().map(Adequacy.Finding::kind).toList(),
+                    "at " + level);
+        }
+    }
+
+    /**
      * An arm nothing reaches is a gap only where the arms were asked about.
      *
      * <p>The same model and the same rows; what differs is the level. At {@code witness} the arms are
@@ -387,11 +439,15 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
      */
     @Test
     void aCompositionHasNoArmsOfItsOwnAndDoesNotHoldTheVerdictOpen() {
-        AdequacyReport report = reportOf(COMPOSED, Adequacy.Level.ALL);
+        // At both levels, because what it owes is what it owes: read off the level, the answer at
+        // `witness` would be that nobody measured arms it does not have.
+        for (Adequacy.Level level : List.of(Adequacy.Level.WITNESS, Adequacy.Level.ALL)) {
+            AdequacyReport report = reportOf(COMPOSED, level);
 
-        String human = report.human(SourceNameResolver.identity());
-        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, report.adequacy(), human);
-        assertFalse(human.contains("the arms were not measured"), human);
+            String human = report.human(SourceNameResolver.identity());
+            assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, report.adequacy(), human);
+            assertFalse(human.contains("the arms were not measured"), human);
+        }
     }
 
     /**
@@ -561,6 +617,33 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
 
             example submit
                 | "within" : (Amount(50)) -> Charged
+            """;
+
+    /** Every case of the signature covered, every arm not. The two guards leave an arm no row goes
+     *  through, and nothing about the signature is short. */
+    private static final String AN_ARM_AND_A_COVERED_SIGNATURE = """
+            module example.rate
+
+            data Amount = Int
+                invariant value >= 0
+
+            data Charged = { cost: Amount }
+            data Refused = { reason: String }
+
+            behavior submit : (cost: Amount) -> Charged | Refused
+                constructs Charged, Refused
+
+            let submit (cost) = {
+                guard cost.value <= 100 else Refused { reason = "over" }
+                guard cost.value >= 10 else Refused { reason = "under" }
+                Charged { cost = cost }
+            }
+
+            example submit
+                | "within" : (Amount(50)) -> Charged
+                | "over"   : (Amount(101)) -> Refused
+                | "zero"   : (Amount(0)) -> Refused
+                | "under"  : (Amount(5)) -> Refused
             """;
 
     private static AdequacyReport reportOf(String source, Adequacy.Level level) {

@@ -2735,10 +2735,13 @@ public final class Adequacy {
             }
             Map<String, SignatureEvidence> signatures =
                     level.reports() ? db.ask(new Witnesses(name)).value() : null;
-            Map<String, PartitionEvidence> partitions =
-                    level.runsInstrumentedRows() ? db.ask(new Coverage(name)).value() : null;
-            Map<String, BranchEvidence> branches =
-                    level.runsInstrumentedRows() ? db.ask(new BranchCoverage(name)).value() : null;
+            // Asked whatever the level is. Each of these says for itself how much of it was made —
+            // a line a fork drew comes back `ARMS_NOT_ASKED` where the rows were not instrumented,
+            // and a line an invariant drew is measured either way — so dropping them here was this
+            // deciding a second time what a measure had already answered, and dropping with them
+            // every gap the measures did establish (issue #955).
+            Map<String, PartitionEvidence> partitions = db.ask(new Coverage(name)).value();
+            Map<String, BranchEvidence> branches = db.ask(new BranchCoverage(name)).value();
 
             Map<String, List<Finding>> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
