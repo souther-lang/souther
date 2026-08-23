@@ -204,8 +204,9 @@ final class Predicates {
      *
      * <p>So, over the cases that are reached: all of them proving the clause is the clause
      * established, all of them refuting it is the clause refused, and anything else is unsettled.
-     * The cases are exhaustive ({@link DischargeRules.Choices}), which is what makes the first two
-     * statements about the result rather than about a case of it.
+     * The cases are exhaustive — which the table they are read from states, and this rests on —
+     * and that is what makes the first two statements about the result rather than about a case of
+     * it.
      *
      * <p>No case reached is not the clause established. It says the guards cannot all hold, and a
      * value the program never builds establishes nothing — while the reading that takes the call as
@@ -996,41 +997,37 @@ final class Predicates {
      * first and leave the second saying nothing.
      */
     private Piecewise piecewiseOf(NumericConstraint owed, Core inv, Denotations at) {
-        Map<FactSubject, Core.PreservedCall> choosing = new LinkedHashMap<>();
+        Map<FactSubject, Choice> choosing = new LinkedHashMap<>();
         chosenCalls(inv, at, choosing);
         choosing.keySet().retainAll(owed.form().coefs().keySet());
         if (choosing.size() != 1) {
             return null;
         }
         FactSubject atom = choosing.keySet().iterator().next();
-        Core.PreservedCall call = choosing.get(atom);
         BigDecimal coefficient = owed.form().coefs().get(atom);
         List<Case> cases = new ArrayList<>();
-        for (DischargeRules.Choice one : DischargeRules.chosenBy(call).cases()) {
-            LinearForm<FactSubject> answered = terms.affineOf(one.answers().of(call), at);
+        for (Choice.Arm arm : choosing.get(atom).arms()) {
+            LinearForm<FactSubject> answered = terms.affineOf(arm.answers(), at);
             if (answered == null) {
                 return null;
             }
             LinearForm<FactSubject> instead = owed.form()
                     .minus(LinearForm.atom(atom).times(coefficient))
                     .plus(answered.times(coefficient));
-            List<NumericConstraint> given = new ArrayList<>(one.given().size() + 1);
+            List<NumericConstraint> given = new ArrayList<>();
             Map<FactSubject, Granularity> kinds = new HashMap<>(terms.kindsOf(instead));
             // What the call answers here, said of the call itself: in this case the two are one
             // value. Without it a guard written about the call would stand outside the cases, and a
-            // clause could come out established by these and refused by that.
+            // clause could come out established by these and refused by that. It belongs to this
+            // reading and to no other — a recipe over the arms answers about the value itself and
+            // has nothing to tie back — which is why what is shared with that reader stops at the
+            // arms and what they settle.
             LinearForm<FactSubject> answeredHere = LinearForm.atom(atom).minus(answered);
             given.add(new NumericConstraint(answeredHere, Rel.EQ));
             kinds.putAll(terms.kindsOf(answeredHere));
-            for (DischargeRules.ArgumentsStand stands : one.given()) {
-                LinearForm<FactSubject> left = terms.affineOf(stands.left().of(call), at);
-                LinearForm<FactSubject> right = terms.affineOf(stands.right().of(call), at);
-                if (left == null || right == null) {
-                    return null;
-                }
-                LinearForm<FactSubject> between = left.minus(right);
-                given.add(new NumericConstraint(between, stands.rel()));
-                kinds.putAll(terms.kindsOf(between));
+            for (NumericConstraint stands : Conditions.settledBy(terms, arm.decidedBy(), at)) {
+                given.add(stands);
+                kinds.putAll(terms.kindsOf(stands.form()));
             }
             cases.add(new Case(new NumericConstraint(instead, owed.rel()), List.copyOf(given),
                     Map.copyOf(kinds)));
@@ -1038,17 +1035,22 @@ final class Predicates {
         return new Piecewise(List.copyOf(cases));
     }
 
-    /** Every call inside {@code e} that answers one of the values it was given, by the atom it keys
-     * as. A name is what it was given, as everywhere else a value is read. */
-    private void chosenCalls(Core e, Denotations at, Map<FactSubject, Core.PreservedCall> out) {
+    /** Every call inside {@code e} that answers one of the values it was given, as the choice it is,
+     * by the atom it keys as. A name is what it was given, as everywhere else a value is read.
+     *
+     * <p>Which calls those are is asked of {@link Choice} and not of the table it reads. A reader
+     * here that knew the table would be a second interpretation of it, and the two would come apart
+     * the day the library changed which argument a case answers. */
+    private void chosenCalls(Core e, Denotations at, Map<FactSubject, Choice> out) {
         if (e instanceof Core.Read r && at.valueOf(r.binding()) != null) {
             chosenCalls(at.valueOf(r.binding()), at, out);
             return;
         }
-        if (e instanceof Core.PreservedCall call && DischargeRules.chosenBy(call) != null) {
-            FactSubject atom = terms.atomOf(call, at);
+        if (e instanceof Core.PreservedCall call) {
+            Choice choice = Choice.of(call);
+            FactSubject atom = choice == null ? null : terms.atomOf(call, at);
             if (atom != null) {
-                out.put(atom, call);
+                out.put(atom, choice);
             }
         }
         Core.forEachChild(e, child -> chosenCalls(child, at, out));

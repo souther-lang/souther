@@ -595,8 +595,13 @@ final class DischargeRules {
      * <p>Stated here rather than as bounds on the result ({@link #BOUNDS_ON_THE_RESULT}) because
      * what these answer depends on the arguments, and a bound that does not may not be written for
      * them. The bounds a case gives — a smaller of two is no greater than either — follow from the
-     * case and are derived where a clause is read, so they are not a second table to keep in step
+     * case and are derived where the cases are read, so they are not a second table to keep in step
      * with this one.
+     *
+     * <p>Read through {@link #chosenBy} in one place ({@link Choice}), which turns a case into an arm
+     * written in the values a call was given. A reader wanting the cases asks there and is never
+     * handed a row: what a row names is an argument of an operation, and a second reading of that is
+     * a second answer to keep in step.
      */
     private static final Map<ValueName, Choices> CHOOSES = Map.of(
             op("Int", "min"), choices(

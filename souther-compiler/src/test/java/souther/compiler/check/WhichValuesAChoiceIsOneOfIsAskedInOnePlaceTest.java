@@ -34,9 +34,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 class WhichValuesAChoiceIsOneOfIsAskedInOnePlaceTest {
 
     /** The arms of {@code Core} that are a choice by their shape — the ones {@link Choice} answers
-     * for. Named against its opposite: what a shape can say is whether every value written at that
-     * node is one of several, and for a call it cannot, so a call is on the other side whatever the
-     * operation turns out to be (#974). */
+     * for whatever stands in them. Named against its opposite: what a shape can say is whether every
+     * value written at that node is one of several, and for a call it cannot, so a call is on the
+     * other side and is answered for by what its operation is rather than by what it is. */
     private static final Set<String> A_CHOICE_BY_ITS_SHAPE =
             Set.of("If", "Match", "IfConstructed");
 
@@ -95,8 +95,9 @@ class WhichValuesAChoiceIsOneOfIsAskedInOnePlaceTest {
      * <p>{@code PreservedCall} is here as a shape and not as every call. What a call answers is one
      * value unless the operation is defined in cases — {@code Int.min} answers one of the two it was
      * given — and which operations those are is a table rather than a shape
-     * ({@code DischargeRules.CHOOSES}). So a call is not a choice by being a call, and the day that
-     * table is read the case goes into {@link Choice} while this row stays where it is (#974). A
+     * ({@code DischargeRules.CHOOSES}). That table is read in {@link Choice} and this row stays where
+     * it is: a call is not a choice by being a call, so a shape cannot put it on the other side, and
+     * a check that moved it there would be claiming of every call what is true of six operations. A
      * classification by shape is what this list can hold; which values a particular call answers one
      * of is {@link Choice}'s, as it is for every other node here.
      */

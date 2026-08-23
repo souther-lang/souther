@@ -2417,10 +2417,33 @@ public final class InvariantChecker {
                     + split.getClass().getSimpleName() + ", which answers one value —"
                     + " isASplit and Choice.of were given a form one of them has not");
         }
-        return new Split(choice.asked(), choice.arms().stream()
-                .map(arm -> new Arm(arm.answers(), choosing(arm.decidedBy())))
-                .toList());
+        Core asked = null;
+        List<Arm> arms = new ArrayList<>(choice.arms().size());
+        for (Choice.Arm arm : choice.arms()) {
+            Opened opened = opening(arm.decidedBy(), split);
+            // The same node and not an equal one. Every arm of a split is decided by the one node
+            // the choice was read off, so this is the node arriving as many times as there are arms;
+            // a producer handing each arm its own has made something this reads by asking one thing
+            // and there is no one thing to ask. Compared by identity because that is what is being
+            // claimed, and because what stands in a scrutinee is a tree of any size.
+            if (asked != null && asked != opened.asked()) {
+                throw new IllegalStateException("the arms of a split at " + split.pos()
+                        + " are decided by more than one node, and a split is read by asking one");
+            }
+            asked = opened.asked();
+            arms.add(new Arm(arm.answers(), opened.choosing()));
+        }
+        return new Split(asked, arms);
     }
+
+    /** What a split reads of one arm: the node deciding between the arms, and what choosing this one
+     * settles.
+     *
+     * <p>Both out of one switch because both are this reader's projection of the same thing. What a
+     * split asks is not a component of a choice — an operation defined by cases is decided by how its
+     * arguments stand and by no node written down — so it is read here, from the way of deciding, by
+     * the one reader that needs it. */
+    private record Opened(Core asked, Choosing choosing) {}
 
     /**
      * What choosing the arm {@code decides} chose settles, as somewhere to enter.
@@ -2435,21 +2458,31 @@ public final class InvariantChecker {
      * binding entered — so reaching this with one is the two disagreeing rather than a case to
      * handle.
      */
-    private Choosing choosing(Choice.Decides decides) {
+    private Opened opening(Choice.Decides decides, Core split) {
         return switch (decides) {
-            case Choice.Decides.ACondition c -> (within, there) -> new Entered(
-                    predicates.assumeCond(c.cond(), within, there, c.holding()).known(), there);
-            case Choice.Decides.ACase c -> (within, there) ->
-                    engine.enteringArm(c.arm(), c.scrutinee(), within, there);
-            case Choice.Decides.ItWasBuilt b -> throw notOpened(b.attempt());
-            case Choice.Decides.ItDeparted d -> throw notOpened(d.attempt());
+            case Choice.Decides.ACondition c -> new Opened(c.cond(), (within, there) -> new Entered(
+                    predicates.assumeCond(c.cond(), within, there, c.holding()).known(), there));
+            case Choice.Decides.ACase c -> new Opened(c.scrutinee(), (within, there) ->
+                    engine.enteringArm(c.arm(), c.scrutinee(), within, there));
+            case Choice.Decides.ItWasBuilt ignored -> throw notOpened(split,
+                    "an attempted construction", "it is read where it stands with what it built"
+                            + " bound");
+            case Choice.Decides.ItDeparted ignored -> throw notOpened(split,
+                    "an attempted construction", "it is read where it stands with what it built"
+                            + " bound");
+            case Choice.Decides.ByArgumentRelations ignored -> throw notOpened(split,
+                    "an operation the library defines by cases", "there is no node to ask — what"
+                            + " decides it is how its arguments stand, and the value is bounded by"
+                            + " what its cases answer");
         };
     }
 
-    private static IllegalStateException notOpened(Core.IfConstructed attempt) {
-        return new IllegalStateException("an attempted construction at " + attempt.pos()
-                + " was opened as a case split, which this walk does not do — it is read where it"
-                + " stands with what it built bound");
+    /** Where the node being opened is, asked of the node and not of the way of deciding. A way of
+     * deciding an arm need carry no node at all, and a message that read one off it had a position
+     * for some of them and nothing for the rest. */
+    private static IllegalStateException notOpened(Core split, String what, String instead) {
+        return new IllegalStateException(what + " at " + split.pos()
+                + " was opened as a case split, which this walk does not do — " + instead);
     }
 
     /**
@@ -2460,7 +2493,9 @@ public final class InvariantChecker {
      * choice this walk reads by putting each arm where the choice stood and reading the body again.
      * An attempt is a choice and is not one of these: it binds what it built, and the walk reads it
      * where it stands with that binding entered ({@link PathEngine#enteringBuilt}) rather than by
-     * substituting its arms. Where it stands inside a value the walk does not read it that way and
+     * substituting its arms. An operation the library defines by cases is not one either, and for a
+     * plainer reason: a split is read by asking the node that decides it, and how two arguments stand
+     * is not a node anybody wrote. Where it stands inside a value the walk does not read it that way and
      * the value is bounded by its arms instead ({@link Derivation.Chosen}).
      *
      * <p>Written as a switch over {@link Choice.Kind} with no default, so a kind of choice added
@@ -2475,7 +2510,7 @@ public final class InvariantChecker {
         Choice choice = Choice.of(e);
         return choice != null && switch (choice.kind()) {
             case A_CONDITION, A_CASE -> true;
-            case AN_ATTEMPT -> false;
+            case AN_ATTEMPT, THE_ARGUMENTS -> false;
         };
     }
 

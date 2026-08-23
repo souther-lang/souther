@@ -122,6 +122,80 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
                 """)), "zero or seven, and neither is below zero");
     }
 
+    /**
+     * A step that answers one of the values it was handed, written as the operation the library
+     * defines by cases.
+     *
+     * <p>The smaller of two values at or above zero is at or above zero. Written as an {@code if}
+     * this discharged; written as {@code Int.min} the same value came out of the walk with no range
+     * at all, because what the library's definition says was read only where a clause stood over the
+     * call itself and never where a value's range was asked for (#974).
+     */
+    @Test
+    void aStepThatAnswersTheSmallerOfTwoAmountsStaysWhereBothAre() {
+        assertFalse(owed(compiled("""
+                behavior total : (xs: List<Line>) -> Money
+                    constructs Money
+
+                let total (xs) = Money(List.fold((sum, x) -> Int.min(sum, x.amount.value), 0, xs))
+                """)), "the smaller of two values at or above zero is at or above zero");
+    }
+
+    /** And the same step over elements nothing bounds is reported, so what discharged the one above
+     * was what the cases say and not the operation's name. */
+    @Test
+    void aStepThatAnswersTheSmallerOfTheAccumulatorAndAnythingIsOwed() {
+        assertTrue(owed(compiled("""
+                behavior total : (xs: List<Int>) -> Money
+                    constructs Money
+
+                let total (xs) = Money(List.fold((sum, x) -> Int.min(sum, x), 0, xs))
+                """)), "an element below zero is what the smaller of the two is");
+    }
+
+    /** The other way round: the larger of the accumulator and anything is no lower than the
+     * accumulator, so a seed above the clause carries it whatever the elements are. */
+    @Test
+    void aStepThatAnswersTheLargerOfTheAccumulatorAndAnythingKeepsTheSeed() {
+        assertFalse(owed(compiled("""
+                behavior total : (xs: List<Int>) -> AtLeastTen
+                    constructs AtLeastTen
+
+                let total (xs) = AtLeastTen(List.fold((acc, x) -> Int.max(acc, x), 10, xs))
+                """)), "the larger of ten and anything is at least ten");
+    }
+
+    /**
+     * A definition written in three cases, two of which are reached under two conditions each.
+     *
+     * <p>Which is what a reading over the arms alone would not carry: the value {@code clamp}
+     * answers is one of three, and only the conditions say that the one it answers where the third
+     * case is reached lies between the other two.
+     */
+    @Test
+    void aStepThatHoldsItsAnswerBetweenTwoWrittenEndsLandsBetweenThem() {
+        assertFalse(owed(compiled("""
+                behavior total : (xs: List<Line>) -> UpToAHundred
+                    constructs UpToAHundred
+
+                let total (xs) = UpToAHundred(
+                    List.fold((acc, x) -> Int.clamp(0, 100, acc + x.amount.value), 0, xs))
+                """)), "a value held between nought and a hundred is within a hundred");
+    }
+
+    /** And held between ends the clause does not cover it is reported, so what discharged the one
+     * above was the ends the call was given. */
+    @Test
+    void aStepHeldBetweenEndsWiderThanTheClauseIsOwed() {
+        assertTrue(owed(compiled("""
+                behavior total : (xs: List<Line>) -> UpToAHundred
+                    constructs UpToAHundred
+
+                let total (xs) = UpToAHundred(
+                    List.fold((acc, x) -> Int.clamp(0, 200, acc + x.amount.value), 0, xs))
+                """)), "a value held below two hundred is not thereby below a hundred");
+    }
+
     /** The accumulator arrives on the second parameter here, which is read off the declaration and
      * not written down anywhere. */
     @Test
