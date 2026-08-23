@@ -7,7 +7,6 @@ import souther.compiler.check.TypeView;
 import souther.compiler.inputs.StructuralDescent;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.ObservedValue;
-import souther.compiler.observe.RowOutcome;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
@@ -43,12 +42,12 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
     }
 
     /**
-     * The values this row put at {@code path}, which is one value at most positions and however
-     * many the row wrote at a position inside a sequence.
+     * The values written at {@code path}, which is one value at most positions and however many
+     * were written at a position inside a sequence.
      *
-     * <p>Empty where it put no readable one there, and never null: a caller asking what a row
-     * covers at a position is answered with what it wrote, and a list of none is a row that wrote
-     * none — which a row holding an empty list did.
+     * <p>Empty where none readable is there, and never null: a caller asking what is covered at a
+     * position is answered with what was written, and a list of none is nothing written there —
+     * which an empty list is.
      *
      * <p>The one walk into a row's values, done with the declared types beside them. A field of a
      * record is reached through the names the record is written under: {@code data SlotN = Slot} is
@@ -72,8 +71,8 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
      * the field named next, or a position whose type is not a record at all. The path and the type
      * disagree, and no observation says why because nothing went wrong with one.
      */
-    public List<ObservedValue> valuesAt(RowOutcome row, TermPath path) {
-        List<Occurrence> found = occurrencesAt(row, path);
+    public List<ObservedValue> valuesAt(List<ObservedValue> inputs, TermPath path) {
+        List<Occurrence> found = occurrencesAt(inputs, path);
         return found == null ? null : found.stream().map(Occurrence::value).toList();
     }
 
@@ -124,13 +123,20 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
         }
     }
 
-    /** The values a row put at {@code path}, each with the elements taken to reach it. */
-    public List<Occurrence> occurrencesAt(RowOutcome row, TermPath path) {
+    /**
+     * The values at {@code path}, each with the elements taken to reach it.
+     *
+     * <p>Asked of the values and not of a row. What falls where is a question about a tuple of
+     * values, and rows are not the only things that have one: a value a {@code let} binds and a
+     * candidate this package composed are both read at these positions, and both have to be read
+     * the way a written row is or the classes they land in are two readings rather than one.
+     */
+    public List<Occurrence> occurrencesAt(List<ObservedValue> inputs, TermPath path) {
         int at = indexOf(path);
-        if (at < 0 || at >= row.inputs().size()) {
+        if (at < 0 || at >= inputs.size()) {
             return null;
         }
-        List<Standing> standing = List.of(new Standing(row.inputs().get(at), types.get(at),
+        List<Standing> standing = List.of(new Standing(inputs.get(at), types.get(at),
                 TermPath.of(path.head()), Map.of()));
         for (TermPath.Step step : path.steps()) {
             List<Standing> next = new ArrayList<>();
@@ -158,16 +164,15 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
     }
 
     /**
-     * The value this row put at {@code path}, or null where it did not put one readable value
-     * there.
+     * The value at {@code path}, or null where there is not one readable value there.
      *
-     * <p>For a position one value stands at. A position inside a sequence has as many as the row
-     * wrote, and answering a caller that wants one with the first of them would report what a row
-     * covers off an element it chose — so such a position answers null here and {@link #valuesAt}
+     * <p>For a position one value stands at. A position inside a sequence has as many as were
+     * written, and answering a caller that wants one with the first of them would report what is
+     * covered off an element it chose — so such a position answers null here and {@link #valuesAt}
      * is what reads it.
      */
-    public ObservedValue valueAt(RowOutcome row, TermPath path) {
-        List<ObservedValue> values = valuesAt(row, path);
+    public ObservedValue valueAt(List<ObservedValue> inputs, TermPath path) {
+        List<ObservedValue> values = valuesAt(inputs, path);
         return values != null && values.size() == 1 ? values.get(0) : null;
     }
 

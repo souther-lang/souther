@@ -228,6 +228,66 @@ public record FixtureTemplate(String text, Hir.Expr value) {
                 new Hir.Tuple(List.of(key.value(), value.value()), NOWHERE, NO_SOURCE));
     }
 
+    /**
+     * A value the module already states, written the way a row writes it: by its name.
+     *
+     * <p>The name and what it denotes, which is what a fixture is read by. A row naming a
+     * module-level {@code let} is a row an author writes today — the value is expanded where the
+     * row is read — and this is that same row, composed.
+     *
+     * @param module what the name belongs to, which is what a reader of the name resolves it through
+     * @param name   the name as this module writes it
+     */
+    public static FixtureTemplate named(String module, String name) {
+        return new FixtureTemplate(name,
+                Hir.Var.denoting(WrittenName.synthetic(name, NOWHERE),
+                        new ValueName.Helper(module, name), new ReachName.Bare(name)));
+    }
+
+    /**
+     * {@code T { ...base, field = value }} — a value the model already states, with one field
+     * moved.
+     *
+     * <p>The one row a reader of a table recognises. Where the gap is a class at one position, the
+     * row that says something about it is that class against values the model already puts beside
+     * it — and a row that also moved the positions beside it says nothing about which of them the
+     * answer turned on (issue #967).
+     *
+     * <p>The spread is the value and not a way of printing it. What a row is written as and what a
+     * decoder builds it from are two forms of one value here, never derived from each other
+     * ({@link FixtureTemplate}), so the tree carries the spread the text spells and both go through
+     * the reading a written row goes through. Printed as a spread over a tree that had the record
+     * written out, the two would be one value under two spellings with their own way of
+     * disagreeing.
+     *
+     * <p>More than one field, because a row about one class can need another moved beside it to be
+     * a value the model allows at all. Which of them the row is <em>for</em> is not here: that is
+     * what it was composed for, and the rest are what it took to write one (issue #967).
+     *
+     * @param type  the record being built, written the way this module reaches it
+     * @param base  the value being spread, which has to be one a row can name
+     * @param moved the fields this writes over what the base holds, in the order they are written
+     */
+    public static FixtureTemplate spreading(TypeReachName.Written type, FixtureTemplate base,
+                                            Map<String, FixtureTemplate> moved) {
+        if (!(base.value() instanceof Hir.Var spread)) {
+            throw new IllegalArgumentException("a spread names a value: " + base.text());
+        }
+        if (moved.isEmpty()) {
+            throw new IllegalArgumentException("a spread that moves nothing is the value itself");
+        }
+        List<String> written = new ArrayList<>();
+        List<Hir.FieldInit> inits = new ArrayList<>();
+        for (Map.Entry<String, FixtureTemplate> field : moved.entrySet()) {
+            written.add(field.getKey() + " = " + field.getValue().text());
+            inits.add(new Hir.FieldInit(field.getKey(), field.getValue().value(), NOWHERE));
+        }
+        return new FixtureTemplate(
+                type.rendered() + " { ..." + base.text() + ", " + String.join(", ", written) + " }",
+                new Hir.NewData(Hir.Name.reached(type, NOWHERE), inits, List.of(spread),
+                        ConstructionOrigin.own(), NOWHERE, NO_SOURCE));
+    }
+
     /** A record, field by field, in the order the fields were declared. */
     public static FixtureTemplate record(TypeReachName.Written type, Map<String, FixtureTemplate> fields) {
         List<String> written = new ArrayList<>();

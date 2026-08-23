@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.numeric.Granularity;
-import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.Bounds;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 
@@ -60,7 +59,7 @@ final class InductiveBounds {
     @FunctionalInterface
     interface Reading {
 
-        Bounds of(LinearForm<FactSubject> form, NumericDomain<FactSubject> domain);
+        Bounds of(LinearForm<FactSubject> form, DerivedNumericFacts.ReadingDomain domain);
     }
 
     /** The range with no ends, which every walk's answer is in and which proves nothing. */
@@ -74,8 +73,9 @@ final class InductiveBounds {
      * domain. So this can be asked twice with two readings and answer twice, and neither answer can
      * reach the other.
      */
-    static Bounds provenOf(Walk walk, NumericDomain<FactSubject> base, Terms terms, Reading read) {
-        NumericDomain<FactSubject> given = walk.inputs().taking(base);
+    static Bounds provenOf(Walk walk, DerivedNumericFacts.ReadingDomain base, Terms terms,
+                           Reading read) {
+        DerivedNumericFacts.ReadingDomain given = base.taking(walk.inputs());
         if (given.isBottom()) {
             return ANYTHING;   // a reading that holds nothing settles nothing about a walk under it
         }
@@ -113,12 +113,14 @@ final class InductiveBounds {
      * round that feeds its own answer back.
      */
     private static boolean inductive(Walk walk, Bounds candidate, Bounds seed,
-                                     NumericDomain<FactSubject> given, Terms terms, Reading read) {
+                                     DerivedNumericFacts.ReadingDomain given, Terms terms,
+                                     Reading read) {
         if (!seed.liesWithin(candidate)) {
             return false;
         }
         Map<FactSubject, Granularity> spacing = terms.kindsOf(LinearForm.atom(walk.accumulator()));
-        NumericDomain<FactSubject> assuming = given.assuming(walk.accumulator(), candidate, spacing);
+        DerivedNumericFacts.ReadingDomain assuming =
+                given.assuming(walk.accumulator(), candidate, spacing);
         if (assuming.isBottom()) {
             // The accumulator is an atom of its own, so a range for it cannot contradict a reading —
             // unless the reading already held nothing, which was answered before this was reached.

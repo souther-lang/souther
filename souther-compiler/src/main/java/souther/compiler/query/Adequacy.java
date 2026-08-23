@@ -24,7 +24,7 @@ import souther.compiler.partition.PointRole;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.Generator;
-import souther.compiler.partition.RowClasses;
+import souther.compiler.partition.InputClassifications;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -123,12 +123,96 @@ public final class Adequacy {
                 case OUTPUT_CASE_UNSPECIFIED, INPUT_CASE_UNSPECIFIED, BOUNDARY_UNMET, ARM_UNREACHED
                         -> true;
                 case DOMAIN_POINT_UNCOVERED -> this == RELIABLE_DOMAIN;
-                // What a measure could not establish, and what it established about the model rather
-                // than about the rows. Neither is a row somebody owes, so no criterion asks for it.
-                case OUTPUT_CASE_UNVERIFIED, AXIS_CLASS_UNCOVERED, PARTITION_NOT_DERIVABLE,
-                     PARTITION_NOT_READ, RULE_UNACCOUNTED, PARTITION_RULES_NOT_REACHED,
-                     PARTITION_VALUES_NOT_SEPARATED, PARTITION_OMITTED -> false;
+                // A row somebody owes, and no criterion is what asks for it. The syllabus's two
+                // are about a border's points, and a class of a position is not one — so which
+                // bar asks for it is {@link AdequacyBar}'s to say, and a criterion saying so
+                // would be the two questions answered by one ordered pair of values.
+                case AXIS_CLASS_UNCOVERED -> false;
+                // Not a row anyone owes: what was seen rather than what was asked for. A case
+                // nothing was observed producing is the rows' own account of themselves.
+                case OUTPUT_CASE_UNVERIFIED -> false;
+                // What a measure could not establish, and what it established about the model
+                // rather than about the rows. Neither is a row somebody owes, and no bar can make
+                // one of them into one: a build that refused over these would be refusing over
+                // this compiler's reading rather than over the model.
+                case PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ, RULE_UNACCOUNTED,
+                     PARTITION_RULES_NOT_REACHED, PARTITION_VALUES_NOT_SEPARATED,
+                     PARTITION_OMITTED -> false;
             };
+        }
+    }
+
+    /**
+     * What a build is held to: a domain-coverage criterion, and whatever else it refuses over
+     * beside it.
+     *
+     * <p>Beside {@link Criterion} and not a third value of it, because the two are independent.
+     * How strongly a border's points are asked for is one question — the syllabus defines the two
+     * answers to it — and whether a class no row is in is a row somebody owes is another. Written
+     * as one ordered enum, a build that wanted the second would have been made to take the
+     * strongest answer to the first, and the coupling would have been in the type rather than in
+     * anything anyone decided. {@code CLASSES} taking the stronger criterion is this bar's choice
+     * and not an order over the three.
+     *
+     * <p>A closed set, so that what has to be true of every bar can be asked of each. A kind some
+     * bar refuses over and nobody gave a code to is a gap a report prints and a build is never
+     * told about, and that is held by walking {@link #values()}.
+     *
+     * <p>What a bar is not is a measurement. How much was measured is {@link Level}'s, and the
+     * points away from a line are measured whenever the ones against them are (issue #937).
+     */
+    public enum AdequacyBar {
+
+        /** A row against each line, and nothing beside what every criterion refuses over. */
+        SIMPLIFIED_DOMAIN(Criterion.SIMPLIFIED_DOMAIN, Set.of()),
+
+        /** Those, and the points away from the line. */
+        RELIABLE_DOMAIN(Criterion.RELIABLE_DOMAIN, Set.of()),
+
+        /**
+         * Those, and a class of a position no row's value falls in.
+         *
+         * <p>Not a default. A model being written has classes no row is in yet — that is what
+         * writing rows is — so a bar refusing over them is one a build asks for when its rows are
+         * meant to be finished, and never the one it is held to for having said nothing.
+         */
+        CLASSES(Criterion.RELIABLE_DOMAIN, Set.of(Kind.AXIS_CLASS_UNCOVERED));
+
+        private final Criterion domain;
+        private final Set<Kind> alsoRefuses;
+
+        AdequacyBar(Criterion domain, Set<Kind> alsoRefuses) {
+            this.domain = domain;
+            this.alsoRefuses = Set.copyOf(alsoRefuses);
+        }
+
+        /** Which of the syllabus's two the border points are asked for under. */
+        public Criterion domain() {
+            return domain;
+        }
+
+        /** What this refuses over beside what {@link #domain} already does. Disjoint from that by
+         *  construction, which a test holds: a kind both halves answered for would be one answer
+         *  written twice, free to disagree the moment either moved. */
+        public Set<Kind> alsoRefuses() {
+            return alsoRefuses;
+        }
+
+        /** Whether a build held to this refuses over {@code kind}. */
+        public boolean refuses(Kind kind) {
+            return domain.refuses(kind) || alsoRefuses.contains(kind);
+        }
+
+        /**
+         * Whether a build held to this is owed a row at {@code role}.
+         *
+         * <p>The criterion's answer, handed on. Never read off {@link #refuses}: a role is not a
+         * kind, and what a bar adds beside its criterion is kinds — so working the roles out from
+         * the kinds it refuses over would be the two consequences of a criterion derived from each
+         * other rather than said once, which is issue #937.
+         */
+        public boolean requires(PointRole role) {
+            return domain.requires(role);
         }
     }
 
@@ -143,37 +227,50 @@ public final class Adequacy {
      * the points away from a line are measured whenever the ones against it are, and whether they
      * are owed is the criterion's answer (issue #937).
      */
-    public record Asked(Level level, boolean warn, Criterion criterion) {
+    public record Asked(Level level, boolean warn, AdequacyBar held) {
 
         public static final Asked NOTHING =
-                new Asked(Level.OFF, false, Criterion.SIMPLIFIED_DOMAIN);
+                new Asked(Level.OFF, false, AdequacyBar.SIMPLIFIED_DOMAIN);
 
-        /** Measured and said, held to the criterion a build asks for by default. */
+        /** Measured and said, held to what a build asks for by default. */
         public static Asked warningsAt(Level level) {
-            return warningsAt(level, Criterion.SIMPLIFIED_DOMAIN);
+            return warningsAt(level, AdequacyBar.SIMPLIFIED_DOMAIN);
         }
 
-        /** Measured and said, held to {@code criterion}. */
-        public static Asked warningsAt(Level level, Criterion criterion) {
-            return new Asked(level, true, criterion);
+        /** Measured and said, held to {@code held}. */
+        public static Asked warningsAt(Level level, AdequacyBar held) {
+            return new Asked(level, true, held);
         }
 
         /**
-         * Everything measured, for a report that is the whole of what a command answers with.
+         * Everything measured, for a report that is the whole of what a command answers with,
+         * held to the whole of what the syllabus asks for.
          *
-         * <p>{@code souther examples} asks for this, and the criterion is part of what it asks for
-         * rather than one left at a build's default. That command chooses no measurement — its output
-         * is the report, so everything is measured — which leaves the bar as the only thing it could
-         * have chosen, and a report command choosing a bar is a build policy in a command that runs no
-         * build. So it is held to the whole of what the syllabus asks for, and {@code --strict}
-         * decides the exit status of that verdict without touching it.
+         * <p>{@code souther examples} asks for this. That command chooses no measurement — its
+         * output is the report, so everything is measured — and the bar it is held to is not a
+         * build's default either: reading one here is what let {@code souther examples --strict}
+         * exit 0 on a model {@code souther compile --adequacy reliable-domain --warnings error}
+         * refused, with the two points away from the line printed in the report that had just
+         * called it satisfied.
          *
-         * <p>Reading a build's default here is what let {@code souther examples --strict} exit 0 on a
-         * model {@code souther compile --adequacy reliable-domain --warnings error} refused, with the
-         * two points away from the line printed in the report that had just called it satisfied.
+         * <p>A caller that names a bar asks for {@link #fullReport(AdequacyBar)} instead. Which
+         * bar a report is written against is a question with an answer; {@code --strict} is not
+         * where it is answered, because that flag decides an exit status and the report is the
+         * same either way.
          */
         public static Asked fullReport() {
-            return reportOnly(Level.ALL);
+            return fullReport(AdequacyBar.RELIABLE_DOMAIN);
+        }
+
+        /**
+         * The same, held to {@code bar}.
+         *
+         * <p>What the bar changes is the report: which findings it marks as gaps and what its
+         * verdict comes to. It does not change what was measured — everything is, either way — so
+         * a reader comparing two runs is comparing two readings of one measurement.
+         */
+        public static Asked fullReport(AdequacyBar bar) {
+            return new Asked(Level.ALL, false, bar);
         }
 
         /**
@@ -182,19 +279,18 @@ public final class Adequacy {
          * the same news twice on the same line.
          *
          * <p>Held to the same bar as {@link #fullReport()}, and for the same reason: what a level
-         * says is how much was measured, and a caller reading a report picks no bar. What that
-         * decides for an editor is which gaps it offers to write a row for — the action that writes
-         * the rows a behavior does not cover reads the criterion, the lens beside the declaration
-         * reads the evidence and not the verdict — so a point away from a line is now offered there
-         * as it is on the command line.
+         * says is how much was measured, and a caller reading a report picks no bar. What the bar
+         * decides for an editor is which findings the lens beside a declaration marks, and no more:
+         * the action that writes the rows a behavior does not cover is asked of every finding
+         * whatever the bar, so what it offers does not move with one.
          */
         public static Asked reportOnly(Level level) {
-            return new Asked(level, false, Criterion.RELIABLE_DOMAIN);
+            return new Asked(level, false, AdequacyBar.RELIABLE_DOMAIN);
         }
 
         /** Whether a build that asked for this refuses over {@code kind}. */
         public boolean refuses(Kind kind) {
-            return criterion.refuses(kind);
+            return held.refuses(kind);
         }
     }
 
@@ -932,7 +1028,7 @@ public final class Adequacy {
                     new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
                             symbols, policy), partitioning.axes(), souther.compiler.partition.HeldCounts.of(domain, symbols));
             Generator.CandidateCheck check =
-                    (at, candidate) -> building.refuse(sig.ins().get(at), candidate.value());
+                    (at, candidate) -> built(building.build(sig.ins().get(at), candidate.value()));
             return new Coverages.Probe() {
 
                 @Override
@@ -1533,26 +1629,32 @@ public final class Adequacy {
      * edge are different requests, asked with different flags, and a caller that merged them could not
      * take one without the other.
      */
-    public record Filling(Generator.GenerationResult pairs, Generator.GenerationResult boundaries,
-                          List<GapDisposition> gaps) {
+    public record Filling(Generator.GenerationResult composed,
+                          Generator.GenerationResult boundaries,
+                          List<GenerationDisposition> generation) {
 
         public static final Filling NONE = new Filling(Generator.GenerationResult.NONE,
                 Generator.GenerationResult.NONE, List.of());
 
         public Filling {
-            gaps = List.copyOf(gaps);
+            generation = List.copyOf(generation);
         }
 
     }
 
     /**
-     * One gap a build refuses, and what the generator can do about it.
+     * One finding, and what the generator can do about it.
      *
-     * <p>Held as a pair rather than as rows with the gap forgotten, because what an author needs to
-     * read is which part of the shortfall was answered and which was not. A block that printed only
-     * what it managed reads as though it filled everything.
+     * <p>Held as a pair rather than as rows with the finding forgotten, because what an author needs
+     * to read is which part of the shortfall was answered and which was not. A block that printed
+     * only what it managed reads as though it filled everything.
+     *
+     * <p>Named for generation and not for gaps, which is what it used to be called. A gap is what
+     * some bar refuses over, and that is not what decides whether a row can be composed for a
+     * finding: the two are separate readings of one set of findings, and a name that said gap kept
+     * the older arrangement alive in every reader that met it.
      */
-    public record GapDisposition(Finding gap, GenerationOutcome outcome) {}
+    public record GenerationDisposition(Finding finding, GenerationOutcome outcome) {}
 
     public record Generated(String name) implements Key<Map<String, Filling>> {
 
@@ -1617,35 +1719,42 @@ public final class Adequacy {
                 }
                 List<BorderAssessment> edges = boundaries == null ? List.of()
                         : boundaries.getOrDefault(spec.name(), List.of());
-                Generator.GenerationResult pairs;
+                Generator.GenerationResult composed;
                 try {
-                    pairs = pairsFor(spec, sig, symbols, db.ask(new Front.Reading()).value(),
+                    composed = rowsFor(spec, sig, symbols, db.ask(new Front.Reading()).value(),
+                            baselines(name, spec, sig,
+                                    db.ask(new Bodies.ModuleDefinitions(name)).value(),
+                                    prepared.value(), symbols),
+                            findings == null ? List.of()
+                                    : findings.getOrDefault(spec.name(), List.of()),
                             bodies.get(spec.name()),
                             elementsOf.getOrDefault(spec.name(),
                                     souther.compiler.check.ElementBindings.NONE), plan,
                             byTarget.getOrDefault(spec.name(), Observed.NONE), building,
                             domainOf(readInputs, spec), arrivalsOf(arrives, spec),
                             statedOf(declared, spec), runningRowsOf(trials, spec.name(), sig),
+                            partitions == null ? PartitionEvidence.NONE
+                                    : partitions.getOrDefault(spec.name(), PartitionEvidence.NONE),
                             levelOf(db).measuresArms());
                 } catch (LinkageError _) {
                     // The generated classes would not link, so nothing can be built to find out
                     // what a model admits. Saying so is not the same as saying the combinations are
                     // impossible, so none of them is reported as one.
                     //
-                    // Caught around the search and not around the answer. A gap's answer is owed
-                    // whatever the search did, and a failure that skipped the walk over the findings
-                    // would take the gaps out of a list that is meant to hold every one of them —
+                    // Caught around the search and not around the answer. A finding's answer is
+                    // owed whatever the search did, and a failure that skipped the walk over the
+                    // findings would take them out of a list that is meant to hold every one —
                     // which is the same defect the list was written against, arriving as control
                     // flow rather than as a value.
-                    pairs = new Generator.GenerationResult(List.of(), List.of(),
+                    composed = new Generator.GenerationResult(List.of(), List.of(),
                             List.of(new souther.compiler.partition.GenerationReason
                                     .LinkageFailed(spec.name())));
                 }
-                out.put(spec.name(), new Filling(pairs, offered(spec.name(), edges),
-                        dispositions(askedOf(db).criterion(), findings == null ? List.of()
+                out.put(spec.name(), new Filling(composed, offered(spec.name(), edges),
+                        dispositions(findings == null ? List.of()
                                         : findings.getOrDefault(spec.name(), List.of()),
                                 edges, partitions == null ? null : partitions.get(spec.name()),
-                                pairs, spec)));
+                                composed, spec)));
             }
             // In the order the module declares them, because the block printed from this is read
             // against the one before it.
@@ -1653,48 +1762,178 @@ public final class Adequacy {
         }
 
         /**
-         * What the generator can do about each gap a build refuses, and about every one of them.
+         * What the generator can do about each finding, and about every one of them.
          *
-         * <p>Walked over the findings rather than over the strategies, which is the whole of it. A
-         * walk over the strategies answers for the gaps somebody wrote a strategy for and leaves the
-         * rest unmentioned, and a block that says nothing about a gap it printed two lines above reads
-         * as though it had filled everything.
+         * <p>Every finding, and not the ones a build refuses over. Those are two questions asked of
+         * one set of findings, and the first used to be the doorway of the second — so a finding
+         * some bar would refuse over and no bar had been asked for went unanswered, and no strategy
+         * could be written for one until a bar gated on it first. No bar reaches this.
          *
-         * <p>Which answer a gap gets is decided by whether a strategy takes gaps of that kind, and
-         * never by what a search came back with. The kinds are listed one at a time so that a kind
-         * added later does not compile until somebody has said which of the three it is.
+         * <p>Walked over the findings rather than over the strategies, which is the other half. A
+         * walk over the strategies answers for the findings somebody wrote a strategy for and
+         * leaves the rest unmentioned, and a block that says nothing about a finding it printed two
+         * lines above reads as though it had filled everything.
+         *
+         * <p>Which answer a finding gets is decided by whether a strategy takes findings of that
+         * kind, and never by what a search came back with. A finding row synthesis is not about at
+         * all is {@link GenerationOutcome.NotApplicable}, which is not a strategy waiting to be
+         * written: nothing anyone writes turns a measure this compiler could not make into a row
+         * somebody can write. The shapes are listed one at a time so that one added later does not
+         * compile until somebody has said which of the four it is.
          */
-        private static List<GapDisposition> dispositions(Criterion criterion, List<Finding> findings,
+        private static List<GenerationDisposition> dispositions(List<Finding> findings,
                                                       List<BorderAssessment> edges,
                                                       PartitionEvidence partition,
-                                                      Generator.GenerationResult pairs,
+                                                      Generator.GenerationResult composed,
                                                       Hir.SpecBehavior spec) {
-            List<GapDisposition> out = new ArrayList<>();
-            for (Finding gap : findings) {
-                if (!gap.isAdequacyGap(criterion)) {
-                    continue;
-                }
-                out.add(new GapDisposition(gap, switch (gap.about()) {
-                    case About.APointOfABorder(var point) -> atEdge(gap, point);
+            List<GenerationDisposition> out = new ArrayList<>();
+            for (Finding finding : findings) {
+                out.add(new GenerationDisposition(finding, switch (finding.about()) {
+                    case About.APointOfABorder(var point) -> atEdge(finding, point);
                     case About.ACaseNoRowAppliesItTo(var input, var missing) ->
-                            atCase(input, missing, partition, pairs, spec);
-                    case About.AnArmNoRowGoesThrough _ -> new GenerationOutcome.NotSupported(
-                            GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_ARM);
+                            atCase(input, missing, partition, composed, spec);
+                    case About.AClassNoRowIsIn(var missing) -> atClass(missing, composed);
+                    case About.AnArmNoRowGoesThrough(var arm) -> atArm(arm, composed);
                     case About.ACaseNoRowExpects _ -> new GenerationOutcome.NotSupported(
                             GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE);
-                    // Not gaps a build refuses, and the loop above does not reach them. Listed so
-                    // that the switch stays exhaustive over what a finding can be about rather than
-                    // over the ones thought of here.
-                    case About.ACaseNothingWasSeenToProduce _, About.AClassNoRowIsIn _,
-                            About.APositionNoLineDivides _, About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
+                    // What the rows were seen doing rather than what they owe.
+                    case About.ACaseNothingWasSeenToProduce _ ->
+                            new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
+                                    .Reason.AN_ACCOUNT_OF_WHAT_THE_ROWS_DID);
+                    // What the model says, read to the end. A row does not change it.
+                    case About.APositionNoLineDivides _, About.APositionPastTheAxisLimit _ ->
+                            new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
+                                    .Reason.A_FACT_ABOUT_THE_MODEL);
+                    // What this compiler could not read. A row would answer a question nothing
+                    // asked, and offering one would be reporting our own shortfall as the
+                    // author's work.
+                    case About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
                             About.APositionWhoseRulesWereNotReached _,
                             About.APositionReadWiderThanItsRules _,
-                            About.AQuestionNothingAnswered _,
-                            About.APositionPastTheAxisLimit _ ->
-                            throw new IllegalStateException("not a gap a build refuses: " + gap);
+                            About.AQuestionNothingAnswered _ ->
+                            new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
+                                    .Reason.NOTHING_WAS_MEASURED);
                 }));
             }
             return out;
+        }
+
+        /**
+         * The arm's own attempt, read off what the search for the combinations made.
+         *
+         * <p>A combination of the body's own decisions is a way through each of the forks it reads,
+         * so a row composed for one takes an arm of each — and the row that answers a finding about
+         * one of them is found by that arm's own number. The two searches used to be two worlds:
+         * the combinations composed rows before any finding was consulted, while the finding about
+         * an arm was told nothing composes an input for one. Both were true and they were about the
+         * same rows.
+         *
+         * <p>Nothing composed for it where no combination claims it. Which is the honest answer and
+         * not a shortfall of this run: an arm no combination of the body reaches is one nothing
+         * here is asked to compose an input for, and a row for it is still a row somebody can write
+         * by hand.
+         */
+        private static GenerationOutcome atArm(souther.compiler.coverage.CoverageSites.Site arm,
+                                               Generator.GenerationResult composed) {
+            return switch (composed.armAt(arm.index())) {
+                case Generator.ArmAttempt.Built built ->
+                        new GenerationOutcome.Generated(List.of(built.row()));
+                // What every combination claiming it came to, all of it. They are not one fact and
+                // they do not order against each other: one the model refuses says the arm may be
+                // unreachable, one the search stopped at says nothing at all, and a reader handed
+                // whichever came first was handed the walk order of the cells.
+                case Generator.ArmAttempt.Unresolved none ->
+                        new GenerationOutcome.CannotGenerate(none.why());
+                case null -> new GenerationOutcome.NotSupported(
+                        GenerationOutcome.NotSupported.Reason.NO_COMBINATION_REACHES_THIS_ARM);
+            };
+        }
+
+        /**
+         * The class's own attempt, read off what the search for it made.
+         *
+         * <p>Found by identity — the position's own name and the class's own id — which is the same
+         * pair the search was asked for. The rows it offers used to be matched back by the words in
+         * their names, which is a spelling two positions of one type share, and it was the search
+         * that decided what to compose while the finding went looking for something to claim.
+         *
+         * <p>Nothing is built here. The search is made once, where the rows are, and this reads
+         * what it came to: a second attempt would be a second answer about one class, and the two
+         * would differ the first time either side of the search moved.
+         */
+        private static GenerationOutcome atClass(PartitionEvidence.AxisClass missing,
+                                                 Generator.GenerationResult composed) {
+            // The spelling the search labels this class with, which is what the block prints beside
+            // the rows. Written another way here, one class came out under two names — the
+            // search's `c.f=C` and this one's `C at c.f` — and the block, which drops a line it has
+            // already said, said the same fact twice because the two lines were not the same line.
+            return atClass(missing.axis().at(), missing.name(),
+                    missing.axis().path() + "=" + missing.name(), composed);
+        }
+
+        /**
+         * The same, for a finding that names its class some other way.
+         *
+         * <p>One reader of what a search made, whatever the finding was about. A case of an input
+         * and a class of a position are two findings about one class, and answering them from two
+         * readings of one search is two answers that agree until either moves.
+         *
+         * @param said how the finding's own words name this class, for the one thing this has to
+         *             say in them: that nothing here reached it
+         */
+        private static GenerationOutcome atClass(souther.compiler.partition.AxisId at,
+                                                 String classId, String said,
+                                                 Generator.GenerationResult composed) {
+            return switch (composed.attemptAt(at, classId)) {
+                case Generator.ClassAttempt.Built built ->
+                        new GenerationOutcome.Generated(List.of(built.row()));
+                case Generator.ClassAttempt.Unresolved none ->
+                        new GenerationOutcome.CannotGenerate(none.why());
+                // No attempt was recorded for this class, which is not the same as a search that
+                // reached it and stopped. Which of them it was is what the run wrote down, and
+                // where it wrote nothing this says so rather than picking the likeliest — a reason
+                // read off an empty result outlives whatever made it plausible.
+                case null -> new GenerationOutcome.CannotGenerate(
+                        new Generator.UnresolvedCombination(List.of(said), whyNothingWasTried(composed)));
+            };
+        }
+
+        /**
+         * Why no attempt was recorded for a class, in the words the run wrote down.
+         *
+         * <p>Only the reasons that say a class was never searched for. A run that stopped before
+         * reaching one records it as the search limit itself, so this is asked where nothing was
+         * recorded at all — and what it must not do is decide which of them it was from the fact
+         * that there is nothing here. Where the run says nothing this says nothing: the class was
+         * owed a row, a strategy takes it, and it produced neither a row nor a reason, which is
+         * this compiler failing to say.
+         */
+        private static Generator.UnresolvedCombination.Reason whyNothingWasTried(
+                Generator.GenerationResult composed) {
+            for (souther.compiler.partition.GenerationReason why : composed.reasons()) {
+                switch (why) {
+                    case souther.compiler.partition.GenerationReason.NothingToBuildAgainst _ -> {
+                        return Generator.UnresolvedCombination.Reason.NOTHING_TO_BUILD_AGAINST;
+                    }
+                    case souther.compiler.partition.GenerationReason.LinkageFailed _ -> {
+                        return Generator.UnresolvedCombination.Reason.LINKAGE_FAILED;
+                    }
+                    // The position was held back, so no class of it was ever a thing to look for.
+                    case souther.compiler.partition.GenerationReason.PositionWithheld _ -> {
+                        return Generator.UnresolvedCombination.Reason.THE_POSITION_WAS_WITHHELD;
+                    }
+                    // Nothing was read, so nothing was searched for.
+                    case souther.compiler.partition.GenerationReason.RowsNotRead _ -> {
+                        return Generator.UnresolvedCombination.Reason.THE_ROWS_WERE_NOT_READ;
+                    }
+                    // About a search that happened, and said in their own words beside the rows.
+                    // Answering with one of them here would be the same fact under a second
+                    // spelling, over a class the search never got to.
+                    case souther.compiler.partition.GenerationReason.SearchLimit _,
+                            souther.compiler.partition.GenerationReason.RowsNotConfirmed _ -> { }
+                }
+            }
+            return Generator.UnresolvedCombination.Reason.NO_REASON_RECORDED;
         }
 
         /**
@@ -1757,15 +1996,19 @@ public final class Adequacy {
         /**
          * What the axes can do about a case of an input no row applies the behavior to.
          *
-         * <p>The strategy that would reach it divides the position into classes and writes a row in
-         * each, so it applies exactly where an axis was derived at the position and holds this case
-         * among its classes. Where none was, nothing takes the gap — and that is read off the axes
-         * rather than off an empty row list, which would be the same as calling a search that found
+         * <p>A case of a position is one of the classes that position divides into, so the row that
+         * answers this finding is the row composed for that class — asked for by the position's own
+         * name and the class's own id, exactly as {@link #atClass} asks. The rows the search
+         * produced used to be matched back by the words in their names, which is a spelling two
+         * parameters of one type share.
+         *
+         * <p>Where the position has no axis, nothing takes the finding. Read off the axes rather
+         * than off an empty row list, which would be the same as calling a search that found
          * nothing a fact about the model.
          */
         private static GenerationOutcome atCase(InputCaseEvidence input, TypeSymbol case_,
                                                 PartitionEvidence partition,
-                                                Generator.GenerationResult pairs,
+                                                Generator.GenerationResult composed,
                                                 Hir.SpecBehavior spec) {
             String missing = case_.name();
             int at = input.at();
@@ -1778,45 +2021,8 @@ public final class Adequacy {
                 return new GenerationOutcome.NotSupported(
                         GenerationOutcome.NotSupported.Reason.NO_AXIS_AT_THIS_POSITION);
             }
-            String label = parameter + "=" + missing;
-            List<Generator.GeneratedRow> written = pairs.rows().stream()
-                    .filter(row -> row.classes().contains(label)).toList();
-            if (!written.isEmpty()) {
-                return new GenerationOutcome.Generated(written);
-            }
-            // Asked before the row list is read, because a search with nothing to put a candidate
-            // through wrote nothing at every class, and a reason taken from the empty result it left
-            // would name the one thing that did not happen. Which of the two it was is carried as
-            // the search recorded it.
-            for (souther.compiler.partition.GenerationReason why : pairs.reasons()) {
-                Generator.UnresolvedCombination.Reason said = switch (why) {
-                    case souther.compiler.partition.GenerationReason.NothingToBuildAgainst _ ->
-                            Generator.UnresolvedCombination.Reason.NOTHING_TO_BUILD_AGAINST;
-                    case souther.compiler.partition.GenerationReason.LinkageFailed _ ->
-                            Generator.UnresolvedCombination.Reason.LINKAGE_FAILED;
-                    // Reasons about this search rather than about there being nothing to search
-                    // with. They are said in their own words elsewhere and answer nothing here.
-                    case souther.compiler.partition.GenerationReason.PositionWithheld _,
-                            souther.compiler.partition.GenerationReason.SearchLimit _,
-                            souther.compiler.partition.GenerationReason.RowsNotConfirmed _,
-                            souther.compiler.partition.GenerationReason.CombinationsWithheld _,
-                            souther.compiler.partition.GenerationReason.RowsNotRead _ -> null;
-                };
-                if (said != null) {
-                    return new GenerationOutcome.CannotGenerate(
-                            new Generator.UnresolvedCombination(List.of(label), said));
-                }
-            }
-            return pairs.unresolved().stream()
-                    .filter(left -> left.classes().contains(label))
-                    .<GenerationOutcome>map(GenerationOutcome.CannotGenerate::new)
-                    .findFirst()
-                    // The axis was derived, so a strategy takes this class; it wrote neither a row
-                    // nor a reason. What that leaves is a gap nothing here can account for, and the
-                    // one thing not to do is name a cause from the shape of the emptiness.
-                    .orElseGet(() -> new GenerationOutcome.CannotGenerate(
-                            new Generator.UnresolvedCombination(List.of(label),
-                                    Generator.UnresolvedCombination.Reason.NO_REASON_RECORDED)));
+            return atClass(new souther.compiler.partition.AxisId(spec.name(), parameter), missing,
+                    parameter + "=" + missing, composed);
         }
 
         /**
@@ -1901,15 +2107,135 @@ public final class Adequacy {
                     .orElseGet(Generator.Watched.NoAccount::new);
         }
 
-        private static Generator.GenerationResult pairsFor(
+        /**
+         * The values a row's positions can be composed against, in the order the search should try
+         * them.
+         *
+         * <p>Two kinds, and the difference between them is what the model says. A row the author
+         * wrote naming a value at each position is a set of values they reached for together, and
+         * is an origin whole. A {@code let} of a parameter's own type is a value of that position
+         * and says nothing about any other, so it is an origin for that position alone — every one
+         * of them, since a second value is another value a reader recognises rather than a reason
+         * to fall back on the classes, and never two of them put together here.
+         *
+         * <p>The names and nothing else. What each value is, is read where the row is read, by the
+         * same reading a written row naming it goes through — so nothing here holds a copy of it to
+         * disagree with.
+         */
+        private static List<Generator.Baseline> baselines(
+                String module, Hir.SpecBehavior spec, Sig sig, Map<String, Hir.FnDef> values,
+                souther.compiler.check.Prepared prepared, Symbols symbols) {
+            List<Generator.Baseline> out = new ArrayList<>();
+            // What the author has already written, first and whole. A row of theirs names a set of
+            // values that go together, which is more than this can say of one value chosen per
+            // position on its own — and it is the set they reached for, which is what makes a row
+            // written against it read as one column moved.
+            for (souther.compiler.check.Prepared.Rows block : prepared.examples()) {
+                if (!block.target().equals(spec.name())) {
+                    continue;
+                }
+                for (Hir.ExampleRow row : block.read().rows()) {
+                    Generator.Baseline named = namesIn(module, spec, row.inputs());
+                    if (!named.isEmpty() && !out.contains(named)) {
+                        out.add(named);
+                    }
+                }
+            }
+            // Then every value the module states of a parameter's own type, in the order it states
+            // them, one origin per turn. Narrowed to the only value of a type, a module that states
+            // a second one lost the spread from every row of every behavior taking it.
+            out.addAll(named(module, spec, sig, values, symbols));
+            return List.copyOf(out);
+        }
+
+        /** The parameters a row names a module-level value at, which is the only thing a spread can
+         *  be written over: a row writing the value out has no name for this to reach it by. */
+        private static Generator.Baseline namesIn(String module, Hir.SpecBehavior spec,
+                                                  List<Hir.Expr> inputs) {
+            Map<String, Generator.Baseline.Named> at = new LinkedHashMap<>();
+            for (int p = 0; p < inputs.size() && p < spec.params().size(); p++) {
+                if (inputs.get(p) instanceof Hir.Var written
+                        && written.answered() instanceof Hir.Var.Denoting denoting
+                        && denoting.denotes() instanceof souther.compiler.types.ValueName.Helper helper) {
+                    at.put(spec.params().get(p).name(),
+                            new Generator.Baseline.Named(helper.module(), written.name()));
+                }
+            }
+            return new Generator.Baseline(at);
+        }
+
+        /**
+         * The values the module states of each parameter's type, one origin apiece.
+         *
+         * <p><b>One parameter each, and never a tuple made here.</b> An origin says what a row is
+         * written against, and a row written against a value the model states reads as that value
+         * with one class moved. What the module states is a value of a type; that two of them go
+         * together is a further thing, and nothing states it.
+         *
+         * <p>So each origin names the one parameter it has a stated value for and says nothing
+         * about the rest, which the composition fills from their classes. That is what the partial
+         * map on {@link Generator.Baseline} is: a position it does not name is one it makes no
+         * claim about. A tuple assembled here would be a claim — {@code (a1, b1)} written as though
+         * the author had put those two values together — and the only thing available to assemble
+         * it by is the order the file happens to declare them in. Taken as the n-th of each list,
+         * swapping two unrelated declarations moved the origin every generated row of the behavior
+         * was written against, and two parameters of one type got {@code (x, x)} and {@code (y, y)}
+         * and never {@code (x, y)}, off a diagonal nothing in the model draws.
+         *
+         * <p>A whole tuple is still an origin where the author wrote one: a row of theirs naming a
+         * value at each position is a set of values they reached for together, and that is read
+         * from the rows rather than assembled ({@link #namesIn}).
+         */
+        private static List<Generator.Baseline> named(String module, Hir.SpecBehavior spec, Sig sig,
+                                                      Map<String, Hir.FnDef> values,
+                                                      Symbols symbols) {
+            if (values == null) {
+                return List.of();
+            }
+            // What a value is declared to be, asked of the one walk that answers it. A second
+            // reading of a definition's type here would be a second answer about what a row may
+            // name, differing from the reading that builds the row at whatever either forgot.
+            souther.compiler.check.FixtureEvidence evidence =
+                    new souther.compiler.check.FixtureEvidence(symbols, values);
+            Map<TypeSymbol, List<String>> stated = new LinkedHashMap<>();
+            for (Map.Entry<String, Hir.FnDef> each : values.entrySet()) {
+                if (!each.getValue().params().isEmpty()
+                        || !(each.getValue().body() instanceof Hir.FnBody.Written written)
+                        || !(evidence.declaredTypeOf(written.expr())
+                                instanceof souther.compiler.types.Type.Ref(TypeSymbol of))) {
+                    continue;
+                }
+                stated.computeIfAbsent(of, _ -> new ArrayList<>()).add(each.getKey());
+            }
+            List<Hir.Param> takes = spec.params();
+            List<Generator.Baseline> out = new ArrayList<>();
+            for (int p = 0; p < takes.size() && p < sig.inputTypes().size(); p++) {
+                if (!(sig.inputTypes().get(p) instanceof souther.compiler.types.Type.Ref(
+                        TypeSymbol of))) {
+                    continue;
+                }
+                for (String value : stated.getOrDefault(of, List.of())) {
+                    Generator.Baseline origin = new Generator.Baseline(Map.of(
+                            takes.get(p).name(), new Generator.Baseline.Named(module, value)));
+                    if (!out.contains(origin)) {
+                        out.add(origin);
+                    }
+                }
+            }
+            return out;
+        }
+
+        private static Generator.GenerationResult rowsFor(
                 Hir.SpecBehavior spec, Sig sig, Symbols symbols,
-                souther.compiler.check.ReadingPolicy policy, souther.compiler.core.Core body,
+                souther.compiler.check.ReadingPolicy policy,
+                List<Generator.Baseline> baselines, List<Finding> owed,
+                souther.compiler.core.Core body,
                 souther.compiler.check.ElementBindings elements,
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
                 FixtureReader.Construction building, InputDomain domain,
                 souther.compiler.check.PathReachability.Answers arrives,
                 souther.compiler.check.StatedContract stated, Generator.Trial trial,
-                boolean recording) {
+                PartitionEvidence evidence, boolean recording) {
             if (observed.someRowsUnseen()) {
                 // Rows exist that nothing read. What they cover is unknown, so what is left uncovered
                 // is unknown too — and a generated row is a specific piece of work handed to a person,
@@ -1931,20 +2257,77 @@ public final class Adequacy {
             Generator.Subject subject =
                     new Generator.Subject(inputs, partitioning.axes(), souther.compiler.partition.HeldCounts.of(domain, symbols));
             Generator.CandidateCheck check = building == null ? Generator.CandidateCheck.ANY
-                    : (at, candidate) -> building.refuse(sig.ins().get(at), candidate.value());
+                    : (at, candidate) -> built(building.build(sig.ins().get(at), candidate.value()));
 
             // Where each row's values sit, and what its run did. Both come off the one outcome:
             // the first is what a pair count is taken over, the second is what says which of the
             // body's combinations the row was seen filling.
             List<Generator.ObservedRow> existing = rows.stream()
                     .map(row -> new Generator.ObservedRow(
-                            RowClasses.of(row, inputs, partitioning.axes()),
+                            InputClassifications.of(row.inputs(), inputs, partitioning.axes()),
                             watched(row, recording)))
                     .toList();
+            // The arms this build is owed a row at, which the measure established and this reads.
+            // A combination the body settles together is where one is looked for and is not itself
+            // owed a row — nothing reports one — so what is searched follows from the findings
+            // rather than from the shape of the search space.
+            Set<Integer> armsOwed = new LinkedHashSet<>();
+            for (Finding finding : owed) {
+                if (finding.about() instanceof About.AnArmNoRowGoesThrough(var arm)) {
+                    armsOwed.add(arm.index());
+                }
+            }
             return Generator.fill(subject, existing, check,
                     souther.compiler.interaction.Interactions.of(body, plan, domain, symbols),
-                    trial);
+                    trial, baselines, classesOwed(evidence), armsOwed);
         }
+
+        /**
+         * The classes this build is owed a row at, off the partition measure's own reading.
+         *
+         * <p>The same evidence a class finding is made from, taken a second way. Where the measure
+         * reached a class, nothing is owed there; where it did not, a row is. What separates the two
+         * projections is that a finding is a gap and needs the rows to have been measured to be one
+         * — a behavior nothing wrote a row for has no gaps, which is not the same as having nothing
+         * to write. So a position with no reading behind it is owed a row at every class, which is
+         * what an empty {@code covered} says, and the report's own line about it is said elsewhere.
+         *
+         * <p>A behavior the coverage query holds nothing for arrives as {@link
+         * PartitionEvidence#NONE} and is owed nothing. Reading the written rows a second time here
+         * would be a plan derived from something other than the evidence, which is the arrangement
+         * this replaces — and it would be one no test covers, the query answering every behavior
+         * the generator reaches.
+         */
+        private static Set<Generator.ClassOwed> classesOwed(PartitionEvidence evidence) {
+            Set<Generator.ClassOwed> out = new LinkedHashSet<>();
+            for (PartitionEvidence.AxisCoverage axis : evidence.axes()) {
+                Set<String> covered = axis.reached().made()
+                        .map(PartitionEvidence.AxisCoverage.Reached::covered)
+                        .orElseGet(Set::of);
+                for (String cls : axis.classes()) {
+                    if (!covered.contains(cls)) {
+                        out.add(new Generator.ClassOwed(axis.at(), cls));
+                    }
+                }
+            }
+            return out;
+        }
+    }
+
+    /**
+     * What a construction came to, in the generator's own words.
+     *
+     * <p>Two vocabularies for one answer, which is what a boundary between two packages costs. The
+     * mapping is here and nowhere else, so a shape added on either side has one place to be
+     * answered rather than as many as there are callers.
+     */
+    private static Generator.CandidateCheck.Built built(FixtureReader.Construction.Built what) {
+        return switch (what) {
+            case FixtureReader.Construction.Built.Value(var observed) ->
+                    new Generator.CandidateCheck.Built.Value(observed);
+            case FixtureReader.Construction.Built.Refused(var why) ->
+                    new Generator.CandidateCheck.Built.Refused(why);
+        };
     }
 
     /**
@@ -2031,7 +2414,7 @@ public final class Adequacy {
          *  is what the rows say of themselves. */
         OUTPUT_CASE_UNVERIFIED(null),
         /** A class of an axis no row is in. */
-        AXIS_CLASS_UNCOVERED(null),
+        AXIS_CLASS_UNCOVERED(DiagnosticCode.E1931),
         /**
          * A point away from a border that no row is at — the {@code IN} or the {@code OUT} point.
          *
@@ -2240,8 +2623,8 @@ public final class Adequacy {
          * the kinds a second time, so what a report marks and what a build refuses over cannot come
          * apart.
          */
-        public Disposition disposition(Criterion criterion) {
-            if (!criterion.refuses(kind())) {
+        public Disposition disposition(AdequacyBar held) {
+            if (!held.refuses(kind())) {
                 return Disposition.REPORTED;
             }
             // What the measurement that found this went without, and not a word for how far it
@@ -2250,9 +2633,9 @@ public final class Adequacy {
             return weakenedBy.isEmpty() ? Disposition.REFUSED : Disposition.UNDECIDED;
         }
 
-        /** Whether a build held to {@code criterion} is entitled to refuse over this. */
-        public boolean isAdequacyGap(Criterion criterion) {
-            return disposition(criterion) == Disposition.REFUSED;
+        /** Whether a build held to {@code held} is entitled to refuse over this. */
+        public boolean isAdequacyGap(AdequacyBar held) {
+            return disposition(held) == Disposition.REFUSED;
         }
 
         public Optional<DiagnosticCode> code() {
@@ -2531,7 +2914,7 @@ public final class Adequacy {
             List<Report> reports = new ArrayList<>();
             for (List<Finding> ofBehavior : found.value().values()) {
                 for (Finding finding : ofBehavior) {
-                    if (finding.isAdequacyGap(asked.criterion())) {
+                    if (finding.isAdequacyGap(asked.held())) {
                         reports.add(warning(finding));
                     }
                 }
@@ -2545,7 +2928,7 @@ public final class Adequacy {
          * <p>The message keys are written out per kind rather than derived from the code's name, so
          * that a scan for the keys this names finds them — a key built by concatenation is one nothing
          * can see is used. Which findings get here is
-         * {@link Finding#isAdequacyGap(Criterion)}'s answer and not this method's.
+         * {@link Finding#isAdequacyGap(AdequacyBar)}'s answer and not this method's.
          */
         private static Report warning(Finding finding) {
             About said = finding.about();
@@ -2598,10 +2981,15 @@ public final class Adequacy {
                         case About.AnArmNoRowGoesThrough(var arm) ->
                                 new ExampleMessage.NoRowGoesThroughThatArm(
                                         phraseFor(arm), arm.behavior());
+                        // The class and the position it is a class of, in the partition's own
+                        // words — which are the words the report writes for the same finding.
+                        case About.AClassNoRowIsIn(var missing) ->
+                                new ExampleMessage.NoRowIsInThatClass(missing.name(),
+                                        missing.axis().path(), finding.behavior());
                         // Kinds no build is told about under any code. Listed rather than
                         // defaulted, so that one added later has to be answered here rather than
                         // arriving as a warning with no sentence.
-                        case About.ACaseNothingWasSeenToProduce _, About.AClassNoRowIsIn _,
+                        case About.ACaseNothingWasSeenToProduce _,
                                 About.APositionNoLineDivides _, About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
                                 About.APositionWhoseRulesWereNotReached _,
                                 About.APositionReadWiderThanItsRules _,
@@ -2667,10 +3055,16 @@ public final class Adequacy {
                 }
                 case About.AnArmNoRowGoesThrough _ ->
                         built.hint(new ExampleMessage.EitherARowIsMissingOrNothingReachesIt());
+                // Said as the row to write and not as the class to cover. A class is met by a
+                // value falling in it, and what an author writes is the value — a hint naming the
+                // class alone leaves them to work out which of the position's values is one.
+                case About.AClassNoRowIsIn(var missing) ->
+                        built.hint(new ExampleMessage.WriteARowWhoseValueThereIsInThatClass(
+                                missing.axis().path(), missing.name()));
                 // The message says all there is to say. Written out rather than defaulted, for the
                 // reason the switch above gives.
                 case About.ACaseNoRowAppliesItTo _, About.ACaseNothingWasSeenToProduce _,
-                        About.AClassNoRowIsIn _, About.APositionNoLineDivides _,
+                        About.APositionNoLineDivides _,
                         About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
                         About.APositionWhoseRulesWereNotReached _,
                         About.APositionReadWiderThanItsRules _,

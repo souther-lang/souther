@@ -123,16 +123,16 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
         String written = written(new Generator.GenerationResult(List.of(), List.of(),
                 List.of(new GenerationReason.SearchLimit("submit", 12))));
 
-        assertEquals("// generation stopped for `submit`: 12 combinations past the row limit"
+        assertEquals("// generation stopped for `submit`: 12 classes and arms past the row limit"
                 + System.lineSeparator(), written);
     }
 
-    /** One left is one combination. */
+    /** One left is one thing on the plan, which is a class or an arm and never a combination. */
     @Test
     void theCountIsWrittenAsACount() {
         String written = written(new Generator.GenerationResult(List.of(), List.of(),
                 List.of(new GenerationReason.SearchLimit("submit", 1))));
 
-        assertTrue(written.contains("1 combination past"), written);
+        assertTrue(written.contains("1 class or arm past"), written);
     }
 }

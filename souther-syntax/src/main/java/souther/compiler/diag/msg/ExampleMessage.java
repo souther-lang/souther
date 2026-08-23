@@ -256,6 +256,29 @@ public sealed interface ExampleMessage extends Message {
             implements ExampleMessage, Reported {}
 
     /**
+     * No row's value at a position falls in one of the classes the model divides it into.
+     *
+     * <p>Told apart from {@link NoRowAppliesItToThatCase} by a code of its own, because the two are
+     * different findings about the same value and are answered by different rows. A case an input
+     * declares is a fact about the type; a class is what the model's own rules divide the position
+     * into, and a position with no sum at all has classes. The same {@code C} can be a case no row
+     * uses and a class no row is in, and one row closes both — which is what makes the pair easy to
+     * read as one thing and wrong to report as one.
+     *
+     * <p>{@code className} is the class as the partition names it, which is the name the report
+     * writes beside the same position. Two spellings of one class would have a reader matching a
+     * warning against a report to find out whether they are about the same thing.
+     */
+    @Code(DiagnosticCode.E1931)
+    record NoRowIsInThatClass(String className, String at, String behavior)
+            implements ExampleMessage, Reported {}
+
+    /** What answers it, said as the row rather than as the class: a class is met by a value, and an
+     *  author writes values. */
+    record WriteARowWhoseValueThereIsInThatClass(String at, String className)
+            implements ExampleMessage, Supporting {}
+
+    /**
      * No row is at one of the points a border owes, the rule that drew it having a name.
      *
      * <p>{@code point} is which of them, in the word domain testing gives it (ISTQB CTAL-TA v4.0

@@ -94,26 +94,27 @@ class APairIsOneElementInTwoClassesTest {
     }
 
     /**
-     * And the search offers a row for the combinations that row is not evidence for.
+     * And the search offers nothing for them, the row's elements being in every class there is.
      *
-     * <p>The same counterexample, put to the other reader. What a row covers is one question, and a
-     * search answering it its own way went on treating every combination as filled while the report
-     * was still calling two of them untried -- so both are asked of one rule here.
+     * <p>The same counterexample, put to the other reader. A pair is measured and is not something
+     * a row is owed for (<<a-bar-is-a-criterion-and-what-it-adds>>): what the search composes for
+     * is a class of a position no row is in, and this row's elements are in all four. So the
+     * combinations two of them are not in stay untried in the count and nothing is offered — which
+     * is the measure saying what it saw and the generator answering the findings, rather than the
+     * two of them disagreeing about one word.
      */
     @Test
-    void theSearchOffersARowForTheCombinationsNeitherElementIsIn() {
+    void theSearchOffersNothingForACombinationNothingIsOwedFor() {
         Map<String, Adequacy.Filling> generated = compiled("""
                 [ Person { age = 17, status = Active },
                   Person { age = 20, status = Inactive } ]""").db()
                 .ask(new Adequacy.Generated(MODULE)).value();
         assertNotNull(generated, "rows are offered");
 
-        assertEquals(List.of("[Person { age = 17, status = Inactive }]",
-                        "[Person { age = 18, status = Active }]"),
-                generated.get("select").pairs().rows().stream()
+        assertEquals(List.of(), generated.get("select").composed().rows().stream()
                         .map(row -> row.inputs().get(0).text()).toList(),
-                () -> "one row for each combination no element of the written row is in: "
-                        + generated.get("select").pairs().reasons());
+                () -> "every class of both positions has a row: "
+                        + generated.get("select").composed().reasons());
     }
 
     /** One element in both classes is a witness, and is counted as one. */

@@ -61,19 +61,37 @@ class ARowOfferedForACombinationIsRunWhereAnythingCanRunItTest {
     void aBuildThatMeasuresTheArmsConfirmsTheRowsItOffers() {
         Adequacy.Filling filling = generationOf(Adequacy.Level.ALL);
 
-        assertFalse(filling.pairs().rows().isEmpty(), "there are rows to offer");
+        assertFalse(filling.composed().rows().isEmpty(), "there are rows to offer");
         assertEquals(List.of(), unconfirmed(filling),
                 "and each was run and seen reaching what it is offered for");
     }
 
+    /**
+     * A build that does not measure the arms is owed no row at one, and offers none.
+     *
+     * <p>This used to offer them anyway and say that nothing had run them. That was the search
+     * having a list of its own: a combination is where a row through an arm is looked for, and
+     * which arms are owed one is what measuring them establishes. A build that measured none has
+     * established nothing, and a row offered for an arm on the strength of a measurement nobody
+     * made is work handed over on nobody's word — which is what a position held back over an
+     * unreadable value already says (`PositionWithheld`).
+     *
+     * <p>The classes are unaffected: what they divide into is read off the model and needs no
+     * second run, so what is owed there does not turn on the level.
+     */
     @Test
-    void aBuildThatDoesNotMeasureTheArmsSaysItsRowsWereNotRun() {
+    void aBuildThatDoesNotMeasureTheArmsIsOwedNoRowAtOne() {
         Adequacy.Filling filling = generationOf(Adequacy.Level.WITNESS);
 
-        assertFalse(filling.pairs().rows().isEmpty(),
-                "the rows are still offered, being worth writing either way");
-        assertEquals(1, unconfirmed(filling).size(),
-                "and the generation says once that nothing ran them: " + filling.pairs().reasons());
+        assertFalse(filling.composed().rows().isEmpty(), "the classes are still offered");
+        assertEquals(List.of(), filling.composed().rows().stream()
+                        .flatMap(row -> row.purposes().stream())
+                        .filter(souther.compiler.partition.Generator.Purpose.ForAnArm.class
+                                ::isInstance)
+                        .toList(),
+                "and no row is composed for an arm, none being owed one");
+        assertEquals(List.of(), unconfirmed(filling),
+                "so there is nothing to say went unrun");
     }
 
     /** The same two decisions, in a behavior that depends on another. */
@@ -116,12 +134,17 @@ class ARowOfferedForACombinationIsRunWhereAnythingCanRunItTest {
      * which says the search found something out about the model. It found nothing out.
      */
     @Test
-    void aBehaviorNothingCanApplyHasItsRowsOfferedUnconfirmed() {
+    void aBehaviorNothingCanApplyIsOwedNoRowAtAnArm() {
         Adequacy.Filling filling = generationOf(DEPENDING, "postageFor", Adequacy.Level.ALL);
 
-        assertFalse(filling.pairs().rows().isEmpty(), "the rows are offered");
-        assertEquals(1, unconfirmed(filling).size(),
-                "and are said to be unconfirmed: " + filling.pairs().reasons());
+        assertFalse(filling.composed().rows().isEmpty(), "the classes are still offered");
+        assertEquals(List.of(), filling.composed().rows().stream()
+                        .flatMap(row -> row.purposes().stream())
+                        .filter(souther.compiler.partition.Generator.Purpose.ForAnArm.class
+                                ::isInstance)
+                        .toList(),
+                "and none for a combination: nothing applied the rows, so no arm is established"
+                        + " unreached");
     }
 
     /** The shipping model with two of its four combinations already written. */
@@ -148,36 +171,32 @@ class ARowOfferedForACombinationIsRunWhereAnythingCanRunItTest {
     }
 
     /**
-     * A combination held back over a row already written is said, not passed over.
+     * Nothing is held back over a combination, nobody being owed one.
      *
-     * <p>The row is not offered, which is right: it may be work the author has done. What is not
-     * right is silence, because silence here reads as a combination covered — and nothing
-     * established that. So the generation says how many it held back and why, and an author reading
-     * it can tell "all done" from "nothing here could tell".
-     *
-     * <p>The measuring build holds nothing back: there the written rows either fill the
-     * combinations or leave them owed, and either way something was established.
+     * <p>This used to count the combinations a written row might have filled and say how many, so
+     * that silence did not read as coverage. What made the count necessary was the search treating
+     * a combination as a thing owed a row: it could neither offer one over a row that might already
+     * fill it nor pass over it in silence. Neither question arises now — an arm is owed a row only
+     * where the measure established that no row reaches it, and a row that might have is a row that
+     * was read.
      */
     @Test
-    void aCombinationHeldBackOverAWrittenRowIsSaid() {
-        assertEquals(1, withheld(generationOf(WRITTEN, "shippingFee", Adequacy.Level.WITNESS)).size(),
-                "a build that could watch nothing says what it held back");
-        assertEquals(List.of(), withheld(generationOf(WRITTEN, "shippingFee", Adequacy.Level.ALL)),
-                "and one that could watch holds nothing back");
+    void nothingIsHeldBackOverACombination() {
+        for (Adequacy.Level level : List.of(Adequacy.Level.WITNESS, Adequacy.Level.ALL)) {
+            assertEquals(List.of(),
+                    generationOf(WRITTEN, "shippingFee", level).composed().reasons().stream()
+                            .filter(GenerationReason.SearchLimit.class::isInstance).toList(),
+                    level::name);
+        }
     }
 
-    private static List<GenerationReason> withheld(Adequacy.Filling filling) {
-        return filling.pairs().reasons().stream()
-                .filter(GenerationReason.CombinationsWithheld.class::isInstance).toList();
-    }
-
-    private static List<String> offeredBy(Adequacy.Level level) {
-        return generationOf(WRITTEN, "shippingFee", level).pairs().rows().stream()
-                .map(souther.compiler.partition.Generator.GeneratedRow::description).toList();
+    private static List<List<String>> offeredBy(Adequacy.Level level) {
+        return generationOf(WRITTEN, "shippingFee", level).composed().rows().stream()
+                .map(souther.compiler.partition.Generator.GeneratedRow::labels).toList();
     }
 
     private static List<GenerationReason> unconfirmed(Adequacy.Filling filling) {
-        return filling.pairs().reasons().stream()
+        return filling.composed().reasons().stream()
                 .filter(GenerationReason.RowsNotConfirmed.class::isInstance).toList();
     }
 
@@ -195,10 +214,10 @@ class ARowOfferedForACombinationIsRunWhereAnythingCanRunItTest {
         assertNotNull(filled, "the model under test compiles and is measured");
         Adequacy.Filling filling = filled.get(behavior);
         assertNotNull(filling, "the behavior under test was generated for");
-        assertTrue(filling.pairs().unresolved().stream().noneMatch(each -> each.reason()
+        assertTrue(filling.composed().unresolved().stream().noneMatch(each -> each.reason()
                         == souther.compiler.partition.Generator.UnresolvedCombination.Reason
                                 .NO_CERTIFIED_WITNESS),
-                "nothing missed: " + filling.pairs().unresolved());
+                "nothing missed: " + filling.composed().unresolved());
         return filling;
     }
 }

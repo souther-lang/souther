@@ -2130,32 +2130,25 @@ public final class InvariantChecker {
     /**
      * The domain {@code owed} is read against, built from what {@code base} holds.
      *
-     * <p>Two steps that are one operation. What each clause states of the sizes it names is taken
-     * as holding, and then what follows about the arithmetic the domain cannot carry — a product of
-     * two values, a truncating quotient — is derived from what the reading proves of the values it
-     * was computed from. The second reads the first: a size a clause bounds is one the arithmetic
-     * over it can be read against, so the derivation has to come after, and a clause added to the
-     * first step without the second being asked again is a construction judged against arithmetic
-     * nothing was derived for. Written as one step so there is no order for a caller to keep.
+     * <p>Two steps that are one operation, and both are inside {@link DerivedNumericFacts}: what
+     * every value the reading can reach carries is taken as holding, and then what follows about the
+     * arithmetic the domain cannot carry — a product of two values, a truncating quotient — is
+     * derived from what the reading proves of the values it was computed from. The second reads the
+     * first, so the order is not a caller's to keep and cannot be: a reading is made by the one
+     * function that makes one ({@link DerivedNumericFacts#readingOf}).
      *
      * <p>Each reading answers with its own. A bound derived here is derived from what this reading
      * assumed, so it belongs to the reading and not to the value — which is why the construction's
      * two readings are built by two calls rather than sharing one domain.
      */
     private NumericDomain<FactSubject> readingOf(NumericDomain<FactSubject> base, List<Owing> owed) {
-        NumericDomain<FactSubject> out = base;
-        // What the clauses are decided by, which is one half of what the derivation can reach. The
-        // other half is what the domain speaks of, and that is the domain's own to answer — asked
-        // after this loop, since assuming a clause's statements is what puts its atoms there.
+        // What the clauses are decided by, which is one half of what the reading can reach. The
+        // other half is what the domain speaks of, and that is the domain's own to answer.
         Set<FactSubject> asked = new LinkedHashSet<>();
         for (Owing owing : owed) {
-            Predicates.Clause c = owing.owed();
-            for (NumericConstraint known : c.known()) {
-                out = out.assume(known.form(), known.rel(), terms.kindsOf(known.form()));
-            }
-            asked.addAll(c.atomsItIsDecidedBy());
+            asked.addAll(owing.owed().atomsItIsDecidedBy());
         }
-        return DerivedNumericFacts.refine(out, terms, asked);
+        return DerivedNumericFacts.refine(base, terms, asked);
     }
 
     /**

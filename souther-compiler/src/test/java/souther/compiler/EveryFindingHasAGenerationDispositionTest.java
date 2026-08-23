@@ -19,17 +19,29 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * What a build refuses, the generator answers — with a row, or with why there is none.
+ * Every finding gets one generation disposition, and which bar a build asked for is no part of it.
  *
- * <p>A generator that offers rows for the gaps it has a strategy for and says nothing about the rest
- * reads as though the block filled everything. An author who takes every row it offers is left with a
- * model that still fails, and nothing told them which part of the shortfall was never attempted.
+ * <p>A generator that offers rows for the findings it has a strategy for and says nothing about the
+ * rest reads as though the block filled everything. An author who takes every row it offers is left
+ * with a model that still fails, and nothing told them which part of the shortfall was never
+ * attempted.
  *
- * <p>So the answer is total over the findings a build refuses. Which of the three it is depends on
- * whether a strategy applies, not on what a search happened to do: a strategy that recognised the gap
- * and composed nothing is not the same as no strategy for the gap at all.
+ * <p>So the answer is total over the findings — <em>all</em> of them. It used to be total over the
+ * ones a build refuses over, which is the coupling this holds against: what a bar refuses and what
+ * a search can compose are two projections of one set of findings, and the first was standing in
+ * the doorway of the second. A finding no bar had been asked for went unanswered, and no strategy
+ * could be written for one until some bar gated on it first.
+ *
+ * <p>Which of the four it is depends on whether a strategy applies, not on what a search happened
+ * to do: a strategy that recognised the finding and composed nothing is not the same as no strategy
+ * for it at all, and neither is the same as a finding no row would answer.
+ *
+ * <p><b>Beside the exhaustive switch and not instead of it.</b> The compiler makes somebody answer
+ * for a new shape of finding; this makes sure nothing filters one out before the switch is reached.
+ * That is exactly what went wrong — a class no row is in was listed in the switch and dropped by
+ * the line above it.
  */
-class EveryGapTheBuildRefusesGetsAnAnswerTest {
+class EveryFindingHasAGenerationDispositionTest {
 
     /** Two boundary gaps a strategy composes a row for, and an arm no strategy reaches. */
     private static final String POLICY = """
@@ -65,23 +77,20 @@ class EveryGapTheBuildRefusesGetsAnAnswerTest {
         return compilation;
     }
 
-    private static List<Adequacy.Finding> gaps(Compilation compilation, String module,
-                                               String behavior) {
+    /**
+     * Every finding of one behavior, filtered by nothing.
+     *
+     * <p>No filter, and that is the point rather than a simplification. Narrowing to what some bar
+     * refuses over is what this exists to refuse: the two lists compared below would then be
+     * answers to one question asked twice, and would agree however much was being dropped between
+     * the findings and the dispositions.
+     */
+    private static List<Adequacy.Finding> findings(Compilation compilation, String module,
+                                                   String behavior) {
         Map<String, List<Adequacy.Finding>> found =
                 compilation.db().ask(new Adequacy.Findings(module)).value();
         assertNotNull(found, "the model under test compiles");
-        return found.get(behavior).stream()
-                // Asked of the compilation, which is what was measured. Named here instead — even by
-                // spelling the same call the fixture above makes — and the two lists this compares
-                // are answers to two questions that agree until one of them moves.
-                .filter(f -> f.isAdequacyGap(askedOf(compilation).criterion())).toList();
-    }
-
-    /** What the compilation under test asked for, from the compilation. */
-    private static Adequacy.Asked askedOf(Compilation compilation) {
-        Adequacy.Asked asked = compilation.db().ask(new Adequacy.Requested()).value();
-        assertNotNull(asked, "the compilation under test was measured");
-        return asked;
+        return found.get(behavior);
     }
 
     private static Adequacy.Filling filling(Compilation compilation, String module,
@@ -93,23 +102,50 @@ class EveryGapTheBuildRefusesGetsAnAnswerTest {
     }
 
     @Test
-    void everyGapTheBuildRefusesHasOneAnswer() {
+    void everyFindingHasOneAnswer() {
         Compilation compilation = compiled(POLICY);
-        List<Adequacy.Finding> gaps = gaps(compilation, "example.policy", "fee");
+        List<Adequacy.Finding> findings = findings(compilation, "example.policy", "fee");
 
-        assertFalse(gaps.isEmpty(), "the model under test has gaps to answer for");
-        assertEquals(gaps,
-                filling(compilation, "example.policy", "fee").gaps().stream()
-                        .map(Adequacy.GapDisposition::gap).toList(),
-                "one answer per gap, in the order the findings were established");
+        assertFalse(findings.isEmpty(), "the model under test has findings to answer for");
+        assertEquals(findings,
+                filling(compilation, "example.policy", "fee").generation().stream()
+                        .map(Adequacy.GenerationDisposition::finding).toList(),
+                "one answer per finding, in the order the findings were established");
+    }
+
+    /**
+     * And the same list whichever bar the run was held to.
+     *
+     * <p>The other half of the separation. The list above could be total over the findings and
+     * still be decided by the bar — a stricter one having more of them — and what says it is not is
+     * that two runs of one model under two bars answer for the same findings.
+     */
+    @Test
+    void whatIsAnsweredForDoesNotMoveWithTheBar() {
+        for (Adequacy.AdequacyBar bar : Adequacy.AdequacyBar.values()) {
+            Compilation compilation = Compilation.ofSource(POLICY, "Main");
+            compilation.measure(Adequacy.Asked.fullReport(bar));
+            compilation.answerEverything();
+
+            // Held within one compilation, because that is where the two lists are the same
+            // findings. Compared across two, a border's finding carries the region its row was
+            // composed over, which is one object per run and equal to nothing else — so the
+            // comparison would be about object identity rather than about what was answered for.
+            List<Adequacy.Finding> found = findings(compilation, "example.policy", "fee");
+            assertFalse(found.isEmpty(), "the model under test has findings to answer for");
+            assertEquals(found,
+                    filling(compilation, "example.policy", "fee").generation().stream()
+                            .map(Adequacy.GenerationDisposition::finding).toList(),
+                    bar::name);
+        }
     }
 
     @Test
     void aBoundaryARowWasComposedForIsAnsweredWithThatRow() {
         Compilation compilation = compiled(POLICY);
-        List<Adequacy.GapDisposition> answered =
-                filling(compilation, "example.policy", "fee").gaps().stream()
-                        .filter(d -> d.gap().kind() == Adequacy.Kind.BOUNDARY_UNMET).toList();
+        List<Adequacy.GenerationDisposition> answered =
+                filling(compilation, "example.policy", "fee").generation().stream()
+                        .filter(d -> d.finding().kind() == Adequacy.Kind.BOUNDARY_UNMET).toList();
 
         assertEquals(2, answered.size(), "both edges");
         assertTrue(answered.stream().allMatch(
@@ -117,12 +153,63 @@ class EveryGapTheBuildRefusesGetsAnAnswerTest {
                 "a strategy applies to a boundary and it composed a row: " + answered);
     }
 
+    /** A body whose decisions read two positions together, so the combinations reach its arms. */
+    private static final String SHIPPING = """
+            module example.shipping
+
+            data Membership = Premium | Standard
+            data Delivery = Express | Regular
+
+            data Fee = Int
+                invariant value >= 0
+
+            behavior shippingFee : (member: Membership, delivery: Delivery) -> Fee
+                constructs Fee
+
+            let baseFee (tier: Membership): Int =
+                match tier with
+                    | Premium -> 0
+                    | Standard -> 500
+
+            let expressFee (speed: Delivery): Int =
+                match speed with
+                    | Express -> 500
+                    | Regular -> 0
+
+            let shippingFee (member, delivery) =
+                Fee(baseFee(member) + expressFee(delivery))
+
+            example shippingFee
+                | "a premium express parcel" : (Premium, Express) -> Fee(500)
+            """;
+
+    /**
+     * An arm a combination of the body's own decisions takes is answered with the row that takes it.
+     *
+     * <p>Two searches used to be two worlds: the combinations composed rows before any finding was
+     * consulted, and the finding about an arm was told nothing composes an input for one. Both were
+     * true and they were about the same rows — a combination is a way through each of the forks it
+     * reads, so a row composed for one takes an arm of each.
+     */
+    @Test
+    void anArmACombinationTakesIsAnsweredWithTheRowThatTakesIt() {
+        Compilation compilation = compiled(SHIPPING);
+        List<Adequacy.GenerationDisposition> arms =
+                filling(compilation, "example.shipping", "shippingFee").generation().stream()
+                        .filter(d -> d.finding().kind() == Adequacy.Kind.ARM_UNREACHED).toList();
+
+        assertFalse(arms.isEmpty(), "no row is written, so every arm is unreached");
+        assertTrue(arms.stream().allMatch(
+                        d -> d.outcome() instanceof GenerationOutcome.Generated),
+                "each is answered with the row composed for a combination that takes it: " + arms);
+    }
+
     @Test
     void anArmNoStrategyReachesIsNotSupportedRatherThanUnanswered() {
         Compilation compilation = compiled(POLICY);
-        List<Adequacy.GapDisposition> arms =
-                filling(compilation, "example.policy", "fee").gaps().stream()
-                        .filter(d -> d.gap().kind() == Adequacy.Kind.ARM_UNREACHED).toList();
+        List<Adequacy.GenerationDisposition> arms =
+                filling(compilation, "example.policy", "fee").generation().stream()
+                        .filter(d -> d.finding().kind() == Adequacy.Kind.ARM_UNREACHED).toList();
 
         assertEquals(1, arms.size());
         assertTrue(arms.get(0).outcome()
@@ -220,12 +307,12 @@ class EveryGapTheBuildRefusesGetsAnAnswerTest {
     /** The answer for the case named {@code missing} of the input at {@code at}, one-based. */
     private static GenerationOutcome forCase(Compilation compilation, String module,
                                              String behavior, String missing, int at) {
-        return filling(compilation, module, behavior).gaps().stream()
-                .filter(each -> each.gap().about()
+        return filling(compilation, module, behavior).generation().stream()
+                .filter(each -> each.finding().about()
                         instanceof souther.compiler.query.About.ACaseNoRowAppliesItTo(
                                 var input, var case_)
                         && case_.name().equals(missing) && input.at() + 1 == at)
-                .map(Adequacy.GapDisposition::outcome)
+                .map(Adequacy.GenerationDisposition::outcome)
                 .findFirst().orElseThrow(() -> new AssertionError("no gap for " + missing));
     }
 
@@ -295,9 +382,10 @@ class EveryGapTheBuildRefusesGetsAnAnswerTest {
      */
     @Test
     void eachReasonSaysWhatIsMissingHereRatherThanWhatCannotExist() {
-        assertEquals("rows here are composed for classes and for boundaries, and nothing composes"
-                        + " one for the sake of an arm",
-                GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_ARM.said());
+        assertEquals("rows here are composed for the classes a position divides into, for the"
+                        + " combinations this body settles together and for boundaries, and no"
+                        + " combination of them takes this arm",
+                GenerationOutcome.NotSupported.Reason.NO_COMBINATION_REACHES_THIS_ARM.said());
         assertEquals("rows here are composed from what the input positions divide into, and nothing"
                         + " searches for one by the case it would answer with",
                 GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE.said());
@@ -311,10 +399,10 @@ class EveryGapTheBuildRefusesGetsAnAnswerTest {
 
     @Test
     void aCaseOfTheOutputIsNotSupported() {
-        List<GenerationOutcome> outputs = filling(compiled(KIND), "example.kind", "pick").gaps()
+        List<GenerationOutcome> outputs = filling(compiled(KIND), "example.kind", "pick").generation()
                 .stream()
-                .filter(each -> each.gap().kind() == Adequacy.Kind.OUTPUT_CASE_UNSPECIFIED)
-                .map(Adequacy.GapDisposition::outcome).toList();
+                .filter(each -> each.finding().kind() == Adequacy.Kind.OUTPUT_CASE_UNSPECIFIED)
+                .map(Adequacy.GenerationDisposition::outcome).toList();
 
         assertEquals(List.of(new GenerationOutcome.NotSupported(
                         GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE)),

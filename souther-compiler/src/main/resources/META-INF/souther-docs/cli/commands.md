@@ -73,7 +73,7 @@ with an `.examples.sou` covering it and a Java test that reaches the generated t
 
 ```
 souther compile <file.sou>... -d|--dir <outdir> [-cp|--class-path <path>]
-                              [--adequacy off|witness|all|reliable-domain]
+                              [--adequacy off|witness|all|reliable-domain|classes]
                               [--warnings report|error]
 ```
 
@@ -84,13 +84,15 @@ examples` asks the same question as a report. Its words name two things at once:
 and what the build is held to. `witness` reads what the rows already ran; `all` adds what the arms
 and the borders take a second run to find out and holds the build to simplified domain coverage;
 `reliable-domain` measures what `all` does and holds it to reliable domain coverage, which asks for a
-row well inside each line and one well outside it as well as the two against it.
+row well inside each line and one well outside it as well as the two against it; `classes` is that
+bar and a class of a position no row's value falls in, which is what a model whose rows are meant to
+be finished is held to.
 
 `--warnings error` refuses the build that warned: nothing is written and the exit code is non-zero.
 It gates every warning and not only the adequacy ones, so a build that wants to fail on coverage
-alone wants `souther examples --strict`, which refuses coverage findings and nothing else. That
-command is held to reliable domain coverage, so the build it answers alike is `compile --adequacy
-reliable-domain --warnings error`.
+alone wants `souther examples --strict`, which refuses coverage findings and nothing else. Both
+take `--adequacy`, and the same word names the same bar on either, so the build that answers
+`examples --adequacy classes --strict` alike is `compile --adequacy classes --warnings error`.
 The default is `report`, which prints them and writes the classes.
 
 <!-- souther-section: run -->
@@ -365,12 +367,23 @@ diff.
 
 ```
 souther examples <file.sou>... [-cp|--class-path <path>] [--module <name>]
-                               [--behavior <name>] [--generate [--boundaries]] [--strict]
+                               [--behavior <name>] [--adequacy reliable-domain|classes]
+                               [--generate [--boundaries]] [--strict]
 ```
 
 Reports how well the `example` rows cover the model — which partitions, boundaries and branch arms
 no row reaches. `--generate` prints commented rows for what nothing covers, `--boundaries` adds
 rows at the untried boundaries, and `--strict` exits non-zero on a gap the report names.
+
+`--adequacy` names the bar the report is read against, and names the same bar `compile` does. Not
+the measurement words that spelling also takes on a compile: this command's whole output is the
+report, so everything is measured either way and there is nothing for `off`, `witness` or `all` to
+choose. Left unwritten the bar is `reliable-domain`.
+
+The bar is here and not on `--strict` because the two decide different things. `--strict` decides an
+exit status and nothing else — the report a reader is given is the same whether or not it was
+written — and a flag that also chose a bar would change which findings the report marks, so two runs
+differing only in the word would be reports of two different questions.
 
 A generated row leaves the answer as `<?>`, and where the behavior carries an `ensures`, part of that
 answer is already written down. So the clauses are quoted over the rows of the behavior they are

@@ -73,12 +73,14 @@ class CompileExampleGenerateTest {
 
     @Test
     void whatTheWrittenRowAlreadyCoversIsNotGeneratedAgain() {
-        Generator.GenerationResult filled = generated(TRIP).get("submit").pairs();
+        Generator.GenerationResult filled = generated(TRIP).get("submit").composed();
 
+        // One row per class the written row is not in, and no more. The written row is
+        // `Domestic, urgent = true`, so what is left is `Overseas` at one position and `false` at
+        // the other — two classes, two rows, each moving the position it is about and no other.
         assertEquals(List.of(
-                        "Request { kind = Domestic, urgent = false }",
                         "Request { kind = Overseas, urgent = true }",
-                        "Request { kind = Overseas, urgent = false }"),
+                        "Request { kind = Domestic, urgent = false }"),
                 inputs(filled));
         assertEquals(List.of(), filled.unresolved());
     }
@@ -113,25 +115,27 @@ class CompileExampleGenerateTest {
                     Accepted { at = "now" }
                 }
                 """;
-        Generator.GenerationResult filled = generated(correlated).get("submit").pairs();
+        Generator.GenerationResult filled = generated(correlated).get("submit").composed();
 
         assertTrue(inputs(filled).stream().noneMatch(row -> row.contains("Amount(101)")),
                 "a value the model refuses is not written into a row: " + inputs(filled));
-        // Both combinations the low end's upper class takes part in, and the class on its own.
-        assertEquals(3, filled.unresolved().size(), filled.unresolved().toString());
+        // The class, once. It used to be said three times — the class on its own and the two
+        // combinations it took part in — which is one fact repeated as many times as the
+        // arithmetic allowed.
+        assertEquals(1, filled.unresolved().size(), filled.unresolved().toString());
         for (Generator.UnresolvedCombination left : filled.unresolved()) {
             assertEquals(Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
                     left.reason());
             assertTrue(left.classes().contains("request.lo=100 < x"),
                     left.classes().toString());
         }
-        // The second of the two is the reason this reason exists. A low end past 100 and a high end
-        // past 50 is a combination values exist for — 101 and 200 — and the representatives the
-        // classes offered happened not to be a pair that builds. Calling that impossible would take a
-        // combination somebody can write a row for out of the denominator.
-        assertTrue(filled.unresolved().stream()
-                        .anyMatch(left -> left.classes().contains("request.hi=50 < x")),
-                filled.unresolved().toString());
+        // And the class beside it is not left unwritten with it. A row for `request.hi = 50 < x`
+        // stands where the low end can be built, so it is composed — which is what says the refusal
+        // above is about the values these two positions were tried at together and not about either
+        // class. Calling one impossible would take a class somebody can write a row for out of the
+        // denominator.
+        assertTrue(inputs(filled).stream().anyMatch(row -> row.contains("Amount(51)")),
+                "the high end's upper class is still written: " + inputs(filled));
     }
 
     /**
@@ -166,7 +170,7 @@ class CompileExampleGenerateTest {
 
         assertEquals(List.of("Request { kind = Domestic, cost = Amount(0) }",
                         "Request { kind = Overseas, cost = Amount(0) }"),
-                inputs(filling.pairs()), "the classes, at whatever cost builds");
+                inputs(filling.composed()), "the classes, at whatever cost builds");
         assertEquals(List.of("Request { kind = Domestic, cost = Amount(0) }",
                         "Request { kind = Domestic, cost = Amount(1) }",
                         "Request { kind = Domestic, cost = Amount(1000) }",
@@ -256,7 +260,7 @@ class CompileExampleGenerateTest {
         assertEquals(List.of(
                         "Office { id = OfficeId(\"00-000000\"), prefecture = Prefecture(\"01\"),"
                                 + " kind = Overseas }"),
-                inputs(generated(formatted).get("register").pairs()),
+                inputs(generated(formatted).get("register").composed()),
                 "the class nothing covers, with an id and a prefecture the rules accept");
     }
 
@@ -283,7 +287,7 @@ class CompileExampleGenerateTest {
                 """;
 
         assertEquals(List.of("Request { on = Date(\"2000-01-01\"), flag = No }"),
-                inputs(generated(dated).get("take").pairs()));
+                inputs(generated(dated).get("take").composed()));
     }
 
     /**
@@ -319,7 +323,7 @@ class CompileExampleGenerateTest {
                 """;
 
         assertEquals(List.of("Note { text = Spaced(\"a\\tb\"), flag = No }"),
-                inputs(generated(tabbed).get("take").pairs()),
+                inputs(generated(tabbed).get("take").composed()),
                 "the tab is written the way a literal spells one");
 
         String block = GeneratedRows.of("example.tabbed", generated(tabbed), Map.of(), false,
@@ -378,7 +382,7 @@ class CompileExampleGenerateTest {
                     invariant String.matches("(?=x)x", value)""", "V").formatted("V(\"x\")");
 
         assertEquals(List.of("Req { v = V(\"x\"), f = No }"),
-                inputs(generated(source).get("take").pairs()));
+                inputs(generated(source).get("take").composed()));
     }
 
     /**
@@ -401,9 +405,9 @@ class CompileExampleGenerateTest {
                     invariant String.matches("[a-z]+", value)""", "V").formatted("V(\"x\")");
 
         assertEquals(List.of("Req { v = V(\"x\"), f = No }"),
-                inputs(generated(forwards).get("take").pairs()));
-        assertEquals(inputs(generated(forwards).get("take").pairs()),
-                inputs(generated(backwards).get("take").pairs()),
+                inputs(generated(forwards).get("take").composed()));
+        assertEquals(inputs(generated(forwards).get("take").composed()),
+                inputs(generated(backwards).get("take").composed()),
                 "the same two rules, written the other way round");
     }
 
@@ -446,10 +450,10 @@ class CompileExampleGenerateTest {
                 """;
 
         assertEquals(List.of("Req { left = Left(\"x\"), right = Right(\"x\"), flag = No }"),
-                inputs(generated(source).get("take").pairs()));
+                inputs(generated(source).get("take").composed()));
         // And the same model with one of the two rewritten to declare its rules in the other order,
         // which is the same model. Order decided this before the assignments were walked as tuples.
-        assertEquals(inputs(generated(source).get("take").pairs()),
+        assertEquals(inputs(generated(source).get("take").composed()),
                 inputs(generated(source.replace("module example.lock", "module example.lock2")
                         .replace("""
                                 data Right = String
@@ -457,7 +461,7 @@ class CompileExampleGenerateTest {
                                     invariant String.matches("[a-z]+", value)""", """
                                 data Right = String
                                     invariant String.matches("[a-z]+", value)
-                                    invariant String.matches("x+", value)""")).get("take").pairs()));
+                                    invariant String.matches("x+", value)""")).get("take").composed()));
     }
 
     /**
@@ -496,7 +500,7 @@ class CompileExampleGenerateTest {
                 let take (one, two) = Ok { n = 0 }
                 """.formatted(declarations);
 
-        List<String> rows = inputs(generated(source).get("take").pairs());
+        List<String> rows = inputs(generated(source).get("take").composed());
 
         assertEquals(2, rows.size(), "one row per class of the only axis: " + rows);
         for (String row : rows) {
@@ -538,7 +542,7 @@ class CompileExampleGenerateTest {
                 let take (request, flag) = Ok { n = 0 }
                 """;
 
-        Generator.GenerationResult filled = generated(source).get("take").pairs();
+        Generator.GenerationResult filled = generated(source).get("take").composed();
 
         assertEquals(List.of(), filled.unresolved(),
                 () -> "the value between the edges builds: " + filled.unresolved());
@@ -588,7 +592,7 @@ class CompileExampleGenerateTest {
                 let take (request) = Ok { n = 0 }
                 """.formatted(declarations, fields);
 
-        List<Generator.UnresolvedCombination> left = generated(source).get("take").pairs()
+        List<Generator.UnresolvedCombination> left = generated(source).get("take").composed()
                 .unresolved();
 
         assertFalse(left.isEmpty(), "nothing builds, so something is left");
@@ -636,7 +640,7 @@ class CompileExampleGenerateTest {
                     | (Req { contact = NoContact, w = NoAmount }) -> Ok { n = 0 }
                 """;
 
-        List<String> rows = inputs(generated(source).get("take").pairs());
+        List<String> rows = inputs(generated(source).get("take").composed());
 
         assertTrue(rows.stream().anyMatch(r -> r.contains("Email(\"a@a\")")),
                 "a case whose rule states a format: " + rows);
@@ -689,7 +693,7 @@ class CompileExampleGenerateTest {
         compilation.answerEverything();
         List<souther.compiler.observe.RowOutcome> rows = outcomes(compilation);
 
-        assertEquals(4, rows.size(), "the row that was there, and the three generated");
+        assertEquals(3, rows.size(), "the row that was there, and the two generated");
         for (souther.compiler.observe.RowOutcome row : rows) {
             assertEquals(souther.compiler.observe.Disposition.HELD, row.disposition(),
                     row.identity().shown() + " -> " + row.failurePhase());
@@ -736,19 +740,220 @@ class CompileExampleGenerateTest {
     }
 
     /**
+     * A row for a class is written against a value the module already states.
+     *
+     * <p>The model issue #967 was reported from. Its gap is a class at one position, and the row a
+     * reader of the table it copies wants is that class against the values already beside it — one
+     * column moved, and the rest as the model says. Composed from the classes alone, every position
+     * held whatever the search named there and a reader had to work out which of the three
+     * differences the answer turned on.
+     */
+    private static final String AGAINST_A_LET = """
+            module example.trip
+
+            data C
+            data B
+            data F = C | B
+
+            data G1
+            data G2
+            data G = G1 | G2
+
+            data Cond = { f: F, g: G }
+            data Out = { n: Int }
+
+            let none = Cond { f = B, g = G1 }
+
+            behavior calc : (c: Cond) -> Out
+                constructs Out
+
+            let calc (c) = Out { n = 0 }
+
+            example calc
+                | "base" : (none) -> Out { n = 0 }
+            """;
+
+    @Test
+    void aRowForAClassIsWrittenAgainstTheValueTheModuleStates() {
+        Generator.GenerationResult filled = generated(AGAINST_A_LET).get("calc").composed();
+
+        assertEquals(List.of("Cond { ...none, f = C }", "Cond { ...none, g = G2 }"),
+                inputs(filled));
+        assertEquals(List.of(List.of("c.f=C"), List.of("c.g=G2")),
+                filled.rows().stream().map(row -> row.labels()).toList(),
+                "each named for the one class it moves");
+    }
+
+    /**
+     * And the spread is the value, not a way of printing one.
+     *
+     * <p>What a row is written as and what a decoder builds it from are two forms of one value
+     * ({@code FixtureTemplate}), so the row offered goes back through the reading a written row
+     * goes through. Printed as a spread over a tree that had the record written out, the two would
+     * be one value under two spellings — and the row an author pasted would be a row nobody built.
+     */
+    @Test
+    void theSpreadRowsHoldWhenTheyArePastedBack() {
+        String source = answered(AGAINST_A_LET, "Out { n = 0 }");
+
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        List<souther.compiler.observe.RowOutcome> rows = outcomes(compilation);
+
+        assertEquals(3, rows.size(), "the row that was there, and the two generated");
+        for (souther.compiler.observe.RowOutcome row : rows) {
+            assertEquals(souther.compiler.observe.Disposition.HELD, row.disposition(),
+                    row.identity().shown() + " -> " + row.failurePhase());
+        }
+        assertEquals("", GeneratedRows.of("example.trip", generated(source), Map.of(), false,
+                        SourceNameResolver.identity()),
+                "and nothing is left to offer once they are answered");
+    }
+
+    /** A rule relating two fields, a value the model states, and a class each of two positions. */
+    private static final String CORRELATED = """
+            module example.trip
+
+            data Amount = Int
+                invariant value >= 0
+
+            data Request = { lo: Amount, hi: Amount }
+                invariant lo.value <= hi.value
+
+            data Accepted = { at: String }
+
+            let mid = Request { lo = Amount(60), hi = Amount(70) }
+
+            behavior submit : (request: Request) -> Accepted
+                constructs Accepted
+
+            let submit (request) = {
+                guard request.lo.value <= 50 else Accepted { at = "wide" }
+                guard request.hi.value <= 60 else Accepted { at = "tall" }
+                Accepted { at = "now" }
+            }
+            """;
+
+    /**
+     * The value the model states is where the search starts, not what it rewrites its answer into.
+     *
+     * <p>Two of these rows cannot be composed from the classes at all. A rule relating {@code lo}
+     * and {@code hi} refuses the pair a composition names — each class offers the bottom of its own
+     * range, and the bottom of one against the bottom of the other is a value the model rules out —
+     * while the same class against the model's own {@code mid} builds. Composed first and rewritten
+     * after, the class came back as one nothing offered a row for.
+     *
+     * <p>And a row that needs another field moved beside the one it is about moves that one and no
+     * more. Composing instead moves every position to whatever the classes named there, which is
+     * what a row about one class exists not to be (issue #967).
+     */
+    @Test
+    void aClassIsWrittenAgainstTheModelsOwnValueOrNotWrittenAtAll() {
+        Adequacy.Filling filling = generated(CORRELATED).get("submit");
+
+        assertEquals(List.of(
+                        // The target and one supporting field: `hi` at the bottom of its lower
+                        // class is under `mid`'s `lo`, which the rule refuses, so `lo` moves too.
+                        "Request { ...mid, hi = Amount(0), lo = Amount(0) }",
+                        "Request { ...mid, hi = Amount(61) }",
+                        "Request { ...mid, lo = Amount(0) }",
+                        "Request { ...mid, lo = Amount(51) }"),
+                filling.composed().rows().stream()
+                        .map(CompileExampleGenerateTest::inputsOf).toList());
+        assertEquals(List.of(), filling.composed().unresolved(),
+                "every class is written for, which composing them could not do");
+    }
+
+    /**
+     * A second value of the same type is another origin, not the end of them.
+     *
+     * <p>Which of an author's values is the ordinary one is not this compiler's to decide, and it
+     * used to answer that by refusing to use either — so a module that stated a second value lost
+     * the spread from every row of every behavior taking that type. A change somewhere else in the
+     * file, answering a question nobody asked it.
+     *
+     * <p>What decides which is used is how far the row has to move from it, which is the search's
+     * question and not a rule about the names.
+     */
+    @Test
+    void aSecondValueOfOneTypeIsAnotherOriginRatherThanNone() {
+        String twice = CORRELATED.replace("let mid = Request { lo = Amount(60), hi = Amount(70) }",
+                """
+                        let mid = Request { lo = Amount(60), hi = Amount(70) }
+                        let wide = Request { lo = Amount(0), hi = Amount(200) }""");
+
+        assertTrue(generated(twice).get("submit").composed().rows().stream()
+                        .allMatch(row -> inputsOf(row).contains("...")),
+                "every row is still written against a value the model states: "
+                        + generated(twice).get("submit").composed().rows().stream()
+                                .map(CompileExampleGenerateTest::inputsOf).toList());
+    }
+
+    /**
+     * The value a row already names comes before the ones only the module states.
+     *
+     * <p>A row of the author's is what they reached for at this behavior, and it names its
+     * positions together — which is more than this can say of one value chosen per position on its
+     * own. So it is the first origin, and the rows offered beside it are written against the same
+     * value the row beside them is.
+     */
+    @Test
+    void theValueARowAlreadyNamesIsTheFirstOrigin() {
+        String written = CORRELATED.replace("let mid = Request { lo = Amount(60), hi = Amount(70) }",
+                """
+                        let mid = Request { lo = Amount(60), hi = Amount(70) }
+                        let wide = Request { lo = Amount(0), hi = Amount(200) }""")
+                + """
+
+                        example submit
+                            | "a wide one" : (wide) -> Accepted { at = "now" }
+                        """;
+
+        List<String> rows = generated(written).get("submit").composed().rows().stream()
+                .map(CompileExampleGenerateTest::inputsOf).toList();
+        assertFalse(rows.isEmpty(), "there are classes the written row is not in");
+        assertTrue(rows.stream().allMatch(row -> row.contains("...wide")),
+                "written against the value the author's own row names: " + rows);
+    }
+
+    /** Each named for the one class it is about, whatever it took to write one. */
+    @Test
+    void aFieldMovedToMakeARowBuildableIsNoPartOfWhatItIsFor() {
+        assertEquals(List.of(List.of("request.hi=0 <= x <= 60"), List.of("request.hi=60 < x"),
+                        List.of("request.lo=0 <= x <= 50"), List.of("request.lo=50 < x")),
+                generated(CORRELATED).get("submit").composed().rows().stream()
+                        .map(row -> row.labels()).toList());
+    }
+
+    private static String inputsOf(Generator.GeneratedRow row) {
+        return String.join(", ", row.inputs().stream()
+                .map(souther.compiler.partition.FixtureTemplate::text).toList());
+    }
+
+    /**
      * The rows come out in the form {@code souther fmt} writes them.
      *
      * <p>These lines are meant to be pasted into a file the formatter then runs over. A block in a
      * shape the formatter would change turns a paste into a diff on the next commit.
+     *
+     * <p>Asked of the block and not of a block somebody has answered. A row is written with the
+     * hole in it, and an answer is wider than the hole — so the line an author ends up with is a
+     * different width from the one offered, and what the formatter does about <em>that</em> is the
+     * author's own {@code fmt} run rather than anything this block chose. What this holds is that
+     * nothing the block does to the formatter's output afterwards — taking off the header it needed
+     * to parse, putting the hole back where the placeholder was — leaves a line the formatter would
+     * not have written.
      */
     @Test
-    void thePastedRowsSurviveFormattingUnchanged() {
-        String source = answered(TRIP, "Accepted { at = \"now\" }");
-        String formatted = souther.compiler.fmt.Formatter.format(source);
+    void theBlockIsWrittenInTheFormattersOwnShape() {
+        String block = GeneratedRows.of("example.trip", generated(TRIP), Map.of(), false,
+                SourceNameResolver.identity());
+        String rows = block.lines()
+                .filter(line -> line.startsWith("//     ") || line.equals("// example submit"))
+                .map(line -> line.substring("// ".length()).replace("<?>", "unanswered__"))
+                .reduce("examples for example.trip\n\n", (all, line) -> all + line + "\n");
 
-        for (String line : source.substring(TRIP.length()).lines().toList()) {
-            assertTrue(formatted.contains(line + "\n"), line + "\n---\n" + formatted);
-        }
+        assertEquals(rows, souther.compiler.fmt.Formatter.format(rows));
     }
 
     /**
@@ -917,7 +1122,7 @@ class CompileExampleGenerateTest {
         Adequacy.Filling filling = generated(correlated).get("submit");
 
         Generator.GeneratedRow atTheEdge = filling.boundaries().rows().stream()
-                .filter(row -> row.classes().contains("bill = 0")).findFirst().orElse(null);
+                .filter(row -> row.labels().contains("bill = 0")).findFirst().orElse(null);
         assertNotNull(atTheEdge, "the edge on `bill` is a row somebody can write: "
                 + filling.boundaries().unresolved());
         assertEquals("Paired { n = Count(1), xs = [0] }",

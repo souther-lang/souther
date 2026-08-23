@@ -72,7 +72,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
         Map<String, Adequacy.Filling> all = compilation.db()
                 .ask(new Adequacy.Generated(compilation.modules().get(0))).value();
         assertNotNull(all, "the rows come back");
-        return all.get("look").pairs();
+        return all.get("look").composed();
     }
 
     /** The one row the generator writes for that combination, as the text an author is offered. */
@@ -192,13 +192,11 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
                     invariant both = Set.size(value) >= 2
                 """, "flags: Flags", "flags = Flags([true, false])"));
 
-        // One per class of what the set holds, each a set of two with that value in it. Both hold
-        // the same two values, a `Bool` having no others and the rule asking for two — so the
-        // second is a row the first already covers, which is a row offered twice and not a row
-        // offered for nothing.
-        assertEquals(List.of("T { kind = Overseas, flags = Flags([true, false]) }",
-                        "T { kind = Overseas, flags = Flags([false, true]) }"),
-                rows);
+        // The written row's set holds both of what a `Bool` divides into, so neither element class
+        // is owed a row and the one offered is for the other position. What it shows is still what
+        // this is about: the set at the position the row is not about is built from both values,
+        // because the rule asks for two and a `Bool` has no third.
+        assertEquals(List.of("T { kind = Overseas, flags = Flags([true, false]) }"), rows);
     }
 
     /**
@@ -220,11 +218,12 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
                     invariant enough = Set.size(value) >= 2
                 """, "palette: Palette", "palette = Palette([Red, Blue])"));
 
-        assertEquals(List.of("Palette([Red, Green])", "Palette([Green, Red])",
-                        "Palette([Green, Red])", "Palette([Blue, Red])"),
+        // The written row holds `Red` and `Blue`, so `Green` is the case left, and the other
+        // position owes a row of its own. Both are sets of two, and the one for `Green` holds it.
+        assertEquals(List.of("Palette([Green, Red])", "Palette([Red, Green])"),
                 rows.stream().map(each -> each.replaceAll(".*palette = ", "").replace(" }", ""))
                         .toList(),
-                "one per case of what the set holds, each a set of two holding it");
+                "a set of two, built from the cases the sum divides into");
     }
 
     // --- a string the rules give a length ----------------------------------------------------------

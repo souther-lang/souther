@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -75,16 +76,20 @@ class ARowNothingRanFillsNoCombinationTest {
             """;
 
     /**
-     * A row is counted against a combination on what a run says, and on what kind of row it is.
+     * A combination is where an arm's row is looked for, and is not itself owed one.
      *
-     * <p>Three rows, one set of values. Seen doing what the combination names, it fills it. Seen
-     * doing something else, it does not — which is the whole of this issue: the values sit in the
-     * classes either way, and the reading that put them there is what was wrong. And where nothing
-     * could watch it, an author's row is given the benefit of it, because a combination re-offered
-     * over a row already in the file is a specific piece of work handed to someone who has done it.
+     * <p>This used to be about which rows filled a combination: seen doing what it names it filled
+     * one, seen doing something else it did not, and where nothing could watch it an author's row
+     * was given the benefit. All three were the generator counting rows against a space nothing
+     * reports — and it counted them from a reading of the body, which is what could be wrong.
+     *
+     * <p>The three answers are still there and they are one measure's: whether an arm was reached
+     * is what {@code BranchEvidence} establishes, and an arm nothing read the rows for is not
+     * established as unreached at all. What is left here is that the search looks where it is told
+     * to and composes for nothing of its own.
      */
     @Test
-    void aRowIsCountedAgainstACombinationOnWhatARunSaysAndOnWhoseRowItIs() {
+    void aCombinationIsSearchedForAnArmOnTheListAndForNothingElse() {
         Model model = Model.of(SHIPPING, "shippingFee");
         List<InteractionCells.Group> groups =
                 InteractionCells.of(model.groups(), model.subject().axes());
@@ -93,27 +98,227 @@ class ARowNothingRanFillsNoCombinationTest {
         assertNotNull(first, "and its first choice is a combination");
         assertFalse(first.claims().isEmpty(), "which a run can be held to");
 
-        Map<AxisId, Classification> sitting = at(model.subject().axes(), first);
-        String combination = labelOf(model.subject().axes(), sitting);
-
-        assertFalse(offeredFor(model, new Generator.Watched.Ran(doing(first.claims())))
-                        .contains(combination),
-                "a row seen doing what the combination names fills it");
-        assertTrue(offeredFor(model, new Generator.Watched.Ran(Observation.NONE))
-                        .contains(combination),
-                "a row seen doing something else leaves it owed, sit where its values may");
-        assertFalse(offeredFor(model, new Generator.Watched.NoAccount()).contains(combination),
-                "and a row of the author's nothing could watch is withheld over, not counted");
+        Set<Integer> every =
+                Generator.everyArmTheCombinationsTake(model.subject(), model.groups());
+        assertTrue(offeredFor(model, every).containsAll(claimedBy(first)),
+                "asked about the arms this combination takes, a row is composed for each of them");
+        assertEquals(Set.of(), offeredFor(model, Set.of()),
+                "and asked about none of them, nothing here composes for the combination itself");
     }
 
-    /** What the generator offers when this row is already written, as the classes of each. */
-    private static List<String> offeredFor(Model model, Generator.Watched watched) {
-        List<InteractionCells.Group> groups =
-                InteractionCells.of(model.groups(), model.subject().axes());
-        Map<AxisId, Classification> sitting = at(model.subject().axes(), groups.get(0).at(0));
-        return Generator.fill(model.subject(), List.of(new Generator.ObservedRow(sitting, watched)),
-                        Generator.CandidateCheck.ANY, model.groups())
-                .rows().stream().map(Generator.GeneratedRow::description).toList();
+    /**
+     * A row is composed for the arms it was looked for, and not for the combination it was found at.
+     *
+     * <p>One combination can be what two arms were both waiting for. Named for the combination, the
+     * row read as answering one thing called {@code a x b} — an obligation nobody raised, standing
+     * where the two that were raised should have been.
+     */
+    @Test
+    void aRowIsComposedForTheArmsAndNotForWhereTheyWereFound() {
+        Model model = Model.of(SHIPPING, "shippingFee");
+        CellSelection first =
+                InteractionCells.of(model.groups(), model.subject().axes()).get(0).at(0);
+        assertNotNull(first);
+        Set<Integer> takes = claimedBy(first);
+        assertTrue(takes.size() > 1, "the combination takes an arm of each decision: " + takes);
+
+        List<Generator.GeneratedRow> composed = Generator.fill(model.subject(), List.of(),
+                        Generator.CandidateCheck.ANY, model.groups(),
+                        Generator.Trial.NOTHING_RUNS, List.of(), Set.of(), takes)
+                .rows();
+
+        assertEquals(1, composed.size(), "one row answers both: " + composed);
+        assertEquals(takes, composed.get(0).purposes().stream()
+                        .map(Generator.Purpose.ForAnArm.class::cast)
+                        .map(Generator.Purpose.ForAnArm::probe)
+                        .collect(java.util.stream.Collectors.toSet()),
+                "and it is composed for each of them, not for where it was found");
+        assertEquals(List.of(), composed.get(0).labels(),
+                "which this package spells no name for: what an arm is called is the report's word");
+    }
+
+    /**
+     * An arm every combination claiming it failed at keeps what each of them came to.
+     *
+     * <p>They are not one fact. A combination the model's own rules leave nothing in and one the
+     * search stopped at are different news — a reader may act on the first and not on the second —
+     * and they do not order against each other, so a single one carried forward carried the order
+     * the cells were walked in. Both are kept and the reader is handed both.
+     */
+    @Test
+    void anArmKeepsWhatEveryCombinationClaimingItCameTo() {
+        Model model = Model.of(SHIPPING, "shippingFee");
+        Set<Integer> every =
+                Generator.everyArmTheCombinationsTake(model.subject(), model.groups());
+        Generator.GenerationResult filled = Generator.fill(model.subject(), List.of(),
+                Generator.CandidateCheck.refusing((_, _) -> java.util.Optional.of("no")),
+                model.groups(), Generator.Trial.NOTHING_RUNS, List.of(), Set.of(), every);
+
+        assertEquals(List.of(), filled.rows(), "nothing builds, so nothing is composed");
+        for (int probe : every) {
+            Generator.ArmAttempt at = filled.armAt(probe);
+            assertInstanceOf(Generator.ArmAttempt.Unresolved.class, at,
+                    "the arm was tried and says so: " + probe);
+            assertEquals(2, ((Generator.ArmAttempt.Unresolved) at).why().size(),
+                    "and keeps what both combinations claiming it came to: " + at);
+        }
+    }
+
+    /**
+     * One row through an arm is what the arm is owed, whichever combination composed it.
+     *
+     * <p>A rule relating two positions can refuse the values one combination names while another
+     * builds. Answered by the first combination walked, the same arm came back as one nothing could
+     * compose for or as one a row goes through, depending on which of them the search reached first.
+     */
+    @Test
+    void oneRowThroughAnArmIsTheAnswerWhateverTheOthersCameTo() {
+        Model model = Model.of(SHIPPING, "shippingFee");
+        Set<Integer> every =
+                Generator.everyArmTheCombinationsTake(model.subject(), model.groups());
+        // Refuses the first case of the first position, so the combinations naming it fail and the
+        // ones beside them build. Every arm of the second decision is claimed by both.
+        Generator.GenerationResult filled = Generator.fill(model.subject(), List.of(),
+                Generator.CandidateCheck.refusing((_, candidate) ->
+                        candidate.text().contains("Premium")
+                                ? java.util.Optional.of("no") : java.util.Optional.empty()),
+                model.groups(), Generator.Trial.NOTHING_RUNS, List.of(), Set.of(), every);
+
+        assertFalse(filled.rows().isEmpty(), "the combinations that build compose their rows");
+        List<Integer> built = every.stream()
+                .filter(probe -> filled.armAt(probe) instanceof Generator.ArmAttempt.Built)
+                .toList();
+        assertEquals(3, built.size(),
+                "the arm nothing builds is the refused one; the three beside it are answered: "
+                        + filled.arms());
+    }
+
+    /**
+     * A position with more classes than the run has rows, and two arms below it.
+     *
+     * <p>The classes go first and spend the whole budget, so the arms are reached with nothing left
+     * to compose. What the search has to say about them is that it stopped.
+     */
+    private static String wide() {
+        StringBuilder cases = new StringBuilder();
+        for (int i = 0; i < 210; i++) {
+            cases.append(i == 0 ? "" : " | ").append("A").append(i);
+        }
+        return """
+                module example.wide
+
+                data Wide = %s
+
+                data Flag = On | Off
+
+                data Mode = Fast | Slow
+
+                data Out = Int
+                    invariant value >= 0
+
+                behavior submit : (w: Wide, f: Flag, m: Mode) -> Out
+                    constructs Out
+
+                let pick (flag: Flag): Int =
+                    match flag with
+                        | On -> 1
+                        | Off -> 0
+
+                let speed (mode: Mode): Int =
+                    match mode with
+                        | Fast -> 10
+                        | Slow -> 0
+
+                let submit (w, f, m) = Out(pick(f) + speed(m))
+                """.formatted(cases.toString());
+    }
+
+    /**
+     * An arm the search stopped short of says so, and is not reported as one nothing reaches.
+     *
+     * <p>The two are one silence otherwise. An arm with no entry in the ledger used to mean both
+     * "no combination of the body claims it" and "the row limit came first", and the second was read
+     * as the first — so a model whose classes alone spend the budget had every arm below them
+     * answered "no combination reaches this arm", which is a fact about the model told on the
+     * strength of a limit (issue #967).
+     */
+    @Test
+    void anArmTheLimitCutOffSaysSoRatherThanReadingAsUnreachable() {
+        Model model = Model.of(wide(), "submit");
+        Set<Integer> every =
+                Generator.everyArmTheCombinationsTake(model.subject(), model.groups());
+        assertFalse(every.isEmpty(), "the body has arms");
+
+        Generator.GenerationResult filled = Generator.fill(model.subject(), List.of(),
+                Generator.CandidateCheck.ANY, model.groups(), Generator.Trial.NOTHING_RUNS,
+                List.of(), Generator.everyClassNoRowSitsIn(model.subject(), List.of()), every);
+
+        assertTrue(filled.reasons().stream()
+                        .anyMatch(GenerationReason.SearchLimit.class::isInstance),
+                "the classes alone spend the budget: " + filled.reasons());
+        for (int probe : every) {
+            Generator.ArmAttempt at = filled.armAt(probe);
+            assertInstanceOf(Generator.ArmAttempt.Unresolved.class, at,
+                    "the arm has an entry rather than the silence of one nothing claims: " + probe);
+            assertEquals(List.of(Generator.UnresolvedCombination.Reason.SEARCH_LIMIT),
+                    ((Generator.ArmAttempt.Unresolved) at).why().stream()
+                            .map(Generator.UnresolvedCombination::reason).toList(),
+                    "and says the search stopped, nothing having been tried at it");
+        }
+    }
+
+    /** The arms one combination claims a run through. */
+    private static Set<Integer> claimedBy(CellSelection selection) {
+        Set<Integer> out = new LinkedHashSet<>();
+        for (ControlClaim claim : selection.claims()) {
+            if (claim.at() instanceof ControlPointId.ArmOccurrence arm && arm.probe().isPresent()) {
+                out.add(arm.probe().getAsInt());
+            }
+        }
+        return out;
+    }
+
+    /**
+     * A class is composed for when it is on the list, and no class is on it by the search's doing.
+     *
+     * <p>The same question the arms are asked, at the other measure. Which classes are owed a row is
+     * what the partition measure reads off the rows, and a search working it out again for itself
+     * is a second reading of one fact — free to offer an author a row at a class the report calls
+     * reached, or to say nothing at one it calls unreached.
+     */
+    @Test
+    void aClassIsComposedForWhenItIsOnTheListAndNotOtherwise() {
+        Model model = Model.of(SHIPPING, "shippingFee");
+        Set<Generator.ClassOwed> every =
+                Generator.everyClassNoRowSitsIn(model.subject(), List.of());
+        assertFalse(every.isEmpty(), "the model divides its positions");
+        Generator.ClassOwed one = every.iterator().next();
+
+        assertEquals(List.of(), composedFor(model, Set.of()),
+                "asked for no class, nothing is composed");
+        assertEquals(List.of(one), composedFor(model, Set.of(one)),
+                "and asked for one, that one and nothing beside it");
+    }
+
+    /** Which classes the generator composes a row for when it is asked about {@code classes}. */
+    private static List<Generator.ClassOwed> composedFor(Model model,
+                                                         Set<Generator.ClassOwed> classes) {
+        return Generator.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
+                        model.groups(), Generator.Trial.NOTHING_RUNS, List.of(), classes,
+                        java.util.Set.of())
+                .rows().stream().flatMap(row -> row.purposes().stream())
+                .map(Generator.Purpose.ForAClass.class::cast)
+                .map(at -> new Generator.ClassOwed(at.at(), at.classId())).toList();
+    }
+
+    /** Which arms the generator composes a row for when it is asked about {@code arms}. */
+    private static Set<Integer> offeredFor(Model model, Set<Integer> arms) {
+        return Generator.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
+                        model.groups(), Generator.Trial.NOTHING_RUNS, List.of(), Set.of(), arms)
+                .rows().stream().flatMap(row -> row.purposes().stream())
+                .map(Generator.Purpose.ForAnArm.class::cast)
+                .map(Generator.Purpose.ForAnArm::probe)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
 
     /** One class per divided position, taken from the one class the combination leaves there. */
