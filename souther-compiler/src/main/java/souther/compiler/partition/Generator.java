@@ -407,19 +407,22 @@ public final class Generator {
          * from one a search tried and could not reach.
          */
         public ArmAttempt armAt(int probe) {
-            ArmAttempt none = null;
+            List<UnresolvedCombination> none = new ArrayList<>();
             for (ArmAttempt each : arms) {
                 if (each.probe() != probe) {
                     continue;
                 }
-                if (each instanceof ArmAttempt.Built) {
-                    return each;   // one row through it is what the arm is owed
-                }
-                if (none == null) {
-                    none = each;
+                switch (each) {
+                    // One row through it is what the arm is owed, whatever the rest came to.
+                    case ArmAttempt.Built built -> {
+                        return built;
+                    }
+                    // And every one of the rest where there is no row, because they are not one
+                    // fact: what a reader may act on is what all of them agreed to.
+                    case ArmAttempt.Unresolved why -> none.addAll(why.why());
                 }
             }
-            return none;
+            return none.isEmpty() ? null : new ArmAttempt.Unresolved(probe, none);
         }
 
         /**
@@ -473,8 +476,41 @@ public final class Generator {
         /** A row composed for a combination that takes this arm. */
         record Built(int probe, GeneratedRow row) implements ArmAttempt {}
 
-        /** No row came of the combination that would have taken it, and why. */
-        record Unresolved(int probe, UnresolvedCombination why) implements ArmAttempt {}
+        /**
+         * No row came of the combinations that would have taken it, and what each came to.
+         *
+         * <p>All of them, because they are not one fact. One combination stopping at the search's
+         * budget and another the model's own rules refuse are different news — the first says a row
+         * may still be writable and the second says the model settles it — and the arm is answered
+         * by the whole of what was tried rather than by whichever was walked first.
+         */
+        record Unresolved(int probe, List<UnresolvedCombination> why) implements ArmAttempt {
+
+            public Unresolved {
+                why = List.copyOf(why);
+                if (why.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "an arm nothing was tried at is one no combination claims");
+                }
+            }
+
+            /**
+             * The weakest of what was tried, which is what a reader may act on.
+             *
+             * <p>An arm is unreachable only where every combination claiming it says the model
+             * leaves nothing there; one that merely ran out of search says nothing about the
+             * others. So a reason a reader may act on survives only if every attempt agreed on it
+             * (ADR-0091), and the first that does not is what this comes to.
+             */
+            public UnresolvedCombination weakest() {
+                for (UnresolvedCombination each : why) {
+                    if (!each.reason().provesInfeasible()) {
+                        return each;
+                    }
+                }
+                return why.get(0);
+            }
+        }
     }
 
     /**
@@ -811,8 +847,8 @@ public final class Generator {
                         UnresolvedCombination why = new UnresolvedCombination(
                                 none.classes(), none.reason(), none.detail(), none.said());
                         unresolved.add(why);
-                        claimed(selection).forEach(
-                                probe -> arms.add(new ArmAttempt.Unresolved(probe, why)));
+                        claimed(selection).forEach(probe ->
+                                arms.add(new ArmAttempt.Unresolved(probe, List.of(why))));
                     }
                     case Witness.Certified found -> {
                         rows.add(found.row());
@@ -890,22 +926,24 @@ public final class Generator {
     }
 
     /**
-     * How many positions beside the one a row is about it may move to be buildable.
-     *
-     * <p>A bound on what a row may say, before it is one on the search. A row that moved eight
-     * positions to reach one class is a row whose reader cannot tell which of the eight the answer
-     * turned on, which is what a row about one class exists not to be (issue #967). Past this the
-     * class is reported as one no row was composed for, which leaves it writable by hand.
-     */
-    private static final int MOST_SUPPORTING = 2;
-
-    /**
      * How many assignments the walk over the origins tries before it gives up on a class.
+     *
+     * <p>One budget for the whole walk, over every origin and every distance. Held per origin, a
+     * model stating a hundred values had a hundred budgets and the number was no bound on anything;
+     * and the walk is nearest-first, so a budget spent is a budget spent on the rows nearest what
+     * the model already says.
      *
      * <p>Its own budget and never {@link #MAX_TUPLES}. That one bounds the walk over the values one
      * parameter's fields may take once the classes are settled; this bounds the walk over which
      * classes to settle them at, and the two multiply — shared, one of them would be spent by the
      * other and which of them ran out would depend on the model.
+     *
+     * <p><b>The only bound.</b> There was a second one — at most two positions moved beside the one
+     * the row is about — which was a rule about what a row may say wearing the clothes of a search
+     * limit: a witness three moves away was not tried however much budget was left, and what came
+     * back said no row was composed rather than that this had stopped looking. If a row that moves
+     * many positions is one this should not offer, that is a policy with a name and a sentence of
+     * its own, not a constant inside a loop.
      */
     private static final int MOST_REPAIRS = 64;
 
@@ -949,46 +987,25 @@ public final class Generator {
         // the only value of a type, a module that states a second one lost the spread from every
         // row of every behavior taking it — a change somewhere else in the file, answering a
         // question nobody asked it.
-        List<Baseline> origins = new ArrayList<>(baselines);
-        origins.add(new Baseline(Map.of()));   // the classes, which name nothing
-        for (Baseline baseline : origins) {
-            // Where the origin's own values already stand, which is what a move is measured from.
-            // Measured from the composition either way, a class the baseline is already in looked
-            // like no move at all and was never tried as one — so a row the baseline needed one
-            // supporting field for fell through to being composed from the classes.
-            int[] from = baseline.isEmpty() ? composes(axes) : stands(subject, axes, baseline, check);
-            if (from == null) {
+        for (Candidate candidate : nearestFirst(subject, axes, at, cls, baselines, check)) {
+            Map<String, FixtureTemplate> given = candidate.from().isEmpty() ? Map.of()
+                    : against(subject, axes, candidate.stands(), at, candidate.where(),
+                            candidate.from());
+            if (!candidate.from().isEmpty() && given.isEmpty()) {
+                continue;   // nothing here can be written against the model's value
+            }
+            Attempt made = build(subject, axes, candidate.where(), check, given);
+            if (made.row() == null) {
+                last = made;
                 continue;
             }
-            int tried = 0;
-            for (int moved = 0; moved <= MOST_SUPPORTING && tried < MOST_REPAIRS; moved++) {
-                for (int[] supporting : supportingSets(axes, at, moved)) {
-                    for (int[] where : assignmentsOver(axes, from, at, cls, supporting)) {
-                        if (++tried > MOST_REPAIRS) {
-                            break;
-                        }
-                        Map<String, FixtureTemplate> given = baseline.isEmpty() ? Map.of()
-                                : against(subject, axes, from, at, where, baseline);
-                        if (!baseline.isEmpty() && given.isEmpty()) {
-                            continue;   // nothing here can be written against the model's value
-                        }
-                        Attempt made = build(subject, axes, where, check, given);
-                        if (made.row() == null) {
-                            last = made;
-                            continue;
-                        }
-                        if (!inTheClass(subject, axes, at, classId, made.row().inputs(), check)) {
-                            last = new Attempt(null,
-                                    UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS, label,
-                                    Optional.empty());
-                            continue;
-                        }
-                        return new ClassAttempt.Built(axis.id(), classId, new GeneratedRow(
-                                new Purpose.ForAClass(axis.id(), classId, label),
-                                made.row().inputs()));
-                    }
-                }
+            if (!inTheClass(subject, axes, at, classId, made.row().inputs(), check)) {
+                last = new Attempt(null, UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS, label,
+                        Optional.empty());
+                continue;
             }
+            return new ClassAttempt.Built(axis.id(), classId, new GeneratedRow(
+                    new Purpose.ForAClass(axis.id(), classId, label), made.row().inputs()));
         }
         UnresolvedCombination why = last == null || last.row() != null
                 ? new UnresolvedCombination(List.of(label),
@@ -996,6 +1013,76 @@ public final class Generator {
                 : new UnresolvedCombination(List.of(label), last.reason(), last.detail(),
                         last.said());
         return new ClassAttempt.Unresolved(axis.id(), classId, why);
+    }
+
+    /**
+     * One assignment to try, and the origin it is a move away from.
+     *
+     * @param from   the value the model states that this row is written against, or a baseline
+     *               naming nothing where the row is composed from the classes
+     * @param stands where {@code from}'s own values already sit, which is what the move is measured
+     *               against and what a spread writes over
+     * @param where  the classes this assignment puts every position at
+     */
+    private record Candidate(Baseline from, int[] stands, int[] where) {}
+
+    /**
+     * The assignments to try for one class, nearest what the model already says first.
+     *
+     * <p>Built whole and then walked, rather than walked as four nested loops. The budget is the
+     * length of this list, so it is a bound on the search rather than a test inside one — nested,
+     * the check that stopped the innermost walk left the three around it turning, and the number
+     * bounded nothing.
+     *
+     * <p><b>Distance first, among the values the model states.</b> How far a row moves from the
+     * value it is written against is what this is minimising, so every baseline is tried at the
+     * target alone before any is tried with a supporting field moved. Within one distance the
+     * origins keep the order they were gathered in, which puts a value the author's own rows name
+     * before one the module merely states.
+     *
+     * <p><b>And the classes last, whatever their distance.</b> A composed row is not a nearer
+     * baseline: its distance is measured from values the search itself named, so it is zero by
+     * construction and says nothing about how far the row is from what a reader recognises. Put in
+     * the same order, a row composed from the classes won against every baseline that needed one
+     * supporting field — which is the objective read backwards.
+     */
+    private static List<Candidate> nearestFirst(Subject subject, List<Axis> axes, int at, int cls,
+                                                List<Baseline> baselines, CandidateCheck check) {
+        List<Candidate> out = new ArrayList<>();
+        List<Baseline> stated = new ArrayList<>(baselines);
+        List<int[]> stand = new ArrayList<>();
+        for (Baseline baseline : stated) {
+            stand.add(stands(subject, axes, baseline, check));
+        }
+        for (int moved = 0; moved < axes.size() && out.size() < MOST_REPAIRS; moved++) {
+            for (int[] supporting : supportingSets(axes, at, moved)) {
+                for (int origin = 0; origin < stated.size() && out.size() < MOST_REPAIRS; origin++) {
+                    if (stand.get(origin) == null) {
+                        continue;   // nothing built this origin's values, so nothing measures it
+                    }
+                    for (int[] where
+                            : assignmentsOver(axes, stand.get(origin), at, cls, supporting)) {
+                        if (out.size() >= MOST_REPAIRS) {
+                            break;
+                        }
+                        out.add(new Candidate(stated.get(origin), stand.get(origin), where));
+                    }
+                }
+            }
+        }
+        Baseline classes = new Baseline(Map.of());
+        int[] composed = composes(axes);
+        for (int moved = 0; moved < axes.size() && out.size() < MOST_REPAIRS; moved++) {
+            for (int[] supporting : supportingSets(axes, at, moved)) {
+                for (int[] where : assignmentsOver(axes, composed, at, cls, supporting)) {
+                    if (out.size() >= MOST_REPAIRS) {
+                        break;
+                    }
+                    out.add(new Candidate(classes, composed, where));
+                }
+            }
+        }
+        return out;
     }
 
     /**

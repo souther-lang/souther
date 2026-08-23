@@ -1834,8 +1834,11 @@ public final class Adequacy {
             return switch (composed.armAt(arm.index())) {
                 case Generator.ArmAttempt.Built built ->
                         new GenerationOutcome.Generated(List.of(built.row()));
+                // The weakest of what every combination claiming it came to. One that stopped at
+                // the search's budget says nothing about the others, so a reason a reader may act
+                // on survives only where they all agreed on it.
                 case Generator.ArmAttempt.Unresolved none ->
-                        new GenerationOutcome.CannotGenerate(none.why());
+                        new GenerationOutcome.CannotGenerate(none.weakest());
                 case null -> new GenerationOutcome.NotSupported(
                         GenerationOutcome.NotSupported.Reason.NO_COMBINATION_REACHES_THIS_ARM);
             };

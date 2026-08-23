@@ -54,10 +54,10 @@ class GeneratorTest {
                 Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED);
 
         for (List<Generator.ArmAttempt> order : List.of(
-                List.<Generator.ArmAttempt>of(new Generator.ArmAttempt.Unresolved(7, why),
+                List.<Generator.ArmAttempt>of(new Generator.ArmAttempt.Unresolved(7, List.of(why)),
                         new Generator.ArmAttempt.Built(7, row)),
                 List.<Generator.ArmAttempt>of(new Generator.ArmAttempt.Built(7, row),
-                        new Generator.ArmAttempt.Unresolved(7, why)))) {
+                        new Generator.ArmAttempt.Unresolved(7, List.of(why))))) {
             assertEquals(new Generator.ArmAttempt.Built(7, row),
                     new Generator.GenerationResult(List.of(), List.of(), List.of(), List.of(),
                             order).armAt(7),
@@ -65,16 +65,36 @@ class GeneratorTest {
         }
     }
 
-    /** And an arm every combination claiming it failed at is one nothing composed a row for. */
+    /**
+     * And an arm every combination claiming it failed at keeps what each of them came to.
+     *
+     * <p>They are not one fact. A combination the model's own rules leave nothing in and one the
+     * search ran out of room on are different news, and a reader may act on the first and not on
+     * the second — so what the arm comes to is the weakest of them, whichever order they were
+     * walked in. Taken as the first attempt, the answer said the model settles the arm because a
+     * combination that did happened to come up first.
+     */
     @Test
-    void anArmEveryCombinationFailedAtIsUnresolved() {
-        Generator.UnresolvedCombination why = new Generator.UnresolvedCombination(List.of("a"),
-                Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED);
+    void whatAnArmComesToIsTheWeakestOfWhatWasTriedAtIt() {
+        Generator.UnresolvedCombination settled = new Generator.UnresolvedCombination(List.of("a"),
+                Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE);
+        Generator.UnresolvedCombination ranOut = new Generator.UnresolvedCombination(List.of("b"),
+                Generator.UnresolvedCombination.Reason.SEARCH_LIMIT);
 
-        assertEquals(new Generator.ArmAttempt.Unresolved(7, why),
-                new Generator.GenerationResult(List.of(), List.of(), List.of(), List.of(),
-                        List.of(new Generator.ArmAttempt.Unresolved(7, why),
-                                new Generator.ArmAttempt.Unresolved(7, why))).armAt(7));
+        for (List<Generator.ArmAttempt> order : List.of(
+                List.<Generator.ArmAttempt>of(new Generator.ArmAttempt.Unresolved(7,
+                                List.of(settled)),
+                        new Generator.ArmAttempt.Unresolved(7, List.of(ranOut))),
+                List.<Generator.ArmAttempt>of(new Generator.ArmAttempt.Unresolved(7,
+                                List.of(ranOut)),
+                        new Generator.ArmAttempt.Unresolved(7, List.of(settled))))) {
+            Generator.ArmAttempt at = new Generator.GenerationResult(List.of(), List.of(),
+                    List.of(), List.of(), order).armAt(7);
+
+            assertEquals(ranOut, ((Generator.ArmAttempt.Unresolved) at).weakest(), order::toString);
+            assertEquals(2, ((Generator.ArmAttempt.Unresolved) at).why().size(),
+                    "and both are kept: " + at);
+        }
     }
 
     private static final String TRIP = """
