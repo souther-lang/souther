@@ -1777,8 +1777,7 @@ public final class Adequacy {
                     case About.APointOfABorder(var point) -> atEdge(finding, point);
                     case About.ACaseNoRowAppliesItTo(var input, var missing) ->
                             atCase(input, missing, partition, pairs, spec);
-                    case About.AClassNoRowIsIn _ -> new GenerationOutcome.NotSupported(
-                            GenerationOutcome.NotSupported.Reason.NO_SEARCH_IS_ASKED_FOR_ONE_CLASS);
+                    case About.AClassNoRowIsIn(var missing) -> atClass(missing, pairs);
                     case About.AnArmNoRowGoesThrough _ -> new GenerationOutcome.NotSupported(
                             GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_ARM);
                     case About.ACaseNoRowExpects _ -> new GenerationOutcome.NotSupported(
@@ -1803,6 +1802,38 @@ public final class Adequacy {
                 }));
             }
             return out;
+        }
+
+        /**
+         * The class's own attempt, read off what the search for it made.
+         *
+         * <p>Found by identity — the position's own name and the class's own id — which is the same
+         * pair the search was asked for. The rows it offers used to be matched back by the words in
+         * their names, which is a spelling two positions of one type share, and it was the search
+         * that decided what to compose while the finding went looking for something to claim.
+         *
+         * <p>Nothing is built here. The search is made once, where the rows are, and this reads
+         * what it came to: a second attempt would be a second answer about one class, and the two
+         * would differ the first time either side of the search moved.
+         */
+        private static GenerationOutcome atClass(PartitionEvidence.AxisClass missing,
+                                                 Generator.GenerationResult composed) {
+            Generator.ClassAttempt attempt =
+                    composed.attemptAt(missing.axis().at(), missing.name());
+            return switch (attempt) {
+                case Generator.ClassAttempt.Built built ->
+                        new GenerationOutcome.Generated(List.of(built.row()));
+                case Generator.ClassAttempt.Unresolved none ->
+                        new GenerationOutcome.CannotGenerate(none.why());
+                // The search did not reach this class, which takes a run that stopped: something
+                // it had to build against was not there, or it ran out of room. Those are said in
+                // their own words beside the rows, and answering here with a reason of this one's
+                // would be the same stop under a second spelling.
+                case null -> new GenerationOutcome.CannotGenerate(
+                        new Generator.UnresolvedCombination(
+                                List.of(missing.name() + " at " + missing.axis().path()),
+                                Generator.UnresolvedCombination.Reason.SEARCH_LIMIT));
+            };
         }
 
         /**

@@ -342,7 +342,8 @@ public record PartitionEvidence(Measurement<List<AxisCoverage>> partitioned,
      *                status saying so, which reads exactly like a position every class of which
      *                went unreached
      */
-    public record AxisCoverage(String axis, String path, List<String> classes, Reading read,
+    public record AxisCoverage(souther.compiler.partition.AxisId at, String path,
+                               List<String> classes, Reading read,
                                Measurement<Reached> reached) {
 
         /**
@@ -422,9 +423,9 @@ public record PartitionEvidence(Measurement<List<AxisCoverage>> partitioned,
 
         /** Which classes there are is a fact about the model, and no row has to exist for it to be
          *  so — which is why a position nothing was measured at still names them. */
-        public static AxisCoverage noRows(String axis, String path, List<String> classes,
-                                          Reading read) {
-            return new AxisCoverage(axis, path, classes, read,
+        public static AxisCoverage noRows(souther.compiler.partition.AxisId at, String path,
+                                          List<String> classes, Reading read) {
+            return new AxisCoverage(at, path, classes, read,
                     new Measurement.NotMeasured<>(NoRows.NO_ROWS));
         }
 

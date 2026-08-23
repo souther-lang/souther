@@ -433,7 +433,7 @@ final class Coverages {
         // ({@link ClaimReport}) — which is what keeps a claim from narrowing a denominator by being
         // in reach of the code that counts one.
         if (readings.noRows() && !readings.someRowsUnseen()) {
-            return PartitionEvidence.AxisCoverage.noRows(axis.id().toString(),
+            return PartitionEvidence.AxisCoverage.noRows(axis.id(),
                     axis.term().toString(), classes, read);
         }
         Set<String> covered = new LinkedHashSet<>();
@@ -446,7 +446,7 @@ final class Coverages {
         PartitionEvidence.AxisCoverage.Reached reached =
                 new PartitionEvidence.AxisCoverage.Reached(covered, readings.couldNotSay(axis));
         WeakeningSet by = readings.weakening(List.of(axis));
-        return new PartitionEvidence.AxisCoverage(axis.id().toString(), axis.term().toString(),
+        return new PartitionEvidence.AxisCoverage(axis.id(), axis.term().toString(),
                 classes, read, by.isEmpty()
                         ? new Measurement.Complete<>(reached)
                         : new Measurement.Partial<>(reached, by));

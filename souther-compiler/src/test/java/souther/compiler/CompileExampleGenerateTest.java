@@ -75,10 +75,12 @@ class CompileExampleGenerateTest {
     void whatTheWrittenRowAlreadyCoversIsNotGeneratedAgain() {
         Generator.GenerationResult filled = generated(TRIP).get("submit").pairs();
 
+        // One row per class the written row is not in, and no more. The written row is
+        // `Domestic, urgent = true`, so what is left is `Overseas` at one position and `false` at
+        // the other — two classes, two rows, each moving the position it is about and no other.
         assertEquals(List.of(
-                        "Request { kind = Domestic, urgent = false }",
                         "Request { kind = Overseas, urgent = true }",
-                        "Request { kind = Overseas, urgent = false }"),
+                        "Request { kind = Domestic, urgent = false }"),
                 inputs(filled));
         assertEquals(List.of(), filled.unresolved());
     }
@@ -117,21 +119,23 @@ class CompileExampleGenerateTest {
 
         assertTrue(inputs(filled).stream().noneMatch(row -> row.contains("Amount(101)")),
                 "a value the model refuses is not written into a row: " + inputs(filled));
-        // Both combinations the low end's upper class takes part in, and the class on its own.
-        assertEquals(3, filled.unresolved().size(), filled.unresolved().toString());
+        // The class, once. It used to be said three times — the class on its own and the two
+        // combinations it took part in — which is one fact repeated as many times as the
+        // arithmetic allowed.
+        assertEquals(1, filled.unresolved().size(), filled.unresolved().toString());
         for (Generator.UnresolvedCombination left : filled.unresolved()) {
             assertEquals(Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
                     left.reason());
             assertTrue(left.classes().contains("request.lo=100 < x"),
                     left.classes().toString());
         }
-        // The second of the two is the reason this reason exists. A low end past 100 and a high end
-        // past 50 is a combination values exist for — 101 and 200 — and the representatives the
-        // classes offered happened not to be a pair that builds. Calling that impossible would take a
-        // combination somebody can write a row for out of the denominator.
-        assertTrue(filled.unresolved().stream()
-                        .anyMatch(left -> left.classes().contains("request.hi=50 < x")),
-                filled.unresolved().toString());
+        // And the class beside it is not left unwritten with it. A row for `request.hi = 50 < x`
+        // stands where the low end can be built, so it is composed — which is what says the refusal
+        // above is about the values these two positions were tried at together and not about either
+        // class. Calling one impossible would take a class somebody can write a row for out of the
+        // denominator.
+        assertTrue(inputs(filled).stream().anyMatch(row -> row.contains("Amount(51)")),
+                "the high end's upper class is still written: " + inputs(filled));
     }
 
     /**
@@ -689,7 +693,7 @@ class CompileExampleGenerateTest {
         compilation.answerEverything();
         List<souther.compiler.observe.RowOutcome> rows = outcomes(compilation);
 
-        assertEquals(4, rows.size(), "the row that was there, and the three generated");
+        assertEquals(3, rows.size(), "the row that was there, and the two generated");
         for (souther.compiler.observe.RowOutcome row : rows) {
             assertEquals(souther.compiler.observe.Disposition.HELD, row.disposition(),
                     row.identity().shown() + " -> " + row.failurePhase());
@@ -740,15 +744,25 @@ class CompileExampleGenerateTest {
      *
      * <p>These lines are meant to be pasted into a file the formatter then runs over. A block in a
      * shape the formatter would change turns a paste into a diff on the next commit.
+     *
+     * <p>Asked of the block and not of a block somebody has answered. A row is written with the
+     * hole in it, and an answer is wider than the hole — so the line an author ends up with is a
+     * different width from the one offered, and what the formatter does about <em>that</em> is the
+     * author's own {@code fmt} run rather than anything this block chose. What this holds is that
+     * nothing the block does to the formatter's output afterwards — taking off the header it needed
+     * to parse, putting the hole back where the placeholder was — leaves a line the formatter would
+     * not have written.
      */
     @Test
-    void thePastedRowsSurviveFormattingUnchanged() {
-        String source = answered(TRIP, "Accepted { at = \"now\" }");
-        String formatted = souther.compiler.fmt.Formatter.format(source);
+    void theBlockIsWrittenInTheFormattersOwnShape() {
+        String block = GeneratedRows.of("example.trip", generated(TRIP), Map.of(), false,
+                SourceNameResolver.identity());
+        String rows = block.lines()
+                .filter(line -> line.startsWith("//     ") || line.equals("// example submit"))
+                .map(line -> line.substring("// ".length()).replace("<?>", "unanswered__"))
+                .reduce("examples for example.trip\n\n", (all, line) -> all + line + "\n");
 
-        for (String line : source.substring(TRIP.length()).lines().toList()) {
-            assertTrue(formatted.contains(line + "\n"), line + "\n---\n" + formatted);
-        }
+        assertEquals(rows, souther.compiler.fmt.Formatter.format(rows));
     }
 
     /**

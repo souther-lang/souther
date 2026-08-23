@@ -277,15 +277,38 @@ public final class Generator {
     }
 
     public record GenerationResult(List<GeneratedRow> rows, List<UnresolvedCombination> unresolved,
-                                   List<GenerationReason> reasons) {
+                                   List<GenerationReason> reasons, List<ClassAttempt> classes) {
 
         public static final GenerationResult NONE =
-                new GenerationResult(List.of(), List.of(), List.of());
+                new GenerationResult(List.of(), List.of(), List.of(), List.of());
+
+        public GenerationResult(List<GeneratedRow> rows, List<UnresolvedCombination> unresolved,
+                                List<GenerationReason> reasons) {
+            this(rows, unresolved, reasons, List.of());
+        }
 
         public GenerationResult {
             rows = List.copyOf(rows);
             unresolved = List.copyOf(unresolved);
             reasons = List.copyOf(reasons);
+            classes = List.copyOf(classes);
+        }
+
+        /**
+         * What composing a row for one class came to, or null where this run was not asked about it.
+         *
+         * <p>Asked by identity — the position's own name and the class's own id — so that a finding
+         * about a class and the attempt made for it are two readings of one thing. Matched on the
+         * words a report writes instead, a class and the row offered for it were joined by a label
+         * that two positions of one type spell the same way.
+         */
+        public ClassAttempt attemptAt(AxisId at, String classId) {
+            for (ClassAttempt each : classes) {
+                if (each.at().equals(at) && each.classId().equals(classId)) {
+                    return each;
+                }
+            }
+            return null;
         }
 
         /**
@@ -299,6 +322,31 @@ public final class Generator {
         public boolean isEmpty() {
             return rows.isEmpty() && unresolved.isEmpty() && reasons.isEmpty();
         }
+    }
+
+    /**
+     * What composing a row for one class of one position came to.
+     *
+     * <p>Held per class and keyed by the class, because a class is what a finding is about and the
+     * row offered for it is what answers that finding. A search whose results were a list of rows
+     * left the two joined by whatever a reader could match — the words in a row's name — and a row
+     * is named for what it was composed for rather than for everything it turns out to settle.
+     */
+    public sealed interface ClassAttempt {
+
+        /** The position, by the name every reading of it uses. */
+        AxisId at();
+
+        /** The class, by the id the partition gave it — never the label, which two positions of
+         *  one type spell the same way. */
+        String classId();
+
+        /** A row composed for this class. */
+        record Built(AxisId at, String classId, GeneratedRow row) implements ClassAttempt {}
+
+        /** No row came of it, and why. Never a statement that none exists. */
+        record Unresolved(AxisId at, String classId, UnresolvedCombination why)
+                implements ClassAttempt {}
     }
 
     /**
@@ -437,16 +485,14 @@ public final class Generator {
         if (axes.isEmpty()) {
             return new GenerationResult(List.of(), List.of(), undecided);
         }
-        // Both, because one does not imply the other. A behavior with one divided position has no
-        // pairs at all and can still have a class nothing has been written in, and a set of rows that
-        // covers every pair can still miss a class of a position the pairs happened to fix elsewhere.
-        Set<Pair> pairs = pairsOf(axes);
-        Set<Pair> singles = singlesOf(axes);
-        for (ObservedRow row : existing) {
-            cover(pairs, singles, axes, row.at());
-        }
+        // Which class of which position no row the author wrote is in. Settled here, from what is
+        // written, and not touched again: a row this run offers is a question and not evidence, and
+        // letting one take a class out of the list would leave that class with nothing named for it
+        // while the row that displaced it was named for something else.
+        List<int[]> owed = owedClasses(axes, existing);
 
         List<GeneratedRow> rows = new ArrayList<>();
+        List<ClassAttempt> attempts = new ArrayList<>();
         List<UnresolvedCombination> unresolved = new ArrayList<>();
         List<GenerationReason> reasons = new ArrayList<>(undecided);
         List<Placement> written = new ArrayList<>();
@@ -491,19 +537,17 @@ public final class Generator {
                     withheld++;
                     continue;
                 }
-                switch (witnessFor(subject, axes, pairs, selection, check, trial)) {
+                switch (witnessFor(subject, axes, selection, check, trial)) {
                     case Witness.None none -> unresolved.add(new UnresolvedCombination(
                             none.classes(), none.reason(), none.detail(), none.said()));
                     case Witness.Certified found -> {
                         rows.add(found.row());
                         written.add(new Placement.Composed(found.by().where(),
                                 new Watched.Ran(found.by().seen())));
-                        cover(pairs, singles, axes, found.by().where());
                     }
                     case Witness.Unconfirmed offer -> {
                         rows.add(offer.row());
                         written.add(new Placement.Composed(offer.where(), new Watched.NoAccount()));
-                        cover(pairs, singles, axes, offer.where());
                         // Nothing watched it, so what it is offered for is what the reading says
                         // and not what anything saw. Said once for the behavior: it is one fact
                         // about this generation.
@@ -516,41 +560,43 @@ public final class Generator {
         for (int g = 0; g < byGroup.size(); g++) {
             cellsLeft += byGroup.get(g).left(taken[g]);
         }
-        int pairsLeft = 0;
-        while (!pairs.isEmpty() || !singles.isEmpty()) {
+        int classesLeft = 0;
+        for (int i = 0; i < owed.size(); i++) {
+            int[] at = owed.get(i);
             if (rows.size() >= MAX_ROWS) {
-                pairsLeft = pairs.size() + singles.size();
-                // Both sets: the count is of both, and reporting one of them would promise more
-                // than it names.
-                for (Set<Pair> remaining : List.of(pairs, singles)) {
-                    for (Pair still : remaining) {
-                        unresolved.add(new UnresolvedCombination(labels(axes, still),
-                                UnresolvedCombination.Reason.SEARCH_LIMIT));
-                    }
+                classesLeft = owed.size() - i;
+                for (int left = i; left < owed.size(); left++) {
+                    unresolved.add(new UnresolvedCombination(
+                            List.of(label(axes.get(owed.get(left)[0]), owed.get(left)[1])),
+                            UnresolvedCombination.Reason.SEARCH_LIMIT));
                 }
                 break;
             }
-            Pair seed = (pairs.isEmpty() ? singles : pairs).iterator().next();
-            int[] where = assign(axes, pairs, seed);
-            Attempt built = build(subject, axes, where, check);
-            if (built.row() != null) {
-                rows.add(built.row());
-                cover(pairs, singles, axes, where);
-            } else {
-                // The seed leaves the sets either way: it is answered, and leaving it in would put the
-                // same combination through the same values on the next turn and never finish.
-                pairs.remove(seed);
-                singles.remove(seed);
-                unresolved.add(new UnresolvedCombination(labels(axes, seed), built.reason(),
-                        built.detail(), built.said()));
+            Axis axis = axes.get(at[0]);
+            String classId = axis.classes().get(at[1]).id();
+            Attempt built = build(subject, axes, movingOnly(axes, at[0], at[1]), check);
+            if (built.row() == null) {
+                UnresolvedCombination why = new UnresolvedCombination(
+                        List.of(label(axis, at[1])), built.reason(), built.detail(), built.said());
+                unresolved.add(why);
+                attempts.add(new ClassAttempt.Unresolved(axis.id(), classId, why));
+                continue;
             }
+            // Named for the class it was composed for and for nothing else. Every other position
+            // holds a value because a row has to, and what those values turn out to settle is a
+            // fact about this run rather than what the row is: a name carrying them would move
+            // when something elsewhere in the model did.
+            GeneratedRow named =
+                    new GeneratedRow(List.of(label(axis, at[1])), built.row().inputs());
+            rows.add(named);
+            attempts.add(new ClassAttempt.Built(axis.id(), classId, named));
         }
-        // Said once, at the end, and about both spaces. A search that ran out on the cells stopped
-        // whether or not the pairs had anything left to do, and two limits reported apart would be
-        // read as two searches.
-        if (cellsLeft + pairsLeft > 0) {
+        // Said once, at the end, and about both searches. One that ran out on the cells stopped
+        // whether or not the classes had anything left to do, and two limits reported apart would
+        // be read as two searches.
+        if (cellsLeft + classesLeft > 0) {
             reasons.add(new GenerationReason.SearchLimit(axes.get(0).id().behavior(),
-                    cellsLeft + pairsLeft));
+                    cellsLeft + classesLeft));
         }
         if (unconfirmed) {
             reasons.add(new GenerationReason.RowsNotConfirmed(axes.get(0).id().behavior()));
@@ -559,7 +605,89 @@ public final class Generator {
             reasons.add(new GenerationReason.CombinationsWithheld(axes.get(0).id().behavior(),
                     withheld));
         }
-        return new GenerationResult(rows, unresolved, reasons);
+        return new GenerationResult(rows, unresolved, reasons, attempts);
+    }
+
+    /**
+     * Which class of which position no row the author wrote is in, as {@code [axis, class]}.
+     *
+     * <p>Off the written rows and nothing else. What this run composes is what the list is answered
+     * with, so a row it offers must not shorten it — a class taken out by a row composed for
+     * something else is a class an author is told nothing about, and the row that took it out is
+     * named for its own reason and says nothing about this one.
+     *
+     * <p>A row of the author's can sit in more than one class of a position at once — a list with
+     * one element under a line and one over it — and each of them is covered. Read as one class,
+     * the rest would be asked for again, which is work the author has already done.
+     */
+    private static List<int[]> owedClasses(List<Axis> axes, List<ObservedRow> existing) {
+        List<int[]> owed = new ArrayList<>();
+        for (int i = 0; i < axes.size(); i++) {
+            Set<String> covered = new LinkedHashSet<>();
+            for (ObservedRow row : existing) {
+                Classification here = row.at().get(axes.get(i).id());
+                if (here != null) {
+                    covered.addAll(here.classIds());
+                }
+            }
+            for (int c = 0; c < axes.get(i).classes().size(); c++) {
+                if (!covered.contains(axes.get(i).classes().get(c).id())) {
+                    owed.add(new int[] {i, c});
+                }
+            }
+        }
+        return owed;
+    }
+
+    /**
+     * The assignment a row about one class is written at: that class, and every other position at
+     * the first of its own.
+     *
+     * <p>One position moved and no more, which is what makes the row readable as being about that
+     * class. A row that also moved the positions beside it would be several answers a person has to
+     * separate before any of them says anything, and which of the three the answer turned on would
+     * be exactly what it does not say (issue #967).
+     *
+     * <p>The first class is where the others stand for now, and it is a stand-in for something
+     * better: a value the model already states — a {@code let} in scope, or the value a row already
+     * written puts there — is what a reader would recognise, and the first class of a position is
+     * merely the first thing this can name. What the row is about does not change with it.
+     */
+    private static int[] movingOnly(List<Axis> axes, int at, int cls) {
+        int[] where = new int[axes.size()];
+        for (int i = 0; i < axes.size(); i++) {
+            where[i] = i == at ? cls : standingAt(axes.get(i), _ -> true);
+        }
+        return where;
+    }
+
+    /**
+     * Where a position the row is not about stands: the first of its classes something can write a
+     * value for, among the ones {@code admits} allows.
+     *
+     * <p>The first that <em>can</em>, and not the first. A class nothing composes a value for is
+     * still a class of the position, and a row standing there is a row that cannot be built — so
+     * taking the first outright made every row of every other position unbuildable whenever one
+     * position happened to declare such a class first.
+     *
+     * <p>The first of the rest where none can, which is a row that will not build. Said that way
+     * rather than by refusing here: what could not be composed and why is {@link #build}'s answer,
+     * and a second place deciding it would be a second reason for the same row.
+     */
+    private static int standingAt(Axis axis, java.util.function.IntPredicate admits) {
+        int first = -1;
+        for (int c = 0; c < axis.classes().size(); c++) {
+            if (!admits.test(c)) {
+                continue;
+            }
+            if (first < 0) {
+                first = c;
+            }
+            if (axis.classes().get(c).representatives().buildable()) {
+                return c;
+            }
+        }
+        return first;
     }
 
     /**
@@ -709,38 +837,11 @@ public final class Generator {
         return at < 0 || at >= subject.types().size() ? null : subject.types().get(at);
     }
 
-    // --- the pair space -------------------------------------------------------------------------
-
-    /** One class of one position against one class of another. Positions are held as their order in
-     * the ordered axes, so the natural order of these is the lexicographic order the search takes. */
-    private record Pair(int left, int leftClass, int right, int rightClass)
-            implements Comparable<Pair> {
-
-        /** One class of one position on its own, which is what a position with no other position to
-         * be paired against still owes a row for. */
-        static Pair alone(int at, int cls) {
-            return new Pair(at, cls, -1, -1);
-        }
-
-        boolean alone() {
-            return right < 0;
-        }
-
-        @Override
-        public int compareTo(Pair other) {
-            return Comparator.comparingInt(Pair::left).thenComparingInt(Pair::right)
-                    .thenComparingInt(Pair::leftClass).thenComparingInt(Pair::rightClass)
-                    .compare(this, other);
-        }
-    }
-
     /**
      * The axes in the order the search fixes them.
      *
-     * <p>Most classes first, which is what makes a greedy pass need fewer rows: the position with the
-     * most classes is the one that forces rows however it is ordered, so every other position rides
-     * along with it. Parameter order and then the path settle the rest, so that two runs of the same
-     * model order them the same way.
+     * <p>Most classes first, and then parameter order and the path, so that two runs of one model
+     * order them the same way and the rows come out in the same order twice.
      */
     private static List<Axis> ordered(Subject subject) {
         List<Axis> divided = new ArrayList<>(subject.axes().stream().filter(Axis::derivable).toList());
@@ -751,30 +852,6 @@ public final class Generator {
                 })
                 .thenComparing(a -> a.path().toString()));
         return List.copyOf(divided);
-    }
-
-    private static Set<Pair> pairsOf(List<Axis> axes) {
-        Set<Pair> all = new TreeSet<>();
-        for (int i = 0; i < axes.size(); i++) {
-            for (int j = i + 1; j < axes.size(); j++) {
-                for (int a = 0; a < axes.get(i).classes().size(); a++) {
-                    for (int b = 0; b < axes.get(j).classes().size(); b++) {
-                        all.add(new Pair(i, a, j, b));
-                    }
-                }
-            }
-        }
-        return all;
-    }
-
-    private static Set<Pair> singlesOf(List<Axis> axes) {
-        Set<Pair> all = new TreeSet<>();
-        for (int i = 0; i < axes.size(); i++) {
-            for (int c = 0; c < axes.get(i).classes().size(); c++) {
-                all.add(Pair.alone(i, c));
-            }
-        }
-        return all;
     }
 
     /** Whether every existing row said where it sat at this position. One that did not leaves the
@@ -835,69 +912,6 @@ public final class Generator {
             at.add(found);
         }
         return at;
-    }
-
-    /**
-     * The same, of a row this generation composed, which sits in one class per position.
-     *
-     * <p>One class apiece, so every pair of the positions it named is a pair one value of each made
-     * — there is no second value here for a pair to be assembled out of. That is what tells this
-     * apart from a row the author wrote, whose list can hold values in more than one class at once,
-     * and it is why the two are not one routine over a set of classes per position.
-     */
-    private static void cover(Set<Pair> pairs, Set<Pair> singles, List<Axis> axes, int[] where) {
-        for (int i = 0; i < axes.size(); i++) {
-            if (where[i] < 0) {
-                continue;
-            }
-            singles.remove(Pair.alone(i, where[i]));
-            for (int j = i + 1; j < axes.size(); j++) {
-                if (where[j] >= 0) {
-                    pairs.remove(new Pair(i, where[i], j, where[j]));
-                }
-            }
-        }
-    }
-
-    /**
-     * What one row the author wrote covers.
-     *
-     * <p>A row reaching more than one class at a position covers each of them: read as one class it
-     * would cover the first and leave the rest owed, which is a row the author already wrote being
-     * asked for again. What it covers of a <em>pair</em> is the narrower question, and the answer is
-     * {@link Classification#pairsOf}'s — the same one the report is measured by. Taken here as every
-     * combination of the two positions' classes, a list holding one element under a line and another
-     * that is active was counted as a row for an element both over the line and active, which none
-     * of its elements is; and the search then offered nothing for a combination the report was still
-     * calling untried.
-     */
-    private static void cover(Set<Pair> pairs, Set<Pair> singles, List<Axis> axes,
-                              Map<AxisId, Classification> row) {
-        for (int i = 0; i < axes.size(); i++) {
-            Classification here = row.get(axes.get(i).id());
-            if (here == null) {
-                continue;
-            }
-            for (String id : here.classIds()) {
-                int one = classIn(axes.get(i), id);
-                if (one >= 0) {
-                    singles.remove(Pair.alone(i, one));
-                }
-            }
-            for (int j = i + 1; j < axes.size(); j++) {
-                Classification beside = row.get(axes.get(j).id());
-                if (beside == null) {
-                    continue;
-                }
-                for (Map.Entry<String, String> both : Classification.pairsOf(here, beside)) {
-                    int one = classIn(axes.get(i), both.getKey());
-                    int other = classIn(axes.get(j), both.getValue());
-                    if (one >= 0 && other >= 0) {
-                        pairs.remove(new Pair(i, one, j, other));
-                    }
-                }
-            }
-        }
     }
 
     /** Where {@code id} sits among {@code axis}'s classes, or -1 where it is none of them. */
@@ -989,76 +1003,19 @@ public final class Generator {
         return maybe ? new CombinationStanding.MayBeWritten() : new CombinationStanding.Owed();
     }
 
-    /** Every position fixed: the seed's two as the seed says, and each of the rest at whichever class
-     * brings in the most combinations nothing covers yet. */
-    private static int[] assign(List<Axis> axes, Set<Pair> uncovered, Pair seed) {
-        InteractionCells.Cell cell = InteractionCells.Cell.anything(axes);
-        pin(cell, seed.left(), seed.leftClass());
-        if (!seed.alone()) {
-            pin(cell, seed.right(), seed.rightClass());
-        }
-        return assign(axes, uncovered, cell);
-    }
-
-    /** Everything but {@code cls} taken away from the position, which is what fixing it is. */
-    private static void pin(InteractionCells.Cell cell, int axis, int cls) {
-        java.util.Arrays.fill(cell.allowed()[axis], false);
-        cell.allowed()[axis][cls] = true;
-    }
-
     /**
-     * The same, from whatever {@code cell} leaves each position.
+     * Every position at the first class {@code cell} admits it, which is the assignment a row for
+     * that cell is first tried at.
      *
-     * <p>A position it leaves several classes is chosen among those the same way a position it says
-     * nothing about is chosen among all of them: what the cell does not settle is room the pairs are
-     * spent in, and there is no reason to spend less of it where the room is narrower.
+     * <p>The positions the cell settles hold what it settles them at; the rest hold the first of
+     * what they may, because the row is not about them. A row that also moved the positions beside
+     * the combination would be several answers a person has to separate.
      */
-    private static int[] assign(List<Axis> axes, Set<Pair> uncovered, InteractionCells.Cell cell) {
+    private static int[] firstAdmitted(List<Axis> axes, InteractionCells.Cell cell) {
         int[] where = new int[axes.size()];
-        java.util.Arrays.fill(where, -1);
-        // The positions the cell leaves one class first, so the rest are chosen against them rather
-        // than against whatever the walk happened to reach earlier.
         for (int i = 0; i < axes.size(); i++) {
-            int only = -1;
-            for (int c = 0; c < axes.get(i).classes().size(); c++) {
-                if (cell.admits(i, c)) {
-                    only = only < 0 ? c : -1;
-                    if (only < 0) {
-                        break;
-                    }
-                }
-            }
-            where[i] = only;
-        }
-        for (int i = 0; i < axes.size(); i++) {
-            if (where[i] >= 0) {
-                continue;
-            }
-            // A position this row is not about still has to hold something, and every class of an
-            // axis is one a row can be written at: what the rules refuse is not a class of the
-            // position at all.
-            int best = -1;
-            int bestGain = -1;
-            for (int c = 0; c < axes.get(i).classes().size(); c++) {
-                if (!cell.admits(i, c)) {
-                    continue;
-                }
-                int gain = 0;
-                for (int j = 0; j < axes.size(); j++) {
-                    if (j == i || where[j] < 0) {
-                        continue;
-                    }
-                    Pair pair = i < j ? new Pair(i, c, j, where[j]) : new Pair(j, where[j], i, c);
-                    if (uncovered.contains(pair)) {
-                        gain++;
-                    }
-                }
-                if (gain > bestGain) {
-                    bestGain = gain;
-                    best = c;
-                }
-            }
-            where[i] = best;   // every axis here has a class, so there is always one to place
+            int at = i;
+            where[i] = standingAt(axes.get(i), c -> cell.admits(at, c));
         }
         return where;
     }
@@ -1068,16 +1025,6 @@ public final class Generator {
      * it twice. */
     private static String label(Axis axis, int cls) {
         return axis.path() + "=" + axis.classes().get(cls).label();
-    }
-
-    private static List<String> labels(List<Axis> axes, int[] where) {
-        List<String> out = new ArrayList<>();
-        for (int i = 0; i < axes.size(); i++) {
-            if (where[i] >= 0) {
-                out.add(label(axes.get(i), where[i]));
-            }
-        }
-        return out;
     }
 
     /**
@@ -1096,12 +1043,6 @@ public final class Generator {
             }
         }
         return out;
-    }
-
-    private static List<String> labels(List<Axis> axes, Pair pair) {
-        String left = label(axes.get(pair.left()), pair.leftClass());
-        return pair.alone() ? List.of(left)
-                : List.of(left, label(axes.get(pair.right()), pair.rightClass()));
     }
 
     // --- looking for a row that fills a combination ----------------------------------------------
@@ -1143,7 +1084,7 @@ public final class Generator {
      * not that the combination is unreachable, and it is not by itself that the reading naming the
      * combination is wrong — the assignments were this search's, and so was the number of them.
      */
-    private static Witness witnessFor(Subject subject, List<Axis> axes, Set<Pair> uncovered,
+    private static Witness witnessFor(Subject subject, List<Axis> axes,
                                       CellSelection selection, CandidateCheck check, Trial trial) {
         InteractionCells.Cell cell = selection.cell();
         List<int[]> tried = new ArrayList<>();
@@ -1151,7 +1092,7 @@ public final class Generator {
         int[] where = null;
         boolean missed = false;
         for (int candidate = 0; candidate < MOST_CANDIDATES; candidate++) {
-            int[] at = assignment(axes, uncovered, cell, candidate, tried);
+            int[] at = assignment(axes, cell, candidate, tried);
             if (at == null) {
                 break;   // the combination leaves nothing this has not already tried
             }
@@ -1205,20 +1146,19 @@ public final class Generator {
      * The {@code candidate}th assignment to try for {@code cell}, or null where it leaves none this
      * has not tried.
      *
-     * <p>The first is the pair search's: every position the combination does not settle goes to
-     * whichever class brings in the most combinations nothing covers yet, which is what makes the
-     * rows a combination needs rows the pair space wanted anyway. The rest are the assignments the
-     * combination admits, counted off in order — a fixed order, so the same model offers the same
-     * rows twice.
+     * <p>The first leaves every position the combination does not settle at the first class the
+     * cell admits there, which is as much of the row as this is about. The rest are the assignments
+     * the combination admits, counted off in order — a fixed order, so the same model offers the
+     * same rows twice.
      *
      * <p>Bounded by how many have been tried rather than by a walk over the space: at most
      * {@link #MOST_CANDIDATES} assignments are ever tried, so one of the first that many is one
      * that has not been.
      */
-    private static int[] assignment(List<Axis> axes, Set<Pair> uncovered,
+    private static int[] assignment(List<Axis> axes,
                                     InteractionCells.Cell cell, int candidate, List<int[]> tried) {
         if (candidate == 0) {
-            return assign(axes, uncovered, cell);
+            return firstAdmitted(axes, cell);
         }
         List<List<Integer>> admitted = new ArrayList<>();
         for (int i = 0; i < axes.size(); i++) {
@@ -1320,7 +1260,12 @@ public final class Generator {
             }
             inputs.add(tried.value());
         }
-        return Attempt.of(new GeneratedRow(labels(axes, where), inputs));
+        // The values, and no name. What a row is about is what it was composed for, which is the
+        // caller's question and not this one's: this is handed an assignment and does not know
+        // whether it is a class, a combination the body decides together, or an edge. Named here
+        // from the assignment, every row said every position it happened to hold — which is what
+        // put three classes in the name of a row composed for one (issue #967).
+        return Attempt.of(new GeneratedRow(List.of(), inputs));
     }
 
     /**

@@ -112,9 +112,8 @@ public sealed interface GenerationOutcome {
 
             /** Nothing composes an input for the sake of the path it would take through a body. */
             NO_STRATEGY_FOR_AN_ARM(
-                    "rows here are composed for the combinations a behavior's positions"
-                            + " make and for boundaries, and nothing composes one for the"
-                            + " sake of an arm"),
+                    "rows here are composed for the classes a position divides into and for"
+                            + " boundaries, and nothing composes one for the sake of an arm"),
 
             /** Nothing searches for an input by the output it produces. */
             NO_STRATEGY_FOR_AN_OUTPUT_CASE(
@@ -123,20 +122,7 @@ public sealed interface GenerationOutcome {
 
             /** The position the case belongs to is not one any axis was derived at. */
             NO_AXIS_AT_THIS_POSITION("no axis was derived at the position this case belongs to, so"
-                    + " no classes were derived there to compose a row from"),
-
-            /**
-             * Rows are composed for the classes of a position and no search is asked for one class.
-             *
-             * <p>Which is not that nothing composes them. The search that fills the combinations
-             * writes rows the classes of a position are covered by, and it is asked for
-             * combinations rather than for one class — so what it produces is not indexed to this
-             * finding, and nothing here can say that any of it answers this one.
-             */
-            NO_SEARCH_IS_ASKED_FOR_ONE_CLASS(
-                    "rows here are composed for the combinations a behavior's positions make, and"
-                            + " no search is asked for one class of one position — so nothing"
-                            + " offered can be said to answer this");
+                    + " no classes were derived there to compose a row from");
 
             private final String said;
 

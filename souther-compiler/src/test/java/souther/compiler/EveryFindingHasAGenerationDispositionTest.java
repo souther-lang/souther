@@ -331,9 +331,8 @@ class EveryFindingHasAGenerationDispositionTest {
      */
     @Test
     void eachReasonSaysWhatIsMissingHereRatherThanWhatCannotExist() {
-        assertEquals("rows here are composed for the combinations a behavior's positions make"
-                        + " and for boundaries, and nothing composes one for the sake of"
-                        + " an arm",
+        assertEquals("rows here are composed for the classes a position divides into and for"
+                        + " boundaries, and nothing composes one for the sake of an arm",
                 GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_ARM.said());
         assertEquals("rows here are composed from what the input positions divide into, and nothing"
                         + " searches for one by the case it would answer with",

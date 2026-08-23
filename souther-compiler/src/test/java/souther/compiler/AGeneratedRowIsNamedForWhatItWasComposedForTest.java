@@ -55,7 +55,7 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
             }
             """;
 
-    /** A row for one of the cells, written by hand — and nothing about the rows below it. */
+    /** A row for one of the classes, written by hand — and nothing about the rows below it. */
     private static final String AND_A_ROW = LIMIT + """
 
             example submit
@@ -130,10 +130,10 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
         String block = block(LIMIT, true);
         List<String> offered = names(block);
 
-        assertEquals(8, rows(block),
-                "the model owes a row for each class pair, one at the line and one either side:\n"
+        assertEquals(7, rows(block),
+                "a row for each of the three classes, and four at the points of the border:\n"
                         + block);
-        assertEquals(4, offered.size(), "the four composed for a cell are named: " + offered);
+        assertEquals(3, offered.size(), "the three composed for a class are named: " + offered);
         Set<String> distinct = new LinkedHashSet<>(offered);
         assertEquals(offered.size(), distinct.size(),
                 "a name says which row it is, so no two rows share one: " + offered);
@@ -144,13 +144,12 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
         String before = block(LIMIT, true);
         String after = block(AND_A_ROW, true);
 
-        String gold = "request.cost=0 <= x <= 100 x request.tier=Gold";
-        assertTrue(names(before).contains(gold), "the cell is owed before anything is written: " + names(before));
-        assertTrue(after.contains("Draft { cost = Amount(0), tier = Gold }"),
-                "and the same row is still owed after: " + after);
-        assertTrue(names(after).contains(gold),
-                "the row is named for the cell it was composed for, and the row written beside it "
-                        + "settled a line rather than that cell: " + names(after));
+        String over = "request.cost=100 < x";
+        assertTrue(names(before).contains(over),
+                "the class is owed before anything is written: " + names(before));
+        assertTrue(names(after).contains(over),
+                "the row is named for the class it was composed for, and the row written beside it "
+                        + "sits in another one: " + names(after));
     }
 
     /**
@@ -163,10 +162,10 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
         List<String> before = names(block(LIMIT, true));
         List<String> after = names(block(AND_A_ROW, true));
 
-        assertTrue(before.contains("request.cost=0 <= x <= 100 x request.tier=Silver"),
-                "the cell the row was written for was owed: " + before);
-        assertTrue(!after.contains("request.cost=0 <= x <= 100 x request.tier=Silver"),
-                "and is not owed once a row is written for it: " + after);
+        assertTrue(before.contains("request.tier=Silver"),
+                "the class the row was written for was owed: " + before);
+        assertTrue(!after.contains("request.tier=Silver"),
+                "and is not owed once a row sits in it: " + after);
     }
 
     /**

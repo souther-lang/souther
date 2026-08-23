@@ -1657,7 +1657,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         ArrayNode axes = out.putArray("axes");
         for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
             ObjectNode a = axes.addObject();
-            a.put("axis", axis.axis());
+            a.put("axis", axis.at().toString());
             a.put("path", axis.path());
             // How far the rules about this position were read, beside the classes it came to. A
             // class arrived at from part of the rules is a value the model singled out, and a rule
