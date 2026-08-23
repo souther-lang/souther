@@ -18,9 +18,10 @@ import java.util.Set;
  * that gave a group of cases a type of its own wrote that type to say something, and a report of
  * three leaves where the model would say one name is a report about a declaration nobody wrote.
  *
- * <p>So this names them back. A declared case all of whose values are in the set is named as itself;
- * one only partly in it is opened, and what is inside it is named the same way. Nothing is dropped
- * and nothing is added — the names that come out cover the set exactly.
+ * <p>So this names them back. A declared case all of whose values are still unnamed is named as
+ * itself; one only partly so is opened, and what is inside it is named the same way. Nothing is
+ * dropped and nothing is added — the names that come out cover the set exactly, and share no value
+ * with each other.
  *
  * <p>Only a report reads this. It is the second reading of a question the check already answered,
  * which is exactly why it is here and not in the check: run the other way round — deciding over
@@ -32,11 +33,18 @@ final class CoveringNames {
     private CoveringNames() {}
 
     /**
-     * {@code atoms} as the largest declared cases of {@code subject} that lie wholly inside it.
+     * {@code atoms} as declared cases of {@code subject} that cover it without overlapping.
      *
-     * <p>In the order the subject declares them, which is the order the model reads in. A value the
-     * descent cannot reach a name for is named as itself, so what comes back covers the set however
-     * odd the subject is.
+     * <p>Taken in the order the subject states its cases, each one named where everything it covers
+     * is still unnamed. Not the largest names that could be found: a value may be a case of two
+     * declarations at once, and where two of a subject's cases both cover what is missing the first
+     * of them is named and the second is opened for whatever is left. The names that come out
+     * therefore share no value, which is what makes them a list of arms someone could write; a
+     * cover chosen for size instead could name two cases that overlap, and adding both as arms
+     * would be refused.
+     *
+     * <p>A value the descent reaches no name for is named as itself, so what comes back covers the
+     * set however odd the subject is.
      */
     static List<String> of(Type subject, List<TypeSymbol> atoms, Symbols symbols) {
         Set<TypeSymbol> left = new LinkedHashSet<>(atoms);

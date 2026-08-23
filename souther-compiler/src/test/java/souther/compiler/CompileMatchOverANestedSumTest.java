@@ -220,6 +220,76 @@ class CompileMatchOverANestedSumTest {
         assertEquals(List.of("AB", "D"), hinted(refused));
     }
 
+
+    /**
+     * An anonymous union states no order, so the report is not left holding the set's.
+     *
+     * <p>A union is a set. Which order it iterates in follows from how it was built and not from
+     * anything about the program, so a report reading it would move between two runs of one
+     * compiler. The order is put on the union in one place; both the values a match answers for and
+     * the names a report says are read from it, and writing the members the other way round is the
+     * same union.
+     */
+    @Test
+    void aReportOverAnAnonymousUnionReadsInAnOrderTheCompilerDecided() {
+        assertEquals(List.of("B", "C"), unansweredOfUnion("A | B | C"));
+        assertEquals(List.of("B", "C"), unansweredOfUnion("C | A | B"),
+                "the union written the other way round is the same union");
+    }
+
+    private List<String> unansweredOfUnion(String members) {
+        CompileException refused = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                data A = { at: String }
+                data B = { at: String }
+                data C = { at: String }
+                data Seen = { at: String }
+
+                behavior pick : (s: Seen) -> %s
+
+                behavior fee : (s: Seen) -> Int
+
+                let fee (s) =
+                    match pick(s) with
+                        | A -> 1
+                """.formatted(members)));
+        assertEquals("E1201", refused.diagnostic().code());
+        return hinted(refused);
+    }
+
+    /**
+     * Where two cases of one subject both cover what is missing, the first is named and the second
+     * is opened.
+     *
+     * <p>A value may be a case of more than one declaration, so {@code AB} and {@code ABC} both
+     * cover {@code A} and {@code B}. Naming both would report a value twice and would offer two
+     * arms that cannot both be written — they answer for one value, which a match refuses. So the
+     * names that come back share nothing: {@code AB}, and then what is left of {@code ABC}.
+     */
+    @Test
+    void whereTwoCasesBothCoverWhatIsMissingTheNamesStillShareNothing() {
+        CompileException refused = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                data A = { at: String }
+                data B = { at: String }
+                data C = { at: String }
+                data D = { at: String }
+                data AB  = A | B
+                data ABC = A | B | C
+                data All = AB | ABC | D
+
+                behavior fee : (k: All) -> Int
+
+                let fee (k) =
+                    match k with
+                        | D -> 1
+                """));
+        assertEquals("E1201", refused.diagnostic().code());
+        assertEquals(List.of("AB", "C"), hinted(refused));
+    }
+
     /** The cases a `match` was refused for not answering, as its report names them. */
     private List<String> unanswered(String arms) {
         CompileException refused = assertThrows(CompileException.class,

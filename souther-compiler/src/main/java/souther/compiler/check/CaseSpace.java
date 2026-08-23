@@ -41,8 +41,9 @@ sealed interface CaseSpace {
      * <p>Ordered so that two readings of one subject list them alike — a report saying what a match
      * left out reads this, and an order that came out differently each time would move a message
      * nothing about the program had changed. A sum's cases come as declared and an optional's
-     * present carrier before its absent one; a union's members are a set, so what comes out is that
-     * set's iteration order and no claim is made about which member was written first.
+     * present carrier before its absent one; a union states no order of its own, so the one
+     * {@link AtomSpace#statedBy} puts on it is used rather than the order its set happens to
+     * iterate in — which is not an order anything about the program decided.
      *
      * <p>It is not the order arms are tried in. Which arm of a {@code match} takes a value is
      * decided by the order the arms are written, which is the match's and not the subject's.
@@ -137,8 +138,11 @@ sealed interface CaseSpace {
                     ResolvedCase.resolve(CaseSelector.optionAbsent(), symbols)));
         }
         if (subject instanceof Type.Union union) {
+            // In the order a union states its members, which is worked out where the atoms are:
+            // asked of the set here and of {@link AtomSpace} there, the two would order one union
+            // two ways, and a report saying what a match left out reads one of them.
             return new Cases(subject, "union `" + Type.show(union) + "`",
-                    direct(union.members(), symbols));
+                    direct(AtomSpace.statedBy(union), symbols));
         }
         if (subject instanceof Type.Ref ref
                 && symbols.declarations().declaration(ref.name().key()) instanceof Hir.SumData sum) {
