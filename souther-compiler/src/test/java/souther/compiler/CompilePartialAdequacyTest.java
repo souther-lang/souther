@@ -248,9 +248,9 @@ class CompilePartialAdequacyTest {
                 .ask(new Adequacy.Generated("example.budget")).value();
         assertNotNull(generated);
 
-        assertEquals(List.of(), generated.get("take").pairs().rows(),
+        assertEquals(List.of(), generated.get("take").composed().rows(),
                 "the flag's classes are undecided, so nothing is written for them");
-        assertFalse(generated.get("take").pairs().reasons().isEmpty(),
+        assertFalse(generated.get("take").composed().reasons().isEmpty(),
                 "and the position that could not be read is named");
         String written = GeneratedRows.of("example.budget", generated, Map.of(), true, SourceNameResolver.identity());
         assertFalse(written.contains("example take"), "no row is offered: " + written);
@@ -438,7 +438,7 @@ class CompilePartialAdequacyTest {
         Map<String, Adequacy.Filling> generated = split().db()
                 .ask(new Adequacy.Generated("example.split")).value();
 
-        assertEquals(List.of(), generated.get("take").pairs().rows());
+        assertEquals(List.of(), generated.get("take").composed().rows());
         assertEquals(List.of(), generated.get("take").boundaries().rows());
         String written = GeneratedRows.of("example.split", generated, Map.of(), true, SourceNameResolver.identity());
         assertFalse(written.contains("example take"),

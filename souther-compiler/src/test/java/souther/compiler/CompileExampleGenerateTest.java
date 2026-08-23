@@ -73,7 +73,7 @@ class CompileExampleGenerateTest {
 
     @Test
     void whatTheWrittenRowAlreadyCoversIsNotGeneratedAgain() {
-        Generator.GenerationResult filled = generated(TRIP).get("submit").pairs();
+        Generator.GenerationResult filled = generated(TRIP).get("submit").composed();
 
         // One row per class the written row is not in, and no more. The written row is
         // `Domestic, urgent = true`, so what is left is `Overseas` at one position and `false` at
@@ -115,7 +115,7 @@ class CompileExampleGenerateTest {
                     Accepted { at = "now" }
                 }
                 """;
-        Generator.GenerationResult filled = generated(correlated).get("submit").pairs();
+        Generator.GenerationResult filled = generated(correlated).get("submit").composed();
 
         assertTrue(inputs(filled).stream().noneMatch(row -> row.contains("Amount(101)")),
                 "a value the model refuses is not written into a row: " + inputs(filled));
@@ -170,7 +170,7 @@ class CompileExampleGenerateTest {
 
         assertEquals(List.of("Request { kind = Domestic, cost = Amount(0) }",
                         "Request { kind = Overseas, cost = Amount(0) }"),
-                inputs(filling.pairs()), "the classes, at whatever cost builds");
+                inputs(filling.composed()), "the classes, at whatever cost builds");
         assertEquals(List.of("Request { kind = Domestic, cost = Amount(0) }",
                         "Request { kind = Domestic, cost = Amount(1) }",
                         "Request { kind = Domestic, cost = Amount(1000) }",
@@ -260,7 +260,7 @@ class CompileExampleGenerateTest {
         assertEquals(List.of(
                         "Office { id = OfficeId(\"00-000000\"), prefecture = Prefecture(\"01\"),"
                                 + " kind = Overseas }"),
-                inputs(generated(formatted).get("register").pairs()),
+                inputs(generated(formatted).get("register").composed()),
                 "the class nothing covers, with an id and a prefecture the rules accept");
     }
 
@@ -287,7 +287,7 @@ class CompileExampleGenerateTest {
                 """;
 
         assertEquals(List.of("Request { on = Date(\"2000-01-01\"), flag = No }"),
-                inputs(generated(dated).get("take").pairs()));
+                inputs(generated(dated).get("take").composed()));
     }
 
     /**
@@ -323,7 +323,7 @@ class CompileExampleGenerateTest {
                 """;
 
         assertEquals(List.of("Note { text = Spaced(\"a\\tb\"), flag = No }"),
-                inputs(generated(tabbed).get("take").pairs()),
+                inputs(generated(tabbed).get("take").composed()),
                 "the tab is written the way a literal spells one");
 
         String block = GeneratedRows.of("example.tabbed", generated(tabbed), Map.of(), false,
@@ -382,7 +382,7 @@ class CompileExampleGenerateTest {
                     invariant String.matches("(?=x)x", value)""", "V").formatted("V(\"x\")");
 
         assertEquals(List.of("Req { v = V(\"x\"), f = No }"),
-                inputs(generated(source).get("take").pairs()));
+                inputs(generated(source).get("take").composed()));
     }
 
     /**
@@ -405,9 +405,9 @@ class CompileExampleGenerateTest {
                     invariant String.matches("[a-z]+", value)""", "V").formatted("V(\"x\")");
 
         assertEquals(List.of("Req { v = V(\"x\"), f = No }"),
-                inputs(generated(forwards).get("take").pairs()));
-        assertEquals(inputs(generated(forwards).get("take").pairs()),
-                inputs(generated(backwards).get("take").pairs()),
+                inputs(generated(forwards).get("take").composed()));
+        assertEquals(inputs(generated(forwards).get("take").composed()),
+                inputs(generated(backwards).get("take").composed()),
                 "the same two rules, written the other way round");
     }
 
@@ -450,10 +450,10 @@ class CompileExampleGenerateTest {
                 """;
 
         assertEquals(List.of("Req { left = Left(\"x\"), right = Right(\"x\"), flag = No }"),
-                inputs(generated(source).get("take").pairs()));
+                inputs(generated(source).get("take").composed()));
         // And the same model with one of the two rewritten to declare its rules in the other order,
         // which is the same model. Order decided this before the assignments were walked as tuples.
-        assertEquals(inputs(generated(source).get("take").pairs()),
+        assertEquals(inputs(generated(source).get("take").composed()),
                 inputs(generated(source.replace("module example.lock", "module example.lock2")
                         .replace("""
                                 data Right = String
@@ -461,7 +461,7 @@ class CompileExampleGenerateTest {
                                     invariant String.matches("[a-z]+", value)""", """
                                 data Right = String
                                     invariant String.matches("[a-z]+", value)
-                                    invariant String.matches("x+", value)""")).get("take").pairs()));
+                                    invariant String.matches("x+", value)""")).get("take").composed()));
     }
 
     /**
@@ -500,7 +500,7 @@ class CompileExampleGenerateTest {
                 let take (one, two) = Ok { n = 0 }
                 """.formatted(declarations);
 
-        List<String> rows = inputs(generated(source).get("take").pairs());
+        List<String> rows = inputs(generated(source).get("take").composed());
 
         assertEquals(2, rows.size(), "one row per class of the only axis: " + rows);
         for (String row : rows) {
@@ -542,7 +542,7 @@ class CompileExampleGenerateTest {
                 let take (request, flag) = Ok { n = 0 }
                 """;
 
-        Generator.GenerationResult filled = generated(source).get("take").pairs();
+        Generator.GenerationResult filled = generated(source).get("take").composed();
 
         assertEquals(List.of(), filled.unresolved(),
                 () -> "the value between the edges builds: " + filled.unresolved());
@@ -592,7 +592,7 @@ class CompileExampleGenerateTest {
                 let take (request) = Ok { n = 0 }
                 """.formatted(declarations, fields);
 
-        List<Generator.UnresolvedCombination> left = generated(source).get("take").pairs()
+        List<Generator.UnresolvedCombination> left = generated(source).get("take").composed()
                 .unresolved();
 
         assertFalse(left.isEmpty(), "nothing builds, so something is left");
@@ -640,7 +640,7 @@ class CompileExampleGenerateTest {
                     | (Req { contact = NoContact, w = NoAmount }) -> Ok { n = 0 }
                 """;
 
-        List<String> rows = inputs(generated(source).get("take").pairs());
+        List<String> rows = inputs(generated(source).get("take").composed());
 
         assertTrue(rows.stream().anyMatch(r -> r.contains("Email(\"a@a\")")),
                 "a case whose rule states a format: " + rows);
@@ -775,7 +775,7 @@ class CompileExampleGenerateTest {
 
     @Test
     void aRowForAClassIsWrittenAgainstTheValueTheModuleStates() {
-        Generator.GenerationResult filled = generated(AGAINST_A_LET).get("calc").pairs();
+        Generator.GenerationResult filled = generated(AGAINST_A_LET).get("calc").composed();
 
         assertEquals(List.of("Cond { ...none, f = C }", "Cond { ...none, g = G2 }"),
                 inputs(filled));

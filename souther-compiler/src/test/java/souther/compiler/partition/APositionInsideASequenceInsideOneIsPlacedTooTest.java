@@ -72,9 +72,9 @@ class APositionInsideASequenceInsideOneIsPlacedTooTest {
                 measured().db().ask(new Adequacy.Generated(MODULE)).value();
         assertNotNull(generated, "rows are offered");
 
-        assertEquals(List.of("[[5]]"), generated.get("deep").pairs().rows().stream()
+        assertEquals(List.of("[[5]]"), generated.get("deep").composed().rows().stream()
                         .map(row -> row.inputs().get(0).text()).toList(),
                 () -> "a list holding a list holding a value at or over the line: "
-                        + generated.get("deep").pairs().reasons());
+                        + generated.get("deep").composed().reasons());
     }
 }

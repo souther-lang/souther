@@ -78,7 +78,7 @@ class AGeneratedRowIsWrittenTheWayTheModuleReachesItTest {
                 compiled(source).db().ask(new Adequacy.Generated("app")).value();
         Adequacy.Filling f = filling.get("f");
         return java.util.stream.Stream
-                .concat(f.boundaries().rows().stream(), f.pairs().rows().stream())
+                .concat(f.boundaries().rows().stream(), f.composed().rows().stream())
                 .map(r -> String.join(", ", r.inputs().stream().map(FixtureTemplate::text).toList()))
                 .distinct().toList();
     }

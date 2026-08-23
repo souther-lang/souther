@@ -1630,7 +1630,8 @@ public final class Adequacy {
      * edge are different requests, asked with different flags, and a caller that merged them could not
      * take one without the other.
      */
-    public record Filling(Generator.GenerationResult pairs, Generator.GenerationResult boundaries,
+    public record Filling(Generator.GenerationResult composed,
+                          Generator.GenerationResult boundaries,
                           List<GenerationDisposition> generation) {
 
         public static final Filling NONE = new Filling(Generator.GenerationResult.NONE,
@@ -1719,9 +1720,9 @@ public final class Adequacy {
                 }
                 List<BorderAssessment> edges = boundaries == null ? List.of()
                         : boundaries.getOrDefault(spec.name(), List.of());
-                Generator.GenerationResult pairs;
+                Generator.GenerationResult composed;
                 try {
-                    pairs = pairsFor(spec, sig, symbols, db.ask(new Front.Reading()).value(),
+                    composed = rowsFor(spec, sig, symbols, db.ask(new Front.Reading()).value(),
                             baselines(name, spec, sig,
                                     db.ask(new Bodies.ModuleDefinitions(name)).value(), symbols),
                             bodies.get(spec.name()),
@@ -1741,15 +1742,15 @@ public final class Adequacy {
                     // would take the gaps out of a list that is meant to hold every one of them —
                     // which is the same defect the list was written against, arriving as control
                     // flow rather than as a value.
-                    pairs = new Generator.GenerationResult(List.of(), List.of(),
+                    composed = new Generator.GenerationResult(List.of(), List.of(),
                             List.of(new souther.compiler.partition.GenerationReason
                                     .LinkageFailed(spec.name())));
                 }
-                out.put(spec.name(), new Filling(pairs, offered(spec.name(), edges),
+                out.put(spec.name(), new Filling(composed, offered(spec.name(), edges),
                         dispositions(findings == null ? List.of()
                                         : findings.getOrDefault(spec.name(), List.of()),
                                 edges, partitions == null ? null : partitions.get(spec.name()),
-                                pairs, spec)));
+                                composed, spec)));
             }
             // In the order the module declares them, because the block printed from this is read
             // against the one before it.
@@ -1771,15 +1772,15 @@ public final class Adequacy {
         private static List<GenerationDisposition> dispositions(List<Finding> findings,
                                                       List<BorderAssessment> edges,
                                                       PartitionEvidence partition,
-                                                      Generator.GenerationResult pairs,
+                                                      Generator.GenerationResult composed,
                                                       Hir.SpecBehavior spec) {
             List<GenerationDisposition> out = new ArrayList<>();
             for (Finding finding : findings) {
                 out.add(new GenerationDisposition(finding, switch (finding.about()) {
                     case About.APointOfABorder(var point) -> atEdge(finding, point);
                     case About.ACaseNoRowAppliesItTo(var input, var missing) ->
-                            atCase(input, missing, partition, pairs, spec);
-                    case About.AClassNoRowIsIn(var missing) -> atClass(missing, pairs);
+                            atCase(input, missing, partition, composed, spec);
+                    case About.AClassNoRowIsIn(var missing) -> atClass(missing, composed);
                     case About.AnArmNoRowGoesThrough _ -> new GenerationOutcome.NotSupported(
                             GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_ARM);
                     case About.ACaseNoRowExpects _ -> new GenerationOutcome.NotSupported(
@@ -2103,7 +2104,7 @@ public final class Adequacy {
             return Map.copyOf(out);
         }
 
-        private static Generator.GenerationResult pairsFor(
+        private static Generator.GenerationResult rowsFor(
                 Hir.SpecBehavior spec, Sig sig, Symbols symbols,
                 souther.compiler.check.ReadingPolicy policy,
                 Map<String, Generator.Baseline> baselines, souther.compiler.core.Core body,

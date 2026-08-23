@@ -92,7 +92,7 @@ public final class GeneratedRows {
         List<Map.Entry<String, Composed>> asked = new ArrayList<>();
         for (Map.Entry<String, Adequacy.Filling> behavior : generated.entrySet()) {
             asked.add(Map.entry(behavior.getKey(),
-                    new Composed(behavior.getValue().pairs().rows(),
+                    new Composed(behavior.getValue().composed().rows(),
                             boundaries ? behavior.getValue().boundaries().rows() : List.of())));
         }
         // Written once and then read three times — printed, counted, and asked whether there is
@@ -389,7 +389,7 @@ public final class GeneratedRows {
                               boolean boundaries, SourceNameResolver names) {
         Set<String> said = new LinkedHashSet<>();
         List<Generator.UnresolvedCombination> left =
-                new ArrayList<>(filling.pairs().unresolved());
+                new ArrayList<>(filling.composed().unresolved());
         if (boundaries) {
             left.addAll(filling.boundaries().unresolved());
         }
@@ -419,7 +419,7 @@ public final class GeneratedRows {
                 case GenerationOutcome.NotApplicable _ -> { }
             }
         }
-        List<GenerationReason> stopped = new ArrayList<>(filling.pairs().reasons());
+        List<GenerationReason> stopped = new ArrayList<>(filling.composed().reasons());
         if (boundaries) {
             stopped.addAll(filling.boundaries().reasons());
         }

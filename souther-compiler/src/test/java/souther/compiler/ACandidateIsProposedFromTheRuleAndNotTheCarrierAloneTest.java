@@ -72,7 +72,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
         Map<String, Adequacy.Filling> all = compilation.db()
                 .ask(new Adequacy.Generated(compilation.modules().get(0))).value();
         assertNotNull(all, "the rows come back");
-        return all.get("look").pairs();
+        return all.get("look").composed();
     }
 
     /** The one row the generator writes for that combination, as the text an author is offered. */

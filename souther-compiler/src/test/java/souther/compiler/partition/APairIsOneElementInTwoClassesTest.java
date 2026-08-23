@@ -111,10 +111,10 @@ class APairIsOneElementInTwoClassesTest {
                 .ask(new Adequacy.Generated(MODULE)).value();
         assertNotNull(generated, "rows are offered");
 
-        assertEquals(List.of(), generated.get("select").pairs().rows().stream()
+        assertEquals(List.of(), generated.get("select").composed().rows().stream()
                         .map(row -> row.inputs().get(0).text()).toList(),
                 () -> "every class of both positions has a row: "
-                        + generated.get("select").pairs().reasons());
+                        + generated.get("select").composed().reasons());
     }
 
     /** One element in both classes is a witness, and is counted as one. */

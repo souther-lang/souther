@@ -61,7 +61,7 @@ class ARowOfferedForACombinationIsRunWhereAnythingCanRunItTest {
     void aBuildThatMeasuresTheArmsConfirmsTheRowsItOffers() {
         Adequacy.Filling filling = generationOf(Adequacy.Level.ALL);
 
-        assertFalse(filling.pairs().rows().isEmpty(), "there are rows to offer");
+        assertFalse(filling.composed().rows().isEmpty(), "there are rows to offer");
         assertEquals(List.of(), unconfirmed(filling),
                 "and each was run and seen reaching what it is offered for");
     }
@@ -70,10 +70,10 @@ class ARowOfferedForACombinationIsRunWhereAnythingCanRunItTest {
     void aBuildThatDoesNotMeasureTheArmsSaysItsRowsWereNotRun() {
         Adequacy.Filling filling = generationOf(Adequacy.Level.WITNESS);
 
-        assertFalse(filling.pairs().rows().isEmpty(),
+        assertFalse(filling.composed().rows().isEmpty(),
                 "the rows are still offered, being worth writing either way");
         assertEquals(1, unconfirmed(filling).size(),
-                "and the generation says once that nothing ran them: " + filling.pairs().reasons());
+                "and the generation says once that nothing ran them: " + filling.composed().reasons());
     }
 
     /** The same two decisions, in a behavior that depends on another. */
@@ -119,9 +119,9 @@ class ARowOfferedForACombinationIsRunWhereAnythingCanRunItTest {
     void aBehaviorNothingCanApplyHasItsRowsOfferedUnconfirmed() {
         Adequacy.Filling filling = generationOf(DEPENDING, "postageFor", Adequacy.Level.ALL);
 
-        assertFalse(filling.pairs().rows().isEmpty(), "the rows are offered");
+        assertFalse(filling.composed().rows().isEmpty(), "the rows are offered");
         assertEquals(1, unconfirmed(filling).size(),
-                "and are said to be unconfirmed: " + filling.pairs().reasons());
+                "and are said to be unconfirmed: " + filling.composed().reasons());
     }
 
     /** The shipping model with two of its four combinations already written. */
@@ -167,17 +167,17 @@ class ARowOfferedForACombinationIsRunWhereAnythingCanRunItTest {
     }
 
     private static List<GenerationReason> withheld(Adequacy.Filling filling) {
-        return filling.pairs().reasons().stream()
+        return filling.composed().reasons().stream()
                 .filter(GenerationReason.CombinationsWithheld.class::isInstance).toList();
     }
 
     private static List<String> offeredBy(Adequacy.Level level) {
-        return generationOf(WRITTEN, "shippingFee", level).pairs().rows().stream()
+        return generationOf(WRITTEN, "shippingFee", level).composed().rows().stream()
                 .map(souther.compiler.partition.Generator.GeneratedRow::description).toList();
     }
 
     private static List<GenerationReason> unconfirmed(Adequacy.Filling filling) {
-        return filling.pairs().reasons().stream()
+        return filling.composed().reasons().stream()
                 .filter(GenerationReason.RowsNotConfirmed.class::isInstance).toList();
     }
 
@@ -195,10 +195,10 @@ class ARowOfferedForACombinationIsRunWhereAnythingCanRunItTest {
         assertNotNull(filled, "the model under test compiles and is measured");
         Adequacy.Filling filling = filled.get(behavior);
         assertNotNull(filling, "the behavior under test was generated for");
-        assertTrue(filling.pairs().unresolved().stream().noneMatch(each -> each.reason()
+        assertTrue(filling.composed().unresolved().stream().noneMatch(each -> each.reason()
                         == souther.compiler.partition.Generator.UnresolvedCombination.Reason
                                 .NO_CERTIFIED_WITNESS),
-                "nothing missed: " + filling.pairs().unresolved());
+                "nothing missed: " + filling.composed().unresolved());
         return filling;
     }
 }
