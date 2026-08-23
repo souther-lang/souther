@@ -154,7 +154,7 @@ class AFindingCarriesWhatTheMeasureThatFoundItWentWithoutTest {
         Adequacy.Findings.signatureFindings("sort", somewhere(), signature, found);
         assertFalse(found.isEmpty(), "the producer says something about these cases");
 
-        Adequacy.StrictPolicy held = Adequacy.StrictPolicy.SIMPLIFIED_DOMAIN;
+        Adequacy.AdequacyBar held = Adequacy.AdequacyBar.SIMPLIFIED_DOMAIN;
         assertEquals(Adequacy.Finding.Disposition.REFUSED,
                 disposition(found, held, About.ACaseNoRowExpects.class, dropped),
                 () -> "a gap the output's own measure established, read through the signature's: "
@@ -169,7 +169,7 @@ class AFindingCarriesWhatTheMeasureThatFoundItWentWithoutTest {
 
     /** What a build does about the one finding of {@code kind} about {@code missing}. */
     private static Adequacy.Finding.Disposition disposition(
-            List<Adequacy.Finding> found, Adequacy.StrictPolicy held, Class<?> kind,
+            List<Adequacy.Finding> found, Adequacy.AdequacyBar held, Class<?> kind,
             TypeSymbol missing) {
         for (Adequacy.Finding each : found) {
             if (kind.isInstance(each.about())
@@ -184,7 +184,7 @@ class AFindingCarriesWhatTheMeasureThatFoundItWentWithoutTest {
 
     /** And of the one about the case {@code missing} at input {@code at}. */
     private static Adequacy.Finding.Disposition inputGap(
-            List<Adequacy.Finding> found, Adequacy.StrictPolicy held, int at,
+            List<Adequacy.Finding> found, Adequacy.AdequacyBar held, int at,
             TypeSymbol missing) {
         for (Adequacy.Finding each : found) {
             if (each.about() instanceof About.ACaseNoRowAppliesItTo(var input, var what)

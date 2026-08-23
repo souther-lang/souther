@@ -94,6 +94,28 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
                 | "within" : (Amount(50)) -> Charged
             """;
 
+    /**
+     * One class covered of a position's two, and nothing else the report can find.
+     *
+     * <p>A {@code Bool} rather than a sum, because a sum's case and its class are two findings the
+     * same row closes and this model is here to move one of them on its own. Nothing draws a line,
+     * so no border owes a point; the output is one data, so no case of it goes unexpected; the body
+     * forks nowhere, so no arm goes unreached. What is left is the class.
+     */
+    private static final String ONE_CLASS_OF_TWO = """
+            module example.rate
+
+            data Charged = { cost: Int }
+
+            behavior submit : (flag: Bool, cost: Int) -> Charged
+                constructs Charged
+
+            let submit (flag, cost) = Charged { cost = cost }
+
+            example submit
+                | "set" : (true, 1) -> Charged { cost = 1 }
+            """;
+
     @Test
     void aRowWaitingForALetIsNotWhatStrictRefuses() throws Exception {
         Run run = examples(ONLY_WAITING, "--strict");
@@ -282,7 +304,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
      */
     @Test
     void everyKindABarRefusesOverHasADiagnosticCode() {
-        for (Adequacy.StrictPolicy held : Adequacy.StrictPolicy.PRESETS) {
+        for (Adequacy.AdequacyBar held : Adequacy.AdequacyBar.values()) {
             for (Adequacy.Kind kind : Adequacy.Kind.values()) {
                 if (held.refuses(kind)) {
                     assertTrue(kind.code().isPresent(), held + " refuses over " + kind);
@@ -302,7 +324,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
      */
     @Test
     void everyKindABarRefusesOverIsToldAsAWarning() {
-        for (Adequacy.StrictPolicy held : Adequacy.StrictPolicy.PRESETS) {
+        for (Adequacy.AdequacyBar held : Adequacy.AdequacyBar.values()) {
             for (Adequacy.Kind kind : Adequacy.Kind.values()) {
                 if (!held.refuses(kind)) {
                     continue;
@@ -423,7 +445,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
     }
 
     private static AdequacyReport.AdequacyStatus verdictOf(PartitionEvidence partition) {
-        return AReportOfOneBorder.verdictOf(partition, Adequacy.StrictPolicy.SIMPLIFIED_DOMAIN);
+        return AReportOfOneBorder.verdictOf(partition, Adequacy.AdequacyBar.SIMPLIFIED_DOMAIN);
     }
 
     /** Two covered stages and the composition of them, which carries rows of its own. */
@@ -549,6 +571,98 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
     }
 
     private record Run(int code, String out, String err) {}
+
+    /**
+     * A class no row is in is reported under every bar and refused under the one that asks for it.
+     *
+     * <p>Which is the whole of what a bar is for. The measurement does not move — the same class is
+     * named in both reports, at the same position, in the same words — and what changes is whether
+     * the model is held to it. A build refusing over this by default would refuse every model whose
+     * rows are not finished, which is every model being written.
+     */
+    @Test
+    void aClassNoRowIsInIsReportedByDefaultAndRefusedUnderTheClassesBar() throws Exception {
+        Run byDefault = examples(ONE_CLASS_OF_TWO);
+        Run classes = examples(ONE_CLASS_OF_TWO, "--adequacy", "classes");
+
+        assertTrue(byDefault.out().contains("· no row is in `false` at flag"), byDefault.out());
+        assertTrue(byDefault.out().contains("adequacy: satisfied"), byDefault.out());
+        assertEquals(0, byDefault.code(), byDefault.err());
+
+        assertTrue(classes.out().contains("! no row is in `false` at flag"), classes.out());
+        assertTrue(classes.out().contains("adequacy: not satisfied"), classes.out());
+        assertEquals(0, classes.code(), "a bar decides the verdict and `--strict` decides the exit");
+    }
+
+    /**
+     * {@code --strict} decides an exit status under whichever bar was asked for, and no more.
+     *
+     * <p>The pair beside {@link #theReportIsWhatItIsWhetherOrNotTheRunWasAskedToBeStrict}, and the
+     * reason the bar is named on {@code --adequacy} rather than on this flag. A {@code --strict}
+     * that carried a bar would change which findings the report marks, and two runs differing only
+     * in the word would be reports of two different questions rather than one report and a verdict
+     * on it.
+     */
+    @Test
+    void theReportIsWhatItIsUnderTheClassesBarToo() throws Exception {
+        Run lenient = examples(ONE_CLASS_OF_TWO, "--adequacy", "classes");
+        Run strict = examples(ONE_CLASS_OF_TWO, "--adequacy", "classes", "--strict");
+
+        assertEquals(lenient.out(), strict.out());
+        assertEquals(0, lenient.code(), lenient.err());
+        assertEquals(1, strict.code(), strict.err());
+    }
+
+    /** The same bar on the other surface, refusing the same finding under its own code. */
+    @Test
+    void aCompileHeldToTheClassesBarRefusesTheSameFinding() throws Exception {
+        Path file = sourceOf(ONE_CLASS_OF_TWO);
+
+        Run classes = cli("compile", file.toString(),
+                "-d", Files.createTempDirectory("souther-classes").toString(),
+                "--adequacy", "classes", "--warnings", "error");
+        Run reliable = cli("compile", file.toString(),
+                "-d", Files.createTempDirectory("souther-reliable-classes").toString(),
+                "--adequacy", "reliable-domain", "--warnings", "error");
+
+        assertEquals(1, classes.code(), classes.out() + classes.err());
+        assertTrue(classes.err().contains("E1931"), classes.err());
+        assertEquals(0, reliable.code(),
+                "the bars differ on this model: " + reliable.out() + reliable.err());
+    }
+
+    /**
+     * A word that says how much to measure names no bar, and the report command takes only bars.
+     *
+     * <p>Its output is the report, so everything is measured either way and there is nothing for
+     * {@code off} or {@code witness} to choose. Refused rather than ignored: a run told to measure
+     * nothing and handed a full report has been answered a question it did not ask.
+     */
+    @Test
+    void aLevelIsNotABarAndTheReportCommandRefusesOne() throws Exception {
+        Run measured = examples(ONE_CLASS_OF_TWO, "--adequacy", "off");
+
+        assertEquals(2, measured.code(), measured.out() + measured.err());
+        assertTrue(measured.err().contains("reliable-domain or classes"), measured.err());
+    }
+
+    /**
+     * A bar adds kinds beside its criterion's and never one of them.
+     *
+     * <p>Both halves of {@code refuses} would answer for such a kind, which is one answer written
+     * in two places and free to disagree the moment either moves — a criterion that stopped
+     * refusing over a kind would leave the bar refusing over it for a reason nobody stated.
+     */
+    @Test
+    void aBarAddsOnlyWhatItsCriterionDoesNotAlreadyRefuse() {
+        for (Adequacy.AdequacyBar bar : Adequacy.AdequacyBar.values()) {
+            for (Adequacy.Kind added : bar.alsoRefuses()) {
+                assertFalse(bar.domain().refuses(added),
+                        bar + " adds " + added + ", which " + bar.domain()
+                                + " already refuses over");
+            }
+        }
+    }
 
     private static Path sourceOf(String model) throws Exception {
         Path file = Files.createTempDirectory("souther-strict").resolve("rate.sou");

@@ -123,11 +123,21 @@ public final class Adequacy {
                 case OUTPUT_CASE_UNSPECIFIED, INPUT_CASE_UNSPECIFIED, BOUNDARY_UNMET, ARM_UNREACHED
                         -> true;
                 case DOMAIN_POINT_UNCOVERED -> this == RELIABLE_DOMAIN;
-                // What a measure could not establish, and what it established about the model rather
-                // than about the rows. Neither is a row somebody owes, so no criterion asks for it.
-                case OUTPUT_CASE_UNVERIFIED, AXIS_CLASS_UNCOVERED, PARTITION_NOT_DERIVABLE,
-                     PARTITION_NOT_READ, RULE_UNACCOUNTED, PARTITION_RULES_NOT_REACHED,
-                     PARTITION_VALUES_NOT_SEPARATED, PARTITION_OMITTED -> false;
+                // A row somebody owes, and no criterion is what asks for it. The syllabus's two
+                // are about a border's points, and a class of a position is not one — so which
+                // bar asks for it is {@link AdequacyBar}'s to say, and a criterion saying so
+                // would be the two questions answered by one ordered pair of values.
+                case AXIS_CLASS_UNCOVERED -> false;
+                // Not a row anyone owes: what was seen rather than what was asked for. A case
+                // nothing was observed producing is the rows' own account of themselves.
+                case OUTPUT_CASE_UNVERIFIED -> false;
+                // What a measure could not establish, and what it established about the model
+                // rather than about the rows. Neither is a row somebody owes, and no bar can make
+                // one of them into one: a build that refused over these would be refusing over
+                // this compiler's reading rather than over the model.
+                case PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ, RULE_UNACCOUNTED,
+                     PARTITION_RULES_NOT_REACHED, PARTITION_VALUES_NOT_SEPARATED,
+                     PARTITION_OMITTED -> false;
             };
         }
     }
@@ -136,52 +146,56 @@ public final class Adequacy {
      * What a build is held to: a domain-coverage criterion, and whatever else it refuses over
      * beside it.
      *
-     * <p>Two fields and not a third rung on {@link Criterion}, because the two are independent.
+     * <p>Beside {@link Criterion} and not a third value of it, because the two are independent.
      * How strongly a border's points are asked for is one question — the syllabus defines the two
      * answers to it — and whether a class no row is in is a row somebody owes is another. Written
      * as one ordered enum, a build that wanted the second would have been made to take the
      * strongest answer to the first, and the coupling would have been in the type rather than in
-     * anything anyone decided.
+     * anything anyone decided. {@code CLASSES} taking the stronger criterion is this bar's choice
+     * and not an order over the three.
      *
-     * <p>Which is not licence for a policy per caller. What a build may be held to is the presets
-     * below, and a caller names one of them; the record is open so that a preset can be written
-     * without a new rung, not so that a bar can be assembled at a call site.
+     * <p>A closed set, so that what has to be true of every bar can be asked of each. A kind some
+     * bar refuses over and nobody gave a code to is a gap a report prints and a build is never
+     * told about, and that is held by walking {@link #values()}.
      *
-     * @param domain      which of the syllabus's two the border points are asked for under
-     * @param alsoRefuses the kinds this refuses over beside the ones {@code domain} already does.
-     *                    Never a kind {@code domain} refuses over already — that would be one
-     *                    answer written in two places, free to disagree once either moved
+     * <p>What a bar is not is a measurement. How much was measured is {@link Level}'s, and the
+     * points away from a line are measured whenever the ones against them are (issue #937).
      */
-    public record StrictPolicy(Criterion domain, Set<Kind> alsoRefuses) {
+    public enum AdequacyBar {
 
         /** A row against each line, and nothing beside what every criterion refuses over. */
-        public static final StrictPolicy SIMPLIFIED_DOMAIN =
-                new StrictPolicy(Criterion.SIMPLIFIED_DOMAIN, Set.of());
+        SIMPLIFIED_DOMAIN(Criterion.SIMPLIFIED_DOMAIN, Set.of()),
 
         /** Those, and the points away from the line. */
-        public static final StrictPolicy RELIABLE_DOMAIN =
-                new StrictPolicy(Criterion.RELIABLE_DOMAIN, Set.of());
+        RELIABLE_DOMAIN(Criterion.RELIABLE_DOMAIN, Set.of()),
 
         /**
-         * Every bar a build may be held to.
+         * Those, and a class of a position no row's value falls in.
          *
-         * <p>Here so that what has to be true of all of them can be asked of each. A kind some bar
-         * refuses over and nobody gave a code to is a gap a report prints and a build is never told
-         * about, and that is checked by walking this — so a bar added and left out of this list
-         * takes its kinds out of the check with it.
+         * <p>Not a default. A model being written has classes no row is in yet — that is what
+         * writing rows is — so a bar refusing over them is one a build asks for when its rows are
+         * meant to be finished, and never the one it is held to for having said nothing.
          */
-        public static final List<StrictPolicy> PRESETS =
-                List.of(SIMPLIFIED_DOMAIN, RELIABLE_DOMAIN);
+        CLASSES(Criterion.RELIABLE_DOMAIN, Set.of(Kind.AXIS_CLASS_UNCOVERED));
 
-        public StrictPolicy {
-            alsoRefuses = Set.copyOf(alsoRefuses);
-            for (Kind kind : alsoRefuses) {
-                if (domain.refuses(kind)) {
-                    throw new IllegalArgumentException(
-                            "a kind the criterion already refuses over is not something beside it: "
-                                    + kind);
-                }
-            }
+        private final Criterion domain;
+        private final Set<Kind> alsoRefuses;
+
+        AdequacyBar(Criterion domain, Set<Kind> alsoRefuses) {
+            this.domain = domain;
+            this.alsoRefuses = Set.copyOf(alsoRefuses);
+        }
+
+        /** Which of the syllabus's two the border points are asked for under. */
+        public Criterion domain() {
+            return domain;
+        }
+
+        /** What this refuses over beside what {@link #domain} already does. Disjoint from that by
+         *  construction, which a test holds: a kind both halves answered for would be one answer
+         *  written twice, free to disagree the moment either moved. */
+        public Set<Kind> alsoRefuses() {
+            return alsoRefuses;
         }
 
         /** Whether a build held to this refuses over {@code kind}. */
@@ -193,9 +207,9 @@ public final class Adequacy {
          * Whether a build held to this is owed a row at {@code role}.
          *
          * <p>The criterion's answer, handed on. Never read off {@link #refuses}: a role is not a
-         * kind, and what this adds beside the criterion is kinds — so a policy that worked the
-         * roles out from the kinds it refuses over would be the two consequences of a criterion
-         * derived from each other rather than said once, which is issue #937.
+         * kind, and what a bar adds beside its criterion is kinds — so working the roles out from
+         * the kinds it refuses over would be the two consequences of a criterion derived from each
+         * other rather than said once, which is issue #937.
          */
         public boolean requires(PointRole role) {
             return domain.requires(role);
@@ -213,37 +227,50 @@ public final class Adequacy {
      * the points away from a line are measured whenever the ones against it are, and whether they
      * are owed is the criterion's answer (issue #937).
      */
-    public record Asked(Level level, boolean warn, StrictPolicy held) {
+    public record Asked(Level level, boolean warn, AdequacyBar held) {
 
         public static final Asked NOTHING =
-                new Asked(Level.OFF, false, StrictPolicy.SIMPLIFIED_DOMAIN);
+                new Asked(Level.OFF, false, AdequacyBar.SIMPLIFIED_DOMAIN);
 
         /** Measured and said, held to what a build asks for by default. */
         public static Asked warningsAt(Level level) {
-            return warningsAt(level, StrictPolicy.SIMPLIFIED_DOMAIN);
+            return warningsAt(level, AdequacyBar.SIMPLIFIED_DOMAIN);
         }
 
         /** Measured and said, held to {@code held}. */
-        public static Asked warningsAt(Level level, StrictPolicy held) {
+        public static Asked warningsAt(Level level, AdequacyBar held) {
             return new Asked(level, true, held);
         }
 
         /**
-         * Everything measured, for a report that is the whole of what a command answers with.
+         * Everything measured, for a report that is the whole of what a command answers with,
+         * held to the whole of what the syllabus asks for.
          *
-         * <p>{@code souther examples} asks for this, and the criterion is part of what it asks for
-         * rather than one left at a build's default. That command chooses no measurement — its output
-         * is the report, so everything is measured — which leaves the bar as the only thing it could
-         * have chosen, and a report command choosing a bar is a build policy in a command that runs no
-         * build. So it is held to the whole of what the syllabus asks for, and {@code --strict}
-         * decides the exit status of that verdict without touching it.
+         * <p>{@code souther examples} asks for this. That command chooses no measurement — its
+         * output is the report, so everything is measured — and the bar it is held to is not a
+         * build's default either: reading one here is what let {@code souther examples --strict}
+         * exit 0 on a model {@code souther compile --adequacy reliable-domain --warnings error}
+         * refused, with the two points away from the line printed in the report that had just
+         * called it satisfied.
          *
-         * <p>Reading a build's default here is what let {@code souther examples --strict} exit 0 on a
-         * model {@code souther compile --adequacy reliable-domain --warnings error} refused, with the
-         * two points away from the line printed in the report that had just called it satisfied.
+         * <p>A caller that names a bar asks for {@link #fullReport(AdequacyBar)} instead. Which
+         * bar a report is written against is a question with an answer; {@code --strict} is not
+         * where it is answered, because that flag decides an exit status and the report is the
+         * same either way.
          */
         public static Asked fullReport() {
-            return reportOnly(Level.ALL);
+            return fullReport(AdequacyBar.RELIABLE_DOMAIN);
+        }
+
+        /**
+         * The same, held to {@code bar}.
+         *
+         * <p>What the bar changes is the report: which findings it marks as gaps and what its
+         * verdict comes to. It does not change what was measured — everything is, either way — so
+         * a reader comparing two runs is comparing two readings of one measurement.
+         */
+        public static Asked fullReport(AdequacyBar bar) {
+            return new Asked(Level.ALL, false, bar);
         }
 
         /**
@@ -259,7 +286,7 @@ public final class Adequacy {
          * as it is on the command line.
          */
         public static Asked reportOnly(Level level) {
-            return new Asked(level, false, StrictPolicy.RELIABLE_DOMAIN);
+            return new Asked(level, false, AdequacyBar.RELIABLE_DOMAIN);
         }
 
         /** Whether a build that asked for this refuses over {@code kind}. */
@@ -1734,7 +1761,7 @@ public final class Adequacy {
          * never by what a search came back with. The kinds are listed one at a time so that a kind
          * added later does not compile until somebody has said which of the three it is.
          */
-        private static List<GapDisposition> dispositions(StrictPolicy held, List<Finding> findings,
+        private static List<GapDisposition> dispositions(AdequacyBar held, List<Finding> findings,
                                                       List<BorderAssessment> edges,
                                                       PartitionEvidence partition,
                                                       Generator.GenerationResult pairs,
@@ -2101,7 +2128,7 @@ public final class Adequacy {
          *  is what the rows say of themselves. */
         OUTPUT_CASE_UNVERIFIED(null),
         /** A class of an axis no row is in. */
-        AXIS_CLASS_UNCOVERED(null),
+        AXIS_CLASS_UNCOVERED(DiagnosticCode.E1931),
         /**
          * A point away from a border that no row is at — the {@code IN} or the {@code OUT} point.
          *
@@ -2310,7 +2337,7 @@ public final class Adequacy {
          * the kinds a second time, so what a report marks and what a build refuses over cannot come
          * apart.
          */
-        public Disposition disposition(StrictPolicy held) {
+        public Disposition disposition(AdequacyBar held) {
             if (!held.refuses(kind())) {
                 return Disposition.REPORTED;
             }
@@ -2321,7 +2348,7 @@ public final class Adequacy {
         }
 
         /** Whether a build held to {@code held} is entitled to refuse over this. */
-        public boolean isAdequacyGap(StrictPolicy held) {
+        public boolean isAdequacyGap(AdequacyBar held) {
             return disposition(held) == Disposition.REFUSED;
         }
 
@@ -2615,7 +2642,7 @@ public final class Adequacy {
          * <p>The message keys are written out per kind rather than derived from the code's name, so
          * that a scan for the keys this names finds them — a key built by concatenation is one nothing
          * can see is used. Which findings get here is
-         * {@link Finding#isAdequacyGap(StrictPolicy)}'s answer and not this method's.
+         * {@link Finding#isAdequacyGap(AdequacyBar)}'s answer and not this method's.
          */
         private static Report warning(Finding finding) {
             About said = finding.about();
@@ -2668,10 +2695,15 @@ public final class Adequacy {
                         case About.AnArmNoRowGoesThrough(var arm) ->
                                 new ExampleMessage.NoRowGoesThroughThatArm(
                                         phraseFor(arm), arm.behavior());
+                        // The class and the position it is a class of, in the partition's own
+                        // words — which are the words the report writes for the same finding.
+                        case About.AClassNoRowIsIn(var missing) ->
+                                new ExampleMessage.NoRowIsInThatClass(missing.name(),
+                                        missing.axis().path(), finding.behavior());
                         // Kinds no build is told about under any code. Listed rather than
                         // defaulted, so that one added later has to be answered here rather than
                         // arriving as a warning with no sentence.
-                        case About.ACaseNothingWasSeenToProduce _, About.AClassNoRowIsIn _,
+                        case About.ACaseNothingWasSeenToProduce _,
                                 About.APositionNoLineDivides _, About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
                                 About.APositionWhoseRulesWereNotReached _,
                                 About.APositionReadWiderThanItsRules _,
@@ -2737,10 +2769,16 @@ public final class Adequacy {
                 }
                 case About.AnArmNoRowGoesThrough _ ->
                         built.hint(new ExampleMessage.EitherARowIsMissingOrNothingReachesIt());
+                // Said as the row to write and not as the class to cover. A class is met by a
+                // value falling in it, and what an author writes is the value — a hint naming the
+                // class alone leaves them to work out which of the position's values is one.
+                case About.AClassNoRowIsIn(var missing) ->
+                        built.hint(new ExampleMessage.WriteARowWhoseValueThereIsInThatClass(
+                                missing.axis().path(), missing.name()));
                 // The message says all there is to say. Written out rather than defaulted, for the
                 // reason the switch above gives.
                 case About.ACaseNoRowAppliesItTo _, About.ACaseNothingWasSeenToProduce _,
-                        About.AClassNoRowIsIn _, About.APositionNoLineDivides _,
+                        About.APositionNoLineDivides _,
                         About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
                         About.APositionWhoseRulesWereNotReached _,
                         About.APositionReadWiderThanItsRules _,

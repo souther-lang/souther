@@ -297,14 +297,14 @@ class CompilePartialAdequacyTest {
                 .findings();
 
         List<Adequacy.Finding> undecided = findings.stream()
-                .filter(f -> Adequacy.StrictPolicy.SIMPLIFIED_DOMAIN.refuses(f.kind())).toList();
+                .filter(f -> Adequacy.AdequacyBar.SIMPLIFIED_DOMAIN.refuses(f.kind())).toList();
 
         assertFalse(undecided.isEmpty(), () -> "the model has a kind a build gates on: " + findings);
         for (Adequacy.Finding f : undecided) {
             assertFalse(f.weakenedBy().isEmpty(), f::toString);
             assertEquals(Adequacy.Finding.Disposition.UNDECIDED,
-                    f.disposition(Adequacy.StrictPolicy.SIMPLIFIED_DOMAIN), f::toString);
-            assertFalse(f.isAdequacyGap(Adequacy.StrictPolicy.SIMPLIFIED_DOMAIN), f::toString);
+                    f.disposition(Adequacy.AdequacyBar.SIMPLIFIED_DOMAIN), f::toString);
+            assertFalse(f.isAdequacyGap(Adequacy.AdequacyBar.SIMPLIFIED_DOMAIN), f::toString);
         }
     }
 

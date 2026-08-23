@@ -168,7 +168,7 @@ class AMeasureWeakerThanCompleteSaysWhatMadeItSoTest {
      */
     @Test
     void whatABuildRefusesOverIsWhatNothingWeakened() {
-        Adequacy.StrictPolicy held = report().asked().held();
+        Adequacy.AdequacyBar held = report().asked().held();
         List<Adequacy.Finding> findings = report().findings();
         assertFalse(findings.isEmpty(), "the model produces findings");
         for (Adequacy.Finding each : findings) {

@@ -82,7 +82,7 @@ class ABuildCanBeHeldToReliableDomainCoverageTest {
         Run compiled = compile(ON_THE_LINE_ONLY, "thorough");
 
         assertEquals(2, compiled.code(), compiled.out() + compiled.err());
-        assertTrue(compiled.err().contains("off, witness, all or reliable-domain"), compiled.err());
+        assertTrue(compiled.err().contains("off, witness, all, reliable-domain or classes"), compiled.err());
     }
 
     /**
@@ -105,10 +105,10 @@ class ABuildCanBeHeldToReliableDomainCoverageTest {
                                         : AReportOfOneBorder.undecided())));
 
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
-                AReportOfOneBorder.verdictOf(measured, Adequacy.StrictPolicy.SIMPLIFIED_DOMAIN),
+                AReportOfOneBorder.verdictOf(measured, Adequacy.AdequacyBar.SIMPLIFIED_DOMAIN),
                 "the points it asks for came to an answer");
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED,
-                AReportOfOneBorder.verdictOf(measured, Adequacy.StrictPolicy.RELIABLE_DOMAIN),
+                AReportOfOneBorder.verdictOf(measured, Adequacy.AdequacyBar.RELIABLE_DOMAIN),
                 "two of the points it asks for did not");
     }
 

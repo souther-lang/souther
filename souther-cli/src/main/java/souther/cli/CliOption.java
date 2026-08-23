@@ -30,8 +30,11 @@ import java.util.Set;
 enum CliOption {
 
     DIRECTORY("compile/init", "<path>", "where what this command writes goes", "-d", "--dir"),
-    ADEQUACY("compile", "off|witness|all|reliable-domain",
-            "warn about what the `example`s do not cover (default off)", "--adequacy"),
+    ADEQUACY("compile/examples", "off|witness|all|reliable-domain|classes",
+            "which bar to read the model against; on compile it also says how much to measure "
+                    + "(default off there, and everything under reliable-domain for examples). "
+                    + "`souther examples` takes only the bars",
+            "--adequacy"),
     WARNINGS("compile", "report|error", "refuse a compile that warns (default report)",
             "--warnings"),
     BEHAVIOR("run/examples", "<name>", "report only this behavior", "--behavior"),

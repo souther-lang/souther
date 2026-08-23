@@ -164,7 +164,7 @@ final class AReportOfOneBorder {
 
     /** What one behavior's partition makes of the whole report, held to {@code held}. */
     static AdequacyReport.AdequacyStatus verdictOf(PartitionEvidence partition,
-                                                   Adequacy.StrictPolicy held) {
+                                                   Adequacy.AdequacyBar held) {
         AdequacyReport.BehaviorReport behavior = new AdequacyReport.BehaviorReport(
                 "weigh", souther.compiler.check.BehaviorImplementation.IMPLEMENTED,
                 1, 0, WeakeningSet.none(), null, partition,

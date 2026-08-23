@@ -197,7 +197,8 @@ public final class Main {
                     Adequacy.Asked named = adequacyAsked(args[++i]);
                     if (named == null) {
                         System.err.println(
-                                "`--adequacy` takes off, witness, all or reliable-domain");
+                                "`--adequacy` takes off, witness, all, reliable-domain"
+                                        + " or classes");
                         return 2;
                     }
                     measure = named;
@@ -297,11 +298,15 @@ public final class Main {
         boolean generate = false;
         boolean boundaries = false;
         // The report is this command's whole output, so everything is measured and nothing is said
-        // twice: what the warnings would say, the report says in one place. And held to the whole of
-        // what the syllabus asks for, which is not a word on this command's line: measuring is not a
-        // choice it makes, so a criterion would be the only thing left to choose, and choosing a bar
-        // is what a build does. `--strict` decides the exit status of the verdict below
-        // and no more — the report a reader is given is the same either way.
+        // twice: what the warnings would say, the report says in one place. Measuring is not a
+        // choice this command makes, and the bar it is read against is `--adequacy`'s — the same
+        // word a compile picks a bar with, meaning the same bar. Left unsaid it is the whole of
+        // what the syllabus asks for.
+        //
+        // `--strict` decides the exit status of the verdict below and no more. It names no bar,
+        // which is what keeps the report a reader is given the same whether or not it was written:
+        // a flag that chose a bar would change which findings the report marks, and the two runs a
+        // reader compares would be reports of two different questions.
         Adequacy.Asked measure = Adequacy.Asked.fullReport();
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
@@ -314,6 +319,21 @@ public final class Main {
                 }
                 case "--module" -> module = Reserved.name(args[++i]);   // a name from outside
                 case "--behavior" -> behavior = Reserved.name(args[++i]);   // a name from outside
+                case "--adequacy" -> {
+                    Adequacy.AdequacyBar bar = barNamed(args[++i]);
+                    if (bar == null) {
+                        // The levels are turned down in the same words they are offered in
+                        // elsewhere. This command measures everything, so `off` and `witness` name
+                        // no state it has — and a reader who wrote one is told what this option
+                        // takes here rather than that the word does not exist.
+                        System.err.println(
+                                "`--adequacy` takes reliable-domain or classes for `examples`,"
+                                        + " whose output is the report and which measures"
+                                        + " everything either way");
+                        return 2;
+                    }
+                    measure = Adequacy.Asked.fullReport(bar);
+                }
                 case "--generate" -> generate = true;
                 case "--boundaries" -> boundaries = true;
                 case "--strict" -> strict = true;
@@ -481,12 +501,36 @@ public final class Main {
      * bar and not a measurement (issue #937).
      */
     private static Adequacy.Asked adequacyAsked(String written) {
+        Adequacy.AdequacyBar bar = barNamed(written);
+        if (bar != null) {
+            // A bar names no level, and every bar wants everything measured: what a bar adds over
+            // `all` is what a build refuses over and never what was looked at (issue #937).
+            return Adequacy.Asked.warningsAt(Adequacy.Level.ALL, bar);
+        }
         return switch (written) {
             case "off" -> Adequacy.Asked.warningsAt(Adequacy.Level.OFF);
             case "witness" -> Adequacy.Asked.warningsAt(Adequacy.Level.WITNESS);
             case "all" -> Adequacy.Asked.warningsAt(Adequacy.Level.ALL);
-            case "reliable-domain" -> Adequacy.Asked.warningsAt(Adequacy.Level.ALL,
-                    Adequacy.StrictPolicy.RELIABLE_DOMAIN);
+            default -> null;
+        };
+    }
+
+    /**
+     * The bar {@code written} names, or null where it names none.
+     *
+     * <p>One reading of these words for both commands that take them. What {@code classes} means
+     * is a bar and nothing else, so a compile and a report holding a model to it are holding it to
+     * the same thing — and the word said twice is two tables free to disagree about the one thing
+     * a reader picked it for.
+     *
+     * <p>The levels are not here. {@code off}, {@code witness} and {@code all} say how much to
+     * measure, which is a question {@code souther examples} does not ask: its output is the report,
+     * so everything is measured and there is nothing for those words to choose.
+     */
+    private static Adequacy.AdequacyBar barNamed(String written) {
+        return switch (written) {
+            case "reliable-domain" -> Adequacy.AdequacyBar.RELIABLE_DOMAIN;
+            case "classes" -> Adequacy.AdequacyBar.CLASSES;
             default -> null;
         };
     }
