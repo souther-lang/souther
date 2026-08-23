@@ -1,12 +1,11 @@
 package souther.compiler.codegen;
 
-import souther.compiler.check.AtomSpace;
+import souther.compiler.check.ResolvedCase;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.BehaviorContract.ContractParam;
 import souther.compiler.check.BehaviorContract.Guard;
 import souther.compiler.check.BehaviorContract.Rule;
 import souther.compiler.jvm.GeneratedClass;
-import souther.compiler.types.CaseSelector;
 import souther.compiler.types.Refinement;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -153,10 +152,10 @@ final class EnsuresGen {
         // second time would be the same question answered twice. A reference slot, as above.
         int answered = gen.slot(Type.STRING);
         for (Rule rule : contract.rules()) {
-            if (!(rule.guard() instanceof Guard.Case(CaseSelector selector)) || rule.readsAnswer()) {
+            if (!(rule.guard() instanceof Guard.Case(ResolvedCase selected)) || rule.readsAnswer()) {
                 continue;
             }
-            List<TypeSymbol> answersFor = answersFor(selector);
+            List<TypeSymbol> answersFor = answersFor(selected);
             if (answersFor.isEmpty()) {
                 continue;
             }
@@ -177,7 +176,7 @@ final class EnsuresGen {
             }
             code.goto_(next);
             code.labelBinding(matched);
-            emitStatement(code, gen, contract, rule, next, selector, answered, () -> { });
+            emitStatement(code, gen, contract, rule, next, selected, answered, () -> { });
         }
         code.return_();
     }
@@ -186,9 +185,9 @@ final class EnsuresGen {
      * The cases an arm answers for, as the names they are declared under.
      *
      * <p>Its leaves, because that is what a written answer is one of: a union member may be a sum,
-     * and an arm naming that sum is about each of the cases it has. Read off the selector, which is
-     * what a selector is for — what a case means was settled where the arm was specialized, and
-     * working it back out of the name here would be a second answer to it.
+     * and an arm naming that sum is about each of the cases it has. Read off the case, which was
+     * resolved where the arm was specialized — this went back to the declarations for it until
+     * #966, which is one question with a second answer in the one stage that must not ask it.
      *
      * <p>Empty for a carrier that is not a case a written answer wears: an optional's, which is
      * made by its own factory and named by neither of the two, and a carrier standing under no
@@ -199,10 +198,11 @@ final class EnsuresGen {
      * leaves. It is what this answers rather than a rule about optionals — the question is asked of
      * the selector, and a selector that has nothing to answer with is not made into one that does.
      */
-    private List<TypeSymbol> answersFor(CaseSelector selector) {
-        return selector.refinement() instanceof Refinement.Direct(Type bound) && bound != null
-                ? AtomSpace.subjectAtoms(bound, ctx.symbols)
-                : List.of();
+    private static List<TypeSymbol> answersFor(ResolvedCase selected) {
+        // Which of them this reader takes is still this reader's. An optional's carrier covers
+        // itself — that is what an arm over an optional is held against — and `Some` is no name a
+        // written answer wears, so what it covers is not what this asks for.
+        return selected.refinement() instanceof Refinement.Direct ? selected.atoms() : List.of();
     }
 
     /**
@@ -214,19 +214,19 @@ final class EnsuresGen {
     private void emitRule(CodeBuilder code, BodyGen gen, BehaviorContract contract, Rule rule,
                           int answer, int answered) {
         Label next = code.newLabel();
-        CaseSelector selector =
-                rule.guard() instanceof Guard.Case(CaseSelector named) ? named : null;
-        if (selector != null) {
-            CaseGen.jumpUnlessMatches(code, ctx, selector, answer, next);
+        ResolvedCase selected =
+                rule.guard() instanceof Guard.Case(ResolvedCase named) ? named : null;
+        if (selected != null) {
+            CaseGen.jumpUnlessMatches(code, ctx, selected.selector(), answer, next);
         }
         Type valueType = rule.valueType(contract.output());
         Refinement refinement =
-                selector == null ? null : selector.refinement();
+                selected == null ? null : selected.refinement();
         if (refinement instanceof Refinement.OptionAbsent) {
             // The case carries nothing, so there is nothing to bind. A rule about it refers to the
             // answer through its guard, which is what having got here is.
-            emitStatement(code, gen, contract, rule, next, selector, answered,
-                    () -> readAnsweredCase(code, selector, answer, answered));
+            emitStatement(code, gen, contract, rule, next, selected, answered,
+                    () -> readAnsweredCase(code, selected, answer, answered));
             return;
         }
         if (refinement == null) {
@@ -237,8 +237,8 @@ final class EnsuresGen {
         int slot = gen.slot(valueType);
         unbox(code, valueType, slot, ctx);
         gen.bind(rule.value(), "value", slot, valueType);
-        emitStatement(code, gen, contract, rule, next, selector, answered,
-                () -> readAnsweredCase(code, selector, answer, answered));
+        emitStatement(code, gen, contract, rule, next, selected, answered,
+                () -> readAnsweredCase(code, selected, answer, answered));
     }
 
     /**
@@ -249,11 +249,11 @@ final class EnsuresGen {
      * call that was going to abort anyway.
      */
     private void emitStatement(CodeBuilder code, BodyGen gen, BehaviorContract contract, Rule rule,
-                               Label next, CaseSelector selector, int answered,
+                               Label next, ResolvedCase selected, int answered,
                                Runnable fillAnswered) {
         gen.expr(rule.statement());
         code.ifne(next);
-        emitAbort(code, contract, rule, selector, answered, fillAnswered);
+        emitAbort(code, contract, rule, selected, answered, fillAnswered);
         code.labelBinding(next);
     }
 
@@ -265,8 +265,8 @@ final class EnsuresGen {
      * keep out of the emitter — so nothing is built until there is nothing left to decide.
      */
     private void emitAbort(CodeBuilder code, BehaviorContract contract, Rule rule,
-                           CaseSelector selector, int answered, Runnable fillAnswered) {
-        if (selector != null) {
+                           ResolvedCase selected, int answered, Runnable fillAnswered) {
+        if (selected != null) {
             fillAnswered.run();
         }
         code.new_(CD_EnsuresFailure);
@@ -274,11 +274,11 @@ final class EnsuresGen {
         code.ldc(contract.behavior().module());
         code.ldc(contract.behavior().name());
         pushOrNull(code, contract.clauseOf(rule).name().orElse(null));
-        if (selector == null) {
+        if (selected == null) {
             code.aconst_null();
             code.aconst_null();
         } else {
-            pushDeclaredCase(code, selector.name());
+            pushDeclaredCase(code, selected.name());
             code.aload(answered);
         }
         code.invokespecial(CD_EnsuresFailure, ConstantDescs.INIT_NAME, MTD_ensuresFailure);
@@ -308,9 +308,9 @@ final class EnsuresGen {
      * declare does — see {@link #answersFor}. It is what this does with an answer it cannot narrow,
      * and not a claim that an optional's carrier is a case.
      */
-    private void readAnsweredCase(CodeBuilder code, CaseSelector selector, int answer, int into) {
+    private void readAnsweredCase(CodeBuilder code, ResolvedCase selected, int answer, int into) {
         Label done = code.newLabel();
-        for (TypeSymbol leaf : answersFor(selector)) {
+        for (TypeSymbol leaf : answersFor(selected)) {
             Label notThis = code.newLabel();
             code.aload(answer);
             code.instanceOf(ctx.matchCaseClass(leaf));
@@ -320,7 +320,7 @@ final class EnsuresGen {
             code.goto_(done);
             code.labelBinding(notThis);
         }
-        pushDeclaredCase(code, selector.name());
+        pushDeclaredCase(code, selected.name());
         code.astore(into);
         code.labelBinding(done);
     }
