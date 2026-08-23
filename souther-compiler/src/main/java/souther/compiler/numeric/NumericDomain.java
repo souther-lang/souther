@@ -748,6 +748,26 @@ public final class NumericDomain<A> {
             return new Bounds(Endpoint.lower(min, other.min), Endpoint.upper(max, other.max));
         }
 
+        /**
+         * These ends, each of them no further out than {@code wider}'s.
+         *
+         * <p>{@link #meet} with one difference, and the difference is what it is for: an end this
+         * has none of stays absent rather than taking {@code wider}'s. So this sharpens the ends
+         * that are here and states none that are not — which is what a reader correcting an answer
+         * wants, as against one adding a fact of its own. An arithmetic composed over numbers of any
+         * size can work out to a number the value it is about never is, and pulling that end back to
+         * where the values stop is a correction; saying where they stop when the arithmetic said
+         * nothing is a range the reader did not derive.
+         *
+         * <p>Where the correction crosses the other end, nothing is left — the arithmetic worked out
+         * to values the thing it is about cannot take, and a range holding none of them is what says
+         * so.
+         */
+        public Bounds noFurtherOutThan(Bounds wider) {
+            return new Bounds(min == null ? null : Endpoint.lower(min, wider.min),
+                    max == null ? null : Endpoint.upper(max, wider.max));
+        }
+
         /** Whether {@code at} is inside both ends — asked of the ends, because whether an end is one
          * of the counts it stops at is what the number alone does not say. */
         public boolean admits(Place at) {

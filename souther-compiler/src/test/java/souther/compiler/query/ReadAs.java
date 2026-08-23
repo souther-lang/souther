@@ -22,7 +22,7 @@ public final class ReadAs {
      * reading is reached at all: nothing written in this repository expands far enough to fall back
      * to it at the limit a compilation sets, so a test that wants it says so.
      */
-    public static final ReadingPolicy MERGING_WHAT_A_CHOICE_LEAVES = new ReadingPolicy(1);
+    public static final ReadingPolicy MERGING_WHAT_A_CHOICE_LEAVES = new ReadingPolicy(1, Front.Reading.STANDARD.scalePlacesLimit());
 
     private ReadAs() {
     }

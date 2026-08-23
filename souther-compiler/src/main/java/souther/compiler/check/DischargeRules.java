@@ -826,13 +826,20 @@ final class DischargeRules {
     }
 
     /**
-     * When an operation answers no number at all, as a condition on what it was given.
+     * Which case of the union came back, as a condition on what the operation was given.
      *
-     * <p>What a union-answering operation's other case <em>means</em>. {@code Int.divide} answers a
-     * quotient unless the divisor is zero, and that is one fact with two readings: an arm taking the
-     * failure case has established the condition, and an arm taking the value case has established
-     * its denial. Written once as the condition rather than twice as two rules, so the two cannot
-     * come apart.
+     * <p>What a union-answering operation's other case <em>means</em>. {@code Int.divide} comes back
+     * as {@code DivisionByZero} exactly where the divisor is zero, and that is one fact with two
+     * readings: an arm taking that case has established the condition, and an arm taking the number
+     * has established its denial. Written once as the condition rather than twice as two rules, so
+     * the two cannot come apart.
+     *
+     * <p>About which case came back and not about whether a number was answered, which are two
+     * things. {@code Int.divide} answers no number for the one pair whose quotient no {@code Int}
+     * holds either — it aborts (spec §stdlib-int), and an abort comes back as no case at all, so no
+     * arm is reached and there is nothing for a condition to say. A row that named the overflow here
+     * would put it on the {@code DivisionByZero} arm, which is a fact that arm has not established.
+     * What is written down is the case selection, and it is exactly right for that.
      *
      * <p>Declared whatever the numeric domain can hold of it. That a divisor is not zero is a
      * disequality, which a domain reasoning in ranges reads little from — and what an operation
@@ -843,15 +850,15 @@ final class DischargeRules {
      * @param op       how it stands to {@code than}
      * @param than     the number it stands against
      */
-    record AnsweredUnless(ArgumentRef argument, BinOp op, long than) {}
+    record TheOtherCaseWhen(ArgumentRef argument, BinOp op, long than) {}
 
     /**
      * What an operation computes, where it answers it, and when it answers nothing.
      *
-     * @param unless the condition under which no number is answered, or null for an operation that
-     *               always answers one
+     * @param unless the condition under which the union comes back as a case other than the
+     *               number's, or null for an operation whose result is the number itself
      */
-    record NumericResult(Answered at, Computes computes, AnsweredUnless unless) {}
+    record NumericResult(Answered at, Computes computes, TheOtherCaseWhen unless) {}
 
     /**
      * The number each operation computes, and the result it answers it at.
@@ -889,13 +896,13 @@ final class DischargeRules {
     }
 
     private static NumericResult inTheCaseCarrying(Type carried, Computes computes,
-                                                   AnsweredUnless unless) {
+                                                   TheOtherCaseWhen unless) {
         return new NumericResult(new Answered.InTheCaseCarrying(carried), computes, unless);
     }
 
-    /** The condition every division answers nothing under: a divisor of zero. */
-    private static AnsweredUnless byZero() {
-        return new AnsweredUnless(at(1), BinOp.EQ, 0);
+    /** The condition every division comes back as {@code DivisionByZero} under. */
+    private static TheOtherCaseWhen byZero() {
+        return new TheOtherCaseWhen(at(1), BinOp.EQ, 0);
     }
 
     /**
@@ -1263,8 +1270,8 @@ final class DischargeRules {
                     }
                     if (rule.unless() == null) {
                         throw new IllegalStateException(operation + " answers its number as one case"
-                                + " of a union, so when it answers none is what the other cases are"
-                                + " for and is not written down");
+                                + " of a union, so when the other case comes back is what that case"
+                                + " means and is not written down");
                     }
                     // The condition names no case, so it says what every case that is not the
                     // number's says — which is one statement only where there is one such case. A

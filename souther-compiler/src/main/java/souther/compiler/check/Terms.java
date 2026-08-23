@@ -59,6 +59,18 @@ final class Terms {
      * atom's name is made: the key and the kind of number behind it are decided in one step, and
      * anywhere else would be a second place that has to agree about which is which. */
     private final Map<FactSubject, Granularity> atomKinds = new HashMap<>();
+
+    /**
+     * Every value each atom's own kind of number can take, for the atoms named at an expression.
+     *
+     * <p>Beside the spacing and for the reason the spacing is here: both are what an atom's type
+     * says of it, and the type is known where the atom is named. What it is for is arithmetic: a
+     * form is composed over numbers of any size, so what a recipe derives can be a number the value
+     * never is — {@code Long.MIN_VALUE / -1} works out to one past the whole-number range, and the
+     * operation that would have answered it aborts (spec §stdlib-int). Held against the atom rather
+     * than in each recipe, so that a recipe added later is held to it without being asked.
+     */
+    private final Map<FactSubject, NumericDomain.Bounds> atomExtents = new HashMap<>();
     /**
      * The terms this reading has built, each held under the one instance standing for it.
      *
@@ -144,6 +156,11 @@ final class Terms {
             }
         }
         return out;
+    }
+
+    /** What this reading may spend, which the compilation set and nothing here makes. */
+    ReadingPolicy policy() {
+        return policy;
     }
 
     Terms(Symbols symbols, ReadingPolicy policy) {
@@ -516,9 +533,23 @@ final class Terms {
     private FactSubject atomOfIdentity(FactSubject identity, Core e, Denotations at) {
         FactSubject atom = named(identity, granularityOf(e.type()));
         if (atom != null) {
+            atomExtents.putIfAbsent(atom, extentOf(affineScalarBase(e.type())));
             recording(atom, e, at);
         }
         return atom;
+    }
+
+    /**
+     * Every value {@code atom} can be, or null where nothing said.
+     *
+     * <p>What the kind of number holds and not what a declaration narrows it to. A value of a
+     * newtype has satisfied that newtype's invariant, and a construction being checked is the
+     * question of whether it does — so reading the declared range here would answer the question
+     * with itself. What is read is the carrier under it, which is the machine's range and is true of
+     * every value that exists at all.
+     */
+    NumericDomain.Bounds extentOf(FactSubject atom) {
+        return atomExtents.get(atom);
     }
 
 
@@ -1067,31 +1098,33 @@ final class Terms {
      */
     FactSubject subjectOpenedAs(NumericMeaning meaning, Type carried, Core scrutinee,
                                 Denotations at) {
-        Term key = openedKey(meaning, carried, scrutinee, at, Leaf.AN_EVALUATION);
+        Term key = openedKey(meaning, carried, scrutinee, at);
         return key == null ? null : FactSubject.of(key);
     }
 
-    /** The same as a term, which is what the symbolic reading names it by. */
-    Term termOpenedAs(NumericMeaning meaning, Type carried, Core scrutinee, Denotations at) {
-        return openedKey(meaning, carried, scrutinee, at, Leaf.SYMBOLIC);
-    }
-
-    /** The arithmetic written as an operator, as a term. */
-    private Term written(BinOp op, Core left, Core right, Denotations at, Leaf leaf) {
-        Term over = termKey(left, at, Map.of(), 0, leaf);
-        Term by = termKey(right, at, Map.of(), 0, leaf);
+    /** The arithmetic written as an operator, as an identity. */
+    private Term written(BinOp op, Core left, Core right, Denotations at) {
+        Term over = identityOf(left, at);
+        Term by = identityOf(right, at);
         return over == null || by == null ? null : interned.operator(op, over, by);
     }
 
-    private Term openedKey(NumericMeaning meaning, Type carried, Core scrutinee, Denotations at,
-                           Leaf leaf) {
+    /**
+     * What the value one case opens is filed under, as a term.
+     *
+     * <p>Built with an atom of its own where the grammar runs out, as every identity is: what is
+     * wanted is which value a fact is about, and a value the symbolic reader cannot read is still
+     * one value. The symbolic reading of an arm's binding is the place it is, and is not this
+     * ({@link PathEngine}).
+     */
+    private Term openedKey(NumericMeaning meaning, Type carried, Core scrutinee, Denotations at) {
         return switch (meaning) {
             case NumericMeaning.TruncatingQuotient(Core dividend, Core divisor) ->
-                    written(BinOp.DIV, dividend, divisor, at, leaf);
+                    written(BinOp.DIV, dividend, divisor, at);
             case NumericMeaning.Operator(BinOp op, Core left, Core right) ->
-                    written(op, left, right, at, leaf);
+                    written(op, left, right, at);
             case NumericMeaning.TruncatingRemainder _, NumericMeaning.RoundedQuotient _ -> {
-                Term of = termKey(scrutinee, at, Map.of(), 0, leaf);
+                Term of = identityOf(scrutinee, at);
                 yield of == null ? null : interned.opened(of, carried);
             }
         };

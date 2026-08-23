@@ -140,6 +140,24 @@ class ADivideRoundedToAScaleIsReadTest {
         assertEquals(List.of(), atScale("2"));
     }
 
+    /**
+     * A scale wider than a reading will lay a grid out for is no scale here either.
+     *
+     * <p>Two questions and not one. What the run time divides at is settled by the backend; what a
+     * reading can afford to lay out is the compilation's
+     * ({@link souther.compiler.check.ReadingPolicy}). A million places is a number a megabyte wide
+     * at every corner of one divide, and the far ends of the whole-number range are scales
+     * {@code BigDecimal} refuses outright — which, asked only whether the run time takes them,
+     * arrived as an exception and left the whole behavior saying nothing.
+     */
+    @Test
+    void aScaleWiderThanAReadingLaysOutIsNoScale() {
+        assertEquals(List.of("E2011"), atScale("1000000"));
+        assertEquals(List.of("E2011"), atScale("0 - 1000000"));
+        assertEquals(List.of("E2011"), atScale("0 - 2147483648"));
+        assertEquals(List.of("E2011"), atScale("2147483647"));
+    }
+
     /** The model of {@link #aScaleAGuardSettlesIsAScale}, with the scale written at the call. */
     private static List<String> atScale(String places) {
         return Compiler.compileWithWarnings("""

@@ -257,19 +257,20 @@ final class DerivedNumericFacts {
                 // memo could stop holding without anything saying so.
                 memo.watched();
                 return answer;
-            }));
+            }), terms);
         }
         return switch (terms.derivations().get(atom)) {
             case Derivation.Product product -> between(atom, Intervals.product(
                     boundsOf(product.left(), base, terms, done, deriving),
-                    boundsOf(product.right(), base, terms, done, deriving)));
+                    boundsOf(product.right(), base, terms, done, deriving)), terms);
             case Derivation.TruncatingQuotient quotient ->
                     quotient(atom, quotient, base, terms, done, deriving);
             case Derivation.TruncatingRemainder remainder ->
                     remainder(atom, remainder, base, terms, done, deriving);
             case Derivation.RoundedQuotient rounded ->
                     rounded(atom, rounded, base, terms, done, deriving);
-            case Derivation.Chosen chosen -> between(atom, chosen(chosen, base, terms, done, deriving));
+            case Derivation.Chosen chosen ->
+                    between(atom, chosen(chosen, base, terms, done, deriving), terms);
         };
     }
 
@@ -301,9 +302,35 @@ final class DerivedNumericFacts {
         return out;
     }
 
-    /** One fact: the atom lies between those ends. */
-    private static List<Fact> between(FactSubject atom, Bounds bounds) {
-        return List.of(new Fact.Between(atom, bounds));
+    /**
+     * One fact: the atom lies between those ends, with an end the arithmetic put outside what its
+     * own kind of number holds pulled back to where the values stop.
+     *
+     * <p>A recipe is arithmetic composed over numbers of any size, so what it works out to can be a
+     * number the value it is about never is: the quotient of the smallest {@code Int} by minus one
+     * works out to one past the whole-number range, and the operation that would have answered it
+     * aborts instead (spec §stdlib-int). Left as it stood, that end is a value no run produces and
+     * the reading can refuse a construction over it — which it did, as an error and on a path
+     * nothing reaches.
+     *
+     * <p>A correction and not a range of its own ({@link Bounds#noFurtherOutThan}): an end the
+     * arithmetic put nowhere stays nowhere. A range stated here would be one every reading holds,
+     * the reading that assumed nothing included, and "within what an {@code Int} is" discharges
+     * nothing while costing every derived atom two more rules to carry.
+     *
+     * <p>Said of every range a recipe answers with rather than in each recipe, so that a recipe
+     * added later is held to it without being asked.
+     *
+     * <p>Where the correction leaves nothing, the operation answers on no input the path admits, and
+     * the empty range is the proof of it: what it says is that this reading has no execution, which
+     * is what an operation aborting wherever it is reached leaves. That is a different thing from a
+     * rule with no operands to fire on, which says nothing and must not be read as an empty range
+     * ({@link #quotient}).
+     */
+    private static List<Fact> between(FactSubject atom, Bounds bounds, Terms terms) {
+        Bounds extent = terms.extentOf(atom);
+        return List.of(new Fact.Between(atom,
+                extent == null ? bounds : bounds.noFurtherOutThan(extent)));
     }
 
     /**
@@ -344,17 +371,17 @@ final class DerivedNumericFacts {
         }
         Bounds numerator = boundsOf(quotient.numerator(), base, terms, done, deriving);
         List<Fact> facts = new ArrayList<>();
-        facts.add(new Fact.Between(atom, Intervals.truncatingQuotient(numerator, divisor)));
-        // What the divide left is `a - b * q`, which is a form the domain carries only where the
-        // divisor is a number: against a divisor the reading holds in a range, `b * q` is a product
-        // of two values and relating the quotient to what it divided would mean deriving that
+        facts.addAll(between(atom, Intervals.truncatingQuotient(numerator, divisor), terms));
+        // What the divide left is `a - b * q`, which is a form the domain carries only where this
+        // reading holds the divisor to one number: against a divisor left in a range, `b * q` is a
+        // product of two values and relating the quotient to what it divided would mean deriving that
         // product — from a range this rule has just derived, which is the reading that tightens
         // under its own answers.
-        BigDecimal by = constantOf(quotient.divisor());
+        BigDecimal by = theOneValueOf(divisor);
         if (by != null) {
             facts.addAll(leftOver(
                     quotient.numerator().minus(LinearForm.<FactSubject>atom(atom).times(by)),
-                    by, numerator));
+                    divisor, numerator));
         }
         return facts;
     }
@@ -375,7 +402,7 @@ final class DerivedNumericFacts {
         if (divisor == null) {
             return List.of();
         }
-        return leftOver(LinearForm.atom(atom), constantOf(remainder.divisor()),
+        return leftOver(LinearForm.atom(atom), divisor,
                 boundsOf(remainder.numerator(), base, terms, done, deriving));
     }
 
@@ -393,15 +420,18 @@ final class DerivedNumericFacts {
      * that puts it on neither side gets neither half, which is a rule not applying rather than a
      * rule saying nothing.
      *
-     * <p>The magnitude is below the divisor's, and that half needs the divisor as a number ({@code
-     * divisor} is null where the reading has none). A
-     * divisor the reading holds in a range is not enough: what is left is smaller than the divisor
-     * <em>it was divided by</em>, and the largest of a range is the only one of them a rule stated
-     * over ends could use — which for a range open above is no number at all. So it is stated where
-     * the divisor reads as a constant, which is where {@code Int.floorMod} states its own ends
+     * <p>The magnitude is below the divisor's, and that half needs a number the divisor cannot be
+     * further from nought than. It is read off what this reading holds the divisor to and not off
+     * how the divisor was written: a name given a constant is that constant, and so is a value a
+     * guard pins, which is how every other rule here reads a value
+     * (spec §invariant-discharge-terms). Asked of the form instead, this said nothing wherever the
+     * divisor was anything but a written number — under {@code guard b == 100} the two sign facts
+     * arrived and the magnitude did not, though the reading held the divisor to one number a line
+     * earlier. A range open either way leaves no such number and then the half is not stated, which
+     * is the condition {@code Int.floorMod} states its own ends under
      * (spec §invariant-discharge-guarantees) and for the same reason.
      */
-    private static List<Fact> leftOver(LinearForm<FactSubject> left, BigDecimal divisor,
+    private static List<Fact> leftOver(LinearForm<FactSubject> left, Bounds divisor,
                                        Bounds dividend) {
         List<Fact> facts = new ArrayList<>();
         if (dividend.liesWithin(AT_OR_ABOVE_NOUGHT)) {
@@ -410,12 +440,10 @@ final class DerivedNumericFacts {
         if (dividend.liesWithin(AT_OR_BELOW_NOUGHT)) {
             facts.add(new Fact.Relating(left, Rel.LE));
         }
-        if (divisor != null) {
-            BigDecimal magnitude = divisor.abs();
-            facts.add(new Fact.Relating(
-                    left.minus(LinearForm.constant(magnitude)), Rel.LT));
-            facts.add(new Fact.Relating(
-                    left.plus(LinearForm.constant(magnitude)), Rel.GT));
+        BigDecimal magnitude = noFurtherFromNoughtThan(divisor);
+        if (magnitude != null) {
+            facts.add(new Fact.Relating(left.minus(LinearForm.constant(magnitude)), Rel.LT));
+            facts.add(new Fact.Relating(left.plus(LinearForm.constant(magnitude)), Rel.GT));
         }
         return facts;
     }
@@ -447,11 +475,12 @@ final class DerivedNumericFacts {
             return List.of();
         }
         Bounds numerator = boundsOf(rounded.numerator(), base, terms, done, deriving);
-        Integer places = placesOf(boundsOf(rounded.scale(), base, terms, done, deriving));
+        Integer places = placesOf(boundsOf(rounded.scale(), base, terms, done, deriving),
+                terms.policy());
         Bounds answered = Intervals.roundedQuotient(numerator, divisor,
                 places == null ? 0 : places);
         if (places != null) {
-            return between(atom, answered);
+            return between(atom, answered, terms);
         }
         List<Fact> facts = new ArrayList<>();
         if (answered.liesWithin(AT_OR_ABOVE_NOUGHT)) {
@@ -473,25 +502,56 @@ final class DerivedNumericFacts {
      *
      * <p>And a number the run time divides at. The backend narrows the scale to an {@code int}, so a
      * place count outside that is a division at a scale nothing proved here was about.
+     *
+     * <p>And a grid this reading will lay out, which is a second question and not a sharpening of
+     * the first. What the run time divides at is settled by the backend; what a reading can afford
+     * to name is settled by the compilation ({@link ReadingPolicy#laysOutAGridAt}) — a scale of a
+     * million places is a number a megabyte wide at every corner of the divide, and the far ends of
+     * the whole-number range are scales {@code BigDecimal} refuses outright. Asked only the first,
+     * what a reading costs would be the source's to decide, and the refusal at the far ends arrived
+     * as an exception the fail-open catch turned into a behavior that says nothing.
      */
-    private static Integer placesOf(Bounds scale) {
+    private static Integer placesOf(Bounds scale, ReadingPolicy policy) {
         Endpoint low = scale.min();
         Endpoint high = scale.max();
         if (low == null || high == null || !low.inclusive() || !high.inclusive()
                 || Count.number(low.at()).compareTo(high.at()) != 0) {
             return null;
         }
+        int places;
         try {
-            return Count.number(low.at()).at().intValueExact();
+            places = Count.number(low.at()).at().intValueExact();
         } catch (ArithmeticException _) {
             return null;
         }
+        return policy.laysOutAGridAt(places) ? places : null;
     }
 
-    /** The number {@code form} is, or null where it names one this reading does not hold as a
-     * written number. */
-    private static BigDecimal constantOf(LinearForm<FactSubject> form) {
-        return form.coefs().isEmpty() ? form.constant() : null;
+    /**
+     * How far from nought the divisor can be, or null where this reading leaves it no such number.
+     *
+     * <p>The further of the two ends, since what is left is smaller than the divisor it was divided
+     * by and the divisor may be any value the reading admits. An end the range does not reach is
+     * read as it stands: a divisor short of a number is short of it, and what is left is smaller
+     * still.
+     */
+    private static BigDecimal noFurtherFromNoughtThan(Bounds divisor) {
+        if (divisor.min() == null || divisor.max() == null) {
+            return null;
+        }
+        return Count.number(divisor.min().at()).at().abs()
+                .max(Count.number(divisor.max().at()).at().abs());
+    }
+
+    /** The one number this reading holds {@code bounds} to, or null where it holds it to more than
+     * one. What a form the domain carries needs: a coefficient is a number and not a range. */
+    private static BigDecimal theOneValueOf(Bounds bounds) {
+        if (bounds.min() == null || bounds.max() == null
+                || !bounds.min().inclusive() || !bounds.max().inclusive()
+                || Count.number(bounds.min().at()).compareTo(bounds.max().at()) != 0) {
+            return null;
+        }
+        return Count.number(bounds.min().at()).at();
     }
 
     /** What the operator divided by, or null where this rule has no divisor to fire on — see

@@ -131,6 +131,56 @@ class AQuotientIsHeldAgainstWhatItDividedTest {
     }
 
     /**
+     * The divisor is what the reading holds it to and not what was written at the divide.
+     *
+     * <p>A name given a constant is that constant, and so is a value a guard pins. Asked of how the
+     * divide was written, the magnitude half said nothing wherever the divisor was anything but a
+     * written number: the two sign facts arrived and {@code -100 < r < 100} did not, though the
+     * reading held the divisor to one number.
+     */
+    @Test
+    void aDivisorAGuardPinsIsADivisor() {
+        assertEquals(List.of(), pinned("""
+                match Int.truncatingRemainder(額, 額面) with
+                            | Int as r -> 硬貨枚数(99 - r)
+                            | DivisionByZero -> 硬貨枚数(0)"""),
+                "a hundred leaves ninety-nine at most, so ninety-nine less it is at or above nought");
+    }
+
+    /**
+     * The same of a quotient held against what it divided, where the construction is written over
+     * the multiple rather than over what is left of it.
+     *
+     * <p>The multiply is by the written number and the divide is by the name, which is what makes
+     * this a form the domain carries: {@code 額 / 額面 * 額面} is a product of two values the
+     * fragment holds as one atom, and relating that atom to the quotient is a rule this does not
+     * have.
+     */
+    @Test
+    void aQuotientOverADivisorAGuardPinsIsHeldAgainstItToo() {
+        assertEquals(List.of(), pinned("硬貨枚数(額 - 額 / 額面 * 100)"));
+    }
+
+    /** The two above, under a guard that pins the divisor to one number. */
+    private static List<String> pinned(String construction) {
+        return Compiler.compileWithWarnings("""
+                module demo
+
+                data 硬貨枚数 = Int
+                    invariant value >= 0
+
+                behavior 買う : (額: Int, 額面: Int) -> 硬貨枚数
+                    constructs 硬貨枚数
+                let 買う (額, 額面) = {
+                    guard 額 >= 0 else 硬貨枚数(0)
+                    guard 額面 == 100 else 硬貨枚数(0)
+                    %s
+                }
+                """.formatted(construction)).warnings().stream()
+                .map(Diagnostic::code).distinct().toList();
+    }
+
+    /**
      * Taking the {@code DivisionByZero} arm establishes that the divisor was zero, which is what
      * that case means and is a fact about a value the caller handed over.
      */

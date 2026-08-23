@@ -215,11 +215,17 @@ final class PathEngine {
     /**
      * {@code in} with what taking this arm's case says about what the operation was given.
      *
-     * <p>An operation answering its number as one case of a union answers none under a condition it
-     * declares ({@link DischargeRules.AnsweredUnless}), and which arm was taken settles that
-     * condition both ways: the arm carrying the number was taken because it does not hold, and any
-     * other arm because it does. So a {@code DivisionByZero} arm has established that the divisor is
-     * zero, which is a fact about a value the caller handed over and not about the case.
+     * <p>An operation answering its number as one case of a union comes back as the other case under
+     * a condition it declares ({@link DischargeRules.TheOtherCaseWhen}), and which arm was taken
+     * settles that condition both ways: the arm carrying the number was taken because it does not
+     * hold, and the other arm because it does. So a {@code DivisionByZero} arm has established that
+     * the divisor is zero, which is a fact about a value the caller handed over and not about the
+     * case.
+     *
+     * <p>About which case came back and not about whether a number was answered. An operation may
+     * answer nothing at all — {@code Int.divide} aborts on the one pair whose quotient no {@code
+     * Int} holds (spec §stdlib-int) — and an abort comes back as no case, so no arm is reached and
+     * there is nothing here for it to say.
      *
      * <p>Taken in through the door a written condition goes through, which is what keeps this one
      * statement rather than two: what a comparison establishes is {@link Predicates}' to say, and a
@@ -250,8 +256,8 @@ final class PathEngine {
         return new Entered(assuming(condition, in.known(), in.at(), !answered).known(), in.at());
     }
 
-    /** Whether {@code arm} was taken because the operation answered its number, or because it did
-     * not — and null where the arm says neither. */
+    /** Whether {@code arm} was taken because the union came back carrying the number, or because it
+     * came back as the other case — and null where the arm says neither. */
     private static Boolean whetherItAnswered(Core.Case arm, Type answersIn) {
         boolean itsCase = false;
         boolean another = false;
@@ -297,24 +303,29 @@ final class PathEngine {
                 ? at.location(root.binding(), terms.placeSubject(root.binding()),
                         terms.placeTerm(root.binding()))
                 : at.opened(root.binding(), opens.value(), opens.subject(),
-                        opens.term() != null ? opens.term() : terms.placeTerm(root.binding()),
-                        opens.numeric());
+                        terms.placeTerm(root.binding()), opens.numeric());
         return new Entered(seedAt(root, k, next, 0), next);
     }
 
     /**
      * What an arm's binding stands for: the value the walk reached where the two are one value, the
-     * subject facts about it are filed under, what the term grammar names it by where the arithmetic
-     * it opened names it, and which arithmetic that is.
+     * subject facts about it are filed under, and which arithmetic it is.
      *
      * <p>Taken together because they are one answer about one binding, and handing them over apart is
-     * how one of them was left behind. Four answers and not one: the value is where it came from,
+     * how one of them was left behind. Three answers and not one: the value is where it came from,
      * which is how a rule declared about an answer is found through however many names the answer
      * went by, and the arithmetic is what was computed to make it. An arm opening the number a
      * library operation answered as a case is where the two are furthest apart — the value it stands
      * for is the union, and the number it is is a quotient of two operands the union does not carry.
+     *
+     * <p>What the term grammar names it by is not among them, and is the place it is. A binding an
+     * arm opens is a place — that is what lets a clause be read against it — and a place is named by
+     * where it is: the two readers of what a binding's term is ({@link Terms#keyOfNowhere},
+     * {@link Terms#computesAsWhatItWasGiven}) are the readers of a binding that is <em>not</em> one.
+     * A term written here would be a second account of what names a binding, and the one nobody
+     * reads.
      */
-    private record Opens(Core value, FactSubject subject, Term term, NumericMeaning numeric) {}
+    private record Opens(Core value, FactSubject subject, NumericMeaning numeric) {}
 
     /**
      * What the arm's binding opens, or null where nothing here says.
@@ -333,7 +344,7 @@ final class PathEngine {
         }
         return switch (arm.pattern().binding()) {
             case Refinement.Direct(Type carried) -> arithmetic(carried, scrutinee, at);
-            case Refinement.OptionPresent ignored -> new Opens(null, terms.heldBy(of), null, null);
+            case Refinement.OptionPresent ignored -> new Opens(null, terms.heldBy(of), null);
             case Refinement.OptionAbsent ignored -> null;
         };
     }
@@ -358,7 +369,7 @@ final class PathEngine {
                 : DischargeRules.numericResult(Terms.operationOf(called));
         if (result == null || !(result.at() instanceof DischargeRules.Answered.InTheCaseCarrying(
                 Type answersIn)) || !answersIn.equals(carried)) {
-            return new Opens(scrutinee, terms.subjectOf(scrutinee, at), null, null);
+            return new Opens(scrutinee, terms.subjectOf(scrutinee, at), null);
         }
         NumericMeaning meaning = terms.computedBy(result, Terms.argsOf(called), carried);
         FactSubject subject = terms.subjectOpenedAs(meaning, carried, called, at);
@@ -366,9 +377,8 @@ final class PathEngine {
         // relate to anything else, and a binding standing for the value it opened is what an arm has
         // always given. Nothing is lost by declining here; what is lost by naming it anyway is the
         // one thing an atom asserts, which is that two writings of it are one value.
-        return subject == null ? new Opens(scrutinee, terms.subjectOf(scrutinee, at), null, null)
-                : new Opens(scrutinee, subject,
-                        terms.termOpenedAs(meaning, carried, called, at), meaning);
+        return subject == null ? new Opens(scrutinee, terms.subjectOf(scrutinee, at), null)
+                : new Opens(scrutinee, subject, meaning);
     }
 
     /** The call {@code value} came from, through however many names it was given, or null where it

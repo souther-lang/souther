@@ -5,9 +5,9 @@ import souther.compiler.core.Core;
 import java.util.List;
 
 /**
- * How much of a declaration's clauses a reading may hold apart.
+ * What a reading may spend, in the two places it can spend without a bound.
  *
- * <p>A choice between alternatives written at two positions is a union of products, and holding it
+ * <p><b>How much of a declaration's clauses it may hold apart.</b> A choice between alternatives written at two positions is a union of products, and holding it
  * is what lets the next conjunction answer each position exactly. What it costs is one alternative
  * per branch, multiplied through every conjunction — so a clause written to expand far enough is
  * one no reading should try, and the reading falls back to merging the alternatives into the one
@@ -20,12 +20,24 @@ import java.util.List;
  * needs is that a finite limit exists; which one a compilation sets is the compilation's, and is
  * written where a reading cannot reach it.
  *
+ * <p><b>How far from the point it will lay out a grid.</b> A divide rounded to a scale answers a
+ * value of that scale's grid, and what a range says of it is the two points of that grid the exact
+ * quotient lies between (spec §invariant-discharge-arithmetic). Laying one out costs a digit per
+ * place, so a scale written large enough is a grid no reading should try to name — a million places
+ * is a number a megabyte wide, and the ends of the whole-number range are scales
+ * {@code BigDecimal} refuses outright. A scale past the limit is a scale this reading has no grid
+ * for, which is what a scale it cannot read as one number already is.
+ *
+ * <p>The two questions a scale raises are not one. What the run time divides at is settled by the
+ * backend, which narrows a scale to what a {@code BigDecimal} takes; what a reading can lay out is
+ * settled here. A reading that asked only the first would be one whose cost the source decides.
+ *
  * <p><b>Owned by the compilation and not made here.</b> Nothing that reads a declaration decides
  * what it may be read with: a policy made where it is needed is one that can differ between two
  * readings of the same declaration, and the two would answer a position differently while each
  * stayed sound. So this arrives from the query graph, and the analysis takes it.
  */
-public record ReadingPolicy(int dnfExpansionLimit) {
+public record ReadingPolicy(int dnfExpansionLimit, int scalePlacesLimit) {
 
     public ReadingPolicy {
         // A guardrail is a positive number a count can be compared against, and a limit outside
@@ -36,6 +48,23 @@ public record ReadingPolicy(int dnfExpansionLimit) {
                     "a reading holds at least one alternative, so a limit below one bounds nothing: "
                             + dnfExpansionLimit);
         }
+        // Nought is a limit: a scale of nought is the whole numbers, which is a grid, and refusing
+        // every other one is a reading that lays out only that. Below it is not a count of places.
+        if (scalePlacesLimit < 0) {
+            throw new IllegalArgumentException(
+                    "a scale is a count of places from the point, so a limit below nought bounds"
+                            + " nothing: " + scalePlacesLimit);
+        }
+    }
+
+    /**
+     * Whether a reading will lay out the grid a divide rounded to {@code places} answers on.
+     *
+     * <p>Either way from the point. A scale left of it rounds to hundreds and is as much a grid as
+     * one that keeps two places, and a number a million places either way is as wide either way.
+     */
+    boolean laysOutAGridAt(int places) {
+        return places >= -scalePlacesLimit && places <= scalePlacesLimit;
     }
 
     /**

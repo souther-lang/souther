@@ -152,12 +152,19 @@ public final class Front {
          * observed rather than an optimum derived from it. What the design needs is that a finite
          * limit exists.
          *
+         * <p>The scale a reading will lay a grid out at is the same kind of number and is set the
+         * same way. A scale a domain writes is a count of places money or a rate is kept to, which
+         * is single digits; a thousand either way from the point is a wide margin over that and
+         * costs a number a thousand digits wide at the corners of one divide. Past it the answer is
+         * what a scale the reading cannot read as one number already gets — which side of nought it
+         * is on, and no grid.
+         *
          * <p>Held here rather than beside the policy it makes, so that reading a declaration cannot
          * reach it: what governs a reading is handed to it, and a default it could pick up is a
          * default two readings of one declaration can differ by.
          */
         static final souther.compiler.check.ReadingPolicy STANDARD =
-                new souther.compiler.check.ReadingPolicy(64);
+                new souther.compiler.check.ReadingPolicy(64, 1000);
     }
 
     /** One source, parsed, with the text of each declaration kept for publishing. Every position in
