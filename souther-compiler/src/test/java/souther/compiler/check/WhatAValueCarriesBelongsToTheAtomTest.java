@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -52,6 +53,10 @@ class WhatAValueCarriesBelongsToTheAtomTest {
 
     private static Core.Read list(BindingId of) {
         return new Core.Read("xs", of, new Type.ListOf(Type.INT), POS);
+    }
+
+    private static Core.Read number(BindingId of) {
+        return new Core.Read("n", of, Type.INT, POS);
     }
 
     private static Core length(Core of) {
@@ -227,6 +232,55 @@ class WhatAValueCarriesBelongsToTheAtomTest {
         assertThrows(DerivedNumericFacts.AnAtomComputedFromItself.class,
                 () -> DerivedNumericFacts.refine(nothingKnown(), computed, Set.of(one)),
                 "and an atom computed from itself is refused where it is derived");
+    }
+
+    /**
+     * A cycle that only closes through what a value carries is not a value built out of itself.
+     *
+     * <p>The two graphs again, and this time on the stack rather than in the tables. Reading a
+     * recipe reads the values a relation drags in, and reading one of those reads its own operands —
+     * so a derivation can arrive back at an atom it is in the middle of without any computation
+     * having reached itself. Here {@code a} is computed from {@code c}, {@code c} carries a relation
+     * naming {@code b}, and {@code b} is computed from {@code a}: over computations alone that is
+     * {@code a → c} and {@code b → a} and no cycle at all.
+     *
+     * <p>What is fixed is only that this is not called a disagreement. Deriving nothing for such an
+     * atom is a reading that says less, which is what a reading that cannot see round a cycle should
+     * say; refusing it says the naming built a value out of itself, which is a claim about this
+     * check and is false here.
+     */
+    @Test
+    void aCycleThatCrossesWhatAValueCarriesIsNotOneAtomComputedFromItself() {
+        Terms terms = terms();
+        Denotations at = holding(binding(0), binding(1), binding(2));
+        FactSubject a = terms.atomOf(number(binding(0)), at);
+        FactSubject b = terms.atomOf(number(binding(1)), at);
+        FactSubject c = terms.atomOf(number(binding(2)), at);
+        terms.computedBy(a, new AtomKnowledge.Computation.Derived(
+                new Derivation.Product(LinearForm.atom(c), LinearForm.atom(c))));
+        terms.computedBy(b, new AtomKnowledge.Computation.Derived(
+                new Derivation.Product(LinearForm.atom(a), LinearForm.atom(a))));
+        terms.carrying(c, List.of(new NumericConstraint(
+                LinearForm.atom(c).minus(LinearForm.atom(b)), Rel.LE)));
+
+        assertDoesNotThrow(() -> DerivedNumericFacts.refine(nothingKnown(), terms, Set.of(a)),
+                "no computation reaches itself here, and only the relation closes the ring");
+
+        // And the chain of recipes still answers for itself. Starting it again where the reading
+        // steps across a relation must not stop it noticing a ring made of recipes alone, which
+        // this one is: two of them and neither names itself.
+        Terms round = terms();
+        Denotations places = holding(binding(0), binding(1));
+        FactSubject one = round.atomOf(number(binding(0)), places);
+        FactSubject two = round.atomOf(number(binding(1)), places);
+        round.computedBy(one, new AtomKnowledge.Computation.Derived(
+                new Derivation.Product(LinearForm.atom(two), LinearForm.atom(two))));
+        round.computedBy(two, new AtomKnowledge.Computation.Derived(
+                new Derivation.Product(LinearForm.atom(one), LinearForm.atom(one))));
+
+        assertThrows(DerivedNumericFacts.AnAtomComputedFromItself.class,
+                () -> DerivedNumericFacts.refine(nothingKnown(), round, Set.of(one)),
+                "a ring of recipes is a value built out of itself however many recipes long it is");
     }
 
     /**
