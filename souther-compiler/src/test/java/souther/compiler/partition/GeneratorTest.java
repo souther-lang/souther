@@ -37,6 +37,46 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class GeneratorTest {
 
+    /**
+     * One row through an arm is what the arm is owed, whichever combination composed it.
+     *
+     * <p>An arm is claimed by every combination that takes it, so a search over the combinations
+     * leaves several attempts at one arm — and a rule relating two positions can refuse the values
+     * one combination names while another builds. Read as the first attempt, the answer moved with
+     * the order the search happened to walk them in: the same arm came back as one nothing could
+     * compose for, or as one a row goes through, depending on which combination came first.
+     */
+    @Test
+    void oneRowThroughAnArmIsTheAnswerWhateverTheOthersCameTo() {
+        Generator.GeneratedRow row = new Generator.GeneratedRow(
+                new Generator.Purpose.ForACombination(List.of("a")), List.of());
+        Generator.UnresolvedCombination why = new Generator.UnresolvedCombination(List.of("a"),
+                Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED);
+
+        for (List<Generator.ArmAttempt> order : List.of(
+                List.<Generator.ArmAttempt>of(new Generator.ArmAttempt.Unresolved(7, why),
+                        new Generator.ArmAttempt.Built(7, row)),
+                List.<Generator.ArmAttempt>of(new Generator.ArmAttempt.Built(7, row),
+                        new Generator.ArmAttempt.Unresolved(7, why)))) {
+            assertEquals(new Generator.ArmAttempt.Built(7, row),
+                    new Generator.GenerationResult(List.of(), List.of(), List.of(), List.of(),
+                            order).armAt(7),
+                    order::toString);
+        }
+    }
+
+    /** And an arm every combination claiming it failed at is one nothing composed a row for. */
+    @Test
+    void anArmEveryCombinationFailedAtIsUnresolved() {
+        Generator.UnresolvedCombination why = new Generator.UnresolvedCombination(List.of("a"),
+                Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED);
+
+        assertEquals(new Generator.ArmAttempt.Unresolved(7, why),
+                new Generator.GenerationResult(List.of(), List.of(), List.of(), List.of(),
+                        List.of(new Generator.ArmAttempt.Unresolved(7, why),
+                                new Generator.ArmAttempt.Unresolved(7, why))).armAt(7));
+    }
+
     private static final String TRIP = """
             module example.trip
 

@@ -395,17 +395,31 @@ public final class Generator {
          * What composing a row that takes {@code probe} came to, or null where no combination this
          * run took claims it.
          *
+         * <p><b>A fold and not a lookup.</b> One arm is claimed by every combination that takes it,
+         * so the attempts are many and the answer is one: a row through the arm is what the arm is
+         * owed, and one that exists is the answer whatever the combinations beside it came to. Read
+         * as the first entry, an arm two combinations claim came back as one nothing could compose
+         * for whenever the one that failed was walked first — an answer that moved with the order
+         * the search happened to take.
+         *
          * <p>Null is an answer and not a failure: an arm no combination of the body's own decisions
          * reaches is an arm nothing here composes an input for, which is a different piece of news
          * from one a search tried and could not reach.
          */
         public ArmAttempt armAt(int probe) {
+            ArmAttempt none = null;
             for (ArmAttempt each : arms) {
-                if (each.probe() == probe) {
-                    return each;
+                if (each.probe() != probe) {
+                    continue;
+                }
+                if (each instanceof ArmAttempt.Built) {
+                    return each;   // one row through it is what the arm is owed
+                }
+                if (none == null) {
+                    none = each;
                 }
             }
-            return null;
+            return none;
         }
 
         /**
