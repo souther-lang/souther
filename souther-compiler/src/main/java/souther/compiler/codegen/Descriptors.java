@@ -172,20 +172,13 @@ final class Descriptors {
     static final ClassDesc CD_Boolean = ClassDesc.of("java.lang.Boolean");
     static final ClassDesc CD_BigDecimal = ClassDesc.of("java.math.BigDecimal");
     static final ClassDesc CD_DecimalMath = ClassDesc.of("souther.runtime.DecimalMath");
-    /** {@code BigDecimal add/subtract/multiply(BigDecimal) -> BigDecimal}: the Decimal `+ - *` ops. */
-    static final MethodTypeDesc MTD_bdArith = MethodTypeDesc.of(CD_BigDecimal, CD_BigDecimal);
-    /** {@code DecimalMath.divide(BigDecimal, BigDecimal) -> BigDecimal}: the Decimal `/` operator. */
-    static final MethodTypeDesc MTD_bdDivideOp =
+    /** {@code DecimalMath add/subtract/multiply/divide(BigDecimal, BigDecimal) -> BigDecimal}: the
+     *  four Decimal operators. One descriptor because the four kernels take and answer the same
+     *  thing — the operator picks the name, not the shape. */
+    static final MethodTypeDesc MTD_bdArith =
             MethodTypeDesc.of(CD_BigDecimal, CD_BigDecimal, CD_BigDecimal);
     /** The Souther value ([#stdlib-decimal]); the runtime maps it to {@code java.math.RoundingMode}. */
     static final ClassDesc CD_RoundingMode = ClassDesc.of("souther.runtime.RoundingMode");
-    static final ClassDesc CD_JavaRoundingMode = ClassDesc.of("java.math.RoundingMode");
-    /** {@code DecimalMath.toJava(RoundingMode)}: the Java constant a mode value denotes. */
-    static final MethodTypeDesc MTD_toJavaRoundingMode =
-            MethodTypeDesc.of(CD_JavaRoundingMode, CD_RoundingMode);
-    /** {@code BigDecimal.divide(BigDecimal, int, RoundingMode)} (spec §stdlib-decimal). */
-    static final MethodTypeDesc MTD_bdDivide =
-            MethodTypeDesc.of(CD_BigDecimal, CD_BigDecimal, ConstantDescs.CD_int, CD_JavaRoundingMode);
     static final ClassDesc CD_LocalDate = ClassDesc.of("java.time.LocalDate");
     static final ClassDesc CD_LocalTime = ClassDesc.of("java.time.LocalTime");
     static final ClassDesc CD_LocalDateTime = ClassDesc.of("java.time.LocalDateTime");

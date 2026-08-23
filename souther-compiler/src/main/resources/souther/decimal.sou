@@ -1,10 +1,11 @@
 // The Decimal stdlib. Declared here like every other core module (§intrinsics); the kernels live in
 // souther-runtime's DecimalMath (compare) and java.math.BigDecimal (add/subtract/multiply).
 //
-// The `+ - * /` operators stay compiler-integrated (syntax + closed-newtype rules), and `divide`
-// (the scale-and-mode form returning `Decimal | DivisionByZero`) stays compiler-integrated for now
-// — a primitive-headed union a core declaration cannot yet express. See the stdlib
-// implementation-location policy.
+// The `+ - * /` operators stay compiler-integrated as syntax (they carry the closed-newtype rules),
+// but what they mean is these kernels: the backend emits a call to DecimalMath rather than to a
+// BigDecimal method, as Int's operators already call IntMath (ADR-0112). Every function below is an
+// ordinary kernel described by its declaration, `divide` included — the primitive-headed union it
+// answers is one a declaration may name (ADR-0081).
 module souther.decimal
 
 // An ordinary data: a mode is evaluated at the call like any other argument. The implementation is

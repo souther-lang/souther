@@ -1142,12 +1142,6 @@ final class BodyGen {
             emitFunctionValue(value, paramTypes);
         }
 
-        /** Narrows an {@code Int} (a {@code long}) to a JVM {@code int}, for a JDK method taking an
-         * {@code int} index. */
-        void emitL2i() {
-            code.l2i();
-        }
-
         private void call(Core.Call call, Type expected) {
             // An enumeration's order lives on its sum, so the ordered family takes it as a comparator
             // rather than reading a Comparable off the value (issue #161). Everything else about
@@ -1176,9 +1170,11 @@ final class BodyGen {
                         MethodTypeDesc.of(CD_List, CD_Comparator, CD_Fn, CD_List));
                 return;
             }
-            // A partial division answers a case rather than a number when its divisor is zero, so
-            // it emits a branch. The table's row shape is one call with one result; these are
+            // A partial Int division answers a case rather than a number when its divisor is zero,
+            // so it emits a branch. The table's row shape is one call with one result; these two are
             // written out here, and their declarations still say what they take and answer.
+            // `Decimal.divide` was a third: it is an ordinary kernel now, and its zero divisor is
+            // answered by the runtime that owns the operation (ADR-0112).
             switch (call.name()) {
                 case "Int.divide" -> {
                     intDivide(call, true);
@@ -1186,10 +1182,6 @@ final class BodyGen {
                 }
                 case "Int.truncatingRemainder" -> {
                     intDivide(call, false);
-                    return;
-                }
-                case "Decimal.divide" -> {
-                    decimalDivide(call);
                     return;
                 }
                 default -> { }
@@ -1513,33 +1505,6 @@ final class BodyGen {
             code.labelBinding(end);
         }
 
-        /** {@code divide(a, b, scale, mode)} on Decimal: a zero divisor takes the DivisionByZero
-         * case, otherwise {@code a.divide(b, scale, toJava(mode))} (spec §stdlib-decimal). */
-        private void decimalDivide(Core.Call call) {
-            genExpr(call.args().get(0));
-            int aSlot = slot(Type.DECIMAL);
-            code.astore(aSlot);
-            genExpr(call.args().get(1));
-            int bSlot = slot(Type.DECIMAL);
-            code.astore(bSlot);
-            code.aload(bSlot);
-            code.invokevirtual(CD_BigDecimal, "signum", MethodTypeDesc.of(ConstantDescs.CD_int));
-            Label zero = code.newLabel();
-            Label end = code.newLabel();
-            code.ifeq(zero);                       // signum == 0 -> DivisionByZero case
-            code.aload(aSlot);
-            code.aload(bSlot);
-            genExpr(call.args().get(2));              // scale (Int, a long)
-            code.l2i();
-            genExpr(call.args().get(3));              // mode, an ordinary value
-            code.invokestatic(CD_DecimalMath, "toJava", MTD_toJavaRoundingMode);
-            code.invokevirtual(CD_BigDecimal, "divide", MTD_bdDivide);
-            code.goto_(end);
-            code.labelBinding(zero);
-            code.getstatic(CD_DivisionByZero, "INSTANCE", CD_DivisionByZero);
-            code.labelBinding(end);
-        }
-
         /**
          * Calls a behavior that depends on nothing (spec {@code [#calling-a-behavior]}). It is built
          * here rather than read out of a field: with an empty requirement set there is nothing to
@@ -1718,9 +1683,16 @@ final class BodyGen {
                     code.labelBinding(end);
                 }
                 // `+ - * /` work on two Int or two Decimal operands (spec
-                // §an-operator-takes-the-types-it-is-defined-for). Int aborts on overflow, and `/` aborts on
-                // a zero divisor; Decimal does not overflow, and its `/` rounds by the default scale/mode.
-                // Case handling for a zero divisor is the divide/remainder functions, not the operator.
+                // §an-operator-takes-the-types-it-is-defined-for). Int aborts on overflow, and `/`
+                // aborts on a zero divisor; Decimal aborts at the ends of the scale range, and its
+                // `/` rounds by the default scale/mode and aborts on a zero divisor too. Case
+                // handling for a zero divisor is the divide/remainder functions, not the operator.
+                //
+                // Both go through the runtime that owns the arithmetic — IntMath and DecimalMath —
+                // rather than to a host method. What an operator means is the runtime's, and calling
+                // BigDecimal here is what let a scale overflow leave a behavior as a
+                // java.lang.ArithmeticException (ADR-0112, issue #976). This said "Decimal does not
+                // overflow", which is not true of a sum, a difference or a product either.
                 case ADD, SUB, MUL, DIV -> {
                     // The operands are numbers here: newtype arithmetic is a construction over the
                     // values its operands wrap, and it was written as one where the tree was built
@@ -1728,12 +1700,13 @@ final class BodyGen {
                     Type t = genExpr(bin.left());
                     genExpr(bin.right());
                     if (t == Type.DECIMAL) {
-                        switch (bin.op()) {
-                            case ADD -> code.invokevirtual(CD_BigDecimal, "add", MTD_bdArith);
-                            case SUB -> code.invokevirtual(CD_BigDecimal, "subtract", MTD_bdArith);
-                            case MUL -> code.invokevirtual(CD_BigDecimal, "multiply", MTD_bdArith);
-                            default  -> code.invokestatic(CD_DecimalMath, "divide", MTD_bdDivideOp);
-                        }
+                        String m = switch (bin.op()) {
+                            case ADD -> "add";
+                            case SUB -> "subtract";
+                            case MUL -> "multiply";
+                            default  -> "divide";
+                        };
+                        code.invokestatic(CD_DecimalMath, m, MTD_bdArith);
                     } else {
                         String m = switch (bin.op()) {
                             case ADD -> "addExact";

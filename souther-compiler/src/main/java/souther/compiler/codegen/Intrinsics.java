@@ -131,17 +131,24 @@ final class Intrinsics {
 
     /**
      * An {@code invokevirtual} to a JDK / {@code java.time} class with an explicit descriptor. The
-     * first {@code argOrder} entry is the receiver; the rest are stack arguments. An argument listed in
-     * {@code l2iArgs} is narrowed from Souther's {@code Int} (a {@code long}) to a JVM {@code int}.
+     * first {@code argOrder} entry is the receiver; the rest are stack arguments.
+     *
+     * <p>The values go over as they are. This is the one emitter that reaches a host method without
+     * a runtime kernel in between, so it is the one that has to be told what it may be used for: a
+     * JDK operation named here takes the Souther values at that position without conversion and
+     * answers on all of them (ADR-0112). An argument that would have to be changed to fit — an
+     * {@code Int} narrowed to an {@code int} — or an operation that refuses some of the values it
+     * admits belongs on a kernel, which owns the conversion and the refusal.
+     *
+     * <p>This carried a {@code l2iArgs} set that narrowed a listed argument with {@code l2i}. It had
+     * no entries, and what it offered was the raw narrowing issue #976 is about, in the one place a
+     * later kernel taking a host {@code int} would reach for it.
      */
     record JdkVirtual(ClassDesc owner, String method, MethodTypeDesc desc, int[] argOrder,
-                      Set<Integer> l2iArgs, Type result) implements Emit {
+                      Type result) implements Emit {
         public Type emit(BodyGen g, String key, Core.Call call) {
             for (int src : argOrder) {
                 g.genExpr(call.args().get(src));
-                if (l2iArgs.contains(src)) {
-                    g.emitL2i();
-                }
             }
             g.emitInvokeVirtual(owner, method, desc);
             return result;
@@ -246,7 +253,7 @@ final class Intrinsics {
     }
 
     private static Emit jdk(ClassDesc owner, String method, MethodTypeDesc desc, int[] argOrder, Type result) {
-        return new JdkVirtual(owner, method, desc, argOrder, Set.of(), result);
+        return new JdkVirtual(owner, method, desc, argOrder, result);
     }
 
     private static MethodTypeDesc mtd(ClassDesc ret, ClassDesc... params) {
@@ -389,13 +396,17 @@ final class Intrinsics {
         t.put("int.compare", rt(CD_IntMath, "compare", order(0, 1), ts -> Type.INT));
         t.put("int.floorMod", rt(CD_IntMath, "floorMod", order(0, 1), ts -> Type.INT));
 
-        // Decimal — add/subtract/multiply are BigDecimal instance methods (receiver is the first arg);
-        // compare is a DecimalMath static returning -1/0/1.
-        t.put("decimal.add", jdk(CD_BigDecimal, "add", MTD_bdArith, order(0, 1), Type.DECIMAL));
-        t.put("decimal.subtract", jdk(CD_BigDecimal, "subtract", MTD_bdArith, order(0, 1), Type.DECIMAL));
-        t.put("decimal.multiply", jdk(CD_BigDecimal, "multiply", MTD_bdArith, order(0, 1), Type.DECIMAL));
-        t.put("decimal.compare", rt(CD_DecimalMath, "compare", order(0, 1), ts -> Type.INT));
-        t.put("decimal.fromInt", rt(CD_DecimalMath, "fromInt", order(0), ts -> Type.DECIMAL));
+        // Decimal — every one of them a DecimalMath static, read off its declaration. What a
+        // BigDecimal method does is not what a Souther operation means: each of these is partial at
+        // the ends of the scale range, and the abort that reports it belongs to the operation rather
+        // than to whoever emitted the call (ADR-0112). One emitter for the whole module, so a
+        // Decimal operation added later has one place to be written and no second shape to pick.
+        t.put("decimal.add", new DeclaredStatic(CD_DecimalMath, "add"));
+        t.put("decimal.subtract", new DeclaredStatic(CD_DecimalMath, "subtract"));
+        t.put("decimal.multiply", new DeclaredStatic(CD_DecimalMath, "multiply"));
+        t.put("decimal.divide", new DeclaredStatic(CD_DecimalMath, "divide"));
+        t.put("decimal.compare", new DeclaredStatic(CD_DecimalMath, "compare"));
+        t.put("decimal.fromInt", new DeclaredStatic(CD_DecimalMath, "fromInt"));
 
         return Map.copyOf(t);
     }
