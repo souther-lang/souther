@@ -23,8 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  *
  * <p>Four readers used to descend a sum's cases themselves — two in {@link TypeOps}, one keyed on
  * the declaration rather than the type, and one in the derivation keyed on the written name. Three
- * of them are held here against {@link LeafSpace}, which is the descent, and the fourth follows
- * (#990). What each of them answers <em>about</em> a type it was handed is its own and is held here
+ * of them are held here against {@link AtomSpace}, which is the descent, and the fourth follows
+ * (#990). What each reader is handed differs and the descent no longer does: a sum asked about
+ * through its declaration is asked about as its type. What each of them answers <em>about</em> a type it was handed is its own and is held here
  * too: a reader asking {@code sumCases} is asking whether there are cases to read at all, and a
  * type that is its own one leaf is not that.
  */
@@ -86,7 +87,7 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
                 data Top = A | B
                 """);
         assertEquals(List.of("R", "T", "P", "Q"),
-                shown(LeafSpace.leavesOf(Type.ref(named(shared, "Top")), TypeChecker.symbols(shared))));
+                shown(AtomSpace.subjectAtoms(Type.ref(named(shared, "Top")), TypeChecker.symbols(shared))));
     }
 
     @Test
@@ -94,12 +95,25 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
         assertEquals(List.of("Station"), shown(leavesOf("Station")));
     }
 
+    /**
+     * A union descends a member that is a sum, as a declared case is descended.
+     *
+     * <p>And answers the same however the set it holds was built. A union states no order of its
+     * own — {@code Type.Union} is a set — so the members are taken in their name's order rather
+     * than in whichever order the set iterates: an order nothing decided is one that can come out
+     * differently between two runs, and a derived artifact is written in it.
+     */
     @Test
-    void aUnionDescendsAMemberThatIsASum() {
-        Type union = Type.union(Set.of(named("OnceKind"), named("Renkei")));
-        assertEquals(Set.of("Station", "Hospital", "Renkei"),
-                Set.copyOf(shown(LeafSpace.leavesOf(union, symbols))),
-                "a member written as a sum contributes its leaves, as a declared case does");
+    void aUnionAnswersTheSameWhicheverWayItsMembersWereCollected() {
+        TypeSymbol once = named("OnceKind");
+        TypeSymbol renkei = named("Renkei");
+        List<String> expected = List.of("Station", "Hospital", "Renkei");
+
+        assertEquals(expected, shown(AtomSpace.subjectAtoms(
+                Type.union(new java.util.LinkedHashSet<>(List.of(once, renkei))), symbols)));
+        assertEquals(expected, shown(AtomSpace.subjectAtoms(
+                Type.union(new java.util.LinkedHashSet<>(List.of(renkei, once))), symbols)),
+                "the union written the other way round is the same union");
     }
 
     /** A sum naming itself is refused where it is written; the descent only has to come back. */
@@ -112,7 +126,7 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
                 data S = A | S
                 """);
         assertEquals(List.of("A"),
-                shown(LeafSpace.leavesOf(Type.ref(named(itself, "S")), TypeChecker.symbols(itself))));
+                shown(AtomSpace.subjectAtoms(Type.ref(named(itself, "S")), TypeChecker.symbols(itself))));
     }
 
     /** What a sum declares, asked of the declaration — the same leaves, and its own name is not one. */
@@ -161,6 +175,17 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
                         .toList());
     }
 
+    /**
+     * The two a selector's own coverage will be read from (#966's next step): a primitive case is
+     * the one atom it is, and an optional has none of its own — its carriers are named by
+     * {@code Option} and given where a subject's cases are worked out, not descended to here.
+     */
+    @Test
+    void aPrimitiveIsOneAtomAndAnOptionalHasNone() {
+        assertEquals(List.of("Int"), shown(AtomSpace.subjectAtoms(Type.INT, symbols)));
+        assertEquals(List.of(), shown(AtomSpace.subjectAtoms(Type.option(Type.INT), symbols)));
+    }
+
     @Test
     void anOutputsCasesAreEmptyWhereTheOutputNamesNoCase() {
         assertEquals(Set.of(), TypeOps.outputCases(Type.INT, symbols),
@@ -170,7 +195,7 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
     // --- helpers ---------------------------------------------------------------------------------
 
     private List<TypeSymbol> leavesOf(String type) {
-        return LeafSpace.leavesOf(Type.ref(named(type)), symbols);
+        return AtomSpace.subjectAtoms(Type.ref(named(type)), symbols);
     }
 
     private TypeSymbol named(String type) {

@@ -376,11 +376,11 @@ public final class TypeOps {
 
     /** The cases of {@code t} when it is a sum — a declared {@code data S = A | B} or the union a
      * branch widened to — with a case that is itself a sum folded to its own cases. Null when
-     * {@code t} is not a sum at all, which is the answer this has that {@link LeafSpace} does not:
+     * {@code t} is not a sum at all, which is the answer this has that {@link AtomSpace} does not:
      * a reader here is asking whether there are cases to read, and a type that is its own one leaf
      * is not that. */
     static List<TypeSymbol> sumCases(Type t, Symbols symbols) {
-        return isSumType(t, symbols) ? LeafSpace.leavesOf(t, symbols) : null;
+        return isSumType(t, symbols) ? AtomSpace.subjectAtoms(t, symbols) : null;
     }
 
     /** A sum's cases: what each name it lists denotes. A name that denotes nothing lists no case —
@@ -917,7 +917,7 @@ public final class TypeOps {
 
     /** The set of leaf (non-sum) case names a data-like type covers, flattening nested sums. */
     public static Set<TypeSymbol> leafCases(Type t, Symbols symbols) {
-        return new LinkedHashSet<>(LeafSpace.leavesOf(t, symbols));
+        return new LinkedHashSet<>(AtomSpace.subjectAtoms(t, symbols));
     }
 
     /**
@@ -1339,7 +1339,7 @@ public final class TypeOps {
 
     /** A sum's leaf cases in declaration order, nested sums flattened where they are written. */
     public static List<TypeSymbol> leafCases(Hir.SumData sum, Symbols symbols) {
-        return LeafSpace.leavesOf(sum, symbols);
+        return AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols);
     }
 
     /** The key of the first {@code Map} inside {@code t} that cannot cross the boundary, or null when
