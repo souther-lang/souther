@@ -71,6 +71,55 @@ final class DerivedNumericFacts {
         record Between(FactSubject atom, Bounds bounds) implements Fact {}
     }
 
+    /**
+     * What a recipe answers about the atom it was recorded for.
+     *
+     * <p>Three answers, where two of them used to be the empty list. A rule with nothing to fire on
+     * says nothing — the divisor is a range holding zero, the scale is not one number, the operands
+     * are values this reading has no bound for — and a rule that fired and found the arithmetic
+     * running wholly outside what the answer's own kind of number holds says something quite
+     * different: this operation produces no value at all for the operands admitted here. Told apart
+     * only by which of them a caller asked for, the second reached every caller as the first, and
+     * the one thing it says was the one thing nobody could read.
+     *
+     * <p>{@link NoValueCameOfIt} is about the recipe's <em>normal</em> answer and about nothing more.
+     * An operation that answers a union produces no number where it comes back as its other case
+     * either, and that case is one an arm is reached at; whether the operation completes at all is a
+     * question with the other cases in it, and it is asked where they are known and not here.
+     *
+     * <p>Not an empty range in the domain, which is the shape this is written to avoid. Asserted
+     * there it would be a contradiction, and a contradictory domain proves every clause there is —
+     * so a construction over a value nothing is known of would come out discharged. It would not
+     * even be that consistently: what refuses a clause is not the numeric rules alone, so the
+     * construction would come out established by the numbers and refused by the predicates at once,
+     * which is the check disagreeing with itself rather than answering.
+     */
+    sealed interface Says {
+
+        /** Nothing this rule can say here. */
+        record Nothing() implements Says {}
+
+        /** What the rule found, each fact through the door it names. */
+        record These(List<Fact> facts) implements Says {}
+
+        /**
+         * The arithmetic ran wholly outside what {@code atom}'s own kind of number holds, so the
+         * operation answered no value for any operands this reading admits.
+         *
+         * <p>Read of the carrier and not of a declaration. A value of a newtype has satisfied that
+         * newtype's invariant, and whether a construction does is the question being asked — so what
+         * is read is the machine's range, which is true of every value that exists at all.
+         */
+        record NoValueCameOfIt(FactSubject atom) implements Says {}
+
+        Says NOTHING = new Nothing();
+
+        /** The facts this holds, which is none but where a rule found some. */
+        default List<Fact> facts() {
+            return this instanceof These(List<Fact> found) ? found : List.of();
+        }
+    }
+
     /** At or above nought, as a range, for asking whether a reading put a value on that side. */
     private static final Bounds AT_OR_ABOVE_NOUGHT =
             new Bounds(Endpoint.inclusive(Count.ZERO), null);
@@ -133,8 +182,8 @@ final class DerivedNumericFacts {
         }
         derived.watched();
         NumericDomain<FactSubject> out = base;
-        for (List<Fact> facts : derived.answered.values()) {
-            out = taking(out, facts, terms);
+        for (Says said : derived.answered.values()) {
+            out = taking(out, said, terms);
         }
         return out;
     }
@@ -181,7 +230,7 @@ final class DerivedNumericFacts {
      */
     private static final class Memo {
 
-        private final Map<FactSubject, List<Fact>> answered = new LinkedHashMap<>();
+        private final Map<FactSubject, Says> answered = new LinkedHashMap<>();
 
         /** Null wherever no test is reading, which is every compilation but a test's. Kept as
          * whether-to-record rather than as a list nobody reads, for the reason
@@ -210,9 +259,9 @@ final class DerivedNumericFacts {
      * the recipes make a graph with no way back to where it started; reaching one that is already
      * being answered would mean the naming built an atom out of itself.
      */
-    private static List<Fact> derive(FactSubject atom, NumericDomain<FactSubject> base, Terms terms,
-                                     Memo done, Set<FactSubject> deriving, ContextMultiplicity copies) {
-        List<Fact> had = done.answered.get(atom);
+    private static Says derive(FactSubject atom, NumericDomain<FactSubject> base, Terms terms,
+                               Memo done, Set<FactSubject> deriving, ContextMultiplicity copies) {
+        Says had = done.answered.get(atom);
         if (had != null) {
             return had;
         }
@@ -220,10 +269,10 @@ final class DerivedNumericFacts {
             throw new AnAtomComputedFromItself(atom);
         }
         done.evaluating(atom);
-        List<Fact> facts = factsFor(atom, base, terms, done, deriving, copies);
+        Says said = factsFor(atom, base, terms, done, deriving, copies);
         deriving.remove(atom);
-        done.answered.put(atom, facts);
-        return facts;
+        done.answered.put(atom, said);
+        return said;
     }
 
     /**
@@ -238,8 +287,8 @@ final class DerivedNumericFacts {
      * seed is a product reaches the product through the form its walk was recorded with, and a
      * product of two folds reaches them through its factors.
      */
-    private static List<Fact> factsFor(FactSubject atom, NumericDomain<FactSubject> base, Terms terms,
-                                       Memo done, Set<FactSubject> deriving, ContextMultiplicity copies) {
+    private static Says factsFor(FactSubject atom, NumericDomain<FactSubject> base, Terms terms,
+                                 Memo done, Set<FactSubject> deriving, ContextMultiplicity copies) {
         InductiveBounds.Walk walk = terms.reductions().get(atom);
         if (walk != null) {
             // Each reading of the walk's own forms gets a memo of its own, since each is against a
@@ -257,7 +306,7 @@ final class DerivedNumericFacts {
             }), terms);
         }
         return switch (terms.derivations().get(atom)) {
-            case Derivation.Product product -> between(atom, Intervals.product(
+            case Derivation.Product product -> projected(atom, Intervals.product(
                     boundsOf(product.left(), base, terms, done, deriving, copies),
                     boundsOf(product.right(), base, terms, done, deriving, copies)), terms);
             case Derivation.TruncatingQuotient quotient ->
@@ -400,25 +449,44 @@ final class DerivedNumericFacts {
      * <p>Said of every range a recipe answers with rather than in each recipe, so that a recipe
      * added later is held to it without being asked.
      *
-     * <p><b>Where the correction leaves nothing, nothing is stated — and not an empty range.</b> The
-     * arithmetic worked out to values the value it is about cannot take, so the operation answers on
-     * no input this reading admits, and the operator that would have answered aborts instead. That
-     * the path therefore has no execution is a stronger thing than this procedure states: whether an
-     * operation aborts at all is settled by the divisor's own type or by a {@code require} (spec
-     * §invariant-discharge-arithmetic), and a reading is not where the language takes that on.
+     * <p><b>Where the correction leaves nothing, no range is stated — and not an empty one.</b>
      * Asserted as an empty range it would be a contradiction, and a contradictory domain proves
-     * every clause there is — which is the same trap a rule with no operands to fire on is kept out
-     * of ({@link #quotient}), and here it does not even hold: what a clause is refused by is not the
-     * numeric rules alone, so a construction would come out established by the numbers and refused
-     * by the predicates at once, which is the check disagreeing with itself.
-     *
-     * <p>So the value is one nothing is known of, and a construction over it is owed its clause as
-     * it is owed over any other such value. What is fixed is that nothing is known of it <em>as a
-     * number no {@code Int} is</em> — which is what a reading refused a construction by.
+     * every clause there is; it would not even do that consistently, since what refuses a clause is
+     * not the numeric rules alone, so a construction would come out established by the numbers and
+     * refused by the predicates at once. What that emptiness <em>means</em> is a different question
+     * and is not answered by leaving a range out: this says nothing about the atom, and
+     * {@link #projected} is where a rule that put one operation's arithmetic through says the other
+     * thing about it.
      */
-    private static List<Fact> between(FactSubject atom, Bounds bounds, Terms terms) {
+    private static Says between(FactSubject atom, Bounds bounds, Terms terms) {
         Bounds held = heldToWhatItCanBe(atom, bounds, terms);
-        return held.holdsAValue() ? List.of(new Fact.Between(atom, held)) : List.of();
+        return held.holdsAValue() ? new Says.These(List.of(new Fact.Between(atom, held)))
+                : Says.NOTHING;
+    }
+
+    /**
+     * The same, where {@code bounds} is a projection of the arithmetic one operation computes — so
+     * an empty answer is that operation having produced no value rather than this reading having
+     * found none.
+     *
+     * <p>Which is the one place the two can be told apart, and it is told apart by what was put
+     * through rather than by what came out. A range that holds nothing before it meets the carrier
+     * is a rule that proved nothing and is {@link Says.NOTHING}; a range that held values and lost
+     * every one of them to the carrier is an operation whose every answer here is a number no value
+     * of its type is, which is an abort (spec §stdlib-int) and not a value nothing is known of.
+     *
+     * <p>Asked of an operation and not of a choice or a walk. A choice answers one of its arms and
+     * each arm is already an answer held to its own carrier, so an empty span there is arms this
+     * reading could say nothing about; and what a walk proves is proved by checking a step, where
+     * failing to prove a range is not proving there is no value in one.
+     */
+    private static Says projected(FactSubject atom, Bounds bounds, Terms terms) {
+        if (!bounds.holdsAValue()) {
+            return Says.NOTHING;
+        }
+        Bounds held = heldToWhatItCanBe(atom, bounds, terms);
+        return held.holdsAValue() ? new Says.These(List.of(new Fact.Between(atom, held)))
+                : new Says.NoValueCameOfIt(atom);
     }
 
     /** {@code bounds} with an end outside what {@code atom}'s own kind of number holds pulled back
@@ -457,26 +525,25 @@ final class DerivedNumericFacts {
      * also be a sharpening of a bound that is already sound, which is a different reason from the
      * one above and not one this rule needs.
      */
-    private static List<Fact> quotient(FactSubject atom, Derivation.TruncatingQuotient quotient,
-                                       NumericDomain<FactSubject> base, Terms terms,
-                                       Memo done, Set<FactSubject> deriving, ContextMultiplicity copies) {
+    private static Says quotient(FactSubject atom, Derivation.TruncatingQuotient quotient,
+                                 NumericDomain<FactSubject> base, Terms terms,
+                                 Memo done, Set<FactSubject> deriving, ContextMultiplicity copies) {
         Bounds divisor = divisorOf(quotient.divisor(), quotient.divisorExtent(), base, terms, done,
                 deriving, copies);
         if (divisor == null) {
-            return List.of();
+            return Says.NOTHING;
         }
         Bounds numerator = boundsOf(quotient.numerator(), base, terms, done, deriving, copies);
-        Bounds held = heldToWhatItCanBe(atom,
+        Says where = projected(atom,
                 Intervals.truncatingQuotient(numerator, divisor), terms);
         // Nothing at all, and not the halves that do not mention the range. What is left of a
         // dividend relates the quotient to it, so a reading that dropped where the quotient lies and
         // kept that relation would put the quotient back where the arithmetic had it — a number no
         // `Int` is, reached the long way round.
-        if (!held.holdsAValue()) {
-            return List.of();
+        if (!(where instanceof Says.These)) {
+            return where;
         }
-        List<Fact> facts = new ArrayList<>();
-        facts.add(new Fact.Between(atom, held));
+        List<Fact> facts = new ArrayList<>(where.facts());
         // What the divide left is `a - b * q`, which is a form the domain carries only where this
         // reading holds the divisor to one number: against a divisor left in a range, `b * q` is a
         // product of two values and relating the quotient to what it divided would mean deriving that
@@ -488,7 +555,7 @@ final class DerivedNumericFacts {
                     quotient.numerator().minus(LinearForm.<FactSubject>atom(atom).times(by)),
                     divisor, numerator));
         }
-        return facts;
+        return new Says.These(List.copyOf(facts));
     }
 
     /**
@@ -499,16 +566,16 @@ final class DerivedNumericFacts {
      * is is not this operation's remainder either. What is said under them is what truncation toward
      * zero means: the answer keeps the sign of what was divided, and is smaller than the divisor.
      */
-    private static List<Fact> remainder(FactSubject atom, Derivation.TruncatingRemainder remainder,
-                                        NumericDomain<FactSubject> base, Terms terms,
-                                        Memo done, Set<FactSubject> deriving, ContextMultiplicity copies) {
+    private static Says remainder(FactSubject atom, Derivation.TruncatingRemainder remainder,
+                                  NumericDomain<FactSubject> base, Terms terms,
+                                  Memo done, Set<FactSubject> deriving, ContextMultiplicity copies) {
         Bounds divisor = divisorOf(remainder.divisor(), remainder.divisorExtent(), base, terms, done,
                 deriving, copies);
         if (divisor == null) {
-            return List.of();
+            return Says.NOTHING;
         }
-        return leftOver(LinearForm.atom(atom), divisor,
-                boundsOf(remainder.numerator(), base, terms, done, deriving, copies));
+        return new Says.These(leftOver(LinearForm.atom(atom), divisor,
+                boundsOf(remainder.numerator(), base, terms, done, deriving, copies)));
     }
 
     /**
@@ -571,13 +638,13 @@ final class DerivedNumericFacts {
      * side it is on follows from the operands and not from where the grid is. Read off the grid at
      * scale nought, since which side that answer is on is the side every other scale answers too.
      */
-    private static List<Fact> rounded(FactSubject atom, Derivation.RoundedQuotient rounded,
-                                      NumericDomain<FactSubject> base, Terms terms,
-                                      Memo done, Set<FactSubject> deriving, ContextMultiplicity copies) {
+    private static Says rounded(FactSubject atom, Derivation.RoundedQuotient rounded,
+                                NumericDomain<FactSubject> base, Terms terms,
+                                Memo done, Set<FactSubject> deriving, ContextMultiplicity copies) {
         Bounds divisor = divisorOf(rounded.divisor(), rounded.divisorExtent(), base, terms, done,
                 deriving, copies);
         if (divisor == null) {
-            return List.of();
+            return Says.NOTHING;
         }
         Bounds numerator = boundsOf(rounded.numerator(), base, terms, done, deriving, copies);
         Integer places = placesOf(boundsOf(rounded.scale(), base, terms, done, deriving, copies),
@@ -585,8 +652,10 @@ final class DerivedNumericFacts {
         Bounds answered = Intervals.roundedQuotient(numerator, divisor,
                 places == null ? 0 : places);
         if (places != null) {
-            return between(atom, answered, terms);
+            return projected(atom, answered, terms);
         }
+        // The grid is not one this reading lays out, so where the quotient lies is not stated and
+        // an empty answer here would be that and not an operation answering nothing.
         List<Fact> facts = new ArrayList<>();
         if (answered.liesWithin(AT_OR_ABOVE_NOUGHT)) {
             facts.add(new NumericConstraint(LinearForm.atom(atom), Rel.GE));
@@ -594,7 +663,7 @@ final class DerivedNumericFacts {
         if (answered.liesWithin(AT_OR_BELOW_NOUGHT)) {
             facts.add(new NumericConstraint(LinearForm.atom(atom), Rel.LE));
         }
-        return facts;
+        return new Says.These(List.copyOf(facts));
     }
 
     /**
@@ -699,10 +768,10 @@ final class DerivedNumericFacts {
     /** {@code d} with every one of {@code facts} taken as holding, each through the door it names.
      * An end a range does not reach is asserted as the strict comparison it is, which is what the
      * domain reads a range's ends as. */
-    private static NumericDomain<FactSubject> taking(NumericDomain<FactSubject> d, List<Fact> facts,
+    private static NumericDomain<FactSubject> taking(NumericDomain<FactSubject> d, Says said,
                                                      Terms terms) {
         NumericDomain<FactSubject> out = d;
-        for (Fact fact : facts) {
+        for (Fact fact : said.facts()) {
             out = switch (fact) {
                 case Fact.Between(FactSubject atom, Bounds bounds) ->
                         out.assuming(atom, bounds, terms.kindsOf(LinearForm.atom(atom)));
