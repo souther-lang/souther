@@ -45,31 +45,13 @@ import java.util.Map;
  */
 public final class Partitions {
 
-    /** How many axes one behavior is measured at. Past this the pairs are more than a person reads. */
-    static final int MAX_AXES = 12;
-
     /**
-     * A position dropped for being past the limit, and what dropping it cost.
-     *
-     * <p>The two are not the same loss. An axis with a cut in it was carrying boundaries some rule
-     * drew, and nothing can ask about them now — what the rows cover there is unknown rather than
-     * complete. An axis with only classes was carrying a measure nothing refuses a build over, so
-     * losing it costs a line in a report and no more. Recorded here because the difference cannot be
-     * read back afterwards: neither leaves a boundary behind, and a position nobody measured looks
-     * exactly like one the rows cover.
-     *
-     * @param axis                which position was dropped
-     * @param carriedAnObligation whether a rule had drawn a line on this position
+     * @param axes the positions this behavior is measured at, in parameter order. Every position
+     *             the model divides is one of them: what a behavior is measured at is settled by
+     *             what its types say and by what its body compares, and a count of positions is
+     *             not a measure of what any of that costs (see this package's documentation)
      */
-    public record OmittedAxis(AxisId axis, boolean carriedAnObligation) {}
-
-    /**
-     * @param axes    the positions this behavior is measured at, in parameter order
-     * @param omitted axes past {@link #MAX_AXES}, dropped rather than merged: an axis whose path
-     *                nobody can name is not an axis, and folding several into one would put a class
-     *                nothing can classify into the denominator
-     */
-    public record Partitioning(List<Axis> axes, List<OmittedAxis> omitted,
+    public record Partitioning(List<Axis> axes,
                                souther.compiler.inputs.Quantities quantities,
                                java.util.Set<NumericTerm> uncertain,
                                List<UndividedPosition> undivided,
@@ -84,7 +66,6 @@ public final class Partitions {
         public Partitioning {
             compared = List.copyOf(compared);
             axes = List.copyOf(axes);
-            omitted = List.copyOf(omitted);
             uncertain = java.util.Set.copyOf(uncertain);
             undivided = List.copyOf(undivided);
             unread = List.copyOf(unread);
@@ -177,24 +158,13 @@ public final class Partitions {
             }
             axisOf(behavior, position, symbols, policy, found, uncertain, unread);
         }
-        List<Axis> kept = new ArrayList<>();
-        List<OmittedAxis> omitted = new ArrayList<>();
-        int counted = 0;
-        for (Axis axis : found) {
-            if (!axis.measurable()) {
-                kept.add(axis);   // kept so a report can name what it could not measure
-            } else if (counted < MAX_AXES) {
-                kept.add(axis);
-                counted++;
-            } else {
-                // Whether this one was carrying an obligation is decided here and not later. A cut is
-                // where a boundary comes from, and an axis dropped before `withThresholds` never gets
-                // the ones a `guard` would have drawn — so what it has now is what it had. A position
-                // that could take a threshold and has no cut yet is not measurable at all and is kept;
-                // one with classes and no cuts is a sum or a `Bool`, which no comparison divides.
-                omitted.add(new OmittedAxis(axis.id(), !axis.cuts().isEmpty()));
-            }
-        }
+        // Every position the reading found, including the ones nothing divides: a report names what
+        // it could not measure at one of those, and a body's comparison can still draw the first
+        // line there. Nothing is dropped for how many there are. What an axis is worth is not known
+        // here — `withThresholds` has not run, so a position a `guard` divides has no cut yet — and
+        // a selection made now would be made where the least is known about what it selects
+        // (see this package's documentation).
+        List<Axis> kept = new ArrayList<>(found);
         // A position undivided because a rule about it went unread says that here, without waiting
         // for a body: a type bounded by a rule this cannot read is one whether or not any behavior
         // compares it. Nothing has compared anything yet, so what the rules came to is whether one
@@ -203,8 +173,8 @@ public final class Partitions {
         for (Axis axis : kept) {
             keep(new ArrayList<>(), measured, axis, null, unread);
         }
-        MeasureClosure.Both closed = MeasureClosure.of(kept, List.of(), omitted, unread);
-        return new Partitioning(kept, omitted, quantities, uncertain, undividedIn(measured),
+        MeasureClosure.Both closed = MeasureClosure.of(kept, List.of(), unread);
+        return new Partitioning(kept, quantities, uncertain, undividedIn(measured),
                 List.copyOf(unread), blockedIn(measured), List.copyOf(notSeparated),
                 List.of(), List.of(), ReachingCuts.NONE, closed.partition(), closed.border());
     }
@@ -483,8 +453,8 @@ public final class Partitions {
                     reachable.stream().map(Threshold::parts).toList()),
                     reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), rules);
         }
-        MeasureClosure.Both closed = MeasureClosure.of(out, compared, base.omitted(), rules);
-        return new Partitioning(out, base.omitted(), base.quantities(), base.uncertain(),
+        MeasureClosure.Both closed = MeasureClosure.of(out, compared, rules);
+        return new Partitioning(out, base.quantities(), base.uncertain(),
                 undividedIn(measured), List.copyOf(rules), blockedIn(measured),
                 // Carried across: what a reading could not hold together is a fact about the
                 // declarations, and a body drawing a line on a position does not make the product

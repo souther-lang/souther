@@ -124,9 +124,9 @@ public sealed interface GenerationOutcome {
          * missing here, and what a reader does about it is write the row that this cannot.
          *
          * <p>Including where what is missing is upstream of the strategies. No axis at a position
-         * is no classes <em>derived</em> there, and the position may well have cases — the one this
-         * is written for is a sum past the axis limit, whose cases are in the declaration and in no
-         * partition. Said as there being no classes, it is the model that reads as having none.
+         * is no classes <em>derived</em> there, and the position may well have cases — a sum this
+         * could not read the rules of has its cases in the declaration and in no partition. Said as
+         * there being no classes, it is the model that reads as having none.
          */
         public enum Reason {
 

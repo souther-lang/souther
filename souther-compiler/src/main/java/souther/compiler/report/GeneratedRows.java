@@ -600,8 +600,7 @@ public final class GeneratedRows {
                     About.ARuleThisCouldNotRead _,
                     About.AQuestionNothingAnswered _,
                     About.APositionWhoseRulesWereNotReached _,
-                    About.APositionReadWiderThanItsRules _,
-                    About.APositionPastTheAxisLimit _ ->
+                    About.APositionReadWiderThanItsRules _ ->
                     throw new IllegalStateException("no row answers this finding: " + finding);
         };
     }

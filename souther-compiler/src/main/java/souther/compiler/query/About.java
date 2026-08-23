@@ -189,14 +189,6 @@ public sealed interface About {
         }
     }
 
-    /** A position left out because the axis limit was reached. */
-    record APositionPastTheAxisLimit(
-            souther.compiler.partition.Partitions.OmittedAxis omitted) implements About {
-        public APositionPastTheAxisLimit {
-            java.util.Objects.requireNonNull(omitted, "a finding is about something");
-        }
-    }
-
     /** An arm of the body no row goes through. */
     record AnArmNoRowGoesThrough(
             souther.compiler.coverage.CoverageSites.Site arm) implements About {

@@ -276,61 +276,37 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
     }
 
     /**
-     * More positions than a report draws axes at, and a claim about one past the limit.
+     * One position a report draws an axis at, and a claim about one below where the walk stops.
      *
-     * <p>Twelve is as many as it draws; the thirteenth and the two of {@code t} are dropped. The
-     * claim about {@code t.one} is judged all the same, and what a report does with it is the
-     * subject of two rows below.
+     * <p>Two levels is as deep as a report reads into what a parameter holds, so the claim about
+     * {@code o.middle.inner.flag} is judged with no axis to carry it. The {@code mode} beside it is
+     * what gives the line a count to be a control over.
      */
-    private static final String PAST_THE_LIMIT = """
+    private static final String OFF_THE_AXES = """
             module example.probe
 
             data On
             data Off
-            data Pending
-            data Flag = On | Off | Pending
-            data Active = Flag invariant value /= Off
-            data Many =
-                { a: Bool, b: Bool, c: Bool, d: Bool, e: Bool, f: Bool, g: Bool
-                , h: Bool, i: Bool, j: Bool, k: Bool, l: Bool, m: Bool
-                }
+            data Flag = On | Off
+            data Quick
+            data Slow
+            data Mode = Quick | Slow
+            data Inner = { flag: Flag }
+            data Middle = { inner: Inner }
+            data Outer = { middle: Middle }
             data Answer = Int
 
-            behavior pick : (many: Many, active: Active) -> Answer
+            behavior pick : (o: Outer, mode: Mode) -> Answer
                 constructs Answer
 
-            let pick (many, active) = match active.value with
-                | On      -> Answer(1)
-                | Pending -> Answer(0)
-                | Off     -> unreachable "an Active is never Off"
+            let pick (o, mode) = match o.middle.inner.flag with
+                | On  -> Answer(1)
+                | Off -> unreachable "the probe never passes Off"
 
             example pick
-                | "on" : (Many { a = true, b = true, c = true, d = true, e = true, f = true
-                               , g = true, h = true, i = true, j = true, k = true, l = true
-                               , m = true }, Active(On)) -> Answer(1)
+                | "on" : (Outer { middle = Middle { inner = Inner { flag = On } } }, Quick)
+                        -> Answer(1)
             """;
-
-    /**
-     * A claim about a position past the axis limit is still said.
-     *
-     * <p>Twelve positions are as many as a report draws axes at, and a claim about the thirteenth
-     * had a verdict all the same. Left to the axes to print, that verdict is reached and dropped —
-     * an exclusion both unproven and silent, one level up from where that was ruled out.
-     */
-    @Test
-    void aClaimAboutAPositionPastTheAxisLimitIsSaid() {
-        String wide = PAST_THE_LIMIT;
-
-        PartitionEvidence partition = partitionOf(wide);
-        String report = reportOn(wide);
-
-        assertTrue(partition.axes().stream().noneMatch(each -> each.path().equals("active")),
-                () -> "the position is past the limit: "
-                        + partition.axes().stream().map(each -> each.path()).toList());
-        assertTrue(report.contains("`Off` at `active` is declared unreachable: "
-                        + "an Active is never Off"),
-                () -> "the claim is named by its position:\n" + report);
-    }
 
     /**
      * And so is one about a position deeper than the walk goes.
@@ -422,19 +398,19 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
      * A claim about a position the line does not count is not counted in it either.
      *
      * <p>The control for the row above. {@code excluded} is a number taken out of the denominator
-     * beside it, so a case at a position past the axis limit — counted in neither {@code classes}
+     * beside it, so a case at a position no axis was derived at — counted in neither {@code classes}
      * nor {@code covered} — cannot be in it: read from every claim instead, the line said one case
      * had left a count that never held it.
      */
     @Test
     void aClaimOffTheAxesIsNotCountedInTheLineThatCountsThem() {
-        String report = reportOn(PAST_THE_LIMIT);
+        String report = reportOn(OFF_THE_AXES);
 
-        assertTrue(partitionLineOf(report).startsWith("partition   axes 12   equivalence partitions 12/24"),
+        assertTrue(partitionLineOf(report).startsWith("partition   axes 1   equivalence partitions"),
                 () -> "the counts are over the positions it has axes for:\n" + report);
         assertFalse(partitionLineOf(report).contains("excluded"),
                 () -> "and nothing left the denominator this line counts:\n" + report);
-        assertTrue(report.contains("`Off` at `active` is declared unreachable"),
+        assertTrue(report.contains("`Off` at `o.middle.inner.flag` is declared unreachable"),
                 () -> "and the claim is said under its own name:\n" + report);
     }
 

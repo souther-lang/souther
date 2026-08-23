@@ -348,23 +348,24 @@ class EveryFindingHasAGenerationDispositionTest {
     }
 
     /**
-     * A case at a position no axis was derived at is one nothing takes.
+     * Every case of a sum parameter is offered a row, however many positions the behavior takes.
      *
-     * <p>Read off the axes rather than off an empty row list. A search that wrote no row at this class
-     * and a partition that never divided the position leave the same absence behind, and only the
-     * second of them is a fact about what the generator can do.
+     * <p>What used to be here asserted the other half of this: a limit on how many positions one
+     * behavior is measured at left the thirteenth without an axis, and its cases were answered
+     * {@code NO_AXIS_AT_THIS_POSITION}. That limit is gone (#969) and with it the only reading that
+     * produced a case at a position nothing divided, so what is left to hold is that the thirteenth
+     * is offered a row like the first.
      */
     @Test
-    void aCaseAtAPositionNoAxisWasDerivedAtIsNotSupported() {
+    void everyCaseOfASumParameterIsOfferedARow() {
         Compilation compilation = compiled(WIDE);
 
         assertInstanceOf(GenerationOutcome.Generated.class,
                 forCase(compilation, "example.wide", "pick", "Overseas", 1),
-                "a position inside the axis limit is divided and offered");
-        assertEquals(new GenerationOutcome.NotSupported(
-                        GenerationOutcome.NotSupported.Reason.NO_AXIS_AT_THIS_POSITION),
+                "the first position is divided and offered");
+        assertInstanceOf(GenerationOutcome.Generated.class,
                 forCase(compilation, "example.wide", "pick", "Overseas", 13),
-                "and one past it is not something anything here takes");
+                "and so is the thirteenth");
     }
 
     /**
@@ -389,9 +390,9 @@ class EveryFindingHasAGenerationDispositionTest {
         assertEquals("rows here are composed from what the input positions divide into, and nothing"
                         + " searches for one by the case it would answer with",
                 GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE.said());
-        // A position past the axis limit has its cases in the declaration and in no partition, so
-        // what is missing is a derivation and not the classes. Said as there being none, the
-        // sentence is about the model again — the thing the other two stopped doing.
+        // A case whose parameter no axis was derived at has its cases in the declaration and in no
+        // partition, so what is missing is a derivation and not the classes. Said as there being
+        // none, the sentence is about the model again — the thing the other two stopped doing.
         assertEquals("no axis was derived at the position this case belongs to, so no classes were"
                         + " derived there to compose a row from",
                 GenerationOutcome.NotSupported.Reason.NO_AXIS_AT_THIS_POSITION.said());

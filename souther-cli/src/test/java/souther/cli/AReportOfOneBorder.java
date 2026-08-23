@@ -18,7 +18,6 @@ import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.OriginRef;
-import souther.compiler.partition.Partitions;
 import souther.compiler.partition.PointRole;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
@@ -127,14 +126,13 @@ final class AReportOfOneBorder {
     /**
      * One behavior's measures, as a verdict reads them.
      *
-     * <p>The measures' own answers and not the entries beside them. What a dropped axis costs is
+     * <p>The measures' own answers and not the entries beside them. What a reading was short of is
      * settled where the reading is, and reaches a verdict as the measure saying it was not made in
      * full — so a fixture here says which answer it is putting in front of the verdict, and the
      * step that decides that answer is tested where it happens
      * (souther-compiler, {@code AMeasureIsShortOfWhateverItsReadingDidNotReachTest}).
      */
-    static PartitionEvidence partition(Measurement<List<BorderAssessment>> border,
-                                       Partitions.OmittedAxis... omitted) {
+    static PartitionEvidence partition(Measurement<List<BorderAssessment>> border) {
         return new PartitionEvidence(
                 new Measurement.FailedToMeasure<>(
                         PartitionDerivation.TheReadingDidNotRunOut.THE_READING_DID_NOT_RUN_OUT,
@@ -143,7 +141,7 @@ final class AReportOfOneBorder {
                                         new souther.compiler.partition.AxisId("b", "t"))))),
                 border,
                 PartitionEvidence.PairSpace.NONE,
-                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(omitted),
+                List.of(), List.of(), List.of(), List.of(), List.of(),
                 List.of());
     }
 
@@ -152,14 +150,13 @@ final class AReportOfOneBorder {
         return new Measurement.Complete<>(List.of(boundary));
     }
 
-    /** And the same border, from a reading that was short of something — which is what a dropped
-     *  axis carrying a line leaves behind. */
+    /** And the same border, from a reading that was short of something — which is what a position
+     *  the walk never reached the rules of leaves behind. */
     static Measurement<List<BorderAssessment>> shortOfSomething(BorderAssessment boundary) {
         return new Measurement.Partial<>(List.of(boundary),
                 WeakeningSet.of(new Weakening.ModelReadingIncomplete(
-                        new souther.compiler.partition.ClosureGap.AxisOmitted(
-                                new Partitions.OmittedAxis(
-                                        new souther.compiler.partition.AxisId("b", "t"), true)))));
+                        new souther.compiler.partition.ClosureGap.RulesNotReached(
+                                new souther.compiler.partition.AxisId("b", "m")))));
     }
 
     /** What one behavior's partition makes of the whole report, held to {@code held}. */

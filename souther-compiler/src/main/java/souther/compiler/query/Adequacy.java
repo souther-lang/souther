@@ -189,8 +189,7 @@ public final class Adequacy {
                 // one of them into one: a build that refused over these would be refusing over
                 // this compiler's reading rather than over the model.
                 case PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ, RULE_UNACCOUNTED,
-                     PARTITION_RULES_NOT_REACHED, PARTITION_VALUES_NOT_SEPARATED,
-                     PARTITION_OMITTED -> false;
+                     PARTITION_RULES_NOT_REACHED, PARTITION_VALUES_NOT_SEPARATED -> false;
             };
         }
     }
@@ -1942,7 +1941,7 @@ public final class Adequacy {
                             new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
                                     .Reason.AN_ACCOUNT_OF_WHAT_THE_ROWS_DID);
                     // What the model says, read to the end. A row does not change it.
-                    case About.APositionNoLineDivides _, About.APositionPastTheAxisLimit _ ->
+                    case About.APositionNoLineDivides _ ->
                             new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
                                     .Reason.A_FACT_ABOUT_THE_MODEL);
                     // What this compiler could not read. A row would answer a question nothing
@@ -2637,9 +2636,7 @@ public final class Adequacy {
          * What it qualifies is the classes rather than their absence, so it is said at positions the
          * axes measured as readily as at positions they did not.
          */
-        PARTITION_VALUES_NOT_SEPARATED(null),
-        /** A position left out because the axis limit was reached. */
-        PARTITION_OMITTED(null);
+        PARTITION_VALUES_NOT_SEPARATED(null);
 
         private final DiagnosticCode code;
 
@@ -2768,7 +2765,6 @@ public final class Adequacy {
                 case About.APositionReadWiderThanItsRules _ ->
                         Kind.PARTITION_VALUES_NOT_SEPARATED;
                 case About.AQuestionNothingAnswered _ -> Kind.RULE_UNACCOUNTED;
-                case About.APositionPastTheAxisLimit _ -> Kind.PARTITION_OMITTED;
                 case About.AnArmNoRowGoesThrough _ -> Kind.ARM_UNREACHED;
             };
         }
@@ -3007,11 +3003,6 @@ public final class Adequacy {
                         Citation.of(behavior.pos()),
                         new About.AQuestionNothingAnswered(each)));
             }
-            for (souther.compiler.partition.Partitions.OmittedAxis dropped : partition.omitted()) {
-                out.add(Finding.noticed(behavior.name(),
-                        Citation.of(behavior.pos()),
-                        new About.APositionPastTheAxisLimit(dropped)));
-            }
         }
 
         /** An arm no row goes through, at the arm and not at the declaration: what to do about it is
@@ -3153,8 +3144,7 @@ public final class Adequacy {
                                 About.APositionNoLineDivides _, About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
                                 About.APositionWhoseRulesWereNotReached _,
                                 About.APositionReadWiderThanItsRules _,
-                                About.AQuestionNothingAnswered _,
-                                About.APositionPastTheAxisLimit _ ->
+                                About.AQuestionNothingAnswered _ ->
                                 throw new IllegalArgumentException(
                                         "no message for " + finding.kind());
                     });
@@ -3228,8 +3218,7 @@ public final class Adequacy {
                         About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
                         About.APositionWhoseRulesWereNotReached _,
                         About.APositionReadWiderThanItsRules _,
-                        About.AQuestionNothingAnswered _,
-                        About.APositionPastTheAxisLimit _ -> { }
+                        About.AQuestionNothingAnswered _ -> { }
             }
             return Report.of(built.build());
         }

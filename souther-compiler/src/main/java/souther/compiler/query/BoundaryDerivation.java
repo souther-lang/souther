@@ -54,8 +54,7 @@ public final class BoundaryDerivation {
 
     /**
      * The reading of what this measure answers did not run out. A rule that places an end and could
-     * not be turned into a line, a position whose rules were never reached, a position dropped past
-     * the axis limit.
+     * not be turned into a line, or a position whose rules were never reached.
      *
      * <p>What {@code NO_LINES_DERIVED} said of every empty answer. It was made {@code NOT_MEASURED}
      * because nothing could tell a model whose bounds sit one type away from a model with no bound

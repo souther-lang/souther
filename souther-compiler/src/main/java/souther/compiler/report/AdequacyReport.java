@@ -74,7 +74,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return ReportMeasurement.statusOf(weakenedBy);
     }
 
-    public static final int SCHEMA_VERSION = 5;
+    public static final int SCHEMA_VERSION = 6;
 
     /**
      * Whether the rows meet what the bar this report is read against asks of them.
@@ -387,10 +387,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * one went unread.
      *
      * <p>Whether a measure applies at all is the measure's own answer, and never the shape of what
-     * came back. A behavior with no body has no arms, and a position dropped for being past the axis
-     * limit left no boundary behind — in both cases the numbers look exactly like a measure that was
-     * made and found nothing, so a report reading them back would call the first adequate and the
-     * second covered.
+     * came back. A behavior with no body has no arms, and a position whose rules the walk never
+     * reached leaves no boundary behind — in both cases the numbers look exactly like a measure
+     * that was made and found nothing, so a report reading them back would call the first adequate
+     * and the second covered.
      */
     private List<Measurement<?>> requiredMeasures() {
         List<Measurement<?>> measures = new ArrayList<>();
@@ -736,8 +736,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             int classes = measuredAxes.stream().mapToInt(a -> a.classes().size()).sum();
             int covered = measuredAxes.stream()
                     .mapToInt(a -> a.reached().made().orElseThrow().covered().size()).sum();
-            // Over the positions this line counts and no others. A claim about a position past the
-            // axis limit is said further down, under its own name — counted here it would be a
+            // Over the positions this line counts and no others. A claim about a position no axis
+            // was derived at is said further down, under its own name — counted here it would be a
             // number taken out of a denominator that never held it.
             int excluded = (int) measuredAxes.stream()
                     .flatMap(each -> behavior.claimed().at(each.path()).stream())
@@ -980,12 +980,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // The questions this measure answers: which values may stand where, which classes hold
         // them, and which value a rule tells from every other. A border is the section below's.
         unaccounted(out, behavior, names, declaredIn, AdequacyReport::aboutTheClasses);
-        for (Adequacy.Finding f : behavior.findings()) {
-            if (f.about() instanceof About.APositionPastTheAxisLimit(var dropped)) {
-                out.append(String.format("      %s omitted: %s (axis limit)%n",
-                        mark(f), dropped.axis()));
-            }
-        }
     }
 
     /**
@@ -1192,8 +1186,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * <p>The numbers alone read the same either way, which is the thing this whole measure-level
      * answer is against: a behavior one of whose rules this compiler could not read showed the line
      * it did draw and the same {@code borders 1   coverage items 4/4} a model read to the end gets.
-     * Why it was not is beside it already — the rules nothing took in, the positions past the axis
-     * limit — so this says which measure they cost rather than saying them again.
+     * Why it was not is beside it already — the rules nothing took in, the positions the walk
+     * could not reach into — so this says which measure they cost rather than saying them again.
      */
     private static String inFull(MeasurementStatus status) {
         return status == MeasurementStatus.PARTIAL ? "   (not all of it was measured)" : "";
@@ -1901,8 +1895,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 ruleId(said.putObject("ruleId"), rule.rule());
             }
         });
-        ArrayNode omitted = out.putArray("omitted");
-        partition.omitted().forEach(o -> omitted.add(o.axis().toString()));
     }
 
     static void branch(ObjectNode behavior, Adequacy.BranchEvidence branch,
@@ -2024,8 +2016,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     About.APositionThisCouldNotRead _, About.ARuleThisCouldNotRead _,
                     About.AQuestionNothingAnswered _,
                     About.APositionWhoseRulesWereNotReached _,
-                    About.APositionReadWiderThanItsRules _,
-                    About.APositionPastTheAxisLimit _ -> null;
+                    About.APositionReadWiderThanItsRules _ -> null;
         };
     }
 
@@ -2061,7 +2052,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // The position, as the two above write it. What is said of it is the kind's; there is
             // no rule to name and no class this is about, so the position is the whole subject.
             case About.APositionReadWiderThanItsRules(var it) -> it.at().toString();
-            case About.APositionPastTheAxisLimit(var dropped) -> dropped.axis().toString();
             // The rule and what it was left saying. Named by the position alone, two rules nothing
             // took in at one position serialised as two identical objects, and the human line named
             // them while a consumer of the document could not tell them apart.
@@ -2157,8 +2147,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                         WeakeningWord.QUESTION_UNANSWERED;
                 case souther.compiler.partition.ClosureGap.RulesNotReached _ ->
                         WeakeningWord.RULES_NOT_REACHED;
-                case souther.compiler.partition.ClosureGap.AxisOmitted _ ->
-                        WeakeningWord.AXIS_OMITTED;
             };
             case Weakening.PairSpaceTruncated _ -> WeakeningWord.PAIR_SPACE_TRUNCATED;
             case Weakening.ProofContradicted _ -> WeakeningWord.PROOF_CONTRADICTED;
