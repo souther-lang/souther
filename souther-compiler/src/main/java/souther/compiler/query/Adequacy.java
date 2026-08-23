@@ -2163,13 +2163,26 @@ public final class Adequacy {
         }
 
         /**
-         * The values the module states of each parameter's type, as one origin per turn.
+         * The values the module states of each parameter's type, one origin apiece.
          *
-         * <p>Taken across the parameters rather than multiplied through them. A behavior of two
-         * parameters with three values apiece has nine tuples and no reason to prefer any of them,
-         * and walking nine origins for every class of every position is a search this run is not
-         * paying for. The n-th of each is one tuple, and the values run out where the shortest list
-         * does — which is deterministic and says what it is.
+         * <p><b>One parameter each, and never a tuple made here.</b> An origin says what a row is
+         * written against, and a row written against a value the model states reads as that value
+         * with one class moved. What the module states is a value of a type; that two of them go
+         * together is a further thing, and nothing states it.
+         *
+         * <p>So each origin names the one parameter it has a stated value for and says nothing
+         * about the rest, which the composition fills from their classes. That is what the partial
+         * map on {@link Generator.Baseline} is: a position it does not name is one it makes no
+         * claim about. A tuple assembled here would be a claim — {@code (a1, b1)} written as though
+         * the author had put those two values together — and the only thing available to assemble
+         * it by is the order the file happens to declare them in. Taken as the n-th of each list,
+         * swapping two unrelated declarations moved the origin every generated row of the behavior
+         * was written against, and two parameters of one type got {@code (x, x)} and {@code (y, y)}
+         * and never {@code (x, y)}, off a diagonal nothing in the model draws.
+         *
+         * <p>A whole tuple is still an origin where the author wrote one: a row of theirs naming a
+         * value at each position is a set of values they reached for together, and that is read
+         * from the rows rather than assembled ({@link #namesIn}).
          */
         private static List<Generator.Baseline> named(String module, Hir.SpecBehavior spec, Sig sig,
                                                       Map<String, Hir.FnDef> values,
@@ -2193,30 +2206,18 @@ public final class Adequacy {
                 stated.computeIfAbsent(of, _ -> new ArrayList<>()).add(each.getKey());
             }
             List<Hir.Param> takes = spec.params();
-            int most = 0;
-            for (int p = 0; p < takes.size() && p < sig.inputTypes().size(); p++) {
-                if (sig.inputTypes().get(p) instanceof souther.compiler.types.Type.Ref(
-                        TypeSymbol of)) {
-                    most = Math.max(most, stated.getOrDefault(of, List.of()).size());
-                }
-            }
             List<Generator.Baseline> out = new ArrayList<>();
-            for (int turn = 0; turn < most; turn++) {
-                Map<String, Generator.Baseline.Named> at = new LinkedHashMap<>();
-                for (int p = 0; p < takes.size() && p < sig.inputTypes().size(); p++) {
-                    if (!(sig.inputTypes().get(p) instanceof souther.compiler.types.Type.Ref(
-                            TypeSymbol of))) {
-                        continue;
-                    }
-                    List<String> here = stated.getOrDefault(of, List.of());
-                    if (turn < here.size()) {
-                        at.put(takes.get(p).name(),
-                                new Generator.Baseline.Named(module, here.get(turn)));
-                    }
+            for (int p = 0; p < takes.size() && p < sig.inputTypes().size(); p++) {
+                if (!(sig.inputTypes().get(p) instanceof souther.compiler.types.Type.Ref(
+                        TypeSymbol of))) {
+                    continue;
                 }
-                Generator.Baseline origin = new Generator.Baseline(at);
-                if (!origin.isEmpty() && !out.contains(origin)) {
-                    out.add(origin);
+                for (String value : stated.getOrDefault(of, List.of())) {
+                    Generator.Baseline origin = new Generator.Baseline(Map.of(
+                            takes.get(p).name(), new Generator.Baseline.Named(module, value)));
+                    if (!out.contains(origin)) {
+                        out.add(origin);
+                    }
                 }
             }
             return out;
