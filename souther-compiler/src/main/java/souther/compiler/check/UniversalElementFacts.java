@@ -59,16 +59,24 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
      * the elements written there and nothing else, so every one of them lies between the least and
      * the greatest. Beside those, what a construction was built from says what it kept
      * ({@link #transferred}).
+     *
+     * <p>The name a container was given is followed once, here, and every reading below is of what
+     * it was given. A name is not a third kind of container: {@code List.sum(ys)} where {@code ys}
+     * was bound to {@code List.map(f, xs)} is the same question as the one written in a line, and a
+     * reading that followed the name for the elements written out and not for what the construction
+     * kept would answer the two differently — which is the shape of what this class was written to
+     * stop, seen inside it.
      */
-    static UniversalElementFacts of(Core container, Denotations at, Terms terms, Symbols symbols,
+    static UniversalElementFacts of(Core written, Denotations at, Terms terms, Symbols symbols,
                                     ReadingPolicy policy) {
-        if (container == null) {
+        if (written == null) {
             return NONE;
         }
+        Core container = terms.listedOut(written, at);
         Map<String, Bounds> held = new LinkedHashMap<>();
         Type element = Terms.elementType(container.type());
         guaranteed(element, symbols, policy).forEach((path, bounds) -> holds(held, path, bounds));
-        writtenOut(container, element, at, terms, held);
+        writtenOut(container, element, held);
         transferred(container, at, terms, symbols, policy, held);
         return held.isEmpty() ? NONE : new UniversalElementFacts(held);
     }
@@ -136,10 +144,8 @@ record UniversalElementFacts(Map<String, Bounds> byPath) {
      * one of them is decided at run time — and saying nothing is what leaves a reader unbounded
      * rather than wrongly bounded.
      */
-    private static void writtenOut(Core container, Type element, Denotations at, Terms terms,
-                                   Map<String, Bounds> held) {
-        if (element == null
-                || !(terms.listedOut(container, at) instanceof Core.ListLit list)
+    private static void writtenOut(Core container, Type element, Map<String, Bounds> held) {
+        if (element == null || !(container instanceof Core.ListLit list)
                 || list.elements().isEmpty()) {
             return;
         }

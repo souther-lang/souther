@@ -39,12 +39,25 @@ class WhatHoldsOfEveryElementIsReadOfTheContainerItWalksTest {
             """;
 
     private static boolean owed(String expression) {
+        return owedIn("let total (xs, ns) = Money(%s)".formatted(expression));
+    }
+
+    /** The same total, with the container bound to a name first. */
+    private static boolean owedWhereTheContainerIsNamed(String container, String walk) {
+        return owedIn("""
+                let total (xs, ns) = {
+                    let ys = %s
+                    Money(%s)
+                }""".formatted(container, walk));
+    }
+
+    private static boolean owedIn(String body) {
         Compiler.Compiled compiled = Compiler.compileWithWarnings(TYPES + "\n" + """
                 behavior total : (xs: List<U>, ns: List<Int>) -> Money
                     constructs Money
 
-                let total (xs, ns) = Money(%s)
-                """.formatted(expression));
+                %s
+                """.formatted(body));
         return compiled.warnings().stream()
                 .anyMatch(d -> d.severity() == Severity.WARNING && "E2011".equals(d.code()));
     }
@@ -93,6 +106,25 @@ class WhatHoldsOfEveryElementIsReadOfTheContainerItWalksTest {
                 "some of the same three numbers, and nothing else is there");
         assertFalse(owed("List.fold((acc, x) -> acc + x, 0, List.map(x -> x, [1, 2, 3]))"),
                 "each of them answered as it stands");
+    }
+
+    /**
+     * A container bound to a name is the container it was given.
+     *
+     * <p>The name was followed for the elements a container is written out with and not for what a
+     * construction kept, so a total written in one line was read and the same total with its list
+     * given a name was not. Two answers to "which container is this", inside the one reading written
+     * to stop a fact depending on how it was spelled.
+     */
+    @Test
+    void aContainerGivenANameIsTheContainerItWasGiven() {
+        assertFalse(owedWhereTheContainerIsNamed(
+                "List.map(x -> x.value, xs)", "List.fold((acc, x) -> acc + x, 0, ys)"));
+        assertFalse(owedWhereTheContainerIsNamed(
+                "List.reverse([1, 2, 3])", "List.fold((acc, x) -> acc + x, 0, ys)"));
+        assertTrue(owedWhereTheContainerIsNamed(
+                "List.map(x -> x, ns)", "List.fold((acc, x) -> acc + x, 0, ys)"),
+                "and a name given to a list nothing bounds bounds nothing");
     }
 
     /** The neighbour that stays reported: a list of numbers nothing bounds is one nothing bounds,
