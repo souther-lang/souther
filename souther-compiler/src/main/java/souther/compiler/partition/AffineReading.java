@@ -46,26 +46,66 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
      * value and the rule about it is one this does not model.
      */
     static AffineReading of(Core.Binary comparison, InputReads reads, Symbols symbols) {
+        return read(comparison, reads, symbols) instanceof OfAComparison.Cuts cuts
+                ? cuts.read() : null;
+    }
+
+    /**
+     * What reading {@code comparison} as a line came to.
+     *
+     * <p>Three answers, because two of them used to be one absence. A reading that stopped and a
+     * reading that went all the way and found no quantity are opposite facts: the first says this
+     * compiler fell short, and the second says the rule cuts nothing — {@code a - a > 0} is read
+     * perfectly and divides no position. Told apart only by a {@code null}, whoever asked had to
+     * guess, and guessed that a rule it had read in full was written in a form it could not read.
+     */
+    sealed interface OfAComparison {
+
+        /** The line the comparison draws. */
+        record Cuts(AffineReading read) implements OfAComparison {}
+
+        /** Read to the end, and the quantity it cuts is nothing: a comparison of constants, or one
+         *  whose positions cancel. Nothing is missing here. */
+        record CutsNothing() implements OfAComparison {}
+
+        /** The reading stopped, at this expression and in the environment it was being read in. */
+        record Stopped(Core node, InputReads at) implements OfAComparison {}
+    }
+
+    /** The same, saying which of the three it is. */
+    static OfAComparison read(Core.Binary comparison, InputReads reads, Symbols symbols) {
         if (!comparison.op().compares()) {
-            return null;
+            return new OfAComparison.CutsNothing();
         }
-        LinearForm<NumericTerm> left = affine(comparison.left(), reads, symbols);
-        LinearForm<NumericTerm> right = affine(comparison.right(), reads, symbols);
-        if (left == null || right == null) {
-            return null;
+        // The left first where both stop, which is the side a threshold would be read off.
+        LinearForm<NumericTerm> left = null;
+        for (Core side : java.util.List.of(comparison.left(), comparison.right())) {
+            AffineForms.Outcome<NumericTerm, InputReads> read =
+                    AffineForms.outcome(side, reads, reading(symbols));
+            if (read instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> stopped) {
+                return new OfAComparison.Stopped(stopped.node(), stopped.at());
+            }
+            if (left == null) {
+                left = ((AffineForms.Outcome.Composed<NumericTerm, InputReads>) read).form();
+            } else {
+                LinearForm<NumericTerm> whole = left.minus(
+                        ((AffineForms.Outcome.Composed<NumericTerm, InputReads>) read).form());
+                if (whole.coefs().isEmpty()) {
+                    return new OfAComparison.CutsNothing();
+                }
+                AffineReading here = new AffineReading(
+                        new LinearForm<>(BigDecimal.ZERO, whole.coefs()),
+                        whole.constant().negate(), ComparisonClaim.of(comparison.op()));
+                // Turned round here and nowhere else. `48 >= 3a + 6b` and `3a + 6b <= 48` are one
+                // rule, and a reader that met the first without turning it round drew its border on
+                // `-3a - 6b` — the same four points under a name no author wrote, and a different
+                // line from the rule written the other way.
+                return new OfAComparison.Cuts(
+                        here.facesTheOtherWay(subjectOf(comparison, left, reads, symbols))
+                                ? here.mirrored() : here);
+            }
         }
-        LinearForm<NumericTerm> whole = left.minus(right);
-        if (whole.coefs().isEmpty()) {
-            return null;   // a comparison of constants states nothing about any position
-        }
-        AffineReading read = new AffineReading(new LinearForm<>(BigDecimal.ZERO, whole.coefs()),
-                whole.constant().negate(), ComparisonClaim.of(comparison.op()));
-        // Turned round here and nowhere else. `48 >= 3a + 6b` and `3a + 6b <= 48` are one rule, and
-        // a reader that met the first without turning it round drew its border on `-3a - 6b` — the
-        // same four points under a name no author wrote, and a different line from the rule written
-        // the other way.
-        return read.facesTheOtherWay(subjectOf(comparison, left, reads, symbols))
-                ? read.mirrored() : read;
+        throw new IllegalStateException("a comparison has two sides");
     }
 
     /**
@@ -85,26 +125,6 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
     /** {@code e} as an affine form over the behavior's positions, or null where it is not one. */
     static LinearForm<NumericTerm> affine(Core e, InputReads reads, Symbols symbols) {
         return AffineForms.of(e, reads, reading(symbols));
-    }
-
-    /**
-     * Where reading {@code comparison} as a form stopped, or null where nothing stopped it.
-     *
-     * <p>Off the walk that stopped, which is the only thing that knows. What the difficulty was is
-     * a fact about one expression, and a reader handed nothing back had only the shape of the whole
-     * comparison to work it out from — so an operation this reads perfectly well was named for a
-     * form it could not read beside it.
-     *
-     * <p>The left first where both stop, which is the side a threshold would be read off.
-     */
-    static Core stoppedAt(Core.Binary comparison, InputReads reads, Symbols symbols) {
-        for (Core side : java.util.List.of(comparison.left(), comparison.right())) {
-            if (AffineForms.outcome(side, reads, reading(symbols))
-                    instanceof AffineForms.Outcome.StoppedAt<NumericTerm> stopped) {
-                return stopped.node();
-            }
-        }
-        return null;
     }
 
     /** What this reader answers about its own environment, which is what tells its atoms from

@@ -120,6 +120,20 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
     }
 
     /**
+     * A rule read from end to end whose quantity the position does not appear in. Nothing fell
+     * short here: there was no line in it to draw.
+     *
+     * <p>Told apart from a reading that stopped, which used to be the same absence. Answered as a
+     * form nobody could read, it sent an author to rewrite a spelling this compiler had read
+     * completely.
+     */
+    @Test
+    void aRuleReadToTheEndThatCutsNothingSaysThat() {
+        assertEquals(List.of(UndividedPosition.Reason.RULE_CUTS_NOTHING),
+                whyAt(guard("a: Int", "Int.subtract(a, a) > 0"), "a"));
+    }
+
+    /**
      * A helper is a binding round the expression it became, and what the expression is made of is
      * its body. An argument the body never reads is no part of the value.
      *

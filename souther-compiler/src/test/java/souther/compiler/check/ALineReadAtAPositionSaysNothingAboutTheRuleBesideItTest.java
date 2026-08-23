@@ -221,8 +221,12 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
      *
      * <p>{@code x < x + 1} names {@code x} either side of it and there is no other position for a
      * class to be about. Told that the rule relates it to another position, a reader goes looking
-     * for one the model never wrote; what would let this be read is a reading of the form, which
-     * is what the position on the right is inside of.
+     * for one the model never wrote.
+     *
+     * <p>Nor is anything here unread. The form is arithmetic this takes apart on both sides, and
+     * what it comes to is a comparison of two numbers {@code x} does not appear in — so the rule
+     * divides nothing and there was never a line in it to draw. Answered as a form nobody could
+     * read, it sent an author to rewrite a spelling this compiler had read from end to end.
      */
     @Test
     void butOnePositionOnBothSidesIsNotTwoPositions() {
@@ -233,7 +237,7 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                     invariant x < x + 1
                 """, "Sole");
 
-        assertEquals(List.of(new BlockReason.UnreadComparisonForm()), reasonsAt(read, "x"));
+        assertEquals(List.of(new BlockReason.ComparisonCuttingNothing()), reasonsAt(read, "x"));
     }
 
     /**

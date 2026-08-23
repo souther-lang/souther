@@ -431,17 +431,16 @@ final class Terms {
     }
 
     /**
-     * Where reading {@code raw} as a form stopped, or null where nothing stopped it.
+     * The same, saying where the reading stopped where it did.
      *
-     * <p>Beside the above and asking what it discards. Which expression had no rule here is a fact
-     * about that expression, and a caller handed nothing back had to reconstruct it from the shape
-     * of what it asked about — which is a second account of this walk, written by whoever needed
-     * one.
+     * <p>Beside the above and carrying what it discards. Which expression had no rule here is a
+     * fact about that expression, and a caller handed nothing back had to reconstruct it from the
+     * shape of what it asked about — which is a second account of this walk, written by whoever
+     * needed one. The environment travels with the expression for the reason
+     * {@link AffineForms.ReadThrough} gives.
      */
-    Core stoppedIn(Core raw, Denotations at) {
-        return AffineForms.outcome(raw, at, affineReading)
-                instanceof AffineForms.Outcome.StoppedAt<FactSubject> stopped
-                ? stopped.node() : null;
+    AffineForms.Outcome<FactSubject, Denotations> outcomeOf(Core raw, Denotations at) {
+        return AffineForms.outcome(raw, at, affineReading);
     }
 
     /**

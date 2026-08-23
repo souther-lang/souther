@@ -406,20 +406,26 @@ public final class GuardThresholds {
                                                                   InputReads reads,
                                                                   Symbols symbols,
                                                                   java.util.Map<TermPath, Type> met) {
-        AffineReading read = AffineReading.of(comparison, reads, symbols);
-        if (read == null) {
-            // What the arithmetic was looking at when it stopped, or the comparison itself where it
-            // read both sides and they stated nothing about any position.
-            Core stopped = AffineReading.stoppedAt(comparison, reads, symbols);
-            Names here = namesIn(stopped == null ? comparison : stopped, reads, symbols);
-            here.met().forEach(met::putIfAbsent);
-            return new UnreadComparison.Quantity.NotRead<>(here.origin());
+        // Each of the three the reading can come to, and no fourth made out of an absence. Where it
+        // stopped, the expression and the environment it was being read in come back together, so
+        // this does not read it again in whatever it happens to hold.
+        switch (AffineReading.read(comparison, reads, symbols)) {
+            case AffineReading.OfAComparison.Stopped stopped -> {
+                Names here = namesIn(stopped.node(), stopped.at(), symbols);
+                here.met().forEach(met::putIfAbsent);
+                return new UnreadComparison.Quantity.NotRead<>(here.origin());
+            }
+            case AffineReading.OfAComparison.CutsNothing _ -> {
+                return new UnreadComparison.Quantity.CutsNothing<>();
+            }
+            case AffineReading.OfAComparison.Cuts cuts -> {
+                java.util.Set<TermPath> over = new java.util.LinkedHashSet<>();
+                for (NumericTerm atom : cuts.read().form().coefs().keySet()) {
+                    over.add(atom.path());
+                }
+                return new UnreadComparison.Quantity.Over<>(over);
+            }
         }
-        java.util.Set<TermPath> over = new java.util.LinkedHashSet<>();
-        for (NumericTerm atom : read.form().coefs().keySet()) {
-            over.add(atom.path());
-        }
-        return new UnreadComparison.Quantity.Over<>(over);
     }
 
     /**

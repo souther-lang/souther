@@ -50,6 +50,11 @@ public final class ReportedReason {
                     UndividedPosition.Reason.COMPETING_COORDINATES;
             case BlockReason.ComparisonBetweenPositions _ ->
                     UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE;
+            // Its own word and not the one above. Both are rules this read to the end that divide
+            // nothing, and what a reader may go on to do about them differs: one is waiting on a
+            // class about two positions, and the other has nothing to wait for.
+            case BlockReason.ComparisonCuttingNothing _ ->
+                    UndividedPosition.Reason.RULE_CUTS_NOTHING;
         };
     }
 

@@ -1442,40 +1442,31 @@ public final class InvariantChecker {
      */
     private UnreadComparison.Quantity<String> quantityOf(Core.Binary comparison, Denotations at,
                                                          Map<FactSubject, Coordinate> byName) {
+        // Each side's own answer, so that a reading which stopped and a reading which went all the
+        // way are never one absence. Where it stopped, the expression comes back with the
+        // environment it was being read in.
+        for (Core side : java.util.List.of(comparison.left(), comparison.right())) {
+            AffineForms.Outcome<FactSubject, Denotations> read = terms.outcomeOf(side, at);
+            if (read instanceof AffineForms.Outcome.StoppedAt<FactSubject, Denotations> stopped) {
+                return new UnreadComparison.Quantity.NotRead<>(
+                        placesIn(stopped.node(), stopped.at(), byName).origin());
+            }
+        }
         NumericDomain.LinearForm<FactSubject> left = terms.affineOf(comparison.left(), at);
         NumericDomain.LinearForm<FactSubject> right = terms.affineOf(comparison.right(), at);
-        if (left == null || right == null) {
-            return notRead(comparison, at, byName);
-        }
         java.util.Set<String> over = new LinkedHashSet<>();
         for (FactSubject atom : left.minus(right).coefs().keySet()) {
             Coordinate here = byName.get(atom);
             if (here == null) {
-                // An atom this reading has no coordinate for. Counted as absent, a quantity over two
-                // positions would come back as one and this reader would describe the rule
-                // differently from the one that reads the same shape in a body — which is the thing
-                // sharing the rule was meant to stop.
-                return notRead(comparison, at, byName);
+                // An atom this reading has no coordinate for. Its own answer: nothing about the form
+                // was unreadable and the form does cut something, so calling it a reading that
+                // stopped would say this compiler fell short of a rule it read from end to end.
+                return new UnreadComparison.Quantity.NotProjected<>();
             }
             over.add(here.path());
         }
-        return new UnreadComparison.Quantity.Over<>(over);
-    }
-
-    /**
-     * That no form was read here, and what the reading was looking at when it stopped.
-     *
-     * <p>Off the walk that stopped. A clause whose one side is arithmetic this reads and whose other
-     * is not is stopped by the second, and read off the sides instead the first was named for it.
-     */
-    private UnreadComparison.Quantity<String> notRead(Core.Binary comparison, Denotations at,
-                                                      Map<FactSubject, Coordinate> byName) {
-        Core stopped = terms.stoppedIn(comparison.left(), at);
-        if (stopped == null) {
-            stopped = terms.stoppedIn(comparison.right(), at);
-        }
-        return new UnreadComparison.Quantity.NotRead<>(
-                placesIn(stopped == null ? comparison : stopped, at, byName).origin());
+        return over.isEmpty() ? new UnreadComparison.Quantity.CutsNothing<>()
+                : new UnreadComparison.Quantity.Over<>(over);
     }
 
     /**

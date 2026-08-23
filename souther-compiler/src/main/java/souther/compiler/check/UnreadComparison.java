@@ -52,6 +52,27 @@ public final class UnreadComparison {
         }
 
         /**
+         * The arithmetic read the whole comparison and there is no quantity to cut: a comparison of
+         * constants, or one whose positions cancel.
+         *
+         * <p>Its own answer and not the one below. {@code a - a > 0} is read to the end and divides
+         * no position, which is a fact about the rule; folded together with a reading that stopped,
+         * it was reported as a rule written in a form this compiler cannot read — of a form this
+         * compiler read completely.
+         */
+        record CutsNothing<K>() implements Quantity<K> {}
+
+        /**
+         * The arithmetic read a form and one of its atoms is not a position this reader names.
+         *
+         * <p>Told apart from both of the others because it is neither: nothing about the form was
+         * unreadable, and the form does cut something. What is missing is a coordinate of this
+         * reader's for one of the things it cuts, which is a fact about this reader and not about
+         * the rule.
+         */
+        record NotProjected<K>() implements Quantity<K> {}
+
+        /**
          * The arithmetic read no form here, and what it was looking at when it stopped.
          *
          * <p>The expression, because the walk that stopped is the only thing that knows which one it
@@ -123,6 +144,11 @@ public final class UnreadComparison {
         if (!left.positions().isEmpty() && !right.positions().isEmpty() && named.size() > 1) {
             return new BlockReason.ComparisonBetweenPositions();
         }
+        // A rule read to the end whose quantity is empty. Said before anything about the sides or
+        // the carrier: nothing was left unread, so no question about what could not be read arises.
+        if (quantity instanceof Quantity.CutsNothing<K>) {
+            return new BlockReason.ComparisonCuttingNothing();
+        }
         // The carrier, asked before anything about the reading. Whether a line can be drawn on what
         // a position holds is settled by the position, and no reader of any form would change it —
         // so `s < Won` over a type with one value says that, wherever the arithmetic stopped.
@@ -130,16 +156,22 @@ public final class UnreadComparison {
         if (side instanceof ValueOrigin.IsAPosition<K> one && !ordered.test(one.at())) {
             return new BlockReason.UnreadComparisonDomain();
         }
-        // Then what the reading stopped at, where it stopped. Which expression that was is the
-        // walk's answer and not something recovered from the sides: `String.length(s) > n * n`
-        // stops at the product, and read off the sides it came back as a rule about the length — an
-        // operation this reads, named for the one it does not.
-        if (quantity instanceof Quantity.NotRead<K> notRead) {
-            return whatThisSideSays(notRead.stoppedAt(), ordered);
-        }
-        // A form was read and still divides no position. What is left to say is about the side the
-        // threshold would have been read off.
-        return whatThisSideSays(side, ordered);
+        // And then what the quantity itself came to, answered case by case with no default: a fourth
+        // answer would otherwise arrive as whichever of these it happened to resemble, which is the
+        // arrangement this whole reading is against.
+        return switch (quantity) {
+            // What the reading stopped at, where it stopped. Which expression that was is the
+            // walk's answer and not something recovered from the sides: `String.length(s) > n * n`
+            // stops at the product, and read off the sides it came back as a rule about the
+            // length — an operation this reads, named for the one it does not.
+            case Quantity.NotRead<K> notRead -> whatThisSideSays(notRead.stoppedAt(), ordered);
+            // A form was read and still divides no position, or one of the things it cuts is not a
+            // position this reader names. What is left to say either way is about the side the
+            // threshold would have been read off.
+            case Quantity.Over<K> _, Quantity.NotProjected<K> _ -> whatThisSideSays(side, ordered);
+            // Answered above, and here so that the switch stays total.
+            case Quantity.CutsNothing<K> _ -> new BlockReason.ComparisonCuttingNothing();
+        };
     }
 
     /**

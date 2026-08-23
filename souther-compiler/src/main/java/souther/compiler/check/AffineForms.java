@@ -98,7 +98,7 @@ public final class AffineForms {
      * which is a name changing what can be said of an expression.
      */
     public static <A, E> LinearForm<A> of(Core raw, E at, Reading<A, E> reading) {
-        return outcome(raw, at, reading) instanceof Outcome.Composed<A> composed
+        return outcome(raw, at, reading) instanceof Outcome.Composed<A, E> composed
                 ? composed.form() : null;
     }
 
@@ -114,7 +114,7 @@ public final class AffineForms {
      * is the expression nothing composed, and naming the sum above it names an expression that would
      * compose the moment its part did.
      */
-    public static <A, E> Outcome<A> outcome(Core raw, E at, Reading<A, E> reading) {
+    public static <A, E> Outcome<A, E> outcome(Core raw, E at, Reading<A, E> reading) {
         return of(raw, at, reading, new java.util.HashSet<>());
     }
 
@@ -125,13 +125,22 @@ public final class AffineForms {
      * reads is an answer about the expression; handed back as an absence it became an answer about
      * this walk, which whoever asked then had to interpret.
      */
-    public sealed interface Outcome<A> {
+    public sealed interface Outcome<A, E> {
 
         /** The arithmetic, over whatever the caller calls an atom. */
-        record Composed<A>(LinearForm<A> form) implements Outcome<A> {}
+        record Composed<A, E>(LinearForm<A> form) implements Outcome<A, E> {}
 
-        /** The expression this has no rule for and the caller could not name either. */
-        record StoppedAt<A>(Core node) implements Outcome<A> {}
+        /**
+         * The expression this has no rule for and the caller could not name either, and what it was
+         * being read in.
+         *
+         * <p>The environment travels with the expression, for the reason {@link ReadThrough} says:
+         * a value stands for a name in the environment the binding was made in, which is not always
+         * the one the name was read in. A caller handed the expression alone read it again in
+         * whatever it happened to hold, which is that reading being done twice and the second one
+         * free to disagree — and the day the two environments come apart, silently.
+         */
+        record StoppedAt<A, E>(Core node, E at) implements Outcome<A, E> {}
     }
 
     /**
@@ -144,8 +153,8 @@ public final class AffineForms {
      * left when nothing can be read. Folded into either neighbour, the boundary between what the
      * language says and what a caller says stops being one a reader can see.
      */
-    private static <A, E> Outcome<A> of(Core raw, E at, Reading<A, E> reading,
-                                        java.util.Set<BindingId> following) {
+    private static <A, E> Outcome<A, E> of(Core raw, E at, Reading<A, E> reading,
+                                           java.util.Set<BindingId> following) {
         Core e = Terms.asOperator(raw);
         if (e instanceof Core.PreservedCall || e instanceof Core.Call) {
             // A call that folds is the number it folds to. `String.length("1A")` is 2, and a clause
@@ -160,13 +169,13 @@ public final class AffineForms {
         // below are still asked. A name over an expression nothing reads is still a name the caller
         // may have an atom for, and taking the stop as the answer here would put the leaf question
         // out of reach — which is a rule about what a name may stand for, not about arithmetic.
-        Core[] stopped = new Core[1];
+        Stop<A, E> stopped = new Stop<>();
         LinearForm<A> composed = composed(e, at, reading, following, stopped);
         if (composed != null) {
             return new Outcome.Composed<>(composed);
         }
-        Outcome<A> denoted = read(e, at, reading, following);
-        if (denoted instanceof Outcome.Composed<A> composedName) {
+        Outcome<A, E> denoted = read(e, at, reading, following);
+        if (denoted instanceof Outcome.Composed<A, E> composedName) {
             return composedName;
         }
         // A name whose value this could not read is still a name the caller may have an atom for,
@@ -179,25 +188,31 @@ public final class AffineForms {
         }
         // Nothing named it, so this is a stop — reported at the most particular expression that has
         // no rule here. A sum whose left term nothing reads is not what an author would change.
-        if (stopped[0] != null) {
-            return new Outcome.StoppedAt<>(stopped[0]);
+        if (stopped.at != null) {
+            return stopped.at;
         }
-        return denoted != null ? denoted : new Outcome.StoppedAt<>(e);
+        return denoted != null ? denoted : new Outcome.StoppedAt<>(e, at);
+    }
+
+    /** The first stop met inside what this walk composes, kept while the questions after it are
+     *  still asked. */
+    private static final class Stop<A, E> {
+        private Outcome.StoppedAt<A, E> at;
     }
 
     /** The form {@code e} came to, or null where the reading stopped inside it. For the parts of a
      *  composition, whose own stop is the whole one. */
     private static <A, E> LinearForm<A> formOf(Core e, E at, Reading<A, E> reading,
                                                java.util.Set<BindingId> following,
-                                               Core[] stopped) {
-        Outcome<A> read = of(e, at, reading, following);
-        if (read instanceof Outcome.StoppedAt<A> at1) {
-            if (stopped[0] == null) {
-                stopped[0] = at1.node();
+                                               Stop<A, E> stopped) {
+        Outcome<A, E> read = of(e, at, reading, following);
+        if (read instanceof Outcome.StoppedAt<A, E> here) {
+            if (stopped.at == null) {
+                stopped.at = here;
             }
             return null;
         }
-        return ((Outcome.Composed<A>) read).form();
+        return ((Outcome.Composed<A, E>) read).form();
     }
 
     /**
@@ -210,8 +225,8 @@ public final class AffineForms {
      * Lifted again once the name is behind the walk, so a form adding one name to itself still reads
      * both of them.
      */
-    private static <A, E> Outcome<A> read(Core e, E at, Reading<A, E> reading,
-                                          java.util.Set<BindingId> following) {
+    private static <A, E> Outcome<A, E> read(Core e, E at, Reading<A, E> reading,
+                                             java.util.Set<BindingId> following) {
         if (!(e instanceof Core.Read r)) {
             return null;
         }
@@ -219,7 +234,7 @@ public final class AffineForms {
         if (through == null || through.value() == e || !following.add(r.binding())) {
             return null;
         }
-        Outcome<A> form = of(through.value(), through.at(), reading, following);
+        Outcome<A, E> form = of(through.value(), through.at(), reading, following);
         following.remove(r.binding());
         return form;
     }
@@ -228,7 +243,7 @@ public final class AffineForms {
      *  it or the rule it has does not compose. */
     private static <A, E> LinearForm<A> composed(Core e, E at, Reading<A, E> reading,
                                                  java.util.Set<BindingId> following,
-                                                 Core[] stopped) {
+                                                 Stop<A, E> stopped) {
         return switch (e) {
             case Core.Int i -> LinearForm.constant(BigDecimal.valueOf(i.value()));
             case Core.Decimal d -> LinearForm.constant(d.value());
