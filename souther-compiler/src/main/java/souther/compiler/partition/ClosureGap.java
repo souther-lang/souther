@@ -52,7 +52,4 @@ public sealed interface ClosureGap {
      * miniature.
      */
     record PositionNotReachedInto(AxisId at, BlockReason.AboutThePosition why) implements ClosureGap {}
-
-    /** A position dropped past the axis limit, with what dropping it cost. */
-    record AxisOmitted(Partitions.OmittedAxis axis) implements ClosureGap {}
 }

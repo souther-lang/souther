@@ -69,8 +69,8 @@ public final class PartitionDerivation {
 
     /**
      * The reading of what this measure answers did not run out, so what it did not find is not known
-     * not to be there. A rule about a position's values that nothing took in, a position whose rules
-     * were never enumerated, a position dropped past the axis limit.
+     * not to be there. A rule about a position's values that nothing took in, or a position whose
+     * rules were never enumerated.
      *
      * <p>What {@code NO_AXIS_DERIVED} said of every empty answer, now said only where it is true —
      * and, since #953, said beside the gaps that make it true rather than on its own.

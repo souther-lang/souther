@@ -38,8 +38,6 @@ public enum WeakeningWord {
     /** A position whose rules nothing enumerated. */
     RULES_NOT_REACHED,
 
-    /** A position dropped past the axis limit. */
-    AXIS_OMITTED,
 
     /** The space of combinations was too large to walk to the end of. */
     PAIR_SPACE_TRUNCATED,

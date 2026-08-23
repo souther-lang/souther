@@ -30,23 +30,19 @@ import java.util.Set;
  * ({@link CoverageObligation#answeredBy}). Counted as "every reader ran to the end" instead, a
  * completeness says the model was read in full for exactly as long as nobody adds a reader.
  *
- * <p><b>And three facts no question carries.</b> A position whose rules were never enumerated
+ * <p><b>And two facts no question carries.</b> A position whose rules were never enumerated
  * raises none, and a set of raised questions all answered is what a reading that never looked also
- * produces ({@link Axis#rulesNotReached}). A position past the axis limit was dropped with whatever
- * it was carrying. And a rule the model wrote that this could not use is one whose question a
- * reading may well have answered before the position refused the answer — two clauses placing ends
- * on a {@code String}'s two coordinates are read, accounted for, and then both dropped, and the
- * accounting is right to say they were read. What an accounting cannot say is that the measure was
- * then left with nothing, and that is what this reads the refusals for.
+ * produces ({@link Axis#rulesNotReached}). And a rule the model wrote that this could not use is one
+ * whose question a reading may well have answered before the position refused the answer — two
+ * clauses placing ends on a {@code String}'s two coordinates are read, accounted for, and then
+ * both dropped, and the accounting is right to say they were read. What an accounting cannot say
+ * is that the measure was then left with nothing, and that is what this reads the refusals for.
  *
- * <p>Which measures each of the three costs is each one's own answer, and they do not agree. A
+ * <p>Which measures each of the two costs is each one's own answer, and they do not agree. A
  * position whose rules were never enumerated and one the walk could not reach into leave both short,
- * because what is not known about them is not known for either. A dropped axis leaves the partition
- * measure short always and the border measure short only where it was carrying a line — what it was
- * carrying is recorded where it was dropped, since neither kind leaves anything behind to read it
- * off afterwards. And a rule set aside answers through its own reason
- * ({@link souther.compiler.inputs.BlockReason.AboutARule#leavesShort}), which for a comparison
- * relating two positions is neither measure.
+ * because what is not known about them is not known for either. And a rule set aside answers
+ * through its own reason ({@link souther.compiler.inputs.BlockReason.AboutARule#leavesShort}),
+ * which for a comparison relating two positions is neither measure.
  */
 public final class MeasureClosure {
 
@@ -146,10 +142,6 @@ public final class MeasureClosure {
      *
      * @param axes    every position the reading kept, measured or not
      * @param compared what the body's comparisons raised and what answered each
-     * @param omitted positions dropped past the axis limit. Each leaves the partition measure short
-     *                always and the border measure short only where it was carrying a line: what a
-     *                dropped axis was carrying is recorded where it was dropped, since neither kind
-     *                leaves anything behind to read it off afterwards
      * @param refused the rules of the model this reading set aside, each from the reader that did.
      *                Asked which measures it leaves short rather than counted: a comparison relating
      *                two positions is set aside by what it says and not by anything missing here,
@@ -157,7 +149,6 @@ public final class MeasureClosure {
      *                ({@link souther.compiler.inputs.BlockReason.AboutARule#leavesShort})
      */
     static Both of(List<Axis> axes, List<GuardThresholds.Guards.AtAPosition> compared,
-                   List<Partitions.OmittedAxis> omitted,
                    List<souther.compiler.inputs.UnreadRule> refused) {
         Set<ClosureGap> partition = new LinkedHashSet<>();
         Set<ClosureGap> border = new LinkedHashSet<>();
@@ -167,17 +158,6 @@ public final class MeasureClosure {
             }
             if (rule.why().leavesShort(CoverageObligation.Measure.BOUNDARY)) {
                 border.add(new ClosureGap.RuleUnread(rule));
-            }
-        }
-        // A dropped axis, asked which measure lost by it. What it was carrying is recorded where it
-        // was dropped, because it cannot be read back afterwards: one that was carrying a line took
-        // the border's evidence with it, and one that was only classifying took the partition's.
-        // Counted as one fact, a model dropping an axis that divides nothing anybody bounds was
-        // held open over a measure it never had.
-        for (Partitions.OmittedAxis each : omitted) {
-            partition.add(new ClosureGap.AxisOmitted(each));
-            if (each.carriedAnObligation()) {
-                border.add(new ClosureGap.AxisOmitted(each));
             }
         }
         for (Axis axis : axes) {

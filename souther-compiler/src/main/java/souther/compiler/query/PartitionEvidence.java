@@ -1,7 +1,6 @@
 package souther.compiler.query;
 
 import souther.compiler.observe.Incompleteness;
-import souther.compiler.partition.Partitions;
 
 import java.util.List;
 import java.util.Set;
@@ -20,9 +19,6 @@ import java.util.Set;
  *                     no way at all or this could not read what it divides them by. Both used to be
  *                     one list of paths, and the sentence written from it claimed the first about
  *                     both
- * @param omitted      positions dropped for being past the axis limit, with what dropping each
- *                     one cost — a position that was carrying a boundary leaves the rows there
- *                     unmeasured rather than covered
  * <p><b>Why these are still here, beside the measures that went without them.</b> #953 moved every
  * fact that costs a measure something into what weakened that measure, and the obvious next step is
  * to drop the lists and project them back out. Two of them cannot be: {@code unread} holds rules
@@ -31,10 +27,10 @@ import java.util.Set;
  * weakening is a strictly smaller set than what a reader is owed, and a projection would drop
  * exactly those rules from the report.
  *
- * <p>The other two, {@code unanswered} and {@code omitted}, look as though they would project: every
- * unanswered question goes to the measure that answers it and every dropped axis costs the partition
- * measure always. They are kept anyway, because that is a reading of the code and not a measurement
- * of it, and the rule this normalization follows is to drop only what something shows is covered.
+ * <p>The other, {@code unanswered}, looks as though it would project: every unanswered question
+ * goes to the measure that answers it. It is kept anyway, because that is a reading of the code and
+ * not a measurement of it, and the rule this normalization follows is to drop only what something
+ * shows is covered.
  *
  * @param whyUnclassified why the rows counted in {@link AxisCoverage#unclassifiedRows} could not be
  *                     placed. The count is the measurement and this is what it came out of, which
@@ -50,7 +46,6 @@ public record PartitionEvidence(Measurement<List<AxisCoverage>> partitioned,
                                 List<souther.compiler.inputs.PositionReadingBlocked> blocked,
                                 List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                 List<Unanswered> unanswered,
-                                List<Partitions.OmittedAxis> omitted,
                                 List<Incompleteness> whyUnclassified) {
 
 
@@ -65,7 +60,7 @@ public record PartitionEvidence(Measurement<List<AxisCoverage>> partitioned,
     public static final PartitionEvidence NONE = new PartitionEvidence(
             PartitionDerivation.noSubject(), BoundaryDerivation.noSubject(),
             PairSpace.NONE, List.of(), List.of(), List.of(), List.of(),
-            List.of(), List.of(), List.of());
+            List.of(), List.of());
 
     public PartitionEvidence {
         notDerivable = List.copyOf(notDerivable);
@@ -73,7 +68,6 @@ public record PartitionEvidence(Measurement<List<AxisCoverage>> partitioned,
         notSeparated = List.copyOf(notSeparated);
         blocked = List.copyOf(blocked);
         unanswered = List.copyOf(unanswered);
-        omitted = List.copyOf(omitted);
         whyUnclassified = List.copyOf(whyUnclassified);
     }
 

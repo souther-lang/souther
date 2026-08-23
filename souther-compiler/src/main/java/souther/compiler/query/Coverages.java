@@ -190,7 +190,6 @@ final class Coverages {
                 pairsOf(behavior.name(), divided, readings, level.readsRows()),
                 partitioning.undivided(), partitioning.unread(), partitioning.blocked(),
                 partitioning.notSeparated(), List.copyOf(standing),
-                partitioning.omitted(),
                 whyUnclassified(readings.byRow(),
                         partitioning.axes().stream().map(Axis::id).toList()));
     }
