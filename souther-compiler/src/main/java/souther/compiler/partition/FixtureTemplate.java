@@ -260,21 +260,32 @@ public record FixtureTemplate(String text, Hir.Expr value) {
      * written out, the two would be one value under two spellings with their own way of
      * disagreeing.
      *
+     * <p>More than one field, because a row about one class can need another moved beside it to be
+     * a value the model allows at all. Which of them the row is <em>for</em> is not here: that is
+     * what it was composed for, and the rest are what it took to write one (issue #967).
+     *
      * @param type  the record being built, written the way this module reaches it
      * @param base  the value being spread, which has to be one a row can name
-     * @param field the field the class's value goes at
+     * @param moved the fields this writes over what the base holds, in the order they are written
      */
     public static FixtureTemplate spreading(TypeReachName.Written type, FixtureTemplate base,
-                                            String field, FixtureTemplate value) {
+                                            Map<String, FixtureTemplate> moved) {
         if (!(base.value() instanceof Hir.Var spread)) {
             throw new IllegalArgumentException("a spread names a value: " + base.text());
         }
+        if (moved.isEmpty()) {
+            throw new IllegalArgumentException("a spread that moves nothing is the value itself");
+        }
+        List<String> written = new ArrayList<>();
+        List<Hir.FieldInit> inits = new ArrayList<>();
+        for (Map.Entry<String, FixtureTemplate> field : moved.entrySet()) {
+            written.add(field.getKey() + " = " + field.getValue().text());
+            inits.add(new Hir.FieldInit(field.getKey(), field.getValue().value(), NOWHERE));
+        }
         return new FixtureTemplate(
-                type.rendered() + " { ..." + base.text() + ", " + field + " = " + value.text()
-                        + " }",
-                new Hir.NewData(Hir.Name.reached(type, NOWHERE),
-                        List.of(new Hir.FieldInit(field, value.value(), NOWHERE)),
-                        List.of(spread), ConstructionOrigin.own(), NOWHERE, NO_SOURCE));
+                type.rendered() + " { ..." + base.text() + ", " + String.join(", ", written) + " }",
+                new Hir.NewData(Hir.Name.reached(type, NOWHERE), inits, List.of(spread),
+                        ConstructionOrigin.own(), NOWHERE, NO_SOURCE));
     }
 
     /** A record, field by field, in the order the fields were declared. */

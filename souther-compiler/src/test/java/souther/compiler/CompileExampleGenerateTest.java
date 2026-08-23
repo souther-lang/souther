@@ -810,6 +810,74 @@ class CompileExampleGenerateTest {
                 "and nothing is left to offer once they are answered");
     }
 
+    /** A rule relating two fields, a value the model states, and a class each of two positions. */
+    private static final String CORRELATED = """
+            module example.trip
+
+            data Amount = Int
+                invariant value >= 0
+
+            data Request = { lo: Amount, hi: Amount }
+                invariant lo.value <= hi.value
+
+            data Accepted = { at: String }
+
+            let mid = Request { lo = Amount(60), hi = Amount(70) }
+
+            behavior submit : (request: Request) -> Accepted
+                constructs Accepted
+
+            let submit (request) = {
+                guard request.lo.value <= 50 else Accepted { at = "wide" }
+                guard request.hi.value <= 60 else Accepted { at = "tall" }
+                Accepted { at = "now" }
+            }
+            """;
+
+    /**
+     * The value the model states is where the search starts, not what it rewrites its answer into.
+     *
+     * <p>Two of these rows cannot be composed from the classes at all. A rule relating {@code lo}
+     * and {@code hi} refuses the pair a composition names — each class offers the bottom of its own
+     * range, and the bottom of one against the bottom of the other is a value the model rules out —
+     * while the same class against the model's own {@code mid} builds. Composed first and rewritten
+     * after, the class came back as one nothing offered a row for.
+     *
+     * <p>And a row that needs another field moved beside the one it is about moves that one and no
+     * more. Composing instead moves every position to whatever the classes named there, which is
+     * what a row about one class exists not to be (issue #967).
+     */
+    @Test
+    void aClassIsWrittenAgainstTheModelsOwnValueOrNotWrittenAtAll() {
+        Adequacy.Filling filling = generated(CORRELATED).get("submit");
+
+        assertEquals(List.of(
+                        // The target and one supporting field: `hi` at the bottom of its lower
+                        // class is under `mid`'s `lo`, which the rule refuses, so `lo` moves too.
+                        "Request { ...mid, hi = Amount(0), lo = Amount(0) }",
+                        "Request { ...mid, hi = Amount(61) }",
+                        "Request { ...mid, lo = Amount(0) }",
+                        "Request { ...mid, lo = Amount(51) }"),
+                filling.composed().rows().stream()
+                        .map(CompileExampleGenerateTest::inputsOf).toList());
+        assertEquals(List.of(), filling.composed().unresolved(),
+                "every class is written for, which composing them could not do");
+    }
+
+    /** Each named for the one class it is about, whatever it took to write one. */
+    @Test
+    void aFieldMovedToMakeARowBuildableIsNoPartOfWhatItIsFor() {
+        assertEquals(List.of(List.of("request.hi=0 <= x <= 60"), List.of("request.hi=60 < x"),
+                        List.of("request.lo=0 <= x <= 50"), List.of("request.lo=50 < x")),
+                generated(CORRELATED).get("submit").composed().rows().stream()
+                        .map(row -> row.purpose().labels()).toList());
+    }
+
+    private static String inputsOf(Generator.GeneratedRow row) {
+        return String.join(", ", row.inputs().stream()
+                .map(souther.compiler.partition.FixtureTemplate::text).toList());
+    }
+
     /**
      * The rows come out in the form {@code souther fmt} writes them.
      *

@@ -228,9 +228,9 @@ class GeneratorTest {
         Symbols symbols = modelOf(TRIP, "submit").symbols();
         Generator.Subject subject = twoNumbers(symbols, List.of(number("low", 1, 2)),
                 List.of(number("high", 10, 20)));
-        Generator.CandidateCheck refusesTheFirst = (at, candidate) ->
-                candidate.text().equals("1") || candidate.text().equals("10")
-                        ? Optional.of("the first pair is not allowed together") : Optional.empty();
+        Generator.CandidateCheck refusesTheFirst = Generator.CandidateCheck.refusing(
+                (at, candidate) -> candidate.text().equals("1") || candidate.text().equals("10")
+                        ? Optional.of("the first pair is not allowed together") : Optional.empty());
 
         Generator.GenerationResult filled =
                 Generator.fill(subject, List.of(), refusesTheFirst);
@@ -254,7 +254,8 @@ class GeneratorTest {
                 List.of(number("high", 10)));
 
         Generator.GenerationResult filled =
-                Generator.fill(subject, List.of(), (_, _) -> Optional.of("no"));
+                Generator.fill(subject, List.of(),
+                        Generator.CandidateCheck.refusing((_, _) -> Optional.of("no")));
 
         assertEquals(List.of(), filled.rows());
         assertTrue(filled.unresolved().stream().allMatch(left ->

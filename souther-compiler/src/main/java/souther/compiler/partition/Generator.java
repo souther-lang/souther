@@ -468,11 +468,71 @@ public final class Generator {
     @FunctionalInterface
     public interface CandidateCheck {
 
-        /** Empty where the value builds; the reason it did not, otherwise. */
-        Optional<String> refuse(int parameter, FixtureTemplate candidate);
+        /**
+         * What building the candidate at one parameter came to: what was built, or why nothing was.
+         *
+         * <p>What was built and not only whether it built. Where a candidate landed is the
+         * decoder's answer — a newtype's construction may narrow it, and a rule relating two
+         * fields decides whether it exists at all — and a caller that had only the refusal was
+         * left reading its own request back as the answer.
+         */
+        Built build(int parameter, FixtureTemplate candidate);
 
-        /** Nothing is refused — what a caller with no runtime to build against uses. */
-        CandidateCheck ANY = (_, _) -> Optional.empty();
+        /** Whether the candidate was refused, for a caller that has nothing to do with what it is. */
+        default Optional<String> refuse(int parameter, FixtureTemplate candidate) {
+            return build(parameter, candidate) instanceof Built.Refused refused
+                    ? Optional.of(refused.why()) : Optional.empty();
+        }
+
+        /**
+         * Nothing is refused and nothing is built — what a caller with no runtime to build against
+         * uses.
+         *
+         * <p>{@link Built.NothingBuiltIt} and not a value: there is no runtime here, so no
+         * candidate went through one, and a reader that took silence for a value would be reading
+         * what it asked for back as what it got.
+         */
+        CandidateCheck ANY = (_, _) -> new Built.NothingBuiltIt();
+
+        /**
+         * A check that says which candidates are refused and nothing about the rest.
+         *
+         * <p>For a caller with no runtime: what it accepts, nothing built, so there is nothing for
+         * it to hand back. Written as a value that was built, a reader asking where a candidate
+         * landed would be handed what it had asked for.
+         */
+        static CandidateCheck refusing(Refusal said) {
+            return (parameter, candidate) -> said.at(parameter, candidate)
+                    .<Built>map(Built.Refused::new).orElseGet(Built.NothingBuiltIt::new);
+        }
+
+        /** Which candidates are refused, and why. */
+        @FunctionalInterface
+        interface Refusal {
+
+            /** Empty where the candidate is allowed; the reason it is not, otherwise. */
+            Optional<String> at(int parameter, FixtureTemplate candidate);
+        }
+
+        /** What came of building one candidate. */
+        sealed interface Built {
+
+            /** It built, and this is what it came to. */
+            record Value(souther.compiler.observe.ObservedValue observed) implements Built {}
+
+            /** It did not, and why. Never a claim that no value of the shape can be built. */
+            record Refused(String why) implements Built {}
+
+            /**
+             * Nothing built it, so nothing here can say what it is.
+             *
+             * <p>Told apart from a value because they are not the same news. A caller checking
+             * where a candidate landed has an answer in one case and none in the other, and a
+             * candidate nothing built is offered on the strength of the reading that composed it —
+             * which is what the row says of itself either way.
+             */
+            record NothingBuiltIt() implements Built {}
+        }
     }
 
     /**
@@ -698,25 +758,12 @@ public final class Generator {
                 }
                 break;
             }
-            Axis axis = axes.get(at[0]);
-            String classId = axis.classes().get(at[1]).id();
-            Attempt built = build(subject, axes, movingOnly(axes, at[0], at[1]), check);
-            if (built.row() == null) {
-                UnresolvedCombination why = new UnresolvedCombination(
-                        List.of(label(axis, at[1])), built.reason(), built.detail(), built.said());
-                unresolved.add(why);
-                attempts.add(new ClassAttempt.Unresolved(axis.id(), classId, why));
-                continue;
+            ClassAttempt attempt = rowFor(subject, axes, at[0], at[1], baselines, check);
+            attempts.add(attempt);
+            switch (attempt) {
+                case ClassAttempt.Built made -> rows.add(made.row());
+                case ClassAttempt.Unresolved none -> unresolved.add(none.why());
             }
-            // Named for the class it was composed for and for nothing else. Every other position
-            // holds a value because a row has to, and what those values turn out to settle is a
-            // fact about this run rather than what the row is: a name carrying them would move
-            // when something elsewhere in the model did.
-            GeneratedRow named = new GeneratedRow(
-                    new Purpose.ForAClass(axis.id(), classId, label(axis, at[1])),
-                    against(subject, axis, at[1], baselines, check, built.row().inputs()));
-            rows.add(named);
-            attempts.add(new ClassAttempt.Built(axis.id(), classId, named));
         }
         // Said once, at the end, and about both searches. One that ran out on the cells stopped
         // whether or not the classes had anything left to do, and two limits reported apart would
@@ -736,73 +783,349 @@ public final class Generator {
     }
 
     /**
+     * How many positions beside the one a row is about it may move to be buildable.
+     *
+     * <p>A bound on what a row may say, before it is one on the search. A row that moved eight
+     * positions to reach one class is a row whose reader cannot tell which of the eight the answer
+     * turned on, which is what a row about one class exists not to be (issue #967). Past this the
+     * class is reported as one no row was composed for, which leaves it writable by hand.
+     */
+    private static final int MOST_SUPPORTING = 2;
+
+    /**
+     * How many assignments the walk over the origins tries before it gives up on a class.
+     *
+     * <p>Its own budget and never {@link #MAX_TUPLES}. That one bounds the walk over the values one
+     * parameter's fields may take once the classes are settled; this bounds the walk over which
+     * classes to settle them at, and the two multiply — shared, one of them would be spent by the
+     * other and which of them ran out would depend on the model.
+     */
+    private static final int MOST_REPAIRS = 64;
+
+    /**
+     * A row for one class: composed against what the model already says where it can be, and moving
+     * as little else as it takes.
+     *
+     * <p>The origins are walked before the repairs, and both outward from what a reader would
+     * recognise. A value the model states is what a row is written against where there is one, and
+     * the classes are what is left when there is not — so the order is {@code baseline} then
+     * {@code composed}, and within each, the target alone before the target and one supporting
+     * position, before the target and two.
+     *
+     * <p><b>Not the other way round.</b> The synthetic composition used to run first and its
+     * failure ended the class: a row the baseline could have been written for came back as one
+     * nothing composed, because a representative chosen from the classes alone broke a rule that
+     * relates two positions while the model's own value does not. Composing is one of the origins,
+     * not the gate in front of them.
+     *
+     * <p>And a refusal of the exact mutation is a reason to repair it, not to abandon the origin.
+     * Where {@code f = C} needs {@code g = G2} beside it, what a reader wants is the baseline with
+     * both moved — {@code Cond &#123;...none, f = C, g = G2&#125;} — and falling back to a
+     * composition moves everything the classes happened to name. The supporting position is part of
+     * the row and no part of what it is for: the row is still named for the class alone
+     * ({@link Purpose.ForAClass}).
+     */
+    private static ClassAttempt rowFor(Subject subject, List<Axis> axes, int at, int cls,
+                                       Map<String, Baseline> baselines, CandidateCheck check) {
+        Axis axis = axes.get(at);
+        String classId = axis.classes().get(cls).id();
+        String label = label(axis, cls);
+        Attempt last = null;
+        // The value the model states first and the classes after, each walked outward from the
+        // target alone. A row composed from the classes moves every position away from what the
+        // model says, so it is further from what a reader recognises than a baseline row with a
+        // supporting move — which is why the origins are the outer loop and the distance the inner.
+        for (boolean fromBaseline : new boolean[] {true, false}) {
+            if (fromBaseline && baselines.isEmpty()) {
+                continue;
+            }
+            // Where the origin's own values already stand, which is what a move is measured from.
+            // Measured from the composition either way, a class the baseline is already in looked
+            // like no move at all and was never tried as one — so a row the baseline needed one
+            // supporting field for fell through to being composed from the classes.
+            int[] from = fromBaseline ? stands(subject, axes, baselines, check) : composes(axes);
+            if (from == null) {
+                continue;
+            }
+            int tried = 0;
+            for (int moved = 0; moved <= MOST_SUPPORTING && tried < MOST_REPAIRS; moved++) {
+                for (int[] supporting : supportingSets(axes, at, moved)) {
+                    for (int[] where : assignmentsOver(axes, from, at, cls, supporting)) {
+                        if (++tried > MOST_REPAIRS) {
+                            break;
+                        }
+                        Map<String, FixtureTemplate> given = fromBaseline
+                                ? against(subject, axes, from, at, where, baselines) : Map.of();
+                        if (fromBaseline && given.isEmpty()) {
+                            continue;   // nothing here can be written against the model's value
+                        }
+                        Attempt made = build(subject, axes, where, check, given);
+                        if (made.row() == null) {
+                            last = made;
+                            continue;
+                        }
+                        if (!inTheClass(subject, axes, at, classId, made.row().inputs(), check)) {
+                            last = new Attempt(null,
+                                    UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS, label,
+                                    Optional.empty());
+                            continue;
+                        }
+                        return new ClassAttempt.Built(axis.id(), classId, new GeneratedRow(
+                                new Purpose.ForAClass(axis.id(), classId, label),
+                                made.row().inputs()));
+                    }
+                }
+            }
+        }
+        UnresolvedCombination why = last == null || last.row() != null
+                ? new UnresolvedCombination(List.of(label),
+                        UnresolvedCombination.Reason.SEARCH_LIMIT)
+                : new UnresolvedCombination(List.of(label), last.reason(), last.detail(),
+                        last.said());
+        return new ClassAttempt.Unresolved(axis.id(), classId, why);
+    }
+
+    /**
+     * Which positions beside {@code at} a row may move, {@code moved} of them at a time.
+     *
+     * <p>In the axes' own order and combinations of it, so two runs of one model walk the same
+     * assignments in the same order and offer the same rows.
+     */
+    private static List<int[]> supportingSets(List<Axis> axes, int at, int moved) {
+        List<int[]> out = new ArrayList<>();
+        chooseSupporting(axes, at, moved, 0, new int[moved], 0, out);
+        return out;
+    }
+
+    private static void chooseSupporting(List<Axis> axes, int at, int moved, int from,
+                                         int[] taken, int filled, List<int[]> out) {
+        if (filled == moved) {
+            out.add(taken.clone());
+            return;
+        }
+        for (int i = from; i < axes.size(); i++) {
+            if (i == at) {
+                continue;
+            }
+            taken[filled] = i;
+            chooseSupporting(axes, at, moved, i + 1, taken, filled + 1, out);
+        }
+    }
+
+    /**
+     * Every assignment that pins {@code at} to {@code cls} and moves the positions in
+     * {@code supporting}, each of the rest standing where a position a row is not about stands.
+     *
+     * <p>The supporting positions take each of their classes in turn, the first of them being where
+     * they would have stood anyway — so the first assignment of every set is the one that moves
+     * nothing beside the target, and a set larger than it is only reached once the smaller ones are
+     * spent.
+     */
+    private static List<int[]> assignmentsOver(List<Axis> axes, int[] from, int at, int cls,
+                                               int[] supporting) {
+        List<int[]> out = new ArrayList<>();
+        int[] where = from.clone();
+        where[at] = cls;
+        walkSupporting(axes, where, supporting, 0, out);
+        return out;
+    }
+
+    /**
+     * Which class each position's value falls in for the value the model already states there, or
+     * null where nothing built one to look at.
+     *
+     * <p>Read off what was built and never off what the baseline was asked to be. A position with
+     * no baseline stands where a composition would put it — the row is not about it either way, and
+     * what it holds is what the classes give it.
+     *
+     * <p>Nothing where no runtime built the values: a distance measured from a baseline nothing
+     * looked at would be measured from a guess, and the composition is the origin this run has.
+     */
+    private static int[] stands(Subject subject, List<Axis> axes, Map<String, Baseline> baselines,
+                                CandidateCheck check) {
+        List<souther.compiler.observe.ObservedValue> observed = new ArrayList<>();
+        for (String parameter : subject.parameters()) {
+            Baseline baseline = baselines.get(parameter);
+            if (baseline == null) {
+                // Not a value this run has, and not one it needs: the axes under it are read off
+                // the composition below.
+                observed.add(new souther.compiler.observe.ObservedValue.Unknown("no baseline"));
+                continue;
+            }
+            if (!(check.build(observed.size(),
+                    FixtureTemplate.named(baseline.module(), baseline.name()))
+                            instanceof CandidateCheck.Built.Value(var value))) {
+                return null;
+            }
+            observed.add(value);
+        }
+        Map<AxisId, Classification> where =
+                InputClassifications.of(observed, subject.inputs(), axes);
+        int[] out = composes(axes);
+        for (int i = 0; i < axes.size(); i++) {
+            Classification here = where.get(axes.get(i).id());
+            if (here == null) {
+                continue;
+            }
+            for (String id : here.classIds()) {
+                int found = classIn(axes.get(i), id);
+                if (found >= 0) {
+                    out[i] = found;
+                    break;
+                }
+            }
+        }
+        return out;
+    }
+
+    /** Where every position stands when a row is composed from the classes alone. */
+    private static int[] composes(List<Axis> axes) {
+        int[] where = new int[axes.size()];
+        for (int i = 0; i < axes.size(); i++) {
+            where[i] = standingAt(axes.get(i), _ -> true);
+        }
+        return where;
+    }
+
+    private static void walkSupporting(List<Axis> axes, int[] where, int[] supporting, int filled,
+                                       List<int[]> out) {
+        if (filled == supporting.length) {
+            out.add(where.clone());
+            return;
+        }
+        int axis = supporting[filled];
+        int stood = where[axis];
+        for (int c = 0; c < axes.get(axis).classes().size(); c++) {
+            // Where it already stands is not a move, and the assignment that makes it is the one
+            // the smaller set already produced.
+            if (c == stood) {
+                continue;
+            }
+            where[axis] = c;
+            walkSupporting(axes, where, supporting, filled + 1, out);
+        }
+        where[axis] = stood;
+    }
+
+    /**
+     * Whether the candidate's value at {@code at} really is in {@code classId}.
+     *
+     * <p>Asked of what was built and never of what was asked for. A class names the values it
+     * stands for and a row writes one of them, and between the two are the decoders and the rules
+     * the model states — a construction may narrow what it is given, and a value written under a
+     * name is read back through it. So where the check built the candidate, where it landed is read
+     * off the built value by the walk every written row's values go through
+     * ({@link InputClassifications}).
+     *
+     * <p>True where nothing built it. There is no runtime to put a candidate through, so nothing
+     * here can say where it went — and a row nothing could judge is offered as it was composed,
+     * which is what {@code Trial.NOTHING_RUNS} leaves a row that nothing ran.
+     */
+    private static boolean inTheClass(Subject subject, List<Axis> axes, int at, String classId,
+                                      List<FixtureTemplate> inputs, CandidateCheck check) {
+        List<souther.compiler.observe.ObservedValue> observed = new ArrayList<>();
+        for (int p = 0; p < inputs.size(); p++) {
+            if (!(check.build(p, inputs.get(p)) instanceof CandidateCheck.Built.Value(var value))) {
+                return true;   // nothing built it, so nothing says where it went
+            }
+            observed.add(value);
+        }
+        Classification where =
+                InputClassifications.of(observed, subject.inputs(), axes).get(axes.get(at).id());
+        return where != null && where.classIds().contains(classId);
+    }
+
+    /**
      * {@code composed} with every position a baseline names written against that baseline.
      *
-     * <p>The position the row is about is written as the baseline with that one field moved, which
-     * is the whole of what the row says. Every other position a baseline names is written as the
-     * baseline itself — the value is already in the model and the row is not about it, so naming it
-     * says so.
+     * <p>A parameter no moved position is under is written as the baseline itself: the value is
+     * already in the model and this row is not about it, so naming it says so. A parameter some
+     * moved position is under is written as the baseline with those fields moved, which is the row
+     * — the difference between it and what the model already says is what the row is for, and
+     * everything else standing where the model puts it is what makes that readable (issue #967).
      *
-     * <p>What a baseline cannot be used for is kept as it was composed, and silently: this is how a
-     * row is written and not whether one could be. A position the baseline's own type does not
-     * reach through one field, a class with no value to put there, a value the model refuses beside
-     * the rest of the row — each of them leaves that position composed from its classes, which is a
+     * <p>What a baseline cannot be written for is kept as it was composed, and silently: this is
+     * how a row is written and not whether one could be. A position the baseline reaches through
+     * more than one field, a class with no value to put there, a value the model refuses beside the
+     * rest of the row — each of them leaves that parameter composed from its classes, which is a
      * row that says the same thing in more words.
      */
-    private static List<FixtureTemplate> against(Subject subject, Axis moved, int cls,
-                                                 Map<String, Baseline> baselines,
-                                                 CandidateCheck check,
-                                                 List<FixtureTemplate> composed) {
-        if (baselines.isEmpty()) {
-            return composed;
-        }
-        List<FixtureTemplate> out = new ArrayList<>(composed);
-        for (int p = 0; p < subject.parameters().size() && p < out.size(); p++) {
+    private static Map<String, FixtureTemplate> against(Subject subject, List<Axis> axes,
+                                                        int[] from, int target, int[] where,
+                                                        Map<String, Baseline> baselines) {
+        Map<String, FixtureTemplate> out = new LinkedHashMap<>();
+        for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
             String parameter = subject.parameters().get(p);
             Baseline baseline = baselines.get(parameter);
             if (baseline == null) {
                 continue;
             }
             FixtureTemplate named = FixtureTemplate.named(baseline.module(), baseline.name());
-            FixtureTemplate written = parameter.equals(moved.path().head())
-                    ? withOneFieldMoved(subject, p, moved, cls, named)
-                    : named;
-            // Kept as composed where the baseline cannot be written here, and where writing it
-            // would be a value the model refuses: what a row is written as never decides what it
-            // is for, so a position that cannot take the baseline takes what the classes gave it.
-            if (written != null && check.refuse(p, written).isEmpty()) {
-                out.set(p, written);
+            FixtureTemplate written = movedUnder(axes, from, parameter, target, where).isEmpty()
+                    ? named
+                    : withFieldsMoved(subject, p, axes, from, parameter, target, where, named);
+            // Left out where the baseline cannot be written for this assignment, which leaves that
+            // parameter to be composed from its classes. How a row is written never decides
+            // whether the model allows it — the check below asks that of every parameter alike.
+            if (written != null) {
+                out.put(parameter, written);
             }
         }
-        return List.copyOf(out);
+        return Map.copyOf(out);
+    }
+
+    /** Which axes this assignment moves under {@code parameter}: the one the row is about, and any
+     *  the search moved beside it to make the row buildable. */
+    private static List<Integer> movedUnder(List<Axis> axes, int[] from, String parameter,
+                                            int target, int[] where) {
+        List<Integer> moved = new ArrayList<>();
+        for (int i = 0; i < axes.size(); i++) {
+            if (!axes.get(i).path().head().equals(parameter)) {
+                continue;
+            }
+            // Moved against where the baseline's own value stands, which is what the spread writes
+            // over. Measured against a composition, a field the baseline already holds the right
+            // value in was written out again for no reason, and one it did not was left unwritten.
+            if (i == target || where[i] != from[i]) {
+                moved.add(i);
+            }
+        }
+        return moved;
     }
 
     /**
-     * The baseline with the field {@code moved} names set to a value of {@code cls}, or null where
-     * this cannot be written.
+     * The baseline with the fields this assignment moves under {@code parameter} set to values of
+     * the classes it moves them to, or null where this cannot be written.
      *
-     * <p>One field, reached in one step. A position further down is a record inside a record, and
+     * <p>Each field reached in one step. A position further down is a record inside a record, and
      * writing it means spreading the value at every step on the way — which is a row that names
-     * values this has not been asked whether it can name. Such a position keeps what the classes
+     * values this has not been asked whether it can name. Such a parameter keeps what the classes
      * composed for it, which says the same thing and says it in full.
      */
-    private static FixtureTemplate withOneFieldMoved(Subject subject, int p, Axis moved, int cls,
-                                                     FixtureTemplate baseline) {
-        if (moved.path().steps().size() != 1
-                || !(moved.path().steps().get(0) instanceof TermPath.Step.Field field)) {
-            return null;
-        }
+    private static FixtureTemplate withFieldsMoved(Subject subject, int p, List<Axis> axes,
+                                                   int[] from, String parameter, int target,
+                                                   int[] where, FixtureTemplate baseline) {
         if (!(subject.types().get(p) instanceof Type.Ref(TypeSymbol built))
                 || !(subject.symbols().scope().reach(built) instanceof TypeReachName.Written type)) {
             return null;
         }
-        // The class's own values, and only those: a class composed through a constructor is a walk
-        // this does not do, and one nothing can produce a value for has nothing to put here.
-        if (!(moved.classes().get(cls).representatives().evaluate()
-                instanceof RepresentativeSource.Evaluation.Values values)) {
-            return null;
+        Map<String, FixtureTemplate> moved = new LinkedHashMap<>();
+        for (int i : movedUnder(axes, from, parameter, target, where)) {
+            Axis axis = axes.get(i);
+            if (axis.path().steps().size() != 1
+                    || !(axis.path().steps().get(0) instanceof TermPath.Step.Field field)) {
+                return null;
+            }
+            // The class's own values, and only those: a class composed through a constructor is a
+            // walk this does not do, and one nothing can produce a value for has nothing to put
+            // here.
+            if (!(axis.classes().get(where[i]).representatives().evaluate()
+                    instanceof RepresentativeSource.Evaluation.Values values)) {
+                return null;
+            }
+            moved.put(field.name(), values.written().get(0));
         }
-        return FixtureTemplate.spreading(type, baseline, field.name(), values.written().get(0));
+        return moved.isEmpty() ? null : FixtureTemplate.spreading(type, baseline, moved);
     }
 
     /**
@@ -1422,7 +1745,22 @@ public final class Generator {
      * stops at {@link #MAX_TUPLES}, and stopping is reported as having stopped rather than as
      * everything having been refused.
      */
-    private static Attempt build(Subject subject, List<Axis> axes, int[] where, CandidateCheck check) {
+    private static Attempt build(Subject subject, List<Axis> axes, int[] where,
+                                 CandidateCheck check) {
+        return build(subject, axes, where, check, Map.of());
+    }
+
+    /**
+     * The same, with the parameters {@code given} names written as it says instead of composed.
+     *
+     * <p>Which is what makes a value the model already states an origin of the search rather than a
+     * rewrite of its answer. Composed first and rewritten after, a row the baseline could have been
+     * written for came back as one nothing composed — a representative chosen from the classes
+     * alone breaks a rule relating two positions while the model's own value does not — and a row
+     * the baseline needed nothing beside came back carrying whatever the composition had needed.
+     */
+    private static Attempt build(Subject subject, List<Axis> axes, int[] where,
+                                 CandidateCheck check, Map<String, FixtureTemplate> given) {
         Map<String, List<FixtureTemplate>> decided = new LinkedHashMap<>();
         Map<String, RepresentativeSource.Evaluation.Compose> recipes = new LinkedHashMap<>();
         for (int i = 0; i < axes.size(); i++) {
@@ -1448,6 +1786,18 @@ public final class Generator {
         }
         List<FixtureTemplate> inputs = new ArrayList<>();
         for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
+            FixtureTemplate written = given.get(subject.parameters().get(p));
+            if (written != null) {
+                // Written as the caller says, and put through the same check a composed value goes
+                // through: how a row is written never decides whether the model allows it.
+                Optional<String> refused = check.refuse(p, written);
+                if (refused.isPresent()) {
+                    return new Attempt(null, UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
+                            subject.parameters().get(p), refused);
+                }
+                inputs.add(written);
+                continue;
+            }
             Outcome tried = valueFor(subject, p, axes, decided, recipes, check);
             if (tried.value() == null) {
                 return Attempt.no(tried.reason(), tried.detail());

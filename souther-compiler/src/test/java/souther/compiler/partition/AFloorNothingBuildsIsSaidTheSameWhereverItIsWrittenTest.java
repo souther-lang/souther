@@ -38,8 +38,8 @@ class AFloorNothingBuildsIsSaidTheSameWhereverItIsWrittenTest {
      * then reports the first parameter's reason — which is a fact about a `Bool` and would be the
      * same sentence whatever the second parameter's rules said.
      */
-    private static final Generator.CandidateCheck REFUSED =
-            (parameter, _) -> parameter == 1 ? Optional.of("refused") : Optional.empty();
+    private static final Generator.CandidateCheck REFUSED = Generator.CandidateCheck.refusing(
+            (parameter, _) -> parameter == 1 ? Optional.of("refused") : Optional.empty());
 
     private static Generator.UnresolvedCombination.Reason reasonFor(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");

@@ -1028,7 +1028,7 @@ public final class Adequacy {
                     new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
                             symbols, policy), partitioning.axes(), souther.compiler.partition.HeldCounts.of(domain, symbols));
             Generator.CandidateCheck check =
-                    (at, candidate) -> building.refuse(sig.ins().get(at), candidate.value());
+                    (at, candidate) -> built(building.build(sig.ins().get(at), candidate.value()));
             return new Coverages.Probe() {
 
                 @Override
@@ -2156,7 +2156,7 @@ public final class Adequacy {
             Generator.Subject subject =
                     new Generator.Subject(inputs, partitioning.axes(), souther.compiler.partition.HeldCounts.of(domain, symbols));
             Generator.CandidateCheck check = building == null ? Generator.CandidateCheck.ANY
-                    : (at, candidate) -> building.refuse(sig.ins().get(at), candidate.value());
+                    : (at, candidate) -> built(building.build(sig.ins().get(at), candidate.value()));
 
             // Where each row's values sit, and what its run did. Both come off the one outcome:
             // the first is what a pair count is taken over, the second is what says which of the
@@ -2170,6 +2170,22 @@ public final class Adequacy {
                     souther.compiler.interaction.Interactions.of(body, plan, domain, symbols),
                     trial, baselines);
         }
+    }
+
+    /**
+     * What a construction came to, in the generator's own words.
+     *
+     * <p>Two vocabularies for one answer, which is what a boundary between two packages costs. The
+     * mapping is here and nowhere else, so a shape added on either side has one place to be
+     * answered rather than as many as there are callers.
+     */
+    private static Generator.CandidateCheck.Built built(FixtureReader.Construction.Built what) {
+        return switch (what) {
+            case FixtureReader.Construction.Built.Value(var observed) ->
+                    new Generator.CandidateCheck.Built.Value(observed);
+            case FixtureReader.Construction.Built.Refused(var why) ->
+                    new Generator.CandidateCheck.Built.Refused(why);
+        };
     }
 
     /**

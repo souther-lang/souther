@@ -98,9 +98,35 @@ public final class FixtureReader {
     @FunctionalInterface
     public interface Construction {
 
-        /** Empty where the value builds; why it did not, otherwise. Throws {@link LinkageError} where
-         * the runtime is absent, which is not a fact about the value. */
-        java.util.Optional<String> refuse(BoundaryInput at, Hir.Expr fixture);
+        /**
+         * What building the value at a position came to: what was built, or why nothing was.
+         *
+         * <p>Both, because the one thing that builds a value is the only thing that can say what it
+         * came to be. Answered as whether it was refused, a caller that wanted to know where the
+         * value landed had to work it out from what it had asked for — and what it asked for is a
+         * reading, while what was built went through the decoders and the invariants and is what a
+         * row would carry.
+         *
+         * <p>Throws {@link LinkageError} where the runtime is absent, which is not a fact about the
+         * value.
+         */
+        Built build(BoundaryInput at, Hir.Expr fixture);
+
+        /** Whether the value was refused, for a caller that has nothing to do with what it is. */
+        default java.util.Optional<String> refuse(BoundaryInput at, Hir.Expr fixture) {
+            return build(at, fixture) instanceof Built.Refused refused
+                    ? java.util.Optional.of(refused.why()) : java.util.Optional.empty();
+        }
+
+        /** What came of building one value. */
+        sealed interface Built {
+
+            /** It built, and this is what it came to. */
+            record Value(ObservedValue observed) implements Built {}
+
+            /** It did not, and why. Never a claim that no value of the shape can be built. */
+            record Refused(String why) implements Built {}
+        }
     }
 
     /** A way to build values against this module's generated classes, without any rows to run. */
@@ -118,7 +144,7 @@ public final class FixtureReader {
         // and a fake's subclass is generated once.
         MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
         return (at, fixture) -> new FixtureReader(module, symbols, values, loader)
-                .refuse(at, fixture);
+                .building(at, fixture);
     }
 
     /** The method emitted for {@code operand}, or null where nothing emitted one — read off the
@@ -2016,17 +2042,19 @@ public final class FixtureReader {
         return new ValueRendering(neutral).typeShown(v, position);
     }
 
-    java.util.Optional<String> refuse(BoundaryInput at, Hir.Expr fixture) {
+    Construction.Built building(BoundaryInput at, Hir.Expr fixture) {
         try {
-            built(fixture, at);
-            return java.util.Optional.empty();
+            // What it came to, and not only that it came to something. Read through the same walk
+            // a row's own inputs are read through, so where a candidate lands is answered the way
+            // where a written row lands is.
+            return new Construction.Built.Value(observed(built(fixture, at)));
         } catch (FixtureException e) {
-            return java.util.Optional.of(e.getMessage());
+            return new Construction.Built.Refused(e.getMessage());
         } catch (RuntimeException e) {
             if (souther.compiler.evaluate.EvaluationContext.overspending(e)) {
                 throw e;   // the evaluation ran out; whether the fixture is refused is still unread
             }
-            return java.util.Optional.of(String.valueOf(e.getMessage()));
+            return new Construction.Built.Refused(String.valueOf(e.getMessage()));
         }
     }
 }
