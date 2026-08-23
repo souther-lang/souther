@@ -11,6 +11,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -338,21 +339,39 @@ final class PathEngine {
      * Whether an arm's pattern says the answer is what {@code guard} is about.
      *
      * <p>Read off the pattern, which is the proof the checker already has: an arm is taken because
-     * the value is one of the cases it names, so an arm naming one case says the answer is that case
-     * and an arm naming several says only that it is one of them. A rule about one of several is a
-     * rule about a value this arm may not have.
+     * the value is one of the cases it names. So the question is whether every value that could
+     * have taken this arm is one the rule is about — {@code armCoverage} inside {@code ruleCoverage}
+     * — and not whether the two were written under one name. An arm naming a case of a case answers
+     * for less than a rule naming the case above it, and the rule holds of it; the other way round
+     * it does not, and reading the inclusion the wrong way would carry a rule into an arm that has
+     * values it says nothing about.
+     *
+     * <p>An arm naming several answers for their union, so a rule holds of it exactly where it
+     * holds of every one of them. Nothing special is done about that: the union is what the arm
+     * covers.
+     *
+     * <p>{@code Core} carries the selector and not what it covers, so the arm's side is resolved
+     * back here. That is this pass crossing into the one that resolves a case, and not a second
+     * reading of what a case means: {@link ResolvedCase#resolve} is where that is worked out, and
+     * the selector is what it is asked about — a carrier of an optional is not the case a name of
+     * the same spelling would be.
      *
      * <p>A rule under no case applies to every answer, so any arm reaching it is an arm it holds of.
      */
-    private static boolean impliedBy(Guard guard, Core.ResolvedPattern pattern) {
+    private boolean impliedBy(Guard guard, Core.ResolvedPattern pattern) {
         if (guard instanceof Guard.Always) {
             return true;
         }
-        if (!(guard instanceof Guard.Case(ResolvedCase selected))
-                || !(pattern instanceof Core.ResolvedPattern.Single single)) {
+        if (!(guard instanceof Guard.Case(ResolvedCase selected))) {
             return false;
         }
-        return single.selector().name().equals(selected.name());
+        Set<TypeSymbol> ruleCovers = new LinkedHashSet<>(selected.atoms());
+        for (CaseSelector armCase : pattern.selectors()) {
+            if (!ruleCovers.containsAll(ResolvedCase.resolve(armCase, symbols).atoms())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** What the arm holds of the answer: what it binds where it binds one, and the answer itself

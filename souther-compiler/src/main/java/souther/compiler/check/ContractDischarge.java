@@ -103,16 +103,19 @@ public record ContractDischarge(List<RuleDischarge> rules,
      * it answers, and a reader wanting to know asks.
      */
     private static List<TypeSymbol> unstatedCases(StatedContract contract, Symbols symbols) {
+        // Over what the answer can be and not over what it declared. A rule may be written about a
+        // case that has cases of its own, and it states something about each of them; counted by
+        // name, every leaf under it would come back as unstated (#966).
         Set<TypeSymbol> stated = new LinkedHashSet<>();
         for (StatedContract.StatedRule rule : contract.rules()) {
             if (rule.guard() instanceof Guard.Case(ResolvedCase selected)) {
-                stated.add(selected.name());
+                stated.addAll(selected.atoms());
             }
         }
         List<TypeSymbol> unstated = new ArrayList<>();
-        for (ResolvedCase selected : CaseSpace.of(contract.output(), symbols).selectors()) {
-            if (!stated.contains(selected.name())) {
-                unstated.add(selected.name());
+        for (TypeSymbol atom : AtomSpace.subjectAtoms(contract.output(), symbols)) {
+            if (!stated.contains(atom)) {
+                unstated.add(atom);
             }
         }
         return unstated;

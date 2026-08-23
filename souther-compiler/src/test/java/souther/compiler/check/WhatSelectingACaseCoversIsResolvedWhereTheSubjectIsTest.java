@@ -97,9 +97,9 @@ class WhatSelectingACaseCoversIsResolvedWhereTheSubjectIsTest {
     void anOptionalsCarrierCoversItselfAndNotWhatItHolds() {
         CaseSpace space = CaseSpace.of(Type.option(type("VisitKind")), symbols);
         assertInstanceOf(CaseSpace.Optional.class, space);
-        ResolvedCase some = space.selector(TypeSymbol.SOME);
+        ResolvedCase some = space.selector(TypeSymbol.SOME, symbols);
         assertEquals(List.of(TypeSymbol.SOME), some.atoms());
-        assertEquals(List.of(TypeSymbol.NONE), space.selector(TypeSymbol.NONE).atoms());
+        assertEquals(List.of(TypeSymbol.NONE), space.selector(TypeSymbol.NONE, symbols).atoms());
         assertInstanceOf(Refinement.OptionPresent.class, some.refinement(),
                 "the carrier still binds the element; only what it covers is its own name");
         assertEquals(type("VisitKind"), some.bound());
@@ -145,7 +145,7 @@ class WhatSelectingACaseCoversIsResolvedWhereTheSubjectIsTest {
     }
 
     private ResolvedCase resolvedCase(String subject, String caseName) {
-        return CaseSpace.of(type(subject), symbols).selector(named(caseName));
+        return CaseSpace.of(type(subject), symbols).selector(named(caseName), symbols);
     }
 
     private Type type(String name) {

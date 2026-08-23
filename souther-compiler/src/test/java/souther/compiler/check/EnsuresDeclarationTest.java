@@ -122,12 +122,16 @@ class EnsuresDeclarationTest {
     }
 
     /**
-     * And a case of a case is not one of them. A caller opens `Failure` and only then what is inside
-     * it, so a clause naming what is inside is one the caller has no arm to assume it at — the same
-     * cases a `match` over this answer admits, and no others.
+     * And a case of a case is one of them, because a value of it is one of the answer.
+     *
+     * <p>A sum whose case is a sum is transparent as a value (spec §sum-data): anything of
+     * {@code Failure} is of the output, and a run that answers {@code Missing} answered the output.
+     * A clause about {@code Missing} is therefore about answers this behavior gives, and a caller
+     * has an arm to assume it at — the same cases a {@code match} over this answer admits, and the
+     * two still admit the same names (#966).
      */
-    @Test void aCaseOfACaseIsNotAnOutputCase() {
-        refused("""
+    @Test void aCaseOfACaseIsAnOutputCase() {
+        assertDoesNotThrow(() -> Compiler.compile("""
                 module example.nested
 
                 data Id = Int
@@ -138,7 +142,7 @@ class EnsuresDeclarationTest {
 
                 behavior find : (id: Id, tag: Id) -> Found | Failure
                     ensures Missing -> value.id == id
-                """, "E1619");
+                """));
     }
 
     /** What `value` is read as comes from what the case holds, which for a primitive case is that
