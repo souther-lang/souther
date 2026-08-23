@@ -1,5 +1,5 @@
 {
-  "schemaVersion" : 5,
+  "schemaVersion" : 6,
   "compilerVersion" : "<version>",
   "status" : "partial",
   "weakening" : [ "rule_unread", "rules_not_reached" ],
@@ -171,8 +171,7 @@
             "ordinal" : 8,
             "lowered" : 0
           }
-        } ],
-        "omitted" : [ ]
+        } ]
       },
       "branch" : {
         "status" : "complete",
@@ -350,8 +349,7 @@
         "notRead" : [ {
           "position" : "指示.品目",
           "reason" : "rules_not_read_at_all"
-        } ],
-        "omitted" : [ ]
+        } ]
       },
       "branch" : {
         "status" : "unavailable",
@@ -605,8 +603,7 @@
         }, {
           "position" : "指示.品目",
           "reason" : "rules_not_read_at_all"
-        } ],
-        "omitted" : [ ]
+        } ]
       },
       "branch" : {
         "status" : "complete",

@@ -57,8 +57,8 @@ class EveryKeyThisWritesIsOneTheSchemaDeclaresTest {
 
     private static JsonNode schema() throws Exception {
         try (InputStream in =
-                     AdequacyReport.class.getResourceAsStream("/souther/adequacy-schema-5.json")) {
-            assertNotNull(in, "adequacy-schema-5.json ships beside the compiler");
+                     AdequacyReport.class.getResourceAsStream("/souther/adequacy-schema-6.json")) {
+            assertNotNull(in, "adequacy-schema-6.json ships beside the compiler");
             return JSON.readTree(new String(in.readAllBytes(), StandardCharsets.UTF_8));
         }
     }
