@@ -1268,6 +1268,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case NO_CERTIFIED_WITNESS ->
                     "no row composed for " + at + " was seen reaching it, which does not make the"
                             + " combination unreachable";
+            case THE_POSITION_WAS_WITHHELD ->
+                    "a row's value at that position could not be read, so no class of it was"
+                            + " looked for";
+            case THE_ROWS_WERE_NOT_READ -> "the rows were not read, so nothing was looked for";
             case NO_REASON_RECORDED -> "nothing was recorded about why";
         };
     }

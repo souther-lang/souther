@@ -236,6 +236,41 @@ class CompilePartialAdequacyTest {
     }
 
     /**
+     * A class nothing looked for is not a class a search stopped short of.
+     *
+     * <p>Two different pieces of news. A search that ran out of room leaves a class still owed and
+     * a row still writable by this compiler; a position held back leaves a class nothing was ever
+     * going to look for, and a row offered there may be one already sitting in the file. Said the
+     * first way, the block printed `the search stopped before reaching it` two lines under the
+     * line saying the position had been withheld.
+     *
+     * <p>What made this possible: the finding's answer is read off there being no attempt recorded
+     * for the class, and an absence says nothing about its cause. So the cause is read off what the
+     * run wrote down, and where it wrote nothing the answer says that rather than naming the
+     * likeliest — which is what the words this replaced were guarding.
+     */
+    @Test
+    void aClassNothingLookedForIsNotAClassASearchStoppedShortOf() {
+        Compilation compilation = measured(budgetSpent(""));
+        Map<String, Adequacy.Filling> generated = compilation.db()
+                .ask(new Adequacy.Generated("example.budget")).value();
+        assertNotNull(generated);
+
+        List<Adequacy.GenerationDisposition> classes =
+                generated.get("take").generation().stream()
+                        .filter(each -> each.finding().kind() == Adequacy.Kind.AXIS_CLASS_UNCOVERED)
+                        .toList();
+        assertFalse(classes.isEmpty(), "the flag's classes are reported as uncovered");
+        for (Adequacy.GenerationDisposition each : classes) {
+            assertEquals(souther.compiler.partition.Generator.UnresolvedCombination.Reason
+                            .THE_POSITION_WAS_WITHHELD,
+                    ((souther.compiler.partition.GenerationOutcome.CannotGenerate) each.outcome())
+                            .why().reason(),
+                    each.finding()::toString);
+        }
+    }
+
+    /**
      * A class a row may already sit in is not a class to write a row for.
      *
      * <p>The worst of these to get wrong. A warning is a claim; a generated row is a specific piece of

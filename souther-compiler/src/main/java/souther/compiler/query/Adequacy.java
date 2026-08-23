@@ -279,11 +279,10 @@ public final class Adequacy {
          * the same news twice on the same line.
          *
          * <p>Held to the same bar as {@link #fullReport()}, and for the same reason: what a level
-         * says is how much was measured, and a caller reading a report picks no bar. What that
-         * decides for an editor is which gaps it offers to write a row for — the action that writes
-         * the rows a behavior does not cover reads the criterion, the lens beside the declaration
-         * reads the evidence and not the verdict — so a point away from a line is now offered there
-         * as it is on the command line.
+         * says is how much was measured, and a caller reading a report picks no bar. What the bar
+         * decides for an editor is which findings the lens beside a declaration marks, and no more:
+         * the action that writes the rows a behavior does not cover is asked of every finding
+         * whatever the bar, so what it offers does not move with one.
          */
         public static Asked reportOnly(Level level) {
             return new Asked(level, false, AdequacyBar.RELIABLE_DOMAIN);
@@ -1737,9 +1736,9 @@ public final class Adequacy {
                     // what a model admits. Saying so is not the same as saying the combinations are
                     // impossible, so none of them is reported as one.
                     //
-                    // Caught around the search and not around the answer. A gap's answer is owed
-                    // whatever the search did, and a failure that skipped the walk over the findings
-                    // would take the gaps out of a list that is meant to hold every one of them —
+                    // Caught around the search and not around the answer. A finding's answer is
+                    // owed whatever the search did, and a failure that skipped the walk over the
+                    // findings would take them out of a list that is meant to hold every one —
                     // which is the same defect the list was written against, arriving as control
                     // flow rather than as a value.
                     composed = new Generator.GenerationResult(List.of(), List.of(),
@@ -1758,16 +1757,24 @@ public final class Adequacy {
         }
 
         /**
-         * What the generator can do about each gap a build refuses, and about every one of them.
+         * What the generator can do about each finding, and about every one of them.
          *
-         * <p>Walked over the findings rather than over the strategies, which is the whole of it. A
-         * walk over the strategies answers for the gaps somebody wrote a strategy for and leaves the
-         * rest unmentioned, and a block that says nothing about a gap it printed two lines above reads
-         * as though it had filled everything.
+         * <p>Every finding, and not the ones a build refuses over. Those are two questions asked of
+         * one set of findings, and the first used to be the doorway of the second — so a finding
+         * some bar would refuse over and no bar had been asked for went unanswered, and no strategy
+         * could be written for one until a bar gated on it first. No bar reaches this.
          *
-         * <p>Which answer a gap gets is decided by whether a strategy takes gaps of that kind, and
-         * never by what a search came back with. The kinds are listed one at a time so that a kind
-         * added later does not compile until somebody has said which of the three it is.
+         * <p>Walked over the findings rather than over the strategies, which is the other half. A
+         * walk over the strategies answers for the findings somebody wrote a strategy for and
+         * leaves the rest unmentioned, and a block that says nothing about a finding it printed two
+         * lines above reads as though it had filled everything.
+         *
+         * <p>Which answer a finding gets is decided by whether a strategy takes findings of that
+         * kind, and never by what a search came back with. A finding row synthesis is not about at
+         * all is {@link GenerationOutcome.NotApplicable}, which is not a strategy waiting to be
+         * written: nothing anyone writes turns a measure this compiler could not make into a row
+         * somebody can write. The shapes are listed one at a time so that one added later does not
+         * compile until somebody has said which of the four it is.
          */
         private static List<GenerationDisposition> dispositions(List<Finding> findings,
                                                       List<BorderAssessment> edges,
@@ -1821,8 +1828,12 @@ public final class Adequacy {
          */
         private static GenerationOutcome atClass(PartitionEvidence.AxisClass missing,
                                                  Generator.GenerationResult composed) {
+            // The spelling the search labels this class with, which is what the block prints beside
+            // the rows. Written another way here, one class came out under two names — the
+            // search's `c.f=C` and this one's `C at c.f` — and the block, which drops a line it has
+            // already said, said the same fact twice because the two lines were not the same line.
             return atClass(missing.axis().at(), missing.name(),
-                    missing.name() + " at " + missing.axis().path(), composed);
+                    missing.axis().path() + "=" + missing.name(), composed);
         }
 
         /**
@@ -1843,25 +1854,26 @@ public final class Adequacy {
                         new GenerationOutcome.Generated(List.of(built.row()));
                 case Generator.ClassAttempt.Unresolved none ->
                         new GenerationOutcome.CannotGenerate(none.why());
-                // The search did not reach this class, which takes a run that stopped. Which stop
-                // it was, is what the run recorded — asked before anything is read off the absence,
-                // because a search with nothing to put a candidate through reached no class at all
-                // and a reason taken from that emptiness would name the one thing that did not
-                // happen.
+                // No attempt was recorded for this class, which is not the same as a search that
+                // reached it and stopped. Which of them it was is what the run wrote down, and
+                // where it wrote nothing this says so rather than picking the likeliest — a reason
+                // read off an empty result outlives whatever made it plausible.
                 case null -> new GenerationOutcome.CannotGenerate(
-                        new Generator.UnresolvedCombination(List.of(said), whyItStopped(composed)));
+                        new Generator.UnresolvedCombination(List.of(said), whyNothingWasTried(composed)));
             };
         }
 
         /**
-         * Why a search reached no class, in the words the run recorded.
+         * Why no attempt was recorded for a class, in the words the run wrote down.
          *
-         * <p>The reasons that say there was nothing to search with, and the search limit otherwise.
-         * The rest — rows nothing ran, combinations held back over rows already written — are about
-         * a search that happened and are said in their own words beside the rows; answering with
-         * one of them here would be the same fact under a second spelling.
+         * <p>Only the reasons that say a class was never searched for. A run that stopped before
+         * reaching one records it as the search limit itself, so this is asked where nothing was
+         * recorded at all — and what it must not do is decide which of them it was from the fact
+         * that there is nothing here. Where the run says nothing this says nothing: the class was
+         * owed a row, a strategy takes it, and it produced neither a row nor a reason, which is
+         * this compiler failing to say.
          */
-        private static Generator.UnresolvedCombination.Reason whyItStopped(
+        private static Generator.UnresolvedCombination.Reason whyNothingWasTried(
                 Generator.GenerationResult composed) {
             for (souther.compiler.partition.GenerationReason why : composed.reasons()) {
                 switch (why) {
@@ -1871,14 +1883,23 @@ public final class Adequacy {
                     case souther.compiler.partition.GenerationReason.LinkageFailed _ -> {
                         return Generator.UnresolvedCombination.Reason.LINKAGE_FAILED;
                     }
-                    case souther.compiler.partition.GenerationReason.PositionWithheld _,
-                            souther.compiler.partition.GenerationReason.SearchLimit _,
+                    // The position was held back, so no class of it was ever a thing to look for.
+                    case souther.compiler.partition.GenerationReason.PositionWithheld _ -> {
+                        return Generator.UnresolvedCombination.Reason.THE_POSITION_WAS_WITHHELD;
+                    }
+                    // Nothing was read, so nothing was searched for.
+                    case souther.compiler.partition.GenerationReason.RowsNotRead _ -> {
+                        return Generator.UnresolvedCombination.Reason.THE_ROWS_WERE_NOT_READ;
+                    }
+                    // About a search that happened, and said in their own words beside the rows.
+                    // Answering with one of them here would be the same fact under a second
+                    // spelling, over a class the search never got to.
+                    case souther.compiler.partition.GenerationReason.SearchLimit _,
                             souther.compiler.partition.GenerationReason.RowsNotConfirmed _,
-                            souther.compiler.partition.GenerationReason.CombinationsWithheld _,
-                            souther.compiler.partition.GenerationReason.RowsNotRead _ -> { }
+                            souther.compiler.partition.GenerationReason.CombinationsWithheld _ -> { }
                 }
             }
-            return Generator.UnresolvedCombination.Reason.SEARCH_LIMIT;
+            return Generator.UnresolvedCombination.Reason.NO_REASON_RECORDED;
         }
 
         /**

@@ -556,6 +556,12 @@ public final class GeneratedRows {
             case LINKAGE_FAILED ->
                     "the generated classes would not link, so the decoders a candidate is built"
                             + " through were out of reach";
+            case THE_POSITION_WAS_WITHHELD ->
+                    "a row's value at that position could not be read, so no class of it was looked"
+                            + " for — one written for it may be one that is already here";
+            case THE_ROWS_WERE_NOT_READ ->
+                    "the rows were not read, so nothing was looked for; what stopped them being"
+                            + " read is said above";
             case NO_REASON_RECORDED ->
                     "the search that takes this class left no reason, which is this compiler failing"
                             + " to say rather than anything established about the class";

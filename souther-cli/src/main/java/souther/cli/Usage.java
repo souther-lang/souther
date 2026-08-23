@@ -62,9 +62,9 @@ final class Usage {
         List<CliOption> options = optionsOf(command);
         lines.add("");
         lines.add("options:");
-        int column = column(options.stream().map(Usage::written).toList());
+        int column = column(options.stream().map(each -> written(command, each)).toList());
         for (CliOption option : options) {
-            lines.addAll(entry(written(option), command.describe(option), column));
+            lines.addAll(entry(written(command, option), command.describe(option), column));
         }
         return String.join(System.lineSeparator(), lines);
     }
@@ -80,10 +80,11 @@ final class Usage {
         return options;
     }
 
-    /** How an option is written where it is listed: every spelling it has, and its value. */
-    private static String written(CliOption option) {
+    /** How an option is written where it is listed: every spelling it has, and the values it takes
+     *  under the command being described — which can be fewer than the option's own. */
+    private static String written(CliCommand command, CliOption option) {
         String spelt = String.join(", ", option.spellings());
-        return option.takesAValue() ? spelt + " " + option.valueSpelling() : spelt;
+        return option.takesAValue() ? spelt + " " + command.valueSpelling(option) : spelt;
     }
 
     /** Where the second column begins: past the widest thing in the first, and the gap. */

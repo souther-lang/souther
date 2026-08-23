@@ -273,6 +273,27 @@ public final class Generator {
             THE_RULES_LEAVE_NOTHING_THERE,
             /** The module's classes were not there to build a candidate against. */
             NOTHING_TO_BUILD_AGAINST,
+            /**
+             * The position was held back, so no class of it was searched for.
+             *
+             * <p>Some row wrote a value here that could not be read, which leaves what the rows
+             * cover at this position unknown — and so what they do not cover. A row offered for a
+             * class here may be one already sitting in the file, which is a specific piece of work
+             * handed to somebody who has done it.
+             *
+             * <p>Told apart from {@link #SEARCH_LIMIT} because they are different pieces of news
+             * and only one of them is about this search: that one says the budget ran out with the
+             * class still owed, this says the class was never a thing to look for.
+             */
+            THE_POSITION_WAS_WITHHELD,
+            /**
+             * The rows were not read, so nothing was searched for at all.
+             *
+             * <p>What made them unreadable is said in its own words beside this, and is a fact
+             * about the evaluation rather than about any class. Named here so that a class is not
+             * told the search reached it and stopped.
+             */
+            THE_ROWS_WERE_NOT_READ,
             /** The generated classes would not link, so the decoders could not be reached. Told
              * apart from the one above it because they were there, which is not what that says. */
             LINKAGE_FAILED,
@@ -319,6 +340,7 @@ public final class Generator {
                     // model saying anything: another value of the same classes may well build.
                     case NOTHING_COMPOSES_ONE, ALL_CANDIDATES_REJECTED, SEARCH_LIMIT,
                          NOTHING_TO_BUILD_AGAINST, LINKAGE_FAILED, NO_CERTIFIED_WITNESS,
+                         THE_POSITION_WAS_WITHHELD, THE_ROWS_WERE_NOT_READ,
                          NO_REASON_RECORDED -> false;
                 };
             }
